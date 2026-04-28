@@ -8,3 +8,6 @@ description = "LLVM IR code generation via Inkwell for Glyim"
 
 [dependencies]
 glyim-hir = { path = "../glyim-hir" }
+glyim-interner = { path = "../glyim-interner" }
+glyim-parse = { path = "../glyim-parse" }
+inkwell = { version = "0.9", features = ["llvm22-1"] }

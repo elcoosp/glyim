@@ -5,6 +5,7 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Symbol(u32);
 
+#[derive(Debug)]
 pub struct Interner {
     strings: Vec<String>,
     map: HashMap<String, u32>,

@@ -6,6 +6,10 @@ license.workspace = true
 rust-version.workspace = true
 description = "CLI entry point for the Glyim compiler"
 
+[lib]
+name = "glyim_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "glyim"
 path = "src/main.rs"
@@ -18,3 +22,7 @@ glyim-macro-core = { path = "../glyim-macro-core" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
+glyim-interner = { path = "../glyim-interner" }
+inkwell = { version = "0.9", features = ["llvm22-1"] }
+clap = { version = "4", features = ["derive"] }
+tempfile = "3"

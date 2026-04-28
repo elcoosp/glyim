@@ -8,7 +8,7 @@ pub struct Span {
 
 impl Span {
     pub fn new(start: usize, end: usize) -> Self {
-        assert!(start <= end, "Span start ({start}) must be <= end ({end})");
+        assert!(start <= end, "start must be <= end");
         Self { start, end }
     }
     pub fn len(&self) -> usize { self.end - self.start }
