@@ -192,6 +192,19 @@ impl<'a> Parser<'a> {
         Some(StmtNode { kind: StmtKind::Let { name, mutable, value: value.clone() }, span: Span::new(start, value_span.end) })
     }
 
+    fn parse_assign_stmt(&mut self) -> Option<StmtNode> {
+        let name_tok = self.tokens.peek()?;
+        if name_tok.kind != SyntaxKind::Ident { return None; }
+        if !self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Eq) { return None; }
+        let target_tok = self.tokens.bump()?;
+        self.tokens.bump();
+        let target = self.interner.intern(target_tok.text);
+        let value = self.parse_expr(0)?;
+        let start = target_tok.start;
+        let span = Span::new(start, value.span.end);
+        Some(StmtNode { kind: StmtKind::Assign { target, value }, span })
+    }
+
     pub fn parse_expr(&mut self, min_bp: u8) -> Option<ExprNode> {
         let mut left = self.parse_expr_atom()?;
         loop {
@@ -271,6 +284,9 @@ impl<'a> Parser<'a> {
             if self.tokens.at(SyntaxKind::KwLet) {
                 if let Some(stmt) = self.parse_let_stmt() { items.push(BlockItem::Stmt(stmt)); continue; }
             }
+            if self.tokens.at(SyntaxKind::Ident) && self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Eq) {
+                if let Some(stmt) = self.parse_assign_stmt() { items.push(BlockItem::Stmt(stmt)); continue; }
+            }
             if let Some(expr) = self.parse_expr(0) {
                 items.push(BlockItem::Expr(expr));
             } else {
@@ -345,6 +361,7 @@ impl<'a> Parser<'a> {
             _ => None,
         }
     }
+
     fn to_binop(kind: SyntaxKind) -> BinOp {
         match kind {
             SyntaxKind::Plus => BinOp::Add, SyntaxKind::Minus => BinOp::Sub, SyntaxKind::Star => BinOp::Mul,

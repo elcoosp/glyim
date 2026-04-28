@@ -58,7 +58,7 @@ impl<'ctx> Codegen<'ctx> {
 
     fn codegen_block(&self, expr: &HirExpr, vars: &mut HashMap<Symbol, PointerValue<'ctx>>, fn_value: FunctionValue<'ctx>) -> Option<IntValue<'ctx>> {
         match expr {
-            HirExpr::Block(stmts) => { let mut last = Some(self.i64_type.const_int(0, false)); for stmt in stmts { last = self.codegen_stmt(stmt, vars, fn_value); } last }
+            HirExpr::Block(stmts) => { let mut last = Some(self.i64_type.const_int(0, false)); for stmt in stmts { if let Some(v) = self.codegen_stmt(stmt, vars, fn_value) { last = Some(v); } } last }
             other => self.codegen_expr(other, vars, fn_value),
         }
     }
@@ -70,7 +70,7 @@ impl<'ctx> Codegen<'ctx> {
                 let alloca = self.builder.build_alloca(self.i64_type, self.interner.resolve(*name)).ok()?;
                 self.builder.build_store(alloca, val).ok()?;
                 vars.insert(*name, alloca);
-                Some(val)
+                None
             }
             HirStmt::Assign { target, value } => {
                 let new_val = self.codegen_expr(value, vars, fn_value)?;
