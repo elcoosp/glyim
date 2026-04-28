@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 55;
+pub const COUNT: u16 = 57;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -11,9 +11,11 @@ pub enum SyntaxKind {
     IntLit, Ident,
     StringLit,
     KwFn, KwStruct, KwEnum, KwLet, KwIf, KwElse, KwReturn, KwUse,
+    KwMut,
     Eq, FatArrow, Arrow, LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, At, Dot,
     Plus, Minus, Star, Slash, Percent, EqEq, BangEq, Lt, Gt, LtEq, GtEq, AmpAmp, PipePipe, Bang, Pipe,
     SourceFile, FnDef, ParamList, Param, BlockExpr, LambdaExpr, CallExpr,
+    IfExpr,
     BinaryExpr, PrefixExpr, LitExpr, PathExpr, MacroCallExpr,
 }
 
@@ -33,6 +35,7 @@ impl SyntaxKind {
             Self::StringLit => "string literal",
             Self::KwFn => "fn", Self::KwStruct => "struct", Self::KwEnum => "enum",
             Self::KwLet => "let", Self::KwIf => "if", Self::KwElse => "else",
+            Self::KwMut => "mut",
             Self::KwReturn => "return", Self::KwUse => "use",
             Self::Eq => "=", Self::FatArrow => "=>", Self::Arrow => "->",
             Self::LParen => "(", Self::RParen => ")", Self::LBrace => "{", Self::RBrace => "}",
@@ -45,6 +48,7 @@ impl SyntaxKind {
             Self::SourceFile => "source file", Self::FnDef => "function definition",
             Self::ParamList => "parameter list", Self::Param => "parameter",
             Self::BlockExpr => "block expression", Self::LambdaExpr => "lambda expression",
+            Self::IfExpr => "if expression",
             Self::CallExpr => "call expression", Self::BinaryExpr => "binary expression",
             Self::PrefixExpr => "prefix expression", Self::LitExpr => "literal expression",
             Self::PathExpr => "path expression", Self::MacroCallExpr => "macro call expression",
@@ -86,6 +90,6 @@ mod tests {
     }
     #[test] fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error; let _ = SyntaxKind::MacroCallExpr;
-        assert_eq!(COUNT, 55);
+        assert_eq!(COUNT, 57);
     }
 }

@@ -11,3 +11,4 @@ glyim-syntax = { path = "../glyim-syntax" }
 glyim-lex = { path = "../glyim-lex" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
+rowan = "0.16"

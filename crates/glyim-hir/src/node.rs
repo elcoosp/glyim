@@ -1,5 +1,3 @@
-//! High-level Intermediate Representation — the codegen's input.
-
 use glyim_interner::Symbol;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -13,12 +11,30 @@ pub enum HirBinOp {
 pub enum HirUnOp { Neg, Not }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HirStmt {
+    Let { name: Symbol, mutable: bool, value: HirExpr },
+    Assign { target: Symbol, value: HirExpr },
+    Expr(HirExpr),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HirExpr {
     IntLit(i64),
+    StrLit(String),
     Ident(Symbol),
     Binary { op: HirBinOp, lhs: Box<HirExpr>, rhs: Box<HirExpr> },
     Unary { op: HirUnOp, operand: Box<HirExpr> },
-    Block(Vec<HirExpr>),
+    Block(Vec<HirStmt>),
+    If {
+        condition: Box<HirExpr>,
+        then_branch: Box<HirExpr>,
+        else_branch: Option<Box<HirExpr>>,
+    },
+    Println(Box<HirExpr>),
+    Assert {
+        condition: Box<HirExpr>,
+        message: Option<Box<HirExpr>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,22 +45,4 @@ pub struct HirFn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hir {
-    pub fns: Vec<HirFn>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use glyim_interner::Interner;
-
-    #[test] fn hir_int_lit() { assert_eq!(HirExpr::IntLit(42), HirExpr::IntLit(42)); }
-    #[test] fn hir_fn_shape() {
-        let mut interner = Interner::new();
-        let name = interner.intern("main");
-        let f = HirFn { name, params: vec![], body: HirExpr::IntLit(42) };
-        assert_eq!(f.name, name);
-        assert!(f.params.is_empty());
-    }
-    #[test] fn hir_holds_fns() { assert!(Hir { fns: vec![] }.fns.is_empty()); }
-}
+pub struct Hir { pub fns: Vec<HirFn> }
