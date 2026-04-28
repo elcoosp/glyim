@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/glyim-interner",
+    "crates/glyim-diag",
+    "crates/glyim-syntax",
+    "crates/glyim-lex",
+    "crates/glyim-parse",
+    "crates/glyim-hir",
+    "crates/glyim-typeck",
+    "crates/glyim-macro-core",
+    "crates/glyim-macro-vfs",
+    "crates/glyim-codegen-llvm",
+    "crates/glyim-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.75.0"

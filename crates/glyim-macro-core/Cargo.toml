@@ -1,0 +1,12 @@
+[package]
+name = "glyim-macro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Typed macro expansion engine for Glyim"
+
+[dependencies]
+glyim-syntax = { path = "../glyim-syntax" }
+glyim-interner = { path = "../glyim-interner" }
+glyim-diag = { path = "../glyim-diag" }

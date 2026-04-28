@@ -1,0 +1,13 @@
+[package]
+name = "glyim-parse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Pratt parser and recursive-descent parser for Glyim"
+
+[dependencies]
+glyim-syntax = { path = "../glyim-syntax" }
+glyim-lex = { path = "../glyim-lex" }
+glyim-diag = { path = "../glyim-diag" }
+glyim-interner = { path = "../glyim-interner" }

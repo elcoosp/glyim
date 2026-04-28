@@ -1,0 +1,10 @@
+[package]
+name = "glyim-hir"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "High-level intermediate representation for Glyim"
+
+[dependencies]
+glyim-interner = { path = "../glyim-interner" }

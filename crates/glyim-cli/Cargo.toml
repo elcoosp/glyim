@@ -1,0 +1,20 @@
+[package]
+name = "glyim-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "CLI entry point for the Glyim compiler"
+
+[[bin]]
+name = "glyim"
+path = "src/main.rs"
+
+[dependencies]
+glyim-parse = { path = "../glyim-parse" }
+glyim-hir = { path = "../glyim-hir" }
+glyim-typeck = { path = "../glyim-typeck" }
+glyim-macro-core = { path = "../glyim-macro-core" }
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
+glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-diag = { path = "../glyim-diag" }

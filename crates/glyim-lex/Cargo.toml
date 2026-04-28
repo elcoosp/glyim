@@ -1,0 +1,11 @@
+[package]
+name = "glyim-lex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Lexer/tokenizer for Glyim source files"
+
+[dependencies]
+glyim-syntax = { path = "../glyim-syntax" }
+glyim-diag = { path = "../glyim-diag" }
