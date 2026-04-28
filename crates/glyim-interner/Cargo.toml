@@ -4,4 +4,4 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "String interning for Glyim compiler identifiers"
+description = "TODO"
