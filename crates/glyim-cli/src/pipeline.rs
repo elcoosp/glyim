@@ -40,7 +40,7 @@ fn compile_to_hir_and_ir(source: &str) -> Result<(glyim_hir::Hir, String, Intern
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let hir = glyim_hir::lower(&parse_out.ast);
+    let hir = glyim_hir::lower(&parse_out.ast, &parse_out.interner);
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
 }
