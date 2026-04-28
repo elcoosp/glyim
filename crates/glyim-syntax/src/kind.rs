@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 54;
+pub const COUNT: u16 = 55;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -9,6 +9,7 @@ pub enum SyntaxKind {
     Error = 0, Eof,
     Whitespace, LineComment, BlockComment,
     IntLit, Ident,
+    StringLit,
     KwFn, KwStruct, KwEnum, KwLet, KwIf, KwElse, KwReturn, KwUse,
     Eq, FatArrow, Arrow, LParen, RParen, LBrace, RBrace, Comma, Colon, Semicolon, At, Dot,
     Plus, Minus, Star, Slash, Percent, EqEq, BangEq, Lt, Gt, LtEq, GtEq, AmpAmp, PipePipe, Bang, Pipe,
@@ -29,6 +30,7 @@ impl SyntaxKind {
             Self::Error => "error", Self::Eof => "end of file",
             Self::Whitespace | Self::LineComment | Self::BlockComment => "trivia",
             Self::IntLit => "integer literal", Self::Ident => "identifier",
+            Self::StringLit => "string literal",
             Self::KwFn => "fn", Self::KwStruct => "struct", Self::KwEnum => "enum",
             Self::KwLet => "let", Self::KwIf => "if", Self::KwElse => "else",
             Self::KwReturn => "return", Self::KwUse => "use",
@@ -84,6 +86,6 @@ mod tests {
     }
     #[test] fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error; let _ = SyntaxKind::MacroCallExpr;
-        assert_eq!(COUNT, 54);
+        assert_eq!(COUNT, 55);
     }
 }
