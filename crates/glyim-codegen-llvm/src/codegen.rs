@@ -4,7 +4,7 @@ use glyim_interner::{Interner,Symbol};
 use glyim_hir::{Hir,HirBinOp,HirExpr,HirStmt,HirUnOp};
 use inkwell::context::Context;
 use inkwell::builder::Builder;
-use inkwell::values::{AsValueRef, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue, StructValue};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue, StructValue};
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, IntType};
 use inkwell::{AddressSpace, IntPredicate};

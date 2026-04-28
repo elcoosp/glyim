@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 use std::process;
-
 use clap::{Parser, Subcommand};
 use glyim_cli::pipeline;
 
 #[derive(Parser)]
-#[command(name = "glyim", version, about = "The Glyim compiler")]
+#[command(name = "glyim", version, about = "The Glyim compiler", after_help = "Examples:\n  glyim init myproject\n  glyim run src/main.xyz\n  glyim check src/main.xyz\n  glyim ir src/main.xyz")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -13,24 +12,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    Build {
-        input: PathBuf,
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
-    Run {
-        input: PathBuf,
-    },
-    Ir {
-        input: PathBuf,
-    },
-    Check {
-        input: PathBuf,
-    },
-    Export {
-        name: String,
-        dest: PathBuf,
-    },
+    Build { input: PathBuf, #[arg(short, long)] output: Option<PathBuf> },
+    Run { input: PathBuf },
+    Ir { input: PathBuf },
+    Check { input: PathBuf },
+    Init { name: String },
+    Export { name: String, dest: PathBuf },
 }
 
 fn main() {
@@ -52,8 +39,12 @@ fn main() {
             Ok(()) => 0,
             Err(e) => { eprintln!("error: {e}"); 1 }
         }
+        Command::Init { name } => match pipeline::init(&name) {
+            Ok(path) => { eprintln!("Created {}/", path.display()); 0 }
+            Err(e) => { eprintln!("error: {e}"); 1 }
+        }
         Command::Export { name, dest } => {
-            eprintln!("error: 'export' not implemented in v0.1.0 (artifact: {name}, dest: {})", dest.display());
+            eprintln!("error: 'export' not implemented (artifact: {name}, dest: {})", dest.display());
             1
         }
     };
