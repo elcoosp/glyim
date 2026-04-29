@@ -284,8 +284,6 @@ fn e2e_test_should_panic_fails_on_zero() {
 }
 
 #[test]
-#[test]
-#[test]
 fn e2e_test_filter() {
     let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
     let summary = pipeline::run_tests(&input, Some("b"), false).unwrap();
@@ -345,10 +343,16 @@ fn e2e_type_error_non_exhaustive_match() {
 
 #[test]
 fn e2e_size_of_i64() {
-    assert_eq!(pipeline::run(&temp_g("main = () => __size_of::<i64>()")).unwrap(), 8);
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => __size_of::<i64>()")).unwrap(),
+        8
+    );
 }
 
 #[test]
 fn e2e_size_of_unit() {
-    assert_eq!(pipeline::run(&temp_g("main = () => __size_of::<()>()")).unwrap(), 8); // Unit type is represented as i64
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => __size_of::<()>()")).unwrap(),
+        8
+    ); // Unit type is represented as i64
 }
