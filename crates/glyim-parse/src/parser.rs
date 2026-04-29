@@ -205,7 +205,7 @@ impl<'a> Parser<'a> {
             SyntaxKind::At => {
                 self.tokens.bump();
                 let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                let name = self.interner.intern(name_tok.text);
+                #[allow(unused_variables)] let name = self.interner.intern(name_tok.text);
                 self.tokens.expect(SyntaxKind::KwFn).ok()?;
                 let fn_name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
                 let fn_name = self.interner.intern(fn_name_tok.text);
@@ -871,7 +871,7 @@ impl<'a> Parser<'a> {
             SyntaxKind::At => {
                 let at = self.tokens.bump()?;
                 let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                let name = self.interner.intern(name_tok.text);
+                #[allow(unused_variables)] let name = self.interner.intern(name_tok.text);
                 self.tokens.expect(SyntaxKind::LParen).ok()?;
                 let arg = self.parse_expr(0)?;
                 let rparen = self.tokens.expect(SyntaxKind::RParen).ok()?;

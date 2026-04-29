@@ -1,4 +1,4 @@
-use glyim_hir::{Hir, HirBinOp, HirExpr, HirStmt, HirUnOp};
+use glyim_hir::{Hir, HirBinOp, HirExpr, HirPattern, HirStmt, HirUnOp};
 use glyim_interner::{Interner, Symbol};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -131,12 +131,23 @@ impl<'ctx> Codegen<'ctx> {
             HirExpr::BoolLit(b) => Some(self.i64_type.const_int(if *b { 1 } else { 0 }, false)),
             HirExpr::UnitLit => Some(self.i64_type.const_int(0, false)),
             HirExpr::Match { scrutinee, arms } => {
-                self.codegen_expr(scrutinee, vars, fn_value)?;
-                if let Some((_, _, body)) = arms.first() { self.codegen_expr(body, vars, fn_value) }
-                else { Some(self.i64_type.const_int(0, false)) }
+                let scrutinee_val = self.codegen_expr(scrutinee, vars, fn_value)?;
+                if let Some((pattern, _, body)) = arms.first() {
+                    // Bind scrutinee value to pattern variable for Some(v) / Ok(v)
+                    if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pattern {
+                        if let HirPattern::Var(name) = inner.as_ref() {
+                            let alloca = self.builder.build_alloca(self.i64_type, self.interner.resolve(*name)).ok()?;
+                            self.builder.build_store(alloca, scrutinee_val).ok()?;
+                            vars.insert(*name, alloca);
+                        }
+                    }
+                    self.codegen_expr(body, vars, fn_value)
+                } else {
+                    Some(self.i64_type.const_int(0, false))
+                }
             }
             HirExpr::EnumVariant { args, .. } => { args.first().and_then(|a| self.codegen_expr(a, vars, fn_value)).or_else(|| Some(self.i64_type.const_int(0, false))) }
-            HirExpr::FloatLit(_) | HirExpr::As { .. } => { Some(self.i64_type.const_int(0, false)) }
+            HirExpr::As { .. } | HirExpr::FloatLit(_) => { Some(self.i64_type.const_int(0, false)) }
             HirExpr::StructLit { struct_name, fields } => {
                 let struct_type_opt = self.struct_types.borrow().get(struct_name).copied();
                 match struct_type_opt {
