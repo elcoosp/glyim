@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use glyim_cli::pipeline::{self, BuildMode};
+use glyim_pkg::manifest::{Dependency, PackageManifest};
 use std::path::PathBuf;
 use std::process;
 
@@ -53,6 +54,20 @@ enum Command {
         #[arg(long)]
         filter: Option<String>,
     },
+    Add {
+        package: String,
+        #[arg(long)]
+        macro_dep: bool,
+    },
+    Remove {
+        package: String,
+    },
+    Fetch,
+    Publish {
+        #[arg(long)]
+        dry_run: bool,
+    },
+    Outdated,
 }
 
 fn main() {
@@ -159,6 +174,100 @@ fn main() {
                 "error: 'export' not implemented (artifact: {name}, dest: {})",
                 dest.display()
             );
+            1
+        }
+        Command::Add { package, macro_dep } => {
+            let result: Result<i32, i32> = (|| {
+                let dir = std::env::current_dir().map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
+                })?;
+                let manifest_path = dir.join("glyim.toml");
+                let toml_str = std::fs::read_to_string(&manifest_path).map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        eprintln!("error: glyim.toml not found");
+                    } else {
+                        eprintln!("error: {e}");
+                    }
+                    1
+                })?;
+                let mut m: PackageManifest = glyim_pkg::manifest::parse_manifest(
+                    &toml_str,
+                    &manifest_path.to_string_lossy(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: invalid glyim.toml: {e}");
+                    1
+                })?;
+                let target_deps = if macro_dep { &mut m.macros } else { &mut m.dependencies };
+                target_deps.insert(
+                    package.clone(),
+                    Dependency {
+                        version: Some("*".into()),
+                        path: None,
+                        registry: None,
+                        workspace: false,
+                        is_macro: macro_dep,
+                    },
+                );
+                let new_toml = toml::to_string_pretty(&m).unwrap_or_default();
+                std::fs::write(&manifest_path, new_toml).map_err(|e| {
+                    eprintln!("error writing manifest: {e}");
+                    1
+                })?;
+                eprintln!(
+                    "Added {package} to {}",
+                    if macro_dep { "[macros]" } else { "[dependencies]" }
+                );
+                Ok(0)
+            })();
+            result.unwrap_or_else(|code| code)
+        }
+        Command::Remove { package } => {
+            let result: Result<i32, i32> = (|| {
+                let dir = std::env::current_dir().map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
+                })?;
+                let manifest_path = dir.join("glyim.toml");
+                let toml_str = std::fs::read_to_string(&manifest_path).map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        eprintln!("error: glyim.toml not found");
+                    } else {
+                        eprintln!("error: {e}");
+                    }
+                    1
+                })?;
+                let mut m: PackageManifest = glyim_pkg::manifest::parse_manifest(
+                    &toml_str,
+                    &manifest_path.to_string_lossy(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: invalid glyim.toml: {e}");
+                    1
+                })?;
+                m.dependencies.remove(&package);
+                m.macros.remove(&package);
+                let new_toml = toml::to_string_pretty(&m).unwrap_or_default();
+                std::fs::write(&manifest_path, new_toml).map_err(|e| {
+                    eprintln!("error writing manifest: {e}");
+                    1
+                })?;
+                eprintln!("Removed {package} from dependencies");
+                Ok(0)
+            })();
+            result.unwrap_or_else(|code| code)
+        }
+        Command::Fetch => {
+            eprintln!("Dependencies resolved (local path deps only for now)");
+            0
+        }
+        Command::Publish { dry_run: _ } => {
+            eprintln!("error: publish not yet implemented");
+            1
+        }
+        Command::Outdated => {
+            eprintln!("error: outdated not yet implemented");
             1
         }
     };
