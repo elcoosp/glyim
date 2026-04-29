@@ -56,6 +56,14 @@ pub enum ExprKind {
         then_branch: Box<ExprNode>,
         else_branch: Option<Box<ExprNode>>,
     },
+    StructLit {
+        name: Symbol,
+        fields: Vec<(Symbol, ExprNode)>,
+    },
+    FieldAccess {
+        object: Box<ExprNode>,
+        field: Symbol,
+    },
     Call {
         callee: Box<ExprNode>,
         args: Vec<ExprNode>,

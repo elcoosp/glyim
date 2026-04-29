@@ -1,7 +1,7 @@
 use crate::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp};
 use crate::item::{HirItem, StructDef, StructField};
 use crate::types::HirType;
-use glyim_interner::Interner;
+use glyim_interner::{Interner, Symbol};
 use glyim_parse::{BinOp, BlockItem, ExprKind, Item, StmtKind, UnOp};
 
 pub fn lower(ast: &glyim_parse::Ast, interner: &Interner) -> Hir {
@@ -93,6 +93,18 @@ fn lower_expr(expr: &ExprKind, interner: &Interner) -> HirExpr {
                 .as_ref()
                 .map(|e| Box::new(lower_expr(&e.kind, interner))),
         },
+        ExprKind::StructLit { name, fields } => {
+            let hir_fields: Vec<(Symbol, HirExpr)> = fields.iter().map(|(sym, e)| {
+                (*sym, lower_expr(&e.kind, interner))
+            }).collect();
+            HirExpr::StructLit { struct_name: *name, fields: hir_fields }
+        }
+        ExprKind::FieldAccess { object, field } => {
+            HirExpr::FieldAccess {
+                object: Box::new(lower_expr(&object.kind, interner)),
+                field: *field,
+            }
+        }
         ExprKind::Call { callee, args } => {
             if let ExprKind::Ident(sym) = &callee.kind {
                 let name = interner.resolve(*sym);

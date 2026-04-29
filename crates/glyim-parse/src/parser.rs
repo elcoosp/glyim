@@ -260,6 +260,23 @@ impl<'a> Parser<'a> {
                 };
                 continue;
             }
+            // Field access: expr.field
+            if op_tok.kind == SyntaxKind::Dot && 90 >= min_bp {
+                self.tokens.bump(); // consume '.'
+                let field_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                    Ok(t) => t,
+                    Err(e) => { self.errors.push(e); break; }
+                };
+                let field = self.interner.intern(field_tok.text);
+                left = ExprNode {
+                    kind: ExprKind::FieldAccess {
+                        object: Box::new(left.clone()),
+                        field,
+                    },
+                    span: Span::new(left.span.start, field_tok.end),
+                };
+                continue;
+            }
             break;
         }
         Some(left)

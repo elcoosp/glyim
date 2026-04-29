@@ -67,6 +67,7 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         }
         // v0.3.0: new literal types — no CST representation yet, skip
         ExprKind::FloatLit(_) | ExprKind::BoolLit(_) | ExprKind::UnitLit => {}
+        ExprKind::StructLit { .. } | ExprKind::FieldAccess { .. } => {}
     }
 }
 
