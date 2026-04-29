@@ -25,6 +25,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 ret: None,
                 body: lower_expr(value, ctx),
                 span: glyim_diag::Span::new(start, value.span.end),
+                is_macro_generated: false,
             }))
         }
         Item::FnDef {
@@ -55,6 +56,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                 body: lower_expr(body, ctx),
                 span: glyim_diag::Span::new(start, body.span.end),
+                is_macro_generated: false,
             }))
         }
         Item::StructDef {
@@ -158,6 +160,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                             body: lower_expr(body, ctx),
                             span: glyim_diag::Span::new(span.start, body.span.end),
+                            is_macro_generated: false,
                         })
                     } else {
                         None
@@ -184,6 +187,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             ret: None,
             body: lower_expr(body, ctx),
             span: glyim_diag::Span::new(name_span.start, body.span.end),
+            is_macro_generated: true,
         })),
         Item::ExternBlock { span, functions, .. } => {
             let ex_fns: Vec<ExternFn> = functions

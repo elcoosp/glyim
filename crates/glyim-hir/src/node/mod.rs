@@ -223,6 +223,7 @@ pub struct HirFn {
     pub ret: Option<HirType>,
     pub body: HirExpr,
     pub span: Span,
+    pub is_macro_generated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

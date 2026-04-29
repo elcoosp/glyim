@@ -27,6 +27,7 @@ pub(crate) fn codegen_stmt<'ctx>(
     stmt: &HirStmt,
     fctx: &mut FunctionContext<'ctx>,
 ) -> Option<IntValue<'ctx>> {
+    // Set debug location for the statement
     let span = match stmt {
         HirStmt::Let { span, .. } => *span,
         HirStmt::LetPat { span, .. } => *span,
@@ -34,11 +35,13 @@ pub(crate) fn codegen_stmt<'ctx>(
         HirStmt::Expr(e) => e.get_span(),
     };
     cg.set_debug_location_for_span(span);
+
     match stmt {
         HirStmt::Let {
             name,
             mutable: _,
-            value, ..
+            value,
+            span,
         } => {
             let val = super::expr::codegen_expr(cg, value, fctx)?;
             let alloca = cg
@@ -46,6 +49,20 @@ pub(crate) fn codegen_stmt<'ctx>(
                 .build_alloca(cg.i64_type, cg.interner.resolve(*name))
                 .ok()?;
             cg.builder.build_store(alloca, val).ok()?;
+
+            // Emit DILocalVariable + llvm.dbg.declare
+            if let (Some(ref di), Some(ref src), Some(sp)) =
+                (&cg.debug_info, &cg.source_str, &cg.current_subprogram)
+            {
+                let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
+                let resolved_name = cg.interner.resolve(*name);
+                if let Ok(var) = di.create_local_variable(resolved_name, *sp, line) {
+                    if let Ok(loc) = di.create_location(*sp, line, 0) {
+                        let _ = di.insert_declare(&cg.builder, var, alloca, loc);
+                    }
+                }
+            }
+
             fctx.vars.insert(*name, alloca);
             None
         }

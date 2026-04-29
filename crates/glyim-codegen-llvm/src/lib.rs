@@ -109,3 +109,9 @@ mod debug_ir_tests {
         assert!(count >= 2, "Expected >= 2 DISubprogram, got {count}\nIR:\n{ir}");
     }
 }
+
+    #[test]
+    fn compile_to_ir_debug_has_local_variable() {
+        let ir = compile_to_ir_debug("fn main() { let x = 42; x }", true).unwrap();
+        assert!(ir.contains("DILocalVariable"), "IR should contain DILocalVariable\nGot:\n{ir}");
+    }

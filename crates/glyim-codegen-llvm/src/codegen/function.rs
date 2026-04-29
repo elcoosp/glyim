@@ -30,7 +30,7 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
             cg.source_str.as_deref().unwrap_or(""),
             f.span.start,
         );
-        if let Ok(subprogram) = di.create_subprogram(name, line, false) {
+        if let Ok(subprogram) = di.create_subprogram(name, line, f.is_macro_generated) {
             di.register_subprogram(f.name, subprogram);
             cg.current_subprogram = Some(subprogram);
         }
