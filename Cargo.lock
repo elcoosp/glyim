@@ -282,6 +282,7 @@ dependencies = [
  "glyim-interner",
  "glyim-parse",
  "inkwell",
+ "llvm-sys",
 ]
 
 [[package]]

@@ -58,7 +58,7 @@ pub(crate) fn codegen_stmt<'ctx>(
                 let resolved_name = cg.interner.resolve(*name);
                 if let Ok(var) = di.create_local_variable(resolved_name, *sp, line) {
                     if let Ok(loc) = di.create_location(*sp, line, 0) {
-                        let _ = di.insert_declare(&cg.builder, var, alloca, loc);
+                        let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
                     }
                 }
             }

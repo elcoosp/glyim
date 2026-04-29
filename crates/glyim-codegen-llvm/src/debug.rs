@@ -2,7 +2,7 @@ use inkwell::debug_info::{
     DebugInfoBuilder, DICompileUnit, DIFile, DISubprogram, DILocation, DILocalVariable,
     DWARFEmissionKind, DWARFSourceLanguage, DIFlagsConstants, AsDIScope,
 };
-use inkwell::context::ContextRef;
+use inkwell::context::{AsContextRef, ContextRef};
 use inkwell::module::Module;
 use inkwell::values::PointerValue;
 use std::cell::RefCell;
@@ -143,25 +143,57 @@ impl<'ctx> DebugInfoGen<'ctx> {
         Ok(var)
     }
 
+    /// Insert llvm.dbg.declare by manually building the intrinsic call.
+    /// This avoids the DbgRecord panic in inkwell 0.9 + LLVM 22.
     pub fn insert_declare(
         &self,
         builder: &inkwell::builder::Builder<'ctx>,
+        module: &Module<'ctx>,
         variable: DILocalVariable<'ctx>,
         ptr_value: PointerValue<'ctx>,
         location: DILocation<'ctx>,
     ) -> Result<(), String> {
-        let block = builder
-            .get_insert_block()
-            .ok_or("no insert block")?;
+        let declare_fn = module
+            .get_function("llvm.dbg.declare")
+            .ok_or_else(|| "llvm.dbg.declare not declared".to_string())?;
 
-        self.dibuilder
-            .insert_declare_at_end(
-                ptr_value,
-                Some(variable),
-                None,
-                location,
-                block,
-            );
+        let ctx_ref = module.get_context();
+        let ctx_ptr = ctx_ref.as_ctx_ref();
+
+        // Convert debug metadata to MetadataValue using unsafe FFI
+        let var_md = unsafe {
+            inkwell::values::MetadataValue::new(
+                llvm_sys::core::LLVMMetadataAsValue(
+                    ctx_ptr,
+                    variable.as_mut_ptr(),
+                )
+            )
+        };
+
+        let loc_md = unsafe {
+            inkwell::values::MetadataValue::new(
+                llvm_sys::core::LLVMMetadataAsValue(
+                    ctx_ptr,
+                    location.as_mut_ptr(),
+                )
+            )
+        };
+
+        let empty_md = module.get_context().metadata_node(&[]);
+
+        builder
+            .build_call(
+                declare_fn,
+                &[
+                    ptr_value.into(),
+                    var_md.into(),
+                    empty_md.into(),
+                    loc_md.into(),
+                ],
+                "",
+            )
+            .map_err(|e| format!("dbg.declare call: {e}"))?;
+
         Ok(())
     }
 
@@ -169,7 +201,6 @@ impl<'ctx> DebugInfoGen<'ctx> {
         self.dibuilder.finalize();
     }
 
-    /// Approximate line number from byte offset by counting newlines.
     pub fn byte_offset_to_line(source: &str, offset: usize) -> u32 {
         let mut line = 1u32;
         for (i, ch) in source.char_indices() {
