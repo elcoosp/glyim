@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cas-server"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "actix-web",
  "glyim-macro-vfs",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "clap",
  "dirs-next",
@@ -783,7 +783,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-codegen-llvm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-diag",
  "glyim-hir",
@@ -795,14 +795,14 @@ dependencies = [
 
 [[package]]
 name = "glyim-diag"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ariadne",
 ]
 
 [[package]]
 name = "glyim-hir"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-diag",
  "glyim-interner",
@@ -811,11 +811,11 @@ dependencies = [
 
 [[package]]
 name = "glyim-interner"
-version = "0.4.0"
+version = "0.5.0"
 
 [[package]]
 name = "glyim-lex"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-diag",
  "glyim-syntax",
@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-macro-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-diag",
  "glyim-interner",
@@ -832,14 +832,14 @@ dependencies = [
 
 [[package]]
 name = "glyim-macro-vfs"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
 name = "glyim-parse"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-diag",
  "glyim-interner",
@@ -850,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-pkg"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-interner",
  "glyim-macro-vfs",
@@ -865,14 +865,14 @@ dependencies = [
 
 [[package]]
 name = "glyim-syntax"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "rowan",
 ]
 
 [[package]]
 name = "glyim-typeck"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "glyim-hir",
  "glyim-interner",
