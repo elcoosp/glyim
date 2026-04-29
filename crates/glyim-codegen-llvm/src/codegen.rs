@@ -135,7 +135,8 @@ impl<'ctx> Codegen<'ctx> {
                 if let Some((_, _, body)) = arms.first() { self.codegen_expr(body, vars, fn_value) }
                 else { Some(self.i64_type.const_int(0, false)) }
             }
-            HirExpr::FloatLit(_) | HirExpr::As { .. } | HirExpr::EnumVariant { .. } => { Some(self.i64_type.const_int(0, false)) }
+            HirExpr::EnumVariant { args, .. } => { args.first().and_then(|a| self.codegen_expr(a, vars, fn_value)).or_else(|| Some(self.i64_type.const_int(0, false))) }
+            HirExpr::FloatLit(_) | HirExpr::As { .. } => { Some(self.i64_type.const_int(0, false)) }
             HirExpr::StructLit { struct_name, fields } => {
                 let struct_type_opt = self.struct_types.borrow().get(struct_name).copied();
                 match struct_type_opt {
