@@ -33,7 +33,7 @@ Glyim is built from day one to fix this. It's a systems language targeting nativ
 
 Glyim now feels like a real language in under 60 seconds:
 
-BTxyz
+```
 let name = "Glyim"
 let mut count = 0
 count = count + 1
@@ -44,8 +44,8 @@ assert(count == 1, "count should be 1")
 println(count)
 ```
 
-BTbash
-$ glyim run hello.xyz
+```bash
+$ glyim run hello.g
 Hello from Glyim!
 1
 ```
@@ -122,7 +122,7 @@ This isn't aspirational — it's enforced by `Cargo.toml`.
 
 ### Build
 
-BTbash
+```bash
 git clone https://github.com/your-org/glyim.git
 cd glyim
 cargo build --release
@@ -130,17 +130,17 @@ cargo build --release
 
 ### Run
 
-BTbash
-echo 'main = () => 42' > hello.xyz
-cargo run --release -- run hello.xyz
+```bash
+echo 'main = () => 42' > hello.g
+cargo run --release -- run hello.g
 echo $?
 # 42
 ```
 
 ### Inspect LLVM IR
 
-BTbash
-cargo run --release -- ir hello.xyz
+```bash
+cargo run --release -- ir hello.g
 # define i32 @main() {
 #   ret i32 42
 # }

@@ -26,11 +26,11 @@ demo: build
     set -e
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
-    echo 'main = () => 42' > "$TMPDIR/main.xyz"
+    echo 'main = () => 42' > "$TMPDIR/main.g"
     echo "── Source ──────────────────────────"
-    cat "$TMPDIR/main.xyz"
+    cat "$TMPDIR/main.g"
     echo "── Compile & Run ───────────────────"
-    ./target/release/glyim run "$TMPDIR/main.xyz"
+    ./target/release/glyim run "$TMPDIR/main.g"
     EXIT_CODE=$?
     echo "── Exit Code ───────────────────────"
     echo "$EXIT_CODE"
@@ -41,11 +41,11 @@ demo-ir: build
     set -e
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
-    echo 'main = () => 42' > "$TMPDIR/main.xyz"
+    echo 'main = () => 42' > "$TMPDIR/main.g"
     echo "── Source ──────────────────────────"
-    cat "$TMPDIR/main.xyz"
+    cat "$TMPDIR/main.g"
     echo "── LLVM IR ─────────────────────────"
-    ./target/release/glyim ir "$TMPDIR/main.xyz"
+    ./target/release/glyim ir "$TMPDIR/main.g"
 
 # Run a more complex v0.1.0 demo (arithmetic, precedence)
 demo-math: build
@@ -53,13 +53,13 @@ demo-math: build
     set -e
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
-    cat > "$TMPDIR/math.xyz" << 'EOF'
+    cat > "$TMPDIR/math.g" << 'EOF'
     main = () => 1 + 2 * 3
     EOF
     echo "── Source ──────────────────────────"
-    cat "$TMPDIR/math.xyz"
+    cat "$TMPDIR/math.g"
     echo "── Compile & Run ───────────────────"
-    ./target/release/glyim run "$TMPDIR/math.xyz"
+    ./target/release/glyim run "$TMPDIR/math.g"
     EXIT_CODE=$?
     echo "── Expected: 7 (1 + (2*3)), Got: $EXIT_CODE ──"
 

@@ -70,6 +70,7 @@ impl<'a> Lexer<'a> {
             '/' => SyntaxKind::Slash, '%' => SyntaxKind::Percent,
             '<' => SyntaxKind::Lt, '>' => SyntaxKind::Gt,
             '!' => SyntaxKind::Bang, '|' => SyntaxKind::Pipe,
+            '?' => SyntaxKind::Question,
             _ => SyntaxKind::Error,
         };
         self.advance();
@@ -113,6 +114,9 @@ impl<'a> Lexer<'a> {
             "enum" => SyntaxKind::KwEnum, "let" => SyntaxKind::KwLet,
             "if" => SyntaxKind::KwIf, "else" => SyntaxKind::KwElse,
             "return" => SyntaxKind::KwReturn, "use" => SyntaxKind::KwUse,
+            "true" => SyntaxKind::KwTrue, "false" => SyntaxKind::KwFalse,
+            "match" => SyntaxKind::KwMatch, "extern" => SyntaxKind::KwExtern,
+            "as" => SyntaxKind::KwAs,
             _ => SyntaxKind::Ident,
         }
     }
@@ -303,4 +307,52 @@ mod tests {
         assert_eq!(tokens[1].start, 2);
         assert_eq!(tokens[1].end, 6);
     }
+
+#[test] fn lex_true_keyword() {
+    let tokens = tokenize("true");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::KwTrue);
+    assert_eq!(nt[0].text, "true");
+}
+#[test] fn lex_false_keyword() {
+    let tokens = tokenize("false");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::KwFalse);
+}
+#[test] fn lex_match_keyword() {
+    let tokens = tokenize("match");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::KwMatch);
+}
+#[test] fn lex_extern_keyword() {
+    let tokens = tokenize("extern");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::KwExtern);
+}
+#[test] fn lex_as_keyword() {
+    let tokens = tokenize("as");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::KwAs);
+}
+#[test] fn lex_question_mark() {
+    let tokens = tokenize("?");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::Question);
+    assert_eq!(nt[0].text, "?");
+}
+#[test] fn trueish_is_identifier_not_keyword() {
+    let tokens = tokenize("trueish");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::Ident);
+}
+#[test] fn existing_tokens_still_work_after_keyword_additions() {
+    let tokens = tokenize("1 + 2 == 3");
+    let kinds: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).map(|t| t.kind).collect();
+    assert_eq!(kinds, vec![
+        SyntaxKind::IntLit, SyntaxKind::Plus,
+        SyntaxKind::IntLit, SyntaxKind::EqEq,
+        SyntaxKind::IntLit,
+    ]);
+}
+
 }
