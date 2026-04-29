@@ -20,7 +20,7 @@ impl TypeChecker {
             HirExpr::BoolLit { id, .. } => *id,
             HirExpr::StrLit { id, .. } => *id,
             HirExpr::Ident { id, .. } => *id,
-            HirExpr::UnitLit { id } => *id,
+            HirExpr::UnitLit { id, .. } => *id,
             HirExpr::Binary { id, .. } => *id,
             HirExpr::Unary { id, .. } => *id,
             HirExpr::Block { id, .. } => *id,

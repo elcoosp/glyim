@@ -31,7 +31,7 @@ pub(crate) fn codegen_stmt<'ctx>(
         HirStmt::Let {
             name,
             mutable: _,
-            value,
+            value, ..
         } => {
             let val = super::expr::codegen_expr(cg, value, fctx)?;
             let alloca = cg
@@ -43,7 +43,7 @@ pub(crate) fn codegen_stmt<'ctx>(
             None
         }
         HirStmt::LetPat { .. } => None,
-        HirStmt::Assign { target, value } => {
+        HirStmt::Assign { target, value, .. } => {
             let new_val = super::expr::codegen_expr(cg, value, fctx)?;
             if let Some(ptr) = fctx.vars.get(target).copied() {
                 cg.builder.build_store(ptr, new_val).ok()?;

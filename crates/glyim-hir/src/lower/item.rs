@@ -10,44 +10,62 @@ use glyim_parse::Item;
 
 pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
     match item {
-        Item::Binding { name, value, .. } => {
-            if let glyim_parse::ExprKind::Lambda { params, body } = &value.kind {
-                Some(HirItem::Fn(HirFn {
-                    name: *name,
-                    type_params: vec![],
-                    params: params.iter().map(|sym| (*sym, HirType::Int)).collect(),
-                    ret: None,
-                    body: lower_expr(&body.kind, ctx),
-                }))
-            } else {
-                None
-            }
+        Item::Binding {
+            name,
+            name_span,
+            value,
+            attrs,
+            ..
+        } => {
+            let start = attrs.first().map_or(name_span.start, |a| a.span.start);
+            Some(HirItem::Fn(HirFn {
+                name: *name,
+                type_params: vec![],
+                params: vec![],
+                ret: None,
+                body: lower_expr(value, ctx),
+                span: glyim_diag::Span::new(start, value.span.end),
+            }))
         }
         Item::FnDef {
             name,
+            name_span,
             type_params,
             params,
             ret,
             body,
+            attrs,
             ..
-        } => Some(HirItem::Fn(HirFn {
-            name: *name,
-            type_params: type_params.clone(),
-            params: params
-                .iter()
-                .map(|(sym, _, ty)| {
-                    (
-                        *sym,
-                        ty.as_ref()
-                            .map(|t| lower_type_expr(t, ctx))
-                            .unwrap_or(HirType::Int),
-                    )
-                })
-                .collect(),
-            ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
-            body: lower_expr(&body.kind, ctx),
-        })),
-        Item::StructDef { name, fields, .. } => {
+        } => {
+            let start = attrs.first().map_or(name_span.start, |a| a.span.start);
+            Some(HirItem::Fn(HirFn {
+                name: *name,
+                type_params: type_params.clone(),
+                params: params
+                    .iter()
+                    .map(|(sym, _, ty)| {
+                        (
+                            *sym,
+                            ty.as_ref()
+                                .map(|t| lower_type_expr(t, ctx))
+                                .unwrap_or(HirType::Int),
+                        )
+                    })
+                    .collect(),
+                ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
+                body: lower_expr(body, ctx),
+                span: glyim_diag::Span::new(start, body.span.end),
+            }))
+        }
+        Item::StructDef {
+            name,
+            name_span,
+            fields,
+            ..
+        } => {
+            let end = fields
+                .last()
+                .map_or(name_span.end, |(_, s, _)| s.end);
             let hir_fields: Vec<StructField> = fields
                 .iter()
                 .map(|(sym, _, _ty)| StructField {
@@ -59,9 +77,18 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 name: *name,
                 type_params: vec![],
                 fields: hir_fields,
+                span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
-        Item::EnumDef { name, variants, .. } => {
+        Item::EnumDef {
+            name,
+            name_span,
+            variants,
+            ..
+        } => {
+            let end = variants
+                .last()
+                .map_or(name_span.end, |v| v.name_span.end);
             let hir_variants: Vec<HirVariant> = variants
                 .iter()
                 .enumerate()
@@ -84,6 +111,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 name: *name,
                 type_params: vec![],
                 variants: hir_variants,
+                span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
         Item::ImplBlock {
@@ -91,6 +119,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             type_params,
             methods,
             is_pub,
+            span,
             ..
         } => {
             let hir_methods: Vec<HirFn> = methods
@@ -107,8 +136,11 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     {
                         let all_tp: Vec<_> =
                             type_params.iter().chain(fn_tp.iter()).copied().collect();
-                        let mangled_name =
-                            ctx.intern(&format!("{}_{}", ctx.resolve(*target), ctx.resolve(*name)));
+                        let mangled_name = ctx.intern(&format!(
+                            "{}_{}",
+                            ctx.resolve(*target),
+                            ctx.resolve(*name)
+                        ));
                         Some(HirFn {
                             name: mangled_name,
                             type_params: all_tp,
@@ -124,7 +156,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                                 })
                                 .collect(),
                             ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
-                            body: lower_expr(&body.kind, ctx),
+                            body: lower_expr(body, ctx),
+                            span: glyim_diag::Span::new(span.start, body.span.end),
                         })
                     } else {
                         None
@@ -136,16 +169,23 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 type_params: type_params.clone(),
                 methods: hir_methods,
                 is_pub: *is_pub,
+                span: *span,
             }))
         }
-        Item::MacroDef { name, body, .. } => Some(HirItem::Fn(HirFn {
+        Item::MacroDef {
+            name,
+            name_span,
+            body,
+            ..
+        } => Some(HirItem::Fn(HirFn {
             name: *name,
             type_params: vec![],
             params: vec![],
             ret: None,
-            body: lower_expr(&body.kind, ctx),
+            body: lower_expr(body, ctx),
+            span: glyim_diag::Span::new(name_span.start, body.span.end),
         })),
-        Item::ExternBlock { functions, .. } => {
+        Item::ExternBlock { span, functions, .. } => {
             let ex_fns: Vec<ExternFn> = functions
                 .iter()
                 .map(|f| ExternFn {
@@ -154,7 +194,10 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     ret: HirType::Int,
                 })
                 .collect();
-            Some(HirItem::Extern(ExternBlock { functions: ex_fns }))
+            Some(HirItem::Extern(ExternBlock {
+                functions: ex_fns,
+                span: *span,
+            }))
         }
         Item::Use(_) | Item::Stmt(_) => None,
     }
