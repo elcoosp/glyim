@@ -94,3 +94,8 @@ fn ui_nested_error() {
 fn ui_empty_source() {
     run_ui_test("empty_source");
 }
+#[test]
+fn ui_bool_mismatch() {
+    run_ui_test("bool_mismatch");
+}
+
