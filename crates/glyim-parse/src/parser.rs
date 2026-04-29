@@ -562,6 +562,13 @@ impl<'a> Parser<'a> {
             }
         };
         let name = self.interner.intern(name_tok.text);
+        if self.tokens.eat(SyntaxKind::Colon).is_some() {
+            if let Some(ty_tok) = self.tokens.peek() {
+                if ty_tok.kind == SyntaxKind::Ident {
+                    self.tokens.bump();
+                }
+            }
+        }
         if let Err(e) = self.tokens.expect(SyntaxKind::Eq) {
             self.errors.push(e);
             return None;
