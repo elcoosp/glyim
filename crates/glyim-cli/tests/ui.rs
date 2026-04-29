@@ -98,4 +98,8 @@ fn ui_empty_source() {
 fn ui_bool_mismatch() {
     run_ui_test("bool_mismatch");
 }
+#[test]
+fn ui_type_mismatch() {
+    run_ui_test("type_mismatch");
+}
 
