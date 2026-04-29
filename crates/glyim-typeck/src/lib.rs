@@ -344,3 +344,10 @@ impl std::fmt::Display for TypeError {
         }
     }
 }
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

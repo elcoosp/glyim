@@ -654,7 +654,7 @@ impl<'a> Parser<'a> {
                 && self
                     .tokens
                     .peek2()
-                    .map_or(false, |t| t.kind == SyntaxKind::Colon)
+                    .is_some_and(|t| t.kind == SyntaxKind::Colon)
                 && 90 >= min_bp
             {
                 self.tokens.bump(); // first ':'

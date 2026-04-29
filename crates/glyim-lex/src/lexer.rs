@@ -131,7 +131,7 @@ impl<'a> Lexer<'a> {
         let _start = self.offset;
         self.eat_while(|c| c.is_ascii_digit());
         // Check for decimal point followed by digits
-        if self.peek() == Some('.') && self.peek2().map_or(false, |c| c.is_ascii_digit()) {
+        if self.peek() == Some('.') && self.peek2().is_some_and(|c| c.is_ascii_digit()) {
             self.advance(); // consume '.'
             self.eat_while(|c| c.is_ascii_digit());
             return SyntaxKind::FloatLit;
