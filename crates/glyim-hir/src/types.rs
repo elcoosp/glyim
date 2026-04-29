@@ -20,6 +20,10 @@ pub enum HirType {
     Unit,
     /// User-defined struct or enum (by name)
     Named(Symbol),
+    /// Generic instantiation: `Vec<Int>`, `HashMap<Str, Int>`
+    Generic(Symbol, Vec<HirType>),
+    /// Tuple type: `(Int, Str, Bool)`
+    Tuple(Vec<HirType>),
     /// Raw pointer (*const T or *mut T)
     RawPtr(Box<HirType>),
     /// Opaque @rust("…") type — pointer-sized
@@ -62,6 +66,10 @@ pub enum HirPattern {
         variant_name: Symbol,
         bindings: Vec<(Symbol, HirPattern)>,
     },
+    /// Tuple pattern: `(a, _, b)`
+    Tuple {
+        elements: Vec<HirPattern>,
+    },
     /// Some(x)
     OptionSome(Box<HirPattern>),
     /// None
@@ -70,4 +78,49 @@ pub enum HirPattern {
     ResultOk(Box<HirPattern>),
     /// Err(e)
     ResultErr(Box<HirPattern>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glyim_interner::Interner;
+
+    #[test]
+    fn generic_type_with_single_param() {
+        let mut i = Interner::new();
+        let sym = i.intern("Vec");
+        let t = HirType::Generic(sym, vec![HirType::Int]);
+        assert_eq!(t, HirType::Generic(sym, vec![HirType::Int]));
+    }
+
+    #[test]
+    fn generic_type_with_multiple_params() {
+        let mut i = Interner::new();
+        let sym = i.intern("HashMap");
+        let t = HirType::Generic(sym, vec![HirType::Str, HirType::Int]);
+        assert!(matches!(t, HirType::Generic(_, ref params) if params.len() == 2));
+    }
+
+    #[test]
+    fn tuple_type() {
+        let t = HirType::Tuple(vec![HirType::Int, HirType::Str]);
+        assert!(matches!(t, HirType::Tuple(ref elems) if elems.len() == 2));
+    }
+
+    #[test]
+    fn tuple_unit_is_distinct_from_unit() {
+        let tuple_unit = HirType::Tuple(vec![]);
+        assert_ne!(HirType::Unit, tuple_unit);
+    }
+
+    #[test]
+    fn tuple_pattern() {
+        let mut i = Interner::new();
+        let a = i.intern("a");
+        let b = i.intern("b");
+        let p = HirPattern::Tuple {
+            elements: vec![HirPattern::Var(a), HirPattern::Wild, HirPattern::Var(b)],
+        };
+        assert!(matches!(p, HirPattern::Tuple { ref elements } if elements.len() == 3));
+    }
 }
