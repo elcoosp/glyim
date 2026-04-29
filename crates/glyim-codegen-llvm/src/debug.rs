@@ -95,6 +95,7 @@ impl<'ctx> DebugInfoGen<'ctx> {
         self.fn_subprograms.borrow_mut().insert(name, subprogram);
     }
 
+    #[allow(dead_code)]
     pub fn get_subprogram(&self, name: Symbol) -> Option<DISubprogram<'ctx>> {
         self.fn_subprograms.borrow().get(&name).copied()
     }
