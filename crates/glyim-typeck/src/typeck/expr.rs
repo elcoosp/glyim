@@ -34,6 +34,7 @@ impl TypeChecker {
             HirExpr::StructLit { id, .. } => *id,
             HirExpr::EnumVariant { id, .. } => *id,
             HirExpr::TupleLit { id, .. } => *id,
+            HirExpr::SizeOf { id, .. } => *id,
         }
     }
 
@@ -126,6 +127,8 @@ impl TypeChecker {
                     elements.iter().filter_map(|e| self.check_expr(e)).collect();
                 HirType::Tuple(elem_types)
             }
+
+            HirExpr::SizeOf { .. } => HirType::Int,
         }
     }
 

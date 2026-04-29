@@ -69,11 +69,11 @@ impl<'ctx> Codegen<'ctx> {
             enum_struct_types: RefCell::new(HashMap::new()),
             enum_variant_tags: RefCell::new(HashMap::new()),
             option_sym,
+            no_std: false,
             result_sym,
             debug_info: None,
             source_str: None,
             current_subprogram: None,
-            no_std: false,
         }
     }
 
@@ -113,11 +113,11 @@ impl<'ctx> Codegen<'ctx> {
             enum_struct_types: RefCell::new(HashMap::new()),
             enum_variant_tags: RefCell::new(HashMap::new()),
             option_sym,
+            no_std: false,
             result_sym,
             debug_info,
             source_str: Some(source_str),
             current_subprogram: None,
-            no_std: false,
         })
     }
 
@@ -389,9 +389,5 @@ impl<'ctx> Codegen<'ctx> {
 
         Ok(())
     }
-
-    pub fn with_no_std(mut self) -> Self {
-        self.no_std = true;
-        self
-    }
 }
+

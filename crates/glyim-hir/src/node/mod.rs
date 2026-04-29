@@ -151,6 +151,7 @@ pub enum HirExpr {
         args: Vec<HirExpr>,
         span: Span,
     },
+    SizeOf { id: ExprId, target_type: HirType, span: Span },
     TupleLit {
         id: ExprId,
         elements: Vec<HirExpr>,
@@ -179,6 +180,7 @@ impl HirExpr {
             Self::FieldAccess { id, .. } => *id,
             Self::StructLit { id, .. } => *id,
             Self::EnumVariant { id, .. } => *id,
+            Self::SizeOf { id, .. } => *id,
             Self::TupleLit { id, .. } => *id,
         }
     }
@@ -203,6 +205,7 @@ impl HirExpr {
             Self::FieldAccess { span, .. } => *span,
             Self::StructLit { span, .. } => *span,
             Self::EnumVariant { span, .. } => *span,
+            Self::SizeOf { span, .. } => *span,
             Self::TupleLit { span, .. } => *span,
         }
     }

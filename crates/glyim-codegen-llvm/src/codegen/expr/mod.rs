@@ -4,6 +4,7 @@ mod data;
 use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
 use glyim_hir::{HirExpr, HirUnOp};
+use inkwell::types::BasicType;
 use inkwell::values::IntValue;
 
 pub(crate) fn codegen_expr<'ctx>(
@@ -41,6 +42,13 @@ pub(crate) fn codegen_expr<'ctx>(
         }
         HirExpr::UnitLit { .. } => Some(cg.i64_type.const_int(0, false)),
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
+        HirExpr::SizeOf { target_type, .. } => {
+            if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
+                Some(llvm_type.size_of().unwrap_or_else(|| cg.i64_type.const_int(0, false)))
+            } else {
+                Some(cg.i64_type.const_int(0, false))
+            }
+        }
         HirExpr::Println { arg, .. } => super::string::codegen_println(cg, arg, fctx),
         HirExpr::Assert {
             condition, message, ..

@@ -95,6 +95,7 @@ pub enum ExprKind {
         callee: Box<ExprNode>,
         args: Vec<ExprNode>,
     },
+    SizeOf(TypeExpr),
     TupleLit(Vec<ExprNode>),
 }
 

@@ -1,6 +1,7 @@
 use crate::lower::context::LoweringContext;
 use crate::lower::ops::{lower_binop, lower_unop};
 use crate::lower::pattern::lower_pattern;
+use crate::lower::types::lower_type_expr;
 use crate::lower::types::resolve_type_name;
 use crate::types::{ExprId, HirType};
 use crate::{HirExpr, HirPattern, HirStmt};
@@ -145,6 +146,12 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             elements: elems.iter().map(|e| lower_expr(e, ctx)).collect(),
             span,
         },
+
+        ExprKind::SizeOf(ty) => HirExpr::SizeOf {
+            id,
+            target_type: lower_type_expr(ty, ctx),
+            span,
+        },
     }
 }
 
@@ -218,6 +225,31 @@ fn lower_match(
 
 fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> HirExpr {
     let span = expr.span;
+    let abort_sym = ctx.intern("abort");
+
+    // Build: Println("FAILED\n") then Call(abort)
+    let fail_block = HirExpr::Block {
+        id: ctx.fresh_id(),
+        stmts: vec![
+            HirStmt::Expr(HirExpr::Println {
+                id: ctx.fresh_id(),
+                arg: Box::new(HirExpr::StrLit {
+                    id: ctx.fresh_id(),
+                    value: "FAILED\n".to_string(),
+                    span,
+                }),
+                span,
+            }),
+            HirStmt::Expr(HirExpr::Call {
+                id: ctx.fresh_id(),
+                callee: abort_sym,
+                args: vec![],
+                span,
+            }),
+        ],
+        span,
+    };
+
     HirExpr::Match {
         id,
         scrutinee: Box::new(lower_expr(expr, ctx)),
@@ -232,13 +264,9 @@ fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringCo
                 },
             ),
             (
-                HirPattern::ResultErr(Box::new(HirPattern::Var(ctx.intern("e")))),
+                HirPattern::ResultErr(Box::new(HirPattern::Wild)),
                 None,
-                HirExpr::IntLit {
-                    id: ctx.fresh_id(),
-                    value: 0,
-                    span,
-                },
+                fail_block,
             ),
         ],
         span,

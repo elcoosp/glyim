@@ -342,3 +342,13 @@ fn e2e_type_error_non_exhaustive_match() {
     let result = pipeline::run(&input);
     assert!(result.is_ok());
 }
+
+#[test]
+fn e2e_size_of_i64() {
+    assert_eq!(pipeline::run(&temp_g("main = () => __size_of::<i64>()")).unwrap(), 8);
+}
+
+#[test]
+fn e2e_size_of_unit() {
+    assert_eq!(pipeline::run(&temp_g("main = () => __size_of::<()>()")).unwrap(), 8); // Unit type is represented as i64
+}
