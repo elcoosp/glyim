@@ -2,8 +2,18 @@
 
 use glyim_interner::Symbol;
 
-/// Unique identifier for an expression node, used for type annotation lookups.
-pub type ExprId = u32;
+/// Unique identifier for an expression node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExprId(u32);
+
+impl ExprId {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+    pub fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}
 
 /// High-level types in the Glyim type system.
 #[derive(Debug, Clone, PartialEq)]
@@ -111,6 +121,25 @@ mod tests {
     fn tuple_unit_is_distinct_from_unit() {
         let tuple_unit = HirType::Tuple(vec![]);
         assert_ne!(HirType::Unit, tuple_unit);
+    }
+
+    #[test]
+    fn expr_id_from_raw() {
+        let id = ExprId::new(42);
+        assert_eq!(id.as_usize(), 42);
+    }
+
+    #[test]
+    fn expr_id_is_copy() {
+        let id = ExprId::new(5);
+        let _a = id;
+        let _b = id;
+    }
+
+    #[test]
+    fn expr_id_is_send_sync() {
+        fn assert_ts<T: Send + Sync>() {}
+        assert_ts::<ExprId>();
     }
 
     #[test]

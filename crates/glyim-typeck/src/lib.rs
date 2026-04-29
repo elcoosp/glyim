@@ -73,19 +73,19 @@ impl TypeChecker {
             expr_types: Vec::new(),
             return_type: None,
             errors: Vec::new(),
-            next_expr_id: 0,
+            next_expr_id: ExprId::new(0),
         }
     }
 
     fn fresh_id(&mut self) -> ExprId {
         let id = self.next_expr_id;
-        self.next_expr_id += 1;
+        self.next_expr_id = ExprId::new(id.as_usize() as u32 + 1);
         self.expr_types.push(HirType::Never);
         id
     }
 
     fn set_type(&mut self, id: ExprId, ty: HirType) {
-        self.expr_types[id as usize] = ty;
+        self.expr_types[id.as_usize()] = ty;
     }
 
     pub fn check(&mut self, hir: &Hir) -> Result<(), Vec<TypeError>> {
