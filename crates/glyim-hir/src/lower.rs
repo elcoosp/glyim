@@ -44,6 +44,15 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
                 }).collect();
                 fns.push(HirItem::Enum(EnumDef { name: *name, variants: hir_variants }));
             }
+            Item::MacroDef { name, body, .. } => {
+                fns.push(HirItem::Fn(HirFn { name: *name, params: vec![], body: lower_expr(&body.kind, interner) }));
+            }
+            Item::MacroDef { name, body, .. } => {
+                fns.push(HirItem::Fn(HirFn { name: *name, params: vec![], body: lower_expr(&body.kind, interner) }));
+            }
+            Item::MacroDef { name, body, .. } => {
+                fns.push(HirItem::Fn(HirFn { name: *name, params: vec![], body: lower_expr(&body.kind, interner) }));
+            }
             Item::ExternBlock { functions, .. } => {
                 let ex_fns: Vec<ExternFn> = functions.iter().map(|f| ExternFn {
                     name: f.name,
@@ -160,7 +169,7 @@ fn lower_expr(expr: &ExprKind, interner: &mut Interner) -> HirExpr {
             variant_name: interner.intern("Err"),
             args: vec![lower_expr(&e.kind, interner)],
         },
-        ExprKind::Pointer { mutable, target } => HirExpr::As {
+        ExprKind::Pointer { mutable: _, target } => HirExpr::As {
             expr: Box::new(HirExpr::IntLit(0)),
             target_type: HirType::RawPtr(Box::new(HirType::Named(*target))),
         },
@@ -168,6 +177,30 @@ fn lower_expr(expr: &ExprKind, interner: &mut Interner) -> HirExpr {
             expr: Box::new(lower_expr(&expr.kind, interner)),
             target_type: HirType::Named(*target_type),
         },
+        ExprKind::MacroCall { name, arg } => {
+            let mac_name = interner.resolve(*name);
+            if mac_name == "identity" {
+                lower_expr(&arg.kind, interner)
+            } else {
+                HirExpr::IntLit(0)
+            }
+        }
+        ExprKind::MacroCall { name, arg } => {
+            let mac_name = interner.resolve(*name);
+            if mac_name == "identity" {
+                lower_expr(&arg.kind, interner)
+            } else {
+                HirExpr::IntLit(0)
+            }
+        }
+        ExprKind::MacroCall { name, arg } => {
+            let mac_name = interner.resolve(*name);
+            if mac_name == "identity" {
+                lower_expr(&arg.kind, interner)
+            } else {
+                HirExpr::IntLit(0)
+            }
+        }
         ExprKind::TryExpr(e) => {
             HirExpr::Match {
                 scrutinee: Box::new(lower_expr(&e.kind, interner)),

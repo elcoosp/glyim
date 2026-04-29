@@ -69,7 +69,7 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         ExprKind::FloatLit(_) | ExprKind::BoolLit(_) | ExprKind::UnitLit => {}
         ExprKind::StructLit { .. } | ExprKind::EnumVariant { .. } | ExprKind::FieldAccess { .. } => {}
     
-        ExprKind::Pointer { .. } | ExprKind::As { .. } => {}
+        ExprKind::Pointer { .. } | ExprKind::As { .. } | ExprKind::MacroCall { .. } => {}
         _ => {}
     }
 }
@@ -91,7 +91,7 @@ fn ast_item_to_cst(builder: &mut CstBuilder, item: &Item) {
         Item::Use(u) => {
             builder.token(SyntaxKind::KwUse, "use"); builder.token(SyntaxKind::Ident, &u.path);
         }
-        Item::StructDef { .. } | Item::EnumDef { .. } | Item::ExternBlock { .. } => {} // TODO: CST representation
+        Item::StructDef { .. } | Item::EnumDef { .. } | Item::ExternBlock { .. } | Item::MacroDef { .. } => {} // TODO: CST representation
     }
 }
 

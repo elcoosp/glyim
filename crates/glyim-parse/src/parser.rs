@@ -113,7 +113,15 @@ impl<'a> Parser<'a> {
 
     fn parse_item(&mut self) -> Option<Item> {
         match self.tokens.peek()?.kind {
-            SyntaxKind::KwFn => self.parse_fn_def(),
+            SyntaxKind::KwFn => {
+                if self.tokens.peek().is_some_and(|t| t.kind == SyntaxKind::Ident) && self.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::LParen) {
+                    self.parse_fn_def()
+                } else if self.tokens.peek().is_some_and(|t| t.kind == SyntaxKind::At) {
+                    self.parse_macro_def()
+                } else {
+                    self.parse_fn_def()
+                }
+            },
             SyntaxKind::KwStruct => self.parse_struct_def(),
             SyntaxKind::KwEnum => self.parse_enum_def(),
             SyntaxKind::KwExtern => self.parse_extern_block(),
@@ -152,6 +160,23 @@ impl<'a> Parser<'a> {
         Some(Item::FnDef { name, name_span, params, body })
     }
 
+
+    fn parse_macro_def(&mut self) -> Option<Item> {
+        self.tokens.bump();
+        self.tokens.expect(SyntaxKind::KwFn).ok()?;
+        let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+        let name = self.interner.intern(name_tok.text);
+        let name_span = Span::new(name_tok.start, name_tok.end);
+        self.tokens.expect(SyntaxKind::LParen).ok()?;
+        let param_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+        self.tokens.eat(SyntaxKind::Colon);
+        self.tokens.expect(SyntaxKind::Ident).ok()?;
+        self.tokens.expect(SyntaxKind::RParen).ok()?;
+        self.tokens.eat(SyntaxKind::Arrow);
+        self.tokens.expect(SyntaxKind::Ident).ok()?;
+        let body = self.parse_block_expr()?;
+        Some(Item::MacroDef { name, name_span, params: vec![(self.interner.intern(param_tok.text), Span::new(param_tok.start, param_tok.end))], body })
+    }
 
     fn parse_struct_def(&mut self) -> Option<Item> {
         let _start_tok = self.tokens.bump()?; // .struct.
@@ -449,17 +474,6 @@ impl<'a> Parser<'a> {
                 };
                 continue;
             }
-            // As cast: expr as Type
-            if op_tok.kind == SyntaxKind::KwAs && 85 >= min_bp {
-                self.tokens.bump();
-                let target_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                let target = self.interner.intern(target_tok.text);
-                left = ExprNode {
-                    kind: ExprKind::As { expr: Box::new(left.clone()), target_type: target },
-                    span: Span::new(left.span.start, target_tok.end),
-                };
-                continue;
-            }
             // Field access: expr.field
             if op_tok.kind == SyntaxKind::Dot && 90 >= min_bp {
                 self.tokens.bump(); // consume '.'
@@ -500,31 +514,21 @@ impl<'a> Parser<'a> {
                 Some(ExprNode { kind: ExprKind::Ident(sym), span: Span::new(tok.start, tok.end) })
             }
             SyntaxKind::LParen if self.tokens.is_lambda_start() => self.parse_lambda(),
+            SyntaxKind::At => {
+                let at = self.tokens.bump()?;
+                let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                let name = self.interner.intern(name_tok.text);
+                self.tokens.expect(SyntaxKind::LParen).ok()?;
+                let arg = self.parse_expr(0)?;
+                let rparen = self.tokens.expect(SyntaxKind::RParen).ok()?;
+                Some(ExprNode {
+                    kind: ExprKind::MacroCall { name, arg: Box::new(arg) },
+                    span: Span::new(at.start, rparen.end),
+                })
+            }
             SyntaxKind::LParen => self.parse_paren_expr(),
             SyntaxKind::LBrace => self.parse_block_expr(),
             SyntaxKind::KwIf => self.parse_if_expr(),
-            SyntaxKind::Star => {
-                let star_tok = self.tokens.bump()?;
-                let start = star_tok.start;
-                if self.tokens.eat(SyntaxKind::KwLet).is_some() {
-                    let target_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                    let target = self.interner.intern(target_tok.text);
-                    Some(ExprNode {
-                        kind: ExprKind::Pointer { mutable: false, target },
-                        span: Span::new(start, target_tok.end),
-                    })
-                } else if self.tokens.eat(SyntaxKind::KwMut).is_some() {
-                    let target_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                    let target = self.interner.intern(target_tok.text);
-                    Some(ExprNode {
-                        kind: ExprKind::Pointer { mutable: true, target },
-                        span: Span::new(start, target_tok.end),
-                    })
-                } else {
-                    self.errors.push(ParseError::Message { msg: "expected const or mut after *".into(), span: (star_tok.start, star_tok.end) });
-                    None
-                }
-            }
             SyntaxKind::Minus | SyntaxKind::Bang => {
                 let op_tok = self.tokens.bump()?;
                 let (r_bp, op) = match op_tok.kind { SyntaxKind::Minus => (70, UnOp::Neg), SyntaxKind::Bang => (70, UnOp::Not), _ => unreachable!() };
