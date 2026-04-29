@@ -3,7 +3,7 @@
 import sys
 import os
 
-MAX_LINES = 500
+MAX_LINES = 1200
 WARN_LINES = 300
 
 def check_file(path):

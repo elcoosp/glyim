@@ -1,5 +1,5 @@
-use glyim_interner::Symbol;
 use crate::types::HirType;
+use glyim_interner::Symbol;
 
 /// A function signature: parameters + return type.
 #[derive(Debug, Clone, PartialEq)]

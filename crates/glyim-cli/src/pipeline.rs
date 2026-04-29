@@ -110,7 +110,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = fs::read_to_string(input)?;
-    let mut parse_out = glyim_parse::parse(&source);
+    let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
             &source,

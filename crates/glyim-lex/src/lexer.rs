@@ -232,4 +232,3 @@ pub fn tokenize(input: &str) -> Vec<Token<'_>> {
     }
     tokens
 }
-

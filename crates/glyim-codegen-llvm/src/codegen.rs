@@ -22,7 +22,15 @@ pub struct Codegen<'ctx> {
     interner: Interner,
     string_counter: RefCell<u32>,
     struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
-    enum_types: RefCell<HashMap<Symbol, (inkwell::types::IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
+    enum_types: RefCell<
+        HashMap<
+            Symbol,
+            (
+                inkwell::types::IntType<'ctx>,
+                inkwell::types::ArrayType<'ctx>,
+            ),
+        >,
+    >,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -59,22 +67,31 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    
     fn codegen_struct_def(&self, def: &glyim_hir::item::StructDef) {
         let _name = self.interner.resolve(def.name);
-        let field_types: Vec<BasicTypeEnum<'ctx>> = def.fields.iter().map(|_| BasicTypeEnum::IntType(self.i64_type)).collect();
+        let field_types: Vec<BasicTypeEnum<'ctx>> = def
+            .fields
+            .iter()
+            .map(|_| BasicTypeEnum::IntType(self.i64_type))
+            .collect();
         let struct_type = self.context.struct_type(&field_types, false);
         self.struct_types.borrow_mut().insert(def.name, struct_type);
     }
 
-
     fn codegen_enum_def(&self, def: &glyim_hir::item::EnumDef) {
         // Compute max payload size (stub: all Int fields)
-        let max_fields = def.variants.iter().map(|v| v.fields.len()).max().unwrap_or(0);
+        let max_fields = def
+            .variants
+            .iter()
+            .map(|v| v.fields.len())
+            .max()
+            .unwrap_or(0);
         let payload_bytes = (max_fields as u32) * 8; // each i64 is 8 bytes
         let tag_type = self.i32_type;
         let payload_type = self.context.i8_type().array_type(payload_bytes);
-        self.enum_types.borrow_mut().insert(def.name, (tag_type, payload_type));
+        self.enum_types
+            .borrow_mut()
+            .insert(def.name, (tag_type, payload_type));
     }
 
     fn codegen_fn(&mut self, f: &glyim_hir::HirFn) -> Result<(), String> {
@@ -139,7 +156,7 @@ impl<'ctx> Codegen<'ctx> {
                 last
             }
             other => self.codegen_expr(other, vars, fn_value),
-}
+        }
     }
 
     fn codegen_stmt(
@@ -259,21 +276,27 @@ impl<'ctx> Codegen<'ctx> {
                 self.codegen_assert(condition, message, vars, fn_value)
             }
             // v0.3.0: stub implementations for new expression variants
-            HirExpr::FloatLit(_) |
-            HirExpr::BoolLit(_) |
-            HirExpr::UnitLit |
-            HirExpr::As { .. } |
-            HirExpr::Match { .. } |
-            HirExpr::EnumVariant { .. } => {
-                Some(self.i64_type.const_int(0, false))
-            }
+            HirExpr::FloatLit(_)
+            | HirExpr::BoolLit(_)
+            | HirExpr::UnitLit
+            | HirExpr::As { .. }
+            | HirExpr::Match { .. }
+            | HirExpr::EnumVariant { .. } => Some(self.i64_type.const_int(0, false)),
             HirExpr::StructLit { .. } => {
                 // Stub: return 0 until proper struct layout codegen is implemented
                 Some(self.i64_type.const_int(0, false))
             }
             HirExpr::FieldAccess { object, field: _ } => {
                 let obj_val = self.codegen_expr(object, vars, fn_value)?;
-                #[allow(unused_variables)] let _ptr = self.builder.build_int_to_ptr(obj_val, self.context.ptr_type(AddressSpace::from(0u16)), "to_ptr").ok()?;
+                #[allow(unused_variables)]
+                let _ptr = self
+                    .builder
+                    .build_int_to_ptr(
+                        obj_val,
+                        self.context.ptr_type(AddressSpace::from(0u16)),
+                        "to_ptr",
+                    )
+                    .ok()?;
                 // Find field index: need the struct type. We don't know the struct type at this point.
                 // For now, hardcode field 0; proper implementation requires type info.
                 // We'll look up the struct from the object? Not possible without type info.
@@ -307,8 +330,7 @@ impl<'ctx> Codegen<'ctx> {
                 .build_gep(ty, global.as_pointer_value(), &[zero32, zero32], "str_ptr")
                 .ok()?
         };
-        self
-            .builder
+        self.builder
             .build_ptr_to_int(ptr, self.i64_type, "str_as_int")
             .ok()
     }
@@ -501,4 +523,3 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
-

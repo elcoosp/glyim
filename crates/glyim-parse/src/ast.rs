@@ -2,82 +2,245 @@ use glyim_diag::Span;
 use glyim_interner::Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum BinOp { Add, Sub, Mul, Div, Mod, Eq, Neq, Lt, Gt, Lte, Gte, And, Or }
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnOp { Neg, Not }
+pub enum UnOp {
+    Neg,
+    Not,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ExprNode { pub kind: ExprKind, pub span: Span }
+pub struct ExprNode {
+    pub kind: ExprKind,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
-    IntLit(i64), FloatLit(f64), BoolLit(bool), StrLit(String), Ident(Symbol), UnitLit,
-    Binary { op: BinOp, lhs: Box<ExprNode>, rhs: Box<ExprNode> },
-    Unary { op: UnOp, operand: Box<ExprNode> },
-    Lambda { params: Vec<Symbol>, body: Box<ExprNode> },
+    IntLit(i64),
+    FloatLit(f64),
+    BoolLit(bool),
+    StrLit(String),
+    Ident(Symbol),
+    UnitLit,
+    Binary {
+        op: BinOp,
+        lhs: Box<ExprNode>,
+        rhs: Box<ExprNode>,
+    },
+    Unary {
+        op: UnOp,
+        operand: Box<ExprNode>,
+    },
+    Lambda {
+        params: Vec<Symbol>,
+        body: Box<ExprNode>,
+    },
     Block(Vec<BlockItem>),
-    If { condition: Box<ExprNode>, then_branch: Box<ExprNode>, else_branch: Option<Box<ExprNode>> },
-    StructLit { name: Symbol, fields: Vec<(Symbol, ExprNode)> },
-    EnumVariant { enum_name: Symbol, variant_name: Symbol, args: Vec<ExprNode> },
-    SomeExpr(Box<ExprNode>), NoneExpr, OkExpr(Box<ExprNode>), ErrExpr(Box<ExprNode>), TryExpr(Box<ExprNode>),
-    Pointer { mutable: bool, target: Symbol },
-    As { expr: Box<ExprNode>, target_type: Symbol },
-    MacroCall { name: Symbol, arg: Box<ExprNode> },
-    Match { scrutinee: Box<ExprNode>, arms: Vec<MatchArm> },
-    FieldAccess { object: Box<ExprNode>, field: Symbol },
-    Call { callee: Box<ExprNode>, args: Vec<ExprNode> },
+    If {
+        condition: Box<ExprNode>,
+        then_branch: Box<ExprNode>,
+        else_branch: Option<Box<ExprNode>>,
+    },
+    StructLit {
+        name: Symbol,
+        fields: Vec<(Symbol, ExprNode)>,
+    },
+    EnumVariant {
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: Vec<ExprNode>,
+    },
+    SomeExpr(Box<ExprNode>),
+    NoneExpr,
+    OkExpr(Box<ExprNode>),
+    ErrExpr(Box<ExprNode>),
+    TryExpr(Box<ExprNode>),
+    Pointer {
+        mutable: bool,
+        target: Symbol,
+    },
+    As {
+        expr: Box<ExprNode>,
+        target_type: Symbol,
+    },
+    MacroCall {
+        name: Symbol,
+        arg: Box<ExprNode>,
+    },
+    Match {
+        scrutinee: Box<ExprNode>,
+        arms: Vec<MatchArm>,
+    },
+    FieldAccess {
+        object: Box<ExprNode>,
+        field: Symbol,
+    },
+    Call {
+        callee: Box<ExprNode>,
+        args: Vec<ExprNode>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StmtNode { pub kind: StmtKind, pub span: Span }
+pub struct StmtNode {
+    pub kind: StmtKind,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum StmtKind { Let { name: Symbol, mutable: bool, value: ExprNode }, Assign { target: Symbol, value: ExprNode } }
+pub enum StmtKind {
+    Let {
+        name: Symbol,
+        mutable: bool,
+        value: ExprNode,
+    },
+    Assign {
+        target: Symbol,
+        value: ExprNode,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum BlockItem { Stmt(StmtNode), Expr(ExprNode) }
+pub enum BlockItem {
+    Stmt(StmtNode),
+    Expr(ExprNode),
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct UseItem { pub path: String, pub span: Span }
+pub struct UseItem {
+    pub path: String,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum VariantKind { Unnamed(Vec<(Symbol, Span)>), Named(Vec<(Symbol, Span)>) }
+pub enum VariantKind {
+    Unnamed(Vec<(Symbol, Span)>),
+    Named(Vec<(Symbol, Span)>),
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct EnumVariantRepr { pub name: Symbol, pub name_span: Span, pub kind: VariantKind }
+pub struct EnumVariantRepr {
+    pub name: Symbol,
+    pub name_span: Span,
+    pub kind: VariantKind,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
-    Wild, BoolLit(bool), IntLit(i64), FloatLit(f64), StrLit(String), Unit, Var(Symbol),
-    Struct { name: Symbol, fields: Vec<(Symbol, Pattern)> },
-    EnumVariant { enum_name: Symbol, variant_name: Symbol, args: Vec<Pattern> },
-    OptionSome(Box<Pattern>), OptionNone, ResultOk(Box<Pattern>), ResultErr(Box<Pattern>),
+    Wild,
+    BoolLit(bool),
+    IntLit(i64),
+    FloatLit(f64),
+    StrLit(String),
+    Unit,
+    Var(Symbol),
+    Struct {
+        name: Symbol,
+        fields: Vec<(Symbol, Pattern)>,
+    },
+    EnumVariant {
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: Vec<Pattern>,
+    },
+    OptionSome(Box<Pattern>),
+    OptionNone,
+    ResultOk(Box<Pattern>),
+    ResultErr(Box<Pattern>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatchArm { pub pattern: Pattern, pub guard: Option<ExprNode>, pub body: ExprNode }
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub guard: Option<ExprNode>,
+    pub body: ExprNode,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ExternFn { pub name: Symbol, pub name_span: Span, pub params: Vec<(Symbol, Span)>, pub ret: Option<(Symbol, Span)> }
+pub struct ExternFn {
+    pub name: Symbol,
+    pub name_span: Span,
+    pub params: Vec<(Symbol, Span)>,
+    pub ret: Option<(Symbol, Span)>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
-    Binding { name: Symbol, name_span: Span, value: ExprNode },
-    FnDef { name: Symbol, name_span: Span, params: Vec<(Symbol, Span)>, body: ExprNode },
-    StructDef { name: Symbol, name_span: Span, fields: Vec<(Symbol, Span)> },
-    EnumDef { name: Symbol, name_span: Span, variants: Vec<EnumVariantRepr> },
-    MacroDef { name: Symbol, name_span: Span, params: Vec<(Symbol, Span)>, body: ExprNode },
+    Binding {
+        name: Symbol,
+        name_span: Span,
+        value: ExprNode,
+    },
+    FnDef {
+        name: Symbol,
+        name_span: Span,
+        params: Vec<(Symbol, Span)>,
+        body: ExprNode,
+    },
+    StructDef {
+        name: Symbol,
+        name_span: Span,
+        fields: Vec<(Symbol, Span)>,
+    },
+    EnumDef {
+        name: Symbol,
+        name_span: Span,
+        variants: Vec<EnumVariantRepr>,
+    },
+    MacroDef {
+        name: Symbol,
+        name_span: Span,
+        params: Vec<(Symbol, Span)>,
+        body: ExprNode,
+    },
     Stmt(StmtNode),
     Use(UseItem),
-    ExternBlock { abi: String, span: Span, functions: Vec<ExternFn> },
+    ExternBlock {
+        abi: String,
+        span: Span,
+        functions: Vec<ExternFn>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Ast { pub items: Vec<Item> }
+pub struct Ast {
+    pub items: Vec<Item>,
+}
 
 impl ExprNode {
-    #[cfg(test)] pub fn dummy(kind: ExprKind) -> Self { Self { kind, span: Span::new(0,0) } }
-    pub fn int_lit(value: i64, span: Span) -> Self { Self { kind: ExprKind::IntLit(value), span } }
-    pub fn ident(sym: Symbol, span: Span) -> Self { Self { kind: ExprKind::Ident(sym), span } }
+    #[cfg(test)]
+    pub fn dummy(kind: ExprKind) -> Self {
+        Self {
+            kind,
+            span: Span::new(0, 0),
+        }
+    }
+    pub fn int_lit(value: i64, span: Span) -> Self {
+        Self {
+            kind: ExprKind::IntLit(value),
+            span,
+        }
+    }
+    pub fn ident(sym: Symbol, span: Span) -> Self {
+        Self {
+            kind: ExprKind::Ident(sym),
+            span,
+        }
+    }
 }
