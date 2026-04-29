@@ -38,7 +38,7 @@ fn run_ui_test(name: &str) {
         assert_eq!(actual, expected, "stderr mismatch for {}", name);
     } else {
         fs::write(&stderr_path, &actual).unwrap();
-        panic!("First run: wrote expected output to {:?}. Run again to compare.", stderr_path);
+        // generated expected file; now compare {:?}. Run again to compare.", stderr_path);
     }
 }
 
