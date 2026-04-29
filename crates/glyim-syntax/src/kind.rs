@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 79;
+pub const COUNT: u16 = 80;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -12,6 +12,7 @@ pub enum SyntaxKind {
     LineComment,
     BlockComment,
     IntLit,
+    FloatLit,
     Ident,
     StringLit,
     KwFn,
@@ -118,6 +119,7 @@ impl SyntaxKind {
             Self::Eof => "end of file",
             Self::Whitespace | Self::LineComment | Self::BlockComment => "trivia",
             Self::IntLit => "integer literal",
+            Self::FloatLit => "float literal",
             Self::Ident => "identifier",
             Self::StringLit => "string literal",
             Self::KwFn => "fn",

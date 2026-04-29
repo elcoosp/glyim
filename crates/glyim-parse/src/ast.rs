@@ -1,7 +1,7 @@
 use glyim_diag::Span;
 use glyim_interner::Symbol;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum BinOp {
     Add,
     Sub,
@@ -17,23 +17,26 @@ pub enum BinOp {
     And,
     Or,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum UnOp {
     Neg,
     Not,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExprNode {
     pub kind: ExprKind,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     IntLit(i64),
+    FloatLit(f64),
+    BoolLit(bool),
     StrLit(String),
     Ident(Symbol),
+    UnitLit,
     Binary {
         op: BinOp,
         lhs: Box<ExprNode>,
@@ -59,13 +62,13 @@ pub enum ExprKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StmtNode {
     pub kind: StmtKind,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StmtKind {
     Let {
         name: Symbol,
@@ -78,19 +81,19 @@ pub enum StmtKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockItem {
     Stmt(StmtNode),
     Expr(ExprNode),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UseItem {
     pub path: String,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Binding {
         name: Symbol,
@@ -107,7 +110,7 @@ pub enum Item {
     Use(UseItem),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Ast {
     pub items: Vec<Item>,
 }

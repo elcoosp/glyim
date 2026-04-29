@@ -73,7 +73,7 @@ impl<'a> Lexer<'a> {
             }
         }
         if c.is_ascii_digit() {
-            return self.lex_number();
+            return self.lex_number_or_float();
         }
         if c == '"' {
             return self.lex_string();
@@ -127,8 +127,15 @@ impl<'a> Lexer<'a> {
         single
     }
 
-    fn lex_number(&mut self) -> SyntaxKind {
+    fn lex_number_or_float(&mut self) -> SyntaxKind {
+        let _start = self.offset;
         self.eat_while(|c| c.is_ascii_digit());
+        // Check for decimal point followed by digits
+        if self.peek() == Some('.') && self.peek2().map_or(false, |c| c.is_ascii_digit()) {
+            self.advance(); // consume '.'
+            self.eat_while(|c| c.is_ascii_digit());
+            return SyntaxKind::FloatLit;
+        }
         SyntaxKind::IntLit
     }
 

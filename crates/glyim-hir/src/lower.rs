@@ -37,6 +37,9 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &Interner) -> Hir {
 fn lower_expr(expr: &ExprKind, interner: &Interner) -> HirExpr {
     match expr {
         ExprKind::IntLit(n) => HirExpr::IntLit(*n),
+        ExprKind::FloatLit(f) => HirExpr::FloatLit(*f),
+        ExprKind::BoolLit(b) => HirExpr::BoolLit(*b),
+        ExprKind::UnitLit => HirExpr::UnitLit,
         ExprKind::StrLit(s) => HirExpr::StrLit(s.clone()),
         ExprKind::Ident(sym) => HirExpr::Ident(*sym),
         ExprKind::Binary { op, lhs, rhs } => HirExpr::Binary {
