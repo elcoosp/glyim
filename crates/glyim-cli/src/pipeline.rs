@@ -70,8 +70,33 @@ impl From<std::io::Error> for PipelineError {
     }
 }
 
-pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
+/// Detect whether the source contains a bare `no_std` declaration.
+///
+/// A `no_std` declaration is a line where `no_std` appears as a standalone
+/// identifier — not part of a larger word, not inside a string literal.
+///
+/// Known limitation: does not filter out `no_std` inside comments.
+/// This is acceptable for v0.5.1 — the full parser handles comments correctly.
+fn detect_no_std(source: &str) -> bool {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed == "no_std" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Load source with prelude prepended, detect no_std.
+/// Returns (full_source, is_no_std_flag).
+fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
+    let is_no_std = detect_no_std(&source);
+    Ok((source, is_no_std))
+}
+
+pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
+    let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -89,6 +114,9 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
     let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
+    if is_no_std {
+        codegen = codegen.with_no_std();
+    }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     codegen
         .write_object_file(&obj_path)
@@ -110,7 +138,7 @@ pub enum Result<T, E> {
 ";
 
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
-    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
+    let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
@@ -146,6 +174,9 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     }
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner, vec![]);
+    if is_no_std {
+        codegen = codegen.with_no_std();
+    }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -227,12 +258,7 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
 }
 
 pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineError> {
-    let source = format!(
-        "{}
-{}",
-        PRELUDE,
-        fs::read_to_string(input)?
-    );
+    let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
@@ -268,6 +294,9 @@ pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineErro
     }
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
+    if is_no_std {
+        codegen = codegen.with_no_std();
+    }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -287,12 +316,7 @@ pub fn build_with_mode(
     output: Option<&Path>,
     _mode: BuildMode,
 ) -> Result<PathBuf, PipelineError> {
-    let source = format!(
-        "{}
-{}",
-        PRELUDE,
-        fs::read_to_string(input)?
-    );
+    let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -310,6 +334,9 @@ pub fn build_with_mode(
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
     let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
+    if is_no_std {
+        codegen = codegen.with_no_std();
+    }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     codegen
         .write_object_file(&obj_path)
@@ -446,12 +473,7 @@ pub fn run_tests(
     filter_name: Option<&str>,
     include_ignored: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
-    let source = format!(
-        "{}
-{}",
-        PRELUDE,
-        fs::read_to_string(input)?
-    );
+    let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
@@ -542,6 +564,9 @@ pub fn run_tests(
 
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
+    if is_no_std {
+        codegen = codegen.with_no_std();
+    }
     codegen
         .generate_for_tests(&hir, &active_names, &should_panic)
         .map_err(PipelineError::Codegen)?;
@@ -632,4 +657,67 @@ fn which(cmd: &str) -> bool {
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+#[cfg(test)]
+mod no_std_tests {
+    use super::*;
+
+    #[test]
+    fn detect_no_std_simple() {
+        assert!(detect_no_std("no_std\nfn main() { 0 }"));
+    }
+
+    #[test]
+    fn detect_no_std_at_start() {
+        assert!(detect_no_std("no_std\nfn main() { 0 }"));
+    }
+
+    #[test]
+    fn detect_no_std_false_when_absent() {
+        assert!(!detect_no_std("fn main() { 0 }"));
+    }
+
+    #[test]
+    fn detect_no_std_false_in_string() {
+        assert!(!detect_no_std(r#"fn main() { "no_std" }"#));
+    }
+
+    #[test]
+    fn detect_no_std_false_as_part_of_ident() {
+        assert!(!detect_no_std("fn no_std_helper() { 0 }"));
+    }
+
+    #[test]
+    fn detect_no_std_false_as_field_name() {
+        assert!(!detect_no_std("struct S { no_std: bool }"));
+    }
+
+    #[test]
+    fn detect_no_std_with_trailing_whitespace() {
+        assert!(detect_no_std("no_std   \nfn main() { 0 }"));
+    }
+
+    #[test]
+    fn detect_no_std_false_empty() {
+        assert!(!detect_no_std(""));
+    }
+
+    #[test]
+    fn detect_no_std_false_only_whitespace() {
+        assert!(!detect_no_std("  \n  \n"));
+    }
+
+    #[test]
+    fn detect_no_std_after_other_code() {
+        assert!(detect_no_std("fn foo() { 0 }\nno_std\nfn bar() { 0 }"));
+    }
+
+    #[test]
+    fn detect_no_std_known_limitation_comment() {
+        // Comments on their own line are correctly excluded
+        // because the trimmed line is "// no_std", not "no_std".
+        assert!(!detect_no_std("// no_std
+fn main() { 0 }"));
+    }
 }
