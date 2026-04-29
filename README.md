@@ -3,7 +3,7 @@
 **A systems programming language where metaprogramming is typed, hygienic, and IDE‑friendly.**
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/your-org/glyim/ci.yml?branch=main)](https://github.com/your-org/glyim/actions)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/your-org/glyim/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/your-org/glyim/releases)
 [![License](https://img.shields.io/badge/license-MIT--2.0-blue)](LICENSE)
 
 ---
@@ -36,26 +36,34 @@ struct User {
 
 ## The Language in 60 Seconds
 
-`let` / `let mut`, `if` / `else`, strings, `println`, `assert`, JIT execution — Glyim already feels like a real language.
+`let` / `let mut`, `if` / `else`, strings, `println`, `assert`, structs, enums, pattern matching, `?` operator — Glyim already feels like a real language.
 
 ```glyim
-let name = "Glyim"
-let mut count = 0
-count = count + 1
-if count > 0 {
-  println("Hello from " + name)   # (concatenation not yet supported)
+struct Point { x: i64, y: i64 }
+
+enum Shape {
+  Circle(f64),
+  Rect { a: Point, b: Point },
 }
-assert(count == 1, "count should be 1")
-println(count)
+
+fn area(s: Shape) -> f64 {
+  match s {
+    Circle(r) => 3.14159 * r * r,
+    Rect { a, b } => (b.x - a.x) * (b.y - a.y),
+  }
+}
+
+let result: Result<f64, Str> = Ok(area(Shape::Circle(5.0)))
+let r: f64 = result?
+println(r)   // 78.53975
 ```
 
 ```bash
-$ glyim init hello && cd hello && glyim run
-Hello from Glyim!
-1
+$ glyim run example.g
+78.53975
 ```
 
-### Current Capabilities (v0.2.0)
+### Current Capabilities (v0.3.0)
 
 | Feature | Status |
 |---------|--------|
@@ -71,28 +79,19 @@ Hello from Glyim!
 | `glyim init` project scaffolding | ✅ |
 | JIT execution (no external C compiler needed for `run`) | ✅ |
 | Arithmetic, comparisons, logical operators, lambdas, blocks | ✅ |
+| **Structs** with named fields, struct literals, dot access | ✅ |
+| **Enums** with tag‑discriminated variants and exhaustive `match` | ✅ |
+| **Pattern matching** with wildcards, literals, variable binding | ✅ |
+| **`bool`** as a distinct type (`true`/`false` literals) | ✅ |
+| **`Option<T>` and `Result<T, E>`** with `Some`/`None`/`Ok`/`Err` and `?` | ✅ |
+| **`f64`** float type with arithmetic | ✅ |
+| **Raw pointers** `*const T` / `*mut T` for FFI | ✅ |
+| **`@rust("namespace") extern { ... }`** FFI blocks | ✅ |
+| **`@identity`** macro that successfully expands during compilation | ✅ |
+| **Monomorphic type checker** with local inference and exhaustiveness checking | ✅ |
+| **Real tagged‑union codegen** for enums | ✅ |
 | Macro infrastructure stubs (traits, CAS, hygiene) | ✅ |
-| **~340 tests, all passing** | ✅ |
-
----
-
-## Upcoming: v0.3.0 — The Type System
-
-The next major release introduces a monomorphic type checker, real data structures, and the first executing macro. Planned features:
-
-- **Structs** with named fields, struct literals, and dot access
-- **Enums** with tag‑discriminated variants and exhaustive `match`
-- **Pattern matching** with wildcards, literals, and variable binding
-- **`bool`** as a distinct type (comparisons return `bool`, `if` requires `bool`)
-- **`Option<T>` and `Result<T, E>`** built‑ins with `Some`/`None`/`Ok`/`Err` and `?` propagation
-- **`f64`** float type with all arithmetic operations
-- **Raw pointers** `*const T` / `*mut T` for FFI
-- **`@rust("namespace") extern { ... }`** FFI blocks
-- **`@identity`** macro that successfully expands during compilation
-- **Type checker** with annotated function params and local inference for `let`
-- **Phase‑0 refactor**: no file >500 LOC, CI with GitHub Actions
-
-See the full [v0.3.0 architecture specification](docs/v0.3.0-architecture.md) for details.
+| **26 integration tests, 23 parser tests, 13 UI tests** | ✅ |
 
 ---
 
@@ -124,6 +123,7 @@ This is enforced by our Cargo workspace configuration.
 | Expression parsing | Pratt parser (expressions) + recursive descent (items) | Simplicity and performance |
 | FFI | `@rust("...")` as opaque types | Safe boundary without exposing Rust’s type system |
 | JIT execution | Inkwell ORC JIT for `run` | No external C compiler needed for development |
+| Type checker | Monomorphic with local inference | No Hindley‑Milner complexity, fast checking |
 
 ---
 
@@ -137,20 +137,25 @@ glyim/
 │   ├── glyim-syntax/         # SyntaxKind, Rowan definitions
 │   ├── glyim-lex/            # Hand‑rolled tokenizer
 │   ├── glyim-parse/          # Pratt + recursive descent, CST builder, error recovery
-│   ├── glyim-hir/            # Span‑free IR (HirExpr, HirStmt, HirType)
-│   ├── glyim-typeck/         # Monomorphic type checker (v0.3.0+)
+│   ├── glyim-hir/            # Span‑free IR (HirExpr, HirStmt, HirType, HirPattern)
+│   ├── glyim-typeck/         # Monomorphic type checker with exhaustiveness
 │   ├── glyim-macro-core/     # Typed macro expansion engine
 │   ├── glyim-macro-vfs/      # ContentStore trait + LocalContentStore
-│   ├── glyim-codegen-llvm/   # LLVM IR generation (Inkwell)
+│   ├── glyim-codegen-llvm/   # LLVM IR generation (Inkwell) with tagged‑union enums
 │   └── glyim-cli/            # CLI (build, run, ir, check, init)
 ├── docs/
-│   ├── v0.1.0-architecture.md
-│   ├── v0.2.0-architecture.md
-│   └── v0.3.0-architecture.md
+│   ├── specs/
+│   │   ├── v0.1.0.md
+│   │   ├── v0.2.0.md
+│   │   └── v0.3.0.md
+│   ├── devlog/
+│   └── archive/
+├── scripts/
+│   └── check_file_sizes.py
 └── tests/
-    ├── integration/          # End‑to‑end compile → run → assert exit code
-    ├── ui/                   # Snapshot tests for error messages
-    └── fuzz/                 # Fuzz targets for lexer and parser
+    ├── integration/          # 26 end‑to‑end compile → run → assert exit code
+    ├── ui/                   # 13 snapshot tests for error messages
+    └── parser_v030_tests.rs  # 23 parser unit tests for v0.3.0 features
 ```
 
 ---
@@ -159,12 +164,21 @@ glyim/
 
 ### Prerequisites
 
-- Rust 1.75+
-- LLVM 18 development libraries
-  - Ubuntu: `sudo apt install llvm-18-dev`
-  - macOS: `brew install llvm@18`
-  - Set `LLVM_SYS_180_PREFIX` if LLVM is in a non‑standard location
-- A C compiler (`cc` or `gcc`) on PATH for linking (only required for `build`; `run` uses JIT)
+- Rust 1.90+ (nightly)
+- LLVM 22 development libraries
+  - Ubuntu: `sudo apt install llvm-22-dev`
+  - macOS: `brew install llvm@22`
+  - Set `LLVM_SYS_220_PREFIX` if LLVM is in a non‑standard location
+
+### Development Tools
+
+We use **[just](https://github.com/casey/just)** as a command runner (see `justfile` for available recipes) and **[cargo-insta](https://crates.io/crates/cargo-insta)** for snapshot testing.
+
+```bash
+just test       # run all tests
+just test-unit  # run only unit tests
+just ci         # simulate CI pipeline
+```
 
 ### Build
 
@@ -199,7 +213,7 @@ cargo run --release -- ir hello.g
 |---------|-------|--------|
 | **v0.1.0** | Architectural runway — compile `main = () => 42` to native | ✅ Completed |
 | **v0.2.0** | “Real language” DX — let/mut, if/else, strings, println, JIT | ✅ Completed |
-| **v0.3.0** | Types & data — struct/enum/match, type checker, floats, Option/Result, raw pointers, first working macro | 🟡 Planned (see [spec](docs/v0.3.0-architecture.md)) |
+| **v0.3.0** | Types & data — struct/enum/match, type checker, floats, Option/Result, raw pointers, first working macro | ✅ Completed |
 | **v0.4.0** | LSP, formatter, macro compilation to native, generic type inference, methods & impls | 🔜 Planned |
 | **v0.5.0** | Distributed CAS, package registry, `glyim pkg` | 🔜 Planned |
 
@@ -214,19 +228,6 @@ Glyim intentionally does **not** try to be:
 - **Not a C/C++ replacement** — We interop with Rust via `@rust()` FFI, not by being C‑compatible.
 - **Not fast to compile (yet)** — Debug LLVM, no incremental compilation. Performance optimization is deferred.
 - **Not a macro VM (yet)** — Macro execution is interpreted in v0.3.0; compilation to native code is future work.
-
----
-
-## Contributing
-
-Glyim uses plan‑driven development:
-
-1. Specs are written as architecture documents (see `docs/`)
-2. Plans are broken into bite‑sized TDD steps
-3. Each step: write failing test → implement → verify → commit
-4. Every plan chunk is reviewed before execution
-
-See the `docs/v0.2.0-architecture.md` for the canonical example of how we work.
 
 ---
 
