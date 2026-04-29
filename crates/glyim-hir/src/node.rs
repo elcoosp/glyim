@@ -62,6 +62,10 @@ pub enum HirExpr {
         else_branch: Option<Box<HirExpr>>,
     },
     Println(Box<HirExpr>),
+    Call {
+        callee: Symbol,
+        args: Vec<HirExpr>,
+    },
     Assert {
         condition: Box<HirExpr>,
         message: Option<Box<HirExpr>>,

@@ -1,7 +1,8 @@
 use glyim_hir::item::{EnumDef, ExternBlock, FnSig, HirVariant, StructDef, StructField};
 use glyim_hir::node::{Hir, HirExpr, HirFn, HirStmt};
 use glyim_hir::types::{ExprId, HirType};
-use glyim_interner::Symbol;
+use glyim_hir::HirPattern;
+use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,6 +51,7 @@ pub struct EnumInfo {
 }
 
 pub struct TypeChecker {
+    pub interner: Interner,
     pub bindings: HashMap<Symbol, HirType>,
     pub structs: HashMap<Symbol, StructInfo>,
     pub enums: HashMap<Symbol, EnumInfo>,
@@ -61,8 +63,9 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
-    pub fn new() -> Self {
+    pub fn new(interner: Interner) -> Self {
         TypeChecker {
+            interner,
             bindings: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
@@ -275,7 +278,8 @@ impl TypeChecker {
                 HirType::Named(*enum_name)
             }
             HirExpr::Match { scrutinee, arms } => {
-                self.check_expr(scrutinee);
+                let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
+                self.check_match_exhaustiveness(&scrutinee_ty, arms);
                 let mut arm_types = vec![];
                 for (_, _, body) in arms {
                     if let Some(t) = self.check_expr(body) {
@@ -283,6 +287,10 @@ impl TypeChecker {
                     }
                 }
                 arm_types.first().cloned().unwrap_or(HirType::Unit)
+            }
+            HirExpr::Call { args, .. } => {
+                for a in args { self.check_expr(a); }
+                HirType::Int
             }
             HirExpr::As { expr, target_type } => {
                 self.check_expr(expr);
@@ -307,6 +315,71 @@ impl TypeChecker {
             }
             HirStmt::Expr(e) => self.check_expr(e),
         }
+    }
+
+    fn check_match_exhaustiveness(
+        &mut self,
+        scrutinee_type: &HirType,
+        arms: &[(HirPattern, Option<HirExpr>, HirExpr)],
+    ) {
+        let enum_variants = match scrutinee_type {
+            HirType::Named(name) => {
+                if let Some(info) = self.enums.get(name) {
+                    info.variants.iter().map(|v| v.name).collect::<Vec<_>>()
+                } else {
+                    let name_str = format!("{:?}", name);
+                    if name_str.contains("Option") {
+                        vec![self.interner.intern("Some"), self.interner.intern("None")]
+                    } else if name_str.contains("Result") {
+                        vec![self.interner.intern("Ok"), self.interner.intern("Err")]
+                    } else {
+                        return;
+                    }
+                }
+            }
+            HirType::Option(_) => {
+                vec![self.interner.intern("Some"), self.interner.intern("None")]
+            }
+            HirType::Result(_, _) => {
+                vec![self.interner.intern("Ok"), self.interner.intern("Err")]
+            }
+            _ => return,
+        };
+
+        let has_wildcard = arms
+            .iter()
+            .any(|(pat, _, _)| matches!(pat, HirPattern::Wild));
+        if has_wildcard {
+            return;
+        }
+
+        let covered: Vec<Symbol> = arms
+            .iter()
+            .filter_map(|(pat, _, _)| match pat {
+                HirPattern::EnumVariant { variant_name, .. } => Some(*variant_name),
+                HirPattern::OptionSome(_) => Some(self.interner.intern("Some")),
+                HirPattern::OptionNone => Some(self.interner.intern("None")),
+                HirPattern::ResultOk(_) => Some(self.interner.intern("Ok")),
+                HirPattern::ResultErr(_) => Some(self.interner.intern("Err")),
+                _ => None,
+            })
+            .collect();
+
+        let missing: Vec<String> = enum_variants
+            .iter()
+            .filter(|v| !covered.contains(v))
+            .map(|v| self.interner.resolve(*v).to_string())
+            .collect();
+
+        if !missing.is_empty() {
+            self.errors.push(TypeError::NonExhaustiveMatch { missing });
+        }
+    }
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new(Interner::new())
     }
 }
 
@@ -344,10 +417,3 @@ impl std::fmt::Display for TypeError {
         }
     }
 }
-
-impl Default for TypeChecker {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-

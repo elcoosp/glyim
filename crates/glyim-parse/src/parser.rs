@@ -205,7 +205,8 @@ impl<'a> Parser<'a> {
             SyntaxKind::At => {
                 self.tokens.bump();
                 let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                #[allow(unused_variables)] let name = self.interner.intern(name_tok.text);
+                #[allow(unused_variables)]
+                let name = self.interner.intern(name_tok.text);
                 self.tokens.expect(SyntaxKind::KwFn).ok()?;
                 let fn_name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
                 let fn_name = self.interner.intern(fn_name_tok.text);
@@ -216,7 +217,10 @@ impl<'a> Parser<'a> {
                     let tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
                     self.tokens.eat(SyntaxKind::Colon);
                     self.tokens.expect(SyntaxKind::Ident).ok()?;
-                    params.push((self.interner.intern(tok.text), Span::new(tok.start, tok.end)));
+                    params.push((
+                        self.interner.intern(tok.text),
+                        Span::new(tok.start, tok.end),
+                    ));
                     self.tokens.eat(SyntaxKind::Comma);
                 }
                 self.tokens.expect(SyntaxKind::RParen).ok()?;
@@ -224,14 +228,27 @@ impl<'a> Parser<'a> {
                     let mut depth = 0u32;
                     while self.tokens.peek().is_some() {
                         let kind = self.tokens.peek().unwrap().kind;
-                        if kind == SyntaxKind::LBrace && depth == 0 { break; }
-                        if kind == SyntaxKind::Lt || kind == SyntaxKind::LParen { depth += 1; }
-                        if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen { if depth > 0 { depth -= 1; } }
+                        if kind == SyntaxKind::LBrace && depth == 0 {
+                            break;
+                        }
+                        if kind == SyntaxKind::Lt || kind == SyntaxKind::LParen {
+                            depth += 1;
+                        }
+                        if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen {
+                            if depth > 0 {
+                                depth -= 1;
+                            }
+                        }
                         self.tokens.bump();
                     }
                 }
                 let body = self.parse_block_expr()?;
-                Some(Item::MacroDef { name: fn_name, name_span: fn_name_span, params, body })
+                Some(Item::MacroDef {
+                    name: fn_name,
+                    name_span: fn_name_span,
+                    params,
+                    body,
+                })
             }
             SyntaxKind::KwFn => self.parse_fn_def(),
             SyntaxKind::KwStruct => self.parse_struct_def(),
@@ -871,7 +888,8 @@ impl<'a> Parser<'a> {
             SyntaxKind::At => {
                 let at = self.tokens.bump()?;
                 let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
-                #[allow(unused_variables)] let name = self.interner.intern(name_tok.text);
+                #[allow(unused_variables)]
+                let name = self.interner.intern(name_tok.text);
                 self.tokens.expect(SyntaxKind::LParen).ok()?;
                 let arg = self.parse_expr(0)?;
                 let rparen = self.tokens.expect(SyntaxKind::RParen).ok()?;
@@ -888,7 +906,12 @@ impl<'a> Parser<'a> {
                 let sym = self.interner.intern(tok.text);
                 let start = tok.start;
                 // Struct literal only if the name starts with uppercase
-                let is_uppercase = self.interner.resolve(sym).chars().next().map_or(false, |c| c.is_uppercase());
+                let is_uppercase = self
+                    .interner
+                    .resolve(sym)
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_uppercase());
                 if is_uppercase && self.tokens.at(SyntaxKind::LBrace) {
                     self.tokens.bump();
                     let mut fields = vec![];
@@ -1177,8 +1200,14 @@ impl<'a> Parser<'a> {
                 let tok = self.tokens.bump()?;
                 let name = self.interner.intern(tok.text);
                 // Enum variant pattern: Name::Variant(pat...) or Name::Variant
-                if self.tokens.at(SyntaxKind::Colon) && self.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::Colon) {
-                    self.tokens.bump(); self.tokens.bump();
+                if self.tokens.at(SyntaxKind::Colon)
+                    && self
+                        .tokens
+                        .peek2()
+                        .is_some_and(|t| t.kind == SyntaxKind::Colon)
+                {
+                    self.tokens.bump();
+                    self.tokens.bump();
                     let variant_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
                     let variant_name = self.interner.intern(variant_tok.text);
                     let mut args = vec![];
@@ -1190,18 +1219,26 @@ impl<'a> Parser<'a> {
                         }
                         self.tokens.expect(SyntaxKind::RParen).ok()?;
                     }
-                    Some(crate::ast::Pattern::EnumVariant { enum_name: name, variant_name, args })
-                } else if self.interner.resolve(name) == "Some" && self.tokens.at(SyntaxKind::LParen) {
+                    Some(crate::ast::Pattern::EnumVariant {
+                        enum_name: name,
+                        variant_name,
+                        args,
+                    })
+                } else if self.interner.resolve(name) == "Some"
+                    && self.tokens.at(SyntaxKind::LParen)
+                {
                     self.tokens.bump();
                     let inner = self.parse_pattern()?;
                     self.tokens.expect(SyntaxKind::RParen).ok()?;
                     Some(crate::ast::Pattern::OptionSome(Box::new(inner)))
-                } else if self.interner.resolve(name) == "Ok" && self.tokens.at(SyntaxKind::LParen) {
+                } else if self.interner.resolve(name) == "Ok" && self.tokens.at(SyntaxKind::LParen)
+                {
                     self.tokens.bump();
                     let inner = self.parse_pattern()?;
                     self.tokens.expect(SyntaxKind::RParen).ok()?;
                     Some(crate::ast::Pattern::ResultOk(Box::new(inner)))
-                } else if self.interner.resolve(name) == "Err" && self.tokens.at(SyntaxKind::LParen) {
+                } else if self.interner.resolve(name) == "Err" && self.tokens.at(SyntaxKind::LParen)
+                {
                     self.tokens.bump();
                     let inner = self.parse_pattern()?;
                     self.tokens.expect(SyntaxKind::RParen).ok()?;
@@ -1223,7 +1260,9 @@ impl<'a> Parser<'a> {
             }
             SyntaxKind::FloatLit => {
                 let tok = self.tokens.bump()?;
-                Some(crate::ast::Pattern::FloatLit(tok.text.parse().unwrap_or(0.0)))
+                Some(crate::ast::Pattern::FloatLit(
+                    tok.text.parse().unwrap_or(0.0),
+                ))
             }
             SyntaxKind::StringLit => {
                 let tok = self.tokens.bump()?;

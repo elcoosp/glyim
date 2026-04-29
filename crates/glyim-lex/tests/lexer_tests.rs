@@ -2,6 +2,8 @@
 use glyim_lex::tokenize;
 use glyim_syntax::SyntaxKind;
 
+#[allow(dead_code)]
+#[allow(dead_code)]
 fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
     tokenize(input)
         .iter()
@@ -9,6 +11,8 @@ fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
         .map(|t| (t.kind, t.text))
         .collect()
 }
+#[allow(dead_code)]
+#[allow(dead_code)]
 fn all_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
     tokenize(input).iter().map(|t| (t.kind, t.text)).collect()
 }
@@ -18,14 +22,18 @@ mod tests {
     use super::*;
     use glyim_syntax::SyntaxKind;
 
-    fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
+    #[allow(dead_code)]
+#[allow(dead_code)]
+fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
         tokenize(input)
             .iter()
             .filter(|t| !t.kind.is_trivia())
             .map(|t| (t.kind, t.text))
             .collect()
     }
-    fn all_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
+    #[allow(dead_code)]
+#[allow(dead_code)]
+fn all_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
         tokenize(input).iter().map(|t| (t.kind, t.text)).collect()
     }
 

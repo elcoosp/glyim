@@ -51,7 +51,7 @@ impl From<std::io::Error> for PipelineError {
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let source = fs::read_to_string(input)?;
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
-    let mut typeck = TypeChecker::new();
+    let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
@@ -106,7 +106,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
-    let mut typeck = TypeChecker::new();
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
@@ -157,7 +157,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
-    let mut typeck = TypeChecker::new();
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
