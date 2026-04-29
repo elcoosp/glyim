@@ -165,10 +165,10 @@ glyim/
 ### Prerequisites
 
 - Rust 1.90+ (nightly)
-- LLVM 22 development libraries
+- LLVM 22.1 development libraries
   - Ubuntu: `sudo apt install llvm-22-dev`
   - macOS: `brew install llvm@22`
-  - Set `LLVM_SYS_220_PREFIX` if LLVM is in a non‑standard location
+  - Set `LLVM_SYS_221_PREFIX` if LLVM is in a non‑standard location
 
 ### Development Tools
 
