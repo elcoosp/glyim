@@ -562,13 +562,6 @@ impl<'a> Parser<'a> {
             }
         };
         let name = self.interner.intern(name_tok.text);
-        if self.tokens.eat(SyntaxKind::Colon).is_some() {
-            if let Some(ty_tok) = self.tokens.peek() {
-                if ty_tok.kind == SyntaxKind::Ident {
-                    self.tokens.bump();
-                }
-            }
-        }
         if let Err(e) = self.tokens.expect(SyntaxKind::Eq) {
             self.errors.push(e);
             return None;
@@ -800,13 +793,123 @@ impl<'a> Parser<'a> {
                     span: Span::new(tok.start, tok.end),
                 })
             }
+            SyntaxKind::KwTrue => {
+                let tok = self.tokens.bump()?;
+                Some(ExprNode {
+                    kind: ExprKind::BoolLit(true),
+                    span: Span::new(tok.start, tok.end),
+                })
+            }
+            SyntaxKind::KwFalse => {
+                let tok = self.tokens.bump()?;
+                Some(ExprNode {
+                    kind: ExprKind::BoolLit(false),
+                    span: Span::new(tok.start, tok.end),
+                })
+            }
+            SyntaxKind::FloatLit => {
+                let tok = self.tokens.bump()?;
+                let v: f64 = tok.text.parse().unwrap_or(0.0);
+                Some(ExprNode {
+                    kind: ExprKind::FloatLit(v),
+                    span: Span::new(tok.start, tok.end),
+                })
+            }
+            SyntaxKind::KwReturn => {
+                let ret_tok = self.tokens.bump()?;
+                let val = self.parse_expr(0)?;
+                Some(ExprNode {
+                    kind: ExprKind::Unary {
+                        op: UnOp::Not,
+                        operand: Box::new(val.clone()),
+                    },
+                    span: Span::new(ret_tok.start, val.span.end),
+                })
+            }
+            SyntaxKind::KwMatch => self.parse_match_expr(),
+            SyntaxKind::At => {
+                let at = self.tokens.bump()?;
+                let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                let name = self.interner.intern(name_tok.text);
+                self.tokens.expect(SyntaxKind::LParen).ok()?;
+                let arg = self.parse_expr(0)?;
+                let rparen = self.tokens.expect(SyntaxKind::RParen).ok()?;
+                Some(ExprNode {
+                    kind: ExprKind::MacroCall {
+                        name,
+                        arg: Box::new(arg),
+                    },
+                    span: Span::new(at.start, rparen.end),
+                })
+            }
             SyntaxKind::Ident => {
                 let tok = self.tokens.bump()?;
                 let sym = self.interner.intern(tok.text);
-                Some(ExprNode {
-                    kind: ExprKind::Ident(sym),
-                    span: Span::new(tok.start, tok.end),
-                })
+                let start = tok.start;
+                if self.tokens.at(SyntaxKind::LBrace) {
+                    self.tokens.bump();
+                    let mut fields = vec![];
+                    while !self.tokens.at(SyntaxKind::RBrace) && self.tokens.peek().is_some() {
+                        let n = match self.tokens.expect(SyntaxKind::Ident) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                self.errors.push(e);
+                                break;
+                            }
+                        };
+                        let n_sym = self.interner.intern(n.text);
+                        self.tokens.eat(SyntaxKind::Colon);
+                        let val = self.parse_expr(0)?;
+                        fields.push((n_sym, val));
+                        self.tokens.eat(SyntaxKind::Comma);
+                    }
+                    let end = match self.tokens.expect(SyntaxKind::RBrace) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            self.errors.push(e);
+                            return None;
+                        }
+                    };
+                    Some(ExprNode {
+                        kind: ExprKind::StructLit { name: sym, fields },
+                        span: Span::new(start, end.end),
+                    })
+                } else if self
+                    .tokens
+                    .peek()
+                    .is_some_and(|t| t.kind == SyntaxKind::LParen)
+                    && matches!(self.interner.resolve(sym), "Some" | "Ok" | "Err")
+                {
+                    let name = self.interner.resolve(sym).to_string();
+                    self.tokens.bump();
+                    let val = self.parse_expr(0)?;
+                    let rparen = self.tokens.expect(SyntaxKind::RParen).ok()?;
+                    let kind = match name.as_str() {
+                        "Some" => ExprKind::SomeExpr(Box::new(val)),
+                        "Ok" => ExprKind::OkExpr(Box::new(val)),
+                        "Err" => ExprKind::ErrExpr(Box::new(val)),
+                        _ => return None,
+                    };
+                    Some(ExprNode {
+                        kind,
+                        span: Span::new(start, rparen.end),
+                    })
+                } else if self.tokens.peek().is_some_and(|t| t.text == "None")
+                    && !self.tokens.peek2().is_some_and(|t| {
+                        t.kind == SyntaxKind::LParen || t.kind == SyntaxKind::LBrace
+                    })
+                {
+                    self.tokens.bump();
+                    Some(ExprNode {
+                        kind: ExprKind::NoneExpr,
+                        span: Span::new(start, tok.end),
+                    })
+                } else {
+                    Some(ExprNode {
+                        kind: ExprKind::Ident(sym),
+                        span: Span::new(tok.start, tok.end),
+                    })
+                }
             }
             SyntaxKind::LParen if self.tokens.is_lambda_start() => self.parse_lambda(),
             SyntaxKind::LParen => self.parse_paren_expr(),
@@ -875,6 +978,7 @@ impl<'a> Parser<'a> {
             if self.tokens.at(SyntaxKind::KwLet) {
                 if let Some(stmt) = self.parse_let_stmt() {
                     items.push(BlockItem::Stmt(stmt));
+                    self.tokens.eat(SyntaxKind::Semicolon);
                     continue;
                 }
             }
@@ -886,11 +990,13 @@ impl<'a> Parser<'a> {
             {
                 if let Some(stmt) = self.parse_assign_stmt() {
                     items.push(BlockItem::Stmt(stmt));
+                    self.tokens.eat(SyntaxKind::Semicolon);
                     continue;
                 }
             }
             if let Some(expr) = self.parse_expr(0) {
                 items.push(BlockItem::Expr(expr));
+                self.tokens.eat(SyntaxKind::Semicolon);
             } else {
                 self.tokens.bump();
             }
@@ -976,6 +1082,95 @@ impl<'a> Parser<'a> {
             },
             span: Span::new(start, body.span.end),
         })
+    }
+
+    fn parse_match_expr(&mut self) -> Option<ExprNode> {
+        let start_tok = self.tokens.bump()?; // 'match'
+        let start = start_tok.start;
+        let scrutinee = self.parse_expr(0)?;
+        if let Err(e) = self.tokens.expect(SyntaxKind::LBrace) {
+            self.errors.push(e);
+            return None;
+        }
+        let mut arms = vec![];
+        while !self.tokens.at(SyntaxKind::RBrace) && self.tokens.peek().is_some() {
+            let pattern = self.parse_pattern()?;
+            let guard = if self.tokens.eat(SyntaxKind::KwIf).is_some() {
+                Some(self.parse_expr(0)?)
+            } else {
+                None
+            };
+            if let Err(e) = self.tokens.expect(SyntaxKind::FatArrow) {
+                self.errors.push(e);
+                break;
+            }
+            let body = self.parse_expr(0)?;
+            arms.push(crate::ast::MatchArm {
+                pattern,
+                guard,
+                body,
+            });
+            self.tokens.eat(SyntaxKind::Comma);
+        }
+        let end_tok = match self.tokens.expect(SyntaxKind::RBrace) {
+            Ok(t) => t,
+            Err(e) => {
+                self.errors.push(e);
+                return None;
+            }
+        };
+        Some(ExprNode {
+            kind: ExprKind::Match {
+                scrutinee: Box::new(scrutinee),
+                arms,
+            },
+            span: Span::new(start, end_tok.end),
+        })
+    }
+
+    fn parse_pattern(&mut self) -> Option<crate::ast::Pattern> {
+        match self.tokens.peek()?.kind {
+            SyntaxKind::Ident => {
+                let tok = self.tokens.bump()?;
+                let name = self.interner.intern(tok.text);
+                match self.interner.resolve(name) {
+                    "true" => Some(crate::ast::Pattern::BoolLit(true)),
+                    "false" => Some(crate::ast::Pattern::BoolLit(false)),
+                    "_" => Some(crate::ast::Pattern::Wild),
+                    _ => Some(crate::ast::Pattern::Var(name)),
+                }
+            }
+            SyntaxKind::IntLit => {
+                let tok = self.tokens.bump()?;
+                Some(crate::ast::Pattern::IntLit(tok.text.parse().unwrap_or(0)))
+            }
+            SyntaxKind::FloatLit => {
+                let tok = self.tokens.bump()?;
+                Some(crate::ast::Pattern::FloatLit(
+                    tok.text.parse().unwrap_or(0.0),
+                ))
+            }
+            SyntaxKind::StringLit => {
+                let tok = self.tokens.bump()?;
+                Some(crate::ast::Pattern::StrLit(tok.text.to_owned()))
+            }
+            SyntaxKind::LParen => {
+                self.tokens.bump();
+                self.tokens.expect(SyntaxKind::RParen).ok()?;
+                Some(crate::ast::Pattern::Unit)
+            }
+            SyntaxKind::Minus => {
+                self.tokens.bump();
+                Some(crate::ast::Pattern::Wild)
+            }
+            _ => {
+                self.errors.push(ParseError::Message {
+                    msg: "expected pattern".into(),
+                    span: (self.tokens.peek()?.start, self.tokens.peek()?.end),
+                });
+                None
+            }
+        }
     }
 
     fn parse_paren_expr(&mut self) -> Option<ExprNode> {

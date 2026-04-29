@@ -19,6 +19,7 @@ pub struct Codegen<'ctx> {
     builder: Builder<'ctx>,
     i64_type: IntType<'ctx>,
     i32_type: IntType<'ctx>,
+    #[allow(dead_code)]
     f64_type: inkwell::types::FloatType<'ctx>,
     interner: Interner,
     string_counter: RefCell<u32>,
@@ -278,9 +279,9 @@ impl<'ctx> Codegen<'ctx> {
                 self.codegen_assert(condition, message, vars, fn_value)
             }
             // v0.3.0: stub implementations for new expression variants
+            HirExpr::BoolLit(b) => Some(self.i64_type.const_int(if *b { 1 } else { 0 }, false)),
+            HirExpr::UnitLit => Some(self.i64_type.const_int(0, false)),
             HirExpr::FloatLit(_)
-            | HirExpr::BoolLit(_)
-            | HirExpr::UnitLit
             | HirExpr::As { .. }
             | HirExpr::Match { .. }
             | HirExpr::EnumVariant { .. } => Some(self.i64_type.const_int(0, false)),
