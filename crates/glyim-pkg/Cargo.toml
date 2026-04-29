@@ -12,7 +12,7 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 toml = "0.8"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
-thiserror = "1"
+thiserror = "2"
 sha2 = "0.11"
 hex = "0.4"
 
