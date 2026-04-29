@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 fn ui_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -39,19 +39,11 @@ fn compile_stderr(source: &str, file_path: &str) -> String {
 }
 
 fn run_ui_test(name: &str) {
-    let g_path = ui_dir().join(format!("{name}.g"));
-    let stderr_path = ui_dir().join(format!("{name}.g.stderr"));
-    let source =
-        fs::read_to_string(&g_path).unwrap_or_else(|_| panic!("missing source file {:?}", g_path));
+    let source_path = ui_dir().join(format!("{name}.g"));
+    let source = fs::read_to_string(&source_path)
+        .unwrap_or_else(|_| panic!("missing source file {:?}", source_path));
     let actual = compile_stderr(&source, &format!("tests/ui/{name}.g"));
-
-    if stderr_path.exists() {
-        let expected = fs::read_to_string(&stderr_path).unwrap();
-        assert_eq!(actual, expected, "stderr mismatch for {}", name);
-    } else {
-        fs::write(&stderr_path, &actual).unwrap();
-        // generated expected file; now compare {:?}. Run again to compare.", stderr_path);
-    }
+    insta::assert_snapshot!(name, actual);
 }
 
 #[test]

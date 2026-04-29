@@ -1,11 +1,11 @@
 pub mod ast;
-pub mod error;
-pub mod cst_builder;
-pub mod recovery;
 pub mod ast_to_cst;
-mod parser;
+pub mod cst_builder;
+pub mod error;
 mod expr;
 mod item;
+mod parser;
+pub mod recovery;
 
 pub use ast::{Ast, BinOp, BlockItem, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp, UseItem};
 pub use error::ParseError;

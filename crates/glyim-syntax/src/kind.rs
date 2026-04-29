@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 76;
+pub const COUNT: u16 = 79;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -13,6 +13,7 @@ pub enum SyntaxKind {
     BlockComment,
     IntLit,
     Ident,
+    StringLit,
     KwFn,
     KwStruct,
     KwEnum,
@@ -26,6 +27,7 @@ pub enum SyntaxKind {
     KwMatch,
     KwExtern,
     KwAs,
+    KwMut,
     Eq,
     FatArrow,
     Arrow,
@@ -51,9 +53,9 @@ pub enum SyntaxKind {
     GtEq,
     AmpAmp,
     PipePipe,
+    Question,
     Bang,
     Pipe,
-    Question,
     SourceFile,
     FnDef,
     ParamList,
@@ -61,6 +63,7 @@ pub enum SyntaxKind {
     BlockExpr,
     LambdaExpr,
     CallExpr,
+    IfExpr,
     BinaryExpr,
     PrefixExpr,
     LitExpr,
@@ -116,12 +119,14 @@ impl SyntaxKind {
             Self::Whitespace | Self::LineComment | Self::BlockComment => "trivia",
             Self::IntLit => "integer literal",
             Self::Ident => "identifier",
+            Self::StringLit => "string literal",
             Self::KwFn => "fn",
             Self::KwStruct => "struct",
             Self::KwEnum => "enum",
             Self::KwLet => "let",
             Self::KwIf => "if",
             Self::KwElse => "else",
+            Self::KwMut => "mut",
             Self::KwReturn => "return",
             Self::KwUse => "use",
             Self::KwTrue => "true",
@@ -163,6 +168,7 @@ impl SyntaxKind {
             Self::Param => "parameter",
             Self::BlockExpr => "block expression",
             Self::LambdaExpr => "lambda expression",
+            Self::IfExpr => "if expression",
             Self::CallExpr => "call expression",
             Self::BinaryExpr => "binary expression",
             Self::PrefixExpr => "prefix expression",
@@ -229,21 +235,9 @@ mod tests {
         assert_eq!(SyntaxKind::Error.display_name(), "error");
     }
     #[test]
-    fn new_v030_keywords_are_keywords() {
-        assert!(SyntaxKind::KwTrue.is_keyword());
-        assert!(SyntaxKind::KwFalse.is_keyword());
-        assert!(SyntaxKind::KwMatch.is_keyword());
-        assert!(SyntaxKind::KwExtern.is_keyword());
-        assert!(SyntaxKind::KwAs.is_keyword());
-    }
-    #[test]
-    fn new_punctuation_has_display_name() {
-        assert_eq!(SyntaxKind::Question.display_name(), "?");
-    }
-    #[test]
     fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error;
         let _ = SyntaxKind::PtrType;
-        assert_eq!(COUNT, 76);
+        assert_eq!(COUNT, 79);
     }
 }

@@ -1,6 +1,6 @@
 use crate::hash::ContentHash;
 
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileArtifact {
     pub logical_path: String,
     pub content: Vec<u8>,

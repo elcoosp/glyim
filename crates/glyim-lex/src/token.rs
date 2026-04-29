@@ -9,6 +9,10 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    pub fn len(&self) -> usize { self.text.len() }
-    pub fn is_empty(&self) -> bool { self.text.is_empty() }
+    pub fn len(&self) -> usize {
+        self.text.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
 }

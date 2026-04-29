@@ -28,7 +28,7 @@ pub fn render_diagnostics(source: &str, file_path: &str, diagnostics: &[Diagnost
 }
 
 pub fn render_single(source: &str, file_path: &str, diag: &Diagnostic) -> String {
-    render_diagnostics(source, file_path, &[diag.clone()])
+    render_diagnostics(source, file_path, std::slice::from_ref(diag))
 }
 
 #[cfg(test)]

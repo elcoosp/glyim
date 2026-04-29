@@ -1,9 +1,12 @@
+use glyim_diag::Span;
 use glyim_interner::Interner;
 use glyim_lex::Token;
 use glyim_syntax::SyntaxKind;
-use glyim_diag::Span;
 
-use crate::ast::{Ast, BinOp, BlockItem, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp, UseItem};
+use crate::ast::{
+    Ast, BinOp, BlockItem, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp,
+    UseItem,
+};
 use crate::error::ParseError;
 
 struct Tokens<'a> {
@@ -25,14 +28,14 @@ impl<'a> Tokens<'a> {
         while p < self.tokens.len() && self.tokens[p].kind.is_trivia() { p += 1; }
         self.tokens.get(p)
     }
-    fn at(&self, kind: SyntaxKind) -> bool { self.peek().map_or(false, |t| t.kind == kind) }
+    fn at(&self, kind: SyntaxKind) -> bool { self.peek().is_some_and(|t| t.kind == kind) }
     fn bump(&mut self) -> Option<Token<'a>> {
         self.skip_trivia();
         if self.pos < self.tokens.len() { let t = self.tokens[self.pos]; self.pos += 1; Some(t) } else { None }
     }
     fn eat(&mut self, kind: SyntaxKind) -> Option<Token<'a>> { if self.at(kind) { self.bump() } else { None } }
     fn eat_ident(&mut self, text: &str) -> Option<Token<'a>> {
-        if self.at(SyntaxKind::Ident) && self.peek().map_or(false, |t| t.text == text) { self.bump() } else { None }
+        if self.at(SyntaxKind::Ident) && self.peek().is_some_and(|t| t.text == text) { self.bump() } else { None }
     }
     fn expect(&mut self, kind: SyntaxKind) -> Result<Token<'a>, ParseError> {
         self.skip_trivia();
@@ -52,23 +55,23 @@ impl<'a> Tokens<'a> {
         if self.tokens.get(p).map_or(true, |t| t.kind != SyntaxKind::LParen) { return false; }
         p += 1;
         while p < self.tokens.len() && self.tokens[p].kind.is_trivia() { p += 1; }
-        if self.tokens.get(p).map_or(false, |t| t.kind == SyntaxKind::RParen) {
+        if self.tokens.get(p).is_some_and(|t| t.kind == SyntaxKind::RParen) {
             p += 1; while p < self.tokens.len() && self.tokens[p].kind.is_trivia() { p += 1; }
-            return self.tokens.get(p).map_or(false, |t| t.kind == SyntaxKind::FatArrow);
+            return self.tokens.get(p).is_some_and(|t| t.kind == SyntaxKind::FatArrow);
         }
-        if !self.tokens.get(p).map_or(false, |t| t.kind == SyntaxKind::Ident) { return false; }
+        if !self.tokens.get(p).is_some_and(|t| t.kind == SyntaxKind::Ident) { return false; }
         p += 1;
         loop {
             while p < self.tokens.len() && self.tokens[p].kind.is_trivia() { p += 1; }
             match self.tokens.get(p) {
                 Some(t) if t.kind == SyntaxKind::Comma => {
                     p += 1; while p < self.tokens.len() && self.tokens[p].kind.is_trivia() { p += 1; }
-                    if !self.tokens.get(p).map_or(false, |t| t.kind == SyntaxKind::Ident) { return false; }
+                    if !self.tokens.get(p).is_some_and(|t| t.kind == SyntaxKind::Ident) { return false; }
                     p += 1;
                 }
                 Some(t) if t.kind == SyntaxKind::RParen => {
                     p += 1; while p < self.tokens.len() && self.tokens[p].kind.is_trivia() { p += 1; }
-                    return self.tokens.get(p).map_or(false, |t| t.kind == SyntaxKind::FatArrow);
+                    return self.tokens.get(p).is_some_and(|t| t.kind == SyntaxKind::FatArrow);
                 }
                 _ => return false,
             }
@@ -90,25 +93,18 @@ impl<'a> Parser<'a> {
     pub fn parse_source_file(&mut self) -> Ast {
         let mut items = vec![];
         while !self.tokens.is_eof() {
-            if let Some(item) = self.parse_item() {
-                items.push(item);
-            } else {
-                self.tokens.bump();
-            }
+            if let Some(item) = self.parse_item() { items.push(item); } else { self.tokens.bump(); }
         }
         Ast { items }
     }
 
-    pub fn parse_source_file_recovery(&mut self) -> Ast {
+    #[allow(dead_code)] pub fn parse_source_file_recovery(&mut self) -> Ast {
         let mut items = vec![];
         while !self.tokens.is_eof() {
             if let Some(item) = self.parse_item() {
                 items.push(item);
             } else {
-                self.errors.push(ParseError::Message {
-                    msg: "failed to parse item".into(),
-                    span: self.current_span(),
-                });
+                self.errors.push(ParseError::Message { msg: "failed to parse item".into(), span: self.current_span() });
                 self.recover();
             }
         }
@@ -121,11 +117,7 @@ impl<'a> Parser<'a> {
             SyntaxKind::KwLet => self.parse_let_stmt().map(Item::Stmt),
             SyntaxKind::KwUse => self.parse_use_item().map(Item::Use),
             SyntaxKind::Ident => {
-                if self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Eq) {
-                    self.parse_binding()
-                } else {
-                    None
-                }
+                if self.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::Eq) { self.parse_binding() } else { None }
             }
             _ => None,
         }
@@ -142,17 +134,13 @@ impl<'a> Parser<'a> {
 
     fn parse_fn_def(&mut self) -> Option<Item> {
         self.tokens.bump()?;
-        let name_tok = match self.tokens.expect(SyntaxKind::Ident) {
-            Ok(t) => t, Err(e) => { self.errors.push(e); return None; }
-        };
+        let name_tok = match self.tokens.expect(SyntaxKind::Ident) { Ok(t) => t, Err(e) => { self.errors.push(e); return None; } };
         let name = self.interner.intern(name_tok.text);
         let name_span = Span::new(name_tok.start, name_tok.end);
         if let Err(e) = self.tokens.expect(SyntaxKind::LParen) { self.errors.push(e); return None; }
         let mut params = vec![];
         while !self.tokens.at(SyntaxKind::RParen) {
-            let tok = match self.tokens.expect(SyntaxKind::Ident) {
-                Ok(t) => t, Err(e) => { self.errors.push(e); break; }
-            };
+            let tok = match self.tokens.expect(SyntaxKind::Ident) { Ok(t) => t, Err(e) => { self.errors.push(e); break; } };
             params.push((self.interner.intern(tok.text), Span::new(tok.start, tok.end)));
             self.tokens.eat(SyntaxKind::Comma);
         }
@@ -165,9 +153,7 @@ impl<'a> Parser<'a> {
         let start_tok = self.tokens.bump()?;
         let mut path_parts = vec![];
         loop {
-            let tok = match self.tokens.expect(SyntaxKind::Ident) {
-                Ok(t) => t, Err(e) => { self.errors.push(e); break; }
-            };
+            let tok = match self.tokens.expect(SyntaxKind::Ident) { Ok(t) => t, Err(e) => { self.errors.push(e); break; } };
             path_parts.push(tok.text);
             if !self.tokens.at(SyntaxKind::Dot) { break; }
             self.tokens.bump();
@@ -182,9 +168,7 @@ impl<'a> Parser<'a> {
     fn parse_let_stmt(&mut self) -> Option<StmtNode> {
         let start = self.tokens.bump()?.start;
         let mutable = self.tokens.eat_ident("mut").is_some();
-        let name_tok = match self.tokens.expect(SyntaxKind::Ident) {
-            Ok(t) => t, Err(e) => { self.errors.push(e); return None; }
-        };
+        let name_tok = match self.tokens.expect(SyntaxKind::Ident) { Ok(t) => t, Err(e) => { self.errors.push(e); return None; } };
         let name = self.interner.intern(name_tok.text);
         if let Err(e) = self.tokens.expect(SyntaxKind::Eq) { self.errors.push(e); return None; }
         let value = self.parse_expr(0)?;
@@ -195,7 +179,7 @@ impl<'a> Parser<'a> {
     fn parse_assign_stmt(&mut self) -> Option<StmtNode> {
         let name_tok = self.tokens.peek()?;
         if name_tok.kind != SyntaxKind::Ident { return None; }
-        if !self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Eq) { return None; }
+        if !self.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::Eq) { return None; }
         let target_tok = self.tokens.bump()?;
         self.tokens.bump();
         let target = self.interner.intern(target_tok.text);
@@ -207,6 +191,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expr(&mut self, min_bp: u8) -> Option<ExprNode> {
         let mut left = self.parse_expr_atom()?;
+        #[allow(clippy::while_let_loop)]
         loop {
             let op_tok = match self.tokens.peek() { Some(t) => *t, None => break };
             if let Some((l_bp, r_bp)) = Self::infix_bp(op_tok.kind) {
@@ -226,9 +211,7 @@ impl<'a> Parser<'a> {
                     args.push(self.parse_expr(0)?);
                     self.tokens.eat(SyntaxKind::Comma);
                 }
-                let rparen = match self.tokens.expect(SyntaxKind::RParen) {
-                    Ok(t) => t, Err(e) => { self.errors.push(e); break; }
-                };
+                let rparen = match self.tokens.expect(SyntaxKind::RParen) { Ok(t) => t, Err(e) => { self.errors.push(e); break; } };
                 left = ExprNode {
                     kind: ExprKind::Call { callee: Box::new(left.clone()), args },
                     span: Span::new(left.span.start, rparen.end),
@@ -263,9 +246,7 @@ impl<'a> Parser<'a> {
             SyntaxKind::KwIf => self.parse_if_expr(),
             SyntaxKind::Minus | SyntaxKind::Bang => {
                 let op_tok = self.tokens.bump()?;
-                let (r_bp, op) = match op_tok.kind {
-                    SyntaxKind::Minus => (70, UnOp::Neg), SyntaxKind::Bang => (70, UnOp::Not), _ => unreachable!(),
-                };
+                let (r_bp, op) = match op_tok.kind { SyntaxKind::Minus => (70, UnOp::Neg), SyntaxKind::Bang => (70, UnOp::Not), _ => unreachable!() };
                 let operand = self.parse_expr(r_bp)?;
                 Some(ExprNode {
                     kind: ExprKind::Unary { op, operand: Box::new(operand.clone()) },
@@ -281,21 +262,13 @@ impl<'a> Parser<'a> {
         let start = start_tok.start;
         let mut items = vec![];
         while !self.tokens.at(SyntaxKind::RBrace) && self.tokens.peek().is_some() {
-            if self.tokens.at(SyntaxKind::KwLet) {
-                if let Some(stmt) = self.parse_let_stmt() { items.push(BlockItem::Stmt(stmt)); continue; }
-            }
-            if self.tokens.at(SyntaxKind::Ident) && self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Eq) {
+            if self.tokens.at(SyntaxKind::KwLet) { if let Some(stmt) = self.parse_let_stmt() { items.push(BlockItem::Stmt(stmt)); continue; } }
+            if self.tokens.at(SyntaxKind::Ident) && self.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::Eq) {
                 if let Some(stmt) = self.parse_assign_stmt() { items.push(BlockItem::Stmt(stmt)); continue; }
             }
-            if let Some(expr) = self.parse_expr(0) {
-                items.push(BlockItem::Expr(expr));
-            } else {
-                self.tokens.bump();
-            }
+            if let Some(expr) = self.parse_expr(0) { items.push(BlockItem::Expr(expr)); } else { self.tokens.bump(); }
         }
-        let end_tok = match self.tokens.expect(SyntaxKind::RBrace) {
-            Ok(t) => t, Err(e) => { self.errors.push(e); return None; }
-        };
+        let end_tok = match self.tokens.expect(SyntaxKind::RBrace) { Ok(t) => t, Err(e) => { self.errors.push(e); return None; } };
         Some(ExprNode { kind: ExprKind::Block(items), span: Span::new(start, end_tok.end) })
     }
 
@@ -304,26 +277,16 @@ impl<'a> Parser<'a> {
         let condition = self.parse_expr(0)?;
         let then_branch = self.parse_block_expr()?;
         let else_branch = if self.tokens.eat(SyntaxKind::KwElse).is_some() {
-            if self.tokens.at(SyntaxKind::KwIf) {
-                self.parse_if_expr()
-            } else if self.tokens.at(SyntaxKind::LBrace) {
-                let else_block = self.parse_block_expr()?;
-                Some(else_block)
-            } else {
+            if self.tokens.at(SyntaxKind::KwIf) { self.parse_if_expr() }
+            else if self.tokens.at(SyntaxKind::LBrace) { let else_block = self.parse_block_expr()?; Some(else_block) }
+            else {
                 let peek = self.tokens.peek();
                 self.errors.push(ParseError::expected(SyntaxKind::LBrace, peek.map_or(SyntaxKind::Eof, |t| t.kind), peek.map_or(0, |t| t.start), peek.map_or(0, |t| t.end)));
                 None
             }
         } else { None };
         let end = else_branch.as_ref().map_or(then_branch.span.end, |e| e.span.end);
-        Some(ExprNode {
-            kind: ExprKind::If {
-                condition: Box::new(condition),
-                then_branch: Box::new(then_branch),
-                else_branch: else_branch.map(Box::new),
-            },
-            span: Span::new(start, end),
-        })
+        Some(ExprNode { kind: ExprKind::If { condition: Box::new(condition), then_branch: Box::new(then_branch), else_branch: else_branch.map(Box::new) }, span: Span::new(start, end) })
     }
 
     fn parse_lambda(&mut self) -> Option<ExprNode> {
@@ -331,9 +294,7 @@ impl<'a> Parser<'a> {
         let start = start_tok.start;
         let mut params = vec![];
         while !self.tokens.at(SyntaxKind::RParen) {
-            let tok = match self.tokens.expect(SyntaxKind::Ident) {
-                Ok(t) => t, Err(e) => { self.errors.push(e); break; }
-            };
+            let tok = match self.tokens.expect(SyntaxKind::Ident) { Ok(t) => t, Err(e) => { self.errors.push(e); break; } };
             params.push(self.interner.intern(tok.text));
             if !self.tokens.at(SyntaxKind::Comma) { break; }
             self.tokens.bump();
@@ -344,52 +305,35 @@ impl<'a> Parser<'a> {
         Some(ExprNode { kind: ExprKind::Lambda { params, body: Box::new(body.clone()) }, span: Span::new(start, body.span.end) })
     }
 
-    fn parse_paren_expr(&mut self) -> Option<ExprNode> {
-        self.tokens.bump();
-        let inner = self.parse_expr(0)?;
-        if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); }
-        Some(inner)
-    }
+    fn parse_paren_expr(&mut self) -> Option<ExprNode> { self.tokens.bump(); let inner = self.parse_expr(0)?; if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); } Some(inner) }
 
     fn infix_bp(kind: SyntaxKind) -> Option<(u8, u8)> {
         match kind {
             SyntaxKind::PipePipe => Some((10,11)), SyntaxKind::AmpAmp => Some((20,21)),
-            SyntaxKind::EqEq | SyntaxKind::BangEq => Some((30,31)),
-            SyntaxKind::Lt | SyntaxKind::Gt | SyntaxKind::LtEq | SyntaxKind::GtEq => Some((40,41)),
-            SyntaxKind::Plus | SyntaxKind::Minus => Some((50,51)),
-            SyntaxKind::Star | SyntaxKind::Slash | SyntaxKind::Percent => Some((60,61)),
+            SyntaxKind::EqEq | SyntaxKind::BangEq => Some((30,31)), SyntaxKind::Lt | SyntaxKind::Gt | SyntaxKind::LtEq | SyntaxKind::GtEq => Some((40,41)),
+            SyntaxKind::Plus | SyntaxKind::Minus => Some((50,51)), SyntaxKind::Star | SyntaxKind::Slash | SyntaxKind::Percent => Some((60,61)),
             _ => None,
         }
     }
-
     fn to_binop(kind: SyntaxKind) -> BinOp {
         match kind {
-            SyntaxKind::Plus => BinOp::Add, SyntaxKind::Minus => BinOp::Sub, SyntaxKind::Star => BinOp::Mul,
-            SyntaxKind::Slash => BinOp::Div, SyntaxKind::Percent => BinOp::Mod,
-            SyntaxKind::EqEq => BinOp::Eq, SyntaxKind::BangEq => BinOp::Neq,
-            SyntaxKind::Lt => BinOp::Lt, SyntaxKind::Gt => BinOp::Gt,
-            SyntaxKind::LtEq => BinOp::Lte, SyntaxKind::GtEq => BinOp::Gte,
+            SyntaxKind::Plus => BinOp::Add, SyntaxKind::Minus => BinOp::Sub, SyntaxKind::Star => BinOp::Mul, SyntaxKind::Slash => BinOp::Div, SyntaxKind::Percent => BinOp::Mod,
+            SyntaxKind::EqEq => BinOp::Eq, SyntaxKind::BangEq => BinOp::Neq, SyntaxKind::Lt => BinOp::Lt, SyntaxKind::Gt => BinOp::Gt, SyntaxKind::LtEq => BinOp::Lte, SyntaxKind::GtEq => BinOp::Gte,
             SyntaxKind::AmpAmp => BinOp::And, SyntaxKind::PipePipe => BinOp::Or,
             _ => unreachable!(),
         }
     }
 
-    pub fn recover(&mut self) {
+    #[allow(dead_code)] pub fn recover(&mut self) {
         loop {
             match self.tokens.peek() {
-                None => break,
-                Some(tok) if crate::recovery::is_sync_point(tok.kind) => break,
+                None => break, Some(tok) if crate::recovery::is_sync_point(tok.kind) => break,
                 Some(tok) if crate::recovery::is_block_end(tok.kind) => { self.tokens.bump(); break; }
                 _ => { self.tokens.bump(); }
             }
         }
     }
-    pub fn current_span(&self) -> (usize, usize) {
-        match self.tokens.peek() {
-            Some(tok) => (tok.start, tok.end),
-            None => (0, 0),
-        }
-    }
+    #[allow(dead_code)] pub fn current_span(&self) -> (usize, usize) { match self.tokens.peek() { Some(tok) => (tok.start, tok.end), None => (0, 0) } }
 }
 
 pub fn parse(source: &str) -> ParseOutput {

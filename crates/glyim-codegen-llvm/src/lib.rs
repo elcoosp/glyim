@@ -1,2 +1,2 @@
 mod codegen;
-pub use codegen::{Codegen, compile_to_ir};
+pub use codegen::{compile_to_ir, Codegen};

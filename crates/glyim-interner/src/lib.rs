@@ -13,7 +13,10 @@ pub struct Interner {
 
 impl Interner {
     pub fn new() -> Self {
-        Self { strings: Vec::new(), map: HashMap::new() }
+        Self {
+            strings: Vec::new(),
+            map: HashMap::new(),
+        }
     }
     pub fn intern(&mut self, s: &str) -> Symbol {
         if let Some(&id) = self.map.get(s) {
@@ -27,56 +30,73 @@ impl Interner {
     pub fn resolve(&self, sym: Symbol) -> &str {
         &self.strings[sym.0 as usize]
     }
-    pub fn len(&self) -> usize { self.strings.len() }
-    pub fn is_empty(&self) -> bool { self.strings.is_empty() }
+    pub fn len(&self) -> usize {
+        self.strings.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.strings.is_empty()
+    }
 }
 
 impl Default for Interner {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test] fn intern_deduplicates_equal_strings() {
+    #[test]
+    fn intern_deduplicates_equal_strings() {
         let mut i = Interner::new();
         assert_eq!(i.intern("hello"), i.intern("hello"));
     }
-    #[test] fn intern_different_strings_produce_different_symbols() {
+    #[test]
+    fn intern_different_strings_produce_different_symbols() {
         let mut i = Interner::new();
         assert_ne!(i.intern("hello"), i.intern("world"));
     }
-    #[test] fn resolve_returns_original_string() {
+    #[test]
+    fn resolve_returns_original_string() {
         let mut i = Interner::new();
         let s = i.intern("hello");
         assert_eq!(i.resolve(s), "hello");
     }
-    #[test] fn resolve_multiple_strings() {
+    #[test]
+    fn resolve_multiple_strings() {
         let mut i = Interner::new();
         let h = i.intern("hello");
         let w = i.intern("world");
         assert_eq!(i.resolve(h), "hello");
         assert_eq!(i.resolve(w), "world");
     }
-    #[test] fn intern_empty_string() {
+    #[test]
+    fn intern_empty_string() {
         let mut i = Interner::new();
         let s = i.intern("");
         assert_eq!(i.resolve(s), "");
     }
-    #[test] fn intern_unicode() {
+    #[test]
+    fn intern_unicode() {
         let mut i = Interner::new();
         let s = i.intern("日本語");
         assert_eq!(i.resolve(s), "日本語");
     }
-    #[test] fn len_tracks_unique_strings() {
+    #[test]
+    fn len_tracks_unique_strings() {
         let mut i = Interner::new();
         assert_eq!(i.len(), 0);
-        i.intern("a"); assert_eq!(i.len(), 1);
-        i.intern("a"); assert_eq!(i.len(), 1);
-        i.intern("b"); assert_eq!(i.len(), 2);
+        i.intern("a");
+        assert_eq!(i.len(), 1);
+        i.intern("a");
+        assert_eq!(i.len(), 1);
+        i.intern("b");
+        assert_eq!(i.len(), 2);
     }
-    #[test] fn default_creates_empty_interner() {
+    #[test]
+    fn default_creates_empty_interner() {
         assert!(Interner::default().is_empty());
     }
 }

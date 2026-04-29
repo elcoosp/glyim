@@ -1,6 +1,6 @@
 //! Rowan language definition and type aliases for the Glyim CST.
-use rowan::Language;
 use crate::SyntaxKind;
+use rowan::Language;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GlyimLang;

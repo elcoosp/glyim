@@ -174,6 +174,11 @@ check-tiers:
         print("✅ Tier constraints verified: no cross-tier violations")
     '
 
+
+# Check file sizes (max 500 LOC, warn 300)
+check-files:
+    python3 scripts/check_file_sizes.py
+
 # Run all quality checks
 qa: check check-dag check-tiers test
     @echo "✅ All quality checks passed"
@@ -207,7 +212,7 @@ loc:
 # ─── CI Simulation ───────────────────────────────────────────
 
 # Simulate what CI would run
-ci: check check-dag check-tiers build test-unit test-integration
+ci: check check-dag check-tiers build test-unit test-integration check-files
     @echo "✅ CI simulation passed"
 
 # ─── Workspace ──────────────────────────────────────────────

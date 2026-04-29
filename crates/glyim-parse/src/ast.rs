@@ -2,33 +2,80 @@ use glyim_diag::Span;
 use glyim_interner::Symbol;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum BinOp { Add, Sub, Mul, Div, Mod, Eq, Neq, Lt, Gt, Lte, Gte, And, Or }
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum UnOp { Neg, Not }
+pub enum UnOp {
+    Neg,
+    Not,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExprNode { pub kind: ExprKind, pub span: Span }
+pub struct ExprNode {
+    pub kind: ExprKind,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
     IntLit(i64),
     StrLit(String),
     Ident(Symbol),
-    Binary { op: BinOp, lhs: Box<ExprNode>, rhs: Box<ExprNode> },
-    Unary { op: UnOp, operand: Box<ExprNode> },
-    Lambda { params: Vec<Symbol>, body: Box<ExprNode> },
+    Binary {
+        op: BinOp,
+        lhs: Box<ExprNode>,
+        rhs: Box<ExprNode>,
+    },
+    Unary {
+        op: UnOp,
+        operand: Box<ExprNode>,
+    },
+    Lambda {
+        params: Vec<Symbol>,
+        body: Box<ExprNode>,
+    },
     Block(Vec<BlockItem>),
-    If { condition: Box<ExprNode>, then_branch: Box<ExprNode>, else_branch: Option<Box<ExprNode>> },
-    Call { callee: Box<ExprNode>, args: Vec<ExprNode> },
+    If {
+        condition: Box<ExprNode>,
+        then_branch: Box<ExprNode>,
+        else_branch: Option<Box<ExprNode>>,
+    },
+    Call {
+        callee: Box<ExprNode>,
+        args: Vec<ExprNode>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StmtNode { pub kind: StmtKind, pub span: Span }
+pub struct StmtNode {
+    pub kind: StmtKind,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StmtKind {
-    Let { name: Symbol, mutable: bool, value: ExprNode },
-    Assign { target: Symbol, value: ExprNode },
+    Let {
+        name: Symbol,
+        mutable: bool,
+        value: ExprNode,
+    },
+    Assign {
+        target: Symbol,
+        value: ExprNode,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,21 +85,51 @@ pub enum BlockItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UseItem { pub path: String, pub span: Span }
+pub struct UseItem {
+    pub path: String,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
-    Binding { name: Symbol, name_span: Span, value: ExprNode },
-    FnDef { name: Symbol, name_span: Span, params: Vec<(Symbol, Span)>, body: ExprNode },
+    Binding {
+        name: Symbol,
+        name_span: Span,
+        value: ExprNode,
+    },
+    FnDef {
+        name: Symbol,
+        name_span: Span,
+        params: Vec<(Symbol, Span)>,
+        body: ExprNode,
+    },
     Stmt(StmtNode),
     Use(UseItem),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Ast { pub items: Vec<Item> }
+pub struct Ast {
+    pub items: Vec<Item>,
+}
 
 impl ExprNode {
-    #[cfg(test)] pub fn dummy(kind: ExprKind) -> Self { Self { kind, span: Span::new(0,0) } }
-    pub fn int_lit(value: i64, span: Span) -> Self { Self { kind: ExprKind::IntLit(value), span } }
-    pub fn ident(sym: Symbol, span: Span) -> Self { Self { kind: ExprKind::Ident(sym), span } }
+    #[cfg(test)]
+    pub fn dummy(kind: ExprKind) -> Self {
+        Self {
+            kind,
+            span: Span::new(0, 0),
+        }
+    }
+    pub fn int_lit(value: i64, span: Span) -> Self {
+        Self {
+            kind: ExprKind::IntLit(value),
+            span,
+        }
+    }
+    pub fn ident(sym: Symbol, span: Span) -> Self {
+        Self {
+            kind: ExprKind::Ident(sym),
+            span,
+        }
+    }
 }

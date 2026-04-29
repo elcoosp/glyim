@@ -28,6 +28,7 @@ clap = { version = "4", features = ["derive"] }
 tempfile = "3"
 
 [dev-dependencies]
+insta = { version = "1", features = ["yaml"] }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }

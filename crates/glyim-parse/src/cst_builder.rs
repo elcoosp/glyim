@@ -1,6 +1,6 @@
-use rowan::api::Language;
-use glyim_syntax::{GreenNode, SyntaxKind, SyntaxNode};
 use crate::ParseError;
+use glyim_syntax::{GreenNode, SyntaxKind, SyntaxNode};
+use rowan::api::Language;
 
 pub struct CstBuilder {
     builder: rowan::GreenNodeBuilder<'static>,
@@ -8,18 +8,31 @@ pub struct CstBuilder {
 }
 
 impl CstBuilder {
-    pub fn new() -> Self { Self { builder: rowan::GreenNodeBuilder::new(), errors: vec![] } }
+    pub fn new() -> Self {
+        Self {
+            builder: rowan::GreenNodeBuilder::new(),
+            errors: vec![],
+        }
+    }
     pub fn start_node(&mut self, kind: SyntaxKind) {
-        self.builder.start_node(glyim_syntax::GlyimLang::kind_to_raw(kind));
+        self.builder
+            .start_node(glyim_syntax::GlyimLang::kind_to_raw(kind));
     }
     pub fn token(&mut self, kind: SyntaxKind, text: &str) {
-        self.builder.token(glyim_syntax::GlyimLang::kind_to_raw(kind), text);
+        self.builder
+            .token(glyim_syntax::GlyimLang::kind_to_raw(kind), text);
     }
-    pub fn finish_node(&mut self) { self.builder.finish_node(); }
-    pub fn error(&mut self, err: ParseError) { self.errors.push(err); }
+    pub fn finish_node(&mut self) {
+        self.builder.finish_node();
+    }
+    pub fn error(&mut self, err: ParseError) {
+        self.errors.push(err);
+    }
     pub fn error_node(&mut self, tokens: &[(SyntaxKind, &str)], err: ParseError) {
         self.start_node(SyntaxKind::Error);
-        for (k,t) in tokens { self.token(*k,t); }
+        for (k, t) in tokens {
+            self.token(*k, t);
+        }
         self.finish_node();
         self.errors.push(err);
     }
@@ -29,4 +42,12 @@ impl CstBuilder {
     }
 }
 
-pub fn green_to_syntax(green: GreenNode) -> SyntaxNode { SyntaxNode::new_root(green) }
+impl Default for CstBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn green_to_syntax(green: GreenNode) -> SyntaxNode {
+    SyntaxNode::new_root(green)
+}
