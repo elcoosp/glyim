@@ -17,7 +17,7 @@ jobs:
 
       - name: Cache LLVM
         id: cache-llvm
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/lib/llvm-22
           key: llvm-22-${{ runner.os }}
