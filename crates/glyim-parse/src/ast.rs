@@ -95,6 +95,7 @@ pub enum ExprKind {
         callee: Box<ExprNode>,
         args: Vec<ExprNode>,
     },
+    SizeOf(TypeExpr),
     TupleLit(Vec<ExprNode>),
 }
 
@@ -182,12 +183,27 @@ pub struct ExternFn {
     pub ret: Option<(Symbol, Span)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttributeArg {
+    pub key: String,
+    pub value: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attribute {
+    pub name: String,
+    pub args: Vec<AttributeArg>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Binding {
         name: Symbol,
         name_span: Span,
         value: ExprNode,
+        attrs: Vec<Attribute>,
     },
     FnDef {
         name: Symbol,
@@ -196,6 +212,7 @@ pub enum Item {
         params: Vec<(Symbol, Span, Option<TypeExpr>)>,
         ret: Option<TypeExpr>,
         body: ExprNode,
+        attrs: Vec<Attribute>,
     },
     StructDef {
         name: Symbol,

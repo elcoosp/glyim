@@ -41,15 +41,29 @@ pub enum TypeError {
 impl std::fmt::Display for TypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeError::MismatchedTypes { expected, found, .. } => {
-                write!(f, "type mismatch: expected {:?}, found {:?}", expected, found)
+            TypeError::MismatchedTypes {
+                expected, found, ..
+            } => {
+                write!(
+                    f,
+                    "type mismatch: expected {:?}, found {:?}",
+                    expected, found
+                )
             }
             TypeError::UnknownType { name } => write!(f, "unknown type: {:?}", name),
             TypeError::UnknownField { struct_name, field } => {
-                write!(f, "unknown field '{:?}' on struct '{:?}'", field, struct_name)
+                write!(
+                    f,
+                    "unknown field '{:?}' on struct '{:?}'",
+                    field, struct_name
+                )
             }
             TypeError::MissingField { struct_name, field } => {
-                write!(f, "missing field '{:?}' in struct '{:?}'", field, struct_name)
+                write!(
+                    f,
+                    "missing field '{:?}' in struct '{:?}'",
+                    field, struct_name
+                )
             }
             TypeError::ExtraField { struct_name, field } => {
                 write!(f, "extra field '{:?}' in struct '{:?}'", field, struct_name)
@@ -62,7 +76,11 @@ impl std::fmt::Display for TypeError {
             }
             TypeError::ExpectedFunction { .. } => write!(f, "expected function call"),
             TypeError::InvalidReturnType { expected, found } => {
-                write!(f, "invalid return type: expected {:?}, found {:?}", expected, found)
+                write!(
+                    f,
+                    "invalid return type: expected {:?}, found {:?}",
+                    expected, found
+                )
             }
         }
     }

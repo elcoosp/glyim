@@ -16,7 +16,7 @@ impl TypeChecker {
                 self.bind_pattern(pattern, &ty);
                 None
             }
-            HirStmt::Assign { target, value } => {
+            HirStmt::Assign { target, value, .. } => {
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
                 self.insert_binding(*target, ty.clone());
                 Some(ty)
@@ -31,7 +31,7 @@ impl TypeChecker {
                 self.insert_binding(*sym, value_ty.clone());
             }
             HirPattern::Wild => {}
-            HirPattern::Tuple { elements } => {
+            HirPattern::Tuple { elements, .. } => {
                 if let HirType::Tuple(elem_types) = value_ty {
                     for (pat, ty) in elements.iter().zip(elem_types.iter()) {
                         self.bind_pattern(pat, ty);

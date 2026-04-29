@@ -1,9 +1,14 @@
 use crate::Codegen;
 use glyim_hir::HirBinOp;
-use inkwell::IntPredicate;
 use inkwell::values::IntValue;
+use inkwell::IntPredicate;
 
-pub(crate) fn codegen_binop<'ctx>(cg: &Codegen<'ctx>, op: HirBinOp, l: IntValue<'ctx>, r: IntValue<'ctx>) -> Option<IntValue<'ctx>> {
+pub(crate) fn codegen_binop<'ctx>(
+    cg: &Codegen<'ctx>,
+    op: HirBinOp,
+    l: IntValue<'ctx>,
+    r: IntValue<'ctx>,
+) -> Option<IntValue<'ctx>> {
     match op {
         HirBinOp::Add => cg.builder.build_int_add(l, r, "add").ok(),
         HirBinOp::Sub => cg.builder.build_int_sub(l, r, "sub").ok(),
@@ -21,7 +26,12 @@ pub(crate) fn codegen_binop<'ctx>(cg: &Codegen<'ctx>, op: HirBinOp, l: IntValue<
     }
 }
 
-fn cmp_extend<'ctx>(cg: &Codegen<'ctx>, pred: IntPredicate, l: IntValue<'ctx>, r: IntValue<'ctx>) -> Option<IntValue<'ctx>> {
+fn cmp_extend<'ctx>(
+    cg: &Codegen<'ctx>,
+    pred: IntPredicate,
+    l: IntValue<'ctx>,
+    r: IntValue<'ctx>,
+) -> Option<IntValue<'ctx>> {
     let c = cg.builder.build_int_compare(pred, l, r, "cmp").ok()?;
     cg.builder.build_int_z_extend(c, cg.i64_type, "zext").ok()
 }

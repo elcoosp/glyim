@@ -394,3 +394,63 @@ mod tests {
         );
     }
 }
+
+#[test]
+fn lex_hash_token() {
+    let tokens = tokenize("#");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::Hash);
+}
+
+#[test]
+fn lex_empty_attribute_brackets() {
+    let tokens = tokenize("#[]");
+    let kinds: Vec<_> = tokens
+        .iter()
+        .filter(|t| !t.kind.is_trivia())
+        .map(|t| t.kind)
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            SyntaxKind::Hash,
+            SyntaxKind::OpenBracket,
+            SyntaxKind::CloseBracket
+        ]
+    );
+}
+
+#[test]
+fn lex_named_attribute() {
+    let tokens = tokenize("#[test]");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[2].kind, SyntaxKind::Ident);
+    assert_eq!(nt[2].text, "test");
+}
+
+#[test]
+fn lex_attribute_with_paren_args() {
+    let tokens = tokenize("#[test(should_panic)]");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    // Expected order: #[test(should_panic)]
+    // Hash, OpenBracket, Ident("test"), LParen, Ident("should_panic"), RParen, CloseBracket
+    assert_eq!(nt.len(), 7);
+    assert_eq!(nt[0].kind, SyntaxKind::Hash);
+    assert_eq!(nt[1].kind, SyntaxKind::OpenBracket);
+    assert_eq!(nt[2].kind, SyntaxKind::Ident);
+    assert_eq!(nt[2].text, "test");
+    assert_eq!(nt[3].kind, SyntaxKind::LParen);
+    assert_eq!(nt[4].kind, SyntaxKind::Ident);
+    assert_eq!(nt[4].text, "should_panic");
+    assert_eq!(nt[5].kind, SyntaxKind::RParen);
+    assert_eq!(nt[6].kind, SyntaxKind::CloseBracket);
+}
+
+#[test]
+fn lex_attribute_before_fn_keyword() {
+    let tokens = tokenize("#[test]\nfn main() { 42 }");
+    let nt: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).collect();
+    assert_eq!(nt[0].kind, SyntaxKind::Hash);
+    assert_eq!(nt[2].kind, SyntaxKind::Ident);
+    assert_eq!(nt[4].kind, SyntaxKind::KwFn);
+}

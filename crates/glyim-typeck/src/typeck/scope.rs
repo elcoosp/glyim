@@ -1,5 +1,5 @@
-use crate::TypeChecker;
 use crate::typeck::types::Scope;
+use crate::TypeChecker;
 use glyim_hir::types::HirType;
 use glyim_interner::Symbol;
 

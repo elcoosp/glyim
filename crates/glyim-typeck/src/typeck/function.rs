@@ -1,5 +1,5 @@
-use crate::TypeChecker;
 use crate::typeck::error::TypeError;
+use crate::TypeChecker;
 use glyim_hir::node::HirFn;
 
 impl TypeChecker {

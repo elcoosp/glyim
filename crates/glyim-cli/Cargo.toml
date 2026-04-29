@@ -15,6 +15,7 @@ name = "glyim"
 path = "src/main.rs"
 
 [dependencies]
+toml = "0.8"
 glyim-parse = { path = "../glyim-parse" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-typeck = { path = "../glyim-typeck" }
@@ -23,9 +24,13 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
+glyim-pkg = { path = "../glyim-pkg" }
 inkwell = { version = "0.9", features = ["llvm22-1"] }
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
+sha2 = "0.10"
+hex = "0.4"
+dirs-next = "2"
 
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }

@@ -1,6 +1,7 @@
 //! Type system types and patterns for the HIR.
 
 use glyim_interner::Symbol;
+use glyim_diag::Span;
 
 /// Unique identifier for an expression node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -69,15 +70,20 @@ pub enum HirPattern {
     Struct {
         name: Symbol,
         bindings: Vec<(Symbol, HirPattern)>,
+        span: Span,
     },
     /// Enum variant pattern `Shape::Circle(r)`
     EnumVariant {
         enum_name: Symbol,
         variant_name: Symbol,
         bindings: Vec<(Symbol, HirPattern)>,
+        span: Span,
     },
     /// Tuple pattern: `(a, _, b)`
-    Tuple { elements: Vec<HirPattern> },
+    Tuple {
+        elements: Vec<HirPattern>,
+        span: Span,
+    },
     /// Some(x)
     OptionSome(Box<HirPattern>),
     /// None
@@ -147,7 +153,8 @@ mod tests {
         let b = i.intern("b");
         let p = HirPattern::Tuple {
             elements: vec![HirPattern::Var(a), HirPattern::Wild, HirPattern::Var(b)],
+            span: Span::new(0, 0),
         };
-        assert!(matches!(p, HirPattern::Tuple { ref elements } if elements.len() == 3));
+        assert!(matches!(p, HirPattern::Tuple { ref elements, .. } if elements.len() == 3));
     }
 }

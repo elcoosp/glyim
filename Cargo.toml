@@ -11,6 +11,8 @@ members = [
     "crates/glyim-macro-core",
     "crates/glyim-macro-vfs",
     "crates/glyim-codegen-llvm",
+    "crates/glyim-pkg",
+    "crates/glyim-cas-server",
     "crates/glyim-cli",
 ]
 

@@ -191,3 +191,105 @@ fn parse_let_with_type_annotation() {
     let out = parse("main = () => { let x: f64 = 3.14; 1 }");
     assert!(out.errors.is_empty());
 }
+
+#[test]
+fn parse_fn_with_test_attribute() {
+    let out = parse("#[test]\nfn check() { 42 }");
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+    match &out.ast.items.as_slice() {
+        [Item::FnDef { attrs, name, .. }] => {
+            assert_eq!(attrs.len(), 1);
+            assert_eq!(attrs[0].name, "test");
+            assert_eq!(out.interner.resolve(*name), "check");
+        }
+        other => panic!("expected FnDef with attrs, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_fn_with_should_panic_attribute() {
+    let out = parse("#[test(should_panic)]\nfn check() { 42 }");
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+    match &out.ast.items.as_slice() {
+        [Item::FnDef { attrs, .. }] => {
+            assert_eq!(attrs[0].name, "test");
+            assert_eq!(attrs[0].args.len(), 1);
+            assert_eq!(attrs[0].args[0].key, "should_panic");
+            assert_eq!(attrs[0].args[0].value, None);
+        }
+        other => panic!("expected FnDef with attrs, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_fn_with_key_value_attribute() {
+    let out = parse("#[bench(iterations=100)]\nfn check() { 42 }");
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+    match &out.ast.items.as_slice() {
+        [Item::FnDef { attrs, .. }] => {
+            assert_eq!(attrs[0].name, "bench");
+            assert_eq!(attrs[0].args[0].key, "iterations");
+            assert_eq!(attrs[0].args[0].value.as_deref(), Some("100"));
+        }
+        other => panic!("expected FnDef with attrs, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_fn_with_multiple_attributes() {
+    let out = parse("#[test]\n#[ignore]\nfn check() { 42 }");
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+    match &out.ast.items.as_slice() {
+        [Item::FnDef { attrs, .. }] => {
+            assert_eq!(attrs.len(), 2);
+            assert_eq!(attrs[0].name, "test");
+            assert_eq!(attrs[1].name, "ignore");
+        }
+        other => panic!("expected FnDef with attrs, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_binding_no_attributes() {
+    let out = parse("main = () => 42");
+    assert!(out.errors.is_empty());
+    match &out.ast.items.as_slice() {
+        [Item::Binding { attrs, .. }] => assert!(attrs.is_empty()),
+        other => panic!("expected Binding, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_binding_with_attribute() {
+    let out = parse("#[test]\nmain = () => 42");
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+    match &out.ast.items.as_slice() {
+        [Item::Binding { attrs, .. }] => {
+            assert_eq!(attrs.len(), 1);
+            assert_eq!(attrs[0].name, "test");
+        }
+        other => panic!("expected Binding with attrs, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_struct_ignores_attributes() {
+    let out = parse("#[derive(Debug)]\nstruct Point { x }");
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+    assert!(matches!(
+        &out.ast.items.as_slice(),
+        [Item::StructDef { .. }]
+    ));
+}
+
+#[test]
+fn parse_let_stmt_no_attributes() {
+    let out = parse("let x = 42");
+    assert!(out.errors.is_empty());
+}
+
+#[test]
+fn parse_use_no_attributes() {
+    let out = parse("use std");
+    assert!(out.errors.is_empty());
+}

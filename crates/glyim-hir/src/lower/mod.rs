@@ -21,7 +21,8 @@ use glyim_interner::Interner;
 /// top-level items in the AST and converts them to their HIR equivalents.
 pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
     let mut ctx = LoweringContext::new(interner);
-    let items: Vec<_> = ast.items
+    let items: Vec<_> = ast
+        .items
         .iter()
         .filter_map(|item| item::lower_item(item, &mut ctx))
         .collect();

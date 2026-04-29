@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 79;
+pub const COUNT: u16 = 82;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -57,6 +57,9 @@ pub enum SyntaxKind {
     AmpAmp,
     PipePipe,
     Question,
+    Hash,
+    OpenBracket,
+    CloseBracket,
     Bang,
     Pipe,
     SourceFile,
@@ -170,6 +173,9 @@ impl SyntaxKind {
             Self::Bang => "!",
             Self::Pipe => "|",
             Self::Question => "?",
+            Self::Hash => "#",
+            Self::OpenBracket => "[",
+            Self::CloseBracket => "]",
             Self::SourceFile => "source file",
             Self::FnDef => "function definition",
             Self::ParamList => "parameter list",
@@ -248,6 +254,6 @@ mod tests {
     fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error;
         let _ = SyntaxKind::PtrType;
-        assert_eq!(COUNT, 79);
+        assert_eq!(COUNT, 82);
     }
 }

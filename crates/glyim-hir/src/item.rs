@@ -1,6 +1,7 @@
 use crate::node::HirFn;
 use crate::types::HirType;
 use glyim_interner::Symbol;
+use glyim_diag::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnSig {
@@ -19,6 +20,7 @@ pub struct StructDef {
     pub name: Symbol,
     pub type_params: Vec<Symbol>,
     pub fields: Vec<StructField>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +44,7 @@ pub struct EnumDef {
     pub name: Symbol,
     pub type_params: Vec<Symbol>,
     pub variants: Vec<HirVariant>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,6 +53,7 @@ pub struct HirImplDef {
     pub type_params: Vec<Symbol>,
     pub methods: Vec<HirFn>,
     pub is_pub: bool,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,4 +66,5 @@ pub struct ExternFn {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExternBlock {
     pub functions: Vec<ExternFn>,
+    pub span: Span,
 }

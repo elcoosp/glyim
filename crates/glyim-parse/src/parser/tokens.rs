@@ -54,7 +54,6 @@ impl<'a> Tokens<'a> {
         }
     }
 
-
     pub fn expect(
         &mut self,
         kind: SyntaxKind,

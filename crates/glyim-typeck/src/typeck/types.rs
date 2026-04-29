@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use glyim_hir::item::{StructField, HirVariant};
+use glyim_hir::item::{HirVariant, StructField};
 use glyim_hir::types::HirType;
 use glyim_interner::Symbol;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct StructInfo {

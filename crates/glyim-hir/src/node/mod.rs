@@ -1,5 +1,6 @@
 use crate::types::{ExprId, HirPattern, HirType};
 use glyim_interner::Symbol;
+use glyim_diag::Span;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum HirBinOp {
@@ -30,15 +31,18 @@ pub enum HirStmt {
         name: Symbol,
         mutable: bool,
         value: HirExpr,
+        span: Span,
     },
     LetPat {
         pattern: HirPattern,
         mutable: bool,
         value: HirExpr,
+        span: Span,
     },
     Assign {
         target: Symbol,
         value: HirExpr,
+        span: Span,
     },
     Expr(HirExpr),
 }
@@ -48,90 +52,110 @@ pub enum HirExpr {
     IntLit {
         id: ExprId,
         value: i64,
+        span: Span,
     },
     FloatLit {
         id: ExprId,
         value: f64,
+        span: Span,
     },
     BoolLit {
         id: ExprId,
         value: bool,
+        span: Span,
     },
     StrLit {
         id: ExprId,
         value: String,
+        span: Span,
     },
     Ident {
         id: ExprId,
         name: Symbol,
+        span: Span,
     },
     UnitLit {
         id: ExprId,
+        span: Span,
     },
     Binary {
         id: ExprId,
         op: HirBinOp,
         lhs: Box<HirExpr>,
         rhs: Box<HirExpr>,
+        span: Span,
     },
     Unary {
         id: ExprId,
         op: HirUnOp,
         operand: Box<HirExpr>,
+        span: Span,
     },
     Block {
         id: ExprId,
         stmts: Vec<HirStmt>,
+        span: Span,
     },
     If {
         id: ExprId,
         condition: Box<HirExpr>,
         then_branch: Box<HirExpr>,
         else_branch: Option<Box<HirExpr>>,
+        span: Span,
     },
     Println {
         id: ExprId,
         arg: Box<HirExpr>,
+        span: Span,
     },
     Call {
         id: ExprId,
         callee: Symbol,
         args: Vec<HirExpr>,
+        span: Span,
     },
     Assert {
         id: ExprId,
         condition: Box<HirExpr>,
         message: Option<Box<HirExpr>>,
+        span: Span,
     },
     As {
         id: ExprId,
         expr: Box<HirExpr>,
         target_type: HirType,
+        span: Span,
     },
     Match {
         id: ExprId,
         scrutinee: Box<HirExpr>,
         arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)>,
+        span: Span,
     },
     FieldAccess {
         id: ExprId,
         object: Box<HirExpr>,
         field: Symbol,
+        span: Span,
     },
     StructLit {
         id: ExprId,
         struct_name: Symbol,
         fields: Vec<(Symbol, HirExpr)>,
+        span: Span,
     },
     EnumVariant {
         id: ExprId,
         enum_name: Symbol,
         variant_name: Symbol,
         args: Vec<HirExpr>,
+        span: Span,
     },
+    SizeOf { id: ExprId, target_type: HirType, span: Span },
     TupleLit {
         id: ExprId,
         elements: Vec<HirExpr>,
+        span: Span,
     },
 }
 
@@ -143,7 +167,7 @@ impl HirExpr {
             Self::BoolLit { id, .. } => *id,
             Self::StrLit { id, .. } => *id,
             Self::Ident { id, .. } => *id,
-            Self::UnitLit { id } => *id,
+            Self::UnitLit { id, .. } => *id,
             Self::Binary { id, .. } => *id,
             Self::Unary { id, .. } => *id,
             Self::Block { id, .. } => *id,
@@ -156,7 +180,33 @@ impl HirExpr {
             Self::FieldAccess { id, .. } => *id,
             Self::StructLit { id, .. } => *id,
             Self::EnumVariant { id, .. } => *id,
+            Self::SizeOf { id, .. } => *id,
             Self::TupleLit { id, .. } => *id,
+        }
+    }
+
+    pub fn get_span(&self) -> Span {
+        match self {
+            Self::IntLit { span, .. } => *span,
+            Self::FloatLit { span, .. } => *span,
+            Self::BoolLit { span, .. } => *span,
+            Self::StrLit { span, .. } => *span,
+            Self::Ident { span, .. } => *span,
+            Self::UnitLit { span, .. } => *span,
+            Self::Binary { span, .. } => *span,
+            Self::Unary { span, .. } => *span,
+            Self::Block { span, .. } => *span,
+            Self::If { span, .. } => *span,
+            Self::Println { span, .. } => *span,
+            Self::Call { span, .. } => *span,
+            Self::Assert { span, .. } => *span,
+            Self::As { span, .. } => *span,
+            Self::Match { span, .. } => *span,
+            Self::FieldAccess { span, .. } => *span,
+            Self::StructLit { span, .. } => *span,
+            Self::EnumVariant { span, .. } => *span,
+            Self::SizeOf { span, .. } => *span,
+            Self::TupleLit { span, .. } => *span,
         }
     }
 }
@@ -175,6 +225,8 @@ pub struct HirFn {
     pub params: Vec<(Symbol, HirType)>,
     pub ret: Option<HirType>,
     pub body: HirExpr,
+    pub span: Span,
+    pub is_macro_generated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
