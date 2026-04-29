@@ -3,7 +3,7 @@
 **A systems programming language where metaprogramming is typed, hygienic, and IDE‑friendly.**
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/your-org/glyim/ci.yml?branch=main)](https://github.com/your-org/glyim/actions)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/your-org/glyim/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/your-org/glyim/releases)
 [![License](https://img.shields.io/badge/license-MIT--2.0-blue)](LICENSE)
 
 ---
@@ -36,7 +36,7 @@ struct User {
 
 ## The Language in 60 Seconds
 
-`let` / `let mut`, `if` / `else`, strings, `println`, `assert`, structs, enums, pattern matching, `?` operator — Glyim already feels like a real language.
+`let` / `let mut`, `if` / `else`, strings, `println`, `assert`, structs, enums, pattern matching, `?` operator, generic types, impl blocks, tuples — Glyim already feels like a real language.
 
 ```glyim
 struct Point { x: i64, y: i64 }
@@ -63,7 +63,7 @@ $ glyim run example.g
 78.53975
 ```
 
-### Current Capabilities (v0.3.0)
+### Current Capabilities (v0.4.0)
 
 | Feature | Status |
 |---------|--------|
@@ -90,8 +90,17 @@ $ glyim run example.g
 | **`@identity`** macro that successfully expands during compilation | ✅ |
 | **Monomorphic type checker** with local inference and exhaustiveness checking | ✅ |
 | **Real tagged‑union codegen** for enums | ✅ |
+| **Generic structs and enums** (`Container<T>`, `Maybe<T>`) | ✅ |
+| **Generic functions** with type inference | ✅ |
+| **Tuples** and tuple field access (`(a, b)._0`) | ✅ |
+| **`impl` blocks** with method definitions | ✅ |
+| **Pattern guards** in `match` arms | ✅ |
+| **Cast expressions** (`expr as Type`) with validity checking | ✅ |
+| **Destructuring `let`** bindings | ✅ |
+| **Modular Pratt + recursive‑descent parser** | ✅ |
+| **Standard prelude** with `Option`, `Result` | ✅ |
 | Macro infrastructure stubs (traits, CAS, hygiene) | ✅ |
-| **26 integration tests, 23 parser tests, 13 UI tests** | ✅ |
+| **33 integration tests, 23 parser tests, 14 UI tests** | ✅ |
 
 ---
 
@@ -136,12 +145,12 @@ glyim/
 │   ├── glyim-diag/           # Span, Diagnostic, ariadne rendering
 │   ├── glyim-syntax/         # SyntaxKind, Rowan definitions
 │   ├── glyim-lex/            # Hand‑rolled tokenizer
-│   ├── glyim-parse/          # Pratt + recursive descent, CST builder, error recovery
+│   ├── glyim-parse/          # Pratt + recursive descent, CST builder, error recovery (modular)
 │   ├── glyim-hir/            # Span‑free IR (HirExpr, HirStmt, HirType, HirPattern)
-│   ├── glyim-typeck/         # Monomorphic type checker with exhaustiveness
+│   ├── glyim-typeck/         # Monomorphic type checker with exhaustiveness and generic inference
 │   ├── glyim-macro-core/     # Typed macro expansion engine
 │   ├── glyim-macro-vfs/      # ContentStore trait + LocalContentStore
-│   ├── glyim-codegen-llvm/   # LLVM IR generation (Inkwell) with tagged‑union enums
+│   ├── glyim-codegen-llvm/   # LLVM IR generation (Inkwell) with tagged‑union enums and generics
 │   └── glyim-cli/            # CLI (build, run, ir, check, init)
 ├── docs/
 │   ├── specs/
@@ -152,10 +161,11 @@ glyim/
 │   └── archive/
 ├── scripts/
 │   └── check_file_sizes.py
-└── tests/
-    ├── integration/          # 26 end‑to‑end compile → run → assert exit code
-    ├── ui/                   # 13 snapshot tests for error messages
-    └── parser_v030_tests.rs  # 23 parser unit tests for v0.3.0 features
+└── crates/
+    └── glyim-cli/
+        └── tests/
+            ├── integration.rs  # 33 end‑to‑end compile → run → assert exit code
+            └── ui.rs           # 14 snapshot tests for error messages
 ```
 
 ---
@@ -214,8 +224,8 @@ cargo run --release -- ir hello.g
 | **v0.1.0** | Architectural runway — compile `main = () => 42` to native | ✅ Completed |
 | **v0.2.0** | “Real language” DX — let/mut, if/else, strings, println, JIT | ✅ Completed |
 | **v0.3.0** | Types & data — struct/enum/match, type checker, floats, Option/Result, raw pointers, first working macro | ✅ Completed |
-| **v0.4.0** | LSP, formatter, macro compilation to native, generic type inference, methods & impls | 🔜 Planned |
-| **v0.5.0** | Distributed CAS, package registry, `glyim pkg` | 🔜 Planned |
+| **v0.4.0** | Generics, impl blocks, tuples, casts, destructuring, prelude | ✅ Completed |
+| **v0.5.0** | LSP, formatter, macro compilation to native, distributed CAS | 🔜 Planned |
 
 ---
 
