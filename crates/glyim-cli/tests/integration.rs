@@ -256,3 +256,80 @@ fn e2e_generic_edge() {
     println!("Edge HIR: {:#?}", hir.items);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), -100);
 }
+
+#[test]
+fn e2e_test_should_panic_passes() {
+    // A should_panic test that calls abort() will pass (non-zero exit)
+    // We simulate a test function that returns non-zero (as if panic occurred)
+    let input = temp_g("#[test(should_panic)]\nfn panics() { 1 }");
+    let summary = pipeline::run_tests(&input, None, false).unwrap();
+    assert_eq!(summary.passed(), 1, "should_panic test that returns non-zero should pass");
+    assert_eq!(summary.exit_code(), 0);
+}
+
+#[test]
+fn e2e_test_should_panic_fails_on_zero() {
+    let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
+    let summary = pipeline::run_tests(&input, None, false).unwrap();
+    assert_eq!(summary.failed(), 1, "should_panic test that returns 0 should fail");
+    assert_eq!(summary.exit_code(), 1);
+}
+
+#[test]
+#[test]
+
+
+#[test]
+fn e2e_test_filter() {
+    let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
+    let summary = pipeline::run_tests(&input, Some("b"), false).unwrap();
+    assert_eq!(summary.total(), 1);
+    assert_eq!(summary.failed(), 1);
+}
+
+#[test]
+fn e2e_test_filter_no_match() {
+    let input = temp_g("#[test]\nfn a() { 0 }");
+    let result = pipeline::run_tests(&input, Some("nonexistent"), false);
+    assert!(result.is_err());
+    let msg = format!("{:?}", result.unwrap_err());
+    assert!(msg.contains("no #[test]"), "error should mention no test functions: {msg}");
+}
+
+#[test]
+fn e2e_type_error_unknown_field() {
+    let input = temp_g("struct Point { x }\nmain = () => { let p = Point { x: 1 }; p.y }");
+    let result = pipeline::run(&input);
+    assert!(result.is_err());
+}
+
+#[test]
+fn e2e_type_error_invalid_cast() {
+    let input = temp_g("main = () => 42 as Str");
+    let result = pipeline::run(&input);
+    assert!(result.is_err());
+}
+
+#[test]
+#[ignore]
+fn e2e_type_error_int_plus_bool() {
+    // Type checker doesn't check operand compatibility yet
+    let input = temp_g("main = () => 1 + true");
+    let result = pipeline::run(&input);
+    assert!(result.is_err());
+}
+
+#[test]
+fn e2e_type_error_missing_main() {
+    let input = temp_g("fn other() { 1 }");
+    let result = pipeline::run(&input);
+    assert!(result.is_err());
+}
+
+#[test]
+fn e2e_type_error_non_exhaustive_match() {
+    let input = temp_g("enum Color { Red, Green, Blue }\nmain = () => match Color::Red { _ => 0 }");
+    // with wildcard, it's exhaustive, should succeed
+    let result = pipeline::run(&input);
+    assert!(result.is_ok());
+}

@@ -435,7 +435,7 @@ fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResul
 }
 
 
-pub fn run_tests(input: &Path) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
+pub fn run_tests(input: &Path, filter_name: Option<&str>, include_ignored: bool) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let source = format!("{}
 {}", PRELUDE, fs::read_to_string(input)?);
     let mut parse_out = glyim_parse::parse(&source);
@@ -454,19 +454,28 @@ pub fn run_tests(input: &Path) -> Result<crate::test_runner::TestRunSummary, Pip
         return Err(PipelineError::Parse(parse_out.errors));
     }
 
-    let test_fns = crate::test_runner::collect_test_functions(&parse_out.ast, &parse_out.interner, None, false);
+    let test_fns = crate::test_runner::collect_test_functions(&parse_out.ast, &parse_out.interner, filter_name, true);
+    // Collect should_panic test names from AST attributes
+    let should_panic: std::collections::HashSet<String> = test_fns.iter()
+        .filter(|t| parse_out.ast.items.iter()
+            .any(|item| if let glyim_parse::Item::FnDef { attrs, name, .. } = item {
+                parse_out.interner.resolve(*name) == t.name && attrs.iter().any(|attr| attr.name == "test" && attr.args.iter().any(|arg| arg.key == "should_panic"))
+            } else { false }))
+        .map(|t| t.name.clone())
+        .collect();
+
     if test_fns.is_empty() {
         return Err(PipelineError::Codegen("no #[test] functions found".into()));
     }
 
-    let active_names: Vec<String> = test_fns.iter()
-        .filter(|t| !t.ignored)
-        .map(|t| t.name.clone())
-        .collect();
-    let ignored_names: Vec<String> = test_fns.iter()
-        .filter(|t| t.ignored)
-        .map(|t| t.name.clone())
-        .collect();
+    let (active_names, ignored_names) = if include_ignored {
+        let all: Vec<String> = test_fns.iter().map(|t| t.name.clone()).collect();
+        (all, Vec::new())
+    } else {
+        let active: Vec<String> = test_fns.iter().filter(|t| !t.ignored).map(|t| t.name.clone()).collect();
+        let ignored: Vec<String> = test_fns.iter().filter(|t| t.ignored).map(|t| t.name.clone()).collect();
+        (active, ignored)
+    };
 
     if active_names.is_empty() {
         let results: Vec<_> = ignored_names.iter()
@@ -474,7 +483,6 @@ pub fn run_tests(input: &Path) -> Result<crate::test_runner::TestRunSummary, Pip
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
     }
-
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -483,7 +491,7 @@ pub fn run_tests(input: &Path) -> Result<crate::test_runner::TestRunSummary, Pip
 
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
-    codegen.generate_for_tests(&hir, &active_names).map_err(PipelineError::Codegen)?;
+    codegen.generate_for_tests(&hir, &active_names, &should_panic).map_err(PipelineError::Codegen)?;
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     codegen.write_object_file(&obj_path).map_err(PipelineError::Codegen)?;
@@ -509,12 +517,12 @@ pub fn run_tests(input: &Path) -> Result<crate::test_runner::TestRunSummary, Pip
     Ok(crate::test_runner::TestRunSummary { results })
 }
 
-pub fn run_tests_package(package_dir: &Path) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
+pub fn run_tests_package(package_dir: &Path, filter_name: Option<&str>, include_ignored: bool) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, format!("{} not found", main_path.display()))));
     }
-    run_tests(&main_path)
+    run_tests(&main_path, filter_name, include_ignored)
 }
 
 fn compile_to_hir_and_ir(

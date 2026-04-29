@@ -88,9 +88,11 @@ impl<'ctx> Codegen<'ctx> {
     pub fn ir_string(&self) -> String {
         self.module.print_to_string().to_string()
     }
+
     pub fn get_module(&self) -> &Module<'ctx> {
         &self.module
     }
+
     pub fn write_object_file(&self, path: &std::path::Path) -> Result<(), String> {
         use inkwell::targets::{
             CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
@@ -168,7 +170,12 @@ impl<'ctx> Codegen<'ctx> {
         Ok(())
     }
 
-    pub fn generate_for_tests(&mut self, hir: &Hir, test_names: &[String]) -> Result<(), String> {
+    pub fn generate_for_tests(
+        &mut self,
+        hir: &Hir,
+        test_names: &[String],
+        should_panic: &std::collections::HashSet<String>,
+    ) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module);
         types::register_builtin_enums(self);
@@ -189,11 +196,15 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
-        self.emit_test_harness(test_names)?;
+        self.emit_test_harness(test_names, should_panic)?;
         Ok(())
     }
 
-    fn emit_test_harness(&mut self, test_names: &[String]) -> Result<(), String> {
+    fn emit_test_harness(
+        &mut self,
+        test_names: &[String],
+        should_panic: &std::collections::HashSet<String>,
+    ) -> Result<(), String> {
         use inkwell::IntPredicate;
 
         if test_names.is_empty() {
@@ -243,10 +254,16 @@ impl<'ctx> Codegen<'ctx> {
                 _ => return Err(format!("test function '{}' returned void", test_name)),
             };
 
-            let is_fail = self
-                .builder
-                .build_int_compare(IntPredicate::NE, result_val, zero64, "is_fail")
-                .map_err(|e| e.to_string())?;
+            let is_should_panic = should_panic.contains(test_name);
+            let is_fail = if is_should_panic {
+                self.builder
+                    .build_int_compare(IntPredicate::EQ, result_val, zero64, "is_fail")
+                    .map_err(|e| e.to_string())?
+            } else {
+                self.builder
+                    .build_int_compare(IntPredicate::NE, result_val, zero64, "is_fail")
+                    .map_err(|e| e.to_string())?
+            };
 
             let pass_bb = self.context.append_basic_block(main_fn, "test_pass");
             let fail_bb = self.context.append_basic_block(main_fn, "test_fail");

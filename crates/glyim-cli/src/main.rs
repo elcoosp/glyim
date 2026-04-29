@@ -48,13 +48,17 @@ enum Command {
     },
     Test {
         input: PathBuf,
+        #[arg(long)]
+        ignore: bool,
+        #[arg(long)]
+        filter: Option<String>,
     },
 }
 
 fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
-        Command::Build { input, output, debug, release } => {
+        Command::Build { input, output, debug: _, release } => {
             let mode = if release { BuildMode::Release } else { BuildMode::Debug };
             let result = if input.is_dir() {
                 pipeline::build_package(&input, output.as_deref(), mode)
@@ -72,7 +76,7 @@ fn main() {
                 }
             }
         },
-        Command::Run { input, debug, release } => {
+        Command::Run { input, debug: _, release } => {
             let mode = if release { BuildMode::Release } else { BuildMode::Debug };
             let result = if input.is_dir() {
                 pipeline::run_package(&input, mode)
@@ -111,11 +115,12 @@ fn main() {
                 1
             }
         },
-        Command::Test { input } => {
+        Command::Test { input, ignore, filter } => {
+            let include_ignored = ignore;
             let result = if input.is_dir() {
-                pipeline::run_tests_package(&input)
+                pipeline::run_tests_package(&input, filter.as_deref(), include_ignored)
             } else {
-                pipeline::run_tests(&input)
+                pipeline::run_tests(&input, filter.as_deref(), include_ignored)
             };
             match result {
                 Ok(summary) => {

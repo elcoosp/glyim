@@ -22,7 +22,7 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     let mut cg = Codegen::new(&ctx, interner, vec![]);
-    cg.generate_for_tests(&hir, test_names)?;
+    cg.generate_for_tests(&hir, test_names, &std::collections::HashSet::new())?;
     Ok(cg.ir_string())
 }
 
