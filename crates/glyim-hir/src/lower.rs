@@ -12,6 +12,7 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
                 if let ExprKind::Lambda { params, body } = &value.kind {
                     fns.push(HirItem::Fn(HirFn {
                         name: *name,
+                        type_params: vec![],
                         params: params.clone(),
                         body: lower_expr(&body.kind, interner),
                     }));
@@ -23,6 +24,7 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
                 let param_syms: Vec<_> = params.iter().map(|(sym, _)| *sym).collect();
                 fns.push(HirItem::Fn(HirFn {
                     name: *name,
+                    type_params: vec![],
                     params: param_syms,
                     body: lower_expr(&body.kind, interner),
                 }));
@@ -70,6 +72,7 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
             Item::MacroDef { name, body, .. } => {
                 fns.push(HirItem::Fn(HirFn {
                     name: *name,
+                    type_params: vec![],
                     params: vec![],
                     body: lower_expr(&body.kind, interner),
                 }));
