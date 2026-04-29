@@ -4,7 +4,7 @@ use glyim_lex::Token;
 use glyim_syntax::SyntaxKind;
 
 use crate::ast::{
-    Ast, BinOp, BlockItem, EnumVariant, ExprKind, ExprNode, Item, MatchArm, Pattern, StmtKind, StmtNode, UnOp,
+    Ast, BinOp, BlockItem, EnumVariant, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp,
     UseItem, VariantKind,
 };
 use crate::error::ParseError;
@@ -412,7 +412,6 @@ impl<'a> Parser<'a> {
             SyntaxKind::LParen => self.parse_paren_expr(),
             SyntaxKind::LBrace => self.parse_block_expr(),
             SyntaxKind::KwIf => self.parse_if_expr(),
-            SyntaxKind::KwMatch => self.parse_match_expr(),
             SyntaxKind::Minus | SyntaxKind::Bang => {
                 let op_tok = self.tokens.bump()?;
                 let (r_bp, op) = match op_tok.kind { SyntaxKind::Minus => (70, UnOp::Neg), SyntaxKind::Bang => (70, UnOp::Not), _ => unreachable!() };
@@ -439,126 +438,6 @@ impl<'a> Parser<'a> {
         }
         let end_tok = match self.tokens.expect(SyntaxKind::RBrace) { Ok(t) => t, Err(e) => { self.errors.push(e); return None; } };
         Some(ExprNode { kind: ExprKind::Block(items), span: Span::new(start, end_tok.end) })
-    }
-
-
-    fn parse_match_expr(&mut self) -> Option<ExprNode> {
-        let start_tok = self.tokens.bump()?; // 'match'
-        let start = start_tok.start;
-        let scrutinee = self.parse_expr(0)?;
-
-        if let Err(e) = self.tokens.expect(SyntaxKind::LBrace) {
-            self.errors.push(e);
-            return None;
-        }
-
-        let mut arms = vec![];
-        while !self.tokens.at(SyntaxKind::RBrace) && self.tokens.peek().is_some() {
-            let pattern = self.parse_pattern()?;
-            let guard = if self.tokens.eat(SyntaxKind::KwIf).is_some() {
-                Some(self.parse_expr(0)?)
-            } else {
-                None
-            };
-            if let Err(e) = self.tokens.expect(SyntaxKind::FatArrow) {
-                self.errors.push(e);
-                break;
-            }
-            let body = self.parse_expr(0)?;
-            arms.push(MatchArm { pattern, guard, body });
-            self.tokens.eat(SyntaxKind::Comma);
-        }
-
-        let end_tok = match self.tokens.expect(SyntaxKind::RBrace) {
-            Ok(t) => t,
-            Err(e) => { self.errors.push(e); return None; }
-        };
-
-        Some(ExprNode {
-            kind: ExprKind::Match {
-                scrutinee: Box::new(scrutinee),
-                arms,
-            },
-            span: Span::new(start, end_tok.end),
-        })
-    }
-
-    fn parse_pattern(&mut self) -> Option<Pattern> {
-        match self.tokens.peek()?.kind {
-            SyntaxKind::LBrace => {
-                // Struct pattern: { x, y } or Unit pattern if empty
-                self.tokens.bump();
-                if self.tokens.at(SyntaxKind::RBrace) {
-                    self.tokens.bump();
-                    return Some(Pattern::Unit);
-                }
-                // Not fully implemented for named struct patterns
-                // For now, skip tokens and return Wild
-                while !self.tokens.at(SyntaxKind::RBrace) { self.tokens.bump(); }
-                self.tokens.bump();
-                Some(Pattern::Wild)
-            }
-            SyntaxKind::Ident => {
-                let tok = self.tokens.bump()?;
-                let name = self.interner.intern(tok.text);
-                if self.tokens.at(SyntaxKind::Colon) && self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Colon) {
-                    // Enum variant pattern: Name::Variant(args...)
-                    self.tokens.bump(); // first ':'
-                    self.tokens.bump(); // second ':'
-                    let variant_tok = match self.tokens.expect(SyntaxKind::Ident) {
-                        Ok(t) => t,
-                        Err(e) => { self.errors.push(e); return None; }
-                    };
-                    let variant_name = self.interner.intern(variant_tok.text);
-                    let mut args = vec![];
-                    if self.tokens.at(SyntaxKind::LParen) {
-                        self.tokens.bump();
-                        while !self.tokens.at(SyntaxKind::RParen) && self.tokens.peek().is_some() {
-                            args.push(self.parse_pattern()?);
-                            self.tokens.eat(SyntaxKind::Comma);
-                        }
-                        if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); }
-                    }
-                    Some(Pattern::EnumVariant { enum_name: name, variant_name, args })
-                } else {
-                    // Variable binding or literal-like identifier (true/false)
-                    match self.interner.resolve(name) {
-                        "true" => Some(Pattern::BoolLit(true)),
-                        "false" => Some(Pattern::BoolLit(false)),
-                        _ => Some(Pattern::Var(name)),
-                    }
-                }
-            }
-            SyntaxKind::IntLit => {
-                let tok = self.tokens.bump()?;
-                let v: i64 = tok.text.parse().unwrap_or(0);
-                Some(Pattern::IntLit(v))
-            }
-            SyntaxKind::FloatLit => {
-                let tok = self.tokens.bump()?;
-                let v: f64 = tok.text.parse().unwrap_or(0.0);
-                Some(Pattern::FloatLit(v))
-            }
-            SyntaxKind::StringLit => {
-                let tok = self.tokens.bump()?;
-                Some(Pattern::StrLit(tok.text.to_owned()))
-            }
-            SyntaxKind::LParen => {
-                // Unit pattern ()
-                self.tokens.bump();
-                if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); }
-                Some(Pattern::Unit)
-            }
-            SyntaxKind::Minus => {
-                // Wildcard: _
-                self.tokens.bump();
-                Some(Pattern::Wild)
-            }
-            _ => {
-                self.errors.push(ParseError::Message { msg: "expected pattern".into(), span: (self.tokens.peek()?.start, self.tokens.peek()?.end) });
-                None
-            }
-        }
     }
 
     fn parse_if_expr(&mut self) -> Option<ExprNode> {

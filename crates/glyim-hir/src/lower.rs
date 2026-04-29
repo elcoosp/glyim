@@ -132,6 +132,35 @@ fn lower_expr(expr: &ExprKind, interner: &mut Interner) -> HirExpr {
                 field: *field,
             }
         }
+        ExprKind::SomeExpr(e) => HirExpr::EnumVariant {
+            enum_name: interner.intern("Option"),
+            variant_name: interner.intern("Some"),
+            args: vec![lower_expr(&e.kind, interner)],
+        },
+        ExprKind::NoneExpr => HirExpr::EnumVariant {
+            enum_name: interner.intern("Option"),
+            variant_name: interner.intern("None"),
+            args: vec![],
+        },
+        ExprKind::OkExpr(e) => HirExpr::EnumVariant {
+            enum_name: interner.intern("Result"),
+            variant_name: interner.intern("Ok"),
+            args: vec![lower_expr(&e.kind, interner)],
+        },
+        ExprKind::ErrExpr(e) => HirExpr::EnumVariant {
+            enum_name: interner.intern("Result"),
+            variant_name: interner.intern("Err"),
+            args: vec![lower_expr(&e.kind, interner)],
+        },
+        ExprKind::TryExpr(e) => {
+            HirExpr::Match {
+                scrutinee: Box::new(lower_expr(&e.kind, interner)),
+                arms: vec![
+                    (HirPattern::ResultOk(Box::new(HirPattern::Var(interner.intern("v")))), None, HirExpr::Ident(interner.intern("v"))),
+                    (HirPattern::ResultErr(Box::new(HirPattern::Var(interner.intern("e")))), None, HirExpr::IntLit(0)),
+                ],
+            }
+        },
         ExprKind::Call { callee, args } => {
             if let ExprKind::Ident(sym) = &callee.kind {
                 let name = interner.resolve(*sym);
