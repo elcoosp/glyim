@@ -887,7 +887,9 @@ impl<'a> Parser<'a> {
                 let tok = self.tokens.bump()?;
                 let sym = self.interner.intern(tok.text);
                 let start = tok.start;
-                if self.tokens.at(SyntaxKind::LBrace) {
+                // Struct literal only if the name starts with uppercase
+                let is_uppercase = self.interner.resolve(sym).chars().next().map_or(false, |c| c.is_uppercase());
+                if is_uppercase && self.tokens.at(SyntaxKind::LBrace) {
                     self.tokens.bump();
                     let mut fields = vec![];
                     while !self.tokens.at(SyntaxKind::RBrace) && self.tokens.peek().is_some() {
