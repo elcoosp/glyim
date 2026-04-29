@@ -28,7 +28,7 @@ glyim-pkg = { path = "../glyim-pkg" }
 inkwell = { version = "0.9", features = ["llvm22-1"] }
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 dirs-next = "2"
 

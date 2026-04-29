@@ -13,7 +13,7 @@ toml = "0.8"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 
 [dev-dependencies]
