@@ -23,8 +23,8 @@ mod tests {
     use glyim_syntax::SyntaxKind;
 
     #[allow(dead_code)]
-#[allow(dead_code)]
-fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
+    #[allow(dead_code)]
+    fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
         tokenize(input)
             .iter()
             .filter(|t| !t.kind.is_trivia())
@@ -32,8 +32,8 @@ fn non_trivia_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
             .collect()
     }
     #[allow(dead_code)]
-#[allow(dead_code)]
-fn all_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
+    #[allow(dead_code)]
+    fn all_tokens(input: &str) -> Vec<(SyntaxKind, &str)> {
         tokenize(input).iter().map(|t| (t.kind, t.text)).collect()
     }
 

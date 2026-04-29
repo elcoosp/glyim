@@ -102,4 +102,3 @@ fn ui_bool_mismatch() {
 fn ui_type_mismatch() {
     run_ui_test("type_mismatch");
 }
-

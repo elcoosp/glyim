@@ -164,19 +164,22 @@ fn parse_err_literal() {
     assert!(matches!(unwrap_main_expr(&out), ExprKind::ErrExpr(_)));
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn parse_unit_literal() {
     let out = parse("main = () => ()");
     assert!(out.errors.is_empty());
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn parse_raw_pointer() {
     let out = parse("main = () => { let p = *const i64; p }");
     assert!(out.errors.is_empty());
 }
 
-#[test] #[ignore]
+#[test]
+#[ignore]
 fn parse_let_with_type_annotation() {
     let out = parse("main = () => { let x: f64 = 3.14; 1 }");
     assert!(out.errors.is_empty());

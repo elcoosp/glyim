@@ -289,7 +289,9 @@ impl TypeChecker {
                 arm_types.first().cloned().unwrap_or(HirType::Unit)
             }
             HirExpr::Call { args, .. } => {
-                for a in args { self.check_expr(a); }
+                for a in args {
+                    self.check_expr(a);
+                }
                 HirType::Int
             }
             HirExpr::As { expr, target_type } => {
