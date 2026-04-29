@@ -67,7 +67,7 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         }
         // v0.3.0: new literal types — no CST representation yet, skip
         ExprKind::FloatLit(_) | ExprKind::BoolLit(_) | ExprKind::UnitLit => {}
-        ExprKind::StructLit { .. } | ExprKind::FieldAccess { .. } => {}
+        ExprKind::StructLit { .. } | ExprKind::EnumVariant { .. } | ExprKind::FieldAccess { .. } => {}
     }
 }
 
@@ -88,7 +88,7 @@ fn ast_item_to_cst(builder: &mut CstBuilder, item: &Item) {
         Item::Use(u) => {
             builder.token(SyntaxKind::KwUse, "use"); builder.token(SyntaxKind::Ident, &u.path);
         }
-        Item::StructDef { .. } => {} // TODO: CST representation
+        Item::StructDef { .. } | Item::EnumDef { .. } => {} // TODO: CST representation
     }
 }
 

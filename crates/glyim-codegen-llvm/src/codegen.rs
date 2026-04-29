@@ -22,6 +22,7 @@ pub struct Codegen<'ctx> {
     interner: Interner,
     string_counter: RefCell<u32>,
     struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
+    enum_types: RefCell<HashMap<Symbol, (inkwell::types::IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -37,6 +38,7 @@ impl<'ctx> Codegen<'ctx> {
             interner,
             string_counter: RefCell::new(0),
             struct_types: RefCell::new(HashMap::new()),
+            enum_types: RefCell::new(HashMap::new()),
         }
     }
 
@@ -46,6 +48,7 @@ impl<'ctx> Codegen<'ctx> {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => self.codegen_fn(f)?,
                 glyim_hir::item::HirItem::Struct(s) => self.codegen_struct_def(s),
+                glyim_hir::item::HirItem::Enum(e) => self.codegen_enum_def(e),
             }
         }
         if self.module.get_function("main").is_none() {
@@ -61,6 +64,16 @@ impl<'ctx> Codegen<'ctx> {
         let field_types: Vec<BasicTypeEnum<'ctx>> = def.fields.iter().map(|_| BasicTypeEnum::IntType(self.i64_type)).collect();
         let struct_type = self.context.struct_type(&field_types, false);
         self.struct_types.borrow_mut().insert(def.name, struct_type);
+    }
+
+
+    fn codegen_enum_def(&self, def: &glyim_hir::item::EnumDef) {
+        // Compute max payload size (stub: all Int fields)
+        let max_fields = def.variants.iter().map(|v| v.fields.len()).max().unwrap_or(0);
+        let payload_bytes = (max_fields as u32) * 8; // each i64 is 8 bytes
+        let tag_type = self.i32_type;
+        let payload_type = self.context.i8_type().array_type(payload_bytes);
+        self.enum_types.borrow_mut().insert(def.name, (tag_type, payload_type));
     }
 
     fn codegen_fn(&mut self, f: &glyim_hir::HirFn) -> Result<(), String> {
@@ -255,6 +268,9 @@ impl<'ctx> Codegen<'ctx> {
             }
             HirExpr::StructLit { .. } => {
                 // Stub: return 0 until proper struct layout codegen is implemented
+                Some(self.i64_type.const_int(0, false))
+            }
+            HirExpr::EnumVariant { .. } => {
                 Some(self.i64_type.const_int(0, false))
             }
             HirExpr::FieldAccess { object, field } => {

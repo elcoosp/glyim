@@ -60,6 +60,11 @@ pub enum ExprKind {
         name: Symbol,
         fields: Vec<(Symbol, ExprNode)>,
     },
+    EnumVariant {
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: Vec<ExprNode>,
+    },
     FieldAccess {
         object: Box<ExprNode>,
         field: Symbol,
@@ -101,6 +106,22 @@ pub struct UseItem {
     pub span: Span,
 }
 
+/// An enum variant definition.
+#[derive(Debug, Clone, PartialEq)]
+pub enum VariantKind {
+    /// Single unnamed field: Circle(f64)
+    Unnamed(Vec<(Symbol, Span)>),
+    /// Named fields: Rect { a: Point, b: Point }
+    Named(Vec<(Symbol, Span)>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: Symbol,
+    pub name_span: Span,
+    pub kind: VariantKind,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Binding {
@@ -118,6 +139,11 @@ pub enum Item {
         name: Symbol,
         name_span: Span,
         fields: Vec<(Symbol, Span)>,
+    },
+    EnumDef {
+        name: Symbol,
+        name_span: Span,
+        variants: Vec<EnumVariant>,
     },
     Stmt(StmtNode),
     Use(UseItem),

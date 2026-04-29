@@ -4,8 +4,8 @@ use glyim_lex::Token;
 use glyim_syntax::SyntaxKind;
 
 use crate::ast::{
-    Ast, BinOp, BlockItem, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp,
-    UseItem,
+    Ast, BinOp, BlockItem, EnumVariant, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp,
+    UseItem, VariantKind,
 };
 use crate::error::ParseError;
 
@@ -115,6 +115,7 @@ impl<'a> Parser<'a> {
         match self.tokens.peek()?.kind {
             SyntaxKind::KwFn => self.parse_fn_def(),
             SyntaxKind::KwStruct => self.parse_struct_def(),
+            SyntaxKind::KwEnum => self.parse_enum_def(),
             SyntaxKind::KwLet => self.parse_let_stmt().map(Item::Stmt),
             SyntaxKind::KwUse => self.parse_use_item().map(Item::Use),
             SyntaxKind::Ident => {
@@ -191,6 +192,76 @@ impl<'a> Parser<'a> {
         Some(Item::StructDef { name, name_span, fields })
     }
 
+
+    fn parse_enum_def(&mut self) -> Option<Item> {
+        self.tokens.bump()?; // 'enum'
+        let name_tok = match self.tokens.expect(SyntaxKind::Ident) {
+            Ok(t) => t,
+            Err(e) => { self.errors.push(e); return None; }
+        };
+        let name = self.interner.intern(name_tok.text);
+        let name_span = Span::new(name_tok.start, name_tok.end);
+
+        if let Err(e) = self.tokens.expect(SyntaxKind::LBrace) {
+            self.errors.push(e);
+            return None;
+        }
+
+        let mut variants = vec![];
+        while !self.tokens.at(SyntaxKind::RBrace) {
+            let variant_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                Ok(t) => t,
+                Err(e) => { self.errors.push(e); break; }
+            };
+            let variant_name = self.interner.intern(variant_tok.text);
+            let variant_span = Span::new(variant_tok.start, variant_tok.end);
+
+            let kind = if self.tokens.at(SyntaxKind::LParen) {
+                // Unnamed fields: Variant(Type, Type, ...)
+                self.tokens.bump();
+                let mut fields = vec![];
+                while !self.tokens.at(SyntaxKind::RParen) {
+                    let field_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                        Ok(t) => t,
+                        Err(e) => { self.errors.push(e); break; }
+                    };
+                    fields.push((self.interner.intern(field_tok.text), Span::new(field_tok.start, field_tok.end)));
+                    self.tokens.eat(SyntaxKind::Comma);
+                }
+                if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); }
+                VariantKind::Unnamed(fields)
+            } else if self.tokens.at(SyntaxKind::LBrace) {
+                // Named fields: Variant { field: Type, ... }
+                self.tokens.bump();
+                let mut fields = vec![];
+                while !self.tokens.at(SyntaxKind::RBrace) {
+                    let field_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                        Ok(t) => t,
+                        Err(e) => { self.errors.push(e); break; }
+                    };
+                    fields.push((self.interner.intern(field_tok.text), Span::new(field_tok.start, field_tok.end)));
+                    self.tokens.eat(SyntaxKind::Colon);
+                    if let Some(tok) = self.tokens.peek() {
+                        if tok.kind == SyntaxKind::Ident { self.tokens.bump(); }
+                    }
+                    self.tokens.eat(SyntaxKind::Comma);
+                }
+                if let Err(e) = self.tokens.expect(SyntaxKind::RBrace) { self.errors.push(e); }
+                VariantKind::Named(fields)
+            } else {
+                // No data variant: Variant
+                VariantKind::Unnamed(vec![])
+            };
+
+            variants.push(EnumVariant { name: variant_name, name_span: variant_span, kind });
+            self.tokens.eat(SyntaxKind::Comma);
+        }
+
+        if let Err(e) = self.tokens.expect(SyntaxKind::RBrace) { self.errors.push(e); }
+
+        Some(Item::EnumDef { name, name_span, variants })
+    }
+
     fn parse_use_item(&mut self) -> Option<UseItem> {
         let start_tok = self.tokens.bump()?;
         let mut path_parts = vec![];
@@ -258,6 +329,44 @@ impl<'a> Parser<'a> {
                     kind: ExprKind::Call { callee: Box::new(left.clone()), args },
                     span: Span::new(left.span.start, rparen.end),
                 };
+                continue;
+            }
+            // Enum variant construction: expr::Variant(args...)
+            if op_tok.kind == SyntaxKind::Colon && self.tokens.peek2().map_or(false, |t| t.kind == SyntaxKind::Colon) && 90 >= min_bp {
+                self.tokens.bump(); // first ':'
+                self.tokens.bump(); // second ':'
+                let variant_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                    Ok(t) => t,
+                    Err(e) => { self.errors.push(e); break; }
+                };
+                let variant_name = self.interner.intern(variant_tok.text);
+                let mut args = vec![];
+                if self.tokens.at(SyntaxKind::LParen) {
+                    self.tokens.bump();
+                    while !self.tokens.at(SyntaxKind::RParen) && self.tokens.peek().is_some() {
+                        args.push(self.parse_expr(0)?);
+                        self.tokens.eat(SyntaxKind::Comma);
+                    }
+                    let rparen = match self.tokens.expect(SyntaxKind::RParen) { Ok(t) => t, Err(e) => { self.errors.push(e); break; } };
+                    left = ExprNode {
+                        kind: ExprKind::EnumVariant {
+                            enum_name: if let ExprKind::Ident(sym) = &left.kind { *sym } else { self.errors.push(ParseError::Message { msg: "expected enum name".into(), span: (left.span.start, left.span.end) }); break; },
+                            variant_name,
+                            args,
+                        },
+                        span: Span::new(left.span.start, rparen.end),
+                    };
+                } else {
+                    // No args: Unit variant
+                    left = ExprNode {
+                        kind: ExprKind::EnumVariant {
+                            enum_name: if let ExprKind::Ident(sym) = &left.kind { *sym } else { self.errors.push(ParseError::Message { msg: "expected enum name".into(), span: (left.span.start, left.span.end) }); break; },
+                            variant_name,
+                            args: vec![],
+                        },
+                        span: Span::new(left.span.start, variant_tok.end),
+                    };
+                }
                 continue;
             }
             // Field access: expr.field

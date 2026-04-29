@@ -1,5 +1,5 @@
 use crate::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp};
-use crate::item::{HirItem, StructDef, StructField};
+use crate::item::{HirItem, StructDef, EnumDef, HirVariant, StructField};
 use crate::types::HirType;
 use glyim_interner::{Interner, Symbol};
 use glyim_parse::{BinOp, BlockItem, ExprKind, Item, StmtKind, UnOp};
@@ -32,6 +32,17 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &Interner) -> Hir {
                     StructField { name: *sym, ty: HirType::Int } // field type defaults to Int for now
                 }).collect();
                 fns.push(HirItem::Struct(StructDef { name: *name, fields: hir_fields }));
+            }
+                        Item::EnumDef { name, variants, .. } => {
+                let hir_variants: Vec<HirVariant> = variants.iter().enumerate().map(|(i, v)| {
+                    let fields = match &v.kind {
+                        glyim_parse::VariantKind::Unnamed(types) | glyim_parse::VariantKind::Named(types) => {
+                            types.iter().map(|(sym, _)| StructField { name: *sym, ty: HirType::Int }).collect()
+                        }
+                    };
+                    HirVariant { name: v.name, fields, tag: i as u32 }
+                }).collect();
+                fns.push(HirItem::Enum(EnumDef { name: *name, variants: hir_variants }));
             }
             Item::Use(_) => {} // No-op
             Item::Stmt(_) => {}
@@ -98,6 +109,10 @@ fn lower_expr(expr: &ExprKind, interner: &Interner) -> HirExpr {
                 (*sym, lower_expr(&e.kind, interner))
             }).collect();
             HirExpr::StructLit { struct_name: *name, fields: hir_fields }
+        }
+        ExprKind::EnumVariant { enum_name, variant_name, args } => {
+            let hir_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(&a.kind, interner)).collect();
+            HirExpr::EnumVariant { enum_name: *enum_name, variant_name: *variant_name, args: hir_args }
         }
         ExprKind::FieldAccess { object, field } => {
             HirExpr::FieldAccess {

@@ -27,4 +27,20 @@ pub struct StructDef {
 pub enum HirItem {
     Fn(crate::node::HirFn),
     Struct(StructDef),
+    Enum(EnumDef),
+}
+
+/// An enum variant definition in HIR.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirVariant {
+    pub name: Symbol,
+    pub fields: Vec<StructField>, // fields for this variant
+    pub tag: u32,                 // discriminant value
+}
+
+/// An enum definition in HIR.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumDef {
+    pub name: Symbol,
+    pub variants: Vec<HirVariant>,
 }
