@@ -39,3 +39,30 @@ fn temp_xyz(content: &str) -> PathBuf {
 #[test] fn e2e_else_if_chain() {
     assert_eq!(pipeline::run(&temp_xyz("main = () => { if 0 { 1 } else if 0 { 2 } else { 3 } }")).unwrap(), 3);
 }
+
+#[test] fn e2e_println_int_compiles_and_runs() {
+    let input = temp_xyz("main = () => { println(42) }");
+    let _ = pipeline::run(&input).expect("println_int should compile and run");
+}
+
+#[test] fn e2e_println_string_compiles_and_runs() {
+    let input = temp_xyz(r#"main = () => { println("hello") }"#);
+    let _ = pipeline::run(&input).expect("println_string should compile and run");
+}
+
+#[test] fn e2e_assert_pass() {
+    let input = temp_xyz("main = () => { assert(1 == 1) }");
+    let _ = pipeline::run(&input).expect("assert_pass should compile and run");
+}
+
+#[test] fn e2e_assert_fail_exits_nonzero() {
+    let input = temp_xyz("main = () => { assert(0) }");
+    let code = pipeline::run(&input).unwrap();
+    assert_ne!(code, 0, "assert failure should exit non-zero");
+}
+
+#[test] fn e2e_assert_fail_msg_exits_nonzero() {
+    let input = temp_xyz(r#"main = () => { assert(0, "oops") }"#);
+    let code = pipeline::run(&input).unwrap();
+    assert_ne!(code, 0, "assert with message should exit non-zero");
+}

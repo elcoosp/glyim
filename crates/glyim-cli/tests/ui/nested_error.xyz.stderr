@@ -1,0 +1,7 @@
+[31mError:[0m expected expression but found error at bytes 11..12
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/ui/nested_error.xyz:2:3 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m$
+ [38;5;240m  │[0m   ┬  
+ [38;5;240m  │[0m   ╰── expected expression but found error at bytes 11..12
+[38;5;246m───╯[0m
