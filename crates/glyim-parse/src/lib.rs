@@ -9,7 +9,7 @@ pub mod recovery;
 
 pub use ast::{
     Ast, BinOp, BlockItem, EnumVariantRepr as EnumVariant, ExprKind, ExprNode, ExternFn, Item,
-    MatchArm, Pattern, StmtKind, StmtNode, UnOp, UseItem, VariantKind,
+    MatchArm, Pattern, StmtKind, StmtNode, TypeExpr, UnOp, UseItem, VariantKind,
 };
 pub use error::ParseError;
 pub use parser::{parse, ParseOutput};

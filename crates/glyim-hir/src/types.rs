@@ -77,9 +77,7 @@ pub enum HirPattern {
         bindings: Vec<(Symbol, HirPattern)>,
     },
     /// Tuple pattern: `(a, _, b)`
-    Tuple {
-        elements: Vec<HirPattern>,
-    },
+    Tuple { elements: Vec<HirPattern> },
     /// Some(x)
     OptionSome(Box<HirPattern>),
     /// None

@@ -161,7 +161,7 @@ impl<'ctx> Codegen<'ctx> {
         let entry = self.context.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(entry);
         let mut vars: HashMap<Symbol, PointerValue<'ctx>> = HashMap::new();
-        for (i, param_sym) in f.params.iter().enumerate() {
+        for (i, (param_sym, _ty)) in f.params.iter().enumerate() {
             let param_val = fn_value.get_nth_param(i as u32).ok_or("missing param")?;
             let alloca = self
                 .builder

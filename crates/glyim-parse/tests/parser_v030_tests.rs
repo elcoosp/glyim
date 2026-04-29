@@ -118,8 +118,15 @@ fn parse_as_cast() {
 
 #[test]
 fn parse_extern_block() {
-    let src = "extern { fn write(fd: i64, buf: *const u8, len: i64) -> i64; }";
+    let src = "extern { fn write(fd: i64, buf: *mut u8, len: i64) -> i64; }";
     let out = parse(src);
+    // Temporary: print errors
+    if !out.errors.is_empty() {
+        eprintln!("Errors encountered:");
+        for e in &out.errors {
+            eprintln!("  - {:?}", e);
+        }
+    }
     assert!(out.errors.is_empty());
 }
 

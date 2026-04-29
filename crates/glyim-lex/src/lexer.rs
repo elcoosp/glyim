@@ -187,6 +187,8 @@ impl<'a> Lexer<'a> {
             "extern" => SyntaxKind::KwExtern,
             "as" => SyntaxKind::KwAs,
             "pub" => SyntaxKind::KwPub,
+            "mut" => SyntaxKind::KwMut,
+            "impl" => SyntaxKind::KwImpl,
             _ => SyntaxKind::Ident,
         }
     }
