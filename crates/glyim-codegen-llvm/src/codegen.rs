@@ -1,5 +1,5 @@
 use glyim_hir::{Hir, HirBinOp, HirExpr, HirStmt, HirUnOp};
-use glyim_hir::item::HirItem;
+
 use glyim_interner::{Interner, Symbol};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -8,6 +8,7 @@ use inkwell::types::{BasicTypeEnum, IntType};
 use inkwell::values::{
     BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue, StructValue,
 };
+
 use inkwell::{AddressSpace, IntPredicate};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -20,6 +21,7 @@ pub struct Codegen<'ctx> {
     i32_type: IntType<'ctx>,
     interner: Interner,
     string_counter: RefCell<u32>,
+    struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -34,6 +36,7 @@ impl<'ctx> Codegen<'ctx> {
             i32_type: context.i32_type(),
             interner,
             string_counter: RefCell::new(0),
+            struct_types: RefCell::new(HashMap::new()),
         }
     }
 
@@ -42,7 +45,7 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => self.codegen_fn(f)?,
-                glyim_hir::item::HirItem::Struct(_) => {} // TODO: codegen struct definitions
+                glyim_hir::item::HirItem::Struct(s) => self.codegen_struct_def(s),
             }
         }
         if self.module.get_function("main").is_none() {
@@ -50,6 +53,14 @@ impl<'ctx> Codegen<'ctx> {
         } else {
             Ok(())
         }
+    }
+
+    
+    fn codegen_struct_def(&self, def: &glyim_hir::item::StructDef) {
+        let _name = self.interner.resolve(def.name);
+        let field_types: Vec<BasicTypeEnum<'ctx>> = def.fields.iter().map(|_| BasicTypeEnum::IntType(self.i64_type)).collect();
+        let struct_type = self.context.struct_type(&field_types, false);
+        self.struct_types.borrow_mut().insert(def.name, struct_type);
     }
 
     fn codegen_fn(&mut self, f: &glyim_hir::HirFn) -> Result<(), String> {
@@ -239,9 +250,20 @@ impl<'ctx> Codegen<'ctx> {
             HirExpr::UnitLit |
             HirExpr::As { .. } |
             HirExpr::Match { .. } |
-            HirExpr::FieldAccess { .. } |
-            HirExpr::StructLit { .. } |
             HirExpr::EnumVariant { .. } => {
+                Some(self.i64_type.const_int(0, false))
+            }
+            HirExpr::StructLit { .. } => {
+                // Stub: return 0 until proper struct layout codegen is implemented
+                Some(self.i64_type.const_int(0, false))
+            }
+            HirExpr::FieldAccess { object, field } => {
+                let obj_val = self.codegen_expr(object, vars, fn_value)?;
+                let ptr = self.builder.build_int_to_ptr(obj_val, self.context.ptr_type(AddressSpace::from(0u16)), "to_ptr").ok()?;
+                // Find field index: need the struct type. We don't know the struct type at this point.
+                // For now, hardcode field 0; proper implementation requires type info.
+                // We'll look up the struct from the object? Not possible without type info.
+                // Stub: return 0.
                 Some(self.i64_type.const_int(0, false))
             }
         }
