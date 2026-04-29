@@ -1,5 +1,5 @@
 use crate::{Hir, HirBinOp, HirExpr, HirFn, HirPattern, HirStmt, HirUnOp};
-use crate::item::{HirItem, StructDef, EnumDef, HirVariant, StructField};
+use crate::item::{ExternBlock, ExternFn, HirItem, StructDef, EnumDef, HirVariant, StructField};
 use crate::types::HirType;
 use glyim_interner::{Interner, Symbol};
 use glyim_parse::{BinOp, BlockItem, ExprKind, Item, StmtKind, UnOp};
@@ -43,6 +43,14 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
                     HirVariant { name: v.name, fields, tag: i as u32 }
                 }).collect();
                 fns.push(HirItem::Enum(EnumDef { name: *name, variants: hir_variants }));
+            }
+            Item::ExternBlock { functions, .. } => {
+                let ex_fns: Vec<ExternFn> = functions.iter().map(|f| ExternFn {
+                    name: f.name,
+                    params: f.params.iter().map(|_| HirType::Int).collect(),
+                    ret: HirType::Int,
+                }).collect();
+                fns.push(HirItem::Extern(ExternBlock { functions: ex_fns }));
             }
             Item::Use(_) => {} // No-op
             Item::Stmt(_) => {}

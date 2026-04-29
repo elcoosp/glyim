@@ -49,6 +49,7 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Fn(f) => self.codegen_fn(f)?,
                 glyim_hir::item::HirItem::Struct(s) => self.codegen_struct_def(s),
                 glyim_hir::item::HirItem::Enum(e) => self.codegen_enum_def(e),
+                glyim_hir::item::HirItem::Extern(_) => {}
             }
         }
         if self.module.get_function("main").is_none() {

@@ -7,6 +7,6 @@ mod item;
 mod parser;
 pub mod recovery;
 
-pub use ast::{Ast, BinOp, BlockItem, EnumVariant, ExprKind, ExprNode, Item, MatchArm, Pattern, StmtKind, StmtNode, UnOp, UseItem, VariantKind};
+pub use ast::{Ast, BinOp, BlockItem, EnumVariantRepr as EnumVariant, ExprKind, ExprNode, Item, MatchArm, Pattern, StmtKind, StmtNode, UnOp, ExternFn, UseItem, VariantKind};
 pub use error::ParseError;
 pub use parser::{parse, ParseOutput};

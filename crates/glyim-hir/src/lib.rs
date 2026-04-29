@@ -6,4 +6,4 @@ pub mod item;
 pub use lower::lower;
 pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
 pub use types::{HirPattern, HirType, ExprId};
-pub use item::{HirItem, StructDef, EnumDef, HirVariant, StructField, FnSig};
+pub use item::{ExternBlock, ExternFn, HirItem, StructDef, EnumDef, HirVariant, StructField, FnSig};

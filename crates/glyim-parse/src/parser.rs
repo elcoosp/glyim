@@ -3,8 +3,8 @@ use glyim_interner::Interner;
 use glyim_lex::Token;
 use glyim_syntax::SyntaxKind;
 
-use crate::ast::{
-    Ast, BinOp, BlockItem, EnumVariant, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp,
+use crate::ast::{ ExternFn,
+    Ast, BinOp, BlockItem, EnumVariantRepr as EnumVariant, ExprKind, ExprNode, Item, StmtKind, StmtNode, UnOp,
     UseItem, VariantKind,
 };
 use crate::error::ParseError;
@@ -116,6 +116,7 @@ impl<'a> Parser<'a> {
             SyntaxKind::KwFn => self.parse_fn_def(),
             SyntaxKind::KwStruct => self.parse_struct_def(),
             SyntaxKind::KwEnum => self.parse_enum_def(),
+            SyntaxKind::KwExtern => self.parse_extern_block(),
             SyntaxKind::KwLet => self.parse_let_stmt().map(Item::Stmt),
             SyntaxKind::KwUse => self.parse_use_item().map(Item::Use),
             SyntaxKind::Ident => {
@@ -260,6 +261,67 @@ impl<'a> Parser<'a> {
         if let Err(e) = self.tokens.expect(SyntaxKind::RBrace) { self.errors.push(e); }
 
         Some(Item::EnumDef { name, name_span, variants })
+    }
+
+
+    fn parse_extern_block(&mut self) -> Option<Item> {
+        let start_tok = self.tokens.bump()?;
+        let start = start_tok.start;
+        if let Err(e) = self.tokens.expect(SyntaxKind::LBrace) {
+            self.errors.push(e);
+            return None;
+        }
+        let mut functions = vec![];
+        while !self.tokens.at(SyntaxKind::RBrace) && self.tokens.peek().is_some() {
+            if let Err(e) = self.tokens.expect(SyntaxKind::KwFn) {
+                self.errors.push(e);
+                break;
+            }
+            let name_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                Ok(t) => t,
+                Err(e) => { self.errors.push(e); break; }
+            };
+            let name = self.interner.intern(name_tok.text);
+            let name_span = Span::new(name_tok.start, name_tok.end);
+            if let Err(e) = self.tokens.expect(SyntaxKind::LParen) {
+                self.errors.push(e);
+                break;
+            }
+            let mut params = vec![];
+            while !self.tokens.at(SyntaxKind::RParen) {
+                let param_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                    Ok(t) => t,
+                    Err(e) => { self.errors.push(e); break; }
+                };
+                self.tokens.eat(SyntaxKind::Colon);
+                let type_tok = if self.tokens.at(SyntaxKind::Star) {
+                    self.tokens.bump();
+                    self.tokens.eat(SyntaxKind::KwMut);
+                    self.tokens.eat(SyntaxKind::KwLet);
+                    self.tokens.expect(SyntaxKind::Ident).ok()?
+                } else {
+                    self.tokens.expect(SyntaxKind::Ident).ok()?
+                };
+                params.push((self.interner.intern(param_tok.text), Span::new(param_tok.start, type_tok.end)));
+                self.tokens.eat(SyntaxKind::Comma);
+            }
+            if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); }
+            let ret = if self.tokens.eat(SyntaxKind::Arrow).is_some() {
+                let tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                Some((self.interner.intern(tok.text), Span::new(tok.start, tok.end)))
+            } else { None };
+            self.tokens.eat(SyntaxKind::Semicolon);
+            functions.push(ExternFn { name, name_span, params, ret });
+        }
+        let end_tok = match self.tokens.expect(SyntaxKind::RBrace) {
+            Ok(t) => t,
+            Err(e) => { self.errors.push(e); return None; }
+        };
+        Some(Item::ExternBlock {
+            abi: "C".into(),
+            span: Span::new(start, end_tok.end),
+            functions,
+        })
     }
 
     fn parse_use_item(&mut self) -> Option<UseItem> {

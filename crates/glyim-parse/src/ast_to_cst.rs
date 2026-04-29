@@ -90,7 +90,7 @@ fn ast_item_to_cst(builder: &mut CstBuilder, item: &Item) {
         Item::Use(u) => {
             builder.token(SyntaxKind::KwUse, "use"); builder.token(SyntaxKind::Ident, &u.path);
         }
-        Item::StructDef { .. } | Item::EnumDef { .. } => {} // TODO: CST representation
+        Item::StructDef { .. } | Item::EnumDef { .. } | Item::ExternBlock { .. } => {} // TODO: CST representation
     }
 }
 

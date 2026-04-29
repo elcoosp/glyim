@@ -28,6 +28,7 @@ pub enum HirItem {
     Fn(crate::node::HirFn),
     Struct(StructDef),
     Enum(EnumDef),
+    Extern(ExternBlock),
 }
 
 /// An enum variant definition in HIR.
@@ -43,4 +44,16 @@ pub struct HirVariant {
 pub struct EnumDef {
     pub name: Symbol,
     pub variants: Vec<HirVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExternFn {
+    pub name: Symbol,
+    pub params: Vec<HirType>,
+    pub ret: HirType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExternBlock {
+    pub functions: Vec<ExternFn>,
 }
