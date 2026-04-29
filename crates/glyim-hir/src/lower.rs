@@ -1,21 +1,22 @@
-use crate::item::{EnumDef, ExternBlock, ExternFn, HirItem, HirVariant, StructDef, StructField};
-use crate::types::HirType;
+use crate::item::{EnumDef, ExternBlock, ExternFn, HirItem, HirImplDef, HirVariant, StructDef, StructField};
+use crate::types::{ExprId, HirType};
 use crate::{Hir, HirBinOp, HirExpr, HirFn, HirPattern, HirStmt, HirUnOp};
-use glyim_interner::{Interner, Symbol};
+use glyim_interner::Interner;
 use glyim_parse::{BinOp, BlockItem, ExprKind, Item, StmtKind, TypeExpr, UnOp, Pattern};
 
 pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
     let mut fns = vec![];
+    let mut next_id: u32 = 0;
+    let mut fresh_id = || { let id = ExprId::new(next_id); next_id += 1; id };
     for item in &ast.items {
         match item {
             Item::Binding { name, value, .. } => {
                 if let ExprKind::Lambda { params, body } = &value.kind {
                     fns.push(HirItem::Fn(HirFn {
-                        name: *name,
-                        type_params: vec![],
+                        name: *name, type_params: vec![],
                         params: params.iter().map(|sym| (*sym, HirType::Int)).collect(),
                         ret: None,
-                        body: lower_expr(&body.kind, interner),
+                        body: lower_expr(&body.kind, interner, &mut fresh_id),
                     }));
                 }
             }
@@ -26,14 +27,14 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
                 let hir_ret = ret.as_ref().map(|t| lower_type_expr(t, interner));
                 fns.push(HirItem::Fn(HirFn {
                     name: *name, type_params: type_params.clone(), params: hir_params, ret: hir_ret,
-                    body: lower_expr(&body.kind, interner),
+                    body: lower_expr(&body.kind, interner, &mut fresh_id),
                 }));
             }
             Item::StructDef { name, fields, .. } => {
                 let hir_fields: Vec<StructField> = fields.iter().map(|(sym, _, _ty)| {
                     StructField { name: *sym, ty: HirType::Int }
                 }).collect();
-                fns.push(HirItem::Struct(StructDef { name: *name, fields: hir_fields }));
+                fns.push(HirItem::Struct(StructDef { name: *name, type_params: vec![], fields: hir_fields }));
             }
             Item::EnumDef { name, variants, .. } => {
                 let hir_variants: Vec<HirVariant> = variants.iter().enumerate().map(|(i, v)| {
@@ -44,25 +45,25 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
                     };
                     HirVariant { name: v.name, fields, tag: i as u32 }
                 }).collect();
-                fns.push(HirItem::Enum(EnumDef { name: *name, variants: hir_variants }));
+                fns.push(HirItem::Enum(EnumDef { name: *name, type_params: vec![], variants: hir_variants }));
             }
-            Item::ImplBlock { methods, .. } => {
-                for method in methods.iter().filter_map(|m| {
-                    if let Item::FnDef { name, type_params, params, ret, body, .. } = m {
+            Item::ImplBlock { target, type_params, methods, is_pub, .. } => {
+                let hir_methods: Vec<HirFn> = methods.iter().filter_map(|m| {
+                    if let Item::FnDef { name, type_params: fn_tp, params, ret, body, .. } = m {
+                        let all_tp: Vec<_> = type_params.iter().chain(fn_tp.iter()).copied().collect();
                         let hir_params = params.iter().map(|(sym, _, ty)| {
                             (*sym, ty.as_ref().map(|t| lower_type_expr(t, interner)).unwrap_or(HirType::Int))
                         }).collect();
                         let hir_ret = ret.as_ref().map(|t| lower_type_expr(t, interner));
-                        Some(HirFn { name: *name, type_params: type_params.clone(), params: hir_params, ret: hir_ret, body: lower_expr(&body.kind, interner) })
+                        Some(HirFn { name: *name, type_params: all_tp, params: hir_params, ret: hir_ret, body: lower_expr(&body.kind, interner, &mut fresh_id) })
                     } else { None }
-                }) {
-                    fns.push(HirItem::Fn(method));
-                }
+                }).collect();
+                fns.push(HirItem::Impl(HirImplDef { target_name: *target, type_params: type_params.clone(), methods: hir_methods, is_pub: *is_pub }));
             }
             Item::MacroDef { name, body, .. } => {
                 fns.push(HirItem::Fn(HirFn {
                     name: *name, type_params: vec![], params: vec![], ret: None,
-                    body: lower_expr(&body.kind, interner),
+                    body: lower_expr(&body.kind, interner, &mut fresh_id),
                 }));
             }
             Item::ExternBlock { functions, .. } => {
@@ -78,75 +79,119 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
     Hir { items: fns }
 }
 
-fn lower_expr(expr: &ExprKind, interner: &mut Interner) -> HirExpr {
+fn lower_expr(expr: &ExprKind, interner: &mut Interner, fresh_id: &mut impl FnMut() -> ExprId) -> HirExpr {
+    let id = fresh_id();
     match expr {
-        ExprKind::IntLit(n) => HirExpr::IntLit(*n),
-        ExprKind::FloatLit(f) => HirExpr::FloatLit(*f),
-        ExprKind::BoolLit(b) => HirExpr::BoolLit(*b),
-        ExprKind::StrLit(s) => HirExpr::StrLit(s.clone()),
-        ExprKind::Ident(sym) => HirExpr::Ident(*sym),
-        ExprKind::UnitLit => HirExpr::UnitLit,
-        ExprKind::Binary { op, lhs, rhs } => HirExpr::Binary { op: lower_binop(op.clone()), lhs: Box::new(lower_expr(&lhs.kind, interner)), rhs: Box::new(lower_expr(&rhs.kind, interner)) },
-        ExprKind::Unary { op, operand } => HirExpr::Unary { op: lower_unop(op.clone()), operand: Box::new(lower_expr(&operand.kind, interner)) },
-        ExprKind::Lambda { params: _, body } => lower_expr(&body.kind, interner),
+        ExprKind::IntLit(n) => HirExpr::IntLit { id, value: *n },
+        ExprKind::FloatLit(f) => HirExpr::FloatLit { id, value: *f },
+        ExprKind::BoolLit(b) => HirExpr::BoolLit { id, value: *b },
+        ExprKind::StrLit(s) => HirExpr::StrLit { id, value: s.clone() },
+        ExprKind::Ident(sym) => HirExpr::Ident { id, name: *sym },
+        ExprKind::UnitLit => HirExpr::UnitLit { id },
+        ExprKind::Binary { op, lhs, rhs } => HirExpr::Binary {
+            id, op: lower_binop(op.clone()),
+            lhs: Box::new(lower_expr(&lhs.kind, interner, fresh_id)),
+            rhs: Box::new(lower_expr(&rhs.kind, interner, fresh_id)),
+        },
+        ExprKind::Unary { op, operand } => HirExpr::Unary {
+            id, op: lower_unop(op.clone()),
+            operand: Box::new(lower_expr(&operand.kind, interner, fresh_id)),
+        },
+        ExprKind::Lambda { params: _, body } => lower_expr(&body.kind, interner, fresh_id),
         ExprKind::Block(items) => {
             let stmts: Vec<HirStmt> = items.iter().map(|item| match item {
-                BlockItem::Expr(e) => HirStmt::Expr(lower_expr(&e.kind, interner)),
+                BlockItem::Expr(e) => HirStmt::Expr(lower_expr(&e.kind, interner, fresh_id)),
                 BlockItem::Stmt(s) => match &s.kind {
                     StmtKind::Let { pattern, mutable, value } => {
-                        let val = lower_expr(&value.kind, interner);
+                        let val = lower_expr(&value.kind, interner, fresh_id);
                         match pattern {
                             Pattern::Var(name) => HirStmt::Let { name: *name, mutable: *mutable, value: val },
                             _ => HirStmt::Let { name: interner.intern("_"), mutable: false, value: val },
                         }
                     }
-                    StmtKind::Assign { target, value } => HirStmt::Assign { target: *target, value: lower_expr(&value.kind, interner) },
+                    StmtKind::Assign { target, value } => HirStmt::Assign { target: *target, value: lower_expr(&value.kind, interner, fresh_id) },
                 },
             }).collect();
-            HirExpr::Block(stmts)
+            HirExpr::Block { id, stmts }
         }
-        ExprKind::If { condition, then_branch, else_branch } => HirExpr::If { condition: Box::new(lower_expr(&condition.kind, interner)), then_branch: Box::new(lower_expr(&then_branch.kind, interner)), else_branch: else_branch.as_ref().map(|e| Box::new(lower_expr(&e.kind, interner))) },
-        ExprKind::StructLit { name, fields } => { let hir_fields = fields.iter().map(|(sym, e)| (*sym, lower_expr(&e.kind, interner))).collect(); HirExpr::StructLit { struct_name: *name, fields: hir_fields } },
+        ExprKind::If { condition, then_branch, else_branch } => HirExpr::If {
+            id,
+            condition: Box::new(lower_expr(&condition.kind, interner, fresh_id)),
+            then_branch: Box::new(lower_expr(&then_branch.kind, interner, fresh_id)),
+            else_branch: else_branch.as_ref().map(|e| Box::new(lower_expr(&e.kind, interner, fresh_id))),
+        },
+        ExprKind::StructLit { name, fields } => {
+            let hir_fields = fields.iter().map(|(sym, e)| (*sym, lower_expr(&e.kind, interner, fresh_id))).collect();
+            HirExpr::StructLit { id, struct_name: *name, fields: hir_fields }
+        }
         ExprKind::Match { scrutinee, arms } => {
             let hir_arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)> = arms.iter().map(|arm| {
                 let pattern = lower_pattern(&arm.pattern, interner);
-                let guard = arm.guard.as_ref().map(|e| lower_expr(&e.kind, interner));
-                let body = lower_expr(&arm.body.kind, interner);
+                let guard = arm.guard.as_ref().map(|e| lower_expr(&e.kind, interner, fresh_id));
+                let body = lower_expr(&arm.body.kind, interner, fresh_id);
                 (pattern, guard, body)
             }).collect();
-            HirExpr::Match { scrutinee: Box::new(lower_expr(&scrutinee.kind, interner)), arms: hir_arms }
+            HirExpr::Match { id, scrutinee: Box::new(lower_expr(&scrutinee.kind, interner, fresh_id)), arms: hir_arms }
         }
         ExprKind::EnumVariant { enum_name, variant_name, args } => {
-            let hir_args = args.iter().map(|a| lower_expr(&a.kind, interner)).collect();
-            HirExpr::EnumVariant { enum_name: *enum_name, variant_name: *variant_name, args: hir_args }
+            let hir_args = args.iter().map(|a| lower_expr(&a.kind, interner, fresh_id)).collect();
+            HirExpr::EnumVariant { id, enum_name: *enum_name, variant_name: *variant_name, args: hir_args }
         }
-        ExprKind::FieldAccess { object, field } => HirExpr::FieldAccess { object: Box::new(lower_expr(&object.kind, interner)), field: *field },
-        ExprKind::SomeExpr(e) => HirExpr::EnumVariant { enum_name: interner.intern("Option"), variant_name: interner.intern("Some"), args: vec![lower_expr(&e.kind, interner)] },
-        ExprKind::NoneExpr => HirExpr::EnumVariant { enum_name: interner.intern("Option"), variant_name: interner.intern("None"), args: vec![] },
-        ExprKind::OkExpr(e) => HirExpr::EnumVariant { enum_name: interner.intern("Result"), variant_name: interner.intern("Ok"), args: vec![lower_expr(&e.kind, interner)] },
-        ExprKind::ErrExpr(e) => HirExpr::EnumVariant { enum_name: interner.intern("Result"), variant_name: interner.intern("Err"), args: vec![lower_expr(&e.kind, interner)] },
-        ExprKind::Pointer { mutable: _, target } => HirExpr::As { expr: Box::new(HirExpr::IntLit(0)), target_type: HirType::RawPtr(Box::new(HirType::Named(*target))) },
-        ExprKind::As { expr, target_type } => HirExpr::As { expr: Box::new(lower_expr(&expr.kind, interner)), target_type: HirType::Named(*target_type) },
-        ExprKind::MacroCall { name, arg } => { if interner.resolve(*name) == "identity" { lower_expr(&arg.kind, interner) } else { HirExpr::IntLit(0) } },
+        ExprKind::FieldAccess { object, field } => HirExpr::FieldAccess { id, object: Box::new(lower_expr(&object.kind, interner, fresh_id)), field: *field },
+        ExprKind::SomeExpr(e) => HirExpr::EnumVariant { id, enum_name: interner.intern("Option"), variant_name: interner.intern("Some"), args: vec![lower_expr(&e.kind, interner, fresh_id)] },
+        ExprKind::NoneExpr => HirExpr::EnumVariant { id, enum_name: interner.intern("Option"), variant_name: interner.intern("None"), args: vec![] },
+        ExprKind::OkExpr(e) => HirExpr::EnumVariant { id, enum_name: interner.intern("Result"), variant_name: interner.intern("Ok"), args: vec![lower_expr(&e.kind, interner, fresh_id)] },
+        ExprKind::ErrExpr(e) => HirExpr::EnumVariant { id, enum_name: interner.intern("Result"), variant_name: interner.intern("Err"), args: vec![lower_expr(&e.kind, interner, fresh_id)] },
+        ExprKind::Pointer { mutable: _, target } => HirExpr::As { id, expr: Box::new(HirExpr::IntLit { id: fresh_id(), value: 0 }), target_type: HirType::RawPtr(Box::new(HirType::Named(*target))) },
+        ExprKind::As { expr, target_type } => {
+                let hir_target = match interner.resolve(*target_type) {
+                    "i64" | "Int" => HirType::Int,
+                    "f64" | "Float" => HirType::Float,
+                    "bool" | "Bool" => HirType::Bool,
+                    "Str" | "str" => HirType::Str,
+                    _ => HirType::Named(*target_type),
+                };
+                HirExpr::As { id, expr: Box::new(lower_expr(&expr.kind, interner, fresh_id)), target_type: hir_target }
+            },
+        ExprKind::MacroCall { name, arg } => { if interner.resolve(*name) == "identity" { lower_expr(&arg.kind, interner, fresh_id) } else { HirExpr::IntLit { id, value: 0 } } },
         ExprKind::TryExpr(e) => HirExpr::Match {
-            scrutinee: Box::new(lower_expr(&e.kind, interner)),
+            id,
+            scrutinee: Box::new(lower_expr(&e.kind, interner, fresh_id)),
             arms: vec![
-                (HirPattern::ResultOk(Box::new(HirPattern::Var(interner.intern("v")))), None, HirExpr::Ident(interner.intern("v"))),
-                (HirPattern::ResultErr(Box::new(HirPattern::Var(interner.intern("e")))), None, HirExpr::IntLit(0)),
+                (HirPattern::ResultOk(Box::new(HirPattern::Var(interner.intern("v")))), None, HirExpr::Ident { id: fresh_id(), name: interner.intern("v") }),
+                (HirPattern::ResultErr(Box::new(HirPattern::Var(interner.intern("e")))), None, HirExpr::IntLit { id: fresh_id(), value: 0 }),
             ],
         },
         ExprKind::Call { callee, args } => {
+            // Handle namespaced function calls: StructName::method(args)
+            if let ExprKind::EnumVariant { enum_name, variant_name, args: enum_args } = &callee.kind {
+                if enum_args.is_empty() {
+                    let mangled = interner.intern(&format!("{}_{}", interner.resolve(*enum_name), interner.resolve(*variant_name)));
+                    // treat as call to mangled function
+                    let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(&a.kind, interner, fresh_id)).collect();
+                    return HirExpr::Call { id: fresh_id(), callee: mangled, args: call_args };
+                }
+            }
             if let ExprKind::Ident(sym) = &callee.kind {
                 match interner.resolve(*sym) {
-                    "println" => { let arg = args.first().map(|a| lower_expr(&a.kind, interner)).unwrap_or(HirExpr::IntLit(0)); return HirExpr::Println(Box::new(arg)); }
-                    "assert" => { let cond = args.first().map(|a| lower_expr(&a.kind, interner)).unwrap_or(HirExpr::IntLit(0)); let msg = args.get(1).map(|a| lower_expr(&a.kind, interner)).map(Box::new); return HirExpr::Assert { condition: Box::new(cond), message: msg }; }
+                    "println" => {
+                        let arg = args.first().map(|a| lower_expr(&a.kind, interner, fresh_id)).unwrap_or(HirExpr::IntLit { id: fresh_id(), value: 0 });
+                        return HirExpr::Println { id: fresh_id(), arg: Box::new(arg) };
+                    }
+                    "assert" => {
+                        let cond = args.first().map(|a| lower_expr(&a.kind, interner, fresh_id)).unwrap_or(HirExpr::IntLit { id: fresh_id(), value: 0 });
+                        let msg = args.get(1).map(|a| lower_expr(&a.kind, interner, fresh_id)).map(Box::new);
+                        return HirExpr::Assert { id: fresh_id(), condition: Box::new(cond), message: msg };
+                    }
                     _ => {}
                 }
             }
-            HirExpr::IntLit(0)
+            HirExpr::IntLit { id: fresh_id(), value: 0 }
         }
-        ExprKind::TupleLit(_) => HirExpr::IntLit(0),
-    }
+        ExprKind::TupleLit(elems) => {
+            let hir_elems = elems.iter().map(|e| lower_expr(&e.kind, interner, fresh_id)).collect();
+            HirExpr::TupleLit { id, elements: hir_elems }
+        }    }
 }
 
 fn lower_binop(op: BinOp) -> HirBinOp {

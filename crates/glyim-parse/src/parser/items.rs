@@ -55,6 +55,7 @@ fn parse_binding(parser: &mut Parser) -> Option<Item> {
 
 fn parse_fn_def(parser: &mut Parser) -> Option<Item> {
     parser.tokens.bump(); // 'fn'
+    let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
     let name_tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
     let name = parser.interner.intern(name_tok.text);
     let name_span = Span::new(name_tok.start, name_tok.end);
@@ -77,6 +78,7 @@ fn parse_fn_def(parser: &mut Parser) -> Option<Item> {
 
 fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
     parser.tokens.bump(); // 'struct'
+    let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
     let name_tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
     let name = parser.interner.intern(name_tok.text);
     let name_span = Span::new(name_tok.start, name_tok.end);
@@ -96,6 +98,7 @@ fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
 
 fn parse_enum_def(parser: &mut Parser) -> Option<Item> {
     parser.tokens.bump(); // 'enum'
+    let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
     let name_tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
     let name = parser.interner.intern(name_tok.text);
     let name_span = Span::new(name_tok.start, name_tok.end);
@@ -122,6 +125,18 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
     let target_tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
     let target = parser.interner.intern(target_tok.text);
     let target_span = Span::new(target_tok.start, target_tok.end);
+    // eat optional generic arguments on the target name (e.g., Edge<T>)
+    if parser.tokens.at(SyntaxKind::Lt) {
+        parser.tokens.bump(); // <
+        loop {
+            if parser.tokens.at(SyntaxKind::Ident) {
+                parser.tokens.bump(); // type param name
+            }
+            if parser.tokens.at(SyntaxKind::Gt) { parser.tokens.bump(); break; }
+            if parser.tokens.at(SyntaxKind::Comma) { parser.tokens.bump(); continue; }
+            break;
+        }
+    }
     parser.tokens.expect(SyntaxKind::LBrace, &mut parser.errors).ok()?;
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {

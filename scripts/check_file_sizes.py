@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Enforce maximum file size limits for Glyim source files."""
-import sys
+
 import os
+import sys
 
 MAX_LINES = 1200
-WARN_LINES = 300
+WARN_LINES = 400
+
 
 def check_file(path):
     with open(path) as f:
@@ -14,8 +16,12 @@ def check_file(path):
         print(f"ERROR: {path}: {count} lines (max {MAX_LINES})", file=sys.stderr)
         return False
     if count > WARN_LINES:
-        print(f"WARN: {path}: {count} lines (warning threshold {WARN_LINES})", file=sys.stderr)
+        print(
+            f"WARN: {path}: {count} lines (warning threshold {WARN_LINES})",
+            file=sys.stderr,
+        )
     return True
+
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +37,7 @@ def main():
                     ok = False
     if not ok:
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

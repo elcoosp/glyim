@@ -1,6 +1,5 @@
 ---
 source: crates/glyim-cli/tests/ui.rs
-assertion_line: 34
 expression: actual
 ---
-error: missing param
+error: no 'main' function

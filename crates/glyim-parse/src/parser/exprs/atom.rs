@@ -59,9 +59,13 @@ fn parse_struct_literal(parser: &mut Parser, name: glyim_interner::Symbol, start
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
         let n = match parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors) { Ok(t) => t, Err(_) => break };
         let n_sym = parser.interner.intern(n.text);
-        if parser.tokens.eat(SyntaxKind::Colon).is_some() { } // optional colon?
-        let val = parser.parse_expr(0)?;
-        fields.push((n_sym, val));
+        if parser.tokens.eat(SyntaxKind::Colon).is_some() {
+            let val = parser.parse_expr(0)?;
+            fields.push((n_sym, val));
+        } else {
+            // shorthand: { field } → { field: field }
+            fields.push((n_sym, ExprNode { kind: ExprKind::Ident(n_sym), span: Span::new(n.start, n.end) }));
+        }
         if !parser.tokens.eat(SyntaxKind::Comma).is_some() { break; }
     }
     let end = match parser.tokens.expect(SyntaxKind::RBrace, &mut parser.errors) { Ok(t) => t, Err(_) => return None };

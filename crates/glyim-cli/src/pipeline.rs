@@ -49,7 +49,7 @@ impl From<std::io::Error> for PipelineError {
 }
 
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
-    let source = fs::read_to_string(input)?;
+    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -66,7 +66,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner);
+    let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     codegen
         .write_object_file(&obj_path)
@@ -75,8 +75,21 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     Ok(output)
 }
 
+
+const PRELUDE: &str = "\
+pub enum Option<T> {
+    Some(T),
+    None,
+}
+
+pub enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+";
+
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
-    let source = fs::read_to_string(input)?;
+    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
@@ -111,7 +124,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         return Err(PipelineError::TypeCheck(errs));
     }
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, parse_out.interner);
+    let mut codegen = Codegen::new(&context, parse_out.interner, vec![]);
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -127,7 +140,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
 }
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {
-    let source = fs::read_to_string(input)?;
+    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
@@ -165,7 +178,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 }
 
 pub fn print_ir(input: &Path) -> Result<(), PipelineError> {
-    let source = fs::read_to_string(input)?;
+    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let ir = compile_to_ir(&source).map_err(PipelineError::Codegen)?;
     println!("{ir}");
     Ok(())
