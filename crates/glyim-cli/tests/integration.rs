@@ -29,7 +29,6 @@ fn e2e_missing_main() {
 fn e2e_parse_error() {
     assert!(pipeline::run(&temp_g("main = +")).is_err());
 }
-
 #[test]
 fn e2e_let_binding() {
     assert_eq!(
@@ -37,13 +36,11 @@ fn e2e_let_binding() {
         0
     );
 }
-
 #[test]
 fn e2e_let_mut_assign() {
     let input = temp_g("main = () => { let mut x = 10\nx = x + 5\nx }");
     assert_eq!(pipeline::run(&input).unwrap(), 15);
 }
-
 #[test]
 fn e2e_if_true_branch() {
     assert_eq!(
@@ -51,7 +48,6 @@ fn e2e_if_true_branch() {
         10
     );
 }
-
 #[test]
 fn e2e_if_false_branch() {
     assert_eq!(
@@ -59,7 +55,6 @@ fn e2e_if_false_branch() {
         20
     );
 }
-
 #[test]
 fn e2e_if_without_else() {
     assert_eq!(
@@ -67,7 +62,6 @@ fn e2e_if_without_else() {
         0
     );
 }
-
 #[test]
 fn e2e_else_if_chain() {
     assert_eq!(
@@ -78,35 +72,124 @@ fn e2e_else_if_chain() {
         3
     );
 }
-
 #[test]
 fn e2e_println_int_compiles_and_runs() {
-    let input = temp_g("main = () => { println(42) }");
-    let _ = pipeline::run(&input).expect("println_int should compile and run");
+    let _ = pipeline::run(&temp_g("main = () => { println(42) }"))
+        .expect("println_int should compile and run");
 }
-
 #[test]
 fn e2e_println_string_compiles_and_runs() {
-    let input = temp_g(r#"main = () => { println("hello") }"#);
-    let _ = pipeline::run(&input).expect("println_string should compile and run");
+    let _ = pipeline::run(&temp_g(r#"main = () => { println("hello") }"#))
+        .expect("println_string should compile and run");
 }
-
 #[test]
 fn e2e_assert_pass() {
-    let input = temp_g("main = () => { assert(1 == 1) }");
-    let _ = pipeline::run(&input).expect("assert_pass should compile and run");
+    let _ = pipeline::run(&temp_g("main = () => { assert(1 == 1) }"))
+        .expect("assert_pass should compile and run");
 }
-
 #[test]
 fn e2e_assert_fail_exits_nonzero() {
-    let input = temp_g("main = () => { assert(0) }");
-    let code = pipeline::run(&input).unwrap();
+    let code = pipeline::run(&temp_g("main = () => { assert(0) }")).unwrap();
     assert_ne!(code, 0, "assert failure should exit non-zero");
+}
+#[test]
+fn e2e_assert_fail_msg_exits_nonzero() {
+    let code = pipeline::run(&temp_g(r#"main = () => { assert(0, "oops") }"#)).unwrap();
+    assert_ne!(code, 0, "assert with message should exit non-zero");
 }
 
 #[test]
-fn e2e_assert_fail_msg_exits_nonzero() {
-    let input = temp_g(r#"main = () => { assert(0, "oops") }"#);
-    let code = pipeline::run(&input).unwrap();
-    assert_ne!(code, 0, "assert with message should exit non-zero");
+#[ignore]
+fn e2e_struct_literal_and_access() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.x + p.y }"
+        ))
+        .unwrap(),
+        3
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_enum_variant() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Green; 1 }"
+        ))
+        .unwrap(),
+        1
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_match_expression() {
+    assert_eq!(pipeline::run(&temp_g("enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Red; match c { Color::Red => 1, Color::Green => 2, Color::Blue => 3 } }")).unwrap(), 1);
+}
+
+#[test]
+#[ignore]
+fn e2e_some_and_none() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_ok_and_err() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "main = () => { let r = Ok(42); match r { Ok(v) => v, Err(_) => 0 } }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_macro_identity() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "@identity fn transform(expr: Expr) -> Expr { return expr } main = () => @identity(99)"
+        ))
+        .unwrap(),
+        99
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_arrow_operator() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "fn fallible() -> Result<i64, Str> { Ok(42) }\nmain = () => { let r = fallible()?; r }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_bool_literal() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { if true { 1 } else { 0 } }")).unwrap(),
+        1
+    );
+}
+
+#[test]
+#[ignore]
+fn e2e_float_literal() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { let x: f64 = 3.14; 1 }")).unwrap(),
+        1
+    );
 }

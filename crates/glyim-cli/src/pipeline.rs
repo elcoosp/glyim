@@ -1,5 +1,7 @@
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_interner::Interner;
+use glyim_typeck::TypeChecker;
+use glyim_typeck::TypeError;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
@@ -9,6 +11,7 @@ pub enum PipelineError {
     Io(std::io::Error),
     Parse(Vec<glyim_parse::ParseError>),
     Codegen(String),
+    TypeCheck(Vec<TypeError>),
     Link(String),
     Run(std::io::Error),
 }
@@ -25,6 +28,13 @@ impl std::fmt::Display for PipelineError {
                 Ok(())
             }
             Self::Codegen(msg) => write!(f, "codegen error: {msg}"),
+            Self::TypeCheck(errs) => {
+                writeln!(f, "{} type error(s):", errs.len())?;
+                for e in errs {
+                    writeln!(f, "  - {e}")?;
+                }
+                Ok(())
+            }
             Self::Link(msg) => write!(f, "linker error: {msg}"),
             Self::Run(e) => write!(f, "execution error: {e}"),
         }
@@ -41,6 +51,10 @@ impl From<std::io::Error> for PipelineError {
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let source = fs::read_to_string(input)?;
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
+    let mut typeck = TypeChecker::new();
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -92,6 +106,10 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut typeck = TypeChecker::new();
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner);
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
@@ -110,7 +128,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = fs::read_to_string(input)?;
-    let parse_out = glyim_parse::parse(&source);
+    let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
             &source,
@@ -137,6 +155,11 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
         );
         eprintln!("{rendered}");
         return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut typeck = TypeChecker::new();
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
     }
     Ok(())
 }
