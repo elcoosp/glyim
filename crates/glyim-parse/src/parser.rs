@@ -440,6 +440,15 @@ impl<'a> Parser<'a> {
                 };
                 continue;
             }
+            // Try operator: expr?
+            if op_tok.kind == SyntaxKind::Question && 80 >= min_bp {
+                self.tokens.bump();
+                left = ExprNode {
+                    kind: ExprKind::TryExpr(Box::new(left.clone())),
+                    span: Span::new(left.span.start, op_tok.end),
+                };
+                continue;
+            }
             // Field access: expr.field
             if op_tok.kind == SyntaxKind::Dot && 90 >= min_bp {
                 self.tokens.bump(); // consume '.'
