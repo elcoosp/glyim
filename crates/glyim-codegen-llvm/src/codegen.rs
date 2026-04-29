@@ -1,4 +1,5 @@
 use glyim_hir::{Hir, HirBinOp, HirExpr, HirStmt, HirUnOp};
+use glyim_hir::item::HirItem;
 use glyim_interner::{Interner, Symbol};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -38,8 +39,11 @@ impl<'ctx> Codegen<'ctx> {
 
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
-        for f in &hir.fns {
-            self.codegen_fn(f)?;
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => self.codegen_fn(f)?,
+                glyim_hir::item::HirItem::Struct(_) => {} // TODO: codegen struct definitions
+            }
         }
         if self.module.get_function("main").is_none() {
             Err("no 'main' function".into())

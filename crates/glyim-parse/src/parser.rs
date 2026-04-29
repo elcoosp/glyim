@@ -114,6 +114,7 @@ impl<'a> Parser<'a> {
     fn parse_item(&mut self) -> Option<Item> {
         match self.tokens.peek()?.kind {
             SyntaxKind::KwFn => self.parse_fn_def(),
+            SyntaxKind::KwStruct => self.parse_struct_def(),
             SyntaxKind::KwLet => self.parse_let_stmt().map(Item::Stmt),
             SyntaxKind::KwUse => self.parse_use_item().map(Item::Use),
             SyntaxKind::Ident => {
@@ -147,6 +148,47 @@ impl<'a> Parser<'a> {
         if let Err(e) = self.tokens.expect(SyntaxKind::RParen) { self.errors.push(e); }
         let body = self.parse_block_expr()?;
         Some(Item::FnDef { name, name_span, params, body })
+    }
+
+
+    fn parse_struct_def(&mut self) -> Option<Item> {
+        let _start_tok = self.tokens.bump()?; // .struct.
+        let name_tok = match self.tokens.expect(SyntaxKind::Ident) {
+            Ok(t) => t,
+            Err(e) => { self.errors.push(e); return None; }
+        };
+        let name = self.interner.intern(name_tok.text);
+        let name_span = Span::new(name_tok.start, name_tok.end);
+
+        if let Err(e) = self.tokens.expect(SyntaxKind::LBrace) {
+            self.errors.push(e);
+            return None;
+        }
+
+        let mut fields = vec![];
+        while !self.tokens.at(SyntaxKind::RBrace) {
+            let field_tok = match self.tokens.expect(SyntaxKind::Ident) {
+                Ok(t) => t,
+                Err(e) => { self.errors.push(e); break; }
+            };
+            fields.push((self.interner.intern(field_tok.text), Span::new(field_tok.start, field_tok.end)));
+
+            self.tokens.eat(SyntaxKind::Colon); // skip type annotation for now
+
+            if let Some(tok) = self.tokens.peek() {
+                if tok.kind == SyntaxKind::Ident {
+                    self.tokens.bump(); // consume type name
+                }
+            }
+
+            self.tokens.eat(SyntaxKind::Comma);
+        }
+
+        if let Err(e) = self.tokens.expect(SyntaxKind::RBrace) {
+            self.errors.push(e);
+        }
+
+        Some(Item::StructDef { name, name_span, fields })
     }
 
     fn parse_use_item(&mut self) -> Option<UseItem> {

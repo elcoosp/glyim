@@ -111,5 +111,5 @@ pub struct HirFn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hir {
-    pub fns: Vec<HirFn>,
+    pub items: Vec<crate::item::HirItem>,
 }

@@ -106,6 +106,11 @@ pub enum Item {
         params: Vec<(Symbol, Span)>,
         body: ExprNode,
     },
+    StructDef {
+        name: Symbol,
+        name_span: Span,
+        fields: Vec<(Symbol, Span)>,
+    },
     Stmt(StmtNode),
     Use(UseItem),
 }

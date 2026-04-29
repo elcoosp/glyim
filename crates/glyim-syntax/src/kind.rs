@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 80;
+pub const COUNT: u16 = 77;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -240,6 +240,6 @@ mod tests {
     fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error;
         let _ = SyntaxKind::PtrType;
-        assert_eq!(COUNT, 79);
+        assert_eq!(COUNT, 77);
     }
 }

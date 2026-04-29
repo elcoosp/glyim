@@ -1,4 +1,6 @@
 use crate::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp};
+use crate::item::{HirItem, StructDef, StructField};
+use crate::types::HirType;
 use glyim_interner::Interner;
 use glyim_parse::{BinOp, BlockItem, ExprKind, Item, StmtKind, UnOp};
 
@@ -8,30 +10,34 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &Interner) -> Hir {
         match item {
             Item::Binding { name, value, .. } => {
                 if let ExprKind::Lambda { params, body } = &value.kind {
-                    fns.push(HirFn {
+                    fns.push(HirItem::Fn(HirFn {
                         name: *name,
                         params: params.clone(),
                         body: lower_expr(&body.kind, interner),
-                    });
+                    }));
                 }
             }
             Item::FnDef {
                 name, params, body, ..
             } => {
                 let param_syms: Vec<_> = params.iter().map(|(sym, _)| *sym).collect();
-                fns.push(HirFn {
+                fns.push(HirItem::Fn(HirFn {
                     name: *name,
                     params: param_syms,
                     body: lower_expr(&body.kind, interner),
-                });
+                }));
             }
-            Item::Stmt(_stmt) => {
-                // Top-level let statement -> wrap in a main function if not already present? For now ignore.
+            Item::StructDef { name, fields, .. } => {
+                let hir_fields: Vec<StructField> = fields.iter().map(|(sym, _)| {
+                    StructField { name: *sym, ty: HirType::Int } // field type defaults to Int for now
+                }).collect();
+                fns.push(HirItem::Struct(StructDef { name: *name, fields: hir_fields }));
             }
             Item::Use(_) => {} // No-op
+            Item::Stmt(_) => {}
         }
     }
-    Hir { fns }
+    Hir { items: fns }
 }
 
 fn lower_expr(expr: &ExprKind, interner: &Interner) -> HirExpr {
