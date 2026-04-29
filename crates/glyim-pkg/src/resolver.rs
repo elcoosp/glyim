@@ -3,6 +3,7 @@ use crate::lockfile::LockSource;
 use std::collections::HashMap;
 
 /// A version requirement from a dependency declaration.
+#[derive(Debug)]
 pub struct Requirement {
     pub name: String,
     pub version_constraint: String,
@@ -24,6 +25,7 @@ pub struct Resolution {
 }
 
 /// An available version from the registry.
+#[derive(Debug)]
 pub struct AvailableVersion {
     pub version: String,
     pub is_macro: bool,
