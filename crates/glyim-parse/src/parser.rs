@@ -235,9 +235,7 @@ impl<'a> Parser<'a> {
                             depth += 1;
                         }
                         if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen {
-                            if depth > 0 {
-                                depth -= 1;
-                            }
+                            depth = depth.saturating_sub(1);
                         }
                         self.tokens.bump();
                     }
@@ -332,9 +330,7 @@ impl<'a> Parser<'a> {
                     depth += 1;
                 }
                 if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen {
-                    if depth > 0 {
-                        depth -= 1;
-                    }
+                    depth = depth.saturating_sub(1);
                 }
                 self.tokens.bump();
             }
@@ -911,7 +907,7 @@ impl<'a> Parser<'a> {
                     .resolve(sym)
                     .chars()
                     .next()
-                    .map_or(false, |c| c.is_uppercase());
+                    .is_some_and(|c| c.is_uppercase());
                 if is_uppercase && self.tokens.at(SyntaxKind::LBrace) {
                     self.tokens.bump();
                     let mut fields = vec![];
