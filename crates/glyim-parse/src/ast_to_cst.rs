@@ -69,6 +69,7 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         ExprKind::FloatLit(_) | ExprKind::BoolLit(_) | ExprKind::UnitLit => {}
         ExprKind::StructLit { .. } | ExprKind::EnumVariant { .. } | ExprKind::FieldAccess { .. } => {}
     
+        ExprKind::Pointer { .. } | ExprKind::As { .. } => {}
         _ => {}
     }
 }

@@ -21,6 +21,8 @@ pub enum ExprKind {
     StructLit { name: Symbol, fields: Vec<(Symbol, ExprNode)> },
     EnumVariant { enum_name: Symbol, variant_name: Symbol, args: Vec<ExprNode> },
     SomeExpr(Box<ExprNode>), NoneExpr, OkExpr(Box<ExprNode>), ErrExpr(Box<ExprNode>), TryExpr(Box<ExprNode>),
+    Pointer { mutable: bool, target: Symbol },
+    As { expr: Box<ExprNode>, target_type: Symbol },
     Match { scrutinee: Box<ExprNode>, arms: Vec<MatchArm> },
     FieldAccess { object: Box<ExprNode>, field: Symbol },
     Call { callee: Box<ExprNode>, args: Vec<ExprNode> },

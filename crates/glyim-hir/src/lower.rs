@@ -160,6 +160,14 @@ fn lower_expr(expr: &ExprKind, interner: &mut Interner) -> HirExpr {
             variant_name: interner.intern("Err"),
             args: vec![lower_expr(&e.kind, interner)],
         },
+        ExprKind::Pointer { mutable, target } => HirExpr::As {
+            expr: Box::new(HirExpr::IntLit(0)),
+            target_type: HirType::RawPtr(Box::new(HirType::Named(*target))),
+        },
+        ExprKind::As { expr, target_type } => HirExpr::As {
+            expr: Box::new(lower_expr(&expr.kind, interner)),
+            target_type: HirType::Named(*target_type),
+        },
         ExprKind::TryExpr(e) => {
             HirExpr::Match {
                 scrutinee: Box::new(lower_expr(&e.kind, interner)),

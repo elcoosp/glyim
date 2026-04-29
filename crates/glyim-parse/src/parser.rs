@@ -449,6 +449,17 @@ impl<'a> Parser<'a> {
                 };
                 continue;
             }
+            // As cast: expr as Type
+            if op_tok.kind == SyntaxKind::KwAs && 85 >= min_bp {
+                self.tokens.bump();
+                let target_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                let target = self.interner.intern(target_tok.text);
+                left = ExprNode {
+                    kind: ExprKind::As { expr: Box::new(left.clone()), target_type: target },
+                    span: Span::new(left.span.start, target_tok.end),
+                };
+                continue;
+            }
             // Field access: expr.field
             if op_tok.kind == SyntaxKind::Dot && 90 >= min_bp {
                 self.tokens.bump(); // consume '.'
@@ -492,6 +503,28 @@ impl<'a> Parser<'a> {
             SyntaxKind::LParen => self.parse_paren_expr(),
             SyntaxKind::LBrace => self.parse_block_expr(),
             SyntaxKind::KwIf => self.parse_if_expr(),
+            SyntaxKind::Star => {
+                let star_tok = self.tokens.bump()?;
+                let start = star_tok.start;
+                if self.tokens.eat(SyntaxKind::KwLet).is_some() {
+                    let target_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                    let target = self.interner.intern(target_tok.text);
+                    Some(ExprNode {
+                        kind: ExprKind::Pointer { mutable: false, target },
+                        span: Span::new(start, target_tok.end),
+                    })
+                } else if self.tokens.eat(SyntaxKind::KwMut).is_some() {
+                    let target_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                    let target = self.interner.intern(target_tok.text);
+                    Some(ExprNode {
+                        kind: ExprKind::Pointer { mutable: true, target },
+                        span: Span::new(start, target_tok.end),
+                    })
+                } else {
+                    self.errors.push(ParseError::Message { msg: "expected const or mut after *".into(), span: (star_tok.start, star_tok.end) });
+                    None
+                }
+            }
             SyntaxKind::Minus | SyntaxKind::Bang => {
                 let op_tok = self.tokens.bump()?;
                 let (r_bp, op) = match op_tok.kind { SyntaxKind::Minus => (70, UnOp::Neg), SyntaxKind::Bang => (70, UnOp::Not), _ => unreachable!() };
