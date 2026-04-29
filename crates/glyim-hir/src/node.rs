@@ -1,6 +1,7 @@
+use crate::types::{HirPattern, HirType};
 use glyim_interner::Symbol;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum HirBinOp {
     Add,
     Sub,
@@ -17,13 +18,13 @@ pub enum HirBinOp {
     Or,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum HirUnOp {
     Neg,
     Not,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HirStmt {
     Let {
         name: Symbol,
@@ -37,11 +38,14 @@ pub enum HirStmt {
     Expr(HirExpr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HirExpr {
     IntLit(i64),
+    FloatLit(f64),
+    BoolLit(bool),
     StrLit(String),
     Ident(Symbol),
+    UnitLit,
     Binary {
         op: HirBinOp,
         lhs: Box<HirExpr>,
@@ -62,16 +66,50 @@ pub enum HirExpr {
         condition: Box<HirExpr>,
         message: Option<Box<HirExpr>>,
     },
+    /// Type cast: expr as Type
+    As {
+        expr: Box<HirExpr>,
+        target_type: HirType,
+    },
+    /// Match expression: arms are (pattern, optional guard, body)
+    Match {
+        scrutinee: Box<HirExpr>,
+        arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)>,
+    },
+    /// Field access: expr.field
+    FieldAccess {
+        object: Box<HirExpr>,
+        field: Symbol,
+    },
+    /// Struct literal: Name { field1: val1, field2: val2, ... }
+    StructLit {
+        struct_name: Symbol,
+        fields: Vec<(Symbol, HirExpr)>,
+    },
+    /// Enum variant constructor: Name::Variant(args...)
+    EnumVariant {
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: Vec<HirExpr>,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A match arm: pattern + optional guard + body expression.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: HirPattern,
+    pub guard: Option<HirExpr>,
+    pub body: HirExpr,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct HirFn {
     pub name: Symbol,
     pub params: Vec<Symbol>,
     pub body: HirExpr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Hir {
     pub fns: Vec<HirFn>,
 }

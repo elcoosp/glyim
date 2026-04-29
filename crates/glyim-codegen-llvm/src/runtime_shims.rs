@@ -1,7 +1,6 @@
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::BasicValue;
 use inkwell::AddressSpace;
 
 pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>) {

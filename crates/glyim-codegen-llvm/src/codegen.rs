@@ -110,7 +110,7 @@ impl<'ctx> Codegen<'ctx> {
                 last
             }
             other => self.codegen_expr(other, vars, fn_value),
-        }
+}
     }
 
     fn codegen_stmt(
@@ -228,6 +228,17 @@ impl<'ctx> Codegen<'ctx> {
             HirExpr::Println(arg) => self.codegen_println(arg, vars, fn_value),
             HirExpr::Assert { condition, message } => {
                 self.codegen_assert(condition, message, vars, fn_value)
+            }
+            // v0.3.0: stub implementations for new expression variants
+            HirExpr::FloatLit(_) |
+            HirExpr::BoolLit(_) |
+            HirExpr::UnitLit |
+            HirExpr::As { .. } |
+            HirExpr::Match { .. } |
+            HirExpr::FieldAccess { .. } |
+            HirExpr::StructLit { .. } |
+            HirExpr::EnumVariant { .. } => {
+                Some(self.i64_type.const_int(0, false))
             }
         }
     }
