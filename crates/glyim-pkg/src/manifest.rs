@@ -111,7 +111,7 @@ pub fn parse_manifest(toml_str: &str, file_name: &str) -> Result<PackageManifest
     })?;
 
     // Validate required fields
-    if manifest.package.name.is_empty() {
+    if manifest.package.name.is_empty() && manifest.workspace.is_none() {
         return Err(crate::PkgError::MissingField {
             field: "package.name",
             file: file_name.to_string(),

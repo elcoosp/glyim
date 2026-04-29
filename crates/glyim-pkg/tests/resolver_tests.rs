@@ -13,7 +13,7 @@ fn make_req(name: &str, version: &str, is_macro: bool) -> Requirement {
     }
 }
 
-fn make_available(name: &str, version: &str, deps: &[(&str, &str)]) -> AvailableVersion {
+fn make_available(_name: &str, version: &str, deps: &[(&str, &str)]) -> AvailableVersion {
     AvailableVersion {
         version: version.to_string(),
         is_macro: false,
