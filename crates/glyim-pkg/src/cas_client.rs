@@ -1,6 +1,6 @@
 use crate::error::PkgError;
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Client for the Glyim content-addressable storage system.
 ///
