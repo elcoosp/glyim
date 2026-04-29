@@ -960,7 +960,7 @@ impl<'a> Parser<'a> {
                         kind,
                         span: Span::new(start, rparen.end),
                     })
-                } else if self.tokens.peek().is_some_and(|t| t.text == "None")
+                } else if self.interner.resolve(sym) == "None"
                     && !self.tokens.peek2().is_some_and(|t| {
                         t.kind == SyntaxKind::LParen || t.kind == SyntaxKind::LBrace
                     })
