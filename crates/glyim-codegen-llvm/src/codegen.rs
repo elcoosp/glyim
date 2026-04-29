@@ -270,12 +270,9 @@ impl<'ctx> Codegen<'ctx> {
                 // Stub: return 0 until proper struct layout codegen is implemented
                 Some(self.i64_type.const_int(0, false))
             }
-            HirExpr::EnumVariant { .. } => {
-                Some(self.i64_type.const_int(0, false))
-            }
-            HirExpr::FieldAccess { object, field } => {
+            HirExpr::FieldAccess { object, field: _ } => {
                 let obj_val = self.codegen_expr(object, vars, fn_value)?;
-                let ptr = self.builder.build_int_to_ptr(obj_val, self.context.ptr_type(AddressSpace::from(0u16)), "to_ptr").ok()?;
+                #[allow(unused_variables)] let _ptr = self.builder.build_int_to_ptr(obj_val, self.context.ptr_type(AddressSpace::from(0u16)), "to_ptr").ok()?;
                 // Find field index: need the struct type. We don't know the struct type at this point.
                 // For now, hardcode field 0; proper implementation requires type info.
                 // We'll look up the struct from the object? Not possible without type info.
@@ -496,9 +493,10 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     if !out.errors.is_empty() {
         return Err(format!("parse: {:?}", out.errors));
     }
-    let hir = glyim_hir::lower(&out.ast, &out.interner);
+    let mut interner = out.interner;
+    let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = Context::create();
-    let mut cg = Codegen::new(&ctx, out.interner);
+    let mut cg = Codegen::new(&ctx, interner);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }

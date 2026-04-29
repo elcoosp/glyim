@@ -63,7 +63,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
 
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let source = fs::read_to_string(input)?;
-    let parse_out = glyim_parse::parse(&source);
+    let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
             &source,
@@ -91,7 +91,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         eprintln!("{rendered}");
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let hir = glyim_hir::lower(&parse_out.ast, &parse_out.interner);
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner);
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
@@ -110,7 +110,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = fs::read_to_string(input)?;
-    let parse_out = glyim_parse::parse(&source);
+    let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
             &source,
@@ -172,11 +172,11 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
 fn compile_to_hir_and_ir(
     source: &str,
 ) -> Result<(glyim_hir::Hir, String, Interner), PipelineError> {
-    let parse_out = glyim_parse::parse(source);
+    let mut parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let hir = glyim_hir::lower(&parse_out.ast, &parse_out.interner);
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
 }

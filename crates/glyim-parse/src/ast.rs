@@ -65,6 +65,10 @@ pub enum ExprKind {
         variant_name: Symbol,
         args: Vec<ExprNode>,
     },
+    Match {
+        scrutinee: Box<ExprNode>,
+        arms: Vec<MatchArm>,
+    },
     FieldAccess {
         object: Box<ExprNode>,
         field: Symbol,
@@ -150,6 +154,51 @@ pub enum Item {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// A pattern used in match arms and destructuring.
+pub enum Pattern {
+    /// Wildcard `_`
+    Wild,
+    /// Boolean literal
+    BoolLit(bool),
+    /// Integer literal
+    IntLit(i64),
+    /// Float literal
+    FloatLit(f64),
+    /// String literal
+    StrLit(String),
+    /// Unit `()`
+    Unit,
+    /// Variable binding
+    Var(Symbol),
+    /// Struct pattern `Point { x, y }`
+    Struct {
+        name: Symbol,
+        fields: Vec<(Symbol, Pattern)>,
+    },
+    /// Enum variant pattern `Shape::Circle(r)`
+    EnumVariant {
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: Vec<Pattern>,
+    },
+    /// Some(x)
+    OptionSome(Box<Pattern>),
+    /// None
+    OptionNone,
+    /// Ok(x)
+    ResultOk(Box<Pattern>),
+    /// Err(e)
+    ResultErr(Box<Pattern>),
+}
+
+/// A match arm: pattern + optional guard + body expression.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub guard: Option<ExprNode>,
+    pub body: ExprNode,
+}
+
 pub struct Ast {
     pub items: Vec<Item>,
 }
