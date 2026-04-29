@@ -653,6 +653,7 @@ fn link_object(obj_path: &Path, output_path: &Path) -> Result<(), PipelineError>
 
 
 /// Compute a source hash for build caching.
+#[allow(dead_code)]
 fn compute_source_hash(source: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -664,6 +665,7 @@ fn compute_source_hash(source: &str) -> String {
 
 /// Build using a content-addressable cache.
 /// If the source hash matches a cached object, reuse it; otherwise compile and store.
+#[allow(dead_code)]
 fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let hash = compute_source_hash(&source);
@@ -671,7 +673,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
         .join("glyim-objects");
     let cas = CasClient::new(&cache_dir)
-        .map_err(|e| PipelineError::Io(e))?;
+        .map_err(PipelineError::Io)?;
 
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input.file_stem().unwrap_or_default().to_string_lossy().to_string();
