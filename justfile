@@ -157,6 +157,7 @@ check-tiers:
         "glyim-hir": 3, "glyim-typeck": 3, "glyim-macro-core": 3, "glyim-macro-vfs": 3,
         "glyim-codegen-llvm": 4,
         "glyim-cli": 5,
+        "glyim-cas-server": 5,
     }
     pkgs = {p["name"]: [d["name"] for d in p["dependencies"]] for p in data["packages"] if p["source"] is None}
     violations = []
