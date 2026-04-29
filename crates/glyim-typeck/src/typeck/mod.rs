@@ -1,0 +1,84 @@
+mod error;
+mod types;
+mod scope;
+mod resolver;
+mod register;
+mod expr;
+mod stmt;
+mod match_check;
+mod function;
+
+pub use error::TypeError;
+pub use types::{StructInfo, EnumInfo};
+
+use glyim_hir::item::FnSig;
+use glyim_hir::node::{Hir, HirFn};
+use glyim_hir::types::{ExprId, HirType};
+use glyim_interner::{Interner, Symbol};
+use std::collections::HashMap;
+
+pub struct TypeChecker {
+    pub interner: Interner,
+    pub(crate) scopes: Vec<types::Scope>,
+    pub structs: HashMap<Symbol, StructInfo>,
+    pub enums: HashMap<Symbol, EnumInfo>,
+    pub extern_fns: HashMap<Symbol, FnSig>,
+    pub impl_methods: HashMap<Symbol, Vec<(Symbol, HirFn)>>,
+    pub expr_types: Vec<HirType>,
+    pub return_type: Option<HirType>,
+    pub errors: Vec<TypeError>,
+    fns: Vec<HirFn>,
+}
+
+impl TypeChecker {
+    pub fn new(interner: Interner) -> Self {
+        TypeChecker {
+            interner,
+            scopes: Vec::new(),
+            structs: HashMap::new(),
+            enums: HashMap::new(),
+            extern_fns: HashMap::new(),
+            impl_methods: HashMap::new(),
+            expr_types: Vec::new(),
+            return_type: None,
+            errors: Vec::new(),
+            fns: Vec::new(),
+        }
+    }
+
+    fn set_type(&mut self, id: ExprId, ty: HirType) {
+        let idx = id.as_usize();
+        if idx >= self.expr_types.len() {
+            self.expr_types.resize(idx + 1, HirType::Never);
+        }
+        self.expr_types[idx] = ty;
+    }
+
+    fn dummy_symbol(&self) -> Symbol {
+        glyim_interner::Interner::new().intern("__dummy")
+    }
+
+    pub fn check(&mut self, hir: &Hir) -> Result<(), Vec<TypeError>> {
+        self.register_items(hir);
+        for item in &hir.items {
+            if let glyim_hir::item::HirItem::Fn(f) = item {
+                self.check_fn(f);
+            }
+        }
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(self.errors.clone())
+        }
+    }
+
+    pub fn get_expr_type(&self, id: ExprId) -> Option<&HirType> {
+        self.expr_types.get(id.as_usize())
+    }
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new(Interner::new())
+    }
+}
