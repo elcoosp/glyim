@@ -34,6 +34,7 @@ pub enum PipelineError {
     TypeCheck(Vec<TypeError>),
     Link(String),
     Run(std::io::Error),
+    Manifest(crate::manifest::ManifestError),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -57,6 +58,7 @@ impl std::fmt::Display for PipelineError {
             }
             Self::Link(msg) => write!(f, "linker error: {msg}"),
             Self::Run(e) => write!(f, "execution error: {e}"),
+            Self::Manifest(e) => write!(f, "manifest error: {e}"),
         }
     }
 }
@@ -224,7 +226,7 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
     Ok(dir)
 }
 
-pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
+pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineError> {
     let source = format!("{}
 {}", PRELUDE, fs::read_to_string(input)?);
     let mut parse_out = glyim_parse::parse(&source);
@@ -276,7 +278,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     Ok(status.code().unwrap_or(1))
 }
 
-pub fn build_with_mode(input: &Path, output: Option<&Path>, mode: BuildMode) -> Result<PathBuf, PipelineError> {
+pub fn build_with_mode(input: &Path, output: Option<&Path>, _mode: BuildMode) -> Result<PathBuf, PipelineError> {
     let source = format!("{}
 {}", PRELUDE, fs::read_to_string(input)?);
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
@@ -302,6 +304,114 @@ pub fn build_with_mode(input: &Path, output: Option<&Path>, mode: BuildMode) -> 
         .map_err(PipelineError::Codegen)?;
     link_object(&obj_path, &output)?;
     Ok(output)
+}
+
+
+
+/// Walk from `start` upward looking for `glyim.toml`.
+pub fn find_package_root(start: &Path) -> Option<PathBuf> {
+    let mut current = if start.is_file() {
+        start.parent()?.to_path_buf()
+    } else {
+        start.to_path_buf()
+    };
+    loop {
+        if current.join("glyim.toml").exists() {
+            return Some(current);
+        }
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+#[cfg(test)]
+mod root_tests {
+    use super::*;
+
+    #[test]
+    fn find_package_root_in_current_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
+        let result = find_package_root(dir.path());
+        assert_eq!(result, Some(dir.path().to_path_buf()));
+    }
+
+    #[test]
+    fn find_package_root_in_parent_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
+        let child = dir.path().join("src");
+        std::fs::create_dir_all(&child).unwrap();
+        let result = find_package_root(&child);
+        assert_eq!(result, Some(dir.path().to_path_buf()));
+    }
+
+    #[test]
+    fn find_package_root_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = find_package_root(dir.path());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn find_package_root_stops_at_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
+        let file_path = dir.path().join("src/main.g");
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(&file_path, "main = () => 42").unwrap();
+        let result = find_package_root(&file_path);
+        assert_eq!(result, Some(dir.path().to_path_buf()));
+    }
+}
+
+
+pub fn build_package(
+    package_dir: &Path,
+    output: Option<&Path>,
+    mode: BuildMode,
+) -> Result<PathBuf, PipelineError> {
+    let manifest_path = package_dir.join("glyim.toml");
+    let toml_str = fs::read_to_string(&manifest_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            PipelineError::Manifest(crate::manifest::ManifestError::FileNotFound(manifest_path))
+        } else {
+            PipelineError::Io(e)
+        }
+    })?;
+    let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+
+    let main_path = package_dir.join("src").join("main.g");
+    if !main_path.exists() {
+        return Err(PipelineError::Manifest(crate::manifest::ManifestError::MissingField(
+            "src/main.g",
+        )));
+    }
+
+    build_with_mode(&main_path, output, mode)
+}
+
+pub fn run_package(package_dir: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
+    let manifest_path = package_dir.join("glyim.toml");
+    let toml_str = fs::read_to_string(&manifest_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            PipelineError::Manifest(crate::manifest::ManifestError::FileNotFound(manifest_path))
+        } else {
+            PipelineError::Io(e)
+        }
+    })?;
+    let _manifest =
+        crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+
+    let main_path = package_dir.join("src").join("main.g");
+    if !main_path.exists() {
+        return Err(PipelineError::Manifest(
+            crate::manifest::ManifestError::MissingField("src/main.g"),
+        ));
+    }
+
+    run_with_mode(&main_path, mode)
 }
 
 fn compile_to_hir_and_ir(

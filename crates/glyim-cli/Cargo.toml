@@ -15,6 +15,7 @@ name = "glyim"
 path = "src/main.rs"
 
 [dependencies]
+toml = "0.8"
 glyim-parse = { path = "../glyim-parse" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-typeck = { path = "../glyim-typeck" }

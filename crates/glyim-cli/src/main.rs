@@ -53,7 +53,12 @@ fn main() {
     let exit_code = match cli.command {
         Command::Build { input, output, debug, release } => {
             let mode = if release { BuildMode::Release } else { BuildMode::Debug };
-            match pipeline::build_with_mode(&input, output.as_deref(), mode) {
+            let result = if input.is_dir() {
+                pipeline::build_package(&input, output.as_deref(), mode)
+            } else {
+                pipeline::build_with_mode(&input, output.as_deref(), mode)
+            };
+            match result {
                 Ok(path) => {
                     eprintln!("Built: {}", path.display());
                     0
@@ -66,7 +71,12 @@ fn main() {
         },
         Command::Run { input, debug, release } => {
             let mode = if release { BuildMode::Release } else { BuildMode::Debug };
-            match pipeline::run_with_mode(&input, mode) {
+            let result = if input.is_dir() {
+                pipeline::run_package(&input, mode)
+            } else {
+                pipeline::run_with_mode(&input, mode)
+            };
+            match result {
                 Ok(code) => code,
                 Err(e) => {
                     eprintln!("error: {e}");
