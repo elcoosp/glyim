@@ -5,9 +5,10 @@ use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
 pub(crate) fn parse_item(parser: &mut Parser) -> Option<Item> {
+    let attrs = parser.parse_attributes();
     match parser.tokens.peek()?.kind {
         SyntaxKind::At => parse_macro_def(parser),
-        SyntaxKind::KwFn => parse_fn_def(parser),
+        SyntaxKind::KwFn => parse_fn_def_with_attrs(parser, attrs),
         SyntaxKind::KwStruct => parse_struct_def(parser),
         SyntaxKind::KwEnum => parse_enum_def(parser),
         SyntaxKind::KwImpl => parse_impl_block(parser),
@@ -20,7 +21,7 @@ pub(crate) fn parse_item(parser: &mut Parser) -> Option<Item> {
                 .peek2()
                 .is_some_and(|t| t.kind == SyntaxKind::Eq)
             {
-                parse_binding(parser)
+                parse_binding_with_attrs(parser, attrs)
             } else {
                 None
             }
@@ -83,7 +84,7 @@ fn parse_macro_def(parser: &mut Parser) -> Option<Item> {
     })
 }
 
-fn parse_binding(parser: &mut Parser) -> Option<Item> {
+fn parse_binding_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>) -> Option<Item> {
     let name_tok = parser.tokens.bump()?;
     let name = parser.interner.intern(name_tok.text);
     let name_span = Span::new(name_tok.start, name_tok.end);
@@ -96,10 +97,11 @@ fn parse_binding(parser: &mut Parser) -> Option<Item> {
         name,
         name_span,
         value,
+        attrs,
     })
 }
 
-fn parse_fn_def(parser: &mut Parser) -> Option<Item> {
+fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>) -> Option<Item> {
     parser.tokens.bump(); // 'fn'
     let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
     let name_tok = parser
@@ -148,6 +150,7 @@ fn parse_fn_def(parser: &mut Parser) -> Option<Item> {
         params,
         ret,
         body,
+        attrs,
     })
 }
 
@@ -273,7 +276,7 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .ok()?;
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
-        if let Some(fn_def) = parse_fn_def(parser) {
+        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![]) {
             methods.push(fn_def);
         } else {
             parser.errors.push(crate::ParseError::Message {

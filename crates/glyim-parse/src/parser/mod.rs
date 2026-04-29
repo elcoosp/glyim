@@ -26,6 +26,62 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_attributes(&mut self) -> Vec<crate::ast::Attribute> {
+        let mut attrs = vec![];
+        while self.tokens.at(glyim_syntax::SyntaxKind::Hash) {
+            let hash_tok = match self.tokens.bump() {
+                Some(t) => t,
+                None => break,
+            };
+            let start = hash_tok.start;
+            if self.tokens.expect(glyim_syntax::SyntaxKind::OpenBracket, &mut self.errors).is_err() {
+                break;
+            }
+            let name_tok = match self.tokens.expect(glyim_syntax::SyntaxKind::Ident, &mut self.errors) {
+                Ok(t) => t,
+                Err(_) => { break; }
+            };
+            let name = name_tok.text.to_string();
+
+            let mut args = vec![];
+            if self.tokens.eat(glyim_syntax::SyntaxKind::LParen).is_some() {
+                loop {
+                    if self.tokens.at(glyim_syntax::SyntaxKind::RParen) {
+                        self.tokens.bump();
+                        break;
+                    }
+                    if self.tokens.is_eof() {
+                        break;
+                    }
+                    let key_tok = match self.tokens.expect(glyim_syntax::SyntaxKind::Ident, &mut self.errors) {
+                        Ok(t) => t,
+                        Err(_) => { self.tokens.eat(glyim_syntax::SyntaxKind::RParen); break; }
+                    };
+                    let key = key_tok.text.to_string();
+                    let value = if self.tokens.eat(glyim_syntax::SyntaxKind::Eq).is_some() {
+                        match self.tokens.peek() {
+                            Some(val_tok) => {
+                                let val_str = val_tok.text.to_string();
+                                self.tokens.bump();
+                                Some(val_str)
+                            }
+                            None => None,
+                        }
+                    } else {
+                        None
+                    };
+                    args.push(crate::ast::AttributeArg { key, value, span: glyim_diag::Span::new(key_tok.start, key_tok.end) });
+                    self.tokens.eat(glyim_syntax::SyntaxKind::Comma);
+                }
+            }
+
+            self.tokens.expect(glyim_syntax::SyntaxKind::CloseBracket, &mut self.errors).ok();
+            let end = self.tokens.peek().map_or(start, |t| t.start);
+            attrs.push(crate::ast::Attribute { name, args, span: glyim_diag::Span::new(start, end) });
+        }
+        attrs
+    }
+
     pub fn parse_source_file(&mut self) -> Ast {
         let mut items = vec![];
         while !self.tokens.is_eof() {
