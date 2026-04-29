@@ -1,6 +1,7 @@
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_interner::Interner;
 use glyim_typeck::TypeChecker;
+use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeError;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
@@ -648,6 +649,65 @@ fn link_object(obj_path: &Path, output_path: &Path) -> Result<(), PipelineError>
         ));
     }
     Ok(())
+}
+
+
+/// Compute a source hash for build caching.
+fn compute_source_hash(source: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(source.as_bytes());
+    // Mix in glyim version to invalidate cache on compiler changes
+    hasher.update(env!("CARGO_PKG_VERSION"));
+    hex::encode(hasher.finalize())
+}
+
+/// Build using a content-addressable cache.
+/// If the source hash matches a cached object, reuse it; otherwise compile and store.
+fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
+    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
+    let hash = compute_source_hash(&source);
+    let cache_dir = dirs_next::cache_dir()
+        .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
+        .join("glyim-objects");
+    let cas = CasClient::new(&cache_dir)
+        .map_err(|e| PipelineError::Io(e))?;
+
+    let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+        let stem = input.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        PathBuf::from(stem)
+    });
+
+    let hash_content = hash.parse::<glyim_macro_vfs::ContentHash>().unwrap();
+    if let Some(cached_obj) = cas.retrieve(hash_content) {
+        let tmp_dir = tempfile::tempdir()?;
+        let obj_path = tmp_dir.path().join("cached.o");
+        fs::write(&obj_path, &cached_obj)?;
+        eprintln!("[cache] Reusing cached object for {}", input.display());
+        link_object(&obj_path, &output)?;
+        return Ok(output);
+    }
+
+    // Compile as usual
+    let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
+    let mut typeck = TypeChecker::new(interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    let context = Context::create();
+    let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
+    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    codegen.write_object_file(&obj_path).map_err(PipelineError::Codegen)?;
+
+    // Store the object in cache
+    let obj_bytes = fs::read(&obj_path)?;
+    cas.store(&obj_bytes);
+    eprintln!("[cache] Stored object for {}", input.display());
+
+    link_object(&obj_path, &output)?;
+    Ok(output)
 }
 
 fn which(cmd: &str) -> bool {
