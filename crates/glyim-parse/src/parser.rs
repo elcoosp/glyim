@@ -777,15 +777,6 @@ impl<'a> Parser<'a> {
                 };
                 continue;
             }
-            // Try operator: expr?
-            if op_tok.kind == SyntaxKind::Question && 80 >= min_bp {
-                self.tokens.bump();
-                left = ExprNode {
-                    kind: ExprKind::TryExpr(Box::new(left.clone())),
-                    span: Span::new(left.span.start, op_tok.end),
-                };
-                continue;
-            }
             // As cast: expr as Type
             if op_tok.kind == SyntaxKind::KwAs && 85 >= min_bp {
                 self.tokens.bump();
@@ -1183,11 +1174,45 @@ impl<'a> Parser<'a> {
             SyntaxKind::Ident => {
                 let tok = self.tokens.bump()?;
                 let name = self.interner.intern(tok.text);
-                match self.interner.resolve(name) {
-                    "true" => Some(crate::ast::Pattern::BoolLit(true)),
-                    "false" => Some(crate::ast::Pattern::BoolLit(false)),
-                    "_" => Some(crate::ast::Pattern::Wild),
-                    _ => Some(crate::ast::Pattern::Var(name)),
+                // Enum variant pattern: Name::Variant(pat...) or Name::Variant
+                if self.tokens.at(SyntaxKind::Colon) && self.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::Colon) {
+                    self.tokens.bump(); self.tokens.bump();
+                    let variant_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                    let variant_name = self.interner.intern(variant_tok.text);
+                    let mut args = vec![];
+                    if self.tokens.at(SyntaxKind::LParen) {
+                        self.tokens.bump();
+                        while !self.tokens.at(SyntaxKind::RParen) && self.tokens.peek().is_some() {
+                            args.push(self.parse_pattern()?);
+                            self.tokens.eat(SyntaxKind::Comma);
+                        }
+                        self.tokens.expect(SyntaxKind::RParen).ok()?;
+                    }
+                    Some(crate::ast::Pattern::EnumVariant { enum_name: name, variant_name, args })
+                } else if self.interner.resolve(name) == "Some" && self.tokens.at(SyntaxKind::LParen) {
+                    self.tokens.bump();
+                    let inner = self.parse_pattern()?;
+                    self.tokens.expect(SyntaxKind::RParen).ok()?;
+                    Some(crate::ast::Pattern::OptionSome(Box::new(inner)))
+                } else if self.interner.resolve(name) == "Ok" && self.tokens.at(SyntaxKind::LParen) {
+                    self.tokens.bump();
+                    let inner = self.parse_pattern()?;
+                    self.tokens.expect(SyntaxKind::RParen).ok()?;
+                    Some(crate::ast::Pattern::ResultOk(Box::new(inner)))
+                } else if self.interner.resolve(name) == "Err" && self.tokens.at(SyntaxKind::LParen) {
+                    self.tokens.bump();
+                    let inner = self.parse_pattern()?;
+                    self.tokens.expect(SyntaxKind::RParen).ok()?;
+                    Some(crate::ast::Pattern::ResultErr(Box::new(inner)))
+                } else if self.interner.resolve(name) == "None" {
+                    Some(crate::ast::Pattern::OptionNone)
+                } else {
+                    match self.interner.resolve(name) {
+                        "true" => Some(crate::ast::Pattern::BoolLit(true)),
+                        "false" => Some(crate::ast::Pattern::BoolLit(false)),
+                        "_" => Some(crate::ast::Pattern::Wild),
+                        _ => Some(crate::ast::Pattern::Var(name)),
+                    }
                 }
             }
             SyntaxKind::IntLit => {
@@ -1196,9 +1221,7 @@ impl<'a> Parser<'a> {
             }
             SyntaxKind::FloatLit => {
                 let tok = self.tokens.bump()?;
-                Some(crate::ast::Pattern::FloatLit(
-                    tok.text.parse().unwrap_or(0.0),
-                ))
+                Some(crate::ast::Pattern::FloatLit(tok.text.parse().unwrap_or(0.0)))
             }
             SyntaxKind::StringLit => {
                 let tok = self.tokens.bump()?;
