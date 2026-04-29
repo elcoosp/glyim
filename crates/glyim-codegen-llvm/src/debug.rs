@@ -1,0 +1,218 @@
+use inkwell::debug_info::{
+    DebugInfoBuilder, DICompileUnit, DIFile, DISubprogram, DILocation, DILocalVariable,
+    DWARFEmissionKind, DWARFSourceLanguage, DIFlagsConstants, AsDIScope,
+};
+use inkwell::module::Module;
+use inkwell::values::PointerValue;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use glyim_interner::Symbol;
+
+pub struct DebugInfoGen<'ctx> {
+    dibuilder: DebugInfoBuilder<'ctx>,
+    compile_unit: DICompileUnit<'ctx>,
+    file: DIFile<'ctx>,
+    fn_subprograms: RefCell<HashMap<Symbol, DISubprogram<'ctx>>>,
+}
+
+impl<'ctx> DebugInfoGen<'ctx> {
+    pub fn new(
+        module: &Module<'ctx>,
+        file_name: &str,
+    ) -> Result<Self, String> {
+        let (dibuilder, compile_unit) = module.create_debug_info_builder(
+            true,
+            DWARFSourceLanguage::C,
+            file_name,
+            ".",
+            "glyim v0.5.1",
+            false,
+            "",
+            0,
+            "",
+            DWARFEmissionKind::Full,
+            0,
+            false,
+            false,
+            "",
+            "",
+        );
+
+        let file = compile_unit.get_file();
+
+        Ok(Self {
+            dibuilder,
+            compile_unit,
+            file,
+            fn_subprograms: RefCell::new(HashMap::new()),
+        })
+    }
+
+    pub fn create_subprogram(
+        &self,
+        name: &str,
+        line: u32,
+        is_artificial: bool,
+    ) -> Result<DISubprogram<'ctx>, String> {
+        let i64_type = self
+            .dibuilder
+            .create_basic_type("i64", 64, 64, 0x05)
+            .map_err(|e| format!("create_basic_type: {e}"))?;
+
+        let subroutine_type = self
+            .dibuilder
+            .create_subroutine_type(
+                self.file,
+                Some(i64_type.as_type()),
+                &[],
+                if is_artificial { DIFlagsConstants::ARTIFICIAL } else { DIFlagsConstants::ZERO },
+            );
+
+        let subprogram = self
+            .dibuilder
+            .create_function(
+                self.compile_unit.as_debug_info_scope(),
+                name,
+                None,
+                self.file,
+                line,
+                subroutine_type,
+                false,
+                true,
+                line,
+                if is_artificial { DIFlagsConstants::ARTIFICIAL } else { DIFlagsConstants::ZERO },
+                false,
+            );
+
+        Ok(subprogram)
+    }
+
+    pub fn register_subprogram(&self, name: Symbol, subprogram: DISubprogram<'ctx>) {
+        self.fn_subprograms.borrow_mut().insert(name, subprogram);
+    }
+
+    pub fn get_subprogram(&self, name: Symbol) -> Option<DISubprogram<'ctx>> {
+        self.fn_subprograms.borrow().get(&name).copied()
+    }
+
+    pub fn create_location(
+        &self,
+        _subprogram: DISubprogram<'ctx>,
+        _line: u32,
+        _column: u32,
+    ) -> Result<DILocation<'ctx>, String> {
+        unimplemented!("create_location needs a ContextRef, to be added later");
+    }
+
+    pub fn create_local_variable(
+        &self,
+        name: &str,
+        subprogram: DISubprogram<'ctx>,
+        line: u32,
+    ) -> Result<DILocalVariable<'ctx>, String> {
+        let i64_type = self
+            .dibuilder
+            .create_basic_type("i64", 64, 64, 0x05)
+            .map_err(|e| format!("create_basic_type: {e}"))?;
+
+        let var = self
+            .dibuilder
+            .create_auto_variable(
+                subprogram.as_debug_info_scope(),
+                name,
+                self.file,
+                line,
+                i64_type.as_type(),
+                true,
+                DIFlagsConstants::ZERO,
+                0,
+            );
+        Ok(var)
+    }
+
+    pub fn insert_declare(
+        &self,
+        builder: &inkwell::builder::Builder<'ctx>,
+        variable: DILocalVariable<'ctx>,
+        ptr_value: PointerValue<'ctx>,
+        location: DILocation<'ctx>,
+    ) -> Result<(), String> {
+        let block = builder
+            .get_insert_block()
+            .ok_or("no insert block")?;
+
+        self.dibuilder
+            .insert_declare_at_end(
+                ptr_value,
+                Some(variable),
+                None,
+                location,
+                block,
+            );
+        Ok(())
+    }
+
+    pub fn finalize(&self) {
+        self.dibuilder.finalize();
+    }
+
+    /// Approximate line number from byte offset by counting newlines.
+    pub fn byte_offset_to_line(source: &str, offset: usize) -> u32 {
+        let mut line = 1u32;
+        for (i, ch) in source.char_indices() {
+            if i >= offset {
+                break;
+            }
+            if ch == '\n' {
+                line += 1;
+            }
+        }
+        line
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use inkwell::context::Context;
+
+    #[test]
+    fn byte_offset_to_line_start() {
+        assert_eq!(DebugInfoGen::byte_offset_to_line("hello\nworld", 0), 1);
+    }
+
+    #[test]
+    fn byte_offset_to_line_second_line() {
+        assert_eq!(DebugInfoGen::byte_offset_to_line("hello\nworld", 6), 2);
+    }
+
+    #[test]
+    fn byte_offset_to_line_past_end() {
+        assert_eq!(DebugInfoGen::byte_offset_to_line("hello\nworld", 100), 2);
+    }
+
+    #[test]
+    fn byte_offset_to_line_empty() {
+        assert_eq!(DebugInfoGen::byte_offset_to_line("", 0), 1);
+    }
+
+    #[test]
+    fn byte_offset_to_line_multiple_newlines() {
+        assert_eq!(DebugInfoGen::byte_offset_to_line("a\nb\nc\nd", 4), 3);
+    }
+
+    #[test]
+    fn debug_info_gen_new_does_not_panic() {
+        let ctx = Context::create();
+        let module = ctx.create_module("test");
+        match DebugInfoGen::new(&module, "test.g") {
+            Ok(_) => {},
+            Err(e) => {
+                eprintln!("DebugInfoGen::new() failed: {e}");
+            }
+        }
+        // Ensure result is dropped before ctx
+        drop(module);
+        drop(ctx);
+    }
+}
