@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 77;
+pub const COUNT: u16 = 78;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -28,6 +28,7 @@ pub enum SyntaxKind {
     KwMatch,
     KwExtern,
     KwAs,
+    KwPub,
     KwMut,
     Eq,
     FatArrow,
@@ -111,6 +112,7 @@ impl SyntaxKind {
                 | Self::KwMatch
                 | Self::KwExtern
                 | Self::KwAs
+                | Self::KwPub
         )
     }
     pub fn display_name(self) -> &'static str {
@@ -136,6 +138,7 @@ impl SyntaxKind {
             Self::KwMatch => "match",
             Self::KwExtern => "extern",
             Self::KwAs => "as",
+            Self::KwPub => "pub",
             Self::Eq => "=",
             Self::FatArrow => "=>",
             Self::Arrow => "->",
@@ -224,6 +227,7 @@ mod tests {
         assert!(SyntaxKind::KwFn.is_keyword());
         assert!(SyntaxKind::KwLet.is_keyword());
         assert!(SyntaxKind::KwUse.is_keyword());
+        assert!(SyntaxKind::KwPub.is_keyword());
     }
     #[test]
     fn non_keywords_are_not_keywords() {
@@ -240,6 +244,6 @@ mod tests {
     fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error;
         let _ = SyntaxKind::PtrType;
-        assert_eq!(COUNT, 77);
+        assert_eq!(COUNT, 78);
     }
 }

@@ -130,9 +130,8 @@ impl<'a> Lexer<'a> {
     fn lex_number_or_float(&mut self) -> SyntaxKind {
         let _start = self.offset;
         self.eat_while(|c| c.is_ascii_digit());
-        // Check for decimal point followed by digits
         if self.peek() == Some('.') && self.peek2().is_some_and(|c| c.is_ascii_digit()) {
-            self.advance(); // consume '.'
+            self.advance();
             self.eat_while(|c| c.is_ascii_digit());
             return SyntaxKind::FloatLit;
         }
@@ -140,7 +139,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_string(&mut self) -> SyntaxKind {
-        self.advance(); // consume opening "
+        self.advance();
         loop {
             match self.peek() {
                 None => return SyntaxKind::Error,
@@ -149,10 +148,10 @@ impl<'a> Lexer<'a> {
                     return SyntaxKind::StringLit;
                 }
                 Some('\\') => {
-                    self.advance(); // consume backslash
+                    self.advance();
                     match self.peek() {
                         Some('"') | Some('\\') | Some('n') | Some('t') | Some('r') | Some('0') => {
-                            self.advance(); // consume escaped char
+                            self.advance();
                         }
                         _ => {
                             if self.peek().is_some() {
@@ -187,6 +186,7 @@ impl<'a> Lexer<'a> {
             "match" => SyntaxKind::KwMatch,
             "extern" => SyntaxKind::KwExtern,
             "as" => SyntaxKind::KwAs,
+            "pub" => SyntaxKind::KwPub,
             _ => SyntaxKind::Ident,
         }
     }
