@@ -68,6 +68,26 @@ enum Command {
         dry_run: bool,
     },
     Outdated,
+    /// Cache management commands
+    #[command(subcommand)]
+    Cache(CacheCommand),
+}
+
+
+#[derive(Subcommand)]
+enum CacheCommand {
+    /// Store a file in the CAS
+    Store {
+        path: PathBuf,
+    },
+    /// Retrieve a blob by hash
+    Retrieve {
+        hash: String,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Show cache status
+    Status,
 }
 
 fn main() {
@@ -266,6 +286,59 @@ fn main() {
             eprintln!("error: publish not yet implemented");
             1
         }
+        Command::Cache(cmd) => match cmd {
+            CacheCommand::Store { path } => (|| -> Result<i32,i32> {
+                let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
+                let client = glyim_pkg::cas_client::CasClient::new(&cas_dir).map_err(|e| {
+                    eprintln!("error opening CAS: {e}"); 1
+                })?;
+                let content = std::fs::read(&path).map_err(|e| {
+                    eprintln!("error reading {}: {e}", path.display()); 1
+                })?;
+                let hash = client.store(&content);
+                println!("{}", hash);
+                Ok(0)
+            })().unwrap_or_else(|code| code),
+            CacheCommand::Retrieve { hash, output } => (|| -> Result<i32,i32> {
+                let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
+                let client = glyim_pkg::cas_client::CasClient::new(&cas_dir).map_err(|e| {
+                    eprintln!("error opening CAS: {e}"); 1
+                })?;
+                let hash: glyim_macro_vfs::ContentHash = hash.parse().map_err(|e| {
+                    eprintln!("invalid hash: {e}"); 1
+                })?;
+                match client.retrieve(hash) {
+                    Some(data) => {
+                        if let Some(output_path) = output {
+                            std::fs::write(&output_path, &data).map_err(|e| {
+                                eprintln!("error writing {}: {e}", output_path.display()); 1
+                            })?;
+                            eprintln!("Wrote {} bytes to {}", data.len(), output_path.display());
+                        } else {
+                            std::io::Write::write_all(&mut std::io::stdout(), &data).unwrap();
+                        }
+                        Ok(0)
+                    }
+                    None => {
+                        eprintln!("blob not found in CAS");
+                        Ok(1)
+                    }
+                }
+            })().unwrap_or_else(|code| code),
+            CacheCommand::Status => {
+                let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
+                match glyim_pkg::cas_client::CasClient::new(&cas_dir) {
+                    Ok(_) => {
+                        eprintln!("CAS directory: {} (exists)", cas_dir.display());
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("CAS directory {} not available: {e}", cas_dir.display());
+                        1
+                    }
+                }
+            }
+        },
         Command::Outdated => {
             eprintln!("error: outdated not yet implemented");
             1
