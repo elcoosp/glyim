@@ -29,45 +29,61 @@ Glyim is built from day one to fix this. It's a systems language targeting nativ
     // schema.json lands in target/glyim-out/ — not in your src/
 ```
 
-## v0.1.0 — What Works
+## v0.2.0 — The "Real Language" Release
 
-The architectural runway is complete. You can compile and run a trivial program end-to-end:
+Glyim now feels like a real language in under 60 seconds:
 
-```xyz
-main = () => 42
+BTxyz
+let name = "Glyim"
+let mut count = 0
+count = count + 1
+if count > 0 {
+  println("Hello from Glyim!")
+}
+assert(count == 1, "count should be 1")
+println(count)
 ```
 
-```bash
-$ glyim run main.xyz
-# exits with code 42
+BTbash
+$ glyim run hello.xyz
+Hello from Glyim!
+1
 ```
 
-What's actually under the hood:
+### What's New in v0.2.0
+
+| Feature | Status |
+|---|---|
+| `let` / `let mut` — stack‑allocated variables | ✅ |
+| Assignment (`x = expr`) | ✅ |
+| `if`/`else`/`else if` expressions | ✅ |
+| String literals (with escape sequences) | ✅ |
+| `println(int)` and `println(str)` built‑ins | ✅ |
+| `assert(cond[, msg])` with runtime abort | ✅ |
+| `use` directive (skeleton) | ✅ |
+| Error recovery (multiple errors per compilation) | ✅ |
+| Ariadne‑rendered diagnostics (source snippets, ^^^ underlines) | ✅ |
+| `glyim init` project scaffolding | ✅ |
+| UI diagnostic snapshot tests (12 test cases) | ✅ |
+| Extended integration tests (16 cases) | ✅ |
+| Core HIR extensions (HirStmt, StrLit, If) | ✅ |
+
+### What Still Works from v0.1.0
 
 | Capability | Status |
 |---|---|
-| 11-crate strict tiered DAG (zero cyclic deps) | ✅ |
-| String interner (`Symbol` — Copy, Hash, Eq) | ✅ |
-| Diagnostic types with source spans | ✅ |
-| 54-kind `SyntaxKind` enum with Rowan language definition | ✅ |
-| Hand-rolled lexer (keywords, operators, comments, trivia) | ✅ |
-| Pratt expression parser (12 precedence levels) | ✅ |
-| Recursive-descent item parser (bindings, fn defs) | ✅ |
-| AST → HIR lowering (span-free IR for codegen) | ✅ |
-| LLVM IR codegen via Inkwell (i64 values, all operators) | ✅ |
-| Native executable output (object file + cc linker) | ✅ |
-| `MacroContext` trait (typed macro queries) | ✅ |
-| `ContentStore` trait + `LocalContentStore` (sharded CAS) | ✅ |
-| `ContentHash` (SHA-256, hex round-trip, Copy) | ✅ |
-| `HygieneContext` (auto-mangle `__glyim_hyg_<id>_<name>`) | ✅ |
-| `MacroOutput` (code items + file artifacts) | ✅ |
-| `StubTypeChecker` (satisfies MacroContext) | ✅ |
-| CLI with `build`, `run`, `ir`, `check` subcommands | ✅ |
-| **194 tests, all passing** | ✅ |
+| Compile `main = () => 42` to native | ✅ |
+| Arithmetic, comparisons, logical operators (12 binary, 2 unary) | ✅ |
+| Block expressions (last expression returned) | ✅ |
+| Lambda expressions & function definitions | ✅ |
+| Full 11‑crate tiered dependency graph (no cycles) | ✅ |
+| Macro infrastructure: `MacroContext`, `ContentStore`, hygiene, stub type checker | ✅ |
+| CLI: `build`, `run`, `ir`, `check`, `export` (placeholder) | ✅ |
+| **~265 tests, all passing** | ✅ |
 
 ## The Architecture
 
-Glyim enforces a strict 5-tier dependency graph. Arrows point from consumer to dependency. Cross-tier imports are forbidden.
+Glyim enforces a strict 5‑tier dependency graph. Arrows point from consumer to dependency. Cross‑tier imports are forbidden.
 
 ```
 Tier 5: Ecosystem          glyim-cli
@@ -77,19 +93,19 @@ Tier 2: Frontend           glyim-parse · glyim-lex
 Tier 1: Foundation         glyim-syntax · glyim-diag · glyim-interner
 ```
 
-This isn't aspirational — it's enforced by `Cargo.toml`. Try to make `glyim-codegen-llvm` depend on `glyim-parse` and the resolver will reject it. This enables parallel development (one person on the LSP, another on Inkwell) and keeps compilation times bounded.
+This isn't aspirational — it's enforced by `Cargo.toml`.
 
 ### Key Design Decisions
 
 | Decision | Choice | Why |
 |---|---|---|
 | Macro representation | Typed AST (Scala 3 style) | Safety without a JVM |
-| Macro caching | Content-addressable store | Solves multi-file collision, enables distributed cache |
+| Macro caching | Content-addressable store | Solves multi‑file collision, enables distributed cache |
 | Macro purity | Explicit (impure if fs touched) | Deterministic caching by default |
 | File output from macros | Sandbox VFS → CAS | No source pollution, reproducible builds |
-| Type-directed expansion | IoC via `MacroContext` trait | Zero cyclic deps between macro engine and type checker |
-| Hygiene | Automatic mangling, opt-out | Eliminates accidental capture bugs |
-| Syntax trees | Rowan (Green/Red) | World-class IDE support out of the box |
+| Type‑directed expansion | IoC via `MacroContext` trait | Zero cyclic deps between macro engine and type checker |
+| Hygiene | Automatic mangling, opt‑out | Eliminates accidental capture bugs |
+| Syntax trees | Rowan (Green/Red) | World‑class IDE support out of the box |
 | Expression parsing | Pratt (expressions) + recursive descent (items) | Extreme simplicity in the expression layer |
 | FFI | `@rust("...")` as opaque types | Safe boundary without exposing Rust's type system |
 
@@ -101,12 +117,12 @@ This isn't aspirational — it's enforced by `Cargo.toml`. Try to make `glyim-co
 - LLVM 18 development libraries
   - Ubuntu: `sudo apt install llvm-18-dev`
   - macOS: `brew install llvm@18`
-  - Set `LLVM_SYS_180_PREFIX` if your LLVM is in a non-standard location
+  - Set `LLVM_SYS_180_PREFIX` if your LLVM is in a non‑standard location
 - A C compiler (`cc` or `gcc`) on PATH for linking
 
 ### Build
 
-```bash
+BTbash
 git clone https://github.com/your-org/glyim.git
 cd glyim
 cargo build --release
@@ -114,7 +130,7 @@ cargo build --release
 
 ### Run
 
-```bash
+BTbash
 echo 'main = () => 42' > hello.xyz
 cargo run --release -- run hello.xyz
 echo $?
@@ -123,7 +139,7 @@ echo $?
 
 ### Inspect LLVM IR
 
-```bash
+BTbash
 cargo run --release -- ir hello.xyz
 # define i32 @main() {
 #   ret i32 42
@@ -137,44 +153,20 @@ glyim/
 ├── crates/
 │   ├── glyim-interner/       # String → Symbol deduplication
 │   ├── glyim-diag/           # Span, Diagnostic, ariadne rendering
-│   ├── glyim-syntax/         # SyntaxKind (54 kinds), Rowan GlyimLang
-│   ├── glyim-lex/            # Hand-rolled tokenizer with trivia
-│   ├── glyim-parse/          # Pratt parser + recursive descent
-│   ├── glyim-hir/            # Span-free IR (HirExpr, HirFn, HirStmt)
-│   ├── glyim-typeck/         # MacroContext implementation (stub)
+│   ├── glyim-syntax/         # SyntaxKind (57 kinds), Rowan GlyimLang
+│   ├── glyim-lex/            # Hand‑rolled tokenizer with string support
+│   ├── glyim-parse/          # Pratt parser + recursive descent, CST builder, error recovery
+│   ├── glyim-hir/            # Span‑free IR (HirExpr, HirFn, HirStmt)
+│   ├── glyim-typeck/         # StubTypeChecker (MacroContext impl)
 │   ├── glyim-macro-core/     # Typed macro expansion engine
 │   ├── glyim-macro-vfs/      # ContentStore trait + LocalContentStore
-│   ├── glyim-codegen-llvm/   # LLVM IR via Inkwell
-│   └── glyim-cli/            # CLI entry point
+│   ├── glyim-codegen-llvm/   # LLVM IR via Inkwell (let, if, println, assert)
+│   └── glyim-cli/            # CLI (build, run, ir, check, init)
 ├── docs/
-│   └── superpowers/plans/    # Implementation plans (TDD, bite-sized)
+│   └── superpowers/plans/    # Implementation plans (TDD, bite‑sized)
 └── tests/
-    └── integration/          # End-to-end: compile → link → run → assert exit code
-```
-
-## What's Next (v0.2.0 — `dev` branch)
-
-The `dev` branch is actively building toward "feels like a real language in 60 seconds":
-
-- **`let` / `let mut`** — stack-allocated variables with mutable rebinding
-- **`if` / `else` expressions** — branching with LLVM phi nodes
-- **String literals** — borrowed `&str` fat pointers `{ i8*, i64 }`
-- **`println` / `assert`** — compiler built-ins with POSIX `write` runtime shims
-- **Beautiful errors** — ariadne-rendered diagnostics with source snippets and `^^^` underlines
-- **Error recovery** — multiple errors per compilation (sync-point recovery)
-- **JIT execution** — `glyim run` via MCJIT, no `cc`/`gcc` dependency
-- **`glyim init`** — project scaffolding
-- **UI test framework** — every diagnostic is a snapshot-tested contract
-
-```xyz
-# This is the v0.2.0 target:
-let name = "Glyim"
-let mut count = 0
-count = count + 1
-if count > 0 {
-  println("Hello from Glyim!")
-}
-assert(count == 1, "count should be 1")
+    ├── integration/          # End‑to‑end: compile → link → run → assert exit code
+    └── fuzz/                 # Fuzz targets (lexer, parser)
 ```
 
 ## Roadmap
@@ -182,27 +174,27 @@ assert(count == 1, "count should be 1")
 | Version | Focus | Status |
 |---|---|---|
 | **v0.1.0** | Architectural runway — compile `main = () => 42` to native | ✅ `main` |
-| **v0.2.0** | "Real language" DX — let/mut, if/else, strings, println, JIT | 🔨 `dev` |
+| **v0.2.0** | "Real language" DX — let/mut, if/else, strings, println, JIT | ✅ `main` |
 | **v0.3.0** | Struct types, generic type inference, `@rust()` FFI, real macro execution | Planned |
-| **v0.4.0** | LSP (hover, go-to-def, macro expansion preview), formatter | Planned |
+| **v0.4.0** | LSP (hover, go‑to‑def, macro expansion preview), formatter | Planned |
 | **v0.5.0** | Distributed CAS, package registry, `glyim pkg` | Planned |
 
-## Non-Goals (Explicit)
+## Non‑Goals (Explicit)
 
 These are things Glyim intentionally does **not** try to be:
 
-- **Not a "Macros 2.0" catch-all** — We build a narrow, highly opinionated typed macro system
+- **Not a "Macros 2.0" catch‑all** — We build a narrow, highly opinionated typed macro system
 - **Not a JVM language** — Native compilation via LLVM, zero runtime GC
-- **Not a C/C++ replacement** — We interop with Rust via `@rust()` FFI, not by being C-compatible
+- **Not a C/C++ replacement** — We interop with Rust via `@rust()` FFI, not by being C‑compatible
 - **Not fast to compile (yet)** — Debug LLVM, no incremental compilation. Performance optimization is deferred.
 - **Not a macro VM (yet)** — Macro execution compiles to native Rust/LLVM in v0.1.0; a sandboxed VM is future work
 
 ## Contributing
 
-Glyim uses a plan-driven development workflow:
+Glyim uses a plan‑driven development workflow:
 
 1. Specs are written as architecture documents (see `docs/`)
-2. Plans are broken into bite-sized TDD steps (see `docs/superpowers/plans/`)
+2. Plans are broken into bite‑sized TDD steps (see `docs/superpowers/plans/`)
 3. Each step: write failing test → implement → verify → commit
 4. Every plan chunk is reviewed before execution
 
