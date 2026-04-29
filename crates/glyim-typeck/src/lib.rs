@@ -1,2 +1,2 @@
 pub mod typeck;
-pub use typeck::{TypeChecker, TypeError, StructInfo, EnumInfo};
+pub use typeck::{EnumInfo, StructInfo, TypeChecker, TypeError};

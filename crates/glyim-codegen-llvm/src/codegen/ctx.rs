@@ -8,7 +8,11 @@ pub struct FunctionContext<'ctx> {
 }
 
 impl<'ctx> FunctionContext<'ctx> {
+    #[allow(dead_code)]
     pub fn new(fn_value: FunctionValue<'ctx>) -> Self {
-        Self { vars: HashMap::new(), fn_value }
+        Self {
+            vars: HashMap::new(),
+            fn_value,
+        }
     }
 }

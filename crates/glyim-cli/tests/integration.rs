@@ -263,7 +263,11 @@ fn e2e_test_should_panic_passes() {
     // We simulate a test function that returns non-zero (as if panic occurred)
     let input = temp_g("#[test(should_panic)]\nfn panics() { 1 }");
     let summary = pipeline::run_tests(&input, None, false).unwrap();
-    assert_eq!(summary.passed(), 1, "should_panic test that returns non-zero should pass");
+    assert_eq!(
+        summary.passed(),
+        1,
+        "should_panic test that returns non-zero should pass"
+    );
     assert_eq!(summary.exit_code(), 0);
 }
 
@@ -271,14 +275,16 @@ fn e2e_test_should_panic_passes() {
 fn e2e_test_should_panic_fails_on_zero() {
     let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
     let summary = pipeline::run_tests(&input, None, false).unwrap();
-    assert_eq!(summary.failed(), 1, "should_panic test that returns 0 should fail");
+    assert_eq!(
+        summary.failed(),
+        1,
+        "should_panic test that returns 0 should fail"
+    );
     assert_eq!(summary.exit_code(), 1);
 }
 
 #[test]
 #[test]
-
-
 #[test]
 fn e2e_test_filter() {
     let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
@@ -293,7 +299,10 @@ fn e2e_test_filter_no_match() {
     let result = pipeline::run_tests(&input, Some("nonexistent"), false);
     assert!(result.is_err());
     let msg = format!("{:?}", result.unwrap_err());
-    assert!(msg.contains("no #[test]"), "error should mention no test functions: {msg}");
+    assert!(
+        msg.contains("no #[test]"),
+        "error should mention no test functions: {msg}"
+    );
 }
 
 #[test]

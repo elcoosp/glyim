@@ -58,8 +58,17 @@ enum Command {
 fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
-        Command::Build { input, output, debug: _, release } => {
-            let mode = if release { BuildMode::Release } else { BuildMode::Debug };
+        Command::Build {
+            input,
+            output,
+            debug: _,
+            release,
+        } => {
+            let mode = if release {
+                BuildMode::Release
+            } else {
+                BuildMode::Debug
+            };
             let result = if input.is_dir() {
                 pipeline::build_package(&input, output.as_deref(), mode)
             } else {
@@ -75,9 +84,17 @@ fn main() {
                     1
                 }
             }
-        },
-        Command::Run { input, debug: _, release } => {
-            let mode = if release { BuildMode::Release } else { BuildMode::Debug };
+        }
+        Command::Run {
+            input,
+            debug: _,
+            release,
+        } => {
+            let mode = if release {
+                BuildMode::Release
+            } else {
+                BuildMode::Debug
+            };
             let result = if input.is_dir() {
                 pipeline::run_package(&input, mode)
             } else {
@@ -90,7 +107,7 @@ fn main() {
                     1
                 }
             }
-        },
+        }
         Command::Ir { input } => match pipeline::print_ir(&input) {
             Ok(()) => 0,
             Err(e) => {
@@ -115,7 +132,11 @@ fn main() {
                 1
             }
         },
-        Command::Test { input, ignore, filter } => {
+        Command::Test {
+            input,
+            ignore,
+            filter,
+        } => {
             let include_ignored = ignore;
             let result = if input.is_dir() {
                 pipeline::run_tests_package(&input, filter.as_deref(), include_ignored)

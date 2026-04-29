@@ -405,8 +405,19 @@ fn lex_hash_token() {
 #[test]
 fn lex_empty_attribute_brackets() {
     let tokens = tokenize("#[]");
-    let kinds: Vec<_> = tokens.iter().filter(|t| !t.kind.is_trivia()).map(|t| t.kind).collect();
-    assert_eq!(kinds, vec![SyntaxKind::Hash, SyntaxKind::OpenBracket, SyntaxKind::CloseBracket]);
+    let kinds: Vec<_> = tokens
+        .iter()
+        .filter(|t| !t.kind.is_trivia())
+        .map(|t| t.kind)
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            SyntaxKind::Hash,
+            SyntaxKind::OpenBracket,
+            SyntaxKind::CloseBracket
+        ]
+    );
 }
 
 #[test]

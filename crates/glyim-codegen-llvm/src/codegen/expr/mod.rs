@@ -1,17 +1,24 @@
 mod control;
 mod data;
 
-use crate::Codegen;
 use crate::codegen::ctx::FunctionContext;
+use crate::Codegen;
 use glyim_hir::{HirExpr, HirUnOp};
 use inkwell::values::IntValue;
 
-pub(crate) fn codegen_expr<'ctx>(cg: &Codegen<'ctx>, expr: &HirExpr, fctx: &mut FunctionContext<'ctx>) -> Option<IntValue<'ctx>> {
+pub(crate) fn codegen_expr<'ctx>(
+    cg: &Codegen<'ctx>,
+    expr: &HirExpr,
+    fctx: &mut FunctionContext<'ctx>,
+) -> Option<IntValue<'ctx>> {
     match expr {
         HirExpr::IntLit { value: n, .. } => Some(cg.i64_type.const_int(*n as u64, true)),
         HirExpr::Ident { name: sym, .. } => {
             let ptr = fctx.vars.get(sym)?;
-            cg.builder.build_load(cg.i64_type, *ptr, cg.interner.resolve(*sym)).ok().map(|v| v.into_int_value())
+            cg.builder
+                .build_load(cg.i64_type, *ptr, cg.interner.resolve(*sym))
+                .ok()
+                .map(|v| v.into_int_value())
         }
         HirExpr::Binary { op, lhs, rhs, .. } => {
             let l = codegen_expr(cg, lhs, fctx)?;
@@ -21,20 +28,29 @@ pub(crate) fn codegen_expr<'ctx>(cg: &Codegen<'ctx>, expr: &HirExpr, fctx: &mut 
         HirExpr::Unary { op, operand, .. } => {
             let val = codegen_expr(cg, operand, fctx)?;
             match op {
-                HirUnOp::Neg => { let zero = cg.i64_type.const_int(0, false); cg.builder.build_int_sub(zero, val, "neg").ok() }
+                HirUnOp::Neg => {
+                    let zero = cg.i64_type.const_int(0, false);
+                    cg.builder.build_int_sub(zero, val, "neg").ok()
+                }
                 HirUnOp::Not => cg.builder.build_not(val, "not").ok(),
             }
         }
-        HirExpr::BoolLit { value: b, .. } => Some(cg.i64_type.const_int(if *b { 1 } else { 0 }, false)),
+        HirExpr::BoolLit { value: b, .. } => {
+            Some(cg.i64_type.const_int(if *b { 1 } else { 0 }, false))
+        }
         HirExpr::UnitLit { .. } => Some(cg.i64_type.const_int(0, false)),
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
         HirExpr::Println { arg, .. } => super::string::codegen_println(cg, arg, fctx),
-        HirExpr::Assert { condition, message, .. } => super::string::codegen_assert(cg, condition, message, fctx),
+        HirExpr::Assert {
+            condition, message, ..
+        } => super::string::codegen_assert(cg, condition, message, fctx),
         HirExpr::Call { callee, args, .. } => super::string::codegen_call(cg, callee, args, fctx),
         HirExpr::Block { stmts, .. } => {
             let mut last = Some(cg.i64_type.const_int(0, false));
             for stmt in stmts {
-                if let Some(v) = super::stmt::codegen_stmt(cg, stmt, fctx) { last = Some(v); }
+                if let Some(v) = super::stmt::codegen_stmt(cg, stmt, fctx) {
+                    last = Some(v);
+                }
             }
             last
         }

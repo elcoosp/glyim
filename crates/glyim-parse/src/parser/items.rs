@@ -84,7 +84,10 @@ fn parse_macro_def(parser: &mut Parser) -> Option<Item> {
     })
 }
 
-fn parse_binding_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>) -> Option<Item> {
+fn parse_binding_with_attrs(
+    parser: &mut Parser,
+    attrs: Vec<crate::ast::Attribute>,
+) -> Option<Item> {
     let name_tok = parser.tokens.bump()?;
     let name = parser.interner.intern(name_tok.text);
     let name_span = Span::new(name_tok.start, name_tok.end);

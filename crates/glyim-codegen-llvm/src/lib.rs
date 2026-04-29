@@ -1,11 +1,13 @@
-pub mod codegen;
 mod alloc;
+pub mod codegen;
 mod runtime_shims;
 pub use codegen::Codegen;
 
 pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let out = glyim_parse::parse(source);
-    if !out.errors.is_empty() { return Err(format!("parse: {:?}", out.errors)); }
+    if !out.errors.is_empty() {
+        return Err(format!("parse: {:?}", out.errors));
+    }
     let mut interner = out.interner;
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
@@ -17,7 +19,9 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
 /// Compile source to LLVM IR in test mode.
 pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String, String> {
     let out = glyim_parse::parse(source);
-    if !out.errors.is_empty() { return Err(format!("parse: {:?}", out.errors)); }
+    if !out.errors.is_empty() {
+        return Err(format!("parse: {:?}", out.errors));
+    }
     let mut interner = out.interner;
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
@@ -32,10 +36,7 @@ mod test_harness_tests {
 
     #[test]
     fn test_compile_to_ir_tests_single() {
-        let ir = compile_to_ir_tests(
-            "fn check() { 0 }",
-            &["check".to_string()],
-        ).unwrap();
+        let ir = compile_to_ir_tests("fn check() { 0 }", &["check".to_string()]).unwrap();
         assert!(ir.contains("@check"));
         assert!(ir.contains("@main"));
     }
@@ -46,8 +47,12 @@ mod test_harness_tests {
             "fn main() { 42 }
 fn check() { 0 }",
             &["check".to_string()],
-        ).unwrap();
-        let mains = ir.lines().filter(|l| l.contains("define i32 @main")).count();
+        )
+        .unwrap();
+        let mains = ir
+            .lines()
+            .filter(|l| l.contains("define i32 @main"))
+            .count();
         assert_eq!(mains, 1);
     }
 }

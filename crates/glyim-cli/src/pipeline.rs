@@ -227,8 +227,12 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
 }
 
 pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineError> {
-    let source = format!("{}
-{}", PRELUDE, fs::read_to_string(input)?);
+    let source = format!(
+        "{}
+{}",
+        PRELUDE,
+        fs::read_to_string(input)?
+    );
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         let rendered = glyim_diag::render_diagnostics(
@@ -278,9 +282,17 @@ pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineErro
     Ok(status.code().unwrap_or(1))
 }
 
-pub fn build_with_mode(input: &Path, output: Option<&Path>, _mode: BuildMode) -> Result<PathBuf, PipelineError> {
-    let source = format!("{}
-{}", PRELUDE, fs::read_to_string(input)?);
+pub fn build_with_mode(
+    input: &Path,
+    output: Option<&Path>,
+    _mode: BuildMode,
+) -> Result<PathBuf, PipelineError> {
+    let source = format!(
+        "{}
+{}",
+        PRELUDE,
+        fs::read_to_string(input)?
+    );
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -305,8 +317,6 @@ pub fn build_with_mode(input: &Path, output: Option<&Path>, _mode: BuildMode) ->
     link_object(&obj_path, &output)?;
     Ok(output)
 }
-
-
 
 /// Walk from `start` upward looking for `glyim.toml`.
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
@@ -366,7 +376,6 @@ mod root_tests {
     }
 }
 
-
 pub fn build_package(
     package_dir: &Path,
     output: Option<&Path>,
@@ -384,9 +393,9 @@ pub fn build_package(
 
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
-        return Err(PipelineError::Manifest(crate::manifest::ManifestError::MissingField(
-            "src/main.g",
-        )));
+        return Err(PipelineError::Manifest(
+            crate::manifest::ManifestError::MissingField("src/main.g"),
+        ));
     }
 
     build_with_mode(&main_path, output, mode)
@@ -401,8 +410,7 @@ pub fn run_package(package_dir: &Path, mode: BuildMode) -> Result<i32, PipelineE
             PipelineError::Io(e)
         }
     })?;
-    let _manifest =
-        crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+    let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
 
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
@@ -413,7 +421,6 @@ pub fn run_package(package_dir: &Path, mode: BuildMode) -> Result<i32, PipelineE
 
     run_with_mode(&main_path, mode)
 }
-
 
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
@@ -434,33 +441,68 @@ fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResul
     results
 }
 
-
-pub fn run_tests(input: &Path, filter_name: Option<&str>, include_ignored: bool) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
-    let source = format!("{}
-{}", PRELUDE, fs::read_to_string(input)?);
+pub fn run_tests(
+    input: &Path,
+    filter_name: Option<&str>,
+    include_ignored: bool,
+) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
+    let source = format!(
+        "{}
+{}",
+        PRELUDE,
+        fs::read_to_string(input)?
+    );
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        let rendered = glyim_diag::render_diagnostics(&source, &input.to_string_lossy(),
-            &parse_out.errors.iter().map(|e| {
-                let span = match e {
-                        glyim_parse::ParseError::Expected { span, .. } => Some(glyim_diag::Span::new(span.0, span.1)),
+        let rendered = glyim_diag::render_diagnostics(
+            &source,
+            &input.to_string_lossy(),
+            &parse_out
+                .errors
+                .iter()
+                .map(|e| {
+                    let span = match e {
+                        glyim_parse::ParseError::Expected { span, .. } => {
+                            Some(glyim_diag::Span::new(span.0, span.1))
+                        }
                         glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                        glyim_parse::ParseError::ExpectedExpr { span, .. } => Some(glyim_diag::Span::new(span.0, span.1)),
-                        glyim_parse::ParseError::Message { span, .. } => Some(glyim_diag::Span::new(span.0, span.1)),
+                        glyim_parse::ParseError::ExpectedExpr { span, .. } => {
+                            Some(glyim_diag::Span::new(span.0, span.1))
+                        }
+                        glyim_parse::ParseError::Message { span, .. } => {
+                            Some(glyim_diag::Span::new(span.0, span.1))
+                        }
                     };
-                glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-            }).collect::<Vec<_>>());
+                    glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
+                })
+                .collect::<Vec<_>>(),
+        );
         eprintln!("{rendered}");
         return Err(PipelineError::Parse(parse_out.errors));
     }
 
-    let test_fns = crate::test_runner::collect_test_functions(&parse_out.ast, &parse_out.interner, filter_name, true);
+    let test_fns = crate::test_runner::collect_test_functions(
+        &parse_out.ast,
+        &parse_out.interner,
+        filter_name,
+        true,
+    );
     // Collect should_panic test names from AST attributes
-    let should_panic: std::collections::HashSet<String> = test_fns.iter()
-        .filter(|t| parse_out.ast.items.iter()
-            .any(|item| if let glyim_parse::Item::FnDef { attrs, name, .. } = item {
-                parse_out.interner.resolve(*name) == t.name && attrs.iter().any(|attr| attr.name == "test" && attr.args.iter().any(|arg| arg.key == "should_panic"))
-            } else { false }))
+    let should_panic: std::collections::HashSet<String> = test_fns
+        .iter()
+        .filter(|t| {
+            parse_out.ast.items.iter().any(|item| {
+                if let glyim_parse::Item::FnDef { attrs, name, .. } = item {
+                    parse_out.interner.resolve(*name) == t.name
+                        && attrs.iter().any(|attr| {
+                            attr.name == "test"
+                                && attr.args.iter().any(|arg| arg.key == "should_panic")
+                        })
+                } else {
+                    false
+                }
+            })
+        })
         .map(|t| t.name.clone())
         .collect();
 
@@ -472,13 +514,22 @@ pub fn run_tests(input: &Path, filter_name: Option<&str>, include_ignored: bool)
         let all: Vec<String> = test_fns.iter().map(|t| t.name.clone()).collect();
         (all, Vec::new())
     } else {
-        let active: Vec<String> = test_fns.iter().filter(|t| !t.ignored).map(|t| t.name.clone()).collect();
-        let ignored: Vec<String> = test_fns.iter().filter(|t| t.ignored).map(|t| t.name.clone()).collect();
+        let active: Vec<String> = test_fns
+            .iter()
+            .filter(|t| !t.ignored)
+            .map(|t| t.name.clone())
+            .collect();
+        let ignored: Vec<String> = test_fns
+            .iter()
+            .filter(|t| t.ignored)
+            .map(|t| t.name.clone())
+            .collect();
         (active, ignored)
     };
 
     if active_names.is_empty() {
-        let results: Vec<_> = ignored_names.iter()
+        let results: Vec<_> = ignored_names
+            .iter()
             .map(|n| (n.clone(), crate::test_runner::TestResult::Ignored))
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
@@ -491,14 +542,20 @@ pub fn run_tests(input: &Path, filter_name: Option<&str>, include_ignored: bool)
 
     let context = Context::create();
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
-    codegen.generate_for_tests(&hir, &active_names, &should_panic).map_err(PipelineError::Codegen)?;
+    codegen
+        .generate_for_tests(&hir, &active_names, &should_panic)
+        .map_err(PipelineError::Codegen)?;
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-    codegen.write_object_file(&obj_path).map_err(PipelineError::Codegen)?;
+    codegen
+        .write_object_file(&obj_path)
+        .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_test_out");
     link_object(&obj_path, &exe_path)?;
 
-    let output = Command::new(&exe_path).output().map_err(PipelineError::Run)?;
+    let output = Command::new(&exe_path)
+        .output()
+        .map_err(PipelineError::Run)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results = parse_test_output(&stdout);
 
@@ -517,10 +574,17 @@ pub fn run_tests(input: &Path, filter_name: Option<&str>, include_ignored: bool)
     Ok(crate::test_runner::TestRunSummary { results })
 }
 
-pub fn run_tests_package(package_dir: &Path, filter_name: Option<&str>, include_ignored: bool) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
+pub fn run_tests_package(
+    package_dir: &Path,
+    filter_name: Option<&str>,
+    include_ignored: bool,
+) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
-        return Err(PipelineError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, format!("{} not found", main_path.display()))));
+        return Err(PipelineError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{} not found", main_path.display()),
+        )));
     }
     run_tests(&main_path, filter_name, include_ignored)
 }

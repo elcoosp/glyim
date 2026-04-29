@@ -120,7 +120,7 @@ impl SyntaxKind {
                 | Self::KwImpl
         )
     }
-        pub fn display_name(self) -> &'static str {
+    pub fn display_name(self) -> &'static str {
         match self {
             Self::Error => "error",
             Self::Eof => "end of file",
@@ -207,7 +207,6 @@ impl SyntaxKind {
             Self::PtrType => "pointer type",
         }
     }
-
 }
 
 impl fmt::Display for SyntaxKind {

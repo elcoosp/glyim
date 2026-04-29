@@ -140,8 +140,7 @@ pub(crate) fn parse_match(parser: &mut Parser) -> Option<ExprNode> {
             guard,
             body,
         });
-        if parser.tokens.eat(SyntaxKind::Comma).is_none() && !parser.tokens.at(SyntaxKind::RBrace)
-        {
+        if parser.tokens.eat(SyntaxKind::Comma).is_none() && !parser.tokens.at(SyntaxKind::RBrace) {
             break;
         }
     }

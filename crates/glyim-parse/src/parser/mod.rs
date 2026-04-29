@@ -34,12 +34,21 @@ impl<'a> Parser<'a> {
                 None => break,
             };
             let start = hash_tok.start;
-            if self.tokens.expect(glyim_syntax::SyntaxKind::OpenBracket, &mut self.errors).is_err() {
+            if self
+                .tokens
+                .expect(glyim_syntax::SyntaxKind::OpenBracket, &mut self.errors)
+                .is_err()
+            {
                 break;
             }
-            let name_tok = match self.tokens.expect(glyim_syntax::SyntaxKind::Ident, &mut self.errors) {
+            let name_tok = match self
+                .tokens
+                .expect(glyim_syntax::SyntaxKind::Ident, &mut self.errors)
+            {
                 Ok(t) => t,
-                Err(_) => { break; }
+                Err(_) => {
+                    break;
+                }
             };
             let name = name_tok.text.to_string();
 
@@ -53,9 +62,15 @@ impl<'a> Parser<'a> {
                     if self.tokens.is_eof() {
                         break;
                     }
-                    let key_tok = match self.tokens.expect(glyim_syntax::SyntaxKind::Ident, &mut self.errors) {
+                    let key_tok = match self
+                        .tokens
+                        .expect(glyim_syntax::SyntaxKind::Ident, &mut self.errors)
+                    {
                         Ok(t) => t,
-                        Err(_) => { self.tokens.eat(glyim_syntax::SyntaxKind::RParen); break; }
+                        Err(_) => {
+                            self.tokens.eat(glyim_syntax::SyntaxKind::RParen);
+                            break;
+                        }
                     };
                     let key = key_tok.text.to_string();
                     let value = if self.tokens.eat(glyim_syntax::SyntaxKind::Eq).is_some() {
@@ -70,14 +85,24 @@ impl<'a> Parser<'a> {
                     } else {
                         None
                     };
-                    args.push(crate::ast::AttributeArg { key, value, span: glyim_diag::Span::new(key_tok.start, key_tok.end) });
+                    args.push(crate::ast::AttributeArg {
+                        key,
+                        value,
+                        span: glyim_diag::Span::new(key_tok.start, key_tok.end),
+                    });
                     self.tokens.eat(glyim_syntax::SyntaxKind::Comma);
                 }
             }
 
-            self.tokens.expect(glyim_syntax::SyntaxKind::CloseBracket, &mut self.errors).ok();
+            self.tokens
+                .expect(glyim_syntax::SyntaxKind::CloseBracket, &mut self.errors)
+                .ok();
             let end = self.tokens.peek().map_or(start, |t| t.start);
-            attrs.push(crate::ast::Attribute { name, args, span: glyim_diag::Span::new(start, end) });
+            attrs.push(crate::ast::Attribute {
+                name,
+                args,
+                span: glyim_diag::Span::new(start, end),
+            });
         }
         attrs
     }

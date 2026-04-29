@@ -1,15 +1,15 @@
 mod error;
-mod types;
-mod scope;
-mod resolver;
-mod register;
 mod expr;
-mod stmt;
-mod match_check;
 mod function;
+mod match_check;
+mod register;
+mod resolver;
+mod scope;
+mod stmt;
+mod types;
 
 pub use error::TypeError;
-pub use types::{StructInfo, EnumInfo};
+pub use types::{EnumInfo, StructInfo};
 
 use glyim_hir::item::FnSig;
 use glyim_hir::node::{Hir, HirFn};

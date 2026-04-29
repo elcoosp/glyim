@@ -1,5 +1,5 @@
-use crate::HirPattern;
 use crate::lower::context::LoweringContext;
+use crate::HirPattern;
 use glyim_parse::Pattern;
 
 pub fn lower_pattern(pat: &Pattern, ctx: &mut LoweringContext) -> HirPattern {

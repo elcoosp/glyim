@@ -1,9 +1,9 @@
-use crate::types::{HirType, ExprId};
-use crate::{HirExpr, HirPattern, HirStmt};
 use crate::lower::context::LoweringContext;
 use crate::lower::ops::{lower_binop, lower_unop};
 use crate::lower::pattern::lower_pattern;
 use crate::lower::types::resolve_type_name;
+use crate::types::{ExprId, HirType};
+use crate::{HirExpr, HirPattern, HirStmt};
 use glyim_parse::{BlockItem, ExprKind, Pattern, StmtKind};
 
 pub fn lower_expr(expr: &ExprKind, ctx: &mut LoweringContext) -> HirExpr {
@@ -12,7 +12,10 @@ pub fn lower_expr(expr: &ExprKind, ctx: &mut LoweringContext) -> HirExpr {
         ExprKind::IntLit(n) => HirExpr::IntLit { id, value: *n },
         ExprKind::FloatLit(f) => HirExpr::FloatLit { id, value: *f },
         ExprKind::BoolLit(b) => HirExpr::BoolLit { id, value: *b },
-        ExprKind::StrLit(s) => HirExpr::StrLit { id, value: s.clone() },
+        ExprKind::StrLit(s) => HirExpr::StrLit {
+            id,
+            value: s.clone(),
+        },
         ExprKind::Ident(sym) => HirExpr::Ident { id, name: *sym },
         ExprKind::UnitLit => HirExpr::UnitLit { id },
 
@@ -32,7 +35,11 @@ pub fn lower_expr(expr: &ExprKind, ctx: &mut LoweringContext) -> HirExpr {
 
         ExprKind::Block(items) => lower_block(items, ctx),
 
-        ExprKind::If { condition, then_branch, else_branch } => HirExpr::If {
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => HirExpr::If {
             id,
             condition: Box::new(lower_expr(&condition.kind, ctx)),
             then_branch: Box::new(lower_expr(&then_branch.kind, ctx)),
@@ -52,7 +59,11 @@ pub fn lower_expr(expr: &ExprKind, ctx: &mut LoweringContext) -> HirExpr {
 
         ExprKind::Match { scrutinee, arms } => lower_match(id, scrutinee, arms, ctx),
 
-        ExprKind::EnumVariant { enum_name, variant_name, args } => HirExpr::EnumVariant {
+        ExprKind::EnumVariant {
+            enum_name,
+            variant_name,
+            args,
+        } => HirExpr::EnumVariant {
             id,
             enum_name: *enum_name,
             variant_name: *variant_name,
@@ -93,7 +104,10 @@ pub fn lower_expr(expr: &ExprKind, ctx: &mut LoweringContext) -> HirExpr {
 
         ExprKind::Pointer { mutable: _, target } => HirExpr::As {
             id,
-            expr: Box::new(HirExpr::IntLit { id: ctx.fresh_id(), value: 0 }),
+            expr: Box::new(HirExpr::IntLit {
+                id: ctx.fresh_id(),
+                value: 0,
+            }),
             target_type: HirType::RawPtr(Box::new(HirType::Named(*target))),
         },
 
@@ -109,7 +123,7 @@ pub fn lower_expr(expr: &ExprKind, ctx: &mut LoweringContext) -> HirExpr {
             } else {
                 HirExpr::IntLit { id, value: 0 }
             }
-        },
+        }
 
         ExprKind::TryExpr(e) => lower_try_expr(id, e, ctx),
 
@@ -136,7 +150,11 @@ fn lower_block(items: &[BlockItem], ctx: &mut LoweringContext) -> HirExpr {
 
 fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStmt {
     match &stmt.kind {
-        StmtKind::Let { pattern, mutable, value } => {
+        StmtKind::Let {
+            pattern,
+            mutable,
+            value,
+        } => {
             let val = lower_expr(&value.kind, ctx);
             match pattern {
                 Pattern::Var(name) => HirStmt::Let {
@@ -188,12 +206,18 @@ fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringCo
             (
                 HirPattern::ResultOk(Box::new(HirPattern::Var(ctx.intern("v")))),
                 None,
-                HirExpr::Ident { id: ctx.fresh_id(), name: ctx.intern("v") },
+                HirExpr::Ident {
+                    id: ctx.fresh_id(),
+                    name: ctx.intern("v"),
+                },
             ),
             (
                 HirPattern::ResultErr(Box::new(HirPattern::Var(ctx.intern("e")))),
                 None,
-                HirExpr::IntLit { id: ctx.fresh_id(), value: 0 },
+                HirExpr::IntLit {
+                    id: ctx.fresh_id(),
+                    value: 0,
+                },
             ),
         ],
     }
@@ -206,7 +230,12 @@ fn lower_call(
     ctx: &mut LoweringContext,
 ) -> HirExpr {
     // Handle namespaced calls: StructName::method(args)
-    if let ExprKind::EnumVariant { enum_name, variant_name, args: enum_args } = &callee.kind {
+    if let ExprKind::EnumVariant {
+        enum_name,
+        variant_name,
+        args: enum_args,
+    } = &callee.kind
+    {
         if enum_args.is_empty() {
             let mangled = ctx.intern(&format!(
                 "{}_{}",
@@ -214,7 +243,11 @@ fn lower_call(
                 ctx.resolve(*variant_name)
             ));
             let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(&a.kind, ctx)).collect();
-            return HirExpr::Call { id: ctx.fresh_id(), callee: mangled, args: call_args };
+            return HirExpr::Call {
+                id: ctx.fresh_id(),
+                callee: mangled,
+                args: call_args,
+            };
         }
     }
 
@@ -228,22 +261,38 @@ fn lower_call(
     }
 
     // Default fallback
-    HirExpr::IntLit { id: ctx.fresh_id(), value: 0 }
+    HirExpr::IntLit {
+        id: ctx.fresh_id(),
+        value: 0,
+    }
 }
 
 fn lower_println_call(args: &[glyim_parse::ExprNode], ctx: &mut LoweringContext) -> HirExpr {
     let arg = args
         .first()
         .map(|a| lower_expr(&a.kind, ctx))
-        .unwrap_or(HirExpr::IntLit { id: ctx.fresh_id(), value: 0 });
-    HirExpr::Println { id: ctx.fresh_id(), arg: Box::new(arg) }
+        .unwrap_or(HirExpr::IntLit {
+            id: ctx.fresh_id(),
+            value: 0,
+        });
+    HirExpr::Println {
+        id: ctx.fresh_id(),
+        arg: Box::new(arg),
+    }
 }
 
 fn lower_assert_call(args: &[glyim_parse::ExprNode], ctx: &mut LoweringContext) -> HirExpr {
     let cond = args
         .first()
         .map(|a| lower_expr(&a.kind, ctx))
-        .unwrap_or(HirExpr::IntLit { id: ctx.fresh_id(), value: 0 });
+        .unwrap_or(HirExpr::IntLit {
+            id: ctx.fresh_id(),
+            value: 0,
+        });
     let msg = args.get(1).map(|a| Box::new(lower_expr(&a.kind, ctx)));
-    HirExpr::Assert { id: ctx.fresh_id(), condition: Box::new(cond), message: msg }
+    HirExpr::Assert {
+        id: ctx.fresh_id(),
+        condition: Box::new(cond),
+        message: msg,
+    }
 }

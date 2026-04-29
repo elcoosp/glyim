@@ -1,5 +1,5 @@
-use glyim_parse::{Ast, Item};
 use glyim_interner::Interner;
+use glyim_parse::{Ast, Item};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestFunction {
@@ -21,19 +21,32 @@ pub struct TestRunSummary {
 
 impl TestRunSummary {
     pub fn passed(&self) -> usize {
-        self.results.iter().filter(|(_, r)| *r == TestResult::Passed).count()
+        self.results
+            .iter()
+            .filter(|(_, r)| *r == TestResult::Passed)
+            .count()
     }
     pub fn failed(&self) -> usize {
-        self.results.iter().filter(|(_, r)| *r == TestResult::Failed).count()
+        self.results
+            .iter()
+            .filter(|(_, r)| *r == TestResult::Failed)
+            .count()
     }
     pub fn ignored(&self) -> usize {
-        self.results.iter().filter(|(_, r)| *r == TestResult::Ignored).count()
+        self.results
+            .iter()
+            .filter(|(_, r)| *r == TestResult::Ignored)
+            .count()
     }
     pub fn total(&self) -> usize {
         self.results.len()
     }
     pub fn exit_code(&self) -> i32 {
-        if self.failed() > 0 { 1 } else { 0 }
+        if self.failed() > 0 {
+            1
+        } else {
+            0
+        }
     }
     pub fn format_summary(&self) -> String {
         let passed = self.passed();
@@ -42,7 +55,9 @@ impl TestRunSummary {
         format!(
             "\ntest result: {}. {} passed; {} failed; {} ignored",
             if failed == 0 { "ok" } else { "FAILED" },
-            passed, failed, ignored
+            passed,
+            failed,
+            ignored
         )
     }
 }
@@ -57,14 +72,23 @@ pub fn collect_test_functions(
     for item in &ast.items {
         if let Item::FnDef { attrs, name, .. } = item {
             let is_test = attrs.iter().any(|a| a.name == "test");
-            if !is_test { continue; }
-            let is_ignored = attrs.iter().any(|a| a.name == "ignore");
-            if is_ignored && !include_ignored { continue; }
-            let resolved = interner.resolve(*name).to_string();
-            if let Some(ref filter) = filter_name {
-                if resolved != *filter { continue; }
+            if !is_test {
+                continue;
             }
-            tests.push(TestFunction { name: resolved, ignored: is_ignored });
+            let is_ignored = attrs.iter().any(|a| a.name == "ignore");
+            if is_ignored && !include_ignored {
+                continue;
+            }
+            let resolved = interner.resolve(*name).to_string();
+            if let Some(filter) = filter_name {
+                if resolved != *filter {
+                    continue;
+                }
+            }
+            tests.push(TestFunction {
+                name: resolved,
+                ignored: is_ignored,
+            });
         }
     }
     tests
@@ -100,11 +124,13 @@ mod tests {
 
     #[test]
     fn summary_format() {
-        let s = TestRunSummary { results: vec![
-            ("a".into(), TestResult::Passed),
-            ("b".into(), TestResult::Failed),
-            ("c".into(), TestResult::Ignored),
-        ]};
+        let s = TestRunSummary {
+            results: vec![
+                ("a".into(), TestResult::Passed),
+                ("b".into(), TestResult::Failed),
+                ("c".into(), TestResult::Ignored),
+            ],
+        };
         let fmt = s.format_summary();
         assert!(fmt.contains("1 passed"));
         assert!(fmt.contains("1 failed"));

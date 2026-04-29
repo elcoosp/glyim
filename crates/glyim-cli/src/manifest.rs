@@ -22,7 +22,9 @@ impl fmt::Display for ManifestError {
             Self::FileNotFound(p) => write!(f, "glyim.toml not found at {}", p.display()),
             Self::Parse(msg) => write!(f, "invalid TOML in glyim.toml: {msg}"),
             Self::MissingSection(section) => write!(f, "missing [{section}] section in glyim.toml"),
-            Self::MissingField(field) => write!(f, "missing required field '{field}' in glyim.toml"),
+            Self::MissingField(field) => {
+                write!(f, "missing required field '{field}' in glyim.toml")
+            }
         }
     }
 }

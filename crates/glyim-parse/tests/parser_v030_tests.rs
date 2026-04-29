@@ -276,7 +276,10 @@ fn parse_binding_with_attribute() {
 fn parse_struct_ignores_attributes() {
     let out = parse("#[derive(Debug)]\nstruct Point { x }");
     assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
-    assert!(matches!(&out.ast.items.as_slice(), [Item::StructDef { .. }]));
+    assert!(matches!(
+        &out.ast.items.as_slice(),
+        [Item::StructDef { .. }]
+    ));
 }
 
 #[test]

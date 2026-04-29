@@ -121,9 +121,9 @@ impl<'a> Lexer<'a> {
             '!' => SyntaxKind::Bang,
             '|' => SyntaxKind::Pipe,
             '?' => SyntaxKind::Question,
-                '#' => SyntaxKind::Hash,
-                '[' => SyntaxKind::OpenBracket,
-                ']' => SyntaxKind::CloseBracket,
+            '#' => SyntaxKind::Hash,
+            '[' => SyntaxKind::OpenBracket,
+            ']' => SyntaxKind::CloseBracket,
             _ => SyntaxKind::Error,
         };
         self.advance();

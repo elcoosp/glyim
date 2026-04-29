@@ -1,10 +1,11 @@
-
 /// Emit extern declarations for malloc and free.
 /// Does NOT redeclare abort (already in emit_runtime_shims).
 pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>) {
     let i64_type = module.get_context().i64_type();
     let void_type = module.get_context().void_type();
-    let ptr_type = module.get_context().ptr_type(inkwell::AddressSpace::from(0u16));
+    let ptr_type = module
+        .get_context()
+        .ptr_type(inkwell::AddressSpace::from(0u16));
 
     let malloc_ty = ptr_type.fn_type(&[i64_type.into()], false);
     module.add_function("malloc", malloc_ty, None);
@@ -15,8 +16,8 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use inkwell::context::Context;
     use super::*;
+    use inkwell::context::Context;
 
     #[test]
     fn emit_shims_declares_malloc() {
