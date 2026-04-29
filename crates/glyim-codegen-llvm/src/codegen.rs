@@ -24,6 +24,7 @@ pub struct Codegen<'ctx> {
     interner: Interner,
     string_counter: RefCell<u32>,
     struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
+    struct_field_indices: RefCell<HashMap<(Symbol, Symbol), usize>>,
     enum_types: RefCell<
         HashMap<
             Symbol,
@@ -49,6 +50,7 @@ impl<'ctx> Codegen<'ctx> {
             interner,
             string_counter: RefCell::new(0),
             struct_types: RefCell::new(HashMap::new()),
+            struct_field_indices: RefCell::new(HashMap::new()),
             enum_types: RefCell::new(HashMap::new()),
         }
     }
@@ -79,6 +81,11 @@ impl<'ctx> Codegen<'ctx> {
             .collect();
         let struct_type = self.context.struct_type(&field_types, false);
         self.struct_types.borrow_mut().insert(def.name, struct_type);
+        // Register field indices
+        let mut index_map = self.struct_field_indices.borrow_mut();
+        for (i, field) in def.fields.iter().enumerate() {
+            index_map.insert((def.name, field.name), i);
+        }
     }
 
     fn codegen_enum_def(&self, def: &glyim_hir::item::EnumDef) {
@@ -285,26 +292,49 @@ impl<'ctx> Codegen<'ctx> {
             | HirExpr::As { .. }
             | HirExpr::Match { .. }
             | HirExpr::EnumVariant { .. } => Some(self.i64_type.const_int(0, false)),
-            HirExpr::StructLit { .. } => {
-                // Stub: return 0 until proper struct layout codegen is implemented
-                Some(self.i64_type.const_int(0, false))
+            HirExpr::StructLit { struct_name, fields } => {
+                let struct_type_opt = self.struct_types.borrow().get(struct_name).copied();
+                match struct_type_opt {
+                    Some(st) => {
+                        let alloca = self.builder.build_alloca(st, "struct_lit").ok()?;
+                        let st_ptr = alloca;
+                        for (i, (_field_name, field_expr)) in fields.iter().enumerate() {
+                            let field_val = self.codegen_expr(field_expr, vars, fn_value)?;
+                            let indices = &[self.i32_type.const_int(0, false), self.i32_type.const_int(i as u64, false)];
+                            let field_ptr = unsafe {
+                                self.builder.build_gep(st, st_ptr, indices, "field").ok()?
+                            };
+                            self.builder.build_store(field_ptr, field_val).ok()?;
+                        }
+                        let ptr_i64 = self.builder.build_ptr_to_int(alloca, self.i64_type, "struct_ptr").ok()?;
+                        Some(ptr_i64)
+                    }
+                    None => {
+                        Some(self.i64_type.const_int(0, false))
+                    }
+                }
             }
-            HirExpr::FieldAccess { object, field: _ } => {
+            HirExpr::FieldAccess { object, field } => {
                 let obj_val = self.codegen_expr(object, vars, fn_value)?;
-                #[allow(unused_variables)]
-                let _ptr = self
-                    .builder
-                    .build_int_to_ptr(
-                        obj_val,
-                        self.context.ptr_type(AddressSpace::from(0u16)),
-                        "to_ptr",
-                    )
-                    .ok()?;
-                // Find field index: need the struct type. We don't know the struct type at this point.
-                // For now, hardcode field 0; proper implementation requires type info.
-                // We'll look up the struct from the object? Not possible without type info.
-                // Stub: return 0.
-                Some(self.i64_type.const_int(0, false))
+                let obj_ptr = self.builder.build_int_to_ptr(obj_val, self.context.ptr_type(AddressSpace::from(0u16)), "to_ptr").ok()?;
+                // Find field index from our registry
+                let index_map = self.struct_field_indices.borrow();
+                let field_idx = index_map.iter()
+                    .find(|((_, f), _)| f == field)
+                    .map(|(_, &idx)| idx)
+                    .unwrap_or(0);
+                drop(index_map);
+                // We also need the struct type. Let's use a reverse map.
+                let field_to_struct = self.struct_types.borrow();
+                let struct_type_opt = field_to_struct.values().next().copied();
+                let indices = &[self.i32_type.const_int(0, false), self.i32_type.const_int(field_idx as u64, false)];
+                let field_ptr = if let Some(st_type) = struct_type_opt {
+                    unsafe { self.builder.build_gep(st_type, obj_ptr, indices, "field_access").ok()? }
+                } else {
+                    return Some(self.i64_type.const_int(0, false));
+                };
+                let field_val = self.builder.build_load(self.i64_type, field_ptr, "field_val").ok()?.into_int_value();
+                Some(field_val)
             }
         }
     }

@@ -202,6 +202,37 @@ impl<'a> Parser<'a> {
 
     fn parse_item(&mut self) -> Option<Item> {
         match self.tokens.peek()?.kind {
+            SyntaxKind::At => {
+                self.tokens.bump();
+                let name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                let name = self.interner.intern(name_tok.text);
+                self.tokens.expect(SyntaxKind::KwFn).ok()?;
+                let fn_name_tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                let fn_name = self.interner.intern(fn_name_tok.text);
+                let fn_name_span = Span::new(fn_name_tok.start, fn_name_tok.end);
+                self.tokens.expect(SyntaxKind::LParen).ok()?;
+                let mut params = vec![];
+                while !self.tokens.at(SyntaxKind::RParen) {
+                    let tok = self.tokens.expect(SyntaxKind::Ident).ok()?;
+                    self.tokens.eat(SyntaxKind::Colon);
+                    self.tokens.expect(SyntaxKind::Ident).ok()?;
+                    params.push((self.interner.intern(tok.text), Span::new(tok.start, tok.end)));
+                    self.tokens.eat(SyntaxKind::Comma);
+                }
+                self.tokens.expect(SyntaxKind::RParen).ok()?;
+                if self.tokens.eat(SyntaxKind::Arrow).is_some() {
+                    let mut depth = 0u32;
+                    while self.tokens.peek().is_some() {
+                        let kind = self.tokens.peek().unwrap().kind;
+                        if kind == SyntaxKind::LBrace && depth == 0 { break; }
+                        if kind == SyntaxKind::Lt || kind == SyntaxKind::LParen { depth += 1; }
+                        if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen { if depth > 0 { depth -= 1; } }
+                        self.tokens.bump();
+                    }
+                }
+                let body = self.parse_block_expr()?;
+                Some(Item::MacroDef { name: fn_name, name_span: fn_name_span, params, body })
+            }
             SyntaxKind::KwFn => self.parse_fn_def(),
             SyntaxKind::KwStruct => self.parse_struct_def(),
             SyntaxKind::KwEnum => self.parse_enum_def(),
@@ -271,6 +302,25 @@ impl<'a> Parser<'a> {
         }
         if let Err(e) = self.tokens.expect(SyntaxKind::RParen) {
             self.errors.push(e);
+        }
+        // Skip return type annotation if present (e.g., -> Result<i64, Str>)
+        if self.tokens.eat(SyntaxKind::Arrow).is_some() {
+            let mut depth = 0u32;
+            while self.tokens.peek().is_some() {
+                let kind = self.tokens.peek().unwrap().kind;
+                if kind == SyntaxKind::LBrace && depth == 0 {
+                    break;
+                }
+                if kind == SyntaxKind::Lt || kind == SyntaxKind::LParen {
+                    depth += 1;
+                }
+                if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen {
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                }
+                self.tokens.bump();
+            }
         }
         let body = self.parse_block_expr()?;
         Some(Item::FnDef {
