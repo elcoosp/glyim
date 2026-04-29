@@ -65,6 +65,8 @@ impl<'ctx> Codegen<'ctx> {
 
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
+        crate::alloc::emit_alloc_shims(&self.module);
+        crate::alloc::emit_alloc_shims(&self.module);
         types::register_builtin_enums(self);
         for item in &hir.items {
             match item {

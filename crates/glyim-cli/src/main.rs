@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use glyim_cli::pipeline;
+use glyim_cli::pipeline::{self, BuildMode};
 use std::path::PathBuf;
 use std::process;
 
@@ -21,9 +21,17 @@ enum Command {
         input: PathBuf,
         #[arg(short, long)]
         output: Option<PathBuf>,
+        #[arg(long, conflicts_with = "release")]
+        debug: bool,
+        #[arg(long, conflicts_with = "debug")]
+        release: bool,
     },
     Run {
         input: PathBuf,
+        #[arg(long, conflicts_with = "release")]
+        debug: bool,
+        #[arg(long, conflicts_with = "debug")]
+        release: bool,
     },
     Ir {
         input: PathBuf,
@@ -43,21 +51,27 @@ enum Command {
 fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
-        Command::Build { input, output } => match pipeline::build(&input, output.as_deref()) {
-            Ok(path) => {
-                eprintln!("Built: {}", path.display());
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
+        Command::Build { input, output, debug, release } => {
+            let mode = if release { BuildMode::Release } else { BuildMode::Debug };
+            match pipeline::build_with_mode(&input, output.as_deref(), mode) {
+                Ok(path) => {
+                    eprintln!("Built: {}", path.display());
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
             }
         },
-        Command::Run { input } => match pipeline::run(&input) {
-            Ok(code) => code,
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
+        Command::Run { input, debug, release } => {
+            let mode = if release { BuildMode::Release } else { BuildMode::Debug };
+            match pipeline::run_with_mode(&input, mode) {
+                Ok(code) => code,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
             }
         },
         Command::Ir { input } => match pipeline::print_ir(&input) {

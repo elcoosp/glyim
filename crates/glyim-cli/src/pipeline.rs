@@ -6,6 +6,26 @@ use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BuildMode {
+    #[default]
+    Debug,
+    Release,
+}
+
+impl BuildMode {
+    pub fn opt_level(&self) -> inkwell::OptimizationLevel {
+        match self {
+            BuildMode::Debug => inkwell::OptimizationLevel::None,
+            BuildMode::Release => inkwell::OptimizationLevel::Aggressive,
+        }
+    }
+
+    pub fn is_release(&self) -> bool {
+        matches!(self, BuildMode::Release)
+    }
+}
+
 #[derive(Debug)]
 pub enum PipelineError {
     Io(std::io::Error),
@@ -202,6 +222,86 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
         "main = () => {\n  println(\"Hello from Glyim!\")\n}\n",
     )?;
     Ok(dir)
+}
+
+pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
+    let source = format!("{}
+{}", PRELUDE, fs::read_to_string(input)?);
+    let mut parse_out = glyim_parse::parse(&source);
+    if !parse_out.errors.is_empty() {
+        let rendered = glyim_diag::render_diagnostics(
+            &source,
+            &input.to_string_lossy(),
+            &parse_out
+                .errors
+                .iter()
+                .map(|e| {
+                    let span = match e {
+                        glyim_parse::ParseError::Expected { span, .. } => {
+                            Some(glyim_diag::Span::new(span.0, span.1))
+                        }
+                        glyim_parse::ParseError::UnexpectedEof { .. } => None,
+                        glyim_parse::ParseError::ExpectedExpr { span, .. } => {
+                            Some(glyim_diag::Span::new(span.0, span.1))
+                        }
+                        glyim_parse::ParseError::Message { span, .. } => {
+                            Some(glyim_diag::Span::new(span.0, span.1))
+                        }
+                    };
+                    glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
+                })
+                .collect::<Vec<_>>(),
+        );
+        eprintln!("{rendered}");
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+    let context = Context::create();
+    let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
+    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    codegen
+        .write_object_file(&obj_path)
+        .map_err(PipelineError::Codegen)?;
+    let exe_path = tmp_dir.path().join("glyim_out");
+    link_object(&obj_path, &exe_path)?;
+    let status = Command::new(&exe_path)
+        .status()
+        .map_err(PipelineError::Run)?;
+    Ok(status.code().unwrap_or(1))
+}
+
+pub fn build_with_mode(input: &Path, output: Option<&Path>, mode: BuildMode) -> Result<PathBuf, PipelineError> {
+    let source = format!("{}
+{}", PRELUDE, fs::read_to_string(input)?);
+    let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
+    let mut typeck = TypeChecker::new(interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+    let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+        let stem = input
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        PathBuf::from(stem)
+    });
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    let context = Context::create();
+    let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
+    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    codegen
+        .write_object_file(&obj_path)
+        .map_err(PipelineError::Codegen)?;
+    link_object(&obj_path, &output)?;
+    Ok(output)
 }
 
 fn compile_to_hir_and_ir(

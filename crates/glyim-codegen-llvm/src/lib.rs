@@ -1,4 +1,5 @@
 pub mod codegen;
+mod alloc;
 mod runtime_shims;
 pub use codegen::Codegen;
 
