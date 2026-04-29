@@ -11,6 +11,7 @@ pub(crate) fn codegen_expr<'ctx>(
     expr: &HirExpr,
     fctx: &mut FunctionContext<'ctx>,
 ) -> Option<IntValue<'ctx>> {
+    cg.set_debug_location_for_span(expr.get_span());
     match expr {
         HirExpr::IntLit { value: n, .. } => Some(cg.i64_type.const_int(*n as u64, true)),
         HirExpr::Ident { name: sym, .. } => {

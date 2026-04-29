@@ -2,6 +2,7 @@ use inkwell::debug_info::{
     DebugInfoBuilder, DICompileUnit, DIFile, DISubprogram, DILocation, DILocalVariable,
     DWARFEmissionKind, DWARFSourceLanguage, DIFlagsConstants, AsDIScope,
 };
+use inkwell::context::ContextRef;
 use inkwell::module::Module;
 use inkwell::values::PointerValue;
 use std::cell::RefCell;
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 use glyim_interner::Symbol;
 
 pub struct DebugInfoGen<'ctx> {
+    context: ContextRef<'ctx>,
     dibuilder: DebugInfoBuilder<'ctx>,
     compile_unit: DICompileUnit<'ctx>,
     file: DIFile<'ctx>,
@@ -39,8 +41,10 @@ impl<'ctx> DebugInfoGen<'ctx> {
         );
 
         let file = compile_unit.get_file();
+        let context = module.get_context();
 
         Ok(Self {
+            context,
             dibuilder,
             compile_unit,
             file,
@@ -97,11 +101,20 @@ impl<'ctx> DebugInfoGen<'ctx> {
 
     pub fn create_location(
         &self,
-        _subprogram: DISubprogram<'ctx>,
-        _line: u32,
-        _column: u32,
+        subprogram: DISubprogram<'ctx>,
+        line: u32,
+        column: u32,
     ) -> Result<DILocation<'ctx>, String> {
-        unimplemented!("create_location needs a ContextRef, to be added later");
+        let loc = self
+            .dibuilder
+            .create_debug_location(
+                self.context,
+                line,
+                column,
+                subprogram.as_debug_info_scope(),
+                None,
+            );
+        Ok(loc)
     }
 
     pub fn create_local_variable(
@@ -211,7 +224,6 @@ mod tests {
                 eprintln!("DebugInfoGen::new() failed: {e}");
             }
         }
-        // Ensure result is dropped before ctx
         drop(module);
         drop(ctx);
     }

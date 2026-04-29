@@ -27,6 +27,13 @@ pub(crate) fn codegen_stmt<'ctx>(
     stmt: &HirStmt,
     fctx: &mut FunctionContext<'ctx>,
 ) -> Option<IntValue<'ctx>> {
+    let span = match stmt {
+        HirStmt::Let { span, .. } => *span,
+        HirStmt::LetPat { span, .. } => *span,
+        HirStmt::Assign { span, .. } => *span,
+        HirStmt::Expr(e) => e.get_span(),
+    };
+    cg.set_debug_location_for_span(span);
     match stmt {
         HirStmt::Let {
             name,

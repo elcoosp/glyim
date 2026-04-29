@@ -11,8 +11,11 @@ use glyim_interner::{Interner, Symbol};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::IntType;
+use inkwell::debug_info::DISubprogram;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use crate::debug::DebugInfoGen;
+use glyim_diag::Span;
 
 pub struct Codegen<'ctx> {
     pub(crate) context: &'ctx Context,
@@ -36,6 +39,10 @@ pub struct Codegen<'ctx> {
     pub(crate) enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
     pub(crate) option_sym: Symbol,
     pub(crate) result_sym: Symbol,
+    // --- debug info fields ---
+    debug_info: Option<DebugInfoGen<'ctx>>,
+    source_str: Option<String>,
+    current_subprogram: Option<DISubprogram<'ctx>>,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -62,6 +69,63 @@ impl<'ctx> Codegen<'ctx> {
             enum_variant_tags: RefCell::new(HashMap::new()),
             option_sym,
             result_sym,
+            debug_info: None,
+            source_str: None,
+            current_subprogram: None,
+        }
+    }
+
+    pub fn with_debug(
+        context: &'ctx Context,
+        mut interner: Interner,
+        expr_types: Vec<HirType>,
+        source_str: String,
+    ) -> Result<Self, String> {
+        let module = context.create_module("glyim_out");
+        let builder = context.create_builder();
+        let option_sym = interner.intern("Option");
+        let result_sym = interner.intern("Result");
+
+        let debug_info = match DebugInfoGen::new(&module, "input.g") {
+            Ok(di) => Some(di),
+            Err(e) => {
+                eprintln!("warning: debug info creation failed: {e}");
+                None
+            }
+        };
+
+        Ok(Self {
+            context,
+            module,
+            builder,
+            i64_type: context.i64_type(),
+            i32_type: context.i32_type(),
+            f64_type: context.f64_type(),
+            interner,
+            string_counter: RefCell::new(0),
+            expr_types,
+            mono_cache: RefCell::new(HashMap::new()),
+            struct_types: RefCell::new(HashMap::new()),
+            struct_field_indices: RefCell::new(HashMap::new()),
+            enum_types: RefCell::new(HashMap::new()),
+            enum_struct_types: RefCell::new(HashMap::new()),
+            enum_variant_tags: RefCell::new(HashMap::new()),
+            option_sym,
+            result_sym,
+            debug_info,
+            source_str: Some(source_str),
+            current_subprogram: None,
+        })
+    }
+
+    fn set_debug_location_for_span(&self, span: Span) {
+        if let (Some(ref di), Some(ref src), Some(sp)) =
+            (&self.debug_info, &self.source_str, &self.current_subprogram)
+        {
+            let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
+            if let Ok(loc) = di.create_location(*sp, line, 0) {
+                self.builder.set_current_debug_location(loc);
+            }
         }
     }
 
@@ -78,6 +142,12 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Impl(_) => {}
             }
         }
+
+        // Finalize debug info before verifying
+        if let Some(ref di) = self.debug_info {
+            di.finalize();
+        }
+
         if self.module.get_function("main").is_none() {
             Err("no 'main' function".into())
         } else {
@@ -194,6 +264,11 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Extern(_) => {}
                 glyim_hir::item::HirItem::Impl(_) => {}
             }
+        }
+
+        // Finalize debug info
+        if let Some(ref di) = self.debug_info {
+            di.finalize();
         }
 
         self.emit_test_harness(test_names, should_panic)?;

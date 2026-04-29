@@ -23,6 +23,19 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
         false,
     );
     let fn_value = cg.module.add_function(name, fn_type, None);
+
+    // Register DWARF subprogram
+    if let Some(ref di) = cg.debug_info {
+        let line = crate::debug::DebugInfoGen::byte_offset_to_line(
+            cg.source_str.as_deref().unwrap_or(""),
+            f.span.start,
+        );
+        if let Ok(subprogram) = di.create_subprogram(name, line, false) {
+            di.register_subprogram(f.name, subprogram);
+            cg.current_subprogram = Some(subprogram);
+        }
+    }
+
     let entry = cg.context.append_basic_block(fn_value, "entry");
     cg.builder.position_at_end(entry);
     let mut vars: HashMap<Symbol, PointerValue<'ctx>> = HashMap::new();
@@ -49,6 +62,10 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     cg.builder
         .build_return(Some(&ret_val))
         .map_err(|e| e.to_string())?;
+
+    // Clear subprogram
+    cg.current_subprogram = None;
+
     if !fn_value.verify(true) {
         return Err("verification fail".into());
     }
