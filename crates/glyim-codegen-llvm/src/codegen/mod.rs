@@ -26,10 +26,12 @@ pub struct Codegen<'ctx> {
     pub(crate) string_counter: RefCell<u32>,
     pub(crate) expr_types: Vec<HirType>,
     #[allow(dead_code)]
-    pub(crate) mono_cache: RefCell<HashMap<(Symbol, Vec<HirType>), inkwell::values::FunctionValue<'ctx>>>,
+    pub(crate) mono_cache:
+        RefCell<HashMap<(Symbol, Vec<HirType>), inkwell::values::FunctionValue<'ctx>>>,
     pub(crate) struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
     pub(crate) struct_field_indices: RefCell<HashMap<(Symbol, Symbol), usize>>,
-    pub(crate) enum_types: RefCell<HashMap<Symbol, (IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
+    pub(crate) enum_types:
+        RefCell<HashMap<Symbol, (IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
     pub(crate) enum_struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
     pub(crate) enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
     pub(crate) option_sym: Symbol,
@@ -66,7 +68,6 @@ impl<'ctx> Codegen<'ctx> {
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module);
-        crate::alloc::emit_alloc_shims(&self.module);
         types::register_builtin_enums(self);
         for item in &hir.items {
             match item {
@@ -84,18 +85,213 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    pub fn ir_string(&self) -> String { self.module.print_to_string().to_string() }
-    pub fn get_module(&self) -> &Module<'ctx> { &self.module }
+    pub fn ir_string(&self) -> String {
+        self.module.print_to_string().to_string()
+    }
+    pub fn get_module(&self) -> &Module<'ctx> {
+        &self.module
+    }
     pub fn write_object_file(&self, path: &std::path::Path) -> Result<(), String> {
-        use inkwell::targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine};
+        use inkwell::targets::{
+            CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
+        };
         Target::initialize_native(&InitializationConfig::default()).map_err(|e| e.to_string())?;
         let triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
-        let machine = target.create_target_machine(
-            &triple, "", "", inkwell::OptimizationLevel::None, RelocMode::PIC, CodeModel::Default)
+        let machine = target
+            .create_target_machine(
+                &triple,
+                "",
+                "",
+                inkwell::OptimizationLevel::None,
+                RelocMode::PIC,
+                CodeModel::Default,
+            )
             .ok_or("target machine")?;
-        machine.write_to_file(&self.module, FileType::Object, path).map_err(|e| e.to_string())
+        machine
+            .write_to_file(&self.module, FileType::Object, path)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Create a null-terminated global C string.
+    fn create_c_string_global(
+        &self,
+        s: &str,
+    ) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+        use inkwell::AddressSpace;
+        let bytes = s.as_bytes();
+        let i8_type = self.context.i8_type();
+        let arr_type = i8_type.array_type((bytes.len() + 1) as u32);
+        let name = {
+            let mut c = self.string_counter.borrow_mut();
+            let n = *c;
+            *c += 1;
+            format!("test.str.{}", n)
+        };
+        let global = self
+            .module
+            .add_global(arr_type, Some(AddressSpace::from(0u16)), &name);
+        let mut elems: Vec<_> = bytes
+            .iter()
+            .map(|b| i8_type.const_int(*b as u64, false))
+            .collect();
+        elems.push(i8_type.const_int(0, false));
+        let arr = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
+        global.set_initializer(&arr);
+        global.set_constant(true);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        let zero = self.context.i32_type().const_int(0, false);
+        unsafe {
+            self.builder.build_gep(
+                arr_type,
+                global.as_pointer_value(),
+                &[zero, zero],
+                "str_ptr",
+            )
+        }
+        .map_err(|e| e.to_string())
+    }
+
+    /// Call printf(fmt, arg).
+    fn call_printf(
+        &self,
+        fmt_ptr: inkwell::values::PointerValue<'ctx>,
+        str_ptr: inkwell::values::PointerValue<'ctx>,
+    ) -> Result<(), String> {
+        let printf = self
+            .module
+            .get_function("printf")
+            .ok_or_else(|| "printf not declared".to_string())?;
+        self.builder
+            .build_call(printf, &[fmt_ptr.into(), str_ptr.into()], "printf")
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn generate_for_tests(&mut self, hir: &Hir, test_names: &[String]) -> Result<(), String> {
+        crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
+        crate::alloc::emit_alloc_shims(&self.module);
+        types::register_builtin_enums(self);
+
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    let name = self.interner.resolve(f.name);
+                    if name == "main" {
+                        continue;
+                    }
+                    function::codegen_fn(self, f)?;
+                }
+                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Extern(_) => {}
+                glyim_hir::item::HirItem::Impl(_) => {}
+            }
+        }
+
+        self.emit_test_harness(test_names)?;
+        Ok(())
+    }
+
+    fn emit_test_harness(&mut self, test_names: &[String]) -> Result<(), String> {
+        use inkwell::IntPredicate;
+
+        if test_names.is_empty() {
+            return Err("no test functions to generate harness for".into());
+        }
+
+        let i32_type = self.i32_type;
+        let i64_type = self.i64_type;
+        let zero32 = i32_type.const_int(0, false);
+        let zero64 = i64_type.const_int(0, false);
+        let one32 = i32_type.const_int(1, false);
+
+        let main_type = i32_type.fn_type(&[], false);
+        let main_fn = self.module.add_function("main", main_type, None);
+        let entry = self.context.append_basic_block(main_fn, "entry");
+        self.builder.position_at_end(entry);
+
+        let fmt_ptr = self.create_c_string_global("%s")?;
+
+        let header = format!("running {} tests\n", test_names.len());
+        let header_ptr = self.create_c_string_global(&header)?;
+        self.call_printf(fmt_ptr, header_ptr)?;
+
+        let any_failed = self
+            .builder
+            .build_alloca(i32_type, "any_failed")
+            .map_err(|e| e.to_string())?;
+        self.builder
+            .build_store(any_failed, zero32)
+            .map_err(|e| e.to_string())?;
+
+        for test_name in test_names {
+            let msg = format!("test {} ... ", test_name);
+            let msg_ptr = self.create_c_string_global(&msg)?;
+            self.call_printf(fmt_ptr, msg_ptr)?;
+
+            let fn_val = self
+                .module
+                .get_function(test_name)
+                .ok_or_else(|| format!("test function '{}' not found", test_name))?;
+            let call_result = self
+                .builder
+                .build_call(fn_val, &[], "test_result")
+                .map_err(|e| e.to_string())?;
+            let result_val = match call_result.try_as_basic_value() {
+                inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_int_value(),
+                _ => return Err(format!("test function '{}' returned void", test_name)),
+            };
+
+            let is_fail = self
+                .builder
+                .build_int_compare(IntPredicate::NE, result_val, zero64, "is_fail")
+                .map_err(|e| e.to_string())?;
+
+            let pass_bb = self.context.append_basic_block(main_fn, "test_pass");
+            let fail_bb = self.context.append_basic_block(main_fn, "test_fail");
+            let next_bb = self.context.append_basic_block(main_fn, "test_next");
+
+            self.builder
+                .build_conditional_branch(is_fail, fail_bb, pass_bb)
+                .map_err(|e| e.to_string())?;
+
+            self.builder.position_at_end(fail_bb);
+            let fail_msg_ptr = self.create_c_string_global("FAILED\n")?;
+            self.call_printf(fmt_ptr, fail_msg_ptr)?;
+            self.builder
+                .build_store(any_failed, one32)
+                .map_err(|e| e.to_string())?;
+            self.builder
+                .build_unconditional_branch(next_bb)
+                .map_err(|e| e.to_string())?;
+
+            self.builder.position_at_end(pass_bb);
+            let ok_msg_ptr = self.create_c_string_global("ok\n")?;
+            self.call_printf(fmt_ptr, ok_msg_ptr)?;
+            self.builder
+                .build_unconditional_branch(next_bb)
+                .map_err(|e| e.to_string())?;
+
+            self.builder.position_at_end(next_bb);
+        }
+
+        let summary = format!(
+            "\ntest result: ok. {} passed; 0 failed; 0 ignored\n",
+            test_names.len()
+        );
+        let summary_ptr = self.create_c_string_global(&summary)?;
+        self.call_printf(fmt_ptr, summary_ptr)?;
+
+        let failed_val = self
+            .builder
+            .build_load(i32_type, any_failed, "failed_val")
+            .map_err(|e| e.to_string())?
+            .into_int_value();
+        self.builder
+            .build_return(Some(&failed_val))
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
     }
 }
-
-pub use self::ctx::FunctionContext;

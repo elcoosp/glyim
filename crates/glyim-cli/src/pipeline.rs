@@ -414,6 +414,109 @@ pub fn run_package(package_dir: &Path, mode: BuildMode) -> Result<i32, PipelineE
     run_with_mode(&main_path, mode)
 }
 
+
+fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
+    let mut results = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("test ") {
+            if let Some(name_end) = rest.find(" ... ") {
+                let name = &rest[..name_end];
+                let status = &rest[name_end + 5..];
+                if status == "ok" {
+                    results.push((name.to_string(), crate::test_runner::TestResult::Passed));
+                } else if status == "FAILED" {
+                    results.push((name.to_string(), crate::test_runner::TestResult::Failed));
+                }
+            }
+        }
+    }
+    results
+}
+
+
+pub fn run_tests(input: &Path) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
+    let source = format!("{}
+{}", PRELUDE, fs::read_to_string(input)?);
+    let mut parse_out = glyim_parse::parse(&source);
+    if !parse_out.errors.is_empty() {
+        let rendered = glyim_diag::render_diagnostics(&source, &input.to_string_lossy(),
+            &parse_out.errors.iter().map(|e| {
+                let span = match e {
+                        glyim_parse::ParseError::Expected { span, .. } => Some(glyim_diag::Span::new(span.0, span.1)),
+                        glyim_parse::ParseError::UnexpectedEof { .. } => None,
+                        glyim_parse::ParseError::ExpectedExpr { span, .. } => Some(glyim_diag::Span::new(span.0, span.1)),
+                        glyim_parse::ParseError::Message { span, .. } => Some(glyim_diag::Span::new(span.0, span.1)),
+                    };
+                glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
+            }).collect::<Vec<_>>());
+        eprintln!("{rendered}");
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+
+    let test_fns = crate::test_runner::collect_test_functions(&parse_out.ast, &parse_out.interner, None, false);
+    if test_fns.is_empty() {
+        return Err(PipelineError::Codegen("no #[test] functions found".into()));
+    }
+
+    let active_names: Vec<String> = test_fns.iter()
+        .filter(|t| !t.ignored)
+        .map(|t| t.name.clone())
+        .collect();
+    let ignored_names: Vec<String> = test_fns.iter()
+        .filter(|t| t.ignored)
+        .map(|t| t.name.clone())
+        .collect();
+
+    if active_names.is_empty() {
+        let results: Vec<_> = ignored_names.iter()
+            .map(|n| (n.clone(), crate::test_runner::TestResult::Ignored))
+            .collect();
+        return Ok(crate::test_runner::TestRunSummary { results });
+    }
+
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+
+    let context = Context::create();
+    let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
+    codegen.generate_for_tests(&hir, &active_names).map_err(PipelineError::Codegen)?;
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    codegen.write_object_file(&obj_path).map_err(PipelineError::Codegen)?;
+    let exe_path = tmp_dir.path().join("glyim_test_out");
+    link_object(&obj_path, &exe_path)?;
+
+    let output = Command::new(&exe_path).output().map_err(PipelineError::Run)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut results = parse_test_output(&stdout);
+
+    for name in &ignored_names {
+        results.push((name.clone(), crate::test_runner::TestResult::Ignored));
+    }
+
+    if !output.status.success() && output.status.code().is_none() {
+        for (_, ref mut result) in results.iter_mut() {
+            if *result == crate::test_runner::TestResult::Passed {
+                *result = crate::test_runner::TestResult::Failed;
+            }
+        }
+    }
+
+    Ok(crate::test_runner::TestRunSummary { results })
+}
+
+pub fn run_tests_package(package_dir: &Path) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
+    let main_path = package_dir.join("src").join("main.g");
+    if !main_path.exists() {
+        return Err(PipelineError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, format!("{} not found", main_path.display()))));
+    }
+    run_tests(&main_path)
+}
+
 fn compile_to_hir_and_ir(
     source: &str,
 ) -> Result<(glyim_hir::Hir, String, Interner), PipelineError> {

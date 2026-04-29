@@ -46,6 +46,9 @@ enum Command {
         name: String,
         dest: PathBuf,
     },
+    Test {
+        input: PathBuf,
+    },
 }
 
 fn main() {
@@ -108,6 +111,23 @@ fn main() {
                 1
             }
         },
+        Command::Test { input } => {
+            let result = if input.is_dir() {
+                pipeline::run_tests_package(&input)
+            } else {
+                pipeline::run_tests(&input)
+            };
+            match result {
+                Ok(summary) => {
+                    eprintln!("{}", summary.format_summary());
+                    summary.exit_code()
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
+            }
+        }
         Command::Export { name, dest } => {
             eprintln!(
                 "error: 'export' not implemented (artifact: {name}, dest: {})",

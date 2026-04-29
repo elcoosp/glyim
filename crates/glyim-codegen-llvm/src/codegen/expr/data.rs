@@ -60,7 +60,7 @@ pub(crate) fn codegen_field_access<'ctx>(cg: &Codegen<'ctx>, expr: &HirExpr, fct
                     let struct_ty = cg.context.struct_type(&field_types, false);
                     let alloca = cg.builder.build_int_to_ptr(obj_val, cg.context.ptr_type(AddressSpace::from(0u16)), "tuple_ptr").ok()?;
                     
-                    let field_ptr = unsafe { cg.builder.build_struct_gep(struct_ty, alloca, 0u32, "field").ok()? };
+                    let field_ptr = cg.builder.build_struct_gep(struct_ty, alloca, 0u32, "field").ok()?;
                     let val = cg.builder.build_load(cg.i64_type, field_ptr, "elem_val").ok()?.into_int_value();
                     return Some(val);
                 }
