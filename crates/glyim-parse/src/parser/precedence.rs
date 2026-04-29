@@ -1,5 +1,5 @@
-use glyim_syntax::SyntaxKind;
 use crate::ast::BinOp;
+use glyim_syntax::SyntaxKind;
 
 pub(crate) fn infix_bp(kind: SyntaxKind) -> Option<(u8, u8)> {
     match kind {
@@ -15,12 +15,19 @@ pub(crate) fn infix_bp(kind: SyntaxKind) -> Option<(u8, u8)> {
 
 pub(crate) fn to_binop(kind: SyntaxKind) -> BinOp {
     match kind {
-        SyntaxKind::Plus => BinOp::Add, SyntaxKind::Minus => BinOp::Sub, SyntaxKind::Star => BinOp::Mul,
-        SyntaxKind::Slash => BinOp::Div, SyntaxKind::Percent => BinOp::Mod,
-        SyntaxKind::EqEq => BinOp::Eq, SyntaxKind::BangEq => BinOp::Neq,
-        SyntaxKind::Lt => BinOp::Lt, SyntaxKind::Gt => BinOp::Gt,
-        SyntaxKind::LtEq => BinOp::Lte, SyntaxKind::GtEq => BinOp::Gte,
-        SyntaxKind::AmpAmp => BinOp::And, SyntaxKind::PipePipe => BinOp::Or,
+        SyntaxKind::Plus => BinOp::Add,
+        SyntaxKind::Minus => BinOp::Sub,
+        SyntaxKind::Star => BinOp::Mul,
+        SyntaxKind::Slash => BinOp::Div,
+        SyntaxKind::Percent => BinOp::Mod,
+        SyntaxKind::EqEq => BinOp::Eq,
+        SyntaxKind::BangEq => BinOp::Neq,
+        SyntaxKind::Lt => BinOp::Lt,
+        SyntaxKind::Gt => BinOp::Gt,
+        SyntaxKind::LtEq => BinOp::Lte,
+        SyntaxKind::GtEq => BinOp::Gte,
+        SyntaxKind::AmpAmp => BinOp::And,
+        SyntaxKind::PipePipe => BinOp::Or,
         _ => unreachable!(),
     }
 }

@@ -7,22 +7,54 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
-    MismatchedTypes { expected: HirType, found: HirType, expr_id: ExprId },
-    UnknownType { name: Symbol },
-    UnknownField { struct_name: Symbol, field: Symbol },
-    MissingField { struct_name: Symbol, field: Symbol },
-    ExtraField { struct_name: Symbol, field: Symbol },
-    NonExhaustiveMatch { missing: Vec<String> },
-    InvalidQuestion { expr_id: ExprId },
-    ExpectedFunction { expr_id: ExprId },
-    InvalidReturnType { expected: HirType, found: HirType },
+    MismatchedTypes {
+        expected: HirType,
+        found: HirType,
+        expr_id: ExprId,
+    },
+    UnknownType {
+        name: Symbol,
+    },
+    UnknownField {
+        struct_name: Symbol,
+        field: Symbol,
+    },
+    MissingField {
+        struct_name: Symbol,
+        field: Symbol,
+    },
+    ExtraField {
+        struct_name: Symbol,
+        field: Symbol,
+    },
+    NonExhaustiveMatch {
+        missing: Vec<String>,
+    },
+    InvalidQuestion {
+        expr_id: ExprId,
+    },
+    ExpectedFunction {
+        expr_id: ExprId,
+    },
+    InvalidReturnType {
+        expected: HirType,
+        found: HirType,
+    },
 }
 
 #[derive(Clone)]
-pub struct StructInfo { pub fields: Vec<StructField>, pub field_map: HashMap<Symbol, usize>, pub type_params: Vec<Symbol> }
+pub struct StructInfo {
+    pub fields: Vec<StructField>,
+    pub field_map: HashMap<Symbol, usize>,
+    pub type_params: Vec<Symbol>,
+}
 
 #[derive(Clone)]
-pub struct EnumInfo { pub variants: Vec<HirVariant>, pub variant_map: HashMap<Symbol, usize>, pub type_params: Vec<Symbol> }
+pub struct EnumInfo {
+    pub variants: Vec<HirVariant>,
+    pub variant_map: HashMap<Symbol, usize>,
+    pub type_params: Vec<Symbol>,
+}
 
 #[derive(Clone)]
 pub(crate) struct Scope {
@@ -59,7 +91,9 @@ impl TypeChecker {
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(Scope { bindings: HashMap::new() });
+        self.scopes.push(Scope {
+            bindings: HashMap::new(),
+        });
     }
 
     fn pop_scope(&mut self) {
@@ -104,35 +138,60 @@ impl TypeChecker {
                 self.check_fn(f);
             }
         }
-        if self.errors.is_empty() { Ok(()) } else { Err(self.errors.clone()) }
+        if self.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(self.errors.clone())
+        }
     }
 
     fn register_struct(&mut self, s: &StructDef) {
         let mut field_map = HashMap::new();
-        for (i, field) in s.fields.iter().enumerate() { field_map.insert(field.name, i); }
-        self.structs.insert(s.name, StructInfo { fields: s.fields.clone(), field_map, type_params: s.type_params.clone() });
+        for (i, field) in s.fields.iter().enumerate() {
+            field_map.insert(field.name, i);
+        }
+        self.structs.insert(
+            s.name,
+            StructInfo {
+                fields: s.fields.clone(),
+                field_map,
+                type_params: s.type_params.clone(),
+            },
+        );
     }
 
     fn register_enum(&mut self, e: &EnumDef) {
         let mut variant_map = HashMap::new();
-        for (i, v) in e.variants.iter().enumerate() { variant_map.insert(v.name, i); }
-        self.enums.insert(e.name, EnumInfo { variants: e.variants.clone(), variant_map, type_params: e.type_params.clone() });
+        for (i, v) in e.variants.iter().enumerate() {
+            variant_map.insert(v.name, i);
+        }
+        self.enums.insert(
+            e.name,
+            EnumInfo {
+                variants: e.variants.clone(),
+                variant_map,
+                type_params: e.type_params.clone(),
+            },
+        );
     }
 
-
     fn register_impl(&mut self, imp: &glyim_hir::item::HirImplDef) {
-        let methods: Vec<(Symbol, HirFn)> = imp.methods.iter()
-            .map(|m| (m.name, m.clone()))
-            .collect();
+        let methods: Vec<(Symbol, HirFn)> =
+            imp.methods.iter().map(|m| (m.name, m.clone())).collect();
         self.impl_methods.insert(imp.target_name, methods);
     }
 
     fn register_extern(&mut self, ext: &ExternBlock) {
         for f in &ext.functions {
-            self.extern_fns.insert(f.name, FnSig { params: f.params.clone(), ret: f.ret.clone() });
+            self.extern_fns.insert(
+                f.name,
+                FnSig {
+                    params: f.params.clone(),
+                    ret: f.ret.clone(),
+                },
+            );
         }
     }
-
 
     fn dummy_symbol(&self) -> Symbol {
         // Return a known dummy symbol (first interned string in a temporary interner)
@@ -188,44 +247,81 @@ impl TypeChecker {
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::Ident { name: sym, .. } => self.lookup_binding(sym).unwrap_or(HirType::Int),
             HirExpr::UnitLit { .. } => HirType::Unit,
-            HirExpr::Binary { lhs, rhs, .. } => { self.check_expr(lhs); self.check_expr(rhs); HirType::Int }
-            HirExpr::Unary { operand, .. } => { self.check_expr(operand); HirType::Int }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.check_expr(lhs);
+                self.check_expr(rhs);
+                HirType::Int
+            }
+            HirExpr::Unary { operand, .. } => {
+                self.check_expr(operand);
+                HirType::Int
+            }
             HirExpr::Block { stmts, .. } => {
                 let mut last = HirType::Unit;
-                for stmt in stmts { if let Some(t) = self.check_stmt(stmt) { last = t; } }
+                for stmt in stmts {
+                    if let Some(t) = self.check_stmt(stmt) {
+                        last = t;
+                    }
+                }
                 last
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.check_expr(condition);
                 let then_type = self.check_expr(then_branch);
-                if let Some(else_br) = else_branch { self.check_expr(else_br); }
+                if let Some(else_br) = else_branch {
+                    self.check_expr(else_br);
+                }
                 then_type.unwrap_or(HirType::Unit)
             }
-            HirExpr::Println { arg, .. } => { self.check_expr(arg); HirType::Unit }
-            HirExpr::Assert { condition, message, .. } => {
-                self.check_expr(condition);
-                if let Some(msg) = message { self.check_expr(msg); }
+            HirExpr::Println { arg, .. } => {
+                self.check_expr(arg);
                 HirType::Unit
             }
-            HirExpr::StructLit { struct_name, fields, .. } => {
+            HirExpr::Assert {
+                condition, message, ..
+            } => {
+                self.check_expr(condition);
+                if let Some(msg) = message {
+                    self.check_expr(msg);
+                }
+                HirType::Unit
+            }
+            HirExpr::StructLit {
+                struct_name,
+                fields,
+                ..
+            } => {
                 let field_names: Vec<Symbol> = fields.iter().map(|(sym, _)| *sym).collect();
                 let field_count = fields.len();
                 let info = self.structs.get(struct_name).cloned();
                 if let Some(ref info) = info {
                     for field_sym in &field_names {
                         if !info.field_map.contains_key(field_sym) {
-                            self.errors.push(TypeError::UnknownField { struct_name: *struct_name, field: *field_sym });
+                            self.errors.push(TypeError::UnknownField {
+                                struct_name: *struct_name,
+                                field: *field_sym,
+                            });
                         }
                     }
                     if field_count != info.fields.len() {
                         for field in &info.fields {
                             if !field_names.contains(&field.name) {
-                                self.errors.push(TypeError::MissingField { struct_name: *struct_name, field: field.name });
+                                self.errors.push(TypeError::MissingField {
+                                    struct_name: *struct_name,
+                                    field: field.name,
+                                });
                             }
                         }
                     }
                 }
-                for (_, val) in fields { self.check_expr(val); }
+                for (_, val) in fields {
+                    self.check_expr(val);
+                }
                 HirType::Named(*struct_name)
             }
             HirExpr::FieldAccess { object, field, .. } => {
@@ -239,37 +335,58 @@ impl TypeChecker {
                                 if idx < elems.len() {
                                     return Some(elems[idx].clone());
                                 } else {
-                                    self.errors.push(TypeError::UnknownField { struct_name: self.dummy_symbol(), field: *field });
+                                    self.errors.push(TypeError::UnknownField {
+                                        struct_name: self.dummy_symbol(),
+                                        field: *field,
+                                    });
                                     return Some(HirType::Int);
                                 }
                             }
                         }
-                        self.errors.push(TypeError::UnknownField { struct_name: self.dummy_symbol(), field: *field });
+                        self.errors.push(TypeError::UnknownField {
+                            struct_name: self.dummy_symbol(),
+                            field: *field,
+                        });
                         HirType::Int
                     }
                     Some(HirType::Named(name)) => {
                         let info = self.structs.get(name).cloned();
                         if let Some(ref info) = info {
                             if !info.field_map.contains_key(field) {
-                                self.errors.push(TypeError::UnknownField { struct_name: *name, field: *field });
+                                self.errors.push(TypeError::UnknownField {
+                                    struct_name: *name,
+                                    field: *field,
+                                });
                             }
                         }
                         HirType::Int
                     }
-                    _ => HirType::Int
+                    _ => HirType::Int,
                 }
             }
-            HirExpr::EnumVariant { enum_name, variant_name, args, .. } => {
+            HirExpr::EnumVariant {
+                enum_name,
+                variant_name,
+                args,
+                ..
+            } => {
                 let info = self.enums.get(enum_name).cloned();
                 if let Some(ref info) = info {
                     if !info.variant_map.contains_key(variant_name) {
-                        self.errors.push(TypeError::UnknownField { struct_name: *enum_name, field: *variant_name });
+                        self.errors.push(TypeError::UnknownField {
+                            struct_name: *enum_name,
+                            field: *variant_name,
+                        });
                     }
                 }
-                for arg in args { self.check_expr(arg); }
+                for arg in args {
+                    self.check_expr(arg);
+                }
                 HirType::Named(*enum_name)
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
                 self.check_match_exhaustiveness(&scrutinee_ty, arms);
                 let mut arm_types = vec![];
@@ -277,17 +394,24 @@ impl TypeChecker {
                     if let Some(g) = guard {
                         self.check_expr(g);
                     }
-                    if let Some(t) = self.check_expr(body) { arm_types.push(t); }
+                    if let Some(t) = self.check_expr(body) {
+                        arm_types.push(t);
+                    }
                 }
                 arm_types.first().cloned().unwrap_or(HirType::Unit)
             }
             HirExpr::Call { callee, args, .. } => {
-                for a in args { self.check_expr(a); }
+                for a in args {
+                    self.check_expr(a);
+                }
                 // Look up function return type
                 if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
                     fn_def.ret.clone().unwrap_or(HirType::Int)
-                } else if let Some(_) = self.extern_fns.get(callee) {
-                    self.extern_fns.get(callee).map(|sig| sig.ret.clone()).unwrap_or(HirType::Int)
+                } else if self.extern_fns.contains_key(callee) {
+                    self.extern_fns
+                        .get(callee)
+                        .map(|sig| sig.ret.clone())
+                        .unwrap_or(HirType::Int)
                 } else {
                     // Search in impl methods
                     for methods in self.impl_methods.values() {
@@ -298,20 +422,20 @@ impl TypeChecker {
                     HirType::Int
                 }
             }
-            HirExpr::As { expr, target_type, .. } => {
+            HirExpr::As {
+                expr, target_type, ..
+            } => {
                 let from_ty = self.check_expr(expr).unwrap_or(HirType::Int);
                 // Resolve named types to primitives using interner
                 let resolve = |ty: &HirType| -> HirType {
                     match ty {
-                        HirType::Named(sym) => {
-                            match self.interner.resolve(*sym) {
-                                "f64" | "Float" => HirType::Float,
-                                "i64" | "Int" => HirType::Int,
-                                "bool" | "Bool" => HirType::Bool,
-                                "Str" | "str" => HirType::Str,
-                                _ => ty.clone(),
-                            }
-                        }
+                        HirType::Named(sym) => match self.interner.resolve(*sym) {
+                            "f64" | "Float" => HirType::Float,
+                            "i64" | "Int" => HirType::Int,
+                            "bool" | "Bool" => HirType::Bool,
+                            "Str" | "str" => HirType::Str,
+                            _ => ty.clone(),
+                        },
                         _ => ty.clone(),
                     }
                 };
@@ -327,7 +451,8 @@ impl TypeChecker {
                 target_type.clone()
             }
             HirExpr::TupleLit { elements, .. } => {
-                let elem_types: Vec<HirType> = elements.iter().filter_map(|e| self.check_expr(e)).collect();
+                let elem_types: Vec<HirType> =
+                    elements.iter().filter_map(|e| self.check_expr(e)).collect();
                 HirType::Tuple(elem_types)
             }
         };
@@ -358,7 +483,9 @@ impl TypeChecker {
 
     fn check_let_pat(&mut self, pattern: &HirPattern, value_ty: &HirType) {
         match pattern {
-            HirPattern::Var(sym) => { self.insert_binding(*sym, value_ty.clone()); }
+            HirPattern::Var(sym) => {
+                self.insert_binding(*sym, value_ty.clone());
+            }
             HirPattern::Wild => {}
             HirPattern::Tuple { elements } => {
                 if let HirType::Tuple(elem_types) = value_ty {
@@ -371,39 +498,57 @@ impl TypeChecker {
         }
     }
 
-    fn check_match_exhaustiveness(&mut self, scrutinee_type: &HirType, arms: &[(HirPattern, Option<HirExpr>, HirExpr)]) {
+    fn check_match_exhaustiveness(
+        &mut self,
+        scrutinee_type: &HirType,
+        arms: &[(HirPattern, Option<HirExpr>, HirExpr)],
+    ) {
         let enum_variants = match scrutinee_type {
             HirType::Named(name) => {
-                if let Some(info) = self.enums.get(name) { info.variants.iter().map(|v| v.name).collect() }
-                else {
+                if let Some(info) = self.enums.get(name) {
+                    info.variants.iter().map(|v| v.name).collect()
+                } else {
                     let name_str = format!("{:?}", name);
-                    if name_str.contains("Option") { vec![self.interner.intern("Some"), self.interner.intern("None")] }
-                    else if name_str.contains("Result") { vec![self.interner.intern("Ok"), self.interner.intern("Err")] }
-                    else { return; }
+                    if name_str.contains("Option") {
+                        vec![self.interner.intern("Some"), self.interner.intern("None")]
+                    } else if name_str.contains("Result") {
+                        vec![self.interner.intern("Ok"), self.interner.intern("Err")]
+                    } else {
+                        return;
+                    }
                 }
             }
             HirType::Option(_) => vec![self.interner.intern("Some"), self.interner.intern("None")],
             HirType::Result(_, _) => vec![self.interner.intern("Ok"), self.interner.intern("Err")],
             _ => return,
         };
-        let has_wildcard = arms.iter().any(|(pat, _, _)| matches!(pat, HirPattern::Wild));
-        if has_wildcard { return; }
-        let covered: Vec<Symbol> = arms.iter().filter_map(|(pat, _, _)| match pat {
-            HirPattern::EnumVariant { variant_name, .. } => Some(*variant_name),
-            HirPattern::OptionSome(_) => Some(self.interner.intern("Some")),
-            HirPattern::OptionNone => Some(self.interner.intern("None")),
-            HirPattern::ResultOk(_) => Some(self.interner.intern("Ok")),
-            HirPattern::ResultErr(_) => Some(self.interner.intern("Err")),
-            _ => None,
-        }).collect();
-        let missing: Vec<String> = enum_variants.iter()
+        let has_wildcard = arms
+            .iter()
+            .any(|(pat, _, _)| matches!(pat, HirPattern::Wild));
+        if has_wildcard {
+            return;
+        }
+        let covered: Vec<Symbol> = arms
+            .iter()
+            .filter_map(|(pat, _, _)| match pat {
+                HirPattern::EnumVariant { variant_name, .. } => Some(*variant_name),
+                HirPattern::OptionSome(_) => Some(self.interner.intern("Some")),
+                HirPattern::OptionNone => Some(self.interner.intern("None")),
+                HirPattern::ResultOk(_) => Some(self.interner.intern("Ok")),
+                HirPattern::ResultErr(_) => Some(self.interner.intern("Err")),
+                _ => None,
+            })
+            .collect();
+        let missing: Vec<String> = enum_variants
+            .iter()
             .filter(|v| !covered.contains(v))
             .map(|v| self.interner.resolve(*v).to_string())
             .collect();
-        if !missing.is_empty() { self.errors.push(TypeError::NonExhaustiveMatch { missing }); }
+        if !missing.is_empty() {
+            self.errors.push(TypeError::NonExhaustiveMatch { missing });
+        }
     }
 }
-
 
 fn is_valid_cast(from: &HirType, to: &HirType) -> bool {
     // Resolve named types to their primitive equivalents
@@ -413,11 +558,17 @@ fn is_valid_cast(from: &HirType, to: &HirType) -> bool {
                 // We need to resolve the symbol name to a primitive
                 // Since we don't have an interner here, we check the Display/Debug output
                 let name = format!("{:?}", sym);
-                if name.contains("f64") || name.contains("Float") { HirType::Float }
-                else if name.contains("i64") || name.contains("Int") { HirType::Int }
-                else if name.contains("bool") || name.contains("Bool") { HirType::Bool }
-                else if name.contains("Str") || name.contains("str") { HirType::Str }
-                else { ty.clone() }
+                if name.contains("f64") || name.contains("Float") {
+                    HirType::Float
+                } else if name.contains("i64") || name.contains("Int") {
+                    HirType::Int
+                } else if name.contains("bool") || name.contains("Bool") {
+                    HirType::Bool
+                } else if name.contains("Str") || name.contains("str") {
+                    HirType::Str
+                } else {
+                    ty.clone()
+                }
             }
             _ => ty.clone(),
         }
@@ -433,30 +584,48 @@ fn is_valid_cast(from: &HirType, to: &HirType) -> bool {
     }
 }
 
-
 impl Default for TypeChecker {
-    fn default() -> Self { Self::new(Interner::new()) }
+    fn default() -> Self {
+        Self::new(Interner::new())
+    }
 }
 
 impl std::fmt::Display for TypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeError::MismatchedTypes { expected, found, .. } =>
-                write!(f, "type mismatch: expected {:?}, found {:?}", expected, found),
+            TypeError::MismatchedTypes {
+                expected, found, ..
+            } => write!(
+                f,
+                "type mismatch: expected {:?}, found {:?}",
+                expected, found
+            ),
             TypeError::UnknownType { name } => write!(f, "unknown type: {:?}", name),
-            TypeError::UnknownField { struct_name, field } =>
-                write!(f, "unknown field '{:?}' on struct '{:?}'", field, struct_name),
-            TypeError::MissingField { struct_name, field } =>
-                write!(f, "missing field '{:?}' in struct '{:?}'", field, struct_name),
-            TypeError::ExtraField { struct_name, field } =>
-                write!(f, "extra field '{:?}' in struct '{:?}'", field, struct_name),
-            TypeError::NonExhaustiveMatch { missing } =>
-                write!(f, "non-exhaustive match, missing variants: {:?}", missing),
-            TypeError::InvalidQuestion { .. } =>
-                write!(f, "? operator used outside of Result-returning function"),
+            TypeError::UnknownField { struct_name, field } => write!(
+                f,
+                "unknown field '{:?}' on struct '{:?}'",
+                field, struct_name
+            ),
+            TypeError::MissingField { struct_name, field } => write!(
+                f,
+                "missing field '{:?}' in struct '{:?}'",
+                field, struct_name
+            ),
+            TypeError::ExtraField { struct_name, field } => {
+                write!(f, "extra field '{:?}' in struct '{:?}'", field, struct_name)
+            }
+            TypeError::NonExhaustiveMatch { missing } => {
+                write!(f, "non-exhaustive match, missing variants: {:?}", missing)
+            }
+            TypeError::InvalidQuestion { .. } => {
+                write!(f, "? operator used outside of Result-returning function")
+            }
             TypeError::ExpectedFunction { .. } => write!(f, "expected function call"),
-            TypeError::InvalidReturnType { expected, found } =>
-                write!(f, "invalid return type: expected {:?}, found {:?}", expected, found),
+            TypeError::InvalidReturnType { expected, found } => write!(
+                f,
+                "invalid return type: expected {:?}, found {:?}",
+                expected, found
+            ),
         }
     }
 }

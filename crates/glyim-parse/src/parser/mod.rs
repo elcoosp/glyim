@@ -1,15 +1,15 @@
-mod tokens;
-mod items;
-mod stmts;
 pub(crate) mod exprs;
+mod items;
 mod patterns;
-pub(crate) mod types;
 mod precedence;
 mod recovery;
+mod stmts;
+mod tokens;
+pub(crate) mod types;
 
-use glyim_interner::Interner;
 use crate::ast::Ast;
 use crate::error::ParseError;
+use glyim_interner::Interner;
 
 pub struct Parser<'a> {
     pub(crate) tokens: tokens::Tokens<'a>,
@@ -19,7 +19,11 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [glyim_lex::Token<'a>]) -> Self {
-        Self { tokens: tokens::Tokens::new(tokens), errors: vec![], interner: Interner::new() }
+        Self {
+            tokens: tokens::Tokens::new(tokens),
+            errors: vec![],
+            interner: Interner::new(),
+        }
     }
 
     pub fn parse_source_file(&mut self) -> Ast {
@@ -66,7 +70,11 @@ pub fn parse(source: &str) -> ParseOutput {
     let tokens = tokenize(source);
     let mut parser = Parser::new(&tokens);
     let ast = parser.parse_source_file();
-    ParseOutput { ast, errors: parser.errors, interner: parser.interner }
+    ParseOutput {
+        ast,
+        errors: parser.errors,
+        interner: parser.interner,
+    }
 }
 
 #[derive(Debug)]

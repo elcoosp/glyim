@@ -1,7 +1,7 @@
-use glyim_syntax::SyntaxKind;
 use crate::ast::TypeExpr;
 use crate::parser::tokens::Tokens;
 use glyim_interner::Interner;
+use glyim_syntax::SyntaxKind;
 
 pub(crate) fn parse_type_expr(tokens: &mut Tokens, interner: &mut Interner) -> Option<TypeExpr> {
     match tokens.peek()?.kind {
@@ -14,12 +14,19 @@ pub(crate) fn parse_type_expr(tokens: &mut Tokens, interner: &mut Interner) -> O
 
 fn parse_tuple_type(tokens: &mut Tokens, interner: &mut Interner) -> Option<TypeExpr> {
     tokens.bump(); // '('
-    if tokens.at(SyntaxKind::RParen) { tokens.bump(); return Some(TypeExpr::Unit); }
+    if tokens.at(SyntaxKind::RParen) {
+        tokens.bump();
+        return Some(TypeExpr::Unit);
+    }
     let mut elems = vec![];
     loop {
         elems.push(parse_type_expr(tokens, interner)?);
-        if !tokens.eat(SyntaxKind::Comma).is_some() { break; }
-        if tokens.at(SyntaxKind::RParen) { break; }
+        if tokens.eat(SyntaxKind::Comma).is_none() {
+            break;
+        }
+        if tokens.at(SyntaxKind::RParen) {
+            break;
+        }
     }
     tokens.expect(SyntaxKind::RParen, &mut vec![]).ok()?;
     Some(TypeExpr::Tuple(elems))
@@ -35,7 +42,10 @@ fn parse_ptr_type(tokens: &mut Tokens, interner: &mut Interner) -> Option<TypeEx
         }
     }
     let inner = parse_type_expr(tokens, interner)?;
-    Some(TypeExpr::RawPtr { mutable, inner: Box::new(inner) })
+    Some(TypeExpr::RawPtr {
+        mutable,
+        inner: Box::new(inner),
+    })
 }
 
 fn parse_named_or_generic_type(tokens: &mut Tokens, interner: &mut Interner) -> Option<TypeExpr> {
@@ -53,8 +63,13 @@ fn parse_named_or_generic_type(tokens: &mut Tokens, interner: &mut Interner) -> 
         let mut args = vec![];
         loop {
             args.push(parse_type_expr(tokens, interner)?);
-            if tokens.at(SyntaxKind::Gt) { tokens.bump(); break; }
-            if !tokens.eat(SyntaxKind::Comma).is_some() { break; }
+            if tokens.at(SyntaxKind::Gt) {
+                tokens.bump();
+                break;
+            }
+            if tokens.eat(SyntaxKind::Comma).is_none() {
+                break;
+            }
         }
         Some(TypeExpr::Generic(sym, args))
     } else {

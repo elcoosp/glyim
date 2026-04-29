@@ -1,41 +1,138 @@
-use crate::types::{HirPattern, HirType, ExprId};
+use crate::types::{ExprId, HirPattern, HirType};
 use glyim_interner::Symbol;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub enum HirBinOp { Add, Sub, Mul, Div, Mod, Eq, Neq, Lt, Gt, Lte, Gte, And, Or }
+pub enum HirBinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+}
 
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub enum HirUnOp { Neg, Not }
+pub enum HirUnOp {
+    Neg,
+    Not,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HirStmt {
-    Let { name: Symbol, mutable: bool, value: HirExpr },
-    LetPat { pattern: HirPattern, mutable: bool, value: HirExpr },
-    Assign { target: Symbol, value: HirExpr },
+    Let {
+        name: Symbol,
+        mutable: bool,
+        value: HirExpr,
+    },
+    LetPat {
+        pattern: HirPattern,
+        mutable: bool,
+        value: HirExpr,
+    },
+    Assign {
+        target: Symbol,
+        value: HirExpr,
+    },
     Expr(HirExpr),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HirExpr {
-    IntLit { id: ExprId, value: i64 },
-    FloatLit { id: ExprId, value: f64 },
-    BoolLit { id: ExprId, value: bool },
-    StrLit { id: ExprId, value: String },
-    Ident { id: ExprId, name: Symbol },
-    UnitLit { id: ExprId },
-    Binary { id: ExprId, op: HirBinOp, lhs: Box<HirExpr>, rhs: Box<HirExpr> },
-    Unary { id: ExprId, op: HirUnOp, operand: Box<HirExpr> },
-    Block { id: ExprId, stmts: Vec<HirStmt> },
-    If { id: ExprId, condition: Box<HirExpr>, then_branch: Box<HirExpr>, else_branch: Option<Box<HirExpr>> },
-    Println { id: ExprId, arg: Box<HirExpr> },
-    Call { id: ExprId, callee: Symbol, args: Vec<HirExpr> },
-    Assert { id: ExprId, condition: Box<HirExpr>, message: Option<Box<HirExpr>> },
-    As { id: ExprId, expr: Box<HirExpr>, target_type: HirType },
-    Match { id: ExprId, scrutinee: Box<HirExpr>, arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)> },
-    FieldAccess { id: ExprId, object: Box<HirExpr>, field: Symbol },
-    StructLit { id: ExprId, struct_name: Symbol, fields: Vec<(Symbol, HirExpr)> },
-    EnumVariant { id: ExprId, enum_name: Symbol, variant_name: Symbol, args: Vec<HirExpr> },
-    TupleLit { id: ExprId, elements: Vec<HirExpr> },
+    IntLit {
+        id: ExprId,
+        value: i64,
+    },
+    FloatLit {
+        id: ExprId,
+        value: f64,
+    },
+    BoolLit {
+        id: ExprId,
+        value: bool,
+    },
+    StrLit {
+        id: ExprId,
+        value: String,
+    },
+    Ident {
+        id: ExprId,
+        name: Symbol,
+    },
+    UnitLit {
+        id: ExprId,
+    },
+    Binary {
+        id: ExprId,
+        op: HirBinOp,
+        lhs: Box<HirExpr>,
+        rhs: Box<HirExpr>,
+    },
+    Unary {
+        id: ExprId,
+        op: HirUnOp,
+        operand: Box<HirExpr>,
+    },
+    Block {
+        id: ExprId,
+        stmts: Vec<HirStmt>,
+    },
+    If {
+        id: ExprId,
+        condition: Box<HirExpr>,
+        then_branch: Box<HirExpr>,
+        else_branch: Option<Box<HirExpr>>,
+    },
+    Println {
+        id: ExprId,
+        arg: Box<HirExpr>,
+    },
+    Call {
+        id: ExprId,
+        callee: Symbol,
+        args: Vec<HirExpr>,
+    },
+    Assert {
+        id: ExprId,
+        condition: Box<HirExpr>,
+        message: Option<Box<HirExpr>>,
+    },
+    As {
+        id: ExprId,
+        expr: Box<HirExpr>,
+        target_type: HirType,
+    },
+    Match {
+        id: ExprId,
+        scrutinee: Box<HirExpr>,
+        arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)>,
+    },
+    FieldAccess {
+        id: ExprId,
+        object: Box<HirExpr>,
+        field: Symbol,
+    },
+    StructLit {
+        id: ExprId,
+        struct_name: Symbol,
+        fields: Vec<(Symbol, HirExpr)>,
+    },
+    EnumVariant {
+        id: ExprId,
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: Vec<HirExpr>,
+    },
+    TupleLit {
+        id: ExprId,
+        elements: Vec<HirExpr>,
+    },
 }
 
 impl HirExpr {

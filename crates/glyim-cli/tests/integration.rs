@@ -9,61 +9,250 @@ fn temp_g(content: &str) -> PathBuf {
     path
 }
 
-#[test] fn e2e_main_42() { assert_eq!(pipeline::run(&temp_g("main = () => 42")).unwrap(), 42); }
-#[test] fn e2e_add() { assert_eq!(pipeline::run(&temp_g("main = () => 1 + 2")).unwrap(), 3); }
-#[test] fn e2e_block_last() { assert_eq!(pipeline::run(&temp_g("main = () => { 1 2 }")).unwrap(), 2); }
-#[test] fn e2e_missing_main() { assert!(pipeline::run(&temp_g("fn other() { 1 }")).is_err()); }
-#[test] fn e2e_parse_error() { assert!(pipeline::run(&temp_g("main = +")).is_err()); }
-#[test] fn e2e_let_binding() { assert_eq!(pipeline::run(&temp_g("main = () => { let x = 42 }")).unwrap(), 0); }
-#[test] fn e2e_let_mut_assign() { assert_eq!(pipeline::run(&temp_g("main = () => { let mut x = 10\nx = x + 5\nx }")).unwrap(), 15); }
-#[test] fn e2e_if_true_branch() { assert_eq!(pipeline::run(&temp_g("main = () => { if 1 { 10 } else { 20 } }")).unwrap(), 10); }
-#[test] fn e2e_if_false_branch() { assert_eq!(pipeline::run(&temp_g("main = () => { if 0 { 10 } else { 20 } }")).unwrap(), 20); }
-#[test] fn e2e_if_without_else() { assert_eq!(pipeline::run(&temp_g("main = () => { if 0 { 42 } }")).unwrap(), 0); }
-#[test] fn e2e_else_if_chain() { assert_eq!(pipeline::run(&temp_g("main = () => { if 0 { 1 } else if 0 { 2 } else { 3 } }")).unwrap(), 3); }
-#[test] fn e2e_println_int() { let _ = pipeline::run(&temp_g("main = () => { println(42) }")).unwrap(); }
-#[test] fn e2e_println_str() { let _ = pipeline::run(&temp_g(r#"main = () => { println("hello") }"#)).unwrap(); }
-#[test] fn e2e_assert_pass() { let _ = pipeline::run(&temp_g("main = () => { assert(1 == 1) }")).unwrap(); }
-#[test] fn e2e_assert_fail() { assert_ne!(pipeline::run(&temp_g("main = () => { assert(0) }")).unwrap(), 0); }
-#[test] fn e2e_assert_fail_msg() { assert_ne!(pipeline::run(&temp_g(r#"main = () => { assert(0, "oops") }"#)).unwrap(), 0); }
-#[test] fn e2e_bool() { assert_eq!(pipeline::run(&temp_g("main = () => { if true { 10 } else { 20 } }")).unwrap(), 10); }
-#[test] fn e2e_float() { assert_eq!(pipeline::run(&temp_g("main = () => { let x = 3.14; 1 }")).unwrap(), 1); }
-#[test] fn e2e_enum() { assert_eq!(pipeline::run(&temp_g("enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Green; 1 }")).unwrap(), 1); }
-#[test] fn e2e_struct() { assert_eq!(pipeline::run(&temp_g("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; 42 }")).unwrap(), 42); }
-#[test] fn e2e_match() { assert_eq!(pipeline::run(&temp_g("enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Red; match c { Color::Red => 1, Color::Green => 2, Color::Blue => 3 } }")).unwrap(), 1); }
-#[test] fn e2e_some_and_none() { assert_eq!(pipeline::run(&temp_g("main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }")).unwrap(), 42); }
-#[test] fn e2e_ok_and_err() { assert_eq!(pipeline::run(&temp_g("main = () => { let r = Ok(42); match r { Ok(v) => v, Err(_) => 0 } }")).unwrap(), 42); }
-#[test] fn e2e_macro_identity() { assert_eq!(pipeline::run(&temp_g("@identity fn transform(expr: Expr) -> Expr { return expr } main = () => @identity(99)")).unwrap(), 99); }
-#[test] fn e2e_arrow() { assert_eq!(pipeline::run(&temp_g("main = () => { let r = Ok(42)?; r }")).unwrap(), 42); }
+#[test]
+fn e2e_main_42() {
+    assert_eq!(pipeline::run(&temp_g("main = () => 42")).unwrap(), 42);
+}
+#[test]
+fn e2e_add() {
+    assert_eq!(pipeline::run(&temp_g("main = () => 1 + 2")).unwrap(), 3);
+}
+#[test]
+fn e2e_block_last() {
+    assert_eq!(pipeline::run(&temp_g("main = () => { 1 2 }")).unwrap(), 2);
+}
+#[test]
+fn e2e_missing_main() {
+    assert!(pipeline::run(&temp_g("fn other() { 1 }")).is_err());
+}
+#[test]
+fn e2e_parse_error() {
+    assert!(pipeline::run(&temp_g("main = +")).is_err());
+}
+#[test]
+fn e2e_let_binding() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { let x = 42 }")).unwrap(),
+        0
+    );
+}
+#[test]
+fn e2e_let_mut_assign() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { let mut x = 10\nx = x + 5\nx }")).unwrap(),
+        15
+    );
+}
+#[test]
+fn e2e_if_true_branch() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { if 1 { 10 } else { 20 } }")).unwrap(),
+        10
+    );
+}
+#[test]
+fn e2e_if_false_branch() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { if 0 { 10 } else { 20 } }")).unwrap(),
+        20
+    );
+}
+#[test]
+fn e2e_if_without_else() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { if 0 { 42 } }")).unwrap(),
+        0
+    );
+}
+#[test]
+fn e2e_else_if_chain() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "main = () => { if 0 { 1 } else if 0 { 2 } else { 3 } }"
+        ))
+        .unwrap(),
+        3
+    );
+}
+#[test]
+fn e2e_println_int() {
+    let _ = pipeline::run(&temp_g("main = () => { println(42) }")).unwrap();
+}
+#[test]
+fn e2e_println_str() {
+    let _ = pipeline::run(&temp_g(r#"main = () => { println("hello") }"#)).unwrap();
+}
+#[test]
+fn e2e_assert_pass() {
+    let _ = pipeline::run(&temp_g("main = () => { assert(1 == 1) }")).unwrap();
+}
+#[test]
+fn e2e_assert_fail() {
+    assert_ne!(
+        pipeline::run(&temp_g("main = () => { assert(0) }")).unwrap(),
+        0
+    );
+}
+#[test]
+fn e2e_assert_fail_msg() {
+    assert_ne!(
+        pipeline::run(&temp_g(r#"main = () => { assert(0, "oops") }"#)).unwrap(),
+        0
+    );
+}
+#[test]
+fn e2e_bool() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { if true { 10 } else { 20 } }")).unwrap(),
+        10
+    );
+}
+#[test]
+fn e2e_float() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { let x = 3.14; 1 }")).unwrap(),
+        1
+    );
+}
+#[test]
+fn e2e_enum() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Green; 1 }"
+        ))
+        .unwrap(),
+        1
+    );
+}
+#[test]
+fn e2e_struct() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; 42 }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+#[test]
+fn e2e_match() {
+    assert_eq!(pipeline::run(&temp_g("enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Red; match c { Color::Red => 1, Color::Green => 2, Color::Blue => 3 } }")).unwrap(), 1);
+}
+#[test]
+fn e2e_some_and_none() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+#[test]
+fn e2e_ok_and_err() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "main = () => { let r = Ok(42); match r { Ok(v) => v, Err(_) => 0 } }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+#[test]
+fn e2e_macro_identity() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "@identity fn transform(expr: Expr) -> Expr { return expr } main = () => @identity(99)"
+        ))
+        .unwrap(),
+        99
+    );
+}
+#[test]
+fn e2e_arrow() {
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { let r = Ok(42)?; r }")).unwrap(),
+        42
+    );
+}
 // v0.4.0
-#[test] fn e2e_generic_identity() { let _ = pipeline::run(&temp_g("fn id<T>(x: T) -> T { x }\nmain = () => id(42)")).unwrap(); }
-#[test] fn e2e_generic_struct() { assert_eq!(pipeline::run(&temp_g("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }")).unwrap(), 42); }
+#[test]
+fn e2e_generic_identity() {
+    let _ = pipeline::run(&temp_g("fn id<T>(x: T) -> T { x }\nmain = () => id(42)")).unwrap();
+}
+#[test]
+fn e2e_generic_struct() {
+    assert_eq!(pipeline::run(&temp_g("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }")).unwrap(), 42);
+}
 // TODO: Tuple field access codegen needs to GEP into correct struct type.
 // The parser/HIR produce correct output, but codegen doesn't resolve the tuple layout yet.
-#[test] #[ignore] fn e2e_tuple() {
+#[test]
+#[ignore]
+fn e2e_tuple() {
     let src = "main = () => { let p = (1, 2); p._0 }";
-    let hir = glyim_hir::lower(&glyim_parse::parse(src).ast, &mut glyim_interner::Interner::new());
+    let hir = glyim_hir::lower(
+        &glyim_parse::parse(src).ast,
+        &mut glyim_interner::Interner::new(),
+    );
     println!("Tuple HIR: {:#?}", hir.items);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
 }
 // TODO: Impl method desugaring produces mangled names (Point_zero),
 // but the call lowering doesn't convert Point::zero() to the mangled call.
-#[test] #[ignore] fn e2e_impl_method() {
+#[test]
+#[ignore]
+fn e2e_impl_method() {
     let src = "struct Point { x, y }\nimpl Point {\n    fn zero() -> Point { Point { x: 0, y: 0 } }\n}\nmain = () => { let p = Point::zero(); p.x }";
-    let hir = glyim_hir::lower(&glyim_parse::parse(src).ast, &mut glyim_interner::Interner::new());
+    let hir = glyim_hir::lower(
+        &glyim_parse::parse(src).ast,
+        &mut glyim_interner::Interner::new(),
+    );
     println!("Impl HIR: {:#?}", hir.items);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
-#[test] fn e2e_cast_int_to_float() { let _ = pipeline::run(&temp_g("main = () => 42 as f64")).unwrap(); }
-#[test] fn e2e_prelude_some() { let _ = pipeline::run(&temp_g("main = () => Some(42)")).unwrap(); }
-#[test] fn e2e_prelude_result() { let _ = pipeline::run(&temp_g("main = () => Ok(100)")).unwrap(); }
-#[test] fn e2e_enum_match_prelude() { assert_eq!(pipeline::run(&temp_g("main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }")).unwrap(), 42); }
-#[test] fn e2e_invalid_cast_fails() { assert!(pipeline::run(&temp_g("main = () => 42 as Str")).is_err()); }
-#[test] fn e2e_wrong_field_fails() { assert!(pipeline::run(&temp_g("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }")).is_err()); }
+#[test]
+fn e2e_cast_int_to_float() {
+    let _ = pipeline::run(&temp_g("main = () => 42 as f64")).unwrap();
+}
+#[test]
+fn e2e_prelude_some() {
+    let _ = pipeline::run(&temp_g("main = () => Some(42)")).unwrap();
+}
+#[test]
+fn e2e_prelude_result() {
+    let _ = pipeline::run(&temp_g("main = () => Ok(100)")).unwrap();
+}
+#[test]
+fn e2e_enum_match_prelude() {
+    assert_eq!(
+        pipeline::run(&temp_g(
+            "main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"
+        ))
+        .unwrap(),
+        42
+    );
+}
+#[test]
+fn e2e_invalid_cast_fails() {
+    assert!(pipeline::run(&temp_g("main = () => 42 as Str")).is_err());
+}
+#[test]
+fn e2e_wrong_field_fails() {
+    assert!(pipeline::run(&temp_g(
+        "struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }"
+    ))
+    .is_err());
+}
 // TODO: Generic struct instantiation with type arguments requires
 // monomorphization in codegen (not yet implemented).
-#[test] #[ignore] fn e2e_generic_edge() {
+#[test]
+#[ignore]
+fn e2e_generic_edge() {
     let src = "struct Edge<T> { from: T, to: T }\nimpl<T> Edge<T> {\n    fn new(from: T, to: T) -> Edge<T> { Edge { from, to } }\n}\nfn main() -> i64 {\n    let e: Edge<i64> = Edge::new(0, 100)\n    let (from, to) = (e.from, e.to)\n    from - to\n}";
-    let hir = glyim_hir::lower(&glyim_parse::parse(src).ast, &mut glyim_interner::Interner::new());
+    let hir = glyim_hir::lower(
+        &glyim_parse::parse(src).ast,
+        &mut glyim_interner::Interner::new(),
+    );
     println!("Edge HIR: {:#?}", hir.items);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), -100);
 }

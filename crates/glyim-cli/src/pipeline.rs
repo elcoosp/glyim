@@ -75,7 +75,6 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     Ok(output)
 }
 
-
 const PRELUDE: &str = "\
 pub enum Option<T> {
     Some(T),
