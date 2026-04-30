@@ -1,34 +1,48 @@
-// Glyim Standard Library — Vec<T>
-//
-// A growable array type backed by heap allocation.
-//
-// STATUS: Cannot be compiled by glyim v0.5.1
-// BLOCKERS:
-//   §1. Generic *mut T not supported — would need *mut u8 with unsafe casts
-//   §2. Pointer load/store (dereferencing) not supported for generic types
-//   §3. __size_of::<T>() works but pointer arithmetic on *mut u8 needs
-//      byte offsets computed manually: ptr + (index * __size_of::<T>())
-//   §4. No Drop/destructor — Vec memory leaks when it goes out of scope
-//   §5. Struct method call resolution broken (Vec::push can't be called as v.push())
-//
-// DESIGN (for when blockers are resolved):
-//   - Internal representation: struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
-//   - All pointer math done in bytes using *mut u8, with manual size_of multiplication
-//   - Growth factor: 2x (or 8 for initial allocation)
-//   - OOM: glyim_alloc returns null → abort (handled by wrapper)
-//   - Drop: calls glyim_free on data pointer
+// A growable array type.
 
-// struct Vec<T> {
-//     data: *mut u8,
-//     len: i64,
-//     cap: i64,
-// }
-//
-// fn Vec::new<T>() -> Vec<T> { Vec { data: null_mut::<u8>(), len: 0, cap: 0 } }
-// fn Vec::push<T>(self: *mut Vec<T>, value: T) { ... }
-// fn Vec::pop<T>(self: *mut Vec<T>) -> Option<T> { ... }
-// fn Vec::get<T>(self: *Vec<T>, index: i64) -> Option<T> { ... }
-// fn Vec::len<T>(self: *Vec<T>) -> i64 { self.len }
-// fn Vec::is_empty<T>(self: *Vec<T>) -> bool { self.len == 0 }
-// fn Vec::drop<T>(self: *mut Vec<T>) { ... }
-// fn Vec::capacity<T>(self: *Vec<T>) -> i64 { self.cap }
+struct Vec<T> {
+    data: *mut u8,
+    len: i64,
+    cap: i64,
+}
+
+impl<T> Vec<T> {
+    pub fn new() -> Vec<T> {
+        Vec { data: 0 as *mut u8, len: 0, cap: 0 }
+    }
+
+    pub fn push(&mut self, value: T) {
+        if self.len == self.cap {
+            let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
+            let size = __size_of::<T>();
+            let new_data = glyim_alloc(new_cap * size) as *mut u8;
+            if self.data != (0 as *mut u8) {
+                let i = 0;
+                while i < self.len {
+                    let src = __ptr_offset(self.data, i * size) as *mut T;
+                    let dst = __ptr_offset(new_data, i * size) as *mut T;
+                    *dst = *src;
+                    i = i + 1
+                };
+                glyim_free(self.data)
+            };
+            self.data = new_data;
+            self.cap = new_cap
+        };
+        let dst = __ptr_offset(self.data, self.len * __size_of::<T>()) as *mut T;
+        *dst = value;
+        self.len = self.len + 1
+    }
+
+    pub fn get(&self, index: i64) -> Option<T> {
+        if index >= self.len {
+            None
+        } else {
+            Some(*(__ptr_offset(self.data, index * __size_of::<T>()) as *mut T))
+        }
+    }
+
+    pub fn len(&self) -> i64 {
+        self.len
+    }
+}
