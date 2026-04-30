@@ -458,7 +458,9 @@ fn main() {
                 let mut interner = parse_out.interner;
                 let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
                 let html = glyim_doc::generate_html(&hir, &interner);
-                let out_path = output.as_deref().unwrap_or(std::path::Path::new("doc/index.html"));
+                let out_path = output
+                    .as_deref()
+                    .unwrap_or(std::path::Path::new("doc/index.html"));
                 if let Some(parent) = out_path.parent() {
                     std::fs::create_dir_all(parent).ok();
                 }
@@ -550,11 +552,15 @@ fn main() {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let remote_url = remote.unwrap_or_else(|| "http://localhost:9090".to_string());
                 let token = std::env::var("GLYIM_CACHE_TOKEN").ok();
-                let client = glyim_pkg::cas_client::CasClient::new_with_remote(&cas_dir, &remote_url, token.as_deref())
-                    .map_err(|e| {
-                        eprintln!("error: {e}");
-                        1
-                    })?;
+                let client = glyim_pkg::cas_client::CasClient::new_with_remote(
+                    &cas_dir,
+                    &remote_url,
+                    token.as_deref(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
+                })?;
                 let _ = client.store(b"cache-push-sentinel");
                 eprintln!("Cache push complete to {}", remote_url);
                 Ok(0)
@@ -564,11 +570,15 @@ fn main() {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let remote_url = remote.unwrap_or_else(|| "http://localhost:9090".to_string());
                 let token = std::env::var("GLYIM_CACHE_TOKEN").ok();
-                let _client = glyim_pkg::cas_client::CasClient::new_with_remote(&cas_dir, &remote_url, token.as_deref())
-                    .map_err(|e| {
-                        eprintln!("error: {e}");
-                        1
-                    })?;
+                let _client = glyim_pkg::cas_client::CasClient::new_with_remote(
+                    &cas_dir,
+                    &remote_url,
+                    token.as_deref(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
+                })?;
                 eprintln!("Remote cache configured: {}", remote_url);
                 eprintln!("Cache pull: blobs fetched on-demand via retrieve.");
                 Ok(0)

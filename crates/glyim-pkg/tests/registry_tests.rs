@@ -19,14 +19,17 @@ async fn wiremock_publish_endpoint_works() {
     // Verify that the mock server intercepts a POST and returns 200
     let server = MockServer::start().await;
     Mock::given(wiremock::matchers::method("POST"))
-        .and(wiremock::matchers::path("/api/v1/packages/test-pkg/1.0.0/upload"))
+        .and(wiremock::matchers::path(
+            "/api/v1/packages/test-pkg/1.0.0/upload",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
 
     let url = format!("{}/api/v1/packages/test-pkg/1.0.0/upload", server.uri());
     let client = reqwest::Client::new();
-    let resp = client.post(&url)
+    let resp = client
+        .post(&url)
         .header("Content-Type", "application/octet-stream")
         .body(b"fake-tarball-content".to_vec())
         .send()

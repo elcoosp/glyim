@@ -38,7 +38,10 @@ impl RegistryClient {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| PkgError::Registry(format!("create HTTP client: {e}")))?;
-        Ok(Self { endpoint: url, client })
+        Ok(Self {
+            endpoint: url,
+            client,
+        })
     }
 
     pub fn endpoint(&self) -> &str {
@@ -47,54 +50,85 @@ impl RegistryClient {
 
     pub fn fetch_available(&self, name: &str) -> Result<Vec<AvailableVersion>, PkgError> {
         let url = format!("{}/api/v1/packages/{}", self.endpoint, name);
-        let response = self.client.get(&url).send()
+        let response = self
+            .client
+            .get(&url)
+            .send()
             .map_err(|e| PkgError::Registry(format!("fetch {name}: {e}")))?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(PkgError::Registry(format!("package '{}' not found in registry", name)));
+            return Err(PkgError::Registry(format!(
+                "package '{}' not found in registry",
+                name
+            )));
         }
         if !response.status().is_success() {
-            return Err(PkgError::Registry(format!("registry returned {} for package '{}'", response.status(), name)));
+            return Err(PkgError::Registry(format!(
+                "registry returned {} for package '{}'",
+                response.status(),
+                name
+            )));
         }
 
-        let meta: RegistryPackageMeta = response.json()
+        let meta: RegistryPackageMeta = response
+            .json()
             .map_err(|e| PkgError::Registry(format!("parse response for {name}: {e}")))?;
 
-        let versions: Vec<AvailableVersion> = meta.versions.into_iter().map(|entry| {
-            let deps: Vec<crate::resolver::Requirement> = entry.deps.iter().map(|d| crate::resolver::Requirement {
-                name: d.name.clone(),
-                version_constraint: d.version.clone(),
-                is_macro: d.is_macro,
-                source: LockSource::Registry { url: self.endpoint.clone() },
-            }).collect();
-            AvailableVersion {
-                version: entry.version,
-                is_macro: entry.is_macro,
-                deps,
-                source: LockSource::Registry { url: self.endpoint.clone() },
-            }
-        }).collect();
+        let versions: Vec<AvailableVersion> = meta
+            .versions
+            .into_iter()
+            .map(|entry| {
+                let deps: Vec<crate::resolver::Requirement> = entry
+                    .deps
+                    .iter()
+                    .map(|d| crate::resolver::Requirement {
+                        name: d.name.clone(),
+                        version_constraint: d.version.clone(),
+                        is_macro: d.is_macro,
+                        source: LockSource::Registry {
+                            url: self.endpoint.clone(),
+                        },
+                    })
+                    .collect();
+                AvailableVersion {
+                    version: entry.version,
+                    is_macro: entry.is_macro,
+                    deps,
+                    source: LockSource::Registry {
+                        url: self.endpoint.clone(),
+                    },
+                }
+            })
+            .collect();
 
         Ok(versions)
     }
 
     pub fn publish(&self, name: &str, version: &str, archive_data: &[u8]) -> Result<(), PkgError> {
-        let url = format!("{}/api/v1/packages/{}/{}/upload", self.endpoint, name, version);
-        let response = self.client
+        let url = format!(
+            "{}/api/v1/packages/{}/{}/upload",
+            self.endpoint, name, version
+        );
+        let response = self
+            .client
             .post(&url)
             .header("Content-Type", "application/octet-stream")
             .body(archive_data.to_vec())
             .send()
             .map_err(|e| PkgError::Registry(format!("publish upload: {e}")))?;
         if !response.status().is_success() {
-            return Err(PkgError::Registry(format!("publish returned {}", response.status())));
+            return Err(PkgError::Registry(format!(
+                "publish returned {}",
+                response.status()
+            )));
         }
         Ok(())
     }
 
     pub fn get_latest_version(&self, name: &str) -> Result<Option<String>, PkgError> {
         let versions = self.fetch_available(name)?;
-        let latest = versions.iter()
+        let latest = versions
+            .iter()
             .filter(|v| !v.is_macro)
             .map(|v| v.version.clone())
             .last();
