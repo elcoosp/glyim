@@ -84,12 +84,13 @@ impl<'ctx> Codegen<'ctx> {
         mut interner: Interner,
         expr_types: Vec<HirType>,
         source_str: String,
+        file_name: &str,
     ) -> Result<Self, String> {
         let module = context.create_module("glyim_out");
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-        let debug_info = match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::Full) {
+        let debug_info = match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full) {
             Ok(di) => Some(di),
             Err(e) => {
                 eprintln!("warning: debug info creation failed: {e}");
@@ -127,13 +128,14 @@ impl<'ctx> Codegen<'ctx> {
         mut interner: Interner,
         expr_types: Vec<HirType>,
         source_str: String,
+        file_name: &str,
     ) -> Result<Self, String> {
         let module = context.create_module("glyim_out");
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
         let debug_info =
-            match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::LineTablesOnly) {
+            match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly) {
                 Ok(di) => Some(di),
                 Err(e) => {
                     eprintln!("warning: debug info creation failed: {e}");

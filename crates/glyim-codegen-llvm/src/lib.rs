@@ -32,7 +32,7 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
 }
 
 /// Compile source to LLVM IR with debug info enabled.
-pub fn compile_to_ir_debug(source: &str, enable_debug: bool) -> Result<String, String> {
+pub fn compile_to_ir_debug(source: &str, enable_debug: bool, file_name: &str) -> Result<String, String> {
     let out = glyim_parse::parse(source);
     if !out.errors.is_empty() {
         return Err(format!("parse: {:?}", out.errors));
@@ -41,7 +41,7 @@ pub fn compile_to_ir_debug(source: &str, enable_debug: bool) -> Result<String, S
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     let mut cg = if enable_debug {
-        Codegen::with_debug(&ctx, interner, vec![], source.to_string())?
+        Codegen::with_debug(&ctx, interner, vec![], source.to_string(), file_name)?
     } else {
         Codegen::new(&ctx, interner, vec![])
     };
@@ -50,7 +50,7 @@ pub fn compile_to_ir_debug(source: &str, enable_debug: bool) -> Result<String, S
 }
 
 /// Compile source to LLVM IR with line-tables-only debug info.
-pub fn compile_to_ir_line_tables(source: &str) -> Result<String, String> {
+pub fn compile_to_ir_line_tables(source: &str, file_name: &str) -> Result<String, String> {
     let out = glyim_parse::parse(source);
     if !out.errors.is_empty() {
         return Err(format!("parse: {:?}", out.errors));
@@ -58,7 +58,7 @@ pub fn compile_to_ir_line_tables(source: &str) -> Result<String, String> {
     let mut interner = out.interner;
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
-    let mut cg = Codegen::with_line_tables(&ctx, interner, vec![], source.to_string())?;
+    let mut cg = Codegen::with_line_tables(&ctx, interner, vec![], source.to_string(), file_name)?;
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
@@ -95,7 +95,7 @@ mod line_tables_tests {
 
     #[test]
     fn compile_to_ir_line_tables_has_debug_locations() {
-        let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
+        let ir = compile_to_ir_line_tables("main = () => 42", "test.g").unwrap();
         assert!(
             ir.contains("!dbg"),
             "Line tables mode should have debug locations\nGot:\n{ir}"
@@ -104,7 +104,7 @@ mod line_tables_tests {
 
     #[test]
     fn compile_to_ir_line_tables_has_line_tables_only() {
-        let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
+        let ir = compile_to_ir_line_tables("main = () => 42", "test.g").unwrap();
         assert!(
             ir.contains("emissionKind: LineTablesOnly"),
             "Line tables mode should specify LineTablesOnly emission kind\nGot:\n{ir}"
@@ -117,7 +117,7 @@ mod debug_ir_tests {
 
     #[test]
     fn compile_to_ir_debug_has_subprogram() {
-        let ir = compile_to_ir_debug("main = () => 42", true).unwrap();
+        let ir = compile_to_ir_debug("main = () => 42", true, "test.g").unwrap();
         assert!(
             ir.contains("DISubprogram"),
             "IR should contain DISubprogram\nGot:\n{ir}"
@@ -126,7 +126,7 @@ mod debug_ir_tests {
 
     #[test]
     fn compile_to_ir_debug_has_debug_locations() {
-        let ir = compile_to_ir_debug("main = () => 42", true).unwrap();
+        let ir = compile_to_ir_debug("main = () => 42", true, "test.g").unwrap();
         assert!(
             ir.contains("!dbg"),
             "IR should contain debug locations (!dbg)\nGot:\n{ir}"
@@ -135,7 +135,7 @@ mod debug_ir_tests {
 
     #[test]
     fn compile_to_ir_release_no_debug() {
-        let ir = compile_to_ir_debug("main = () => 42", false).unwrap();
+        let ir = compile_to_ir_debug("main = () => 42", false, "test.g").unwrap();
         assert!(
             !ir.contains("DISubprogram"),
             "Release should have no subprograms\nGot:\n{ir}"
@@ -148,7 +148,7 @@ mod debug_ir_tests {
 
     #[test]
     fn compile_to_ir_debug_multi_function() {
-        let ir = compile_to_ir_debug("fn helper() { 0 }\nmain = () => { helper() }", true).unwrap();
+        let ir = compile_to_ir_debug("fn helper() { 0 }\nmain = () => { helper() }", true, "test.g").unwrap();
         let count = ir.matches("DISubprogram").count();
         assert!(
             count >= 2,
@@ -158,7 +158,7 @@ mod debug_ir_tests {
 
     #[test]
     fn compile_to_ir_debug_has_local_variable() {
-        let ir = compile_to_ir_debug("fn main() { let x = 42; x }", true).unwrap();
+        let ir = compile_to_ir_debug("fn main() { let x = 42; x }", true, "test.g").unwrap();
         assert!(
             ir.contains("DILocalVariable"),
             "IR should contain DILocalVariable\nGot:\n{ir}"
@@ -169,7 +169,7 @@ mod debug_ir_tests {
     fn compile_to_ir_debug_macro_has_artificial_flag() {
         let src = "@identity fn transform(expr: Expr) -> Expr { return expr }
 main = () => @identity(99)";
-        let ir = compile_to_ir_debug(src, true).unwrap();
+        let ir = compile_to_ir_debug(src, true, "test.g").unwrap();
         // Macro-generated function should have DIFlagArtificial
         assert!(
             ir.contains("DISubprogram"),

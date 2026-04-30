@@ -119,7 +119,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let context = Context::create();
     info!("starting codegen");
     let mut codegen =
-        Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source)
+        Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source, &input.to_string_lossy())
             .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -170,7 +170,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let context = Context::create();
     info!("starting codegen");
     let mut codegen =
-        Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone())
+        Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone(), &input.to_string_lossy())
             .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -273,6 +273,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
             parse_out.interner,
             typeck.expr_types.clone(),
             source.clone(),
+            &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
         BuildMode::Release => Codegen::new(&context, parse_out.interner, typeck.expr_types.clone()),
@@ -325,6 +326,7 @@ pub fn build_with_mode(
             interner,
             typeck.expr_types.clone(),
             source.clone(),
+            &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
         BuildMode::Release => Codegen::new(&context, interner, typeck.expr_types.clone()),
