@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 97;
+pub const COUNT: u16 = 98;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -33,6 +33,7 @@ pub enum SyntaxKind {
     KwImpl,
     KwWhile,
     KwMut,
+    Amp,
     Eq,
     FatArrow,
     Arrow,
@@ -149,6 +150,7 @@ impl SyntaxKind {
             Self::KwIf => "if",
             Self::KwElse => "else",
             Self::KwWhile => "while",
+            Self::Amp => "&",
             Self::KwMut => "mut",
             Self::KwReturn => "return",
             Self::KwUse => "use",

@@ -14,7 +14,6 @@ impl TypeChecker {
                 glyim_hir::item::HirItem::Extern(ext) => self.register_extern(ext),
                 glyim_hir::item::HirItem::Impl(imp) => self.register_impl(imp),
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!("[typeck register] registering fn {:?} (type_params={:?})", self.interner.resolve(f.name), f.type_params);
                     self.fns.push(f.clone());
                 }
             }
@@ -53,6 +52,10 @@ impl TypeChecker {
 
     fn register_impl(&mut self, imp: &glyim_hir::item::HirImplDef) {
         let methods: Vec<glyim_hir::node::HirFn> = imp.methods.to_vec();
+        // Push each method into fns so they're visible to check_call
+        for m in &methods {
+            self.fns.push(m.clone());
+        }
         self.impl_methods.insert(imp.target_name, methods);
     }
 

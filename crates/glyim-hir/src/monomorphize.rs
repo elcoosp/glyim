@@ -99,13 +99,10 @@ impl<'a> MonoContext<'a> {
         // not yet in call_type_args (backward compatibility fallback).
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
-                eprintln!("[mono seed] scanning body of fn '{}'", self.interner.resolve(f.name));
                 self.scan_expr_for_generic_calls(&f.body);
             }
         }
-        eprintln!("[mono seed] work queue after seeding: {} entries", self.fn_work_queue.len());
 
-        eprintln!("[mono] after work queue: fn_specs={}", self.fn_specs.len());
         // Scan struct literals for specializations
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
@@ -114,7 +111,6 @@ impl<'a> MonoContext<'a> {
         }
 
         // Process work queue
-        eprintln!("[mono work] processing queue with {} entries", self.fn_work_queue.len());
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
@@ -392,7 +388,10 @@ impl<'a> MonoContext<'a> {
                     items.push(HirItem::Extern(e.clone()));
                 }
                 HirItem::Impl(imp) if imp.type_params.is_empty() => {
-                    items.push(HirItem::Impl(self.rewrite_impl(imp, &fn_mangle_map, &struct_mangle_map)));
+                    let rewritten = self.rewrite_impl(imp, &fn_mangle_map, &struct_mangle_map);
+                    for method in &rewritten.methods {
+                        items.push(HirItem::Fn(method.clone()));
+                    }
                 }
                 _ => {}
             }
@@ -437,13 +436,6 @@ impl<'a> MonoContext<'a> {
                 if let Some(&mangled) = struct_mangle_map.get(orig) {
                     final_type_overrides.insert(ExprId::new(idx as u32), HirType::Named(mangled));
                 }
-            }
-        }
-        for (i, item) in items.iter().enumerate() {
-            match item {
-                HirItem::Fn(f) => eprintln!("  [{}] Fn: {}", i, self.interner.resolve(f.name)),
-                HirItem::Struct(s) => eprintln!("  [{}] Struct: {}", i, self.interner.resolve(s.name)),
-                _ => eprintln!("  [{}] {:?}", i, std::mem::discriminant(item)),
             }
         }
         MonoResult {

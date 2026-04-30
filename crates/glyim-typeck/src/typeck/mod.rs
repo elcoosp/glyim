@@ -118,8 +118,16 @@ impl TypeChecker {
         self.register_builtin_enums();
         self.register_items(hir);
         for item in &hir.items {
-            if let glyim_hir::item::HirItem::Fn(f) = item {
-                self.check_fn(f);
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    self.check_fn(f);
+                }
+                glyim_hir::item::HirItem::Impl(imp) => {
+                    for method in &imp.methods {
+                        self.check_fn(method);
+                    }
+                }
+                _ => {}
             }
         }
         if self.errors.is_empty() {

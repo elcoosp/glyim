@@ -319,7 +319,6 @@ impl TypeChecker {
         callee: Symbol,
         args: &[HirExpr],
     ) -> (HirType, Option<Vec<HirType>>) {
-        eprintln!("[typeck] check_call_with_type_args callee={:?}, arg_count={}", self.interner.resolve(callee), args.len());
         let arg_types: Vec<HirType> = args
             .iter()
             .filter_map(|a| self.check_expr(a))
@@ -344,7 +343,6 @@ impl TypeChecker {
                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                         .collect();
                     let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
-                    eprintln!("[typeck] generic call inferred type_args={:?}", type_args);
                     return (glyim_hir::types::substitute_type(&ret, &sub), Some(type_args));
                 }
             }
@@ -353,7 +351,6 @@ impl TypeChecker {
 
         for methods in self.impl_methods.values() {
             if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
-                eprintln!("[typeck] non-generic call, return {:?}", fn_def.ret);
                 return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
             }
         }

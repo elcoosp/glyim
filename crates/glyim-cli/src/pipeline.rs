@@ -99,9 +99,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
@@ -169,7 +167,6 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
-            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
@@ -184,9 +181,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
@@ -237,7 +232,6 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
-            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
@@ -290,7 +284,6 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
-            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
@@ -305,9 +298,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
@@ -371,9 +362,7 @@ pub fn build_with_mode(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
@@ -562,7 +551,6 @@ pub fn run_tests(
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
-            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
@@ -632,9 +620,7 @@ pub fn run_tests(
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
@@ -784,7 +770,6 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         let tmp_dir = tempfile::tempdir()?;
         let obj_path = tmp_dir.path().join("cached.o");
         fs::write(&obj_path, &cached_obj)?;
-        eprintln!("[cache] Reusing cached object for {}", input.display());
         link_object(&obj_path, &output, false)?;
         return Ok(output);
     }
@@ -797,9 +782,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
@@ -833,7 +816,6 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
 
     let obj_bytes = fs::read(&obj_path)?;
     cas.store(&obj_bytes);
-    eprintln!("[cache] Stored object for {}", input.display());
 
     link_object(&obj_path, &output, false)?;
     Ok(output)
@@ -926,9 +908,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    eprintln!("[pipeline] call_type_args has {} entries", call_type_args.len());
     for (id, args) in &call_type_args {
-        eprintln!("[pipeline]   expr_id={:?} type_args={:?}", id, args);
     }
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,

@@ -55,6 +55,14 @@ pub(crate) fn parse_atom(parser: &mut Parser) -> Option<ExprNode> {
                 span: Span::new(ret_tok.start, val.span.end),
             })
         }
+                SyntaxKind::KwSelf => {
+            let tok = parser.tokens.bump()?;
+            let sym = parser.interner.intern("self");
+            Some(ExprNode {
+                kind: ExprKind::Ident(sym),
+                span: Span::new(tok.start, tok.end),
+            })
+        }
         SyntaxKind::KwMatch => super::complex::parse_match(parser),
         SyntaxKind::At => parse_macro_call(parser),
         SyntaxKind::Ident => parse_ident_expr(parser),

@@ -93,7 +93,6 @@ impl<'ctx> Codegen<'ctx> {
         let debug_info = match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full) {
             Ok(di) => Some(di),
             Err(e) => {
-                eprintln!("warning: debug info creation failed: {e}");
                 None
             }
         };
@@ -138,7 +137,6 @@ impl<'ctx> Codegen<'ctx> {
             match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly) {
                 Ok(di) => Some(di),
                 Err(e) => {
-                    eprintln!("warning: debug info creation failed: {e}");
                     None
                 }
             };
