@@ -27,6 +27,12 @@ pub enum TypeError {
     ExpectedFunction { expr_id: ExprId },
     #[error("invalid return type: expected {expected:?}, found {found:?}")]
     InvalidReturnType { expected: HirType, found: HirType },
+    #[error("if condition must be `bool`, found `{found:?}`")]
+    IfConditionMustBeBool { found: HirType, expr_id: ExprId },
+    #[error("cannot assign to immutable binding")]
+    AssignToImmutable { name: Symbol, expr_id: ExprId },
+    #[error("unresolved name: {name:?}")]
+    UnresolvedName { name: Symbol },
 }
 
 impl Diagnostic for TypeError {
@@ -64,7 +70,6 @@ impl Diagnostic for TypeError {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan>>> {
-        // Type errors don't have byte spans yet, so no labels.
         None
     }
 }

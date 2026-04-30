@@ -48,3 +48,7 @@ insta = { version = "1", features = ["yaml"] }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
+
+[features]
+default = []
+jit = []

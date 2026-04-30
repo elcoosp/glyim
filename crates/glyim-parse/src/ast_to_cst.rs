@@ -1,7 +1,8 @@
-use crate::ast::{Ast, BinOp, BlockItem, ExprKind, ExprNode, Item, StmtKind, UnOp};
+use crate::ast::*;
 use crate::cst_builder::CstBuilder;
 use glyim_syntax::{GreenNode, SyntaxKind, SyntaxNode};
 
+// ── Operator helpers (unchanged from original) ─────────────────────
 fn binop_kind(op: BinOp) -> SyntaxKind {
     match op {
         BinOp::Add => SyntaxKind::Plus,
@@ -49,6 +50,7 @@ fn unop_text(op: UnOp) -> &'static str {
     }
 }
 
+// ── Expression → CST ────────────────────────────────────────────────
 fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
     match &expr.kind {
         ExprKind::IntLit(n) => {
@@ -56,9 +58,32 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::IntLit, &n.to_string());
             builder.finish_node();
         }
+        ExprKind::FloatLit(f) => {
+            builder.start_node(SyntaxKind::LitExpr);
+            builder.token(SyntaxKind::FloatLit, &f.to_string());
+            builder.finish_node();
+        }
+        ExprKind::BoolLit(b) => {
+            builder.start_node(SyntaxKind::LitExpr);
+            builder.token(
+                if *b {
+                    SyntaxKind::KwTrue
+                } else {
+                    SyntaxKind::KwFalse
+                },
+                if *b { "true" } else { "false" },
+            );
+            builder.finish_node();
+        }
         ExprKind::StrLit(s) => {
             builder.start_node(SyntaxKind::LitExpr);
             builder.token(SyntaxKind::StringLit, s);
+            builder.finish_node();
+        }
+        ExprKind::UnitLit => {
+            builder.start_node(SyntaxKind::LitExpr);
+            builder.token(SyntaxKind::LParen, "(");
+            builder.token(SyntaxKind::RParen, ")");
             builder.finish_node();
         }
         ExprKind::Ident(_) => {
@@ -93,9 +118,7 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             for item in items {
                 match item {
                     BlockItem::Expr(e) => ast_expr_to_cst(builder, e),
-                    BlockItem::Stmt(_) => {
-                        builder.token(SyntaxKind::Ident, "<stmt>");
-                    }
+                    BlockItem::Stmt(s) => ast_stmt_to_cst(builder, s),
                 }
             }
             builder.token(SyntaxKind::RBrace, "}");
@@ -106,13 +129,13 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             then_branch,
             else_branch,
         } => {
-            builder.start_node(SyntaxKind::SourceFile);
+            builder.start_node(SyntaxKind::IfExpr);
             builder.token(SyntaxKind::KwIf, "if");
             ast_expr_to_cst(builder, condition);
             ast_expr_to_cst(builder, then_branch);
-            if let Some(else_br) = else_branch {
+            if let Some(e) = else_branch {
                 builder.token(SyntaxKind::KwElse, "else");
-                ast_expr_to_cst(builder, else_br);
+                ast_expr_to_cst(builder, e);
             }
             builder.finish_node();
         }
@@ -129,10 +152,93 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::RParen, ")");
             builder.finish_node();
         }
-        _ => {}
+        ExprKind::StructLit { name: _, fields } => {
+            builder.start_node(SyntaxKind::StructLitExpr);
+            for (_, fe) in fields {
+                ast_expr_to_cst(builder, fe);
+            }
+            builder.finish_node();
+        }
+        ExprKind::EnumVariant { .. } => {
+            builder.start_node(SyntaxKind::EnumVariantExpr);
+            builder.token(SyntaxKind::Ident, "<variant>");
+            builder.finish_node();
+        }
+        ExprKind::SomeExpr(e) | ExprKind::OkExpr(e) | ExprKind::ErrExpr(e) => {
+            builder.start_node(SyntaxKind::EnumVariantExpr);
+            ast_expr_to_cst(builder, e);
+            builder.finish_node();
+        }
+        ExprKind::NoneExpr => {
+            builder.start_node(SyntaxKind::EnumVariantExpr);
+            builder.finish_node();
+        }
+        ExprKind::TryExpr(e) => {
+            builder.start_node(SyntaxKind::TryExpr);
+            ast_expr_to_cst(builder, e);
+            builder.token(SyntaxKind::Question, "?");
+            builder.finish_node();
+        }
+        ExprKind::As { expr, .. } => {
+            builder.start_node(SyntaxKind::AsExpr);
+            ast_expr_to_cst(builder, expr);
+            builder.token(SyntaxKind::KwAs, "as");
+            builder.finish_node();
+        }
+        ExprKind::MacroCall { .. } => {
+            builder.token(SyntaxKind::At, "@");
+            builder.token(SyntaxKind::Ident, "<macro>");
+        }
+        ExprKind::Match { .. } => {
+            builder.start_node(SyntaxKind::MatchExpr);
+            builder.token(SyntaxKind::KwMatch, "match");
+            builder.finish_node();
+        }
+        ExprKind::FieldAccess { .. } => {
+            builder.start_node(SyntaxKind::FieldAccessExpr);
+            builder.token(SyntaxKind::Dot, ".");
+            builder.finish_node();
+        }
+        ExprKind::SizeOf(_) => {
+            builder.token(SyntaxKind::Ident, "__size_of");
+        }
+        ExprKind::TupleLit(elems) => {
+            builder.start_node(SyntaxKind::TupleLitExpr);
+            for e in elems {
+                ast_expr_to_cst(builder, e);
+            }
+            builder.finish_node();
+        }
+        ExprKind::Pointer { .. } => {
+            builder.token(SyntaxKind::Star, "*");
+        }
     }
 }
 
+// ── Statement → CST ─────────────────────────────────────────────────
+fn ast_stmt_to_cst(builder: &mut CstBuilder, stmt: &StmtNode) {
+    match &stmt.kind {
+        StmtKind::Let {
+            pattern: _,
+            mutable: _,
+            value,
+        } => {
+            builder.start_node(SyntaxKind::LetStmt);
+            builder.token(SyntaxKind::KwLet, "let");
+            builder.token(SyntaxKind::Ident, "<name>");
+            builder.token(SyntaxKind::Eq, "=");
+            ast_expr_to_cst(builder, value);
+            builder.finish_node();
+        }
+        StmtKind::Assign { target: _, value } => {
+            builder.start_node(SyntaxKind::AssignStmt);
+            ast_expr_to_cst(builder, value);
+            builder.finish_node();
+        }
+    }
+}
+
+// ── Item → CST ──────────────────────────────────────────────────────
 fn ast_item_to_cst(builder: &mut CstBuilder, item: &Item) {
     match item {
         Item::Binding { value, .. } => ast_expr_to_cst(builder, value),
@@ -145,27 +251,40 @@ fn ast_item_to_cst(builder: &mut CstBuilder, item: &Item) {
             ast_expr_to_cst(builder, body);
             builder.finish_node();
         }
-        Item::Stmt(stmt) => {
-            if let StmtKind::Let {
-                pattern: _,
-                mutable: _,
-                value,
-            } = &stmt.kind
-            {
-                builder.token(SyntaxKind::KwLet, "let");
-                builder.token(SyntaxKind::Ident, "<name>");
-                builder.token(SyntaxKind::Eq, "=");
-                ast_expr_to_cst(builder, value);
-            }
-        }
+        Item::Stmt(stmt) => ast_stmt_to_cst(builder, stmt),
         Item::Use(u) => {
             builder.token(SyntaxKind::KwUse, "use");
             builder.token(SyntaxKind::Ident, &u.path);
         }
-        _ => {}
+        Item::StructDef { .. } => {
+            builder.start_node(SyntaxKind::StructDef);
+            builder.token(SyntaxKind::KwStruct, "struct");
+            builder.token(SyntaxKind::Ident, "<name>");
+            builder.finish_node();
+        }
+        Item::EnumDef { .. } => {
+            builder.start_node(SyntaxKind::EnumDef);
+            builder.token(SyntaxKind::KwEnum, "enum");
+            builder.token(SyntaxKind::Ident, "<name>");
+            builder.finish_node();
+        }
+        Item::ImplBlock { .. } => {
+            builder.token(SyntaxKind::KwImpl, "impl");
+            builder.token(SyntaxKind::Ident, "<name>");
+        }
+        Item::MacroDef { .. } => {
+            builder.token(SyntaxKind::At, "@");
+            builder.token(SyntaxKind::Ident, "<macro>");
+        }
+        Item::ExternBlock { .. } => {
+            builder.start_node(SyntaxKind::ExternBlock);
+            builder.token(SyntaxKind::KwExtern, "extern");
+            builder.finish_node();
+        }
     }
 }
 
+// ── Public API (unchanged) ──────────────────────────────────────────
 pub fn ast_to_green(ast: &Ast) -> GreenNode {
     let mut builder = CstBuilder::new();
     builder.start_node(SyntaxKind::SourceFile);

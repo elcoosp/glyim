@@ -7,7 +7,7 @@ impl TypeChecker {
     pub(crate) fn check_fn(&mut self, f: &HirFn) {
         self.with_scope(|tc| {
             for (sym, ty) in &f.params {
-                tc.insert_binding(*sym, ty.clone());
+                tc.insert_binding(*sym, ty.clone(), false);
             }
             let body_type = tc.check_expr(&f.body);
             if let Some(ref expected) = f.ret {

@@ -46,21 +46,21 @@ fn e2e_let_mut_assign() {
 #[test]
 fn e2e_if_true_branch() {
     assert_eq!(
-        pipeline::run(&temp_g("main = () => { if 1 { 10 } else { 20 } }")).unwrap(),
+        pipeline::run(&temp_g("main = () => { if true { 10 } else { 20 } }")).unwrap(),
         10
     );
 }
 #[test]
 fn e2e_if_false_branch() {
     assert_eq!(
-        pipeline::run(&temp_g("main = () => { if 0 { 10 } else { 20 } }")).unwrap(),
+        pipeline::run(&temp_g("main = () => { if false { 10 } else { 20 } }")).unwrap(),
         20
     );
 }
 #[test]
 fn e2e_if_without_else() {
     assert_eq!(
-        pipeline::run(&temp_g("main = () => { if 0 { 42 } }")).unwrap(),
+        pipeline::run(&temp_g("main = () => { if false { 42 } }")).unwrap(),
         0
     );
 }
@@ -68,7 +68,7 @@ fn e2e_if_without_else() {
 fn e2e_else_if_chain() {
     assert_eq!(
         pipeline::run(&temp_g(
-            "main = () => { if 0 { 1 } else if 0 { 2 } else { 3 } }"
+            "main = () => { if false { 1 } else if false { 2 } else { 3 } }"
         ))
         .unwrap(),
         3
@@ -355,4 +355,29 @@ fn e2e_size_of_unit() {
         pipeline::run(&temp_g("main = () => __size_of::<()>()")).unwrap(),
         8
     ); // Unit type is represented as i64
+}
+
+#[test]
+fn e2e_bool_if_rejects_int_condition() {
+    let src = "fn main() -> i64 { let x = 5; if x { 1 } else { 0 } }";
+    assert!(pipeline::run(&temp_g(src)).is_err());
+}
+
+#[test]
+fn e2e_float_arithmetic_no_crash() {
+    let src = "fn main() -> i64 { let x: f64 = 3.0; let y: f64 = x + 2.0; 1 }";
+    assert!(pipeline::run(&temp_g(src)).is_ok());
+}
+
+#[test]
+fn e2e_extern_block_with_ptr_param() {
+    let src =
+        "extern { fn write(fd: i64, buf: *const u8, len: i64) -> i64; }\nfn main() -> i64 { 0 }";
+    assert!(pipeline::run(&temp_g(src)).is_ok());
+}
+
+#[test]
+fn e2e_assign_to_immutable_is_error() {
+    let src = "fn main() -> i64 { let x = 5; x = 10; x }";
+    assert!(pipeline::run(&temp_g(src)).is_err());
 }

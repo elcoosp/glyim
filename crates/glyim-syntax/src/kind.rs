@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 82;
+pub const COUNT: u16 = 94;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -91,6 +91,15 @@ pub enum SyntaxKind {
     FloatLitExpr,
     TypeAnnotation,
     PtrType,
+    LetStmt,
+    AssignStmt,
+    ExprStmt,
+    StructLitExpr,
+    EnumVariantExpr,
+    FieldAccessExpr,
+    TupleLitExpr,
+    ReturnExpr,
+    MatchArmPat,
 }
 
 impl SyntaxKind {
@@ -205,6 +214,15 @@ impl SyntaxKind {
             Self::FloatLitExpr => "float literal expression",
             Self::TypeAnnotation => "type annotation",
             Self::PtrType => "pointer type",
+            Self::LetStmt => "let statement",
+            Self::AssignStmt => "assignment statement",
+            Self::ExprStmt => "expression statement",
+            Self::StructLitExpr => "struct literal",
+            Self::EnumVariantExpr => "enum variant",
+            Self::FieldAccessExpr => "field access",
+            Self::TupleLitExpr => "tuple literal",
+            Self::ReturnExpr => "return expression",
+            Self::MatchArmPat => "match arm pattern",
         }
     }
 }
@@ -253,7 +271,7 @@ mod tests {
     #[test]
     fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error;
-        let _ = SyntaxKind::PtrType;
-        assert_eq!(COUNT, 82);
+        let _ = SyntaxKind::MatchArmPat;
+        assert_eq!(COUNT, 94);
     }
 }

@@ -1,5 +1,6 @@
 mod control;
 mod data;
+mod float_ops;
 
 use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
@@ -38,7 +39,15 @@ pub(crate) fn codegen_expr<'ctx>(
             }
         }
         HirExpr::BoolLit { value: b, .. } => {
-            Some(cg.i64_type.const_int(if *b { 1 } else { 0 }, false))
+            let i1 = cg
+                .context
+                .bool_type()
+                .const_int(if *b { 1 } else { 0 }, false);
+            Some(
+                cg.builder
+                    .build_int_z_extend(i1, cg.i64_type, "bool_zext")
+                    .ok()?,
+            )
         }
         HirExpr::UnitLit { .. } => Some(cg.i64_type.const_int(0, false)),
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
@@ -73,6 +82,24 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::EnumVariant { .. } => data::codegen_enum_variant(cg, expr, fctx),
         HirExpr::FieldAccess { .. } => data::codegen_field_access(cg, expr, fctx),
         HirExpr::TupleLit { .. } => data::codegen_tuple_lit(cg, expr, fctx),
-        HirExpr::As { .. } | HirExpr::FloatLit { .. } => Some(cg.i64_type.const_int(0, false)),
+        HirExpr::Return { value, .. } => {
+            let ret_val = match value {
+                Some(v) => codegen_expr(cg, v, fctx)?,
+                None => cg.i64_type.const_int(0, false),
+            };
+            cg.builder.build_return(Some(&ret_val)).ok()?;
+            None
+        }
+        HirExpr::As { .. } => Some(cg.i64_type.const_int(0, false)),
+        HirExpr::FloatLit { value: f, .. } => {
+            let fv = cg.f64_type.const_float(*f);
+            let alloca = cg.builder.build_alloca(cg.f64_type, "float_tmp").ok()?;
+            cg.builder.build_store(alloca, fv).ok()?;
+            Some(
+                cg.builder
+                    .build_ptr_to_int(alloca, cg.i64_type, "f2i64")
+                    .ok()?,
+            )
+        }
     }
 }
