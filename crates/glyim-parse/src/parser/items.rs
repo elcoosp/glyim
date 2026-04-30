@@ -9,7 +9,7 @@ pub(crate) fn parse_item(parser: &mut Parser) -> Option<Item> {
     let attrs = parser.parse_attributes();
     match parser.tokens.peek()?.kind {
         SyntaxKind::At => parse_macro_def(parser),
-        SyntaxKind::KwFn => parse_fn_def_with_attrs(parser, attrs),
+        SyntaxKind::KwFn => parse_fn_def_with_attrs(parser, attrs, None),
         SyntaxKind::KwStruct => parse_struct_def(parser),
         SyntaxKind::KwEnum => parse_enum_def(parser),
         SyntaxKind::KwImpl => parse_impl_block(parser),
@@ -105,7 +105,7 @@ fn parse_binding_with_attrs(
     })
 }
 
-fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>) -> Option<Item> {
+fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>, self_type: Option<TypeExpr>) -> Option<Item> {
     parser.tokens.bump(); // fn
     let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
@@ -121,15 +121,17 @@ fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute
         .ok()?;
     let mut params = vec![];
     while !parser.tokens.at(SyntaxKind::RParen) {
-        // Check for 'mut' keyword
-        let mutable = parser.tokens.eat(SyntaxKind::KwMut).is_some();
-
-        // Check for 'self' keyword
+        // Handle &self, &mut self, self, mut self
+        let is_ref = parser.tokens.eat(SyntaxKind::Amp).is_some();
+        let mutable = parser.tokens.eat(SyntaxKind::KwMut).is_some() || is_ref;
         if parser.tokens.eat(SyntaxKind::KwSelf).is_some() {
             let self_sym = parser.interner.intern("self");
-            let self_span = Span::new(if mutable { /* span would need tok */ 0 } else { 0 }, 0);
+            let self_span = Span::new(0, 0);
             let ty = if parser.tokens.eat(SyntaxKind::Colon).is_some() {
                 parse_type_expr(&mut parser.tokens, &mut parser.interner)
+            } else if is_ref || mutable {
+                // &self or mut self without explicit type: use impl target type
+                self_type.clone()
             } else {
                 None
             };
@@ -285,7 +287,7 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .ok()?;
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
-        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![]) {
+        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![], Some(TypeExpr::Named(target))) {
             methods.push(fn_def);
         } else {
             parser.errors.push(crate::ParseError::Message {

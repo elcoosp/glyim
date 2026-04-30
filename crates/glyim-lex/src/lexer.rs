@@ -119,6 +119,7 @@ impl<'a> Lexer<'a> {
             '<' => SyntaxKind::Lt,
             '>' => SyntaxKind::Gt,
             '!' => SyntaxKind::Bang,
+            '&' => SyntaxKind::Amp,
             '|' => SyntaxKind::Pipe,
             '?' => SyntaxKind::Question,
             '#' => SyntaxKind::Hash,

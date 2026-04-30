@@ -23,13 +23,4 @@ pub fn lower_type_expr(ty: &TypeExpr, ctx: &mut LoweringContext) -> HirType {
     }
 }
 
-/// Resolve a type from a string identifier (used in `as` expressions)
-pub fn resolve_type_name(name: &str, sym: glyim_interner::Symbol) -> HirType {
-    match name {
-        "i64" | "Int" => HirType::Int,
-        "f64" | "Float" => HirType::Float,
-        "bool" | "Bool" => HirType::Bool,
-        "Str" | "str" | "String" => HirType::Str,
-        _ => HirType::Named(sym),
-    }
-}
+

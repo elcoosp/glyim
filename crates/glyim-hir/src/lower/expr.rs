@@ -2,7 +2,6 @@ use crate::lower::context::LoweringContext;
 use crate::lower::ops::{lower_binop, lower_unop};
 use crate::lower::pattern::lower_pattern;
 use crate::lower::types::lower_type_expr;
-use crate::lower::types::resolve_type_name;
 use crate::types::{ExprId, HirType};
 use crate::{HirExpr, HirPattern, HirStmt};
 use glyim_parse::{BlockItem, ExprKind, StmtKind};
