@@ -2,6 +2,7 @@ use crate::Codegen;
 use glyim_hir::HirBinOp;
 use inkwell::values::FloatValue;
 
+#[allow(dead_code)]
 pub(crate) fn codegen_float_binop<'ctx>(
     cg: &Codegen<'ctx>,
     op: &HirBinOp,

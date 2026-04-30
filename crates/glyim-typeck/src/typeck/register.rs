@@ -49,8 +49,7 @@ impl TypeChecker {
     }
 
     fn register_impl(&mut self, imp: &glyim_hir::item::HirImplDef) {
-        let methods: Vec<(glyim_interner::Symbol, glyim_hir::node::HirFn)> =
-            imp.methods.iter().map(|m| (m.name, m.clone())).collect();
+        let methods: Vec<glyim_hir::node::HirFn> = imp.methods.to_vec();
         self.impl_methods.insert(imp.target_name, methods);
     }
 

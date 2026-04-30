@@ -212,6 +212,17 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         ExprKind::Pointer { .. } => {
             builder.token(SyntaxKind::Star, "*");
         }
+        // New variants: just emit a placeholder
+        ExprKind::MethodCall { .. } => {
+            builder.start_node(SyntaxKind::CallExpr);
+            builder.token(SyntaxKind::Ident, "<method>");
+            builder.finish_node();
+        }
+        ExprKind::Deref(_) => {
+            builder.start_node(SyntaxKind::PrefixExpr);
+            builder.token(SyntaxKind::Star, "*");
+            builder.finish_node();
+        }
     }
 }
 
@@ -232,6 +243,13 @@ fn ast_stmt_to_cst(builder: &mut CstBuilder, stmt: &StmtNode) {
         }
         StmtKind::Assign { target: _, value } => {
             builder.start_node(SyntaxKind::AssignStmt);
+            ast_expr_to_cst(builder, value);
+            builder.finish_node();
+        }
+        StmtKind::AssignDeref { target, value } => {
+            builder.start_node(SyntaxKind::AssignStmt);
+            ast_expr_to_cst(builder, target);
+            builder.token(SyntaxKind::Eq, "=");
             ast_expr_to_cst(builder, value);
             builder.finish_node();
         }

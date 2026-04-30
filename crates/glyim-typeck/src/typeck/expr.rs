@@ -37,6 +37,8 @@ impl TypeChecker {
             HirExpr::TupleLit { id, .. } => *id,
             HirExpr::SizeOf { id, .. } => *id,
             HirExpr::Return { id, .. } => *id,
+            HirExpr::Deref { id, .. } => *id,
+            HirExpr::MethodCall { id, .. } => *id,
         }
     }
 
@@ -124,6 +126,45 @@ impl TypeChecker {
             }
             HirExpr::SizeOf { .. } => HirType::Int,
             HirExpr::Return { .. } => HirType::Never,
+            HirExpr::Deref { expr, id, .. } => {
+                let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);
+                match inner_ty {
+                    HirType::RawPtr(inner) => *inner,
+                    _ => {
+                        self.errors.push(TypeError::DerefNonPointer {
+                            found: inner_ty,
+                            expr_id: *id,
+                        });
+                        HirType::Never
+                    }
+                }
+            }
+            HirExpr::MethodCall {
+                receiver,
+                method_name,
+                args,
+                ..
+            } => {
+                let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
+                for a in args {
+                    self.check_expr(a);
+                }
+                // look up method in impl methods by mangled name computed from receiver type
+                if let HirType::Named(type_name) = receiver_ty {
+                    let mangled = format!(
+                        "{}_{}",
+                        self.interner.resolve(type_name),
+                        self.interner.resolve(*method_name)
+                    );
+                    let mangled_sym = self.interner.intern(&mangled);
+                    if let Some(methods) = self.impl_methods.get(&type_name) {
+                        if let Some(fn_def) = methods.iter().find(|f| f.name == mangled_sym) {
+                            return fn_def.ret.clone().unwrap_or(HirType::Int);
+                        }
+                    }
+                }
+                HirType::Int
+            }
         }
     }
 
@@ -245,7 +286,7 @@ impl TypeChecker {
                 .unwrap_or(HirType::Int);
         }
         for methods in self.impl_methods.values() {
-            if let Some((_, fn_def)) = methods.iter().find(|(name, _)| *name == callee) {
+            if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
                 return fn_def.ret.clone().unwrap_or(HirType::Int);
             }
         }

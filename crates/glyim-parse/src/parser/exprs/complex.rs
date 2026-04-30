@@ -1,12 +1,11 @@
-use crate::ast::{BlockItem, ExprKind, ExprNode, MatchArm};
+use crate::ast::{BlockItem, ExprKind, ExprNode, MatchArm, StmtKind, StmtNode};
 use crate::parser::patterns::parse_pattern;
 use crate::parser::Parser;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
-#[tracing::instrument(skip_all)]
 pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
-    let start_tok = parser.tokens.bump()?; // '{'
+    let start_tok = parser.tokens.bump()?;
     let start = start_tok.start;
     let mut items = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
@@ -17,23 +16,49 @@ pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
                 continue;
             }
         }
-        if parser.tokens.at(SyntaxKind::Ident)
-            && parser
-                .tokens
-                .peek2()
-                .is_some_and(|t| t.kind == SyntaxKind::Eq)
-        {
-            if let Some(stmt) = parser.parse_assign_stmt() {
-                items.push(BlockItem::Stmt(stmt));
-                parser.tokens.eat(SyntaxKind::Semicolon);
-                continue;
-            }
-        }
         if let Some(expr) = parser.parse_expr(0) {
-            items.push(BlockItem::Expr(expr));
+            if parser.tokens.eat(SyntaxKind::Eq).is_some() {
+                let value = parser.parse_expr(0)?;
+                let value_span = value.span;
+                let stmt = match &expr.kind {
+                    ExprKind::Ident(sym) => StmtNode {
+                        kind: StmtKind::Assign {
+                            target: *sym,
+                            value,
+                        },
+                        span: Span::new(expr.span.start, value_span.end),
+                    },
+                    ExprKind::Deref(_) => {
+                        let target_clone = expr.clone();
+                        StmtNode {
+                            kind: StmtKind::AssignDeref {
+                                target: Box::new(target_clone),
+                                value,
+                            },
+                            span: Span::new(expr.span.start, value_span.end),
+                        }
+                    }
+                    _ => {
+                        parser.errors.push(crate::ParseError::Message {
+                            msg: "invalid assignment target".into(),
+                            span: (expr.span.start, expr.span.end),
+                        });
+                        StmtNode {
+                            kind: StmtKind::Assign {
+                                target: parser.interner.intern("_"),
+                                value,
+                            },
+                            span: Span::new(expr.span.start, value_span.end),
+                        }
+                    }
+                };
+                items.push(BlockItem::Stmt(stmt));
+            } else {
+                items.push(BlockItem::Expr(expr));
+            }
             parser.tokens.eat(SyntaxKind::Semicolon);
         } else {
-            parser.tokens.bump(); // skip bad token
+            parser.tokens.bump();
         }
     }
     let end_tok = match parser.tokens.expect(SyntaxKind::RBrace, &mut parser.errors) {
@@ -46,7 +71,6 @@ pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
     })
 }
 
-#[tracing::instrument(skip_all)]
 pub(crate) fn parse_if(parser: &mut Parser) -> Option<ExprNode> {
     let start = parser.tokens.bump()?.start;
     let condition = parser.parse_expr(0)?;
@@ -84,7 +108,7 @@ pub(crate) fn parse_if(parser: &mut Parser) -> Option<ExprNode> {
 }
 
 pub(crate) fn parse_lambda(parser: &mut Parser) -> Option<ExprNode> {
-    let start_tok = parser.tokens.bump()?; // '('
+    let start_tok = parser.tokens.bump()?;
     let start = start_tok.start;
     let mut params = vec![];
     while !parser.tokens.at(SyntaxKind::RParen) {
@@ -116,9 +140,8 @@ pub(crate) fn parse_lambda(parser: &mut Parser) -> Option<ExprNode> {
     })
 }
 
-#[tracing::instrument(skip_all)]
 pub(crate) fn parse_match(parser: &mut Parser) -> Option<ExprNode> {
-    let start_tok = parser.tokens.bump()?; // 'match'
+    let start_tok = parser.tokens.bump()?;
     let start = start_tok.start;
     let scrutinee = parser.parse_expr(0)?;
     parser

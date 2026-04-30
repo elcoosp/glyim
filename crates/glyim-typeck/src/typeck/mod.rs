@@ -23,7 +23,7 @@ pub struct TypeChecker {
     pub structs: HashMap<Symbol, StructInfo>,
     pub enums: HashMap<Symbol, EnumInfo>,
     pub extern_fns: HashMap<Symbol, FnSig>,
-    pub impl_methods: HashMap<Symbol, Vec<(Symbol, HirFn)>>,
+    pub impl_methods: HashMap<Symbol, Vec<HirFn>>,
     pub expr_types: Vec<HirType>,
     pub return_type: Option<HirType>,
     pub errors: Vec<TypeError>,
@@ -55,19 +55,35 @@ impl TypeChecker {
         let ok = self.interner.intern("Ok");
         let err = self.interner.intern("Err");
 
-        let opt_variants = vec![
-            glyim_hir::item::HirVariant { name: some, fields: vec![], tag: 0 },
-            glyim_hir::item::HirVariant { name: none, fields: vec![], tag: 1 },
+        let opt_variants = [
+            glyim_hir::item::HirVariant {
+                name: some,
+                fields: vec![],
+                tag: 0,
+            },
+            glyim_hir::item::HirVariant {
+                name: none,
+                fields: vec![],
+                tag: 1,
+            },
         ];
-        let res_variants = vec![
-            glyim_hir::item::HirVariant { name: ok, fields: vec![], tag: 0 },
-            glyim_hir::item::HirVariant { name: err, fields: vec![], tag: 1 },
+        let res_variants = [
+            glyim_hir::item::HirVariant {
+                name: ok,
+                fields: vec![],
+                tag: 0,
+            },
+            glyim_hir::item::HirVariant {
+                name: err,
+                fields: vec![],
+                tag: 1,
+            },
         ];
 
         self.enums.insert(
             opt_name,
             EnumInfo {
-                variants: opt_variants.iter().map(|v| v.clone()).collect(),
+                variants: opt_variants.to_vec(),
                 variant_map: vec![(some, 0), (none, 1)].into_iter().collect(),
                 type_params: vec![],
             },
@@ -75,7 +91,7 @@ impl TypeChecker {
         self.enums.insert(
             result_name,
             EnumInfo {
-                variants: res_variants.iter().map(|v| v.clone()).collect(),
+                variants: res_variants.to_vec(),
                 variant_map: vec![(ok, 0), (err, 1)].into_iter().collect(),
                 type_params: vec![],
             },

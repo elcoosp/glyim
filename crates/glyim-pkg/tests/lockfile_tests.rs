@@ -114,25 +114,61 @@ fn lockfile_roundtrip_multiple_versions() {
     let mut resolved = HashMap::new();
     resolved.insert(
         "a".to_string(),
-        ("1.0.0".to_string(), "sha256:abc".to_string(), false, vec![], LockSource::Local),
+        (
+            "1.0.0".to_string(),
+            "sha256:abc".to_string(),
+            false,
+            vec![],
+            LockSource::Local,
+        ),
     );
     resolved.insert(
         "b".to_string(),
-        ("2.0.0".to_string(), "sha256:def".to_string(), true, vec![], LockSource::Local),
+        (
+            "2.0.0".to_string(),
+            "sha256:def".to_string(),
+            true,
+            vec![],
+            LockSource::Local,
+        ),
     );
     let lock = generate_lockfile(&resolved);
     let serialized = serialize_lockfile(&lock);
     let parsed = parse_lockfile(&serialized).unwrap();
     assert_eq!(parsed.packages.len(), 2);
-    assert!(parsed.packages.iter().any(|p| p.name == "a" && p.version == "1.0.0"));
-    assert!(parsed.packages.iter().any(|p| p.name == "b" && p.version == "2.0.0" && p.is_macro));
+    assert!(parsed
+        .packages
+        .iter()
+        .any(|p| p.name == "a" && p.version == "1.0.0"));
+    assert!(parsed
+        .packages
+        .iter()
+        .any(|p| p.name == "b" && p.version == "2.0.0" && p.is_macro));
 }
 
 #[test]
 fn lockfile_serialized_sorted() {
     let mut resolved = HashMap::new();
-    resolved.insert("z".to_string(), ("0.1.0".to_string(), "h".to_string(), false, vec![], LockSource::Local));
-    resolved.insert("a".to_string(), ("0.2.0".to_string(), "h".to_string(), false, vec![], LockSource::Local));
+    resolved.insert(
+        "z".to_string(),
+        (
+            "0.1.0".to_string(),
+            "h".to_string(),
+            false,
+            vec![],
+            LockSource::Local,
+        ),
+    );
+    resolved.insert(
+        "a".to_string(),
+        (
+            "0.2.0".to_string(),
+            "h".to_string(),
+            false,
+            vec![],
+            LockSource::Local,
+        ),
+    );
     let lock = generate_lockfile(&resolved);
     let serialized = serialize_lockfile(&lock);
     let parsed = parse_lockfile(&serialized).unwrap();
@@ -149,7 +185,13 @@ version = "1.0"
 hash = "abc"
 "#;
     let result = parse_lockfile(toml);
-    assert!(result.is_err(), "expected parse error for missing type field");
+    assert!(
+        result.is_err(),
+        "expected parse error for missing type field"
+    );
     let result = parse_lockfile(toml);
-    assert!(result.is_err(), "expected parse error for missing type field");
+    assert!(
+        result.is_err(),
+        "expected parse error for missing type field"
+    );
 }

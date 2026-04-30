@@ -126,10 +126,9 @@ pub(crate) fn codegen_field_access<'ctx>(
                             "tuple_ptr",
                         )
                         .ok()?;
-
                     let field_ptr = cg
                         .builder
-                        .build_struct_gep(struct_ty, alloca, 0u32, "field")
+                        .build_struct_gep(struct_ty, alloca, idx as u32, "field")
                         .ok()?;
                     let val = cg
                         .builder
@@ -155,8 +154,10 @@ pub(crate) fn codegen_field_access<'ctx>(
             .map(|(_, &idx)| idx)
             .unwrap_or(0);
         drop(index_map);
-        let field_to_struct = cg.struct_types.borrow();
-        let struct_type_opt = field_to_struct.values().next().copied();
+        let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
+            Some(HirType::Named(name)) => cg.struct_types.borrow().get(name).copied(),
+            _ => None,
+        };
         let indices = &[
             cg.i32_type.const_int(0, false),
             cg.i32_type.const_int(field_idx as u64, false),

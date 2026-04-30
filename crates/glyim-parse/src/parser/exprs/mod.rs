@@ -62,7 +62,7 @@ impl Parser<'_> {
                 && 90 >= min_bp
             {
                 self.tokens.bump();
-                self.tokens.bump(); // consume ::
+                self.tokens.bump();
                 let variant_tok = match self.tokens.expect(SyntaxKind::Ident, &mut self.errors) {
                     Ok(t) => t,
                     Err(_) => break,
@@ -147,6 +147,7 @@ impl Parser<'_> {
                 };
                 continue;
             }
+            // Field access / Method call
             if op_tok.kind == SyntaxKind::Dot && 90 >= min_bp {
                 self.tokens.bump();
                 let field_tok = match self.tokens.expect(SyntaxKind::Ident, &mut self.errors) {
@@ -154,6 +155,35 @@ impl Parser<'_> {
                     Err(_) => break,
                 };
                 let field = self.interner.intern(field_tok.text);
+
+                // Check if it's a method call: identifier followed by '('
+                if self.tokens.at(SyntaxKind::LParen) {
+                    self.tokens.bump();
+                    let mut args = vec![left.clone()];
+                    while !self.tokens.at(SyntaxKind::RParen) && self.tokens.peek().is_some() {
+                        args.push(self.parse_expr(0)?);
+                        if self.tokens.eat(SyntaxKind::Comma).is_none()
+                            && !self.tokens.at(SyntaxKind::RParen)
+                        {
+                            break;
+                        }
+                    }
+                    let rparen = match self.tokens.expect(SyntaxKind::RParen, &mut self.errors) {
+                        Ok(t) => t,
+                        Err(_) => break,
+                    };
+                    left = ExprNode {
+                        kind: ExprKind::MethodCall {
+                            receiver: Box::new(left.clone()),
+                            method: field,
+                            args,
+                        },
+                        span: Span::new(left.span.start, rparen.end),
+                    };
+                    continue;
+                }
+
+                // Otherwise field access
                 left = ExprNode {
                     kind: ExprKind::FieldAccess {
                         object: Box::new(left.clone()),

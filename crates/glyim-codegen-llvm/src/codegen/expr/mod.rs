@@ -1,3 +1,4 @@
+use glyim_hir::HirType;
 mod control;
 mod data;
 mod float_ops;
@@ -100,6 +101,80 @@ pub(crate) fn codegen_expr<'ctx>(
                     .build_ptr_to_int(alloca, cg.i64_type, "f2i64")
                     .ok()?,
             )
+        }
+        HirExpr::Deref { expr, id, .. } => {
+            let ptr_val = codegen_expr(cg, expr, fctx)?;
+            let pointed_ty = cg
+                .expr_types
+                .get(id.as_usize())
+                .cloned()
+                .unwrap_or(HirType::Int);
+            let load_type = cg
+                .hir_type_to_llvm(&pointed_ty)
+                .unwrap_or(cg.i64_type.into());
+            let ptr = cg
+                .builder
+                .build_int_to_ptr(
+                    ptr_val,
+                    cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
+                    "deref_ptr",
+                )
+                .ok()?;
+            let loaded = cg.builder.build_load(load_type, ptr, "deref_val").ok()?;
+            match loaded {
+                inkwell::values::BasicValueEnum::IntValue(iv) => Some(iv),
+                inkwell::values::BasicValueEnum::FloatValue(fv) => {
+                    let alloca = cg.builder.build_alloca(cg.f64_type, "f_tmp").ok()?;
+                    cg.builder.build_store(alloca, fv).ok()?;
+                    cg.builder.build_ptr_to_int(alloca, cg.i64_type, "f2i").ok()
+                }
+                inkwell::values::BasicValueEnum::PointerValue(pv) => {
+                    cg.builder.build_ptr_to_int(pv, cg.i64_type, "p2i").ok()
+                }
+                _ => Some(cg.i64_type.const_int(0, false)),
+            }
+        }
+        HirExpr::MethodCall {
+            receiver: _,
+            method_name,
+            args,
+            ..
+        } => {
+            let receiver = args.first()?;
+            let receiver_id = receiver.get_id();
+            let receiver_ty = cg
+                .expr_types
+                .get(receiver_id.as_usize())
+                .cloned()
+                .unwrap_or(HirType::Int);
+            let mangled_name = match receiver_ty {
+                HirType::Named(type_name) => format!(
+                    "{}_{}",
+                    cg.interner.resolve(type_name),
+                    cg.interner.resolve(*method_name)
+                ),
+                _ => cg.interner.resolve(*method_name).to_string(),
+            };
+            if let Some(fn_val) = cg.module.get_function(&mangled_name) {
+                let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
+                for a in args {
+                    if let Some(v) = codegen_expr(cg, a, fctx) {
+                        call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));
+                    }
+                }
+                let result = cg
+                    .builder
+                    .build_call(fn_val, &call_args, "method_call")
+                    .ok()?;
+                match result.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(basic_val) => {
+                        Some(basic_val.into_int_value())
+                    }
+                    _ => Some(cg.i64_type.const_int(0, false)),
+                }
+            } else {
+                Some(cg.i64_type.const_int(0, false))
+            }
         }
     }
 }

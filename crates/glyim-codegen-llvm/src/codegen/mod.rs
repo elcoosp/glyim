@@ -40,12 +40,10 @@ pub struct Codegen<'ctx> {
     pub(crate) enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
     pub(crate) option_sym: Symbol,
     pub(crate) result_sym: Symbol,
-    // --- debug info fields ---
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,
     current_subprogram: Option<DISubprogram<'ctx>>,
-    pub(crate) macro_fn_names:
-        std::cell::RefCell<std::collections::HashSet<glyim_interner::Symbol>>,
+    pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
     pub(crate) no_std: bool,
 }
 
@@ -77,7 +75,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: None,
             current_subprogram: None,
             no_std: false,
-            macro_fn_names: std::cell::RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         }
     }
 
@@ -91,7 +89,6 @@ impl<'ctx> Codegen<'ctx> {
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-
         let debug_info = match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::Full) {
             Ok(di) => Some(di),
             Err(e) => {
@@ -99,7 +96,6 @@ impl<'ctx> Codegen<'ctx> {
                 None
             }
         };
-
         Ok(Self {
             context,
             module,
@@ -122,7 +118,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: Some(source_str),
             current_subprogram: None,
             no_std: false,
-            macro_fn_names: std::cell::RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -136,7 +132,6 @@ impl<'ctx> Codegen<'ctx> {
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-
         let debug_info =
             match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::LineTablesOnly) {
                 Ok(di) => Some(di),
@@ -145,7 +140,6 @@ impl<'ctx> Codegen<'ctx> {
                     None
                 }
             };
-
         Ok(Self {
             context,
             module,
@@ -168,7 +162,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: Some(source_str),
             current_subprogram: None,
             no_std: false,
-            macro_fn_names: std::cell::RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -184,17 +178,29 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     #[tracing::instrument(skip_all)]
-    #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
         types::register_builtin_enums(self);
         for item in &hir.items {
             match item {
-                glyim_hir::item::HirItem::Fn(f) => function::codegen_fn(self, f)?,
+                glyim_hir::item::HirItem::Fn(f) => {
+                    function::codegen_fn(self, f)?;
+                }
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
-                glyim_hir::item::HirItem::Extern(_) => {}
+                glyim_hir::item::HirItem::Extern(ext) => {
+                    for f in &ext.functions {
+                        let name = self.interner.resolve(f.name);
+                        let param_types: Vec<inkwell::types::BasicTypeEnum> =
+                            f.params.iter().map(|_| self.i64_type.into()).collect();
+                        let fn_type = self.i64_type.fn_type(
+                            &param_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                            false,
+                        );
+                        self.module.add_function(name, fn_type, None);
+                    }
+                }
                 glyim_hir::item::HirItem::Impl(impl_def) => {
                     for method in &impl_def.methods {
                         function::codegen_fn(self, method)?;
@@ -203,7 +209,6 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
-        // Finalize debug info before verifying
         self.emit_macro_debug_section();
         if let Some(ref di) = self.debug_info {
             di.finalize();
@@ -254,7 +259,6 @@ impl<'ctx> Codegen<'ctx> {
             .map_err(|e| e.to_string())
     }
 
-    /// Create a null-terminated global C string.
     fn create_c_string_global(
         &self,
         s: &str,
@@ -293,7 +297,6 @@ impl<'ctx> Codegen<'ctx> {
         .map_err(|e| e.to_string())
     }
 
-    /// Call printf(fmt, arg).
     fn call_printf(
         &self,
         fmt_ptr: inkwell::values::PointerValue<'ctx>,
@@ -318,7 +321,6 @@ impl<'ctx> Codegen<'ctx> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
         types::register_builtin_enums(self);
-
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
@@ -330,7 +332,18 @@ impl<'ctx> Codegen<'ctx> {
                 }
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
-                glyim_hir::item::HirItem::Extern(_) => {}
+                glyim_hir::item::HirItem::Extern(ext) => {
+                    for f in &ext.functions {
+                        let name = self.interner.resolve(f.name);
+                        let param_types: Vec<inkwell::types::BasicTypeEnum> =
+                            f.params.iter().map(|_| self.i64_type.into()).collect();
+                        let fn_type = self.i64_type.fn_type(
+                            &param_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                            false,
+                        );
+                        self.module.add_function(name, fn_type, None);
+                    }
+                }
                 glyim_hir::item::HirItem::Impl(impl_def) => {
                     for method in &impl_def.methods {
                         function::codegen_fn(self, method)?;
@@ -338,12 +351,9 @@ impl<'ctx> Codegen<'ctx> {
                 }
             }
         }
-
-        // Finalize debug info
         if let Some(ref di) = self.debug_info {
             di.finalize();
         }
-
         self.emit_test_harness(test_names, should_panic)?;
         Ok(())
     }
@@ -354,28 +364,22 @@ impl<'ctx> Codegen<'ctx> {
         should_panic: &std::collections::HashSet<String>,
     ) -> Result<(), String> {
         use inkwell::IntPredicate;
-
         if test_names.is_empty() {
             return Err("no test functions to generate harness for".into());
         }
-
         let i32_type = self.i32_type;
         let i64_type = self.i64_type;
         let zero32 = i32_type.const_int(0, false);
         let zero64 = i64_type.const_int(0, false);
         let one32 = i32_type.const_int(1, false);
-
         let main_type = i32_type.fn_type(&[], false);
         let main_fn = self.module.add_function("main", main_type, None);
         let entry = self.context.append_basic_block(main_fn, "entry");
         self.builder.position_at_end(entry);
-
         let fmt_ptr = self.create_c_string_global("%s")?;
-
         let header = format!("running {} tests\n", test_names.len());
         let header_ptr = self.create_c_string_global(&header)?;
         self.call_printf(fmt_ptr, header_ptr)?;
-
         let any_failed = self
             .builder
             .build_alloca(i32_type, "any_failed")
@@ -383,12 +387,10 @@ impl<'ctx> Codegen<'ctx> {
         self.builder
             .build_store(any_failed, zero32)
             .map_err(|e| e.to_string())?;
-
         for test_name in test_names {
             let msg = format!("test {} ... ", test_name);
             let msg_ptr = self.create_c_string_global(&msg)?;
             self.call_printf(fmt_ptr, msg_ptr)?;
-
             let fn_val = self
                 .module
                 .get_function(test_name)
@@ -401,7 +403,6 @@ impl<'ctx> Codegen<'ctx> {
                 inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_int_value(),
                 _ => return Err(format!("test function '{}' returned void", test_name)),
             };
-
             let is_should_panic = should_panic.contains(test_name);
             let is_fail = if is_should_panic {
                 self.builder
@@ -412,15 +413,12 @@ impl<'ctx> Codegen<'ctx> {
                     .build_int_compare(IntPredicate::NE, result_val, zero64, "is_fail")
                     .map_err(|e| e.to_string())?
             };
-
             let pass_bb = self.context.append_basic_block(main_fn, "test_pass");
             let fail_bb = self.context.append_basic_block(main_fn, "test_fail");
             let next_bb = self.context.append_basic_block(main_fn, "test_next");
-
             self.builder
                 .build_conditional_branch(is_fail, fail_bb, pass_bb)
                 .map_err(|e| e.to_string())?;
-
             self.builder.position_at_end(fail_bb);
             let fail_msg_ptr = self.create_c_string_global("FAILED\n")?;
             self.call_printf(fmt_ptr, fail_msg_ptr)?;
@@ -430,24 +428,20 @@ impl<'ctx> Codegen<'ctx> {
             self.builder
                 .build_unconditional_branch(next_bb)
                 .map_err(|e| e.to_string())?;
-
             self.builder.position_at_end(pass_bb);
             let ok_msg_ptr = self.create_c_string_global("ok\n")?;
             self.call_printf(fmt_ptr, ok_msg_ptr)?;
             self.builder
                 .build_unconditional_branch(next_bb)
                 .map_err(|e| e.to_string())?;
-
             self.builder.position_at_end(next_bb);
         }
-
         let summary = format!(
             "\ntest result: ok. {} passed; 0 failed; 0 ignored\n",
             test_names.len()
         );
         let summary_ptr = self.create_c_string_global(&summary)?;
         self.call_printf(fmt_ptr, summary_ptr)?;
-
         let failed_val = self
             .builder
             .build_load(i32_type, any_failed, "failed_val")
@@ -456,7 +450,6 @@ impl<'ctx> Codegen<'ctx> {
         self.builder
             .build_return(Some(&failed_val))
             .map_err(|e| e.to_string())?;
-
         Ok(())
     }
 
@@ -465,13 +458,11 @@ impl<'ctx> Codegen<'ctx> {
         self
     }
 
-    /// Emit a `.glyim-macro-debug` ELF section containing macro expansion metadata.
     fn emit_macro_debug_section(&self) {
         let names = self.macro_fn_names.borrow();
         if names.is_empty() {
             return;
         }
-        // Create a simple metadata string: comma-separated list of macro function names
         let metadata = names
             .iter()
             .map(|sym| self.interner.resolve(*sym).to_string())

@@ -64,7 +64,27 @@ pub(crate) fn parse_atom(parser: &mut Parser) -> Option<ExprNode> {
         SyntaxKind::LParen => parse_paren_or_tuple(parser),
         SyntaxKind::LBrace => super::complex::parse_block(parser),
         SyntaxKind::KwIf => super::complex::parse_if(parser),
-        SyntaxKind::Star => parse_pointer(parser),
+        SyntaxKind::Star => {
+            // Guard: *let, *mut, *const → null pointer expression (existing behavior)
+            let is_null_ptr = if let Some(next) = parser.tokens.peek2() {
+                matches!(next.kind, SyntaxKind::KwLet | SyntaxKind::KwMut)
+                    || (next.kind == SyntaxKind::Ident && next.text == "const")
+            } else {
+                false
+            };
+            if is_null_ptr {
+                parse_pointer(parser)
+            } else {
+                // Deref expression: *expr (high prefix precedence)
+                let star_tok = parser.tokens.bump()?;
+                let operand = parser.parse_expr(70)?;
+                let op_span = operand.span;
+                Some(ExprNode {
+                    kind: ExprKind::Deref(Box::new(operand)),
+                    span: Span::new(star_tok.start, op_span.end),
+                })
+            }
+        }
         SyntaxKind::Minus | SyntaxKind::Bang => parse_unary(parser),
         _ => {
             parser.errors.push(crate::ParseError::expected_expr(

@@ -14,6 +14,7 @@ members = [
     "crates/glyim-pkg",
     "crates/glyim-cas-server",
     "crates/glyim-cli",
+    "crates/glyim-doc",
 ]
 
 [workspace.package]

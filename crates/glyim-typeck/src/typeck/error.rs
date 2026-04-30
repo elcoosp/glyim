@@ -31,6 +31,10 @@ pub enum TypeError {
     IfConditionMustBeBool { found: HirType, expr_id: ExprId },
     #[error("cannot assign to immutable binding")]
     AssignToImmutable { name: Symbol, expr_id: ExprId },
+    #[error("cannot assign through non-pointer type `{found:?}`")]
+    AssignThroughNonPointer { found: HirType, expr_id: ExprId },
+    #[error("cannot dereference non-pointer type `{found:?}`")]
+    DerefNonPointer { found: HirType, expr_id: ExprId },
     #[error("unresolved name: {name:?}")]
     UnresolvedName { name: Symbol },
 }

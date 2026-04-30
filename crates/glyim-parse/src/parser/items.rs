@@ -32,7 +32,7 @@ pub(crate) fn parse_item(parser: &mut Parser) -> Option<Item> {
 }
 
 fn parse_macro_def(parser: &mut Parser) -> Option<Item> {
-    parser.tokens.bump(); // '@'
+    parser.tokens.bump();
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)
@@ -106,8 +106,8 @@ fn parse_binding_with_attrs(
 }
 
 fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>) -> Option<Item> {
-    parser.tokens.bump(); // 'fn'
-    let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
+    parser.tokens.bump(); // fn
+    let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)
@@ -159,8 +159,8 @@ fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute
 }
 
 fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
-    parser.tokens.bump(); // 'struct'
-    let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
+    parser.tokens.bump(); // struct
+    let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)
@@ -202,8 +202,8 @@ fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
 }
 
 fn parse_enum_def(parser: &mut Parser) -> Option<Item> {
-    parser.tokens.bump(); // 'enum'
-    let _is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
+    parser.tokens.bump(); // enum
+    let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)
@@ -246,7 +246,7 @@ fn parse_enum_def(parser: &mut Parser) -> Option<Item> {
 }
 
 fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
-    let start_tok = parser.tokens.bump()?; // 'impl'
+    let start_tok = parser.tokens.bump()?;
     let start = start_tok.start;
     let is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
     let type_params = parse_type_params(parser);
@@ -255,25 +255,11 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .expect(SyntaxKind::Ident, &mut parser.errors)
         .ok()?;
     let target = parser.interner.intern(target_tok.text);
-    let target_span = Span::new(target_tok.start, target_tok.end);
-    // eat optional generic arguments on the target name (e.g., Edge<T>)
-    if parser.tokens.at(SyntaxKind::Lt) {
-        parser.tokens.bump(); // <
-        loop {
-            if parser.tokens.at(SyntaxKind::Ident) {
-                parser.tokens.bump(); // type param name
-            }
-            if parser.tokens.at(SyntaxKind::Gt) {
-                parser.tokens.bump();
-                break;
-            }
-            if parser.tokens.at(SyntaxKind::Comma) {
-                parser.tokens.bump();
-                continue;
-            }
-            break;
-        }
+    let _ = parser.tokens.eat(SyntaxKind::Lt); // skip generics on target
+    while parser.tokens.at(SyntaxKind::Ident) {
+        parser.tokens.bump();
     }
+    let _ = parser.tokens.eat(SyntaxKind::Gt);
     parser
         .tokens
         .expect(SyntaxKind::LBrace, &mut parser.errors)
@@ -296,7 +282,7 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .ok()?;
     Some(Item::ImplBlock {
         target,
-        target_span,
+        target_span: Span::new(target_tok.start, target_tok.end),
         type_params,
         is_pub,
         methods,
@@ -325,14 +311,13 @@ fn parse_extern_block(parser: &mut Parser) -> Option<Item> {
             .expect(SyntaxKind::Ident, &mut parser.errors)
             .ok()?;
         let name = parser.interner.intern(name_tok.text);
-        let name_span = Span::new(name_tok.start, name_tok.end);
         parser
             .tokens
             .expect(SyntaxKind::LParen, &mut parser.errors)
             .ok()?;
         let mut params = vec![];
         loop {
-            if parser.tokens.at(SyntaxKind::RParen) {
+            if parser.tokens.at(SyntaxKind::RParen) || parser.tokens.is_eof() {
                 break;
             }
             let param_tok = parser
@@ -340,10 +325,11 @@ fn parse_extern_block(parser: &mut Parser) -> Option<Item> {
                 .expect(SyntaxKind::Ident, &mut parser.errors)
                 .ok()?;
             parser.tokens.eat(SyntaxKind::Colon);
-            parse_extern_type(parser);
+            let ty = parse_extern_type(parser);
             params.push((
                 parser.interner.intern(param_tok.text),
                 Span::new(param_tok.start, param_tok.end),
+                ty,
             ));
             if parser.tokens.eat(SyntaxKind::Comma).is_none() {
                 break;
@@ -354,15 +340,14 @@ fn parse_extern_block(parser: &mut Parser) -> Option<Item> {
             .expect(SyntaxKind::RParen, &mut parser.errors)
             .ok()?;
         let ret = if parser.tokens.eat(SyntaxKind::Arrow).is_some() {
-            parse_extern_type(parser);
-            Some((parser.interner.intern("unknown"), Span::new(0, 0)))
+            parse_extern_type(parser)
         } else {
             None
         };
         parser.tokens.eat(SyntaxKind::Semicolon);
         functions.push(ExternFn {
             name,
-            name_span,
+            name_span: Span::new(name_tok.start, name_tok.end),
             params,
             ret,
         });
@@ -378,18 +363,23 @@ fn parse_extern_block(parser: &mut Parser) -> Option<Item> {
     })
 }
 
-fn parse_extern_type(parser: &mut Parser) {
-    // Handle pointer types: *mut T, *const T
+fn parse_extern_type(parser: &mut Parser) -> Option<TypeExpr> {
     if parser.tokens.at(SyntaxKind::Star) {
-        parser.tokens.bump(); // '*'
-        parser.tokens.eat(SyntaxKind::KwMut);
-        // const is not a keyword, just an identifier
-        if parser.tokens.at(SyntaxKind::Ident) && parser.tokens.peek().unwrap().text == "const" {
+        parser.tokens.bump();
+        let mutable = parser.tokens.eat(SyntaxKind::KwMut).is_some();
+        if !mutable
+            && parser.tokens.at(SyntaxKind::Ident)
+            && parser.tokens.peek().unwrap().text == "const"
+        {
             parser.tokens.bump();
         }
-        parse_extern_type(parser);
+        let inner = parse_extern_type(parser)?;
+        Some(TypeExpr::RawPtr {
+            mutable,
+            inner: Box::new(inner),
+        })
     } else {
-        parse_type_expr(&mut parser.tokens, &mut parser.interner);
+        parse_type_expr(&mut parser.tokens, &mut parser.interner)
     }
 }
 
@@ -424,8 +414,7 @@ fn parse_type_params(parser: &mut Parser) -> Vec<glyim_interner::Symbol> {
     parser.tokens.bump();
     let mut tp = vec![];
     while let Ok(t) = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors) {
-        let tok = t;
-        tp.push(parser.interner.intern(tok.text));
+        tp.push(parser.interner.intern(t.text));
         if parser.tokens.at(SyntaxKind::Gt) {
             parser.tokens.bump();
             break;
@@ -494,15 +483,14 @@ fn parse_variant_kind(parser: &mut Parser) -> VariantKind {
 fn skip_return_type(parser: &mut Parser) {
     if parser.tokens.eat(SyntaxKind::Arrow).is_some() {
         let mut depth = 0u32;
-        while parser.tokens.peek().is_some() {
-            let kind = parser.tokens.peek().unwrap().kind;
-            if kind == SyntaxKind::LBrace && depth == 0 {
+        while let Some(tok) = parser.tokens.peek() {
+            if tok.kind == SyntaxKind::LBrace && depth == 0 {
                 break;
             }
-            if kind == SyntaxKind::Lt || kind == SyntaxKind::LParen {
+            if tok.kind == SyntaxKind::Lt || tok.kind == SyntaxKind::LParen {
                 depth += 1;
             }
-            if kind == SyntaxKind::Gt || kind == SyntaxKind::RParen {
+            if tok.kind == SyntaxKind::Gt || tok.kind == SyntaxKind::RParen {
                 depth = depth.saturating_sub(1);
             }
             parser.tokens.bump();

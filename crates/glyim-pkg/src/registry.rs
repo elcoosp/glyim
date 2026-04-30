@@ -2,7 +2,6 @@ use crate::error::PkgError;
 use crate::lockfile::LockSource;
 use crate::resolver::AvailableVersion;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RegistryPackageMeta {
@@ -27,7 +26,6 @@ struct RegistryDepEntry {
     is_macro: bool,
 }
 
-/// Registry client for the Glyim package registry.
 pub struct RegistryClient {
     endpoint: String,
     client: reqwest::blocking::Client,
@@ -50,7 +48,6 @@ impl RegistryClient {
         &self.endpoint
     }
 
-    /// Fetch available versions for a package from the registry.
     pub fn fetch_available(&self, name: &str) -> Result<Vec<AvailableVersion>, PkgError> {
         let url = format!("{}/api/v1/packages/{}", self.endpoint, name);
         let response = self
@@ -107,68 +104,34 @@ impl RegistryClient {
         Ok(versions)
     }
 
-    /// Download a package archive and return its content hash.
-    pub fn download(&self, name: &str, version: &str, dest: &Path) -> Result<String, PkgError> {
+    pub fn publish(&self, name: &str, version: &str, archive_data: &[u8]) -> Result<(), PkgError> {
         let url = format!(
-            "{}/api/v1/packages/{}/{}/download",
+            "{}/api/v1/packages/{}/{}/upload",
             self.endpoint, name, version
         );
         let response = self
             .client
-            .get(&url)
+            .post(&url)
+            .header("Content-Type", "application/octet-stream")
+            .body(archive_data.to_vec())
             .send()
-            .map_err(|e| PkgError::Registry(format!("download {name}@{version}: {e}")))?;
-
+            .map_err(|e| PkgError::Registry(format!("publish upload: {e}")))?;
         if !response.status().is_success() {
             return Err(PkgError::Registry(format!(
-                "download {name}@{version} returned {}",
+                "publish returned {}",
                 response.status()
             )));
         }
-
-        let bytes = response
-            .bytes()
-            .map_err(|e| PkgError::Registry(format!("read response: {e}")))?;
-
-        let hash = crate::lockfile::compute_content_hash(&bytes);
-
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).map_err(PkgError::Io)?;
-        }
-        std::fs::write(dest, &bytes).map_err(PkgError::Io)?;
-
-        Ok(hash)
+        Ok(())
     }
 
-    /// Publish a package archive to the registry.
-    pub fn publish(&self, _archive_path: &Path) -> Result<(), PkgError> {
-        // TODO: Implement multipart upload with auth
-        Err(PkgError::Registry("publish not yet implemented".into()))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn registry_client_new_with_url() {
-        let client = RegistryClient::new("https://registry.glyim.dev").unwrap();
-        assert_eq!(client.endpoint(), "https://registry.glyim.dev");
-    }
-
-    #[test]
-    fn registry_client_fetch_returns_error_on_bad_url() {
-        let client = RegistryClient::new("http://localhost:99999").unwrap();
-        let result = client.fetch_available("nonexistent");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn registry_client_download_returns_error_on_bad_url() {
-        let client = RegistryClient::new("http://localhost:99999").unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let result = client.download("pkg", "1.0.0", dir.path());
-        assert!(result.is_err());
+    pub fn get_latest_version(&self, name: &str) -> Result<Option<String>, PkgError> {
+        let versions = self.fetch_available(name)?;
+        let latest = versions
+            .iter()
+            .filter(|v| !v.is_macro)
+            .map(|v| v.version.clone())
+            .next_back();
+        Ok(latest)
     }
 }

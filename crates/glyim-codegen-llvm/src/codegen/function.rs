@@ -7,7 +7,6 @@ use inkwell::values::PointerValue;
 use std::collections::HashMap;
 
 #[tracing::instrument(skip_all)]
-#[tracing::instrument(skip_all)]
 pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), String> {
     let name = cg.interner.resolve(f.name);
     let is_main = name == "main";
