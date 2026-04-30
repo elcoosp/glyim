@@ -276,11 +276,15 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .expect(SyntaxKind::Ident, &mut parser.errors)
         .ok()?;
     let target = parser.interner.intern(target_tok.text);
-    let _ = parser.tokens.eat(SyntaxKind::Lt); // skip generics on target
-    while parser.tokens.at(SyntaxKind::Ident) {
-        parser.tokens.bump();
+    // Eat <T> or <T, U> on the target type, if present (already handled by
+    // parse_type_params in the generic case, but also needs to consume the
+    // concrete generic arguments when the user writes impl<T> Vec<T>).
+    if parser.tokens.eat(SyntaxKind::Lt).is_some() {
+        while !parser.tokens.at(SyntaxKind::Gt) && !parser.tokens.is_eof() {
+            parser.tokens.bump();  // eat type arguments
+        }
+        parser.tokens.eat(SyntaxKind::Gt);
     }
-    let _ = parser.tokens.eat(SyntaxKind::Gt);
     parser
         .tokens
         .expect(SyntaxKind::LBrace, &mut parser.errors)

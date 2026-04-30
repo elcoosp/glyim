@@ -497,7 +497,13 @@ main = () => {
 "#;
     let full_src = format!("{}\n{}\n{}", vec_src, string_src, main_code);
     let input = temp_g(&full_src);
-    assert_eq!(pipeline::run(&input).unwrap(), 0);
+    match pipeline::run(&input) {
+                Ok(v) => assert_eq!(v, 0),
+                Err(e) => {
+                    eprintln!("String test error: {:?}", e);
+                    panic!("String test failed");
+                }
+            }
 
 #[test]
 fn e2e_vec_generic_len() {

@@ -79,7 +79,9 @@ pub(crate) fn codegen_expr<'ctx>(
         }
         HirExpr::ForIn { .. } => control::codegen_while(cg, expr, fctx),
         HirExpr::While { .. } => control::codegen_while(cg, expr, fctx),
-        HirExpr::If { .. } => control::codegen_if(cg, expr, fctx),
+        HirExpr::If { condition, .. } => {
+            control::codegen_if(cg, expr, fctx)
+        },
         HirExpr::Match { .. } => control::codegen_match(cg, expr, fctx),
         HirExpr::StructLit { .. } => data::codegen_struct_lit(cg, expr, fctx),
         HirExpr::EnumVariant { .. } => data::codegen_enum_variant(cg, expr, fctx),

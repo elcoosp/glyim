@@ -109,6 +109,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
+    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -191,6 +192,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
+    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -308,6 +310,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
+    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -372,6 +375,7 @@ pub fn build_with_mode(
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
+    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -630,6 +634,7 @@ pub fn run_tests(
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
+    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -792,6 +797,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
+    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {

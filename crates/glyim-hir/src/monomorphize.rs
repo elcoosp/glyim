@@ -30,6 +30,7 @@ struct MonoContext<'a> {
     type_overrides: HashMap<ExprId, HirType>,
     fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
     fn_queued: HashSet<(Symbol, Vec<HirType>)>,
+    current_type_params: Vec<Symbol>,  // type params of the function being scanned
 }
 
 impl<'a> MonoContext<'a> {
@@ -49,14 +50,26 @@ impl<'a> MonoContext<'a> {
             type_overrides: HashMap::new(),
             fn_work_queue: Vec::new(),
             fn_queued: HashSet::new(),
+            current_type_params: vec![],
         }
     }
 
     fn find_fn(&self, name: Symbol) -> Option<HirFn> {
+        // Search top-level functions
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
                 if f.name == name {
                     return Some(f.clone());
+                }
+            }
+        }
+        // Search impl methods
+        for item in &self.hir.items {
+            if let HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    if m.name == name {
+                        return Some(m.clone());
+                    }
                 }
             }
         }
@@ -78,37 +91,54 @@ impl<'a> MonoContext<'a> {
         let base_str = self.interner.resolve(base).to_string();
         let args_str = type_args
             .iter()
-            .map(|t| format_type_short(t))
+            .map(|t| self.format_type_short(t))
             .collect::<Vec<_>>()
             .join("_");
-        self.interner.intern(&format!("{}__{}", base_str, args_str))
+        let mangled = format!("{}__{}", base_str, args_str);
+        println!("[mono mangle] base='{}' type_args={:?} -> '{}'", base_str, type_args.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>(), mangled);
+        self.interner.intern(&mangled)
     }
 
     fn collect_and_specialize(&mut self) {
         // Seed work queue from call_type_args (provided by type checker)
         for (expr_id, type_args) in self.call_type_args.iter() {
             for item in &self.hir.items {
-                if let HirItem::Fn(f) = item {
-                    if let Some(callee) = self.find_call_callee_by_id(&f.body, *expr_id) {
-                        self.queue_fn_specialization(callee, type_args.clone());
+                match item {
+                    HirItem::Fn(f) => {
+                        if let Some(callee) = self.find_call_callee_by_id(&f.body, *expr_id) {
+                            self.queue_fn_specialization(callee, type_args.clone());
+                        }
                     }
+                    HirItem::Impl(imp) => {
+                        for m in &imp.methods {
+                            if let Some(callee) = self.find_call_callee_by_id(&m.body, *expr_id) {
+                                self.queue_fn_specialization(callee, type_args.clone());
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
         // Also scan all function bodies to discover generic calls
         // not yet in call_type_args (backward compatibility fallback).
+        // Struct instantiation scanning is deferred to work-queue processing,
+        // where the specialized body has concrete types.
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
+                self.current_type_params = f.type_params.clone();
                 self.scan_expr_for_generic_calls(&f.body);
             }
-        }
-
-        // Scan struct literals for specializations
-        for item in &self.hir.items {
-            if let HirItem::Fn(f) = item {
-                self.scan_expr_for_struct_instantiations(&f.body);
+            if let HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    self.current_type_params = m.type_params.clone();
+                    self.scan_expr_for_generic_calls(&m.body);
+                }
             }
         }
+        self.current_type_params = vec![];
+
+        // Struct scanning done in work-queue processing only
 
         // Process work queue
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
@@ -118,7 +148,9 @@ impl<'a> MonoContext<'a> {
             }
             if let Some(generic_fn) = self.find_fn(fn_name) {
                 let specialized = self.specialize_fn(&generic_fn, &type_args);
+                self.current_type_params = vec![];  // specialized body has no type params
                 self.scan_expr_for_generic_calls(&specialized.body);
+                self.scan_expr_for_struct_instantiations(&specialized.body);
                 self.fn_specs.insert(key.clone(), specialized.clone());
             }
         }
@@ -173,17 +205,22 @@ impl<'a> MonoContext<'a> {
     fn scan_expr_for_struct_instantiations(&mut self, expr: &HirExpr) {
         match expr {
             HirExpr::StructLit { id, struct_name, fields, .. } => {
+                println!("[mono scan_struct] StructLit id={:?} name='{}'", id, self.interner.resolve(*struct_name));
                 if let Some(struct_def) = self.find_struct(*struct_name) {
+                    println!("[mono scan_struct] found struct_def with {} type_params", struct_def.type_params.len());
                     if !struct_def.type_params.is_empty() {
                         let field_types: Vec<HirType> = fields
                             .iter()
                             .map(|(_, f)| self.expr_types.get(f.get_id().as_usize()).cloned().unwrap_or(HirType::Never))
                             .collect();
+                        println!("[mono scan_struct] field_types: {:?}", field_types.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>());
                         let mut sub = HashMap::new();
                         for (i, tp) in struct_def.type_params.iter().enumerate() {
                             if let Some(ft) = struct_def.fields.get(i) {
+                                println!("[mono scan_struct]   field[{}] ty={:?}", i, ft.ty);
                                 if let HirType::Named(param_sym) = &ft.ty {
                                     if let Some(val_ty) = field_types.get(i) {
+                                        println!("[mono scan_struct]     val_ty={:?}, param_sym={:?}, tp={:?}, match={}, not_never={}", val_ty, self.interner.resolve(*param_sym), self.interner.resolve(*tp), *param_sym == *tp, *val_ty != HirType::Never);
                                         if *param_sym == *tp && *val_ty != HirType::Never {
                                             sub.insert(*tp, val_ty.clone());
                                         }
@@ -191,6 +228,7 @@ impl<'a> MonoContext<'a> {
                                 }
                             }
                         }
+                        println!("[mono scan_struct] sub len={}, type_params len={}", sub.len(), struct_def.type_params.len());
                         if sub.len() == struct_def.type_params.len() {
                             let concrete: Vec<HirType> = struct_def
                                 .type_params
@@ -203,6 +241,7 @@ impl<'a> MonoContext<'a> {
                                 self.struct_specs.insert(key, specialized);
                             }
                             let mangled = self.mangle_name(*struct_name, &concrete);
+                            println!("[mono scan_struct] CREATING specialization: mangled='{}'", self.interner.resolve(mangled));
                             self.type_overrides.insert(*id, HirType::Named(mangled));
                         }
                     }
@@ -322,6 +361,30 @@ impl<'a> MonoContext<'a> {
         }
     }
 
+    
+    fn format_type_short(&self, ty: &HirType) -> String {
+        match ty {
+            HirType::Int    => "i64".to_string(),
+            HirType::Bool   => "bool".to_string(),
+            HirType::Float  => "f64".to_string(),
+            HirType::Str    => "str".to_string(),
+            HirType::Unit   => "unit".to_string(),
+            HirType::Never  => "never".to_string(),
+            HirType::Named(s) => self.interner.resolve(*s).to_string(),
+            HirType::Generic(s, args) => {
+                let inner = args.iter().map(|a| self.format_type_short(a)).collect::<Vec<_>>().join("_");
+                if inner.is_empty() { self.interner.resolve(*s).to_string() } else { format!("{}_{}", self.interner.resolve(*s), inner) }
+            }
+            HirType::Tuple(elems) => {
+                format!("tup_{}", elems.iter().map(|e| self.format_type_short(e)).collect::<Vec<_>>().join("_"))
+            }
+            HirType::RawPtr(inner) => format!("ptr_{}", self.format_type_short(inner)),
+            HirType::Option(inner) => format!("opt_{}", self.format_type_short(inner)),
+            HirType::Result(ok, err) => format!("res_{}_{}", self.format_type_short(ok), self.format_type_short(err)),
+            _ => format!("ty{:?}", std::mem::discriminant(ty)),
+        }
+    }
+
     fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
         for (i, tp) in f.type_params.iter().enumerate() {
@@ -357,6 +420,7 @@ impl<'a> MonoContext<'a> {
 
     fn build_result(mut self) -> MonoResult {
         // Precompute mangle maps once, before any mutable borrow
+        eprintln!("[mono] fn_specs={}, struct_specs={}", self.fn_specs.len(), self.struct_specs.len());
         let fn_keys: Vec<(Symbol, Vec<HirType>)> = self.fn_specs.keys().cloned().collect();
         let struct_keys: Vec<(Symbol, Vec<HirType>)> = self.struct_specs.keys().cloned().collect();
 
@@ -372,7 +436,20 @@ impl<'a> MonoContext<'a> {
 
         let mut items = Vec::new();
 
-        // Rewrite non-generic items
+        // 1. Add specialized structs FIRST so codegen registers them before functions
+        {
+            let struct_entries: Vec<_> = self.struct_specs.iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            eprintln!("[mono] pushing {} specialized structs first", struct_entries.len());
+            for ((_orig_name, args), mut s) in struct_entries {
+                s.name = self.mangle_name(s.name, &args);
+                eprintln!("[mono]   struct '{}'", self.interner.resolve(s.name));
+                items.push(HirItem::Struct(s));
+            }
+        }
+
+        // 2. Rewrite non-generic items (functions, impls, etc.)
         for item in &self.hir.items {
             match item {
                 HirItem::Fn(f) if f.type_params.is_empty() => {
@@ -394,17 +471,6 @@ impl<'a> MonoContext<'a> {
                     }
                 }
                 _ => {}
-            }
-        }
-
-        // Add specialized structs (collect first to avoid borrow conflicts)
-        {
-            let struct_entries: Vec<_> = self.struct_specs.iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
-            for ((_orig_name, args), mut s) in struct_entries {
-                s.name = self.mangle_name(s.name, &args);
-                items.push(HirItem::Struct(s));
             }
         }
 
@@ -436,6 +502,13 @@ impl<'a> MonoContext<'a> {
                 if let Some(&mangled) = struct_mangle_map.get(orig) {
                     final_type_overrides.insert(ExprId::new(idx as u32), HirType::Named(mangled));
                 }
+            }
+        }
+        for item in &items {
+            match item {
+                HirItem::Fn(f) => eprintln!("  Fn {:?}", self.interner.resolve(f.name)),
+                HirItem::Struct(s) => eprintln!("  Struct {:?} with {} fields", self.interner.resolve(s.name), s.fields.len()),
+                _ => eprintln!("  {:?}", std::mem::discriminant(item)),
             }
         }
         MonoResult {
@@ -592,28 +665,7 @@ impl<'a> MonoContext<'a> {
     }
 }
 
-fn format_type_short(ty: &HirType) -> String {
-    match ty {
-        HirType::Int    => "i64".to_string(),
-        HirType::Bool   => "bool".to_string(),
-        HirType::Float  => "f64".to_string(),
-        HirType::Str    => "str".to_string(),
-        HirType::Unit   => "unit".to_string(),
-        HirType::Never  => "never".to_string(),
-        HirType::Named(s) => format!("n{:?}", s),
-        HirType::Generic(s, args) => {
-            let inner = args.iter().map(format_type_short).collect::<Vec<_>>().join("_");
-            if inner.is_empty() { format!("g{:?}", s) } else { format!("g{:?}_{}", s, inner) }
-        }
-        HirType::Tuple(elems) => {
-            format!("tup_{}", elems.iter().map(format_type_short).collect::<Vec<_>>().join("_"))
-        }
-        HirType::RawPtr(inner) => format!("ptr_{}", format_type_short(inner)),
-        HirType::Option(inner) => format!("opt_{}", format_type_short(inner)),
-        HirType::Result(ok, err) => format!("res_{}_{}", format_type_short(ok), format_type_short(err)),
-        _ => format!("ty{:?}", std::mem::discriminant(ty)),
-    }
-}
+
 
 #[cfg(test)]
 mod tests {

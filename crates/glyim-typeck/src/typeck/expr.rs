@@ -232,7 +232,15 @@ impl TypeChecker {
                         if let Some(val_ty) = field_value_types.get(i) {
                             if let HirType::Named(param_sym) = field_ty {
                                 if *param_sym == *tp {
-                                    sub.insert(*tp, val_ty.clone());
+                                    // Only insert if value type is a concrete type, not a type parameter
+                                    match val_ty {
+                                        HirType::Named(v_sym) if info.type_params.contains(v_sym) => {
+                                            // Skip: value is itself a type parameter (will be resolved by monomorphization)
+                                        }
+                                        _ => {
+                                            sub.insert(*tp, val_ty.clone());
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -253,11 +261,27 @@ impl TypeChecker {
 
     fn check_field_access(&mut self, object: &HirExpr, field: Symbol) -> HirType {
         let obj_type = self.check_expr(object);
-        match &obj_type {
+        let result = match &obj_type {
             Some(HirType::Tuple(elems)) => self.check_tuple_field_access(field, elems),
             Some(HirType::Named(name)) => self.check_struct_field_access(*name, field),
+            Some(HirType::Generic(name, args)) => {
+                if let Some(info) = self.structs.get(name) {
+                    if let Some(field_info) = info.fields.iter().find(|f| f.name == field) {
+                        let mut sub = HashMap::new();
+                        for (i, tp) in info.type_params.iter().enumerate() {
+                            if let Some(arg) = args.get(i) {
+                                sub.insert(*tp, arg.clone());
+                            }
+                        }
+                        let result = glyim_hir::types::substitute_type(&field_info.ty, &sub);
+                        return result;
+                    }
+                }
+                HirType::Int
+            }
             _ => HirType::Int,
-        }
+        };
+        result
     }
 
     fn check_tuple_field_access(&mut self, field: Symbol, elems: &[HirType]) -> HirType {

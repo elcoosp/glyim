@@ -101,10 +101,12 @@ pub enum HirPattern {
 pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType {
     match ty {
         HirType::Named(sym) => {
-            if let Some(concrete) = sub.get(sym) {
-                return concrete.clone();
-            }
-            ty.clone()
+            let result = if let Some(concrete) = sub.get(sym) {
+                concrete.clone()
+            } else {
+                ty.clone()
+            };
+            result
         }
         HirType::Generic(sym, args) => {
             let new_args: Vec<HirType> = args

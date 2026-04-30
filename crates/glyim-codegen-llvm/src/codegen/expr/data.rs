@@ -109,6 +109,15 @@ pub(crate) fn codegen_field_access<'ctx>(
         let obj_val = codegen_expr(cg, object, fctx)?;
         let obj_id = object.get_id();
         let obj_ty = cg.expr_types.get(obj_id.as_usize()).cloned();
+        eprintln!("[codegen_field_access] obj_id={:?} obj_ty={:?}", obj_id, obj_ty);
+        {
+            let st = cg.struct_types.borrow();
+            eprintln!("[codegen_field_access] struct_types keys: {:?}", st.keys().map(|s| cg.interner.resolve(*s)).collect::<Vec<_>>());
+        }
+        {
+            let idx = cg.struct_field_indices.borrow();
+            eprintln!("[codegen_field_access] struct_field_indices keys: {:?}", idx.keys().map(|(s,f)| (cg.interner.resolve(*s), cg.interner.resolve(*f))).collect::<Vec<_>>());
+        }
         if let Some(HirType::Tuple(elems)) = obj_ty {
             let field_name = cg.interner.resolve(*field);
             if let Some(idx) = field_name
@@ -157,17 +166,30 @@ pub(crate) fn codegen_field_access<'ctx>(
             .or_else(|| {
                 index_map
                     .iter()
-                    .find(|((_, f), _)| f == field)
+                    .filter(|((_, f), _)| f == field)
                     .map(|(_, &idx)| idx)
+                    .next()
             })
             .unwrap_or(0);
         drop(index_map);
         let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
-            Some(HirType::Named(name)) => {
+            Some(HirType::Named(name)) | Some(HirType::Generic(name, _)) => {
                 cg.struct_types.borrow().get(name).copied()
             }
             _ => None,
         };
+        // Fallback: if struct not found by name, search all struct types for one containing this field
+        let struct_type_opt = struct_type_opt.or_else(|| {
+            let struct_types = cg.struct_types.borrow();
+            let index_map = cg.struct_field_indices.borrow();
+            struct_types.iter().find_map(|(sym, st)| {
+                if index_map.contains_key(&(*sym, *field)) {
+                    Some(st.clone())
+                } else {
+                    None
+                }
+            })
+        });
         let indices = &[
             cg.i32_type.const_int(0, false),
             cg.i32_type.const_int(field_idx as u64, false),
@@ -181,10 +203,11 @@ pub(crate) fn codegen_field_access<'ctx>(
         } else {
             return Some(cg.i64_type.const_int(0, false));
         };
-        cg.builder
+        let result = cg.builder
             .build_load(cg.i64_type, field_ptr, "field_val")
             .ok()
-            .map(|v| v.into_int_value())
+            .map(|v| v.into_int_value());
+        result
     } else {
         None
     }
