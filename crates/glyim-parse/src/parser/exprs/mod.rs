@@ -8,7 +8,7 @@ use glyim_syntax::SyntaxKind;
 
 impl Parser<'_> {
     #[tracing::instrument(skip_all)]
-pub fn parse_expr(&mut self, min_bp: u8) -> Option<ExprNode> {
+    pub fn parse_expr(&mut self, min_bp: u8) -> Option<ExprNode> {
         let mut left = atom::parse_atom(self)?;
         while let Some(op_tok) = self.tokens.peek() {
             let op_tok = *op_tok;

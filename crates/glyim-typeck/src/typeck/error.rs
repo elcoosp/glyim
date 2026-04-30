@@ -1,6 +1,6 @@
-use miette::Diagnostic;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
+use miette::Diagnostic;
 use similar::TextDiff;
 
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
@@ -14,20 +14,11 @@ pub enum TypeError {
     #[error("unknown type: {name:?}")]
     UnknownType { name: Symbol },
     #[error("unknown field {field:?} on struct {struct_name:?}")]
-    UnknownField {
-        struct_name: Symbol,
-        field: Symbol,
-    },
+    UnknownField { struct_name: Symbol, field: Symbol },
     #[error("missing field {field:?} in struct {struct_name:?}")]
-    MissingField {
-        struct_name: Symbol,
-        field: Symbol,
-    },
+    MissingField { struct_name: Symbol, field: Symbol },
     #[error("extra field {field:?} in struct {struct_name:?}")]
-    ExtraField {
-        struct_name: Symbol,
-        field: Symbol,
-    },
+    ExtraField { struct_name: Symbol, field: Symbol },
     #[error("non-exhaustive match, missing variants: {missing:?}")]
     NonExhaustiveMatch { missing: Vec<String> },
     #[error("? operator used outside of Result-returning function")]
@@ -35,10 +26,7 @@ pub enum TypeError {
     #[error("expected function call")]
     ExpectedFunction { expr_id: ExprId },
     #[error("invalid return type: expected {expected:?}, found {found:?}")]
-    InvalidReturnType {
-        expected: HirType,
-        found: HirType,
-    },
+    InvalidReturnType { expected: HirType, found: HirType },
 }
 
 impl Diagnostic for TypeError {
@@ -47,7 +35,10 @@ impl Diagnostic for TypeError {
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        if let TypeError::MismatchedTypes { expected, found, .. } = self {
+        if let TypeError::MismatchedTypes {
+            expected, found, ..
+        } = self
+        {
             let expected_str = format!("{:?}", expected);
             let found_str = format!("{:?}", found);
             let diff = TextDiff::from_lines(&expected_str, &found_str);

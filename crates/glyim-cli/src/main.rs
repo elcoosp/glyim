@@ -3,8 +3,7 @@ use glyim_cli::pipeline::{self, BuildMode};
 use glyim_pkg::manifest::{Dependency, PackageManifest};
 use std::path::PathBuf;
 use std::process;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser)]
 #[command(
@@ -127,24 +126,25 @@ fn main() {
     // Set up tracing subscriber based on flags
     // Configure miette handler: JSON or graphical
     if cli.json {
-        glyim_diag::miette::set_hook(Box::new(|_| Box::new(glyim_diag::miette::JSONReportHandler::new()))).ok();
+        glyim_diag::miette::set_hook(Box::new(|_| {
+            Box::new(glyim_diag::miette::JSONReportHandler::new())
+        }))
+        .ok();
     } else {
-        glyim_diag::miette::set_hook(Box::new(|_| Box::new(glyim_diag::miette::MietteHandlerOpts::new().build()))).ok();
+        glyim_diag::miette::set_hook(Box::new(|_| {
+            Box::new(glyim_diag::miette::MietteHandlerOpts::new().build())
+        }))
+        .ok();
     }
 
     if cli.trace {
         let (chrome_layer, _guard) = tracing_chrome::ChromeLayerBuilder::new()
             .file("glyim-trace.json")
             .build();
-        tracing_subscriber::registry()
-            .with(chrome_layer)
-            .init();
+        tracing_subscriber::registry().with(chrome_layer).init();
     } else if cli.tree {
         tracing_subscriber::registry()
-            .with(
-                tracing_tree::HierarchicalLayer::new(2)
-                    .with_targets(true)
-            )
+            .with(tracing_tree::HierarchicalLayer::new(2).with_targets(true))
             .init();
     } else {
         tracing_subscriber::fmt()

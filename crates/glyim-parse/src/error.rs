@@ -1,5 +1,5 @@
-use miette::Diagnostic;
 use glyim_syntax::SyntaxKind;
+use miette::Diagnostic;
 
 #[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
@@ -10,24 +10,17 @@ pub enum ParseError {
         span: (usize, usize),
     },
     #[error("expected {expected} but reached end of input")]
-    UnexpectedEof {
-        expected: SyntaxKind,
-    },
+    UnexpectedEof { expected: SyntaxKind },
     #[error("expected expression but found {found}")]
     ExpectedExpr {
         found: SyntaxKind,
         span: (usize, usize),
     },
     #[error("{msg}")]
-    Message {
-        msg: String,
-        span: (usize, usize),
-    },
+    Message { msg: String, span: (usize, usize) },
 }
 
 impl Diagnostic for ParseError {
-
-
     fn severity(&self) -> Option<miette::Severity> {
         Some(miette::Severity::Error)
     }
@@ -44,13 +37,13 @@ impl Diagnostic for ParseError {
             ParseError::ExpectedExpr { span, found, .. } => {
                 (span.0, span.1, format!("unexpected {}", found))
             }
-            ParseError::Message { span, msg } => {
-                (span.0, span.1, msg.clone())
-            }
+            ParseError::Message { span, msg } => (span.0, span.1, msg.clone()),
             ParseError::UnexpectedEof { .. } => return None,
         };
         Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-            Some(msg), start, end - start
+            Some(msg),
+            start,
+            end - start,
         ))))
     }
 }

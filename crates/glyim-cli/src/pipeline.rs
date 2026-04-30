@@ -5,8 +5,8 @@ use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
-use tracing::{info, info_span};
 use std::{fs, process::Command};
+use tracing::{info, info_span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
@@ -115,8 +115,8 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     });
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-        let _codegen_span = info_span!("phase", name = "codegen").entered();
-let context = Context::create();
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let context = Context::create();
     info!("starting codegen");
     let mut codegen =
         Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source)
@@ -148,8 +148,8 @@ pub enum Result<T, E> {
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-        let _parse_span = info_span!("phase", name = "parse").entered();
-let mut parse_out = glyim_parse::parse(&source);
+    let _parse_span = info_span!("phase", name = "parse").entered();
+    let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
@@ -157,17 +157,17 @@ let mut parse_out = glyim_parse::parse(&source);
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
-        let _lower_span = info_span!("phase", name = "lower").entered();
-let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let _lower_span = info_span!("phase", name = "lower").entered();
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     info!("lowered to HIR");
-        let _typeck_span = info_span!("phase", name = "typeck").entered();
-let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-        let _codegen_span = info_span!("phase", name = "codegen").entered();
-let context = Context::create();
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let context = Context::create();
     info!("starting codegen");
     let mut codegen =
         Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone())
@@ -193,8 +193,8 @@ let context = Context::create();
 #[tracing::instrument(name = "check", skip_all)]
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
-        let _parse_span = info_span!("phase", name = "parse").entered();
-let mut parse_out = glyim_parse::parse(&source);
+    let _parse_span = info_span!("phase", name = "parse").entered();
+    let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
@@ -202,11 +202,11 @@ let mut parse_out = glyim_parse::parse(&source);
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
-        let _lower_span = info_span!("phase", name = "lower").entered();
-let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let _lower_span = info_span!("phase", name = "lower").entered();
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     info!("lowered to HIR");
-        let _typeck_span = info_span!("phase", name = "typeck").entered();
-let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
@@ -246,8 +246,8 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
 #[tracing::instrument(name = "run_with_mode", skip_all)]
 pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-        let _parse_span = info_span!("phase", name = "parse").entered();
-let mut parse_out = glyim_parse::parse(&source);
+    let _parse_span = info_span!("phase", name = "parse").entered();
+    let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
@@ -255,17 +255,17 @@ let mut parse_out = glyim_parse::parse(&source);
         }
         return Err(PipelineError::Parse(parse_out.errors));
     }
-        let _lower_span = info_span!("phase", name = "lower").entered();
-let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let _lower_span = info_span!("phase", name = "lower").entered();
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     info!("lowered to HIR");
-        let _typeck_span = info_span!("phase", name = "typeck").entered();
-let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-        let _codegen_span = info_span!("phase", name = "codegen").entered();
-let context = Context::create();
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let context = Context::create();
     info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
@@ -316,8 +316,8 @@ pub fn build_with_mode(
     });
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-        let _codegen_span = info_span!("phase", name = "codegen").entered();
-let context = Context::create();
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let context = Context::create();
     info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
@@ -470,8 +470,8 @@ pub fn run_tests(
     include_ignored: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-        let _parse_span = info_span!("phase", name = "parse").entered();
-let mut parse_out = glyim_parse::parse(&source);
+    let _parse_span = info_span!("phase", name = "parse").entered();
+    let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
@@ -533,18 +533,18 @@ let mut parse_out = glyim_parse::parse(&source);
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
     }
-        let _lower_span = info_span!("phase", name = "lower").entered();
-let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let _lower_span = info_span!("phase", name = "lower").entered();
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     info!("lowered to HIR");
-        let _typeck_span = info_span!("phase", name = "typeck").entered();
-let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
+    let mut typeck = TypeChecker::new(parse_out.interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
 
-        let _codegen_span = info_span!("phase", name = "codegen").entered();
-let context = Context::create();
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let context = Context::create();
     info!("starting codegen");
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
     if is_no_std {
@@ -604,8 +604,8 @@ fn compile_to_hir_and_ir(
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
-        let _lower_span = info_span!("phase", name = "lower").entered();
-let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let _lower_span = info_span!("phase", name = "lower").entered();
+    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     info!("lowered to HIR");
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
@@ -690,8 +690,8 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     }
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-        let _codegen_span = info_span!("phase", name = "codegen").entered();
-let context = Context::create();
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let context = Context::create();
     info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;

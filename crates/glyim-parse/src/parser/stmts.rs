@@ -6,7 +6,7 @@ use glyim_syntax::SyntaxKind;
 
 impl Parser<'_> {
     #[tracing::instrument(skip_all)]
-pub(crate) fn parse_let_stmt(&mut self) -> Option<StmtNode> {
+    pub(crate) fn parse_let_stmt(&mut self) -> Option<StmtNode> {
         let start = self.tokens.bump()?.start;
         let mutable = if self.tokens.at(SyntaxKind::KwMut) {
             self.tokens.bump();

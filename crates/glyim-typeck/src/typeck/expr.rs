@@ -7,7 +7,7 @@ use glyim_interner::Symbol;
 
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
-pub(crate) fn check_expr(&mut self, expr: &HirExpr) -> Option<HirType> {
+    pub(crate) fn check_expr(&mut self, expr: &HirExpr) -> Option<HirType> {
         let id = self.extract_expr_id(expr);
         let ty = self.infer_expr(expr);
         self.set_type(id, ty.clone());

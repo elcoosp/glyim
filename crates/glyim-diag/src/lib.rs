@@ -11,8 +11,12 @@ impl Span {
         assert!(start <= end);
         Self { start, end }
     }
-    pub fn len(&self) -> usize { self.end - self.start }
-    pub fn is_empty(&self) -> bool { self.start == self.end }
+    pub fn len(&self) -> usize {
+        self.end - self.start
+    }
+    pub fn is_empty(&self) -> bool {
+        self.start == self.end
+    }
 }
 
 /// Convert a Span into a miette SourceSpan.

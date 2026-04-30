@@ -6,7 +6,7 @@ use glyim_hir::HirPattern;
 use glyim_interner::Symbol;
 
 impl TypeChecker {
-#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn check_match_exhaustiveness(
         &mut self,
         scrutinee_type: &HirType,
