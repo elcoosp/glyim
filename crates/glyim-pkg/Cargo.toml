@@ -9,7 +9,7 @@ description = "Package manager for Glyim - manifest parsing, dependency resoluti
 [dependencies]
 glyim-interner = { path = "../glyim-interner" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
-toml = "0.8"
+toml = "1.0"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
