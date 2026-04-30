@@ -386,3 +386,9 @@ fn e2e_assign_to_immutable_is_error() {
     let src = "fn main() -> i64 { let x = 5; x = 10; x }";
     assert!(pipeline::run(&temp_g(src)).is_err());
 }
+
+#[test]
+fn e2e_struct_with_ptr_parse_and_typecheck() {
+    let src = "struct Ptr { data: *mut i64 }\nmain = () => { 42 }";
+    assert!(pipeline::run(&temp_g(src)).is_ok());
+}
