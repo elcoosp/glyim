@@ -1,6 +1,7 @@
 use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
 use miette::Diagnostic;
+use similar::ChangeTag;
 use similar::TextDiff;
 
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
@@ -55,13 +56,13 @@ impl Diagnostic for TypeError {
             let mut result = String::new();
             for change in diff.iter_all_changes() {
                 match change.tag() {
-                    similar::ChangeTag::Equal => {
+                    ChangeTag::Equal => {
                         result.push_str(&format!(" {}\n", change));
                     }
-                    similar::ChangeTag::Delete => {
+                    ChangeTag::Delete => {
                         result.push_str(&format!("-{}\n", change));
                     }
-                    similar::ChangeTag::Insert => {
+                    ChangeTag::Insert => {
                         result.push_str(&format!("+{}\n", change));
                     }
                 }
