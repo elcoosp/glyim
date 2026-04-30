@@ -18,7 +18,10 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::IntLit { value: n, .. } => Some(cg.i64_type.const_int(*n as u64, true)),
         HirExpr::Ident { name: sym, .. } => {
             let ptr = fctx.vars.get(sym)?;
-            cg.builder.build_load(cg.i64_type, *ptr, cg.interner.resolve(*sym)).ok().map(|v| v.into_int_value())
+            cg.builder
+                .build_load(cg.i64_type, *ptr, cg.interner.resolve(*sym))
+                .ok()
+                .map(|v| v.into_int_value())
         }
         HirExpr::Binary { op, lhs, rhs, .. } => {
             let l = codegen_expr(cg, lhs, fctx)?;
@@ -28,28 +31,48 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::Unary { op, operand, .. } => {
             let val = codegen_expr(cg, operand, fctx)?;
             match op {
-                HirUnOp::Neg => { let zero = cg.i64_type.const_int(0, false); cg.builder.build_int_sub(zero, val, "neg").ok() }
+                HirUnOp::Neg => {
+                    let zero = cg.i64_type.const_int(0, false);
+                    cg.builder.build_int_sub(zero, val, "neg").ok()
+                }
                 HirUnOp::Not => cg.builder.build_not(val, "not").ok(),
             }
         }
         HirExpr::BoolLit { value: b, .. } => {
-            let i1 = cg.context.bool_type().const_int(if *b { 1 } else { 0 }, false);
-            Some(cg.builder.build_int_z_extend(i1, cg.i64_type, "bool_zext").ok()?)
+            let i1 = cg
+                .context
+                .bool_type()
+                .const_int(if *b { 1 } else { 0 }, false);
+            Some(
+                cg.builder
+                    .build_int_z_extend(i1, cg.i64_type, "bool_zext")
+                    .ok()?,
+            )
         }
         HirExpr::UnitLit { .. } => Some(cg.i64_type.const_int(0, false)),
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
         HirExpr::SizeOf { target_type, .. } => {
             if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
-                Some(llvm_type.size_of().unwrap_or_else(|| cg.i64_type.const_int(0, false)))
-            } else { Some(cg.i64_type.const_int(0, false)) }
+                Some(
+                    llvm_type
+                        .size_of()
+                        .unwrap_or_else(|| cg.i64_type.const_int(0, false)),
+                )
+            } else {
+                Some(cg.i64_type.const_int(0, false))
+            }
         }
         HirExpr::Println { arg, .. } => super::string::codegen_println(cg, arg, fctx),
-        HirExpr::Assert { condition, message, .. } => super::string::codegen_assert(cg, condition, message, fctx),
+        HirExpr::Assert {
+            condition, message, ..
+        } => super::string::codegen_assert(cg, condition, message, fctx),
         HirExpr::Call { callee, args, .. } => super::string::codegen_call(cg, callee, args, fctx),
         HirExpr::Block { stmts, .. } => {
             let mut last = Some(cg.i64_type.const_int(0, false));
             for stmt in stmts {
-                if let Some(v) = super::stmt::codegen_stmt(cg, stmt, fctx) { last = Some(v); }
+                if let Some(v) = super::stmt::codegen_stmt(cg, stmt, fctx) {
+                    last = Some(v);
+                }
             }
             last
         }
@@ -72,7 +95,11 @@ pub(crate) fn codegen_expr<'ctx>(
             let fv = cg.f64_type.const_float(*f);
             let alloca = cg.builder.build_alloca(cg.f64_type, "float_tmp").ok()?;
             cg.builder.build_store(alloca, fv).ok()?;
-            Some(cg.builder.build_ptr_to_int(alloca, cg.i64_type, "f2i64").ok()?)
+            Some(
+                cg.builder
+                    .build_ptr_to_int(alloca, cg.i64_type, "f2i64")
+                    .ok()?,
+            )
         }
     }
 }

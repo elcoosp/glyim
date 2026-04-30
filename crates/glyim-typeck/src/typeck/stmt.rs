@@ -9,7 +9,12 @@ impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_stmt(&mut self, stmt: &HirStmt) -> Option<HirType> {
         match stmt {
-            HirStmt::Let { name, mutable, value, .. } => {
+            HirStmt::Let {
+                name,
+                mutable,
+                value,
+                ..
+            } => {
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
                 self.insert_binding(*name, ty, *mutable);
                 None
@@ -20,11 +25,14 @@ impl TypeChecker {
                 None
             }
             HirStmt::Assign { target, value, .. } => {
-                let immutable = self.lookup_binding_full(target)
-                    .map(|b| !b.mutable).unwrap_or(false);
+                let immutable = self
+                    .lookup_binding_full(target)
+                    .map(|b| !b.mutable)
+                    .unwrap_or(false);
                 if immutable {
                     self.errors.push(TypeError::AssignToImmutable {
-                        name: *target, expr_id: ExprId::new(0),
+                        name: *target,
+                        expr_id: ExprId::new(0),
                     });
                 }
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);

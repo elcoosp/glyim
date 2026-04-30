@@ -1,11 +1,11 @@
 pub(crate) mod ctx;
 mod expr;
 mod function;
+mod monomorphize;
 mod ops;
 mod stmt;
 mod string;
 mod types;
-mod monomorphize;
 
 use crate::debug::DebugInfoGen;
 use glyim_diag::Span;

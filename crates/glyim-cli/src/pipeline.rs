@@ -817,7 +817,8 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut cg = Codegen::new(&context, interner, typeck.expr_types);
     cg.generate(&hir).map_err(PipelineError::Codegen)?;
 
-    let engine = cg.get_module()
+    let engine = cg
+        .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 

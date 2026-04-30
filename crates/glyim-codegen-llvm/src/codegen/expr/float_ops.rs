@@ -3,8 +3,10 @@ use glyim_hir::HirBinOp;
 use inkwell::values::FloatValue;
 
 pub(crate) fn codegen_float_binop<'ctx>(
-    cg: &Codegen<'ctx>, op: &HirBinOp,
-    lhs: FloatValue<'ctx>, rhs: FloatValue<'ctx>,
+    cg: &Codegen<'ctx>,
+    op: &HirBinOp,
+    lhs: FloatValue<'ctx>,
+    rhs: FloatValue<'ctx>,
 ) -> Option<FloatValue<'ctx>> {
     match op {
         HirBinOp::Add => cg.builder.build_float_add(lhs, rhs, "fadd").ok(),

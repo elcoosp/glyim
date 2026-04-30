@@ -18,13 +18,22 @@ pub struct EnumInfo {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Binding { pub ty: HirType, pub mutable: bool }
+pub(crate) struct Binding {
+    pub ty: HirType,
+    pub mutable: bool,
+}
 
 #[derive(Clone, Debug)]
-pub(crate) struct Scope { pub bindings: HashMap<Symbol, Binding> }
+pub(crate) struct Scope {
+    pub bindings: HashMap<Symbol, Binding>,
+}
 
 impl Scope {
-    pub fn new() -> Self { Self { bindings: HashMap::new() } }
+    pub fn new() -> Self {
+        Self {
+            bindings: HashMap::new(),
+        }
+    }
     pub fn insert(&mut self, name: Symbol, ty: HirType, mutable: bool) {
         self.bindings.insert(name, Binding { ty, mutable });
     }

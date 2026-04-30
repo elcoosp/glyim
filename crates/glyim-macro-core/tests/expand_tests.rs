@@ -1,12 +1,18 @@
-use glyim_macro_core::context::{MacroContext, Field};
-use glyim_macro_core::expand::{interpret_macro, MacroArg};
 use glyim_interner::Symbol;
+use glyim_macro_core::context::{Field, MacroContext};
+use glyim_macro_core::expand::{interpret_macro, MacroArg};
 
 struct TestCtx;
 impl MacroContext for TestCtx {
-    fn trait_is_implemented(&self, _: Symbol, _: Symbol) -> bool { false }
-    fn get_fields(&self, _: Symbol) -> Vec<Field> { vec![] }
-    fn get_type_params(&self, _: Symbol) -> Vec<Symbol> { vec![] }
+    fn trait_is_implemented(&self, _: Symbol, _: Symbol) -> bool {
+        false
+    }
+    fn get_fields(&self, _: Symbol) -> Vec<Field> {
+        vec![]
+    }
+    fn get_type_params(&self, _: Symbol) -> Vec<Symbol> {
+        vec![]
+    }
 }
 
 #[test]

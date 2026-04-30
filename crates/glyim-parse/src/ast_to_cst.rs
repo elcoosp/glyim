@@ -22,19 +22,32 @@ fn binop_kind(op: BinOp) -> SyntaxKind {
 }
 fn binop_text(op: BinOp) -> &'static str {
     match op {
-        BinOp::Add => "+", BinOp::Sub => "-", BinOp::Mul => "*",
-        BinOp::Div => "/", BinOp::Mod => "%",
-        BinOp::Eq => "==", BinOp::Neq => "!=",
-        BinOp::Lt => "<", BinOp::Gt => ">",
-        BinOp::Lte => "<=", BinOp::Gte => ">=",
-        BinOp::And => "&&", BinOp::Or => "||",
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        BinOp::Div => "/",
+        BinOp::Mod => "%",
+        BinOp::Eq => "==",
+        BinOp::Neq => "!=",
+        BinOp::Lt => "<",
+        BinOp::Gt => ">",
+        BinOp::Lte => "<=",
+        BinOp::Gte => ">=",
+        BinOp::And => "&&",
+        BinOp::Or => "||",
     }
 }
 fn unop_kind(op: UnOp) -> SyntaxKind {
-    match op { UnOp::Neg => SyntaxKind::Minus, UnOp::Not => SyntaxKind::Bang }
+    match op {
+        UnOp::Neg => SyntaxKind::Minus,
+        UnOp::Not => SyntaxKind::Bang,
+    }
 }
 fn unop_text(op: UnOp) -> &'static str {
-    match op { UnOp::Neg => "-", UnOp::Not => "!" }
+    match op {
+        UnOp::Neg => "-",
+        UnOp::Not => "!",
+    }
 }
 
 // ── Expression → CST ────────────────────────────────────────────────
@@ -53,7 +66,11 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         ExprKind::BoolLit(b) => {
             builder.start_node(SyntaxKind::LitExpr);
             builder.token(
-                if *b { SyntaxKind::KwTrue } else { SyntaxKind::KwFalse },
+                if *b {
+                    SyntaxKind::KwTrue
+                } else {
+                    SyntaxKind::KwFalse
+                },
                 if *b { "true" } else { "false" },
             );
             builder.finish_node();
@@ -107,7 +124,11 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::RBrace, "}");
             builder.finish_node();
         }
-        ExprKind::If { condition, then_branch, else_branch } => {
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             builder.start_node(SyntaxKind::IfExpr);
             builder.token(SyntaxKind::KwIf, "if");
             ast_expr_to_cst(builder, condition);
@@ -123,7 +144,9 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             ast_expr_to_cst(builder, callee);
             builder.token(SyntaxKind::LParen, "(");
             for (i, a) in args.iter().enumerate() {
-                if i > 0 { builder.token(SyntaxKind::Comma, ","); }
+                if i > 0 {
+                    builder.token(SyntaxKind::Comma, ",");
+                }
                 ast_expr_to_cst(builder, a);
             }
             builder.token(SyntaxKind::RParen, ")");
@@ -131,7 +154,9 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
         }
         ExprKind::StructLit { name: _, fields } => {
             builder.start_node(SyntaxKind::StructLitExpr);
-            for (_, fe) in fields { ast_expr_to_cst(builder, fe); }
+            for (_, fe) in fields {
+                ast_expr_to_cst(builder, fe);
+            }
             builder.finish_node();
         }
         ExprKind::EnumVariant { .. } => {
@@ -174,20 +199,30 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::Dot, ".");
             builder.finish_node();
         }
-        ExprKind::SizeOf(_) => { builder.token(SyntaxKind::Ident, "__size_of"); }
+        ExprKind::SizeOf(_) => {
+            builder.token(SyntaxKind::Ident, "__size_of");
+        }
         ExprKind::TupleLit(elems) => {
             builder.start_node(SyntaxKind::TupleLitExpr);
-            for e in elems { ast_expr_to_cst(builder, e); }
+            for e in elems {
+                ast_expr_to_cst(builder, e);
+            }
             builder.finish_node();
         }
-        ExprKind::Pointer { .. } => { builder.token(SyntaxKind::Star, "*"); }
+        ExprKind::Pointer { .. } => {
+            builder.token(SyntaxKind::Star, "*");
+        }
     }
 }
 
 // ── Statement → CST ─────────────────────────────────────────────────
 fn ast_stmt_to_cst(builder: &mut CstBuilder, stmt: &StmtNode) {
     match &stmt.kind {
-        StmtKind::Let { pattern: _, mutable: _, value } => {
+        StmtKind::Let {
+            pattern: _,
+            mutable: _,
+            value,
+        } => {
             builder.start_node(SyntaxKind::LetStmt);
             builder.token(SyntaxKind::KwLet, "let");
             builder.token(SyntaxKind::Ident, "<name>");
