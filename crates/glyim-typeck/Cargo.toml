@@ -7,5 +7,10 @@ rust-version.workspace = true
 description = "Type checker and MacroContext implementation for Glyim"
 
 [dependencies]
+similar = "2"
+tracing = { version = "0.1", features = ["attributes"] }
+miette = { version = "7", features = ["fancy-no-backtrace"] }
+miette-derive = "7"
+thiserror = "2"
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }

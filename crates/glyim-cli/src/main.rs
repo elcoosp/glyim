@@ -3,6 +3,7 @@ use glyim_cli::pipeline::{self, BuildMode};
 use glyim_pkg::manifest::{Dependency, PackageManifest};
 use std::path::PathBuf;
 use std::process;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser)]
 #[command(
@@ -12,6 +13,15 @@ use std::process;
     after_help = "Examples:\n  glyim init myproject\n  glyim run src/main.g\n  glyim check src/main.g\n  glyim ir src/main.g"
 )]
 struct Cli {
+    /// Output diagnostics as JSON (ideal for tooling)
+    #[arg(long = "json", global = true, help = "Output in JSON format")]
+    json: bool,
+    /// Output a Chrome trace file (for perfetto.dev)
+    #[arg(long = "trace", global = true, help = "Write a Chrome trace file")]
+    trace: bool,
+    /// Use hierarchical span output instead of flat
+    #[arg(long = "tree", global = true, help = "Show spans as an indented tree")]
+    tree: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -68,6 +78,18 @@ enum Command {
         dry_run: bool,
     },
     Outdated,
+    /// Dump tokens with colors
+    DumpTokens {
+        input: PathBuf,
+    },
+    /// Dump AST as indented tree
+    DumpAst {
+        input: PathBuf,
+    },
+    /// Dump HIR as indented tree
+    DumpHir {
+        input: PathBuf,
+    },
     #[command(subcommand)]
     Cache(CacheCommand),
 }
@@ -95,7 +117,42 @@ enum CacheCommand {
 }
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .init();
     let cli = Cli::parse();
+
+    // Set up tracing subscriber based on flags
+    // Configure miette handler: JSON or graphical
+    if cli.json {
+        glyim_diag::miette::set_hook(Box::new(|_| {
+            Box::new(glyim_diag::miette::JSONReportHandler::new())
+        }))
+        .ok();
+    } else {
+        glyim_diag::miette::set_hook(Box::new(|_| {
+            Box::new(glyim_diag::miette::MietteHandlerOpts::new().build())
+        }))
+        .ok();
+    }
+
+    if cli.trace {
+        let (chrome_layer, _guard) = tracing_chrome::ChromeLayerBuilder::new()
+            .file("glyim-trace.json")
+            .build();
+        tracing_subscriber::registry().with(chrome_layer).init();
+    } else if cli.tree {
+        tracing_subscriber::registry()
+            .with(tracing_tree::HierarchicalLayer::new(2).with_targets(true))
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .with_writer(std::io::stderr)
+            .init();
+    }
+
     let exit_code = match cli.command {
         Command::Build {
             input,
@@ -328,6 +385,23 @@ fn main() {
             eprintln!("error: publish not yet implemented");
             1
         }
+        Command::DumpTokens { input } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            glyim_cli::dump::dump_tokens(&source, &mut std::io::stdout());
+            0
+        }
+        Command::DumpAst { input } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            let interner = glyim_interner::Interner::new();
+            glyim_cli::dump::dump_ast(&source, &interner, &mut std::io::stdout());
+            0
+        }
+        Command::DumpHir { input } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            let interner = glyim_interner::Interner::new();
+            glyim_cli::dump::dump_hir(&source, &interner, &mut std::io::stdout());
+            0
+        }
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
@@ -391,7 +465,7 @@ fn main() {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let remote_url = remote.unwrap_or_else(|| "http://localhost:9090".to_string());
                 let token = std::env::var("GLYIM_CACHE_TOKEN").ok();
-                let client = glyim_pkg::cas_client::CasClient::new_with_remote(
+                let _client = glyim_pkg::cas_client::CasClient::new_with_remote(
                     &cas_dir,
                     &remote_url,
                     token.as_deref(),
@@ -437,5 +511,12 @@ fn main() {
             1
         }
     };
+    if cli.json {
+        let summary = serde_json::json!({
+            "success": exit_code == 0,
+            "exit_code": exit_code,
+        });
+        println!("{}", serde_json::to_string(&summary).unwrap());
+    }
     process::exit(exit_code);
 }

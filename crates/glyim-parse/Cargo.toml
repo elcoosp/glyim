@@ -7,6 +7,10 @@ rust-version.workspace = true
 description = "Pratt parser and recursive-descent parser for Glyim"
 
 [dependencies]
+tracing = { version = "0.1", features = ["attributes"] }
+miette = { version = "7", features = ["fancy-no-backtrace"] }
+miette-derive = "7"
+thiserror = "2"
 glyim-syntax = { path = "../glyim-syntax" }
 glyim-lex = { path = "../glyim-lex" }
 glyim-diag = { path = "../glyim-diag" }

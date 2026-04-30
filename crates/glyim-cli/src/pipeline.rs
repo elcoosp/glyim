@@ -6,6 +6,7 @@ use glyim_typeck::TypeError;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
+use tracing::{info, info_span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
@@ -96,6 +97,7 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
     Ok((source, is_no_std))
 }
 
+#[tracing::instrument(name = "build", skip_all)]
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
@@ -113,7 +115,9 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     });
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
+    info!("starting codegen");
     let mut codegen =
         Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source)
             .map_err(PipelineError::Codegen)?;
@@ -121,6 +125,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
@@ -140,42 +145,30 @@ pub enum Result<T, E> {
 }
 ";
 
+#[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let _parse_span = info_span!("phase", name = "parse").entered();
     let mut parse_out = glyim_parse::parse(&source);
+    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        let rendered = glyim_diag::render_diagnostics(
-            &source,
-            &input.to_string_lossy(),
-            &parse_out
-                .errors
-                .iter()
-                .map(|e| {
-                    let span = match e {
-                        glyim_parse::ParseError::Expected { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                        glyim_parse::ParseError::ExpectedExpr { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::Message { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                    };
-                    glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-                })
-                .collect::<Vec<_>>(),
-        );
-        eprintln!("{rendered}");
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
+        }
         return Err(PipelineError::Parse(parse_out.errors));
     }
+    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
+    info!("starting codegen");
     let mut codegen =
         Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone())
             .map_err(PipelineError::Codegen)?;
@@ -183,6 +176,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     codegen
@@ -196,44 +190,31 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     Ok(status.code().unwrap_or(1))
 }
 
+#[tracing::instrument(name = "check", skip_all)]
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
+    let _parse_span = info_span!("phase", name = "parse").entered();
     let mut parse_out = glyim_parse::parse(&source);
+    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        let rendered = glyim_diag::render_diagnostics(
-            &source,
-            &input.to_string_lossy(),
-            &parse_out
-                .errors
-                .iter()
-                .map(|e| {
-                    let span = match e {
-                        glyim_parse::ParseError::Expected { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                        glyim_parse::ParseError::ExpectedExpr { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::Message { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                    };
-                    glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-                })
-                .collect::<Vec<_>>(),
-        );
-        eprintln!("{rendered}");
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
+        }
         return Err(PipelineError::Parse(parse_out.errors));
     }
+    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
     Ok(())
 }
 
+#[tracing::instrument(name = "print_ir", skip_all)]
 pub fn print_ir(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let ir = compile_to_ir(&source).map_err(PipelineError::Codegen)?;
@@ -262,42 +243,30 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
     Ok(dir)
 }
 
+#[tracing::instrument(name = "run_with_mode", skip_all)]
 pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let _parse_span = info_span!("phase", name = "parse").entered();
     let mut parse_out = glyim_parse::parse(&source);
+    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        let rendered = glyim_diag::render_diagnostics(
-            &source,
-            &input.to_string_lossy(),
-            &parse_out
-                .errors
-                .iter()
-                .map(|e| {
-                    let span = match e {
-                        glyim_parse::ParseError::Expected { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                        glyim_parse::ParseError::ExpectedExpr { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::Message { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                    };
-                    glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-                })
-                .collect::<Vec<_>>(),
-        );
-        eprintln!("{rendered}");
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
+        }
         return Err(PipelineError::Parse(parse_out.errors));
     }
+    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
+    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -312,6 +281,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     codegen
@@ -346,7 +316,9 @@ pub fn build_with_mode(
     });
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
+    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -361,6 +333,7 @@ pub fn build_with_mode(
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
@@ -497,32 +470,13 @@ pub fn run_tests(
     include_ignored: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let _parse_span = info_span!("phase", name = "parse").entered();
     let mut parse_out = glyim_parse::parse(&source);
+    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        let rendered = glyim_diag::render_diagnostics(
-            &source,
-            &input.to_string_lossy(),
-            &parse_out
-                .errors
-                .iter()
-                .map(|e| {
-                    let span = match e {
-                        glyim_parse::ParseError::Expected { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                        glyim_parse::ParseError::ExpectedExpr { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                        glyim_parse::ParseError::Message { span, .. } => {
-                            Some(glyim_diag::Span::new(span.0, span.1))
-                        }
-                    };
-                    glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-                })
-                .collect::<Vec<_>>(),
-        );
-        eprintln!("{rendered}");
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
+        }
         return Err(PipelineError::Parse(parse_out.errors));
     }
 
@@ -579,13 +533,19 @@ pub fn run_tests(
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
     }
+    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
+    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
 
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
+    info!("starting codegen");
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -644,7 +604,9 @@ fn compile_to_hir_and_ir(
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
+    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
 }
@@ -728,9 +690,12 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     }
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
+    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
+    info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
@@ -758,56 +723,67 @@ mod no_std_tests {
     use super::*;
 
     #[test]
+
     fn detect_no_std_simple() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
 
     #[test]
+
     fn detect_no_std_at_start() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
 
     #[test]
+
     fn detect_no_std_false_when_absent() {
         assert!(!detect_no_std("fn main() { 0 }"));
     }
 
     #[test]
+
     fn detect_no_std_false_in_string() {
         assert!(!detect_no_std(r#"fn main() { "no_std" }"#));
     }
 
     #[test]
+
     fn detect_no_std_false_as_part_of_ident() {
         assert!(!detect_no_std("fn no_std_helper() { 0 }"));
     }
 
     #[test]
+
     fn detect_no_std_false_as_field_name() {
         assert!(!detect_no_std("struct S { no_std: bool }"));
     }
 
     #[test]
+
     fn detect_no_std_with_trailing_whitespace() {
         assert!(detect_no_std("no_std   \nfn main() { 0 }"));
     }
 
     #[test]
+
     fn detect_no_std_false_empty() {
         assert!(!detect_no_std(""));
     }
 
     #[test]
+
     fn detect_no_std_false_only_whitespace() {
         assert!(!detect_no_std("  \n  \n"));
     }
 
     #[test]
+
     fn detect_no_std_after_other_code() {
         assert!(detect_no_std("fn foo() { 0 }\nno_std\nfn bar() { 0 }"));
     }
 
     #[test]
+
     fn detect_no_std_known_limitation_comment() {
         // Comments on their own line are correctly excluded
         // because the trimmed line is "// no_std", not "no_std".

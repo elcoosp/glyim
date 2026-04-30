@@ -3,6 +3,7 @@ use crate::parser::Parser;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
+#[tracing::instrument(skip_all)]
 pub(crate) fn parse_atom(parser: &mut Parser) -> Option<ExprNode> {
     let tok = parser.tokens.peek()?;
     match tok.kind {

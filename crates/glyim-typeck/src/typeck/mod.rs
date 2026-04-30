@@ -58,6 +58,8 @@ impl TypeChecker {
         glyim_interner::Interner::new().intern("__dummy")
     }
 
+    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn check(&mut self, hir: &Hir) -> Result<(), Vec<TypeError>> {
         self.register_items(hir);
         for item in &hir.items {

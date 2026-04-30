@@ -4,6 +4,7 @@ use crate::parser::Parser;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
+#[tracing::instrument(skip_all)]
 pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
     let start_tok = parser.tokens.bump()?; // '{'
     let start = start_tok.start;
@@ -45,6 +46,7 @@ pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
     })
 }
 
+#[tracing::instrument(skip_all)]
 pub(crate) fn parse_if(parser: &mut Parser) -> Option<ExprNode> {
     let start = parser.tokens.bump()?.start;
     let condition = parser.parse_expr(0)?;
@@ -114,6 +116,7 @@ pub(crate) fn parse_lambda(parser: &mut Parser) -> Option<ExprNode> {
     })
 }
 
+#[tracing::instrument(skip_all)]
 pub(crate) fn parse_match(parser: &mut Parser) -> Option<ExprNode> {
     let start_tok = parser.tokens.bump()?; // 'match'
     let start = start_tok.start;

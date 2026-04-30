@@ -15,26 +15,15 @@ fn compile_stderr(source: &str, file_path: &str) -> String {
             Err(e) => format!("error: {e}"),
         }
     } else {
-        let diags: Vec<_> = parse_out
-            .errors
-            .iter()
-            .map(|e| {
-                let span = match e {
-                    glyim_parse::ParseError::Expected { span, .. } => {
-                        Some(glyim_diag::Span::new(span.0, span.1))
-                    }
-                    glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                    glyim_parse::ParseError::ExpectedExpr { span, .. } => {
-                        Some(glyim_diag::Span::new(span.0, span.1))
-                    }
-                    glyim_parse::ParseError::Message { span, .. } => {
-                        Some(glyim_diag::Span::new(span.0, span.1))
-                    }
-                };
-                glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-            })
-            .collect();
-        glyim_diag::render_diagnostics(source, file_path, &diags)
+        let mut output = String::new();
+        for e in &parse_out.errors {
+            let report = glyim_diag::Report::new(e.clone()).with_source_code(
+                glyim_diag::miette::NamedSource::new(file_path, source.to_string()),
+            );
+            use std::fmt::Write;
+            let _ = writeln!(output, "{:?}", report);
+        }
+        output
     }
 }
 

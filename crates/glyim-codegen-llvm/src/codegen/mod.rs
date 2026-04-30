@@ -182,6 +182,8 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);

@@ -6,6 +6,7 @@ use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
 
 impl TypeChecker {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn check_expr(&mut self, expr: &HirExpr) -> Option<HirType> {
         let id = self.extract_expr_id(expr);
         let ty = self.infer_expr(expr);

@@ -2,6 +2,7 @@ use crate::ast::Pattern;
 use crate::parser::tokens::Tokens;
 use glyim_interner::Interner;
 use glyim_syntax::SyntaxKind;
+#[tracing::instrument(skip_all)]
 
 pub(crate) fn parse_pattern(
     tokens: &mut Tokens,

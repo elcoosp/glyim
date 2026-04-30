@@ -25,6 +25,7 @@ impl<'a> Parser<'a> {
             interner: Interner::new(),
         }
     }
+    #[tracing::instrument(skip_all)]
 
     fn parse_attributes(&mut self) -> Vec<crate::ast::Attribute> {
         let mut attrs = vec![];
@@ -106,6 +107,7 @@ impl<'a> Parser<'a> {
         }
         attrs
     }
+    #[tracing::instrument(skip_all)]
 
     pub fn parse_source_file(&mut self) -> Ast {
         let mut items = vec![];
@@ -120,6 +122,7 @@ impl<'a> Parser<'a> {
     }
 
     #[allow(dead_code)]
+    #[tracing::instrument(skip_all)]
     pub fn parse_source_file_recovery(&mut self) -> Ast {
         let mut items = vec![];
         while !self.tokens.is_eof() {
@@ -146,6 +149,7 @@ impl<'a> Parser<'a> {
 }
 
 use glyim_lex::tokenize;
+#[tracing::instrument(skip_all)]
 
 pub fn parse(source: &str) -> ParseOutput {
     let tokens = tokenize(source);

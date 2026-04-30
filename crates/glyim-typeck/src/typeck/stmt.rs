@@ -4,6 +4,7 @@ use glyim_hir::types::HirType;
 use glyim_hir::HirPattern;
 
 impl TypeChecker {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn check_stmt(&mut self, stmt: &HirStmt) -> Option<HirType> {
         match stmt {
             HirStmt::Let { name, value, .. } => {
