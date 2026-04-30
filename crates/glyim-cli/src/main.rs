@@ -239,6 +239,11 @@ fn main() {
                     "Added {package} to {}",
                     if macro_dep { "[macros]" } else { "[dependencies]" }
                 );
+                // Attempt to resolve and write lockfile
+                match glyim_cli::lockfile_integration::resolve_and_write_lockfile(&dir, &m) {
+                    Ok(()) => {}
+                    Err(e) => eprintln!("warning: could not resolve dependencies: {e}"),
+                }
                 Ok(0)
             })();
             result.unwrap_or_else(|code| code)
@@ -274,6 +279,11 @@ fn main() {
                     1
                 })?;
                 eprintln!("Removed {package} from dependencies");
+                // Attempt to resolve and write lockfile
+                match glyim_cli::lockfile_integration::resolve_and_write_lockfile(&dir, &m) {
+                    Ok(()) => {}
+                    Err(e) => eprintln!("warning: could not resolve dependencies: {e}"),
+                }
                 Ok(0)
             })();
             result.unwrap_or_else(|code| code)
