@@ -131,7 +131,7 @@ impl RegistryClient {
             .iter()
             .filter(|v| !v.is_macro)
             .map(|v| v.version.clone())
-            .last();
+            .next_back();
         Ok(latest)
     }
 }

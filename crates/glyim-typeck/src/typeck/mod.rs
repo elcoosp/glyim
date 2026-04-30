@@ -55,8 +55,7 @@ impl TypeChecker {
         let ok = self.interner.intern("Ok");
         let err = self.interner.intern("Err");
 
-        let opt_variants = vec![
-            glyim_hir::item::HirVariant {
+        let opt_variants = [glyim_hir::item::HirVariant {
                 name: some,
                 fields: vec![],
                 tag: 0,
@@ -65,10 +64,8 @@ impl TypeChecker {
                 name: none,
                 fields: vec![],
                 tag: 1,
-            },
-        ];
-        let res_variants = vec![
-            glyim_hir::item::HirVariant {
+            }];
+        let res_variants = [glyim_hir::item::HirVariant {
                 name: ok,
                 fields: vec![],
                 tag: 0,
@@ -77,13 +74,12 @@ impl TypeChecker {
                 name: err,
                 fields: vec![],
                 tag: 1,
-            },
-        ];
+            }];
 
         self.enums.insert(
             opt_name,
             EnumInfo {
-                variants: opt_variants.iter().map(|v| v.clone()).collect(),
+                variants: opt_variants.iter().cloned().collect(),
                 variant_map: vec![(some, 0), (none, 1)].into_iter().collect(),
                 type_params: vec![],
             },
@@ -91,7 +87,7 @@ impl TypeChecker {
         self.enums.insert(
             result_name,
             EnumInfo {
-                variants: res_variants.iter().map(|v| v.clone()).collect(),
+                variants: res_variants.iter().cloned().collect(),
                 variant_map: vec![(ok, 0), (err, 1)].into_iter().collect(),
                 type_params: vec![],
             },

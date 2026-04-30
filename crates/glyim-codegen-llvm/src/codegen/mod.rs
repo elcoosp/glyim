@@ -185,7 +185,7 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    let _ = function::codegen_fn(self, f)?;
+                    function::codegen_fn(self, f)?;
                 }
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
