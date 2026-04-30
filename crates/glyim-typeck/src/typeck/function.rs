@@ -3,7 +3,8 @@ use crate::TypeChecker;
 use glyim_hir::node::HirFn;
 
 impl TypeChecker {
-    pub(crate) fn check_fn(&mut self, f: &HirFn) {
+    #[tracing::instrument(skip_all)]
+pub(crate) fn check_fn(&mut self, f: &HirFn) {
         self.with_scope(|tc| {
             for (sym, ty) in &f.params {
                 tc.insert_binding(*sym, ty.clone());

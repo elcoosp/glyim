@@ -4,6 +4,7 @@ use crate::parser::Parser;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
+#[tracing::instrument(skip_all)]
 pub(crate) fn parse_item(parser: &mut Parser) -> Option<Item> {
     let attrs = parser.parse_attributes();
     match parser.tokens.peek()?.kind {

@@ -4,7 +4,8 @@ use glyim_hir::item::{EnumDef, ExternBlock, FnSig, StructDef};
 use std::collections::HashMap;
 
 impl TypeChecker {
-    pub(crate) fn register_items(&mut self, hir: &glyim_hir::node::Hir) {
+    #[tracing::instrument(skip_all)]
+pub(crate) fn register_items(&mut self, hir: &glyim_hir::node::Hir) {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Struct(s) => self.register_struct(s),
