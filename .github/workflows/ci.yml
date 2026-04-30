@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLVM_SYS_221_PREFIX: /usr/lib/llvm-22
-      LLVM_NO_POLLY: 1
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -29,7 +28,7 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-          sudo apt-get install -y llvm-22-dev libclang-22-dev
+          sudo apt-get install -y llvm-22-dev libclang-22-dev libpolly-22-dev
 
       - name: Set LLVM environment
         run: |
