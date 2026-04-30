@@ -196,6 +196,10 @@ fn e2e_tuple() {
         &mut glyim_interner::Interner::new(),
     );
     println!("Tuple HIR: {:#?}", hir.items);
+    let result = pipeline::run(&temp_g(src)).unwrap();
+    eprintln!("Test result: {}", result);
+    let result = pipeline::run(&temp_g(src)).unwrap();
+    eprintln!("Test result: {}", result);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
 }
 // TODO: Impl method desugaring produces mangled names (Point_zero),

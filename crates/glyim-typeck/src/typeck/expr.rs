@@ -37,6 +37,8 @@ impl TypeChecker {
             HirExpr::TupleLit { id, .. } => *id,
             HirExpr::SizeOf { id, .. } => *id,
             HirExpr::Return { id, .. } => *id,
+            HirExpr::Deref { id, .. } => *id,
+            HirExpr::MethodCall { id, .. } => *id,
         }
     }
 
@@ -124,6 +126,41 @@ impl TypeChecker {
             }
             HirExpr::SizeOf { .. } => HirType::Int,
             HirExpr::Return { .. } => HirType::Never,
+            HirExpr::Deref { expr, id, .. } => {
+                let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);
+                match inner_ty {
+                    HirType::RawPtr(inner) => *inner,
+                    _ => {
+                        self.errors.push(TypeError::DerefNonPointer {
+                            found: inner_ty,
+                            expr_id: *id,
+                        });
+                        HirType::Never
+                    }
+                }
+            }
+            HirExpr::MethodCall {
+                receiver,
+                method_name,
+                args,
+                ..
+            } => {
+                let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
+                for a in args {
+                    self.check_expr(a);
+                }
+                // look up method in impl methods by receiver type name
+                if let HirType::Named(type_name) = receiver_ty {
+                    if let Some(methods) = self.impl_methods.get(&type_name) {
+                        if let Some((_, fn_def)) =
+                            methods.iter().find(|(name, _)| *name == *method_name)
+                        {
+                            return fn_def.ret.clone().unwrap_or(HirType::Int);
+                        }
+                    }
+                }
+                HirType::Int
+            }
         }
     }
 

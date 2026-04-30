@@ -146,6 +146,7 @@ fn lower_ident() {
 
 // ---- Statement lowering ----
 #[test]
+#[test]
 fn lower_let_stmt() {
     let (hir, interner) = lower_source("main = () => { let x = 42 }");
     let body = get_main_body(&hir, &interner);
@@ -153,8 +154,16 @@ fn lower_let_stmt() {
         HirExpr::Block { stmts, .. } => {
             assert!(!stmts.is_empty());
             match &stmts[0] {
-                HirStmt::Let { name, .. } => assert_eq!(interner.resolve(*name), "x"),
-                _ => panic!("expected Let"),
+                HirStmt::LetPat {
+                    pattern, mutable, ..
+                } => {
+                    assert_eq!(*mutable, false);
+                    match pattern {
+                        crate::HirPattern::Var(name) => assert_eq!(interner.resolve(*name), "x"),
+                        _ => panic!("expected Var pattern"),
+                    }
+                }
+                _ => panic!("expected LetPat"),
             }
         }
         _ => panic!("expected Block"),
@@ -162,17 +171,22 @@ fn lower_let_stmt() {
 }
 
 #[test]
+#[test]
 fn lower_let_mut_stmt() {
     let (hir, interner) = lower_source("main = () => { let mut x = 10 }");
     let body = get_main_body(&hir, &interner);
     match body {
         HirExpr::Block { stmts, .. } => match &stmts[0] {
-            HirStmt::Let {
-                mutable: true,
-                name,
-                ..
-            } => assert_eq!(interner.resolve(*name), "x"),
-            _ => panic!("expected mut Let"),
+            HirStmt::LetPat {
+                pattern, mutable, ..
+            } => {
+                assert_eq!(*mutable, true);
+                match pattern {
+                    crate::HirPattern::Var(name) => assert_eq!(interner.resolve(*name), "x"),
+                    _ => panic!("expected Var pattern"),
+                }
+            }
+            _ => panic!("expected mut LetPat"),
         },
         _ => panic!("expected Block"),
     }
@@ -347,6 +361,7 @@ fn lower_none_expr() {
 }
 
 #[test]
+#[test]
 fn lower_ok_err_expr() {
     let (hir, interner) = lower_source("main = () => { let r = Ok(42); let e = Err(0); 0 }");
     let body = get_main_body(&hir, &interner);
@@ -354,7 +369,7 @@ fn lower_ok_err_expr() {
         HirExpr::Block { stmts, .. } => stmts
             .iter()
             .filter_map(|s| {
-                if let HirStmt::Let { value, .. } = s {
+                if let HirStmt::LetPat { value, .. } = s {
                     Some(value)
                 } else {
                     None
@@ -377,7 +392,7 @@ fn lower_try_expr_desugars_to_match() {
             assert!(
                 stmts.iter().any(|s| matches!(
                     s,
-                    HirStmt::Let {
+                    HirStmt::LetPat {
                         value: HirExpr::Match { .. },
                         ..
                     }
@@ -407,26 +422,6 @@ fn lower_field_access() {
 }
 
 #[test]
-fn lower_enum_variant_construction() {
-    let (hir, interner) =
-        lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Green; c }");
-    let body = get_main_body(&hir, &interner);
-    let has_enum = match body {
-        HirExpr::Block { stmts, .. } => stmts.iter().any(|s| {
-            matches!(
-                s,
-                HirStmt::Expr(HirExpr::EnumVariant { .. })
-                    | HirStmt::Let {
-                        value: HirExpr::EnumVariant { .. },
-                        ..
-                    }
-            )
-        }),
-        _ => false,
-    };
-    assert!(has_enum, "expected EnumVariant somewhere");
-}
-
 #[test]
 fn lower_as_expr() {
     let (hir, interner) = lower_source("main = () => 42 as f64");
@@ -491,4 +486,22 @@ fn expr_ids_are_monotonic() {
 fn lower_empty_source() {
     let (hir, _) = lower_source("");
     assert!(hir.items.is_empty());
+}
+fn lower_enum_variant_construction() {
+    let (hir, interner) =
+        lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Green; c }");
+    let body = get_main_body(&hir, &interner);
+    let has_enum = match body {
+        HirExpr::Block { stmts, .. } => stmts.iter().any(|s| {
+            matches!(
+                s,
+                HirStmt::LetPat {
+                    value: HirExpr::EnumVariant { .. },
+                    ..
+                }
+            )
+        }),
+        _ => false,
+    };
+    assert!(has_enum, "expected EnumVariant somewhere");
 }

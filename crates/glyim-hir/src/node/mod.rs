@@ -39,6 +39,11 @@ pub enum HirStmt {
         value: HirExpr,
         span: Span,
     },
+    AssignDeref {
+        target: Box<HirExpr>,
+        value: HirExpr,
+        span: Span,
+    },
     Assign {
         target: Symbol,
         value: HirExpr,
@@ -108,6 +113,13 @@ pub enum HirExpr {
         arg: Box<HirExpr>,
         span: Span,
     },
+    MethodCall {
+        id: ExprId,
+        receiver: Box<HirExpr>,
+        method_name: Symbol,
+        args: Vec<HirExpr>,
+        span: Span,
+    },
     Call {
         id: ExprId,
         callee: Symbol,
@@ -161,6 +173,11 @@ pub enum HirExpr {
         elements: Vec<HirExpr>,
         span: Span,
     },
+    Deref {
+        id: ExprId,
+        expr: Box<HirExpr>,
+        span: Span,
+    },
     Return {
         id: ExprId,
         value: Option<Box<HirExpr>>,
@@ -183,6 +200,7 @@ impl HirExpr {
             Self::If { id, .. } => *id,
             Self::Println { id, .. } => *id,
             Self::Call { id, .. } => *id,
+            Self::MethodCall { id, .. } => *id,
             Self::Assert { id, .. } => *id,
             Self::As { id, .. } => *id,
             Self::Match { id, .. } => *id,
@@ -191,6 +209,7 @@ impl HirExpr {
             Self::EnumVariant { id, .. } => *id,
             Self::SizeOf { id, .. } => *id,
             Self::TupleLit { id, .. } => *id,
+            Self::Deref { id, .. } => *id,
             Self::Return { id, .. } => *id,
         }
     }
@@ -209,6 +228,7 @@ impl HirExpr {
             Self::If { span, .. } => *span,
             Self::Println { span, .. } => *span,
             Self::Call { span, .. } => *span,
+            Self::MethodCall { span, .. } => *span,
             Self::Assert { span, .. } => *span,
             Self::As { span, .. } => *span,
             Self::Match { span, .. } => *span,
@@ -217,6 +237,7 @@ impl HirExpr {
             Self::EnumVariant { span, .. } => *span,
             Self::SizeOf { span, .. } => *span,
             Self::TupleLit { span, .. } => *span,
+            Self::Deref { span, .. } => *span,
             Self::Return { span, .. } => *span,
         }
     }

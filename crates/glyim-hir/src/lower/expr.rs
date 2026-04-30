@@ -5,7 +5,7 @@ use crate::lower::types::lower_type_expr;
 use crate::lower::types::resolve_type_name;
 use crate::types::{ExprId, HirType};
 use crate::{HirExpr, HirPattern, HirStmt};
-use glyim_parse::{BlockItem, ExprKind, Pattern, StmtKind};
+use glyim_parse::{BlockItem, ExprKind, StmtKind};
 
 pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> HirExpr {
     let id = ctx.fresh_id();
@@ -99,7 +99,6 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             span,
         },
 
-        // Option/Result sugar
         ExprKind::SomeExpr(e) => HirExpr::EnumVariant {
             id,
             enum_name: ctx.intern("Option"),
@@ -159,9 +158,27 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
 
         ExprKind::Call { callee, args } => lower_call(callee, args, ctx),
 
+        ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+        } => HirExpr::MethodCall {
+            id,
+            receiver: Box::new(lower_expr(receiver, ctx)),
+            method_name: *method,
+            args: args.iter().map(|a| lower_expr(a, ctx)).collect(),
+            span,
+        },
+
         ExprKind::TupleLit(elems) => HirExpr::TupleLit {
             id,
             elements: elems.iter().map(|e| lower_expr(e, ctx)).collect(),
+            span,
+        },
+
+        ExprKind::Deref(e) => HirExpr::Deref {
+            id: ctx.fresh_id(),
+            expr: Box::new(lower_expr(e, ctx)),
             span,
         },
 
@@ -202,23 +219,21 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
             value,
         } => {
             let val = lower_expr(value, ctx);
-            match pattern {
-                Pattern::Var(name) => HirStmt::Let {
-                    name: *name,
-                    mutable: *mutable,
-                    value: val,
-                    span,
-                },
-                _ => HirStmt::Let {
-                    name: ctx.intern("_"),
-                    mutable: false,
-                    value: val,
-                    span,
-                },
+            let pat = lower_pattern(pattern, ctx);
+            HirStmt::LetPat {
+                pattern: pat,
+                mutable: *mutable,
+                value: val,
+                span,
             }
         }
         StmtKind::Assign { target, value } => HirStmt::Assign {
             target: *target,
+            value: lower_expr(value, ctx),
+            span,
+        },
+        StmtKind::AssignDeref { target, value } => HirStmt::AssignDeref {
+            target: Box::new(lower_expr(target, ctx)),
             value: lower_expr(value, ctx),
             span,
         },
@@ -252,8 +267,6 @@ fn lower_match(
 fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> HirExpr {
     let span = expr.span;
     let abort_sym = ctx.intern("abort");
-
-    // Build: Println("FAILED\n") then Call(abort)
     let fail_block = HirExpr::Block {
         id: ctx.fresh_id(),
         stmts: vec![
@@ -275,7 +288,6 @@ fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringCo
         ],
         span,
     };
-
     HirExpr::Match {
         id,
         scrutinee: Box::new(lower_expr(expr, ctx)),
@@ -310,7 +322,6 @@ fn lower_call(
         glyim_diag::Span::new(start, end)
     };
 
-    // Handle namespaced calls: StructName::method(args)
     if let ExprKind::EnumVariant {
         enum_name,
         variant_name,
@@ -333,12 +344,43 @@ fn lower_call(
         }
     }
 
-    // Handle built-in functions
+    let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
     if let ExprKind::Ident(sym) = &callee.kind {
         match ctx.resolve(*sym) {
-            "println" => return lower_println_call(args, ctx),
-            "assert" => return lower_assert_call(args, ctx),
-            _ => {}
+            "println" => {
+                return HirExpr::Println {
+                    id: ctx.fresh_id(),
+                    arg: Box::new(call_args.into_iter().next().unwrap_or(HirExpr::IntLit {
+                        id: ctx.fresh_id(),
+                        value: 0,
+                        span: glyim_diag::Span::new(0, 0),
+                    })),
+                    span: call_span,
+                }
+            }
+            "assert" => {
+                let cond = call_args.into_iter().next().unwrap_or(HirExpr::IntLit {
+                    id: ctx.fresh_id(),
+                    value: 0,
+                    span: glyim_diag::Span::new(0, 0),
+                });
+                let msg = None;
+                return HirExpr::Assert {
+                    id: ctx.fresh_id(),
+                    condition: Box::new(cond),
+                    message: msg,
+                    span: call_span,
+                };
+            }
+            _ => {
+                let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
+                return HirExpr::Call {
+                    id: ctx.fresh_id(),
+                    callee: *sym,
+                    args: call_args,
+                    span: call_span,
+                };
+            }
         }
     }
 
@@ -346,41 +388,5 @@ fn lower_call(
         id: ctx.fresh_id(),
         value: 0,
         span: call_span,
-    }
-}
-
-fn lower_println_call(args: &[glyim_parse::ExprNode], ctx: &mut LoweringContext) -> HirExpr {
-    let arg = args
-        .first()
-        .map(|a| lower_expr(a, ctx))
-        .unwrap_or(HirExpr::IntLit {
-            id: ctx.fresh_id(),
-            value: 0,
-            span: glyim_diag::Span::new(0, 0),
-        });
-    let span = args.first().map_or(glyim_diag::Span::new(0, 0), |a| a.span);
-    HirExpr::Println {
-        id: ctx.fresh_id(),
-        arg: Box::new(arg),
-        span,
-    }
-}
-
-fn lower_assert_call(args: &[glyim_parse::ExprNode], ctx: &mut LoweringContext) -> HirExpr {
-    let cond = args
-        .first()
-        .map(|a| lower_expr(a, ctx))
-        .unwrap_or(HirExpr::IntLit {
-            id: ctx.fresh_id(),
-            value: 0,
-            span: glyim_diag::Span::new(0, 0),
-        });
-    let msg = args.get(1).map(|a| Box::new(lower_expr(a, ctx)));
-    let span = cond.get_span();
-    HirExpr::Assert {
-        id: ctx.fresh_id(),
-        condition: Box::new(cond),
-        message: msg,
-        span,
     }
 }

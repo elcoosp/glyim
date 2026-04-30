@@ -91,12 +91,18 @@ pub enum ExprKind {
         object: Box<ExprNode>,
         field: Symbol,
     },
+    MethodCall {
+        receiver: Box<ExprNode>,
+        method: Symbol,
+        args: Vec<ExprNode>,
+    },
     Call {
         callee: Box<ExprNode>,
         args: Vec<ExprNode>,
     },
     SizeOf(TypeExpr),
     TupleLit(Vec<ExprNode>),
+    Deref(Box<ExprNode>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +116,10 @@ pub enum StmtKind {
     Let {
         pattern: Pattern,
         mutable: bool,
+        value: ExprNode,
+    },
+    AssignDeref {
+        target: Box<ExprNode>,
         value: ExprNode,
     },
     Assign {
