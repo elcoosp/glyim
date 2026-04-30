@@ -15,26 +15,14 @@ fn compile_stderr(source: &str, file_path: &str) -> String {
             Err(e) => format!("error: {e}"),
         }
     } else {
-        let diags: Vec<_> = parse_out
-            .errors
-            .iter()
-            .map(|e| {
-                let span = match e {
-                    glyim_parse::ParseError::Expected { span, .. } => {
-                        Some(glyim_diag::Span::new(span.0, span.1))
-                    }
-                    glyim_parse::ParseError::UnexpectedEof { .. } => None,
-                    glyim_parse::ParseError::ExpectedExpr { span, .. } => {
-                        Some(glyim_diag::Span::new(span.0, span.1))
-                    }
-                    glyim_parse::ParseError::Message { span, .. } => {
-                        Some(glyim_diag::Span::new(span.0, span.1))
-                    }
-                };
-                glyim_diag::Diagnostic::error(e.to_string()).with_span_opt(span)
-            })
-            .collect();
-        glyim_diag::render_diagnostics(source, file_path, &diags)
+        let mut output = String::new();
+        for e in &parse_out.errors {
+            let report = glyim_diag::Report::new(e.clone())
+                .with_source_code(glyim_diag::miette::NamedSource::new(file_path, source.to_string()));
+            use std::fmt::Write;
+            let _ = writeln!(output, "{:?}", report);
+        }
+        output
     }
 }
 
@@ -47,58 +35,30 @@ fn run_ui_test(name: &str) {
 }
 
 #[test]
-fn ui_let_missing_eq() {
-    run_ui_test("let_missing_eq");
-}
+fn ui_let_missing_eq() { run_ui_test("let_missing_eq"); }
 #[test]
-fn ui_assign_immutable() {
-    run_ui_test("assign_immutable");
-}
+fn ui_assign_immutable() { run_ui_test("assign_immutable"); }
 #[test]
-fn ui_missing_main() {
-    run_ui_test("missing_main");
-}
+fn ui_missing_main() { run_ui_test("missing_main"); }
 #[test]
-fn ui_unterminated_string() {
-    run_ui_test("unterminated_string");
-}
+fn ui_unterminated_string() { run_ui_test("unterminated_string"); }
 #[test]
-fn ui_missing_closing_brace() {
-    run_ui_test("missing_closing_brace");
-}
+fn ui_missing_closing_brace() { run_ui_test("missing_closing_brace"); }
 #[test]
-fn ui_multiple_errors() {
-    run_ui_test("multiple_errors");
-}
+fn ui_multiple_errors() { run_ui_test("multiple_errors"); }
 #[test]
-fn ui_if_missing_brace() {
-    run_ui_test("if_missing_brace");
-}
+fn ui_if_missing_brace() { run_ui_test("if_missing_brace"); }
 #[test]
-fn ui_unexpected_token() {
-    run_ui_test("unexpected_token");
-}
+fn ui_unexpected_token() { run_ui_test("unexpected_token"); }
 #[test]
-fn ui_missing_comma_in_params() {
-    run_ui_test("missing_comma_in_params");
-}
+fn ui_missing_comma_in_params() { run_ui_test("missing_comma_in_params"); }
 #[test]
-fn ui_duplicate_param() {
-    run_ui_test("duplicate_param");
-}
+fn ui_duplicate_param() { run_ui_test("duplicate_param"); }
 #[test]
-fn ui_nested_error() {
-    run_ui_test("nested_error");
-}
+fn ui_nested_error() { run_ui_test("nested_error"); }
 #[test]
-fn ui_empty_source() {
-    run_ui_test("empty_source");
-}
+fn ui_empty_source() { run_ui_test("empty_source"); }
 #[test]
-fn ui_bool_mismatch() {
-    run_ui_test("bool_mismatch");
-}
+fn ui_bool_mismatch() { run_ui_test("bool_mismatch"); }
 #[test]
-fn ui_type_mismatch() {
-    run_ui_test("type_mismatch");
-}
+fn ui_type_mismatch() { run_ui_test("type_mismatch"); }

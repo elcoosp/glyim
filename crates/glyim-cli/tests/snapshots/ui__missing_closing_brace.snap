@@ -1,6 +1,5 @@
 ---
 source: crates/glyim-cli/tests/ui.rs
-assertion_line: 34
 expression: actual
 ---
-[31mError:[0m expected } but reached end of input
+  [31m×[0m expected } but reached end of input

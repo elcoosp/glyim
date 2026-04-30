@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLVM_SYS_221_PREFIX: /usr/lib/llvm-22
+      LLVM_NO_POLLY: 1
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable

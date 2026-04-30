@@ -1,25 +1,58 @@
-//! Parse error types.
+use miette::Diagnostic;
 use glyim_syntax::SyntaxKind;
-use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
+    #[error("expected {expected} but found {found}")]
     Expected {
         expected: SyntaxKind,
         found: SyntaxKind,
         span: (usize, usize),
     },
+    #[error("expected {expected} but reached end of input")]
     UnexpectedEof {
         expected: SyntaxKind,
     },
+    #[error("expected expression but found {found}")]
     ExpectedExpr {
         found: SyntaxKind,
         span: (usize, usize),
     },
+    #[error("{msg}")]
     Message {
         msg: String,
         span: (usize, usize),
     },
+}
+
+impl Diagnostic for ParseError {
+
+
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Error)
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        None
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan>>> {
+        let (start, end, msg) = match self {
+            ParseError::Expected { span, found, .. } => {
+                (span.0, span.1, format!("unexpected {}", found))
+            }
+            ParseError::ExpectedExpr { span, found, .. } => {
+                (span.0, span.1, format!("unexpected {}", found))
+            }
+            ParseError::Message { span, msg } => {
+                (span.0, span.1, msg.clone())
+            }
+            ParseError::UnexpectedEof { .. } => return None,
+        };
+        Some(Box::new(std::iter::once(miette::LabeledSpan::new(
+            Some(msg), start, end - start
+        ))))
+    }
 }
 
 impl ParseError {
@@ -46,39 +79,6 @@ impl ParseError {
     }
 }
 
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Expected {
-                expected,
-                found,
-                span,
-            } => write!(
-                f,
-                "expected {} but found {} at bytes {}..{}",
-                expected.display_name(),
-                found.display_name(),
-                span.0,
-                span.1
-            ),
-            Self::UnexpectedEof { expected } => write!(
-                f,
-                "expected {} but reached end of input",
-                expected.display_name()
-            ),
-            Self::ExpectedExpr { found, span } => write!(
-                f,
-                "expected expression but found {} at bytes {}..{}",
-                found.display_name(),
-                span.0,
-                span.1
-            ),
-            Self::Message { msg, span } => write!(f, "{} at bytes {}..{}", msg, span.0, span.1),
-        }
-    }
-}
-impl std::error::Error for ParseError {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,7 +89,6 @@ mod tests {
         let s = e.to_string();
         assert!(s.contains("expected )"));
         assert!(s.contains("but found integer literal"));
-        assert!(s.contains("5..7"));
     }
     #[test]
     fn display_eof() {

@@ -391,7 +391,7 @@ fn main() {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let remote_url = remote.unwrap_or_else(|| "http://localhost:9090".to_string());
                 let token = std::env::var("GLYIM_CACHE_TOKEN").ok();
-                let client = glyim_pkg::cas_client::CasClient::new_with_remote(
+                let _client = glyim_pkg::cas_client::CasClient::new_with_remote(
                     &cas_dir,
                     &remote_url,
                     token.as_deref(),
