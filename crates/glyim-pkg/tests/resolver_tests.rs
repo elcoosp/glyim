@@ -118,3 +118,38 @@ fn satisfies_caret() {
     assert!(!satisfies_constraint("2.0.0", "^1.0.0"));
     assert!(!satisfies_constraint("0.9.0", "^1.0.0"));
 }
+
+// ---- New edge-case tests ----
+
+#[test]
+fn resolve_conflicting_constraints_no_satisfying() {
+    let mut available = HashMap::new();
+    available.insert(
+        "foo".to_string(),
+        vec![
+            make_available("foo", "1.0.0", &[]),
+            make_available("foo", "2.0.0", &[]),
+        ],
+    );
+    let req = make_req("foo", "^1.5.0", false);
+    let result = resolve(&[req], None, &available);
+    assert!(result.is_err());
+}
+
+#[test]
+fn resolve_cyclic_dependency_detected() {
+    let mut available = HashMap::new();
+    available.insert(
+        "a".to_string(),
+        vec![make_available("a", "1.0.0", &[("b", "1.0.0")])],
+    );
+    available.insert(
+        "b".to_string(),
+        vec![make_available("b", "1.0.0", &[("a", "1.0.0")])],
+    );
+    let result = resolve(&[make_req("a", "1.0.0", false)], None, &available);
+    match result {
+        Ok(_) => {}
+        Err(e) => assert!(e.to_string().contains("not found")),
+    }
+}

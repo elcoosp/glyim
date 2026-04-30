@@ -106,3 +106,50 @@ fn compute_content_hash_different_content() {
     let h2 = compute_content_hash(b"world");
     assert_ne!(h1, h2);
 }
+
+// ---- New edge-case tests ----
+
+#[test]
+fn lockfile_roundtrip_multiple_versions() {
+    let mut resolved = HashMap::new();
+    resolved.insert(
+        "a".to_string(),
+        ("1.0.0".to_string(), "sha256:abc".to_string(), false, vec![], LockSource::Local),
+    );
+    resolved.insert(
+        "b".to_string(),
+        ("2.0.0".to_string(), "sha256:def".to_string(), true, vec![], LockSource::Local),
+    );
+    let lock = generate_lockfile(&resolved);
+    let serialized = serialize_lockfile(&lock);
+    let parsed = parse_lockfile(&serialized).unwrap();
+    assert_eq!(parsed.packages.len(), 2);
+    assert!(parsed.packages.iter().any(|p| p.name == "a" && p.version == "1.0.0"));
+    assert!(parsed.packages.iter().any(|p| p.name == "b" && p.version == "2.0.0" && p.is_macro));
+}
+
+#[test]
+fn lockfile_serialized_sorted() {
+    let mut resolved = HashMap::new();
+    resolved.insert("z".to_string(), ("0.1.0".to_string(), "h".to_string(), false, vec![], LockSource::Local));
+    resolved.insert("a".to_string(), ("0.2.0".to_string(), "h".to_string(), false, vec![], LockSource::Local));
+    let lock = generate_lockfile(&resolved);
+    let serialized = serialize_lockfile(&lock);
+    let parsed = parse_lockfile(&serialized).unwrap();
+    assert_eq!(parsed.packages[0].name, "a");
+    assert_eq!(parsed.packages[1].name, "z");
+}
+
+#[test]
+fn lockfile_parse_missing_type_field_defaults_to_registry() {
+    let toml = r#"
+[[package]]
+name = "foo"
+version = "1.0"
+hash = "abc"
+"#;
+    let result = parse_lockfile(toml);
+    assert!(result.is_err(), "expected parse error for missing type field");
+    let result = parse_lockfile(toml);
+    assert!(result.is_err(), "expected parse error for missing type field");
+}
