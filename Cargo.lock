@@ -821,6 +821,7 @@ dependencies = [
  "glyim-interner",
  "glyim-parse",
  "inkwell",
+ "insta",
  "llvm-sys",
  "thiserror 2.0.18",
  "tracing",
