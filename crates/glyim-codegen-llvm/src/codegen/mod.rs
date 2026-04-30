@@ -43,6 +43,7 @@ pub struct Codegen<'ctx> {
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,
     current_subprogram: Option<DISubprogram<'ctx>>,
+    pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<glyim_interner::Symbol>>,
     pub(crate) no_std: bool,
 }
 
@@ -74,6 +75,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: None,
             current_subprogram: None,
             no_std: false,
+            macro_fn_names: std::cell::RefCell::new(std::collections::HashSet::new()),
         }
     }
 
@@ -118,6 +120,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: Some(source_str),
             current_subprogram: None,
             no_std: false,
+            macro_fn_names: std::cell::RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -162,6 +165,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: Some(source_str),
             current_subprogram: None,
             no_std: false,
+            macro_fn_names: std::cell::RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -191,7 +195,8 @@ impl<'ctx> Codegen<'ctx> {
         }
 
         // Finalize debug info before verifying
-        if let Some(ref di) = self.debug_info {
+        self.emit_macro_debug_section();
+                if let Some(ref di) = self.debug_info {
             di.finalize();
         }
 
@@ -446,4 +451,33 @@ impl<'ctx> Codegen<'ctx> {
         self.no_std = true;
         self
     }
+
+    /// Emit a `.glyim-macro-debug` ELF section containing macro expansion metadata.
+    fn emit_macro_debug_section(&self) {
+        let names = self.macro_fn_names.borrow();
+        if names.is_empty() {
+            return;
+        }
+        // Create a simple metadata string: comma-separated list of macro function names
+        let metadata = names.iter()
+            .map(|sym| self.interner.resolve(*sym).to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let metadata = format!("[{}]", metadata);
+        let bytes = metadata.as_bytes();
+        let i8_type = self.context.i8_type();
+        let arr_type = i8_type.array_type(bytes.len() as u32);
+        let global = self
+            .module
+            .add_global(arr_type, Some(inkwell::AddressSpace::from(0u16)), "_glyim_macro_debug");
+        let elems: Vec<_> = bytes
+            .iter()
+            .map(|b| i8_type.const_int(*b as u64, false))
+            .collect();
+        let arr = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
+        global.set_initializer(&arr);
+        global.set_constant(true);
+        global.set_section(Some(".glyim-macro-debug"));
+    }
+
 }

@@ -31,6 +31,7 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
             f.span.start,
         );
         if let Ok(subprogram) = di.create_subprogram(name, line, f.is_macro_generated) {
+        cg.macro_fn_names.borrow_mut().insert(f.name);
             di.register_subprogram(f.name, subprogram);
             cg.current_subprogram = Some(subprogram);
         }
