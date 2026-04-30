@@ -116,11 +116,11 @@ test-json:
 
 # Run the lexer fuzzer (requires cargo-fuzz)
 fuzz-lexer:
-    cd fuzz && cargo fuzz run fuzz_lexer
+    cd crates/glyim-fuzz && cargo fuzz run fuzz_lexer
 
 # Run the parser fuzzer (requires cargo-fuzz)
 fuzz-parser:
-    cd fuzz && cargo fuzz run fuzz_parser
+    cd crates/glyim-fuzz && cargo fuzz run fuzz_parser
 
 # ─── Quality ────────────────────────────────────────────────
 
