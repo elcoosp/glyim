@@ -122,12 +122,14 @@ impl<'a> MonoContext<'a> {
         }
         // Also scan all function bodies to discover generic calls
         // not yet in call_type_args (backward compatibility fallback).
-        // Struct instantiation scanning is deferred to work-queue processing,
-        // where the specialized body has concrete types.
+        // For non‑generic functions, also scan struct instantiations immediately.
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
                 self.current_type_params = f.type_params.clone();
                 self.scan_expr_for_generic_calls(&f.body);
+                if f.type_params.is_empty() {
+                    self.scan_expr_for_struct_instantiations(&f.body);
+                }
             }
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
