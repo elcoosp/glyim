@@ -18,7 +18,7 @@ impl ExprId {
 }
 
 /// High-level types in the Glyim type system.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HirType {
     /// 64-bit signed integer
     Int,

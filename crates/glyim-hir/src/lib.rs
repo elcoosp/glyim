@@ -1,6 +1,7 @@
 pub mod item;
 mod lower;
 pub mod node;
+pub mod monomorphize;
 pub mod types;
 
 pub use item::{
