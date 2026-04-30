@@ -63,6 +63,7 @@ pub(crate) fn parse_atom(parser: &mut Parser) -> Option<ExprNode> {
         }
         SyntaxKind::LParen => parse_paren_or_tuple(parser),
         SyntaxKind::LBrace => super::complex::parse_block(parser),
+        SyntaxKind::KwWhile => super::complex::parse_while(parser),
         SyntaxKind::KwIf => super::complex::parse_if(parser),
         SyntaxKind::Star => {
             // Guard: *let, *mut, *const → null pointer expression (existing behavior)

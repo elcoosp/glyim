@@ -77,6 +77,7 @@ pub(crate) fn codegen_expr<'ctx>(
             }
             last
         }
+        HirExpr::While { .. } => control::codegen_while(cg, expr, fctx),
         HirExpr::If { .. } => control::codegen_if(cg, expr, fctx),
         HirExpr::Match { .. } => control::codegen_match(cg, expr, fctx),
         HirExpr::StructLit { .. } => data::codegen_struct_lit(cg, expr, fctx),
@@ -91,7 +92,67 @@ pub(crate) fn codegen_expr<'ctx>(
             cg.builder.build_return(Some(&ret_val)).ok()?;
             None
         }
-        HirExpr::As { .. } => Some(cg.i64_type.const_int(0, false)),
+        HirExpr::As { expr, target_type, id: _, .. } => {
+            let src_val = codegen_expr(cg, expr, fctx)?;
+            let src_ty = cg.expr_types.get(expr.get_id().as_usize())
+                .cloned()
+                .unwrap_or(HirType::Int);
+
+            // Determine the resolved target type (unwrapping Named if needed)
+            let resolve_ty = |ty: &HirType| -> HirType {
+                match ty {
+                    HirType::Named(sym) => {
+                        let name = cg.interner.resolve(*sym);
+                        match name {
+                            "i64" | "Int" => HirType::Int,
+                            "f64" | "Float" => HirType::Float,
+                            "bool" | "Bool" => HirType::Bool,
+                            "Str" | "str" => HirType::Str,
+                            _ => ty.clone(),
+                        }
+                    }
+                    _ => ty.clone(),
+                }
+            };
+
+            let resolved_src = resolve_ty(&src_ty);
+            let resolved_tgt = resolve_ty(target_type);
+
+            use HirType::*;
+            match (&resolved_src, &resolved_tgt) {
+                // Integer to Float
+                (Int, Float) => {
+                    let fv = cg.builder
+                        .build_signed_int_to_float(src_val, cg.f64_type, "sitofp")
+                        .ok()?;
+                    let alloca = cg.builder.build_alloca(cg.f64_type, "cast_tmp").ok()?;
+                    cg.builder.build_store(alloca, fv).ok()?;
+                    cg.builder.build_ptr_to_int(alloca, cg.i64_type, "f2i64").ok()
+                }
+                // Float to Integer
+                (Float, Int) => {
+                    let ptr = cg.builder
+                        .build_int_to_ptr(src_val, cg.context.ptr_type(inkwell::AddressSpace::from(0u16)), "i2ptr")
+                        .ok()?;
+                    let fv = cg.builder
+                        .build_load(cg.f64_type, ptr, "load_f64")
+                        .ok()?
+                        .into_float_value();
+                    cg.builder.build_float_to_signed_int(fv, cg.i64_type, "fptosi").ok()
+                }
+                // Integer/Float to same type (identity)
+                (Int, Int) | (Float, Float) => Some(src_val),
+                // Integer to RawPtr
+                (_, RawPtr(_)) => {
+                    let ptr = cg.builder
+                        .build_int_to_ptr(src_val, cg.context.ptr_type(inkwell::AddressSpace::from(0u16)), "inttoptr")
+                        .ok()?;
+                    cg.builder.build_ptr_to_int(ptr, cg.i64_type, "ptr2i64").ok()
+                }
+                // RawPtr and everything else (identity or bitcast)
+                _ => Some(src_val),
+            }
+        }
         HirExpr::FloatLit { value: f, .. } => {
             let fv = cg.f64_type.const_float(*f);
             let alloca = cg.builder.build_alloca(cg.f64_type, "float_tmp").ok()?;

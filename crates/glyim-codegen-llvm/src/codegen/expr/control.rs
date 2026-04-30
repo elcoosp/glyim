@@ -6,6 +6,47 @@ use glyim_hir::{HirExpr, HirPattern};
 use inkwell::values::{BasicValue, IntValue};
 use inkwell::{AddressSpace, IntPredicate};
 
+pub(crate) fn codegen_while<'ctx>(
+    cg: &Codegen<'ctx>,
+    expr: &HirExpr,
+    fctx: &mut FunctionContext<'ctx>,
+) -> Option<IntValue<'ctx>> {
+    if let HirExpr::While { condition, body, .. } = expr {
+        let cond_bb = cg.context.append_basic_block(fctx.fn_value, "while.cond");
+        let body_bb = cg.context.append_basic_block(fctx.fn_value, "while.body");
+        let end_bb = cg.context.append_basic_block(fctx.fn_value, "while.end");
+
+        // Jump to condition check
+        cg.builder.build_unconditional_branch(cond_bb).ok()?;
+
+        // Condition block
+        cg.builder.position_at_end(cond_bb);
+        let cond_val = codegen_expr(cg, condition, fctx)?;
+        let cond_bool = cg.builder
+            .build_int_compare(
+                IntPredicate::NE,
+                cond_val,
+                cg.i64_type.const_int(0, false),
+                "while_cond",
+            )
+            .ok()?;
+        cg.builder
+            .build_conditional_branch(cond_bool, body_bb, end_bb)
+            .ok()?;
+
+        // Body block
+        cg.builder.position_at_end(body_bb);
+        codegen_block(cg, body, fctx)?;
+        cg.builder.build_unconditional_branch(cond_bb).ok()?;
+
+        // End block
+        cg.builder.position_at_end(end_bb);
+        Some(cg.i64_type.const_int(0, false))
+    } else {
+        None
+    }
+}
+
 pub(crate) fn codegen_if<'ctx>(
     cg: &Codegen<'ctx>,
     expr: &HirExpr,

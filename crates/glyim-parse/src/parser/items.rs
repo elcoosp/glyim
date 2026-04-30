@@ -121,6 +121,25 @@ fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute
         .ok()?;
     let mut params = vec![];
     while !parser.tokens.at(SyntaxKind::RParen) {
+        // Check for 'mut' keyword
+        let mutable = parser.tokens.eat(SyntaxKind::KwMut).is_some();
+
+        // Check for 'self' keyword
+        if parser.tokens.eat(SyntaxKind::KwSelf).is_some() {
+            let self_sym = parser.interner.intern("self");
+            let self_span = Span::new(if mutable { /* span would need tok */ 0 } else { 0 }, 0);
+            let ty = if parser.tokens.eat(SyntaxKind::Colon).is_some() {
+                parse_type_expr(&mut parser.tokens, &mut parser.interner)
+            } else {
+                None
+            };
+            params.push((self_sym, self_span, ty));
+            if parser.tokens.eat(SyntaxKind::Comma).is_none() {
+                break;
+            }
+            continue;
+        }
+
         let tok = parser
             .tokens
             .expect(SyntaxKind::Ident, &mut parser.errors)

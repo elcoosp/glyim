@@ -103,6 +103,10 @@ pub enum ExprKind {
     SizeOf(TypeExpr),
     TupleLit(Vec<ExprNode>),
     Deref(Box<ExprNode>),
+    While {
+        condition: Box<ExprNode>,
+        body: Box<ExprNode>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

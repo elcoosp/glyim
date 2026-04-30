@@ -356,7 +356,7 @@ fn e2e_struct_with_ptr_parse_and_typecheck() {
 }
 
 #[test]
-#[ignore = "requires pointer arithmetic, while loops, mut self"]
+#[ignore = "requires impl blocks with self"]
 fn e2e_veci64_push_get() {
     // Read vec_i64.g from the workspace root
     let vec_src = include_str!("../../../stdlib/src/vec_i64.g");
@@ -405,4 +405,22 @@ fn e2e_mono_two_instantiations_same_fn() {
 fn e2e_mono_generic_fn_with_two_type_params() {
     let src = "fn pair<A,B>(a: A, b: B) -> B { b }\nfn main() -> i64 { pair(1, 42) }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+
+
+#[test]
+fn e2e_while_loop() {
+    let src = r#"
+main = () => {
+    let mut i = 0;
+    let mut sum = 0;
+    while i < 5 {
+        sum = sum + i;
+        i = i + 1;
+    };
+    sum
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 10);
+}
+
 }

@@ -200,6 +200,13 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             span,
         },
 
+                ExprKind::While { condition, body } => HirExpr::While {
+            id,
+            condition: Box::new(lower_expr(condition, ctx)),
+            body: Box::new(lower_expr(body, ctx)),
+            span,
+        },
+
         ExprKind::SizeOf(ty) => HirExpr::SizeOf {
             id,
             target_type: lower_type_expr(ty, ctx),

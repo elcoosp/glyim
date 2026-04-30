@@ -218,6 +218,13 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::Ident, "<method>");
             builder.finish_node();
         }
+        ExprKind::While { condition, body } => {
+            builder.start_node(SyntaxKind::WhileExpr);
+            builder.token(SyntaxKind::KwWhile, "while");
+            ast_expr_to_cst(builder, condition);
+            ast_expr_to_cst(builder, body);
+            builder.finish_node();
+        }
         ExprKind::Deref(_) => {
             builder.start_node(SyntaxKind::PrefixExpr);
             builder.token(SyntaxKind::Star, "*");

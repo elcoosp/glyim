@@ -163,6 +163,12 @@ pub enum HirExpr {
         args: Vec<HirExpr>,
         span: Span,
     },
+    While {
+        id: ExprId,
+        condition: Box<HirExpr>,
+        body: Box<HirExpr>,
+        span: Span,
+    },
     SizeOf {
         id: ExprId,
         target_type: HirType,
@@ -207,6 +213,7 @@ impl HirExpr {
             Self::FieldAccess { id, .. } => *id,
             Self::StructLit { id, .. } => *id,
             Self::EnumVariant { id, .. } => *id,
+            Self::While { id, .. } => *id,
             Self::SizeOf { id, .. } => *id,
             Self::TupleLit { id, .. } => *id,
             Self::Deref { id, .. } => *id,
@@ -235,6 +242,7 @@ impl HirExpr {
             Self::FieldAccess { span, .. } => *span,
             Self::StructLit { span, .. } => *span,
             Self::EnumVariant { span, .. } => *span,
+            Self::While { span, .. } => *span,
             Self::SizeOf { span, .. } => *span,
             Self::TupleLit { span, .. } => *span,
             Self::Deref { span, .. } => *span,

@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 94;
+pub const COUNT: u16 = 97;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -16,6 +16,7 @@ pub enum SyntaxKind {
     Ident,
     StringLit,
     KwFn,
+    KwSelf,
     KwStruct,
     KwEnum,
     KwLet,
@@ -30,6 +31,7 @@ pub enum SyntaxKind {
     KwAs,
     KwPub,
     KwImpl,
+    KwWhile,
     KwMut,
     Eq,
     FatArrow,
@@ -99,6 +101,7 @@ pub enum SyntaxKind {
     FieldAccessExpr,
     TupleLitExpr,
     ReturnExpr,
+    WhileExpr,
     MatchArmPat,
 }
 
@@ -139,11 +142,13 @@ impl SyntaxKind {
             Self::Ident => "identifier",
             Self::StringLit => "string literal",
             Self::KwFn => "fn",
+            Self::KwSelf => "self",
             Self::KwStruct => "struct",
             Self::KwEnum => "enum",
             Self::KwLet => "let",
             Self::KwIf => "if",
             Self::KwElse => "else",
+            Self::KwWhile => "while",
             Self::KwMut => "mut",
             Self::KwReturn => "return",
             Self::KwUse => "use",
@@ -222,6 +227,7 @@ impl SyntaxKind {
             Self::FieldAccessExpr => "field access",
             Self::TupleLitExpr => "tuple literal",
             Self::ReturnExpr => "return expression",
+            Self::WhileExpr => "while expression",
             Self::MatchArmPat => "match arm pattern",
         }
     }

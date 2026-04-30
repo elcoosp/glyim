@@ -140,6 +140,21 @@ pub(crate) fn parse_lambda(parser: &mut Parser) -> Option<ExprNode> {
     })
 }
 
+pub(crate) fn parse_while(parser: &mut Parser) -> Option<ExprNode> {
+    let start_tok = parser.tokens.bump()?; // 'while'
+    let start = start_tok.start;
+    let condition = parser.parse_expr(0)?;
+    let body = parse_block(parser)?;
+    let end = body.span.end;
+    Some(ExprNode {
+        kind: ExprKind::While {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        },
+        span: Span::new(start, end),
+    })
+}
+
 pub(crate) fn parse_match(parser: &mut Parser) -> Option<ExprNode> {
     let start_tok = parser.tokens.bump()?;
     let start = start_tok.start;

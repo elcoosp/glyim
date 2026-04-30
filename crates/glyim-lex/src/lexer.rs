@@ -177,6 +177,7 @@ impl<'a> Lexer<'a> {
         let text = &self.input[start..self.offset];
         match text {
             "fn" => SyntaxKind::KwFn,
+            "self" => SyntaxKind::KwSelf,
             "struct" => SyntaxKind::KwStruct,
             "enum" => SyntaxKind::KwEnum,
             "let" => SyntaxKind::KwLet,
@@ -191,6 +192,7 @@ impl<'a> Lexer<'a> {
             "as" => SyntaxKind::KwAs,
             "pub" => SyntaxKind::KwPub,
             "mut" => SyntaxKind::KwMut,
+            "while" => SyntaxKind::KwWhile,
             "impl" => SyntaxKind::KwImpl,
             _ => SyntaxKind::Ident,
         }
