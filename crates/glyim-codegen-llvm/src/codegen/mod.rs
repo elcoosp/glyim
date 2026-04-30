@@ -92,9 +92,7 @@ impl<'ctx> Codegen<'ctx> {
         let result_sym = interner.intern("Result");
         let debug_info = match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full) {
             Ok(di) => Some(di),
-            Err(e) => {
-                None
-            }
+            Err(e) => None,
         };
         Ok(Self {
             context,
@@ -136,9 +134,7 @@ impl<'ctx> Codegen<'ctx> {
         let debug_info =
             match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly) {
                 Ok(di) => Some(di),
-                Err(e) => {
-                    None
-                }
+                Err(e) => None,
             };
         Ok(Self {
             context,
@@ -187,13 +183,17 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
-                glyim_hir::item::HirItem::Enum(e)   => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
                         let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
                             f.params.iter().map(|_| self.i64_type.into()).collect();
-                        self.module.add_function(name, self.i64_type.fn_type(&param_types, false), None);
+                        self.module.add_function(
+                            name,
+                            self.i64_type.fn_type(&param_types, false),
+                            None,
+                        );
                     }
                 }
                 _ => {}
@@ -203,9 +203,13 @@ impl<'ctx> Codegen<'ctx> {
         // Pass 2 — forward-declare ALL functions before any body is compiled
         for item in &hir.items {
             match item {
-                glyim_hir::item::HirItem::Fn(f) => { function::declare_fn(self, f); }
+                glyim_hir::item::HirItem::Fn(f) => {
+                    function::declare_fn(self, f);
+                }
                 glyim_hir::item::HirItem::Impl(imp) => {
-                    for m in &imp.methods { function::declare_fn(self, m); }
+                    for m in &imp.methods {
+                        function::declare_fn(self, m);
+                    }
                 }
                 _ => {}
             }
@@ -214,9 +218,13 @@ impl<'ctx> Codegen<'ctx> {
         // Pass 3 — emit bodies (all forward declarations already present)
         for item in &hir.items {
             match item {
-                glyim_hir::item::HirItem::Fn(f) => { function::codegen_fn(self, f)?; }
+                glyim_hir::item::HirItem::Fn(f) => {
+                    function::codegen_fn(self, f)?;
+                }
                 glyim_hir::item::HirItem::Impl(imp) => {
-                    for m in &imp.methods { function::codegen_fn(self, m)?; }
+                    for m in &imp.methods {
+                        function::codegen_fn(self, m)?;
+                    }
                 }
                 _ => {}
             }
@@ -339,13 +347,17 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
-                glyim_hir::item::HirItem::Enum(e)   => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
                         let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
                             f.params.iter().map(|_| self.i64_type.into()).collect();
-                        self.module.add_function(name, self.i64_type.fn_type(&param_types, false), None);
+                        self.module.add_function(
+                            name,
+                            self.i64_type.fn_type(&param_types, false),
+                            None,
+                        );
                     }
                 }
                 _ => {}
@@ -357,10 +369,14 @@ impl<'ctx> Codegen<'ctx> {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
                     let name = self.interner.resolve(f.name);
-                    if name != "main" { function::declare_fn(self, f); }
+                    if name != "main" {
+                        function::declare_fn(self, f);
+                    }
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
-                    for m in &imp.methods { function::declare_fn(self, m); }
+                    for m in &imp.methods {
+                        function::declare_fn(self, m);
+                    }
                 }
                 _ => {}
             }
@@ -371,11 +387,15 @@ impl<'ctx> Codegen<'ctx> {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
                     let name = self.interner.resolve(f.name);
-                    if name == "main" { continue; }
+                    if name == "main" {
+                        continue;
+                    }
                     function::codegen_fn(self, f)?;
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
-                    for m in &imp.methods { function::codegen_fn(self, m)?; }
+                    for m in &imp.methods {
+                        function::codegen_fn(self, m)?;
+                    }
                 }
                 _ => {}
             }

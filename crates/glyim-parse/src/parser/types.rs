@@ -55,7 +55,7 @@ fn parse_named_or_generic_type(tokens: &mut Tokens, interner: &mut Interner) -> 
         "i64" | "Int" => return Some(TypeExpr::Int),
         "f64" | "Float" => return Some(TypeExpr::Float),
         "bool" | "Bool" => return Some(TypeExpr::Bool),
-        "Str" | "str" | "String" => return Some(TypeExpr::Str),
+        "Str" | "str" => return Some(TypeExpr::Str),
         _ => {}
     }
     if tokens.at(SyntaxKind::Lt) {

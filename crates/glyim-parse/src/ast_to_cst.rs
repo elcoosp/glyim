@@ -218,7 +218,11 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::Ident, "<method>");
             builder.finish_node();
         }
-        ExprKind::ForIn { pattern: _, iter, body } => {
+        ExprKind::ForIn {
+            pattern: _,
+            iter,
+            body,
+        } => {
             builder.start_node(glyim_syntax::SyntaxKind::ForInExpr);
             builder.token(glyim_syntax::SyntaxKind::KwFor, "for");
             ast_expr_to_cst(builder, iter);

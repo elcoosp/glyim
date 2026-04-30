@@ -109,14 +109,27 @@ pub(crate) fn codegen_field_access<'ctx>(
         let obj_val = codegen_expr(cg, object, fctx)?;
         let obj_id = object.get_id();
         let obj_ty = cg.expr_types.get(obj_id.as_usize()).cloned();
-        eprintln!("[codegen_field_access] obj_id={:?} obj_ty={:?}", obj_id, obj_ty);
+        eprintln!(
+            "[codegen_field_access] obj_id={:?} obj_ty={:?}",
+            obj_id, obj_ty
+        );
         {
             let st = cg.struct_types.borrow();
-            eprintln!("[codegen_field_access] struct_types keys: {:?}", st.keys().map(|s| cg.interner.resolve(*s)).collect::<Vec<_>>());
+            eprintln!(
+                "[codegen_field_access] struct_types keys: {:?}",
+                st.keys()
+                    .map(|s| cg.interner.resolve(*s))
+                    .collect::<Vec<_>>()
+            );
         }
         {
             let idx = cg.struct_field_indices.borrow();
-            eprintln!("[codegen_field_access] struct_field_indices keys: {:?}", idx.keys().map(|(s,f)| (cg.interner.resolve(*s), cg.interner.resolve(*f))).collect::<Vec<_>>());
+            eprintln!(
+                "[codegen_field_access] struct_field_indices keys: {:?}",
+                idx.keys()
+                    .map(|(s, f)| (cg.interner.resolve(*s), cg.interner.resolve(*f)))
+                    .collect::<Vec<_>>()
+            );
         }
         if let Some(HirType::Tuple(elems)) = obj_ty {
             let field_name = cg.interner.resolve(*field);
@@ -203,7 +216,8 @@ pub(crate) fn codegen_field_access<'ctx>(
         } else {
             return Some(cg.i64_type.const_int(0, false));
         };
-        let result = cg.builder
+        let result = cg
+            .builder
             .build_load(cg.i64_type, field_ptr, "field_val")
             .ok()
             .map(|v| v.into_int_value());

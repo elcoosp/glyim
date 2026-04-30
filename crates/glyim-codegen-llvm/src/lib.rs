@@ -32,7 +32,11 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
 }
 
 /// Compile source to LLVM IR with debug info enabled.
-pub fn compile_to_ir_debug(source: &str, enable_debug: bool, file_name: &str) -> Result<String, String> {
+pub fn compile_to_ir_debug(
+    source: &str,
+    enable_debug: bool,
+    file_name: &str,
+) -> Result<String, String> {
     let out = glyim_parse::parse(source);
     if !out.errors.is_empty() {
         return Err(format!("parse: {:?}", out.errors));
@@ -148,7 +152,12 @@ mod debug_ir_tests {
 
     #[test]
     fn compile_to_ir_debug_multi_function() {
-        let ir = compile_to_ir_debug("fn helper() { 0 }\nmain = () => { helper() }", true, "test.g").unwrap();
+        let ir = compile_to_ir_debug(
+            "fn helper() { 0 }\nmain = () => { helper() }",
+            true,
+            "test.g",
+        )
+        .unwrap();
         let count = ir.matches("DISubprogram").count();
         assert!(
             count >= 2,

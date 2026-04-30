@@ -1,11 +1,11 @@
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
 use crate::TypeChecker;
-use glyim_hir::HirBinOp;
-use std::collections::HashMap;
 use glyim_hir::node::HirExpr;
 use glyim_hir::types::{ExprId, HirType};
+use glyim_hir::HirBinOp;
 use glyim_interner::Symbol;
+use std::collections::HashMap;
 
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
@@ -58,8 +58,12 @@ impl TypeChecker {
                 self.check_expr(lhs);
                 self.check_expr(rhs);
                 match op {
-                    HirBinOp::Eq | HirBinOp::Neq | HirBinOp::Lt
-                    | HirBinOp::Gt | HirBinOp::Lte | HirBinOp::Gte => HirType::Bool,
+                    HirBinOp::Eq
+                    | HirBinOp::Neq
+                    | HirBinOp::Lt
+                    | HirBinOp::Gt
+                    | HirBinOp::Lte
+                    | HirBinOp::Gte => HirType::Bool,
                     _ => HirType::Int,
                 }
             }
@@ -123,7 +127,9 @@ impl TypeChecker {
             HirExpr::Match {
                 scrutinee, arms, ..
             } => self.check_match(scrutinee, arms),
-            HirExpr::Call { id, callee, args, .. } => {
+            HirExpr::Call {
+                id, callee, args, ..
+            } => {
                 let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args);
                 if let Some(type_args) = inferred_args {
                     self.call_type_args.insert(*id, type_args);
@@ -143,7 +149,9 @@ impl TypeChecker {
                 self.check_expr(body);
                 HirType::Unit
             }
-            HirExpr::While { condition, body, .. } => {
+            HirExpr::While {
+                condition, body, ..
+            } => {
                 let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);
                 if cond_type != HirType::Bool {
                     self.errors.push(TypeError::IfConditionMustBeBool {
@@ -234,7 +242,9 @@ impl TypeChecker {
                                 if *param_sym == *tp {
                                     // Only insert if value type is a concrete type, not a type parameter
                                     match val_ty {
-                                        HirType::Named(v_sym) if info.type_params.contains(v_sym) => {
+                                        HirType::Named(v_sym)
+                                            if info.type_params.contains(v_sym) =>
+                                        {
                                             // Skip: value is itself a type parameter (will be resolved by monomorphization)
                                         }
                                         _ => {
@@ -354,10 +364,7 @@ impl TypeChecker {
         callee: Symbol,
         args: &[HirExpr],
     ) -> (HirType, Option<Vec<HirType>>) {
-        let arg_types: Vec<HirType> = args
-            .iter()
-            .filter_map(|a| self.check_expr(a))
-            .collect();
+        let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
 
         let fn_def = self.fns.iter().find(|f| f.name == callee);
 
@@ -368,7 +375,11 @@ impl TypeChecker {
                     .iter()
                     .zip(arg_types.iter())
                     .filter_map(|(tp, at)| {
-                        if at == &HirType::Never { None } else { Some((*tp, at.clone())) }
+                        if at == &HirType::Never {
+                            None
+                        } else {
+                            Some((*tp, at.clone()))
+                        }
                     })
                     .collect();
                 if sub.len() == fn_def.type_params.len() {
@@ -378,7 +389,10 @@ impl TypeChecker {
                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                         .collect();
                     let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
-                    return (glyim_hir::types::substitute_type(&ret, &sub), Some(type_args));
+                    return (
+                        glyim_hir::types::substitute_type(&ret, &sub),
+                        Some(type_args),
+                    );
                 }
             }
             return (fn_def.ret.clone().unwrap_or(HirType::Int), None);

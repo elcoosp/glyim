@@ -74,7 +74,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 .iter()
                 .map(|(sym, _, ty)| StructField {
                     name: *sym,
-                    ty: ty.as_ref()
+                    ty: ty
+                        .as_ref()
                         .map(|t| lower_type_expr(t, ctx))
                         .unwrap_or(HirType::Int),
                 })

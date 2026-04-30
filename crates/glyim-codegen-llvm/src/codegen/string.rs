@@ -118,7 +118,8 @@ pub(crate) fn codegen_call<'ctx>(
         let ptr_val = codegen_expr(cg, &args[0], fctx)?;
         let offset_val = codegen_expr(cg, &args[1], fctx)?;
         let ptr_type = cg.context.ptr_type(inkwell::AddressSpace::from(0u16));
-        let base_ptr = cg.builder
+        let base_ptr = cg
+            .builder
             .build_int_to_ptr(ptr_val, ptr_type, "ptr_cast")
             .ok()?;
         let gep = unsafe {
@@ -131,7 +132,8 @@ pub(crate) fn codegen_call<'ctx>(
                 )
                 .ok()?
         };
-        return cg.builder
+        return cg
+            .builder
             .build_ptr_to_int(gep, cg.i64_type, "ptr_to_int")
             .ok();
     }

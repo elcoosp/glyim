@@ -1,6 +1,6 @@
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
-use glyim_interner::Interner;
 use glyim_hir::types::HirType;
+use glyim_interner::Interner;
 use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
@@ -99,17 +99,19 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    for (id, args) in &call_type_args {}
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
-    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
+    eprintln!(
+        "[pipeline] type_overrides (len={}): {:?}",
+        type_overrides.len(),
+        type_overrides
+            .iter()
+            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
+            .collect::<Vec<_>>()
+    );
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -133,13 +135,20 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
-    let mut codegen =
-        Codegen::with_line_tables(&context, interner, merged_types, source, &input.to_string_lossy())
-            .map_err(PipelineError::Codegen)?;
+    let mut codegen = Codegen::with_line_tables(
+        &context,
+        interner,
+        merged_types,
+        source,
+        &input.to_string_lossy(),
+    )
+    .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    codegen
+        .generate(&mono_hir)
+        .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
@@ -167,8 +176,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {
-        }
+        for e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
@@ -182,8 +190,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
+    for (id, args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -192,7 +199,14 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
-    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
+    eprintln!(
+        "[pipeline] type_overrides (len={}): {:?}",
+        type_overrides.len(),
+        type_overrides
+            .iter()
+            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
+            .collect::<Vec<_>>()
+    );
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -205,13 +219,20 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
-    let mut codegen =
-        Codegen::with_line_tables(&context, parse_out.interner, merged_types, source, &input.to_string_lossy())
-            .map_err(PipelineError::Codegen)?;
+    let mut codegen = Codegen::with_line_tables(
+        &context,
+        parse_out.interner,
+        merged_types,
+        source,
+        &input.to_string_lossy(),
+    )
+    .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    codegen
+        .generate(&mono_hir)
+        .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -233,8 +254,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {
-        }
+        for e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
@@ -285,8 +305,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {
-        }
+        for e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
@@ -300,8 +319,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
+    for (id, args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -310,7 +328,14 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
-    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
+    eprintln!(
+        "[pipeline] type_overrides (len={}): {:?}",
+        type_overrides.len(),
+        type_overrides
+            .iter()
+            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
+            .collect::<Vec<_>>()
+    );
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -337,7 +362,9 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    codegen
+        .generate(&mono_hir)
+        .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -365,17 +392,19 @@ pub fn build_with_mode(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    for (id, args) in &call_type_args {}
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
-    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
+    eprintln!(
+        "[pipeline] type_overrides (len={}): {:?}",
+        type_overrides.len(),
+        type_overrides
+            .iter()
+            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
+            .collect::<Vec<_>>()
+    );
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -413,7 +442,9 @@ pub fn build_with_mode(
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    codegen
+        .generate(&mono_hir)
+        .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
@@ -554,8 +585,7 @@ pub fn run_tests(
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {
-        }
+        for e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
 
@@ -624,8 +654,7 @@ pub fn run_tests(
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
+    for (id, args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -634,7 +663,14 @@ pub fn run_tests(
     );
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
-    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
+    eprintln!(
+        "[pipeline] type_overrides (len={}): {:?}",
+        type_overrides.len(),
+        type_overrides
+            .iter()
+            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
+            .collect::<Vec<_>>()
+    );
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -787,17 +823,19 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    for (id, args) in &call_type_args {}
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
-    eprintln!("[pipeline] type_overrides (len={}): {:?}", type_overrides.len(), type_overrides.iter().map(|(k,v)| (k.as_usize(), format!("{:?}",v))).collect::<Vec<_>>());
+    eprintln!(
+        "[pipeline] type_overrides (len={}): {:?}",
+        type_overrides.len(),
+        type_overrides
+            .iter()
+            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
+            .collect::<Vec<_>>()
+    );
     let mut merged_types = expr_types;
     for (id, ty) in type_overrides {
         if id.as_usize() < merged_types.len() {
@@ -814,7 +852,9 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let context = Context::create();
     info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, merged_types);
-    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    codegen
+        .generate(&mono_hir)
+        .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
@@ -914,8 +954,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {
-    }
+    for (id, args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -927,7 +966,8 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         .iter()
         .enumerate()
         .map(|(i, ty)| {
-            mono_result.type_overrides
+            mono_result
+                .type_overrides
                 .get(&ExprId::new(i as u32))
                 .cloned()
                 .unwrap_or_else(|| ty.clone())

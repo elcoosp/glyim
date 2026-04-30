@@ -133,15 +133,18 @@ impl Parser<'_> {
             }
             if op_tok.kind == SyntaxKind::KwAs && 85 >= min_bp {
                 self.tokens.bump();
-                let target_type = super::types::parse_type_expr(&mut self.tokens, &mut self.interner)
-                    .ok_or_else(|| {
-                        self.errors.push(crate::ParseError::expected_expr(
-                            self.tokens.peek().map_or(glyim_syntax::SyntaxKind::Eof, |t| t.kind),
-                            self.tokens.peek().map_or(0, |t| t.start),
-                            self.tokens.peek().map_or(0, |t| t.end),
-                        ));
-                    })
-                    .ok()?;
+                let target_type =
+                    super::types::parse_type_expr(&mut self.tokens, &mut self.interner)
+                        .ok_or_else(|| {
+                            self.errors.push(crate::ParseError::expected_expr(
+                                self.tokens
+                                    .peek()
+                                    .map_or(glyim_syntax::SyntaxKind::Eof, |t| t.kind),
+                                self.tokens.peek().map_or(0, |t| t.start),
+                                self.tokens.peek().map_or(0, |t| t.end),
+                            ));
+                        })
+                        .ok()?;
                 let end = self.tokens.peek().map_or(left.span.end, |t| t.start);
                 // Convert TypeExpr to Symbol for the AST
                 let target_sym = match &target_type {

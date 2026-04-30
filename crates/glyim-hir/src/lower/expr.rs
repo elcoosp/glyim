@@ -107,7 +107,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                     span,
                 }
             }
-        },
+        }
 
         ExprKind::FieldAccess { object, field } => HirExpr::FieldAccess {
             id,
@@ -171,7 +171,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 target_type: target_hir,
                 span,
             }
-        },
+        }
 
         ExprKind::MacroCall { name, arg } => {
             if ctx.resolve(*name) == "identity" {
@@ -209,7 +209,11 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             span,
         },
 
-                        ExprKind::ForIn { pattern, iter, body } => {
+        ExprKind::ForIn {
+            pattern,
+            iter,
+            body,
+        } => {
             // Desugar: for x in iter { body }
             //   → let mut __iter = iter;
             //     let mut __done = false;
@@ -229,7 +233,11 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             let let_done = HirStmt::LetPat {
                 pattern: HirPattern::Var(done_sym),
                 mutable: true,
-                value: HirExpr::BoolLit { id: ctx.fresh_id(), value: false, span },
+                value: HirExpr::BoolLit {
+                    id: ctx.fresh_id(),
+                    value: false,
+                    span,
+                },
                 span,
             };
             let let_iter = HirStmt::LetPat {
@@ -244,24 +252,42 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 id: ctx.fresh_id(),
                 scrutinee: Box::new(HirExpr::MethodCall {
                     id: ctx.fresh_id(),
-                    receiver: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: iter_sym, span }),
+                    receiver: Box::new(HirExpr::Ident {
+                        id: ctx.fresh_id(),
+                        name: iter_sym,
+                        span,
+                    }),
                     method_name: next_sym,
-                    args: vec![HirExpr::Ident { id: ctx.fresh_id(), name: iter_sym, span }],
+                    args: vec![HirExpr::Ident {
+                        id: ctx.fresh_id(),
+                        name: iter_sym,
+                        span,
+                    }],
                     span,
                 }),
                 arms: vec![
-                    (HirPattern::OptionSome(Box::new(lower_pattern(pattern, ctx))), None, body_expr),
-                    (HirPattern::OptionNone, None, HirExpr::Block {
-                        id: ctx.fresh_id(),
-                        stmts: vec![
-                            HirStmt::Assign {
+                    (
+                        HirPattern::OptionSome(Box::new(lower_pattern(pattern, ctx))),
+                        None,
+                        body_expr,
+                    ),
+                    (
+                        HirPattern::OptionNone,
+                        None,
+                        HirExpr::Block {
+                            id: ctx.fresh_id(),
+                            stmts: vec![HirStmt::Assign {
                                 target: done_sym,
-                                value: HirExpr::BoolLit { id: ctx.fresh_id(), value: true, span },
+                                value: HirExpr::BoolLit {
+                                    id: ctx.fresh_id(),
+                                    value: true,
+                                    span,
+                                },
                                 span,
-                            }
-                        ],
-                        span,
-                    }),
+                            }],
+                            span,
+                        },
+                    ),
                 ],
                 span,
             };
@@ -271,7 +297,11 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 condition: Box::new(HirExpr::Unary {
                     id: ctx.fresh_id(),
                     op: crate::node::HirUnOp::Not,
-                    operand: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: done_sym, span }),
+                    operand: Box::new(HirExpr::Ident {
+                        id: ctx.fresh_id(),
+                        name: done_sym,
+                        span,
+                    }),
                     span,
                 }),
                 body: Box::new(HirExpr::Block {
@@ -284,11 +314,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
 
             HirExpr::Block {
                 id: ctx.fresh_id(),
-                stmts: vec![
-                    let_iter,
-                    let_done,
-                    HirStmt::Expr(while_expr),
-                ],
+                stmts: vec![let_iter, let_done, HirStmt::Expr(while_expr)],
                 span,
             }
         }

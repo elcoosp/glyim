@@ -1,7 +1,7 @@
 use crate::types::ExprId;
+use glyim_interner::Interner;
 use glyim_interner::Symbol;
 use std::collections::HashSet;
-use glyim_interner::Interner;
 
 /// Context shared across all lowering operations.
 /// Encapsulates mutable state to avoid threading `&mut Interner` everywhere.

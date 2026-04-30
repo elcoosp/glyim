@@ -22,5 +22,3 @@ pub fn lower_type_expr(ty: &TypeExpr, ctx: &mut LoweringContext) -> HirType {
         }
     }
 }
-
-

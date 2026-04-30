@@ -140,8 +140,6 @@ pub(crate) fn parse_lambda(parser: &mut Parser) -> Option<ExprNode> {
     })
 }
 
-
-
 pub(crate) fn parse_while(parser: &mut Parser) -> Option<ExprNode> {
     let start_tok = parser.tokens.bump()?; // 'while'
     let start = start_tok.start;

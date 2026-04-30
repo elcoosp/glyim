@@ -105,7 +105,11 @@ fn parse_binding_with_attrs(
     })
 }
 
-fn parse_fn_def_with_attrs(parser: &mut Parser, attrs: Vec<crate::ast::Attribute>, self_type: Option<TypeExpr>) -> Option<Item> {
+fn parse_fn_def_with_attrs(
+    parser: &mut Parser,
+    attrs: Vec<crate::ast::Attribute>,
+    self_type: Option<TypeExpr>,
+) -> Option<Item> {
     parser.tokens.bump(); // fn
     let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
@@ -281,7 +285,7 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
     // concrete generic arguments when the user writes impl<T> Vec<T>).
     if parser.tokens.eat(SyntaxKind::Lt).is_some() {
         while !parser.tokens.at(SyntaxKind::Gt) && !parser.tokens.is_eof() {
-            parser.tokens.bump();  // eat type arguments
+            parser.tokens.bump(); // eat type arguments
         }
         parser.tokens.eat(SyntaxKind::Gt);
     }
@@ -291,7 +295,8 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .ok()?;
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
-        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![], Some(TypeExpr::Named(target))) {
+        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![], Some(TypeExpr::Named(target)))
+        {
             methods.push(fn_def);
         } else {
             parser.errors.push(crate::ParseError::Message {

@@ -55,7 +55,7 @@ pub(crate) fn parse_atom(parser: &mut Parser) -> Option<ExprNode> {
                 span: Span::new(ret_tok.start, val.span.end),
             })
         }
-                SyntaxKind::KwSelf => {
+        SyntaxKind::KwSelf => {
             let tok = parser.tokens.bump()?;
             let sym = parser.interner.intern("self");
             Some(ExprNode {

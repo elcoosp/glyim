@@ -8,15 +8,15 @@ use std::collections::HashMap;
 #[tracing::instrument(skip_all)]
 pub(crate) fn declare_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) {
     let name = cg.interner.resolve(f.name);
-    if cg.module.get_function(name).is_some() { return; }
+    if cg.module.get_function(name).is_some() {
+        return;
+    }
     let is_main = name == "main";
     let ret_type = if is_main { cg.i32_type } else { cg.i64_type };
-    let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f
-        .params
-        .iter()
-        .map(|_| cg.i64_type.into())
-        .collect();
-    cg.module.add_function(name, ret_type.fn_type(&param_types, false), None);
+    let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+        f.params.iter().map(|_| cg.i64_type.into()).collect();
+    cg.module
+        .add_function(name, ret_type.fn_type(&param_types, false), None);
 }
 
 #[tracing::instrument(skip_all)]
@@ -25,7 +25,9 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     let name = cg.interner.resolve(f.name);
     let is_main = name == "main";
     // Fetch the already-declared FunctionValue — never call add_function again
-    let fn_value = cg.module.get_function(name)
+    let fn_value = cg
+        .module
+        .get_function(name)
         .ok_or_else(|| format!("declare_fn failed for '{}'", name))?;
 
     // Register DWARF subprogram

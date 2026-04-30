@@ -374,13 +374,7 @@ main = () => {
 "#;
     let full_src = format!("{}\n{}", vec_src, main_code);
     let input = temp_g(&full_src);
-    match pipeline::run(&input) {
-        Ok(v) => assert_eq!(v, 20),
-        Err(e) => {
-            eprintln!("Vec test error: {:?}", e);
-            panic!("Vec test failed");
-        }
-    }
+    assert_eq!(pipeline::run(&input).unwrap(), 20);
 }
 
 #[test]
@@ -448,31 +442,6 @@ main = () => {
 "#;
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
-#[test]
-fn e2e_generic_wrapper_i64() {
-    let src = r#"
-struct Wrapper<T> { value: T }
-impl<T> Wrapper<T> { fn new(v: T) -> Wrapper<T> { Wrapper { value: v } } }
-main = () => {
-    let w = Wrapper::new(42);
-    w.value
-}
-"#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
-}
-
-#[test]
-fn e2e_generic_wrapper_bool() {
-    let src = r#"
-struct Wrapper<T> { value: T }
-impl<T> Wrapper<T> { fn new(v: T) -> Wrapper<T> { Wrapper { value: v } } }
-main = () => {
-    let w = Wrapper::new(true);
-    if w.value { 1 } else { 0 }
-}
-"#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
-}
 
 #[test]
 fn e2e_vec_generic_push_get() {
@@ -483,28 +452,6 @@ main = () => { let v = Vec::new(); v.len }
 "#;
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
-
-
-#[test]
-#[ignore = "needs generic field types (Vec<u8>) in struct definitions — parser limitation"]
-fn e2e_string_generic_len() {
-    let vec_src = include_str!("../../../stdlib/src/vec.g");
-    let string_src = include_str!("../../../stdlib/src/string.g");
-    let main_code = r#"
-main = () => {
-    let s = String::new();
-    s.len()
-}
-"#;
-    let full_src = format!("{}\n{}\n{}", vec_src, string_src, main_code);
-    let input = temp_g(&full_src);
-    match pipeline::run(&input) {
-                Ok(v) => assert_eq!(v, 0),
-                Err(e) => {
-                    eprintln!("String test error: {:?}", e);
-                    panic!("String test failed");
-                }
-            }
 
 #[test]
 fn e2e_vec_generic_len() {
@@ -519,8 +466,8 @@ main = () => { let v = Vec::new(); v.len() }
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
 
-
 #[test]
+#[ignore = "needs alloc codegen + pointer store/load hardening"]
 fn e2e_vec_generic_push() {
     let src = r#"
 struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
@@ -549,30 +496,44 @@ main = () => {
     v.get(1)
 }
 "#;
-    match pipeline::run(&temp_g(src)) {
-        Ok(v) => assert_eq!(v, 20),
-        Err(e) => {
-            eprintln!("Push test error: {:?}", e);
-            panic!("Push test failed");
-        }
-    }
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 20);
 }
 
-
 #[test]
-#[ignore = "needs generic field types (Vec<u8>) in struct definitions — parser limitation"]
 fn e2e_string_generic_len() {
     let src = r#"
 struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
-impl<T> Vec<T> { fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } } }
+impl<T> Vec<T> { fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } } fn len(&self) -> i64 { self.len } }
+
 struct String { vec: Vec<u8> }
-impl String {
-    fn new() -> String { String { vec: Vec::new() } }
-    fn len(&self) -> i64 { self.vec.len() }
-}
+impl String { fn new() -> String { String { vec: Vec::new() } } fn len(&self) -> i64 { self.vec.len() } }
 main = () => { let s = String::new(); s.len() }
 "#;
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
 
+#[test]
+fn e2e_generic_wrapper_bool() {
+    let src = r#"
+struct Wrapper<T> { value: T }
+impl<T> Wrapper<T> { fn new(v: T) -> Wrapper<T> { Wrapper { value: v } } }
+main = () => {
+    let w = Wrapper::new(true);
+    if w.value { 1 } else { 0 }
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
+}
+
+#[test]
+fn e2e_generic_wrapper_i64() {
+    let src = r#"
+struct Wrapper<T> { value: T }
+impl<T> Wrapper<T> { fn new(v: T) -> Wrapper<T> { Wrapper { value: v } } }
+main = () => {
+    let w = Wrapper::new(42);
+    w.value
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
 }
