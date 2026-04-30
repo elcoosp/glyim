@@ -200,7 +200,91 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             span,
         },
 
-                ExprKind::While { condition, body } => HirExpr::While {
+                        ExprKind::ForIn { pattern, iter, body } => {
+            // Desugar: for x in iter { body }
+            //   → let mut __iter = iter;
+            //     let mut __done = false;
+            //     while !__done {
+            //         match __iter.next() {
+            //             Some(x) => { body },
+            //             None => { __done = true; },
+            //         }
+            //     }
+            let iter_expr = lower_expr(iter, ctx);
+            let iter_sym = ctx.intern("__iter");
+            let done_sym = ctx.intern("__done");
+            let next_sym = ctx.intern("next");
+            let some_sym = ctx.intern("Some");
+            let none_sym = ctx.intern("None");
+
+            let let_done = HirStmt::LetPat {
+                pattern: HirPattern::Var(done_sym),
+                mutable: true,
+                value: HirExpr::BoolLit { id: ctx.fresh_id(), value: false, span },
+                span,
+            };
+            let let_iter = HirStmt::LetPat {
+                pattern: HirPattern::Var(iter_sym),
+                mutable: true,
+                value: iter_expr,
+                span,
+            };
+
+            let body_expr = lower_expr(body, ctx);
+            let match_expr = HirExpr::Match {
+                id: ctx.fresh_id(),
+                scrutinee: Box::new(HirExpr::MethodCall {
+                    id: ctx.fresh_id(),
+                    receiver: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: iter_sym, span }),
+                    method_name: next_sym,
+                    args: vec![HirExpr::Ident { id: ctx.fresh_id(), name: iter_sym, span }],
+                    span,
+                }),
+                arms: vec![
+                    (HirPattern::OptionSome(Box::new(pattern.clone())), None, body_expr),
+                    (HirPattern::OptionNone, None, HirExpr::Block {
+                        id: ctx.fresh_id(),
+                        stmts: vec![
+                            HirStmt::Assign {
+                                target: done_sym,
+                                value: HirExpr::BoolLit { id: ctx.fresh_id(), value: true, span },
+                                span,
+                            }
+                        ],
+                        span,
+                    }),
+                ],
+                span,
+            };
+
+            let while_expr = HirExpr::While {
+                id,
+                condition: Box::new(HirExpr::Unary {
+                    id: ctx.fresh_id(),
+                    op: crate::node::HirUnOp::Not,
+                    operand: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: done_sym, span }),
+                    span,
+                }),
+                body: Box::new(HirExpr::Block {
+                    id: ctx.fresh_id(),
+                    stmts: vec![HirStmt::Expr(match_expr)],
+                    span,
+                }),
+                span,
+            };
+
+            HirExpr::Block {
+                id: ctx.fresh_id(),
+                stmts: vec![
+                    let_iter,
+                    let_done,
+                    HirStmt::Expr(while_expr),
+                ],
+                span,
+            }
+        }
+
+        ExprKind::While { condition, body } => HirExpr::While {
             id,
             condition: Box::new(lower_expr(condition, ctx)),
             body: Box::new(lower_expr(body, ctx)),
