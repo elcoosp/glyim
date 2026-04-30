@@ -1,6 +1,6 @@
 ---
 source: crates/glyim-cli/tests/ui.rs
-assertion_line: 34
+assertion_line: 35
 expression: actual
 ---
-error: no 'main' function
+

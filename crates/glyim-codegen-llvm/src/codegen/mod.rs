@@ -5,6 +5,7 @@ mod ops;
 mod stmt;
 mod string;
 mod types;
+mod monomorphize;
 
 use crate::debug::DebugInfoGen;
 use glyim_diag::Span;
@@ -194,7 +195,11 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(_) => {}
-                glyim_hir::item::HirItem::Impl(_) => {}
+                glyim_hir::item::HirItem::Impl(impl_def) => {
+                    for method in &impl_def.methods {
+                        function::codegen_fn(self, method)?;
+                    }
+                }
             }
         }
 
@@ -326,7 +331,11 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(_) => {}
-                glyim_hir::item::HirItem::Impl(_) => {}
+                glyim_hir::item::HirItem::Impl(impl_def) => {
+                    for method in &impl_def.methods {
+                        function::codegen_fn(self, method)?;
+                    }
+                }
             }
         }
 

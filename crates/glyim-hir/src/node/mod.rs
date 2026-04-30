@@ -161,6 +161,11 @@ pub enum HirExpr {
         elements: Vec<HirExpr>,
         span: Span,
     },
+    Return {
+        id: ExprId,
+        value: Option<Box<HirExpr>>,
+        span: Span,
+    },
 }
 
 impl HirExpr {
@@ -186,6 +191,7 @@ impl HirExpr {
             Self::EnumVariant { id, .. } => *id,
             Self::SizeOf { id, .. } => *id,
             Self::TupleLit { id, .. } => *id,
+            Self::Return { id, .. } => *id,
         }
     }
 
@@ -211,6 +217,7 @@ impl HirExpr {
             Self::EnumVariant { span, .. } => *span,
             Self::SizeOf { span, .. } => *span,
             Self::TupleLit { span, .. } => *span,
+            Self::Return { span, .. } => *span,
         }
     }
 }
