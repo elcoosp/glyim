@@ -70,6 +70,11 @@ impl TypeChecker {
                 }
                 Some(HirType::Unit)
             }
+            HirStmt::AssignField { object, field: _, value, .. } => {
+                let _obj_ty = self.check_expr(object).unwrap_or(HirType::Int);
+                let val_ty = self.check_expr(value).unwrap_or(HirType::Int);
+                Some(val_ty)
+            }
             HirStmt::Expr(e) => self.check_expr(e),
         }
     }

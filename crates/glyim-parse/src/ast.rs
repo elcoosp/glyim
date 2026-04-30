@@ -135,6 +135,11 @@ pub enum StmtKind {
         target: Symbol,
         value: ExprNode,
     },
+    AssignField {
+        object: Box<ExprNode>,
+        field: Symbol,
+        value: ExprNode,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

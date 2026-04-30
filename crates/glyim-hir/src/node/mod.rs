@@ -44,6 +44,12 @@ pub enum HirStmt {
         value: HirExpr,
         span: Span,
     },
+    AssignField {
+        object: Box<HirExpr>,
+        field: Symbol,
+        value: HirExpr,
+        span: Span,
+    },
     Assign {
         target: Symbol,
         value: HirExpr,

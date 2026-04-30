@@ -227,8 +227,8 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             let iter_sym = ctx.intern("__iter");
             let done_sym = ctx.intern("__done");
             let next_sym = ctx.intern("next");
-            let some_sym = ctx.intern("Some");
-            let none_sym = ctx.intern("None");
+            let __some_sym = ctx.intern("Some");
+            let __none_sym = ctx.intern("None");
 
             let let_done = HirStmt::LetPat {
                 pattern: HirPattern::Var(done_sym),
@@ -378,6 +378,12 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
         },
         StmtKind::AssignDeref { target, value } => HirStmt::AssignDeref {
             target: Box::new(lower_expr(target, ctx)),
+            value: lower_expr(value, ctx),
+            span,
+        },
+        StmtKind::AssignField { object, field, value } => HirStmt::AssignField {
+            object: Box::new(lower_expr(object, ctx)),
+            field: *field,
             value: lower_expr(value, ctx),
             span,
         },

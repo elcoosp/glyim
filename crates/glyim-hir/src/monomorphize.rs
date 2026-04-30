@@ -176,6 +176,9 @@ impl<'a> MonoContext<'a> {
                 HirStmt::AssignDeref { target, value, .. } => self
                     .find_call_callee_by_id(target, search_id)
                     .or_else(|| self.find_call_callee_by_id(value, search_id)),
+                HirStmt::AssignField { value, .. } => {
+                    self.find_call_callee_by_id(value, search_id)
+                }
             }),
             HirExpr::If {
                 condition,
@@ -311,6 +314,10 @@ impl<'a> MonoContext<'a> {
                             self.scan_expr_for_struct_instantiations(target);
                             self.scan_expr_for_struct_instantiations(value);
                         }
+                        HirStmt::AssignField { object, value, .. } => {
+                            self.scan_expr_for_struct_instantiations(object);
+                            self.scan_expr_for_struct_instantiations(value);
+                        }
                     }
                 }
             }
@@ -423,6 +430,10 @@ impl<'a> MonoContext<'a> {
                         | HirStmt::Assign { value, .. } => self.scan_expr_for_generic_calls(value),
                         HirStmt::AssignDeref { target, value, .. } => {
                             self.scan_expr_for_generic_calls(target);
+                            self.scan_expr_for_generic_calls(value);
+                        }
+                        HirStmt::AssignField { object, value, .. } => {
+                            self.scan_expr_for_generic_calls(object);
                             self.scan_expr_for_generic_calls(value);
                         }
                     }
@@ -597,10 +608,13 @@ impl<'a> MonoContext<'a> {
                         &struct_mangle_map,
                     )));
                 }
-                HirItem::Struct(s) if s.type_params.is_empty() => {
+                HirItem::Struct(s) => {
+                    // Include all struct definitions – even generic ones.
+                    // Generic structs whose field types don't depend on type params
+                    // don't need specialization; they use the same layout for all Ts.
                     items.push(HirItem::Struct(s.clone()));
                 }
-                HirItem::Enum(e) if e.type_params.is_empty() => {
+                HirItem::Enum(e) => {
                     items.push(HirItem::Enum(e.clone()));
                 }
                 HirItem::Extern(e) => {
@@ -905,6 +919,17 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirStmt::AssignDeref {
                 target: Box::new(self.rewrite_expr(target, fn_map, struct_map)),
+                value: self.rewrite_expr(value, fn_map, struct_map),
+                span: *span,
+            },
+            HirStmt::AssignField {
+                object,
+                field,
+                value,
+                span,
+            } => HirStmt::AssignField {
+                object: Box::new(self.rewrite_expr(object, fn_map, struct_map)),
+                field: *field,
                 value: self.rewrite_expr(value, fn_map, struct_map),
                 span: *span,
             },

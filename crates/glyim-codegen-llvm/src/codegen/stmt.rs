@@ -1,6 +1,6 @@
 use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
-use glyim_hir::{HirExpr, HirStmt};
+use glyim_hir::{HirExpr, HirStmt, HirType};
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::IntValue;
 use inkwell::AddressSpace;
@@ -34,6 +34,7 @@ pub(crate) fn codegen_stmt<'ctx>(
         HirStmt::LetPat { span, .. } => *span,
         HirStmt::Assign { span, .. } => *span,
         HirStmt::AssignDeref { span, .. } => *span,
+        HirStmt::AssignField { span, .. } => *span,
         HirStmt::Expr(e) => e.get_span(),
     };
     cg.set_debug_location_for_span(span);
@@ -123,6 +124,45 @@ pub(crate) fn codegen_stmt<'ctx>(
                 )
                 .ok()?;
             cg.builder.build_store(ptr, new_val).ok()?;
+            Some(new_val)
+        }
+        HirStmt::AssignField { object, field, value, .. } => {
+            let obj_val = super::expr::codegen_expr(cg, object, fctx)?;
+            let obj_ptr = cg.builder
+                .build_int_to_ptr(obj_val, cg.context.ptr_type(AddressSpace::from(0u16)), "obj_ptr")
+                .ok()?;
+            let index_map = cg.struct_field_indices.borrow();
+            let field_idx = index_map.iter()
+                .filter(|((_, f), _)| f == field)
+                .map(|(_, &idx)| idx)
+                .next()
+                .unwrap_or(0);
+            drop(index_map);
+            let obj_id = object.get_id();
+            let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
+                Some(HirType::Named(name)) | Some(HirType::Generic(name, _)) => {
+                    cg.struct_types.borrow().get(name).copied()
+                }
+                _ => None,
+            };
+            let struct_type_opt = struct_type_opt.or_else(|| {
+                let struct_types = cg.struct_types.borrow();
+                let idx_map = cg.struct_field_indices.borrow();
+                struct_types.iter().find_map(|(sym, st)| {
+                    if idx_map.contains_key(&(*sym, *field)) { Some(st.clone()) } else { None }
+                })
+            });
+            let field_ptr = if let Some(st) = struct_type_opt {
+                let indices = &[
+                    cg.i32_type.const_int(0, false),
+                    cg.i32_type.const_int(field_idx as u64, false),
+                ];
+                unsafe { cg.builder.build_gep(st, obj_ptr, indices, "assign_field").ok()? }
+            } else {
+                return Some(cg.i64_type.const_int(0, false));
+            };
+            let new_val = super::expr::codegen_expr(cg, value, fctx)?;
+            cg.builder.build_store(field_ptr, new_val).ok()?;
             Some(new_val)
         }
         HirStmt::Expr(e) => super::expr::codegen_expr(cg, e, fctx),

@@ -92,7 +92,7 @@ impl<'ctx> Codegen<'ctx> {
         let result_sym = interner.intern("Result");
         let debug_info = match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full) {
             Ok(di) => Some(di),
-            Err(e) => None,
+            Err(_e) => None,
         };
         Ok(Self {
             context,
@@ -134,7 +134,7 @@ impl<'ctx> Codegen<'ctx> {
         let debug_info =
             match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly) {
                 Ok(di) => Some(di),
-                Err(e) => None,
+                Err(_e) => None,
             };
         Ok(Self {
             context,

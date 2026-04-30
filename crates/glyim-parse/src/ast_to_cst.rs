@@ -271,6 +271,13 @@ fn ast_stmt_to_cst(builder: &mut CstBuilder, stmt: &StmtNode) {
             ast_expr_to_cst(builder, value);
             builder.finish_node();
         }
+        StmtKind::AssignField { object, value, .. } => {
+            builder.start_node(SyntaxKind::AssignStmt);
+            ast_expr_to_cst(builder, object);
+            builder.token(SyntaxKind::Eq, "=");
+            ast_expr_to_cst(builder, value);
+            builder.finish_node();
+        }
     }
 }
 
