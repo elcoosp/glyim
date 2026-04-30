@@ -46,6 +46,42 @@ impl TypeChecker {
         }
     }
 
+    fn register_builtin_enums(&mut self) {
+        // Register Option<T> and Result<T, E> as known enums
+        let opt_name = self.interner.intern("Option");
+        let result_name = self.interner.intern("Result");
+        let some = self.interner.intern("Some");
+        let none = self.interner.intern("None");
+        let ok = self.interner.intern("Ok");
+        let err = self.interner.intern("Err");
+
+        let opt_variants = vec![
+            glyim_hir::item::HirVariant { name: some, fields: vec![], tag: 0 },
+            glyim_hir::item::HirVariant { name: none, fields: vec![], tag: 1 },
+        ];
+        let res_variants = vec![
+            glyim_hir::item::HirVariant { name: ok, fields: vec![], tag: 0 },
+            glyim_hir::item::HirVariant { name: err, fields: vec![], tag: 1 },
+        ];
+
+        self.enums.insert(
+            opt_name,
+            EnumInfo {
+                variants: opt_variants.iter().map(|v| v.clone()).collect(),
+                variant_map: vec![(some, 0), (none, 1)].into_iter().collect(),
+                type_params: vec![],
+            },
+        );
+        self.enums.insert(
+            result_name,
+            EnumInfo {
+                variants: res_variants.iter().map(|v| v.clone()).collect(),
+                variant_map: vec![(ok, 0), (err, 1)].into_iter().collect(),
+                type_params: vec![],
+            },
+        );
+    }
+
     fn set_type(&mut self, id: ExprId, ty: HirType) {
         let idx = id.as_usize();
         if idx >= self.expr_types.len() {
@@ -61,6 +97,7 @@ impl TypeChecker {
     #[tracing::instrument(skip_all)]
     #[tracing::instrument(skip_all)]
     pub fn check(&mut self, hir: &Hir) -> Result<(), Vec<TypeError>> {
+        self.register_builtin_enums();
         self.register_items(hir);
         for item in &hir.items {
             if let glyim_hir::item::HirItem::Fn(f) = item {

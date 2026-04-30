@@ -2,9 +2,9 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-  [31m×[0m expected ) but found identifier
-   ╭─[[36;1;4mtests/ui/missing_comma_in_params.g:1:8[0m]
- [2m1[0m │ fn f(a b) { a }
-   · [35;1m       ┬[0m
-   ·        [35;1m╰── [35;1munexpected identifier[0m[0m
+  × expected ) but found identifier
+   ╭─[tests/ui/missing_comma_in_params.g:1:8]
+ 1 │ fn f(a b) { a }
+   ·        ┬
+   ·        ╰── unexpected identifier
    ╰────

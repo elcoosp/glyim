@@ -1,5 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
+use glyim_parse::parse;
+use glyim_hir::lower;
+use glyim_typeck::TypeChecker;
+use glyim_diag::miette;
 
 fn ui_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -8,23 +12,44 @@ fn ui_dir() -> PathBuf {
 }
 
 fn compile_stderr(source: &str, file_path: &str) -> String {
-    let parse_out = glyim_parse::parse(source);
-    if parse_out.errors.is_empty() {
-        match glyim_codegen_llvm::compile_to_ir(source) {
-            Ok(_) => String::new(),
-            Err(e) => format!("error: {e}"),
-        }
-    } else {
-        let mut output = String::new();
+    let parse_out = parse(source);
+    let mut errors = String::new();
+
+    if !parse_out.errors.is_empty() {
         for e in &parse_out.errors {
-            let report = glyim_diag::Report::new(e.clone()).with_source_code(
-                glyim_diag::miette::NamedSource::new(file_path, source.to_string()),
-            );
             use std::fmt::Write;
-            let _ = writeln!(output, "{:?}", report);
+            let report = glyim_diag::Report::new(e.clone())
+                .with_source_code(miette::NamedSource::new(file_path, source.to_string()));
+            let _ = writeln!(errors, "{:?}", report);
         }
-        output
+        return errors;
     }
+
+    // Parse succeeded → lower to HIR
+    let mut interner = parse_out.interner;
+    let hir = lower(&parse_out.ast, &mut interner);
+
+    // Run type checker and collect errors
+    let mut tc = TypeChecker::new(interner);
+    if let Err(type_errors) = tc.check(&hir) {
+        for e in &type_errors {
+            use std::fmt::Write;
+            // TypeErrors don't have spans in this UI test, so just print
+            let _ = writeln!(errors, "error: {e}");
+        }
+        return errors;
+    }
+
+    // If no type errors, try IR generation for codegen-level errors
+    match glyim_codegen_llvm::compile_to_ir(source) {
+        Ok(_) => {}
+        Err(e) => {
+            use std::fmt::Write;
+            let _ = writeln!(errors, "error: {e}");
+        }
+    }
+
+    errors
 }
 
 fn run_ui_test(name: &str) {
@@ -35,59 +60,17 @@ fn run_ui_test(name: &str) {
     insta::assert_snapshot!(name, actual);
 }
 
-#[test]
-fn ui_let_missing_eq() {
-    run_ui_test("let_missing_eq");
-}
-#[test]
-fn ui_assign_immutable() {
-    run_ui_test("assign_immutable");
-}
-#[test]
-fn ui_missing_main() {
-    run_ui_test("missing_main");
-}
-#[test]
-fn ui_unterminated_string() {
-    run_ui_test("unterminated_string");
-}
-#[test]
-fn ui_missing_closing_brace() {
-    run_ui_test("missing_closing_brace");
-}
-#[test]
-fn ui_multiple_errors() {
-    run_ui_test("multiple_errors");
-}
-#[test]
-fn ui_if_missing_brace() {
-    run_ui_test("if_missing_brace");
-}
-#[test]
-fn ui_unexpected_token() {
-    run_ui_test("unexpected_token");
-}
-#[test]
-fn ui_missing_comma_in_params() {
-    run_ui_test("missing_comma_in_params");
-}
-#[test]
-fn ui_duplicate_param() {
-    run_ui_test("duplicate_param");
-}
-#[test]
-fn ui_nested_error() {
-    run_ui_test("nested_error");
-}
-#[test]
-fn ui_empty_source() {
-    run_ui_test("empty_source");
-}
-#[test]
-fn ui_bool_mismatch() {
-    run_ui_test("bool_mismatch");
-}
-#[test]
-fn ui_type_mismatch() {
-    run_ui_test("type_mismatch");
-}
+#[test] fn ui_let_missing_eq()         { run_ui_test("let_missing_eq"); }
+#[test] fn ui_assign_immutable()       { run_ui_test("assign_immutable"); }
+#[test] fn ui_missing_main()           { run_ui_test("missing_main"); }
+#[test] fn ui_unterminated_string()    { run_ui_test("unterminated_string"); }
+#[test] fn ui_missing_closing_brace()  { run_ui_test("missing_closing_brace"); }
+#[test] fn ui_multiple_errors()        { run_ui_test("multiple_errors"); }
+#[test] fn ui_if_missing_brace()       { run_ui_test("if_missing_brace"); }
+#[test] fn ui_unexpected_token()       { run_ui_test("unexpected_token"); }
+#[test] fn ui_missing_comma_in_params() { run_ui_test("missing_comma_in_params"); }
+#[test] fn ui_duplicate_param()        { run_ui_test("duplicate_param"); }
+#[test] fn ui_nested_error()           { run_ui_test("nested_error"); }
+#[test] fn ui_empty_source()           { run_ui_test("empty_source"); }
+#[test] fn ui_bool_mismatch()          { run_ui_test("bool_mismatch"); }
+#[test] fn ui_type_mismatch()          { run_ui_test("type_mismatch"); }

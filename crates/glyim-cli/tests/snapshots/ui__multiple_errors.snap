@@ -2,18 +2,18 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-  [31m×[0m expected = but found integer literal
-   ╭─[[36;1;4mtests/ui/multiple_errors.g:1:7[0m]
- [2m1[0m │ let x 42
-   · [35;1m      ─┬[0m
-   ·        [35;1m╰── [35;1munexpected integer literal[0m[0m
- [2m2[0m │ let y + 10
+  × expected = but found integer literal
+   ╭─[tests/ui/multiple_errors.g:1:7]
+ 1 │ let x 42
+   ·       ─┬
+   ·        ╰── unexpected integer literal
+ 2 │ let y + 10
    ╰────
 
-  [31m×[0m expected = but found +
-   ╭─[[36;1;4mtests/ui/multiple_errors.g:2:7[0m]
- [2m1[0m │ let x 42
- [2m2[0m │ let y + 10
-   · [35;1m      ┬[0m
-   ·       [35;1m╰── [35;1munexpected +[0m[0m
+  × expected = but found +
+   ╭─[tests/ui/multiple_errors.g:2:7]
+ 1 │ let x 42
+ 2 │ let y + 10
+   ·       ┬
+   ·       ╰── unexpected +
    ╰────

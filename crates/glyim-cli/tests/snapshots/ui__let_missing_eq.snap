@@ -2,9 +2,9 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-  [31m×[0m expected = but found integer literal
-   ╭─[[36;1;4mtests/ui/let_missing_eq.g:1:7[0m]
- [2m1[0m │ let x 42
-   · [35;1m      ─┬[0m
-   ·        [35;1m╰── [35;1munexpected integer literal[0m[0m
+  × expected = but found integer literal
+   ╭─[tests/ui/let_missing_eq.g:1:7]
+ 1 │ let x 42
+   ·       ─┬
+   ·        ╰── unexpected integer literal
    ╰────

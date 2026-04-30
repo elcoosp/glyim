@@ -27,6 +27,7 @@ fn lookup_unbound_returns_none() {
 fn let_binding_visible_in_same_scope() {
     let mut tc = TypeChecker::new(Interner::new());
     let x = tc.interner.intern("x");
+    tc.push_scope();
     tc.insert_binding(x, HirType::Int, false);
     assert_eq!(tc.lookup_binding(&x), Some(HirType::Int));
 }
@@ -35,6 +36,7 @@ fn let_binding_visible_in_same_scope() {
 fn binding_not_visible_in_parent_scope() {
     let mut tc = TypeChecker::new(Interner::new());
     let _x = tc.interner.intern("x"); // unused, but harmless
+    tc.push_scope();
     tc.push_scope();
     let y = tc.interner.intern("y");
     tc.insert_binding(y, HirType::Bool, false);
@@ -46,6 +48,7 @@ fn binding_not_visible_in_parent_scope() {
 fn nested_scopes_shadow() {
     let mut tc = TypeChecker::new(Interner::new());
     let x = tc.interner.intern("x");
+    tc.push_scope();
     tc.insert_binding(x, HirType::Int, false);
     tc.push_scope();
     tc.insert_binding(x, HirType::Bool, false);
@@ -58,6 +61,7 @@ fn nested_scopes_shadow() {
 fn with_scope_restores_after_pop() {
     let mut tc = TypeChecker::new(Interner::new());
     let x = tc.interner.intern("x");
+    tc.push_scope();
     tc.insert_binding(x, HirType::Int, false);
     let inner_result = tc.with_scope(|tc| {
         let y = tc.interner.intern("y");
@@ -182,6 +186,7 @@ fn infer_ident_unbound_falls_back_to_int() {
 fn infer_ident_returns_binding_type() {
     let mut tc = TypeChecker::new(Interner::new());
     let x = tc.interner.intern("x");
+    tc.push_scope();
     tc.insert_binding(x, HirType::Bool, false);
     let expr = HirExpr::Ident {
         id: ExprId::new(0),
