@@ -547,6 +547,15 @@ impl<'a> MonoContext<'a> {
                     span: *span,
                 }
             }
+            HirExpr::ForIn { id, pattern, iter, body, span } => {
+                HirExpr::ForIn {
+                    id: *id,
+                    pattern: pattern.clone(),
+                    iter: Box::new(self.rewrite_expr(iter, fn_map, struct_map)),
+                    body: Box::new(self.rewrite_expr(body, fn_map, struct_map)),
+                    span: *span,
+                }
+            }
             HirExpr::MethodCall { id, receiver, method_name, args, span } => {
                 HirExpr::MethodCall {
                     id: *id,

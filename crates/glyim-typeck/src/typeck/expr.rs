@@ -39,6 +39,7 @@ impl TypeChecker {
             HirExpr::SizeOf { id, .. } => *id,
             HirExpr::Return { id, .. } => *id,
             HirExpr::Deref { id, .. } => *id,
+            HirExpr::ForIn { id, .. } => *id,
             HirExpr::While { id, .. } => *id,
             HirExpr::MethodCall { id, .. } => *id,
         }
@@ -131,6 +132,11 @@ impl TypeChecker {
                 let elem_types: Vec<HirType> =
                     elements.iter().filter_map(|e| self.check_expr(e)).collect();
                 HirType::Tuple(elem_types)
+            }
+            HirExpr::ForIn { iter, body, .. } => {
+                self.check_expr(iter);
+                self.check_expr(body);
+                HirType::Unit
             }
             HirExpr::While { condition, body, .. } => {
                 let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);

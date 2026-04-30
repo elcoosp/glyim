@@ -77,6 +77,7 @@ pub(crate) fn codegen_expr<'ctx>(
             }
             last
         }
+        HirExpr::ForIn { .. } => control::codegen_while(cg, expr, fctx),
         HirExpr::While { .. } => control::codegen_while(cg, expr, fctx),
         HirExpr::If { .. } => control::codegen_if(cg, expr, fctx),
         HirExpr::Match { .. } => control::codegen_match(cg, expr, fctx),

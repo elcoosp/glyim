@@ -1,7 +1,7 @@
 //! Syntax kind enumeration for the Glyim lossless CST.
 use std::fmt;
 
-pub const COUNT: u16 = 100;
+pub const COUNT: u16 = 101;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u16)]
@@ -105,6 +105,7 @@ pub enum SyntaxKind {
     TupleLitExpr,
     ReturnExpr,
     WhileExpr,
+    ForInExpr,
     MatchArmPat,
 }
 
@@ -234,6 +235,7 @@ impl SyntaxKind {
             Self::TupleLitExpr => "tuple literal",
             Self::ReturnExpr => "return expression",
             Self::WhileExpr => "while expression",
+            Self::ForInExpr => "for-in expression",
             Self::MatchArmPat => "match arm pattern",
         }
     }
