@@ -31,6 +31,7 @@ impl Parser<'_> {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn parse_assign_stmt(&mut self) -> Option<StmtNode> {
         let name_tok = self.tokens.peek()?;
         if name_tok.kind != SyntaxKind::Ident {

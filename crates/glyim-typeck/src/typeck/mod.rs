@@ -79,7 +79,7 @@ impl TypeChecker {
         self.enums.insert(
             opt_name,
             EnumInfo {
-                variants: opt_variants.iter().cloned().collect(),
+                variants: opt_variants.to_vec(),
                 variant_map: vec![(some, 0), (none, 1)].into_iter().collect(),
                 type_params: vec![],
             },
@@ -87,7 +87,7 @@ impl TypeChecker {
         self.enums.insert(
             result_name,
             EnumInfo {
-                variants: res_variants.iter().cloned().collect(),
+                variants: res_variants.to_vec(),
                 variant_map: vec![(ok, 0), (err, 1)].into_iter().collect(),
                 type_params: vec![],
             },
