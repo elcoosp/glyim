@@ -17,7 +17,8 @@ fn fetch_available_is_stub() {
     let client = RegistryClient::new("https://registry.glyim.dev").unwrap();
     let result = client.fetch_available("serde");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("not yet implemented"));
+    // Real HTTP client now errors on connection, not a stub message
+    assert!(result.unwrap_err().to_string().contains("fetch"));
 }
 
 #[test]
