@@ -190,16 +190,7 @@ fn e2e_generic_struct() {
 #[ignore]
 fn e2e_tuple() {
     let src = "main = () => { let p = (1, 2); p._0 }";
-    let hir = glyim_hir::lower(
-        &glyim_parse::parse(src).ast,
-        &mut glyim_interner::Interner::new(),
-    );
-    println!("Tuple HIR: {:#?}", hir.items);
-    let result = pipeline::run(&temp_g(src)).unwrap();
-    eprintln!("Test result: {}", result);
-    let result = pipeline::run(&temp_g(src)).unwrap();
-    eprintln!("Test result: {}", result);
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
+    let _result = pipeline::run(&temp_g(src)).unwrap();
 }
 #[test]
 fn e2e_impl_method() {
@@ -245,25 +236,14 @@ fn e2e_wrong_field_fails() {
 #[ignore]
 fn e2e_generic_edge() {
     let src = "struct Edge<T> { from: T, to: T }\nimpl<T> Edge<T> {\n    fn new(from: T, to: T) -> Edge<T> { Edge { from, to } }\n}\nfn main() -> i64 {\n    let e: Edge<i64> = Edge::new(0, 100)\n    let (from, to) = (e.from, e.to)\n    from - to\n}";
-    let hir = glyim_hir::lower(
-        &glyim_parse::parse(src).ast,
-        &mut glyim_interner::Interner::new(),
-    );
-    println!("Edge HIR: {:#?}", hir.items);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), -100);
 }
 
 #[test]
 fn e2e_test_should_panic_passes() {
-    // A should_panic test that calls abort() will pass (non-zero exit)
-    // We simulate a test function that returns non-zero (as if panic occurred)
     let input = temp_g("#[test(should_panic)]\nfn panics() { 1 }");
     let summary = pipeline::run_tests(&input, None, false).unwrap();
-    assert_eq!(
-        summary.passed(),
-        1,
-        "should_panic test that returns non-zero should pass"
-    );
+    assert_eq!(summary.passed(), 1, "should_panic test should pass");
     assert_eq!(summary.exit_code(), 0);
 }
 
@@ -271,11 +251,7 @@ fn e2e_test_should_panic_passes() {
 fn e2e_test_should_panic_fails_on_zero() {
     let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
     let summary = pipeline::run_tests(&input, None, false).unwrap();
-    assert_eq!(
-        summary.failed(),
-        1,
-        "should_panic test that returns 0 should fail"
-    );
+    assert_eq!(summary.failed(), 1, "should_panic test that returns 0 should fail");
     assert_eq!(summary.exit_code(), 1);
 }
 
@@ -293,10 +269,7 @@ fn e2e_test_filter_no_match() {
     let result = pipeline::run_tests(&input, Some("nonexistent"), false);
     assert!(result.is_err());
     let msg = format!("{:?}", result.unwrap_err());
-    assert!(
-        msg.contains("no #[test]"),
-        "error should mention no test functions: {msg}"
-    );
+    assert!(msg.contains("no #[test]"), "error should mention no test functions: {msg}");
 }
 
 #[test]
@@ -316,7 +289,6 @@ fn e2e_type_error_invalid_cast() {
 #[test]
 #[ignore]
 fn e2e_type_error_int_plus_bool() {
-    // Type checker doesn't check operand compatibility yet
     let input = temp_g("main = () => 1 + true");
     let result = pipeline::run(&input);
     assert!(result.is_err());
@@ -332,7 +304,6 @@ fn e2e_type_error_missing_main() {
 #[test]
 fn e2e_type_error_non_exhaustive_match() {
     let input = temp_g("enum Color { Red, Green, Blue }\nmain = () => match Color::Red { _ => 0 }");
-    // with wildcard, it's exhaustive, should succeed
     let result = pipeline::run(&input);
     assert!(result.is_ok());
 }
@@ -350,7 +321,7 @@ fn e2e_size_of_unit() {
     assert_eq!(
         pipeline::run(&temp_g("main = () => __size_of::<()>()")).unwrap(),
         8
-    ); // Unit type is represented as i64
+    );
 }
 
 #[test]
@@ -382,6 +353,7 @@ fn e2e_assign_to_immutable_is_error() {
 fn e2e_struct_with_ptr_parse_and_typecheck() {
     let src = "struct Ptr { data: *mut i64 }\nmain = () => { 42 }";
     assert!(pipeline::run(&temp_g(src)).is_ok());
+}
 
 #[test]
 fn e2e_veci64_push_get() {
@@ -392,7 +364,7 @@ main = () => {
     v.push(10);
     v.push(20);
     v.push(30);
-    let x = v.get(1);  // should be 20
+    let x = v.get(1);
     x
 }
 "#;
@@ -401,45 +373,34 @@ main = () => {
     assert_eq!(pipeline::run(&input).unwrap(), 20);
 }
 
-
 #[test]
 fn e2e_generic_identity_call() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
 }
 
-
 // ── Monomorphization verification tests ──────────────────────────
 
 #[test]
 fn e2e_mono_generic_fn_discovered_without_call_type_args() {
-    // Bug 1: seed queue by scanning function bodies, not just call_type_args.
-    // This should work even though no explicit type arguments are provided.
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
 }
 
 #[test]
 fn e2e_mono_non_generic_param_before_generic() {
-    // Bug 2: structural param mapping — first param is concrete, second is generic.
-    // fn wrap<T>(label: i64, value: T) -> T { value }
     let src = "fn wrap<T>(label: i64, value: T) -> T { value }\nfn main() -> i64 { wrap(0, 99) }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 99);
 }
 
 #[test]
 fn e2e_mono_two_instantiations_same_fn() {
-    // Bug 4: two specialisations of the same generic function should not collide.
-    // id<i64> and id<bool> must both exist with mangled names.
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { let a = id(42); let b = id(true); if b { a } else { 0 } }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
 }
 
 #[test]
 fn e2e_mono_generic_fn_with_two_type_params() {
-    // Verify that multi-param generics work correctly.
     let src = "fn pair<A,B>(a: A, b: B) -> B { b }\nfn main() -> i64 { pair(1, 42) }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
-}
-
 }
