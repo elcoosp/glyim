@@ -484,7 +484,6 @@ fn lower_empty_source() {
     assert!(hir.items.is_empty());
 }
 #[test]
-#[test]
 fn lower_enum_variant_construction() {
     let (hir, interner) =
         lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Green; c }");
