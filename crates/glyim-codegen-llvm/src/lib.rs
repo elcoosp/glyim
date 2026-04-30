@@ -128,6 +128,21 @@ mod debug_ir_tests {
         let ir = compile_to_ir_debug("fn main() { let x = 42; x }", true).unwrap();
         assert!(ir.contains("DILocalVariable"), "IR should contain DILocalVariable\nGot:\n{ir}");
     }
+    #[test]
+    fn compile_to_ir_debug_macro_has_artificial_flag() {
+        let src = "@identity fn transform(expr: Expr) -> Expr { return expr }
+main = () => @identity(99)";
+        let ir = compile_to_ir_debug(src, true).unwrap();
+        // Macro-generated function should have DIFlagArtificial
+        assert!(ir.contains("DISubprogram"), "IR should contain DISubprogram
+Got:
+{ir}");
+        // The transform function is macro-generated, so it should be present
+        assert!(ir.contains("transform"), "IR should contain function transform
+Got:
+{ir}");
+    }
+
 }
 
 #[cfg(test)]
