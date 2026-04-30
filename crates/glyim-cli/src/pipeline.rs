@@ -9,12 +9,6 @@ use std::{fs, process::Command};
 use tracing::{info, info_span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[derive(Debug, Clone)]
-pub struct BuildConfig {
-    pub mode: BuildMode,
-    pub target: Option<String>,
-}
-
 pub enum BuildMode {
     #[default]
     Debug,
