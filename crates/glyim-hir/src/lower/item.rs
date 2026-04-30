@@ -65,6 +65,9 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             fields,
             ..
         } => {
+            // Register this struct's name so we can later recognise
+            // calls like Point::zero() as struct associated functions.
+            ctx.struct_names.insert(*name);
             let end = fields.last().map_or(name_span.end, |(_, s, _)| s.end);
             let hir_fields: Vec<StructField> = fields
                 .iter()

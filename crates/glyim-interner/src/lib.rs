@@ -30,6 +30,11 @@ impl Interner {
     pub fn resolve(&self, sym: Symbol) -> &str {
         &self.strings[sym.0 as usize]
     }
+
+    /// Returns None if the symbol index is out of bounds.
+    pub fn try_resolve(&self, sym: Symbol) -> Option<&str> {
+        self.strings.get(sym.0 as usize).map(|s| s.as_str())
+    }
     pub fn len(&self) -> usize {
         self.strings.len()
     }

@@ -202,17 +202,9 @@ fn e2e_tuple() {
     eprintln!("Test result: {}", result);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
 }
-// TODO: Impl method desugaring produces mangled names (Point_zero),
-// but the call lowering doesn't convert Point::zero() to the mangled call.
 #[test]
-#[ignore]
 fn e2e_impl_method() {
     let src = "struct Point { x, y }\nimpl Point {\n    fn zero() -> Point { Point { x: 0, y: 0 } }\n}\nmain = () => { let p = Point::zero(); p.x }";
-    let hir = glyim_hir::lower(
-        &glyim_parse::parse(src).ast,
-        &mut glyim_interner::Interner::new(),
-    );
-    println!("Impl HIR: {:#?}", hir.items);
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
 #[test]

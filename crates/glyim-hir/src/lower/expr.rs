@@ -84,12 +84,30 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             enum_name,
             variant_name,
             args,
-        } => HirExpr::EnumVariant {
-            id,
-            enum_name: *enum_name,
-            variant_name: *variant_name,
-            args: args.iter().map(|a| lower_expr(a, ctx)).collect(),
-            span,
+        } => {
+            if ctx.struct_names.contains(enum_name) {
+                // This is a struct-associated function call, e.g., Point::zero().
+                let mangled = ctx.intern(&format!(
+                    "{}_{}",
+                    ctx.resolve(*enum_name),
+                    ctx.resolve(*variant_name)
+                ));
+                let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
+                HirExpr::Call {
+                    id,
+                    callee: mangled,
+                    args: call_args,
+                    span,
+                }
+            } else {
+                HirExpr::EnumVariant {
+                    id,
+                    enum_name: *enum_name,
+                    variant_name: *variant_name,
+                    args: args.iter().map(|a| lower_expr(a, ctx)).collect(),
+                    span,
+                }
+            }
         },
 
         ExprKind::FieldAccess { object, field } => HirExpr::FieldAccess {

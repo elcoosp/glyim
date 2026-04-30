@@ -1,4 +1,6 @@
 use crate::types::ExprId;
+use glyim_interner::Symbol;
+use std::collections::HashSet;
 use glyim_interner::Interner;
 
 /// Context shared across all lowering operations.
@@ -6,6 +8,7 @@ use glyim_interner::Interner;
 pub struct LoweringContext<'a> {
     pub interner: &'a mut Interner,
     next_id: u32,
+    pub struct_names: HashSet<Symbol>,
 }
 
 impl<'a> LoweringContext<'a> {
@@ -13,6 +16,7 @@ impl<'a> LoweringContext<'a> {
         Self {
             interner,
             next_id: 0,
+            struct_names: HashSet::new(),
         }
     }
 

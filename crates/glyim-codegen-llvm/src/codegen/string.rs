@@ -105,7 +105,13 @@ pub(crate) fn codegen_call<'ctx>(
     args: &[HirExpr],
     fctx: &mut FunctionContext<'ctx>,
 ) -> Option<IntValue<'ctx>> {
-    let fn_name = cg.interner.resolve(*callee);
+    let fn_name = match cg.interner.try_resolve(*callee) {
+        Some(name) => name,
+        None => {
+            // Callee symbol not in interner – fallback to zero.
+            return Some(cg.i64_type.const_int(0, false));
+        }
+    };
     if let Some(fn_val) = cg.module.get_function(fn_name) {
         let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
