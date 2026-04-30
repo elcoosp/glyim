@@ -1,5 +1,6 @@
 //! Type system types and patterns for the HIR.
 
+use std::collections::HashMap;
 use glyim_diag::Span;
 use glyim_interner::Symbol;
 
@@ -92,6 +93,55 @@ pub enum HirPattern {
     ResultOk(Box<HirPattern>),
     /// Err(e)
     ResultErr(Box<HirPattern>),
+}
+
+
+/// Substitute type parameters with concrete types.
+/// `sub` maps type parameter symbols to their concrete types.
+pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType {
+    match ty {
+        HirType::Named(sym) => {
+            if let Some(concrete) = sub.get(sym) {
+                return concrete.clone();
+            }
+            ty.clone()
+        }
+        HirType::Generic(sym, args) => {
+            let new_args: Vec<HirType> = args
+                .iter()
+                .map(|a| substitute_type(a, sub))
+                .collect();
+            if new_args.is_empty() {
+                if let Some(concrete) = sub.get(sym) {
+                    return concrete.clone();
+                }
+            }
+            HirType::Generic(*sym, new_args)
+        }
+        HirType::Tuple(elems) => {
+            HirType::Tuple(elems.iter().map(|e| substitute_type(e, sub)).collect())
+        }
+        HirType::RawPtr(inner) => {
+            HirType::RawPtr(Box::new(substitute_type(inner, sub)))
+        }
+        HirType::Option(inner) => {
+            HirType::Option(Box::new(substitute_type(inner, sub)))
+        }
+        HirType::Result(ok, err) => {
+            HirType::Result(
+                Box::new(substitute_type(ok, sub)),
+                Box::new(substitute_type(err, sub)),
+            )
+        }
+        HirType::Func(params, ret) => {
+            HirType::Func(
+                params.iter().map(|p| substitute_type(p, sub)).collect(),
+                Box::new(substitute_type(ret, sub)),
+            )
+        }
+        HirType::Int | HirType::Bool | HirType::Float | HirType::Str
+        | HirType::Unit | HirType::Never | HirType::Opaque(_) => ty.clone(),
+    }
 }
 
 #[cfg(test)]

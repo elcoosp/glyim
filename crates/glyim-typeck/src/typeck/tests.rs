@@ -565,4 +565,20 @@ fn check_fn_params_bound_in_body() {
         "param usage should typecheck: {:?}",
         tc.errors
     );
+
+#[test]
+fn infer_type_args_for_generic_call() {
+    let tc = typecheck("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
+    assert!(!tc.call_type_args.is_empty(), "should have inferred type args for id(42)");
+    let args = tc.call_type_args.values().next().unwrap();
+    assert_eq!(args.len(), 1, "id should have 1 type param");
+    assert_eq!(args[0], HirType::Int, "T should be inferred as Int from arg 42");
+}
+
+#[test]
+fn infer_type_args_for_generic_struct_lit() {
+    let tc = typecheck("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }");
+    assert!(tc.errors.is_empty(), "generic struct lit should not error: {:?}", tc.errors);
+}
+
 }
