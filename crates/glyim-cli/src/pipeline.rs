@@ -117,6 +117,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let obj_path = tmp_dir.path().join("output.o");
         let _codegen_span = info_span!("phase", name = "codegen").entered();
 let context = Context::create();
+    info!("starting codegen");
     let mut codegen =
         Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source)
             .map_err(PipelineError::Codegen)?;
@@ -124,6 +125,7 @@ let context = Context::create();
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
@@ -157,13 +159,16 @@ let mut parse_out = glyim_parse::parse(&source);
     }
         let _lower_span = info_span!("phase", name = "lower").entered();
 let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
         let _typeck_span = info_span!("phase", name = "typeck").entered();
 let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
         let _codegen_span = info_span!("phase", name = "codegen").entered();
 let context = Context::create();
+    info!("starting codegen");
     let mut codegen =
         Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone())
             .map_err(PipelineError::Codegen)?;
@@ -171,6 +176,7 @@ let context = Context::create();
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     codegen
@@ -198,8 +204,10 @@ let mut parse_out = glyim_parse::parse(&source);
     }
         let _lower_span = info_span!("phase", name = "lower").entered();
 let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
         let _typeck_span = info_span!("phase", name = "typeck").entered();
 let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
@@ -249,13 +257,16 @@ let mut parse_out = glyim_parse::parse(&source);
     }
         let _lower_span = info_span!("phase", name = "lower").entered();
 let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
         let _typeck_span = info_span!("phase", name = "typeck").entered();
 let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
         let _codegen_span = info_span!("phase", name = "codegen").entered();
 let context = Context::create();
+    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -270,6 +281,7 @@ let context = Context::create();
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     codegen
@@ -306,6 +318,7 @@ pub fn build_with_mode(
     let obj_path = tmp_dir.path().join("output.o");
         let _codegen_span = info_span!("phase", name = "codegen").entered();
 let context = Context::create();
+    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -320,6 +333,7 @@ let context = Context::create();
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
@@ -521,14 +535,17 @@ let mut parse_out = glyim_parse::parse(&source);
     }
         let _lower_span = info_span!("phase", name = "lower").entered();
 let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
         let _typeck_span = info_span!("phase", name = "typeck").entered();
 let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
 
         let _codegen_span = info_span!("phase", name = "codegen").entered();
 let context = Context::create();
+    info!("starting codegen");
     let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -589,6 +606,7 @@ fn compile_to_hir_and_ir(
     }
         let _lower_span = info_span!("phase", name = "lower").entered();
 let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    info!("lowered to HIR");
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
 }
@@ -674,8 +692,10 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let obj_path = tmp_dir.path().join("output.o");
         let _codegen_span = info_span!("phase", name = "codegen").entered();
 let context = Context::create();
+    info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;

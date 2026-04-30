@@ -14,6 +14,9 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
     after_help = "Examples:\n  glyim init myproject\n  glyim run src/main.g\n  glyim check src/main.g\n  glyim ir src/main.g"
 )]
 struct Cli {
+    /// Output diagnostics as JSON (ideal for tooling)
+    #[arg(long = "json", global = true, help = "Output in JSON format")]
+    json: bool,
     /// Output a Chrome trace file (for perfetto.dev)
     #[arg(long = "trace", global = true, help = "Write a Chrome trace file")]
     trace: bool,
@@ -122,6 +125,13 @@ fn main() {
     let cli = Cli::parse();
 
     // Set up tracing subscriber based on flags
+    // Configure miette handler: JSON or graphical
+    if cli.json {
+        glyim_diag::miette::set_hook(Box::new(|_| Box::new(glyim_diag::miette::JSONReportHandler::new()))).ok();
+    } else {
+        glyim_diag::miette::set_hook(Box::new(|_| Box::new(glyim_diag::miette::MietteHandlerOpts::new().build()))).ok();
+    }
+
     if cli.trace {
         let (chrome_layer, _guard) = tracing_chrome::ChromeLayerBuilder::new()
             .file("glyim-trace.json")
@@ -142,6 +152,7 @@ fn main() {
             .with_writer(std::io::stderr)
             .init();
     }
+
     let exit_code = match cli.command {
         Command::Build {
             input,
@@ -500,5 +511,12 @@ fn main() {
             1
         }
     };
+    if cli.json {
+        let summary = serde_json::json!({
+            "success": exit_code == 0,
+            "exit_code": exit_code,
+        });
+        println!("{}", serde_json::to_string(&summary).unwrap());
+    }
     process::exit(exit_code);
 }

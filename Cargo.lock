@@ -924,6 +924,7 @@ dependencies = [
  "glyim-interner",
  "miette",
  "miette-derive",
+ "similar",
  "thiserror 2.0.18",
  "tracing",
 ]

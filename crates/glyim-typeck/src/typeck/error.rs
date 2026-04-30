@@ -1,6 +1,7 @@
 use miette::Diagnostic;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
+use similar::TextDiff;
 
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum TypeError {
@@ -41,20 +42,38 @@ pub enum TypeError {
 }
 
 impl Diagnostic for TypeError {
-
-
     fn severity(&self) -> Option<miette::Severity> {
         Some(miette::Severity::Error)
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        if let TypeError::MismatchedTypes { expected, found, .. } = self {
+            let expected_str = format!("{:?}", expected);
+            let found_str = format!("{:?}", found);
+            let diff = TextDiff::from_lines(&expected_str, &found_str);
+            let mut result = String::new();
+            for change in diff.iter_all_changes() {
+                match change.tag() {
+                    similar::ChangeTag::Equal => {
+                        result.push_str(&format!(" {}\n", change));
+                    }
+                    similar::ChangeTag::Delete => {
+                        result.push_str(&format!("-{}\n", change));
+                    }
+                    similar::ChangeTag::Insert => {
+                        result.push_str(&format!("+{}\n", change));
+                    }
+                }
+            }
+            if !result.is_empty() {
+                return Some(Box::new(format!("Type diff:\n{result}")));
+            }
+        }
         None
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan>>> {
         // Type errors don't have byte spans yet, so no labels.
-        // In the future, we can attach spans when available.
         None
     }
 }
-
