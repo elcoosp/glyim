@@ -1,4 +1,3 @@
-use crate::Codegen;
 use glyim_hir::{HirFn, HirType};
 use glyim_interner::Symbol;
 use std::collections::HashMap;
