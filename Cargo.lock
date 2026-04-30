@@ -920,8 +920,10 @@ dependencies = [
 name = "glyim-typeck"
 version = "0.5.0"
 dependencies = [
+ "glyim-diag",
  "glyim-hir",
  "glyim-interner",
+ "glyim-parse",
  "miette",
  "miette-derive",
  "similar",

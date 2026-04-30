@@ -84,3 +84,6 @@ impl Default for TypeChecker {
         Self::new(Interner::new())
     }
 }
+
+#[cfg(test)]
+mod tests;
