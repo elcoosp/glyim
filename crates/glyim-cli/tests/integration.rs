@@ -392,3 +392,8 @@ fn e2e_struct_with_ptr_parse_and_typecheck() {
     let src = "struct Ptr { data: *mut i64 }\nmain = () => { 42 }";
     assert!(pipeline::run(&temp_g(src)).is_ok());
 }
+
+#[test]
+fn e2e_cross_compile_default_target() {
+    assert_eq!(pipeline::run(&temp_g("main = () => 42")).unwrap(), 42);
+}
