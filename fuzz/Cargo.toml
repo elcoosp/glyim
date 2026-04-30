@@ -1,3 +1,5 @@
+[workspace]
+
 [package]
 name = "glyim-fuzz"
 version = "0.0.0"
@@ -11,9 +13,9 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
 
-glyim-lex = { path = "../glyim-lex" }
-glyim-syntax = { path = "../glyim-syntax" }
-glyim-parse = { path = "../glyim-parse" }
+glyim-lex = { path = "../crates/glyim-lex" }
+glyim-syntax = { path = "../crates/glyim-syntax" }
+glyim-parse = { path = "../crates/glyim-parse" }
 
 [[bin]]
 name = "fuzz_lexer"
