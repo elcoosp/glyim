@@ -218,6 +218,13 @@ fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
             builder.token(SyntaxKind::Ident, "<method>");
             builder.finish_node();
         }
+        ExprKind::ForIn { pattern: _, iter, body } => {
+            builder.start_node(glyim_syntax::SyntaxKind::ForInExpr);
+            builder.token(glyim_syntax::SyntaxKind::KwFor, "for");
+            ast_expr_to_cst(builder, iter);
+            ast_expr_to_cst(builder, body);
+            builder.finish_node();
+        }
         ExprKind::While { condition, body } => {
             builder.start_node(SyntaxKind::WhileExpr);
             builder.token(SyntaxKind::KwWhile, "while");
