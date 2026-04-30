@@ -21,6 +21,7 @@ impl<'ctx> DebugInfoGen<'ctx> {
     pub fn new(
         module: &Module<'ctx>,
         file_name: &str,
+        emission_kind: DWARFEmissionKind,
     ) -> Result<Self, String> {
         let (dibuilder, compile_unit) = module.create_debug_info_builder(
             true,
@@ -32,7 +33,7 @@ impl<'ctx> DebugInfoGen<'ctx> {
             "",
             0,
             "",
-            DWARFEmissionKind::Full,
+            emission_kind,
             0,
             false,
             false,
@@ -250,12 +251,23 @@ mod tests {
     fn debug_info_gen_new_does_not_panic() {
         let ctx = Context::create();
         let module = ctx.create_module("test");
-        match DebugInfoGen::new(&module, "test.g") {
+        match DebugInfoGen::new(&module, "test.g", DWARFEmissionKind::Full) {
             Ok(_) => {},
             Err(e) => {
                 eprintln!("DebugInfoGen::new() failed: {e}");
             }
         }
+        drop(module);
+        drop(ctx);
+    }
+
+    #[test]
+    fn debug_info_gen_new_line_tables_only() {
+        let ctx = Context::create();
+        let module = ctx.create_module("test");
+        let di = DebugInfoGen::new(&module, "test.g", DWARFEmissionKind::LineTablesOnly);
+        assert!(di.is_ok(), "DebugInfoGen::new with LineTablesOnly failed");
+        drop(di);
         drop(module);
         drop(ctx);
     }

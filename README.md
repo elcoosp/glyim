@@ -3,7 +3,7 @@
 **A systems programming language where metaprogramming is typed, hygienic, and IDE‑friendly.**
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/your-org/glyim/ci.yml?branch=main)](https://github.com/your-org/glyim/actions)
-[![Version](https://img.shields.io/badge/version-0.5.0-blue)](https://github.com/your-org/glyim/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0--dev-blue)](https://github.com/your-org/glyim/releases)
 [![License](https://img.shields.io/badge/license-MIT--2.0-blue)](LICENSE)
 
 ---
@@ -36,7 +36,7 @@ struct User {
 
 ## The Language in 60 Seconds
 
-`let` / `let mut`, `if` / `else`, strings, `println`, `assert`, structs, enums, pattern matching, `?` operator, generic types, impl blocks, tuples, and the new `__size_of::<T>()` built‑in — Glyim already feels like a real language.
+`let` / `let mut`, `if` / `else`, strings, `println`, `assert`, structs, enums, pattern matching, `?` operator, generic types, impl blocks, tuples, and the `__size_of::<T>()` built‑in — Glyim is on a fast track to feeling like a real language.
 
 ```glyim
 struct Point { x: i64, y: i64 }
@@ -55,77 +55,78 @@ fn area(s: Shape) -> f64 {
 
 let result: Result<f64, Str> = Ok(area(Shape::Circle(5.0)))
 let r: f64 = result?
-println(r)   // 78.53975
+println(r)   // 78.53975 (planned – currently not fully functional)
 ```
 
 ```bash
 $ glyim run example.g
-78.53975
+78.53975   # (future output; today prints a diagnostic)
 ```
 
-### Current Capabilities (v0.5.0)
+---
+
+## Current Capabilities (v0.5.0-dev)
+
+**This is a work in progress.** Many features are present in the parser and internal representation but have only partial codegen or type‑checking. The table below shows what’s *fully implemented* vs. what’s *in development*.
 
 | Feature | Status |
 |---------|--------|
 | `let` / `let mut` stack‑allocated bindings | ✅ |
-| Full assignment (`x = expr`) | ✅ |
+| Assignment to mutable variables | ✅ |
+| Immutability checks (cannot assign to `let` binding) | ❌ (not enforced) |
 | `if` / `else` / `else if` as expressions | ✅ |
-| String literals (borrowed `&str` fat pointers) | ✅ |
-| `println(int)` and `println(str)` built‑ins | ✅ |
-| `assert(cond[, msg])` with runtime abort | ✅ |
-| `?` operator aborting on `Err` (in development builds) | ✅ |
+| String literals (`"…"` – borrowed fat pointers) | ✅ |
+| `println(int)` and `println(str)` (via runtime shims) | ✅ |
+| `assert(cond[, msg])` with abort | ✅ |
 | Error recovery (multiple errors per compile) | ✅ |
 | Ariadne‑rendered diagnostics with `^^^` underlines | ✅ |
-| `glyim init` project scaffolding | ✅ |
-| JIT execution (no external C compiler needed for `run`) | ✅ |
-| Arithmetic, comparisons, logical operators, lambdas, blocks | ✅ |
-| **Structs** with named fields, struct literals, dot access | ✅ |
-| **Enums** with tag‑discriminated variants and exhaustive `match` | ✅ |
-| **Pattern matching** with wildcards, literals, variable binding | ✅ |
-| **`bool`** as a distinct type (`true`/`false` literals) | ✅ |
-| **`Option<T>` and `Result<T, E>`** with `Some`/`None`/`Ok`/`Err` and `?` | ✅ |
-| **`f64`** float type with arithmetic | ✅ |
-| **Raw pointers** `*const T` / `*mut T` for FFI | ✅ |
-| **`__size_of::<T>()`** compiler intrinsic | ✅ |
-| **`@rust("namespace") extern { ... }`** FFI blocks | ✅ |
-| **`@identity`** macro that successfully expands during compilation | ✅ |
-| **Monomorphic type checker** with local inference and exhaustiveness checking | ✅ |
-| **Real tagged‑union codegen** for enums | ✅ |
-| **Generic structs and enums** (`Container<T>`, `Maybe<T>`) | ✅ |
-| **Generic functions** with type inference | ✅ |
-| **Tuples** and tuple field access (`(a, b)._0`) | ✅ |
-| **`impl` blocks** with method definitions | ✅ |
-| **Pattern guards** in `match` arms | ✅ |
-| **Cast expressions** (`expr as Type`) with validity checking | ✅ |
-| **Destructuring `let`** bindings | ✅ |
-| **Modular Pratt + recursive‑descent parser** | ✅ |
-| **Standard prelude** with `Option`, `Result` | ✅ |
-| **DWARF debug info** with per‑function `DISubprogram`, per‑instruction `DILocation`, and per‑variable `DILocalVariable` (LLVM 22 compatible) | ✅ |
-| **Heap allocator wrappers** (`glyim_alloc`/`glyim_free`) with OOM detection | ✅ |
-| **`no_std` detection** and conditional allocator emission | ✅ |
-| **Package manager** (`glyim-pkg`) with full manifest parsing, lockfile generation, minimal‑version‑selection resolver, and workspace detection | ✅ |
-| **Registry client stub** and `glyim add`/`glyim remove` CLI commands | ✅ |
-| **Content‑addressable storage server** (`glyim-cas-server`) with `store`/`retrieve` endpoints | ✅ |
-| **Build cache** using CAS for object file deduplication | ✅ |
-| **Cache CLI** (`glyim cache store`/`retrieve`/`status`) | ✅ |
-| Macro infrastructure stubs (traits, CAS, hygiene) | ✅ |
-| **73+ integration tests, 23 parser tests, 14 UI tests** | ✅ |
+| `glyim init` scaffolding | ✅ |
+| Arithmetic, comparisons, logical operators, lambdas | ✅ |
+| **Structs** – parsing, lowering, codegen with `i64` fields | ✅ (typed fields planned) |
+| **Enums** – tag‑discriminated variants, `match` codegen (switch) | ✅ (payloads limited to `i64`) |
+| **Pattern matching** (wildcards, literals, variable binding) | ✅ |
+| **`bool`** type (lexed & parsed, lowered to `i64` for now) | ⚠️ (no distinct type checking) |
+| **`Option<T>` and `Result<T, E>`** (built‑in prelude desugared) | ✅ |
+| **`?` operator** – currently aborts on `Err`, not early return | ⚠️ (spec requires `return`) |
+| **`f64`** float type (lexed & parsed, arithmetic not yet generated) | ❌ (stubbed to `i64 0`) |
+| **Raw pointers** (`*const T`, `*mut T`) – parsing only | ⚠️ (no codegen) |
+| **`__size_of::<T>()`** intrinsic | ✅ |
+| **`@rust("namespace") extern { ... }`** parsing | ✅ |
+| **Macro infrastructure** (typed `MacroContext`, `ContentStore`) | ⚠️ (stubs; `@identity` works via hardcoded AST substitution) |
+| **Type checker** – basic type propagation, primarily `i64` | ⚠️ (exhaustiveness, generic inference planned) |
+| **Monomorphic generics** – parsed, lowered, but **not monomorphized** | ⚠️ (generic functions emit a single LLVM function) |
+| **Generic structs & enums** – syntax works; all fields are `i64` | ⚠️ |
+| **`impl` blocks** – methods lowered to mangled names; call‑site rewriting missing | ❌ (integration tests disabled) |
+| **Tuples** – parsing and lowering; field access unreliable | ⚠️ |
+| **Destructuring `let`** | ✅ (simple cases) |
+| **Cast expressions** (`expr as Type`) – parsed, validity check stubbed | ⚠️ |
+| **Standard prelude** (real generic `Option`, `Result`) | ✅ |
+| **DWARF debug info** (DISubprogram, DILocation, DILocalVariable) | ✅ |
+| **Heap wrappers** (`glyim_alloc`/`glyim_free`) | ✅ |
+| **`no_std` detection** | ✅ |
+| **Package manager** (manifest, lockfile, MVS resolver, workspace) | ✅ |
+| **CAS server & build cache** | ✅ |
+| **Rowan‑first CST** (required by spec) | ❌ (parser builds AST first, CST is secondary) |
+| **JIT execution** (remove `cc` dependency) | ❌ (uses system linker) |
+| **`glyim run` without C compiler** | ❌ |
+
+> **Legend:** ✅ = fully working · ⚠️ = partially implemented (see details) · ❌ = not yet implemented
 
 ---
 
-## The Architecture
+## Architecture
 
-Glyim enforces a strict 5‑tier dependency graph. Arrows point from consumer to dependency; cross‑tier imports are forbidden.
+Glyim enforces a strict 5‑tier dependency graph (ADR‑001) with zero cycles.
 
 ```
-Tier 5: Ecosystem          glyim-cli · glyim-cas-server
-Tier 4: Backend            glyim-codegen-llvm
-Tier 3: Analysis & Macros  glyim-hir · glyim-typeck · glyim-macro-core · glyim-macro-vfs · glyim-pkg
-Tier 2: Frontend           glyim-parse · glyim-lex
-Tier 1: Foundation         glyim-syntax · glyim-diag · glyim-interner
+Tier 5: Ecosystem  glyim-cli · glyim-cas-server
+Tier 4: Backend    glyim-codegen-llvm
+Tier 3: Analysis   glyim-hir · glyim-typeck · glyim-macro-core · glyim-macro-vfs · glyim-pkg
+Tier 2: Frontend   glyim-parse · glyim-lex
+Tier 1: Foundation glyim-syntax · glyim-diag · glyim-interner
 ```
 
-This is enforced by our Cargo workspace configuration.
+This is enforced by the workspace setup and verified by `just check-dag` and `just check-tiers`.
 
 ### Key Design Decisions
 
@@ -135,17 +136,15 @@ This is enforced by our Cargo workspace configuration.
 | Macro caching | Content‑addressable store | Solves multi‑file collision, enables distributed cache |
 | Macro purity | Explicit (impure if fs touched) | Deterministic caching by default |
 | File output from macros | Sandbox VFS → CAS | No source pollution, reproducible builds |
-| Type‑directed expansion | IoC via `MacroContext` trait | Zero cyclic deps between macro engine and type checker |
-| Hygiene | Automatic mangling, opt‑out | Eliminates accidental capture bugs |
-| Syntax trees | Rowan (Green/Red) | World‑class IDE support out of the box |
-| Expression parsing | Pratt parser (expressions) + recursive descent (items) | Simplicity and performance |
-| FFI | `@rust("...")` as opaque types | Safe boundary without exposing Rust’s type system |
-| JIT execution | Inkwell ORC JIT for `run` | No external C compiler needed for development |
-| Type checker | Monomorphic with local inference | No Hindley‑Milner complexity, fast checking |
-| Package management | glyim-pkg with MVS resolver | Minimal conflict dependency resolution |
-| Debug info | Inkwell DIBuilder with manual `llvm.dbg.declare` intrinsics | LLVM 22 compatible per‑variable debug info |
-| Build caching | CAS‑backed object file cache | Avoids re‑compilation of unchanged sources |
-| Allocator | Compiler‑emitted `glyim_alloc`/`glyim_free` with OOM abort | Safe heap allocation out of the box |
+| Type‑directed expansion | IoC via `MacroContext` trait | Zero cyclic deps |
+| Hygiene | Automatic mangling, opt‑out | Eliminates accidental capture |
+| Syntax trees | Rowan (Green/Red) (planned) | World‑class IDE support |
+| Expression parsing | Pratt parser + recursive descent | Simplicity & performance |
+| FFI | `@rust("...")` as opaque types | Safe boundary |
+| JIT execution | Inkwell ORC JIT (planned) | Remove C compiler dependency |
+| Type checker | Monomorphic with local inference | Fast checks, no HM complexity |
+| Package mgmt | MVS resolver | Minimal version selection |
+| Build caching | CAS‑backed object cache | Avoid redundant recompilation |
 
 ---
 
@@ -154,32 +153,23 @@ This is enforced by our Cargo workspace configuration.
 ```
 glyim/
 ├── crates/
-│   ├── glyim-interner/       # String → Symbol deduplication
-│   ├── glyim-diag/           # Span, Diagnostic, ariadne rendering
+│   ├── glyim-interner/       # Symbol interning
+│   ├── glyim-diag/           # Diagnostics & ariadne rendering
 │   ├── glyim-syntax/         # SyntaxKind, Rowan definitions
-│   ├── glyim-lex/            # Hand‑rolled tokenizer
-│   ├── glyim-parse/          # Pratt + recursive descent, CST builder, error recovery (modular)
-│   ├── glyim-hir/            # High‑level IR with spans (HirExpr, HirStmt, HirType, HirPattern)
-│   ├── glyim-typeck/         # Monomorphic type checker with exhaustiveness and generic inference
-│   ├── glyim-macro-core/     # Typed macro expansion engine
-│   ├── glyim-macro-vfs/      # ContentStore trait + LocalContentStore + SHA‑256 hashing
-│   ├── glyim-pkg/            # Package manager (manifest, lockfile, resolver, workspace, CAS client)
-│   ├── glyim-cas-server/     # HTTP content‑addressable storage server (actix‑web)
-│   ├── glyim-codegen-llvm/   # LLVM IR generation (Inkwell) with debug info, allocators, no_std support
-│   └── glyim-cli/            # CLI (build, run, ir, check, init, test, add, remove, cache, fetch, publish, outdated)
-├── stdlib/
-│   ├── src/                  # Standard library specification files (vec.g, string.g, hashmap.g, io.g, iterator.g, range.g)
-│   └── tests/                # stdlib test specifications
-├── docs/
-│   ├── specs/
-│   │   ├── v0.1.0.md
-│   │   ├── v0.2.0.md
-│   │   └── v0.3.0.md
-│   ├── devlog/
-│   └── archive/
-├── scripts/
-│   └── check_file_sizes.py
-└── justfile                  # Build, test, and quality‑of‑life recipes
+│   ├── glyim-lex/            # Tokenizer
+│   ├── glyim-parse/          # Parser (Pratt + RD), CST builder, recovery
+│   ├── glyim-hir/            # HIR: expressions, types, patterns
+│   ├── glyim-typeck/         # Type checker (work‑in‑progress)
+│   ├── glyim-macro-core/     # Typed macro engine (stub)
+│   ├── glyim-macro-vfs/      # ContentStore trait, local CAS
+│   ├── glyim-pkg/            # Package manager (resolver, lockfile)
+│   ├── glyim-cas-server/     # HTTP CAS server
+│   ├── glyim-codegen-llvm/   # LLVM IR codegen (Inkwell)
+│   └── glyim-cli/            # CLI (build, run, check, init, test, pkg, cache)
+├── stdlib/                   # Standard library specifications (not yet compilable)
+├── docs/specs/               # Architecture specifications v0.1.0 – v0.4.0
+├── scripts/check_file_sizes.py
+└── justfile                  # Build, test, and quality recipes
 ```
 
 ---
@@ -188,56 +178,37 @@ glyim/
 
 ### Prerequisites
 
-- Rust 1.75+ (stable) or nightly
-- LLVM 22.1 development libraries
-  - Ubuntu: `sudo apt install llvm-22-dev`
-  - macOS: `brew install llvm@22`
+- Rust 1.75+ (stable or nightly)
+- LLVM 22.1 development libraries  
+  - Ubuntu: `sudo apt install llvm-22-dev`  
+  - macOS: `brew install llvm@22`  
   - Set `LLVM_SYS_221_PREFIX` if LLVM is in a non‑standard location
 
-### Development Tools
-
-We use **[just](https://github.com/casey/just)** as a command runner (see `justfile` for available recipes) and **[cargo-insta](https://crates.io/crates/cargo-insta)** for snapshot testing.
-
-```bash
-just test       # run all tests
-just test-unit  # run only unit tests
-just ci         # simulate CI pipeline
-```
-
-### Build
+### Quick Start
 
 ```bash
 git clone https://github.com/your-org/glyim.git
 cd glyim
 cargo build --release
-```
 
-### Run a Glyim program
-
-```bash
+# Run a program (currently requires cc on PATH)
 echo 'main = () => 42' > hello.g
 cargo run --release -- run hello.g
-echo $?               # prints 42
-```
 
-### Inspect LLVM IR
-
-```bash
+# Inspect LLVM IR
 cargo run --release -- ir hello.g
-# define i64 @main() {
-#   ret i64 42
-# }
+
+# Use the package manager
+cargo run --release -- init myproject
+cd myproject
+cargo run --release -- add serde  # adds dependency to glyim.toml
 ```
 
-### Use the Package Manager
-
+We use **[just](https://github.com/casey/just)** for common tasks:
 ```bash
-glyim init myproject
-cd myproject
-glyim add serde
-glyim cache store src/main.g   # Store in CAS
-glyim cache status
-glyim fetch                    # Resolve dependencies
+just test              # run all tests
+just ci                # simulate CI pipeline
+just check-files       # enforce file size limits
 ```
 
 ---
@@ -246,24 +217,44 @@ glyim fetch                    # Resolve dependencies
 
 | Version | Focus | Status |
 |---------|-------|--------|
-| **v0.1.0** | Architectural runway — compile `main = () => 42` to native | ✅ Completed |
-| **v0.2.0** | “Real language” DX — let/mut, if/else, strings, println, JIT | ✅ Completed |
-| **v0.3.0** | Types & data — struct/enum/match, type checker, floats, Option/Result, raw pointers, first working macro | ✅ Completed |
-| **v0.4.0** | Generics, impl blocks, tuples, casts, destructuring, prelude | ✅ Completed |
-| **v0.5.0** | Package manager (glyim-pkg), DWARF debug info, allocator wrappers, no_std support, CAS server, build cache, CLI extensions | ✅ Completed |
-| **v0.6.0** | LSP, formatter, macro compilation to native, distributed CAS, pointer operations for stdlib types | 🔜 Planned |
+| **v0.1.0** | Architectural runway — compile `main = () => 42` to native | ✅ |
+| **v0.2.0** | “Real language” DX — let/mut, if/else, strings, println, UI tests | ✅ (JIT missing) |
+| **v0.3.0** | Types & data — struct, enum, match, float, pointers, working macro | ⚠️ basic types only |
+| **v0.4.0** | Generics, impls, tuples, destructuring, standard prelude | ⚠️ parsed, not functional |
+| **v0.5.0** | Package manager, debug info, allocators, no_std, build cache | ⚠️ partial |
+| **v0.6.0** | LSP, formatter, macro compilation, distributed CAS, stdlib types | 🔜 planned |
+
+### Current Focus Areas (help wanted!)
+
+- **Finishing the type checker** – enforce immutability, proper type propagation, `bool` as distinct type
+- **Rowan‑first parser** – rewrite parser to emit CST during parsing (as per spec)
+- **Macro engine** – implement `glyim-macro-core` with typed interpretation
+- **`?` operator** – desugar to early `return Err(e)` instead of abort
+- **Float arithmetic** – generate `fadd`, `fsub`, etc.
+- **Monomorphization** – real generic codegen
 
 ---
 
-## Non‑Goals
+## Known Limitations in the Current Build
 
-Glyim intentionally does **not** try to be:
+- **`glyim run` requires a C compiler** (`cc`/`gcc`) for linking; JIT is not yet enabled.
+- **Macros** are limited to a hardcoded `@identity`; the full typed‑macro pipeline is a placeholder.
+- **Float literals** do not produce arithmetic; all `f64` operations yield zero.
+- **Generic functions** are not monomorphized; they compile to a single LLVM function with `i64` for all type parameters.
+- **Impl method calls** (e.g., `p.translate(dx, dy)`) do not resolve; integration tests are disabled.
+- **Raw pointer types** cannot be used as variable types or function parameters.
+- **The type checker** does not catch most type mismatches; many errors pass silently.
+- **The CST** (Rowan) is built *after* parsing, contravening the spec’s requirement for a lossless parse tree.
 
-- **Not a “Macros 2.0” catch‑all** — We build a narrow, highly opinionated typed macro system.
-- **Not a JVM language** — Native compilation via LLVM, zero runtime GC.
-- **Not a C/C++ replacement** — We interop with Rust via `@rust()` FFI, not by being C‑compatible.
-- **Not fast to compile (yet)** — Debug LLVM, no incremental compilation. Performance optimization is deferred.
-- **Not a macro VM (yet)** — Macro execution is interpreted; compilation to native code is future work.
+See the detailed architecture specs in `docs/specs/` for the intended design.
+
+---
+
+## Contributing
+
+Glyim is an ambitious compiler project and we welcome contributors! The best way to start is to look at the issues tagged `good first issue` (once we have them 😅) or pick a task from the **Current Focus Areas** above.
+
+Before contributing, read the [architecture specs](docs/specs/) to understand the design constraints and the strict tier dependency rules.
 
 ---
 
@@ -273,4 +264,4 @@ Licensed under [MIT license](LICENSE-MIT).
 
 ---
 
-*"The best macro system is the one that makes you forget macros are hard."*
+*“The best macro system is the one that makes you forget macros are hard.”*

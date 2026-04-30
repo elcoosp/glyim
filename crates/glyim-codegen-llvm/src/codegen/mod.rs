@@ -11,7 +11,7 @@ use glyim_interner::{Interner, Symbol};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::IntType;
-use inkwell::debug_info::DISubprogram;
+use inkwell::debug_info::{DISubprogram, DWARFEmissionKind};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use crate::debug::DebugInfoGen;
@@ -88,7 +88,51 @@ impl<'ctx> Codegen<'ctx> {
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
 
-        let debug_info = match DebugInfoGen::new(&module, "input.g") {
+        let debug_info = match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::Full) {
+            Ok(di) => Some(di),
+            Err(e) => {
+                eprintln!("warning: debug info creation failed: {e}");
+                None
+            }
+        };
+
+        Ok(Self {
+            context,
+            module,
+            builder,
+            i64_type: context.i64_type(),
+            i32_type: context.i32_type(),
+            f64_type: context.f64_type(),
+            interner,
+            string_counter: RefCell::new(0),
+            expr_types,
+            mono_cache: RefCell::new(HashMap::new()),
+            struct_types: RefCell::new(HashMap::new()),
+            struct_field_indices: RefCell::new(HashMap::new()),
+            enum_types: RefCell::new(HashMap::new()),
+            enum_struct_types: RefCell::new(HashMap::new()),
+            enum_variant_tags: RefCell::new(HashMap::new()),
+            option_sym,
+            result_sym,
+            debug_info,
+            source_str: Some(source_str),
+            current_subprogram: None,
+            no_std: false,
+        })
+    }
+
+    pub fn with_line_tables(
+        context: &'ctx Context,
+        mut interner: Interner,
+        expr_types: Vec<HirType>,
+        source_str: String,
+    ) -> Result<Self, String> {
+        let module = context.create_module("glyim_out");
+        let builder = context.create_builder();
+        let option_sym = interner.intern("Option");
+        let result_sym = interner.intern("Result");
+
+        let debug_info = match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::LineTablesOnly) {
             Ok(di) => Some(di),
             Err(e) => {
                 eprintln!("warning: debug info creation failed: {e}");
@@ -167,6 +211,14 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     pub fn write_object_file(&self, path: &std::path::Path) -> Result<(), String> {
+        self.write_object_file_with_opt(path, inkwell::OptimizationLevel::None)
+    }
+
+    pub fn write_object_file_with_opt(
+        &self,
+        path: &std::path::Path,
+        opt_level: inkwell::OptimizationLevel,
+    ) -> Result<(), String> {
         use inkwell::targets::{
             CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
         };
@@ -178,7 +230,7 @@ impl<'ctx> Codegen<'ctx> {
                 &triple,
                 "",
                 "",
-                inkwell::OptimizationLevel::None,
+                opt_level,
                 RelocMode::PIC,
                 CodeModel::Default,
             )
