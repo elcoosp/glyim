@@ -128,7 +128,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
-        link_object(&obj_path, &output)?;
+        link_object(&obj_path, &output, false)?;
     Ok(output)
 }
 
@@ -197,7 +197,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_out");
-    link_object(&obj_path, &exe_path)?;
+    link_object(&obj_path, &exe_path, false)?;
     let status = Command::new(&exe_path)
         .status()
         .map_err(PipelineError::Run)?;
@@ -326,7 +326,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_out");
-    link_object(&obj_path, &exe_path)?;
+    link_object(&obj_path, &exe_path, mode == BuildMode::Release)?;
     let status = Command::new(&exe_path)
         .status()
         .map_err(PipelineError::Run)?;
@@ -372,7 +372,7 @@ pub fn build_with_mode(
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
-        link_object(&obj_path, &output)?;
+        link_object(&obj_path, &output, mode == BuildMode::Release)?;
     Ok(output)
 }
 
@@ -607,7 +607,7 @@ pub fn run_tests(
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_test_out");
-    link_object(&obj_path, &exe_path)?;
+    link_object(&obj_path, &exe_path, false)?;
 
     let output = Command::new(&exe_path)
         .output()
@@ -657,7 +657,7 @@ fn compile_to_hir_and_ir(
     Ok((hir, ir, parse_out.interner))
 }
 
-fn link_object(obj_path: &Path, output_path: &Path) -> Result<(), PipelineError> {
+fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(), PipelineError> {
     let linker = if which("cc") {
         "cc"
     } else if which("gcc") {
@@ -667,10 +667,16 @@ fn link_object(obj_path: &Path, output_path: &Path) -> Result<(), PipelineError>
             "no C compiler found (tried 'cc' and 'gcc')".into(),
         ));
     };
+    let mut args: Vec<std::ffi::OsString> = vec![
+        "-o".into(),
+        output_path.as_os_str().into(),
+        obj_path.as_os_str().into(),
+    ];
+    if use_lto {
+        args.push("-flto=thin".into());
+    }
     let output = Command::new(linker)
-        .arg("-o")
-        .arg(output_path)
-        .arg(obj_path)
+        .args(&args)
         .output()
         .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
     if !output.status.success() {
@@ -716,7 +722,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         let obj_path = tmp_dir.path().join("cached.o");
         fs::write(&obj_path, &cached_obj)?;
         eprintln!("[cache] Reusing cached object for {}", input.display());
-        link_object(&obj_path, &output)?;
+        link_object(&obj_path, &output, false)?;
         return Ok(output);
     }
 
@@ -738,7 +744,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     cas.store(&obj_bytes);
     eprintln!("[cache] Stored object for {}", input.display());
 
-    link_object(&obj_path, &output)?;
+    link_object(&obj_path, &output, false)?;
     Ok(output)
 }
 

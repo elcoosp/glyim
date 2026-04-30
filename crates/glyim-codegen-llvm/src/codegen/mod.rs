@@ -469,7 +469,7 @@ impl<'ctx> Codegen<'ctx> {
         let arr_type = i8_type.array_type(bytes.len() as u32);
         let global = self
             .module
-            .add_global(arr_type, Some(inkwell::AddressSpace::from(0u16)), "_glyim_macro_debug");
+            .add_global(arr_type, Some(inkwell::AddressSpace::from(0u16)), "_glyim_macro");
         let elems: Vec<_> = bytes
             .iter()
             .map(|b| i8_type.const_int(*b as u64, false))
@@ -477,7 +477,7 @@ impl<'ctx> Codegen<'ctx> {
         let arr = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
         global.set_initializer(&arr);
         global.set_constant(true);
-        global.set_section(Some(".glyim-macro-debug"));
+        global.set_section(Some(".glyim.macro"));
     }
 
 }
