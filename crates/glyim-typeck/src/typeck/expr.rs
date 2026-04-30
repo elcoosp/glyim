@@ -1,6 +1,7 @@
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
 use crate::TypeChecker;
+use glyim_hir::HirBinOp;
 use std::collections::HashMap;
 use glyim_hir::node::HirExpr;
 use glyim_hir::types::{ExprId, HirType};
@@ -53,10 +54,14 @@ impl TypeChecker {
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::Ident { name, .. } => self.lookup_binding(name).unwrap_or(HirType::Int),
-            HirExpr::Binary { lhs, rhs, .. } => {
+            HirExpr::Binary { op, lhs, rhs, .. } => {
                 self.check_expr(lhs);
                 self.check_expr(rhs);
-                HirType::Int
+                match op {
+                    HirBinOp::Eq | HirBinOp::Neq | HirBinOp::Lt
+                    | HirBinOp::Gt | HirBinOp::Lte | HirBinOp::Gte => HirType::Bool,
+                    _ => HirType::Int,
+                }
             }
             HirExpr::Unary { operand, .. } => {
                 self.check_expr(operand);

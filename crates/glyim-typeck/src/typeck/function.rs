@@ -1,4 +1,5 @@
 use crate::typeck::error::TypeError;
+use glyim_hir::types::HirType;
 use crate::TypeChecker;
 use glyim_hir::node::HirFn;
 
@@ -12,7 +13,12 @@ impl TypeChecker {
             let body_type = tc.check_expr(&f.body);
             if let Some(ref expected) = f.ret {
                 if let Some(ref actual) = body_type {
-                    if expected != actual {
+                    // Relaxed check: Generic<S, _> matches Named<S>
+                    let is_match = expected == actual || match (expected, actual) {
+                        (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
+                        _ => false,
+                    };
+                    if !is_match {
                         tc.errors.push(TypeError::InvalidReturnType {
                             expected: expected.clone(),
                             found: actual.clone(),

@@ -286,6 +286,6 @@ mod tests {
     fn count_matches_actual_variants() {
         let _ = SyntaxKind::Error;
         let _ = SyntaxKind::MatchArmPat;
-        assert_eq!(COUNT, 94);
+        assert_eq!(COUNT, 101);
     }
 }

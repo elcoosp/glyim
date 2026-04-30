@@ -184,8 +184,6 @@ fn e2e_generic_identity() {
 fn e2e_generic_struct() {
     assert_eq!(pipeline::run(&temp_g("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }")).unwrap(), 42);
 }
-// TODO: Tuple field access codegen needs to GEP into correct struct type.
-// The parser/HIR produce correct output, but codegen doesn't resolve the tuple layout yet.
 #[test]
 #[ignore]
 fn e2e_tuple() {
@@ -230,8 +228,6 @@ fn e2e_wrong_field_fails() {
     ))
     .is_err());
 }
-// TODO: Generic struct instantiation with type arguments requires
-// monomorphization in codegen (not yet implemented).
 #[test]
 #[ignore]
 fn e2e_generic_edge() {
@@ -358,7 +354,6 @@ fn e2e_struct_with_ptr_parse_and_typecheck() {
 #[test]
 #[ignore = "requires impl blocks with self"]
 fn e2e_veci64_push_get() {
-    // Read vec_i64.g from the workspace root
     let vec_src = include_str!("../../../stdlib/src/vec_i64.g");
     let main_code = r#"
 main = () => {
@@ -405,7 +400,7 @@ fn e2e_mono_two_instantiations_same_fn() {
 fn e2e_mono_generic_fn_with_two_type_params() {
     let src = "fn pair<A,B>(a: A, b: B) -> B { b }\nfn main() -> i64 { pair(1, 42) }";
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
-
+}
 
 #[test]
 fn e2e_while_loop() {
@@ -423,4 +418,20 @@ main = () => {
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 10);
 }
 
+#[test]
+fn e2e_veci64_impl() {
+    let src = r#"
+struct VecI64 { data: *mut u8, len: i64, cap: i64 }
+
+impl VecI64 {
+    fn new() -> VecI64 { VecI64 { data: 0 as *mut u8, len: 0, cap: 0 } }
+    fn len(&self) -> i64 { self.len }
+}
+
+main = () => {
+    let v = VecI64::new();
+    v.len()
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
 }
