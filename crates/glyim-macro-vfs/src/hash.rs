@@ -2,7 +2,7 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ContentHash([u8; 32]);
 
 impl ContentHash {

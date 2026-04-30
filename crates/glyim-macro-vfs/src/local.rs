@@ -53,4 +53,34 @@ impl ContentStore for LocalContentStore {
         let hex = fs::read_to_string(self.names_dir.join(&safe)).ok()?;
         hex.parse().ok()
     }
+
+
+    fn store_action_result(
+        &self,
+        action_hash: ContentHash,
+        result: crate::store::ActionResult,
+    ) -> Result<(), crate::store::StoreError> {
+        let json = serde_json::to_vec(&result)
+            .map_err(|e| crate::store::StoreError::Io(format!("serialize action result: {e}")))?;
+        let stored_hash = self.store(&json);
+        if stored_hash != action_hash {
+            self.register_name(&format!("action:{}", action_hash), stored_hash);
+        }
+        Ok(())
+    }
+
+    fn retrieve_action_result(&self, action_hash: ContentHash) -> Option<crate::store::ActionResult> {
+        let name = format!("action:{}", action_hash);
+        let hash = self.resolve_name(&name)?;
+        let json = self.retrieve(hash)?;
+        serde_json::from_slice(&json).ok()
+    }
+
+    fn has_blobs(&self, hashes: &[ContentHash]) -> Vec<ContentHash> {
+        hashes
+            .iter()
+            .filter(|h| self.retrieve(**h).is_some())
+            .copied()
+            .collect()
+    }
 }
