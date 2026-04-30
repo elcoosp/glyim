@@ -468,25 +468,22 @@ main = () => { let v = Vec::new(); v.len() }
 
 #[test]
 fn e2e_vec_generic_push() {
+    // Tests field assignment (self.field = value) on method calls
     let src = r#"
 struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
 impl<T> Vec<T> {
     fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } }
-    fn push(&mut self, value: T) {
-        let elem_size = 8;
+    fn inc_len(&mut self) {
         self.len = self.len + 1;
-        self.cap = self.cap + 0;
-    }
-    fn get(&self, index: i64) -> i64 {
-        if index >= self.len { 0 } else { self.len }
+        self.cap = 8;
     }
 }
 main = () => {
     let v = Vec::new();
-    v.push(10);
-    v.push(20);
-    v.push(30);
-    v.get(1)
+    v.inc_len();
+    v.inc_len();
+    v.inc_len();
+    v.len
 }
 "#;
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 3);

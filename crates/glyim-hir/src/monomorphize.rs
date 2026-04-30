@@ -30,7 +30,7 @@ struct MonoContext<'a> {
     type_overrides: HashMap<ExprId, HirType>,
     fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
     fn_queued: HashSet<(Symbol, Vec<HirType>)>,
-    current_type_params: Vec<Symbol>, // type params of the function being scanned
+    current_type_params: Vec<Symbol>,
 }
 
 impl<'a> MonoContext<'a> {
@@ -55,7 +55,6 @@ impl<'a> MonoContext<'a> {
     }
 
     fn find_fn(&self, name: Symbol) -> Option<HirFn> {
-        // Search top-level functions
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
                 if f.name == name {
@@ -63,7 +62,6 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-        // Search impl methods
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
@@ -94,21 +92,10 @@ impl<'a> MonoContext<'a> {
             .map(|t| self.format_type_short(t))
             .collect::<Vec<_>>()
             .join("_");
-        let mangled = format!("{}__{}", base_str, args_str);
-        println!(
-            "[mono mangle] base='{}' type_args={:?} -> '{}'",
-            base_str,
-            type_args
-                .iter()
-                .map(|t| format!("{:?}", t))
-                .collect::<Vec<_>>(),
-            mangled
-        );
-        self.interner.intern(&mangled)
+        self.interner.intern(&format!("{}__{}", base_str, args_str))
     }
 
     fn collect_and_specialize(&mut self) {
-        // Seed work queue from call_type_args (provided by type checker)
         for (expr_id, type_args) in self.call_type_args.iter() {
             for item in &self.hir.items {
                 match item {
@@ -128,9 +115,6 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-        // Also scan all function bodies to discover generic calls
-        // not yet in call_type_args (backward compatibility fallback).
-        // For non‑generic functions, also scan struct instantiations immediately.
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
                 self.current_type_params = f.type_params.clone();
@@ -146,10 +130,6 @@ impl<'a> MonoContext<'a> {
             }
         }
         self.current_type_params = vec![];
-
-        // Struct scanning done in work-queue processing only
-
-        // Process work queue
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
@@ -157,7 +137,7 @@ impl<'a> MonoContext<'a> {
             }
             if let Some(generic_fn) = self.find_fn(fn_name) {
                 let specialized = self.specialize_fn(&generic_fn, &type_args);
-                self.current_type_params = vec![]; // specialized body has no type params
+                self.current_type_params = vec![];
                 self.scan_expr_for_generic_calls(&specialized.body);
                 self.scan_expr_for_struct_instantiations(&specialized.body);
                 self.fn_specs.insert(key.clone(), specialized.clone());
@@ -172,13 +152,13 @@ impl<'a> MonoContext<'a> {
                 HirStmt::Expr(e) => self.find_call_callee_by_id(e, search_id),
                 HirStmt::Let { value, .. }
                 | HirStmt::LetPat { value, .. }
-                | HirStmt::Assign { value, .. } => self.find_call_callee_by_id(value, search_id),
+                | HirStmt::Assign { value, .. }
+                | HirStmt::AssignField { value, .. } => {
+                    self.find_call_callee_by_id(value, search_id)
+                }
                 HirStmt::AssignDeref { target, value, .. } => self
                     .find_call_callee_by_id(target, search_id)
                     .or_else(|| self.find_call_callee_by_id(value, search_id)),
-                HirStmt::AssignField { value, .. } => {
-                    self.find_call_callee_by_id(value, search_id)
-                }
             }),
             HirExpr::If {
                 condition,
@@ -231,16 +211,7 @@ impl<'a> MonoContext<'a> {
                 fields,
                 ..
             } => {
-                println!(
-                    "[mono scan_struct] StructLit id={:?} name='{}'",
-                    id,
-                    self.interner.resolve(*struct_name)
-                );
                 if let Some(struct_def) = self.find_struct(*struct_name) {
-                    println!(
-                        "[mono scan_struct] found struct_def with {} type_params",
-                        struct_def.type_params.len()
-                    );
                     if !struct_def.type_params.is_empty() {
                         let field_types: Vec<HirType> = fields
                             .iter()
@@ -251,20 +222,11 @@ impl<'a> MonoContext<'a> {
                                     .unwrap_or(HirType::Never)
                             })
                             .collect();
-                        println!(
-                            "[mono scan_struct] field_types: {:?}",
-                            field_types
-                                .iter()
-                                .map(|t| format!("{:?}", t))
-                                .collect::<Vec<_>>()
-                        );
                         let mut sub = HashMap::new();
                         for (i, tp) in struct_def.type_params.iter().enumerate() {
                             if let Some(ft) = struct_def.fields.get(i) {
-                                println!("[mono scan_struct]   field[{}] ty={:?}", i, ft.ty);
                                 if let HirType::Named(param_sym) = &ft.ty {
                                     if let Some(val_ty) = field_types.get(i) {
-                                        println!("[mono scan_struct]     val_ty={:?}, param_sym={:?}, tp={:?}, match={}, not_never={}", val_ty, self.interner.resolve(*param_sym), self.interner.resolve(*tp), *param_sym == *tp, *val_ty != HirType::Never);
                                         if *param_sym == *tp && *val_ty != HirType::Never {
                                             sub.insert(*tp, val_ty.clone());
                                         }
@@ -272,12 +234,7 @@ impl<'a> MonoContext<'a> {
                                 }
                             }
                         }
-                        println!(
-                            "[mono scan_struct] sub len={}, type_params len={}",
-                            sub.len(),
-                            struct_def.type_params.len()
-                        );
-                        if sub.len() == struct_def.type_params.len() {
+                        if sub.len() == struct_def.type_params.len() && !sub.is_empty() {
                             let concrete: Vec<HirType> = struct_def
                                 .type_params
                                 .iter()
@@ -289,10 +246,6 @@ impl<'a> MonoContext<'a> {
                                 self.struct_specs.insert(key, specialized);
                             }
                             let mangled = self.mangle_name(*struct_name, &concrete);
-                            println!(
-                                "[mono scan_struct] CREATING specialization: mangled='{}'",
-                                self.interner.resolve(mangled)
-                            );
                             self.type_overrides.insert(*id, HirType::Named(mangled));
                         }
                     }
@@ -307,15 +260,12 @@ impl<'a> MonoContext<'a> {
                         HirStmt::Expr(e) => self.scan_expr_for_struct_instantiations(e),
                         HirStmt::Let { value, .. }
                         | HirStmt::LetPat { value, .. }
-                        | HirStmt::Assign { value, .. } => {
+                        | HirStmt::Assign { value, .. }
+                        | HirStmt::AssignField { value, .. } => {
                             self.scan_expr_for_struct_instantiations(value)
                         }
                         HirStmt::AssignDeref { target, value, .. } => {
                             self.scan_expr_for_struct_instantiations(target);
-                            self.scan_expr_for_struct_instantiations(value);
-                        }
-                        HirStmt::AssignField { object, value, .. } => {
-                            self.scan_expr_for_struct_instantiations(object);
                             self.scan_expr_for_struct_instantiations(value);
                         }
                     }
@@ -388,8 +338,6 @@ impl<'a> MonoContext<'a> {
                                     .unwrap_or(HirType::Never)
                             })
                             .collect();
-                        // Map type params to concrete types by matching param positions
-                        // where the declared type equals the type param symbol.
                         let mut sub = HashMap::new();
                         for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
                             if let HirType::Named(param_sym) = param_ty {
@@ -427,13 +375,12 @@ impl<'a> MonoContext<'a> {
                         HirStmt::Expr(e) => self.scan_expr_for_generic_calls(e),
                         HirStmt::Let { value, .. }
                         | HirStmt::LetPat { value, .. }
-                        | HirStmt::Assign { value, .. } => self.scan_expr_for_generic_calls(value),
+                        | HirStmt::Assign { value, .. }
+                        | HirStmt::AssignField { value, .. } => {
+                            self.scan_expr_for_generic_calls(value)
+                        }
                         HirStmt::AssignDeref { target, value, .. } => {
                             self.scan_expr_for_generic_calls(target);
-                            self.scan_expr_for_generic_calls(value);
-                        }
-                        HirStmt::AssignField { object, value, .. } => {
-                            self.scan_expr_for_generic_calls(object);
                             self.scan_expr_for_generic_calls(value);
                         }
                     }
@@ -504,16 +451,14 @@ impl<'a> MonoContext<'a> {
                     format!("{}_{}", self.interner.resolve(*s), inner)
                 }
             }
-            HirType::Tuple(elems) => {
-                format!(
-                    "tup_{}",
-                    elems
-                        .iter()
-                        .map(|e| self.format_type_short(e))
-                        .collect::<Vec<_>>()
-                        .join("_")
-                )
-            }
+            HirType::Tuple(elems) => format!(
+                "tup_{}",
+                elems
+                    .iter()
+                    .map(|e| self.format_type_short(e))
+                    .collect::<Vec<_>>()
+                    .join("_")
+            ),
             HirType::RawPtr(inner) => format!("ptr_{}", self.format_type_short(inner)),
             HirType::Option(inner) => format!("opt_{}", self.format_type_short(inner)),
             HirType::Result(ok, err) => format!(
@@ -559,70 +504,45 @@ impl<'a> MonoContext<'a> {
     }
 
     fn build_result(mut self) -> MonoResult {
-        // Precompute mangle maps once, before any mutable borrow
-        eprintln!(
-            "[mono] fn_specs={}, struct_specs={}",
-            self.fn_specs.len(),
-            self.struct_specs.len()
-        );
         let fn_keys: Vec<(Symbol, Vec<HirType>)> = self.fn_specs.keys().cloned().collect();
         let struct_keys: Vec<(Symbol, Vec<HirType>)> = self.struct_specs.keys().cloned().collect();
-
         let fn_mangle_map: HashMap<(Symbol, Vec<HirType>), Symbol> = fn_keys
             .iter()
             .map(|(name, args)| ((*name, args.clone()), self.mangle_name(*name, args)))
             .collect();
-
         let struct_mangle_map: HashMap<Symbol, Symbol> = struct_keys
             .iter()
             .map(|(name, args)| (*name, self.mangle_name(*name, args)))
             .collect();
-
         let mut items = Vec::new();
 
-        // 1. Add specialized structs FIRST so codegen registers them before functions
+        // 1. Specialized structs first
         {
             let struct_entries: Vec<_> = self
                 .struct_specs
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
-            eprintln!(
-                "[mono] pushing {} specialized structs first",
-                struct_entries.len()
-            );
-            for ((_orig_name, args), mut s) in struct_entries {
+            for ((_, args), mut s) in struct_entries {
                 s.name = self.mangle_name(s.name, &args);
-                eprintln!("[mono]   struct '{}'", self.interner.resolve(s.name));
                 items.push(HirItem::Struct(s));
             }
         }
 
-        // 2. Rewrite non-generic items (functions, impls, etc.)
+        // 2. Non-generic items
         for item in &self.hir.items {
             match item {
-                HirItem::Fn(f) if f.type_params.is_empty() => {
-                    items.push(HirItem::Fn(self.rewrite_fn(
-                        f,
-                        &fn_mangle_map,
-                        &struct_mangle_map,
-                    )));
-                }
-                HirItem::Struct(s) => {
-                    // Include all struct definitions – even generic ones.
-                    // Generic structs whose field types don't depend on type params
-                    // don't need specialization; they use the same layout for all Ts.
-                    items.push(HirItem::Struct(s.clone()));
-                }
-                HirItem::Enum(e) => {
-                    items.push(HirItem::Enum(e.clone()));
-                }
-                HirItem::Extern(e) => {
-                    items.push(HirItem::Extern(e.clone()));
-                }
+                HirItem::Fn(f) if f.type_params.is_empty() => items.push(HirItem::Fn(
+                    self.rewrite_fn(f, &fn_mangle_map, &struct_mangle_map),
+                )),
+                HirItem::Struct(s) => items.push(HirItem::Struct(s.clone())),
+                HirItem::Enum(e) => items.push(HirItem::Enum(e.clone())),
+                HirItem::Extern(e) => items.push(HirItem::Extern(e.clone())),
                 HirItem::Impl(imp) if imp.type_params.is_empty() => {
-                    let rewritten = self.rewrite_impl(imp, &fn_mangle_map, &struct_mangle_map);
-                    for method in &rewritten.methods {
+                    for method in &self
+                        .rewrite_impl(imp, &fn_mangle_map, &struct_mangle_map)
+                        .methods
+                    {
                         items.push(HirItem::Fn(method.clone()));
                     }
                 }
@@ -630,29 +550,31 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        // Add specialized functions with rewritten bodies (collect first to avoid borrow conflicts)
+        // 3. Specialized functions
         {
             let fn_entries: Vec<_> = self
                 .fn_specs
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
-            for ((_orig_name, args), mut f) in fn_entries {
+            for ((_, args), mut f) in fn_entries {
                 f.name = self.mangle_name(f.name, &args);
                 f.body = self.rewrite_expr(&f.body, &fn_mangle_map, &struct_mangle_map);
                 items.push(HirItem::Fn(f));
             }
         }
 
-        // Build final type_overrides
         let mut final_type_overrides = HashMap::new();
         for (expr_id, ty) in &self.type_overrides {
             if let HirType::Named(orig) = ty {
-                if let Some(&mangled) = struct_mangle_map.get(orig) {
-                    final_type_overrides.insert(*expr_id, HirType::Named(mangled));
-                } else {
-                    final_type_overrides.insert(*expr_id, ty.clone());
-                }
+                final_type_overrides.insert(
+                    *expr_id,
+                    struct_mangle_map
+                        .get(orig)
+                        .cloned()
+                        .map(HirType::Named)
+                        .unwrap_or_else(|| ty.clone()),
+                );
             }
         }
         for (idx, ty) in self.expr_types.iter().enumerate() {
@@ -662,17 +584,7 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-        for item in &items {
-            match item {
-                HirItem::Fn(f) => eprintln!("  Fn {:?}", self.interner.resolve(f.name)),
-                HirItem::Struct(s) => eprintln!(
-                    "  Struct {:?} with {} fields",
-                    self.interner.resolve(s.name),
-                    s.fields.len()
-                ),
-                _ => eprintln!("  {:?}", std::mem::discriminant(item)),
-            }
-        }
+
         MonoResult {
             hir: crate::Hir { items },
             type_overrides: final_type_overrides,
@@ -689,7 +601,6 @@ impl<'a> MonoContext<'a> {
         mono.body = self.rewrite_expr(&f.body, fn_map, struct_map);
         mono
     }
-
     fn rewrite_impl(
         &mut self,
         imp: &HirImplDef,
@@ -716,7 +627,6 @@ impl<'a> MonoContext<'a> {
                 args,
                 span,
             } => {
-                // Look up with concrete type args (from call_type_args or inferred from arg types)
                 let type_args = self.call_type_args.get(id).cloned().unwrap_or_else(|| {
                     args.iter()
                         .map(|a| {
@@ -727,8 +637,10 @@ impl<'a> MonoContext<'a> {
                         })
                         .collect()
                 });
-                let key = (*callee, type_args);
-                let new_callee = fn_map.get(&key).copied().unwrap_or(*callee);
+                let new_callee = fn_map
+                    .get(&(*callee, type_args))
+                    .copied()
+                    .unwrap_or(*callee);
                 HirExpr::Call {
                     id: *id,
                     callee: new_callee,
@@ -785,16 +697,15 @@ impl<'a> MonoContext<'a> {
                 arms,
                 span,
             } => {
-                let new_arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)> = arms
+                let new_arms: Vec<_> = arms
                     .iter()
                     .map(|(pat, guard, body)| {
-                        let new_guard = guard
-                            .as_ref()
-                            .map(|g| Box::new(self.rewrite_expr(g, fn_map, struct_map)))
-                            .map(|b| *b);
                         (
                             pat.clone(),
-                            new_guard,
+                            guard
+                                .as_ref()
+                                .map(|g| Box::new(self.rewrite_expr(g, fn_map, struct_map)))
+                                .map(|b| *b),
                             self.rewrite_expr(body, fn_map, struct_map),
                         )
                     })
@@ -942,7 +853,6 @@ impl<'a> MonoContext<'a> {
 mod tests {
     use super::*;
     use crate::item::HirItem;
-    use crate::node::HirExpr;
     use glyim_interner::Interner;
 
     fn lower_source(source: &str) -> (crate::Hir, Interner) {
@@ -951,8 +861,7 @@ mod tests {
             panic!("parse errors: {:?}", parse_out.errors);
         }
         let mut interner = parse_out.interner;
-        let hir = crate::lower(&parse_out.ast, &mut interner);
-        (hir, interner)
+        (crate::lower(&parse_out.ast, &mut interner), interner)
     }
 
     #[test]

@@ -381,7 +381,11 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
             value: lower_expr(value, ctx),
             span,
         },
-        StmtKind::AssignField { object, field, value } => HirStmt::AssignField {
+        StmtKind::AssignField {
+            object,
+            field,
+            value,
+        } => HirStmt::AssignField {
             object: Box::new(lower_expr(object, ctx)),
             field: *field,
             value: lower_expr(value, ctx),

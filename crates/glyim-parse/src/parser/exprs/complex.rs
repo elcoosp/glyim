@@ -38,6 +38,14 @@ pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
                             span: Span::new(expr.span.start, value_span.end),
                         }
                     }
+                    ExprKind::FieldAccess { object, field } => StmtNode {
+                        kind: StmtKind::AssignField {
+                            object: object.clone(),
+                            field: *field,
+                            value,
+                        },
+                        span: Span::new(expr.span.start, value_span.end),
+                    },
                     _ => {
                         parser.errors.push(crate::ParseError::Message {
                             msg: "invalid assignment target".into(),

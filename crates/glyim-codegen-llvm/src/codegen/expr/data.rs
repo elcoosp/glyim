@@ -19,18 +19,31 @@ pub(crate) fn codegen_struct_lit<'ctx>(
         let struct_type_opt = cg.struct_types.borrow().get(struct_name).copied();
         match struct_type_opt {
             Some(st) => {
-                let alloca = cg.builder.build_alloca(st, "struct_lit").ok()?;
+                let size = st.size_of()?;
+                let alloc_fn = cg
+                    .module
+                    .get_function("glyim_alloc")
+                    .or_else(|| cg.module.get_function("malloc"))?;
+                let call_result = cg
+                    .builder
+                    .build_call(alloc_fn, &[size.into()], "struct_alloc")
+                    .ok()?
+                    .try_as_basic_value();
+                let ptr = match call_result {
+                    inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_pointer_value(),
+                    _ => return Some(cg.i64_type.const_int(0, false)),
+                };
                 for (i, (_fn, fe)) in fields.iter().enumerate() {
                     let fv = codegen_expr(cg, fe, fctx)?;
                     let indices = &[
                         cg.i32_type.const_int(0, false),
                         cg.i32_type.const_int(i as u64, false),
                     ];
-                    let fp = unsafe { cg.builder.build_gep(st, alloca, indices, "field").ok()? };
+                    let fp = unsafe { cg.builder.build_gep(st, ptr, indices, "field").ok()? };
                     cg.builder.build_store(fp, fv).ok()?;
                 }
                 cg.builder
-                    .build_ptr_to_int(alloca, cg.i64_type, "struct_ptr")
+                    .build_ptr_to_int(ptr, cg.i64_type, "struct_ptr")
                     .ok()
             }
             None => Some(cg.i64_type.const_int(0, false)),
@@ -109,28 +122,6 @@ pub(crate) fn codegen_field_access<'ctx>(
         let obj_val = codegen_expr(cg, object, fctx)?;
         let obj_id = object.get_id();
         let obj_ty = cg.expr_types.get(obj_id.as_usize()).cloned();
-        eprintln!(
-            "[codegen_field_access] obj_id={:?} obj_ty={:?}",
-            obj_id, obj_ty
-        );
-        {
-            let st = cg.struct_types.borrow();
-            eprintln!(
-                "[codegen_field_access] struct_types keys: {:?}",
-                st.keys()
-                    .map(|s| cg.interner.resolve(*s))
-                    .collect::<Vec<_>>()
-            );
-        }
-        {
-            let idx = cg.struct_field_indices.borrow();
-            eprintln!(
-                "[codegen_field_access] struct_field_indices keys: {:?}",
-                idx.keys()
-                    .map(|(s, f)| (cg.interner.resolve(*s), cg.interner.resolve(*f)))
-                    .collect::<Vec<_>>()
-            );
-        }
         if let Some(HirType::Tuple(elems)) = obj_ty {
             let field_name = cg.interner.resolve(*field);
             if let Some(idx) = field_name
@@ -152,12 +143,11 @@ pub(crate) fn codegen_field_access<'ctx>(
                         .builder
                         .build_struct_gep(struct_ty, alloca, idx as u32, "field")
                         .ok()?;
-                    let val = cg
+                    return cg
                         .builder
                         .build_load(cg.i64_type, field_ptr, "elem_val")
-                        .ok()?
-                        .into_int_value();
-                    return Some(val);
+                        .ok()
+                        .map(|v| v.into_int_value());
                 }
             }
         }
@@ -170,12 +160,10 @@ pub(crate) fn codegen_field_access<'ctx>(
             )
             .ok()?;
         let index_map = cg.struct_field_indices.borrow();
-        // First try exact match by struct name + field name
         let field_idx = index_map
             .iter()
             .find(|((_, f), _)| f == field)
             .map(|(_, &idx)| idx)
-            // Fallback: if no exact match, try any key with matching field name
             .or_else(|| {
                 index_map
                     .iter()
@@ -191,12 +179,11 @@ pub(crate) fn codegen_field_access<'ctx>(
             }
             _ => None,
         };
-        // Fallback: if struct not found by name, search all struct types for one containing this field
         let struct_type_opt = struct_type_opt.or_else(|| {
             let struct_types = cg.struct_types.borrow();
-            let index_map = cg.struct_field_indices.borrow();
+            let idx_map = cg.struct_field_indices.borrow();
             struct_types.iter().find_map(|(sym, st)| {
-                if index_map.contains_key(&(*sym, *field)) {
+                if idx_map.contains_key(&(*sym, *field)) {
                     Some(st.clone())
                 } else {
                     None
@@ -216,12 +203,10 @@ pub(crate) fn codegen_field_access<'ctx>(
         } else {
             return Some(cg.i64_type.const_int(0, false));
         };
-        let result = cg
-            .builder
+        cg.builder
             .build_load(cg.i64_type, field_ptr, "field_val")
             .ok()
-            .map(|v| v.into_int_value());
-        result
+            .map(|v| v.into_int_value())
     } else {
         None
     }
@@ -240,8 +225,7 @@ pub(crate) fn codegen_tuple_lit<'ctx>(
         if elems.is_empty() {
             return Some(cg.i64_type.const_int(0, false));
         }
-        let len = elems.len();
-        let field_types = vec![BasicTypeEnum::IntType(cg.i64_type); len];
+        let field_types = vec![BasicTypeEnum::IntType(cg.i64_type); elems.len()];
         let struct_ty = cg.context.struct_type(&field_types, false);
         let alloca = cg.builder.build_alloca(struct_ty, "tuple").ok()?;
         for (i, val) in elems.iter().enumerate() {

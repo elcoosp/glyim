@@ -126,13 +126,24 @@ pub(crate) fn codegen_stmt<'ctx>(
             cg.builder.build_store(ptr, new_val).ok()?;
             Some(new_val)
         }
-        HirStmt::AssignField { object, field, value, .. } => {
+        HirStmt::AssignField {
+            object,
+            field,
+            value,
+            ..
+        } => {
             let obj_val = super::expr::codegen_expr(cg, object, fctx)?;
-            let obj_ptr = cg.builder
-                .build_int_to_ptr(obj_val, cg.context.ptr_type(AddressSpace::from(0u16)), "obj_ptr")
+            let obj_ptr = cg
+                .builder
+                .build_int_to_ptr(
+                    obj_val,
+                    cg.context.ptr_type(AddressSpace::from(0u16)),
+                    "obj_ptr",
+                )
                 .ok()?;
             let index_map = cg.struct_field_indices.borrow();
-            let field_idx = index_map.iter()
+            let field_idx = index_map
+                .iter()
                 .filter(|((_, f), _)| f == field)
                 .map(|(_, &idx)| idx)
                 .next()
@@ -149,7 +160,11 @@ pub(crate) fn codegen_stmt<'ctx>(
                 let struct_types = cg.struct_types.borrow();
                 let idx_map = cg.struct_field_indices.borrow();
                 struct_types.iter().find_map(|(sym, st)| {
-                    if idx_map.contains_key(&(*sym, *field)) { Some(st.clone()) } else { None }
+                    if idx_map.contains_key(&(*sym, *field)) {
+                        Some(st.clone())
+                    } else {
+                        None
+                    }
                 })
             });
             let field_ptr = if let Some(st) = struct_type_opt {
@@ -157,7 +172,11 @@ pub(crate) fn codegen_stmt<'ctx>(
                     cg.i32_type.const_int(0, false),
                     cg.i32_type.const_int(field_idx as u64, false),
                 ];
-                unsafe { cg.builder.build_gep(st, obj_ptr, indices, "assign_field").ok()? }
+                unsafe {
+                    cg.builder
+                        .build_gep(st, obj_ptr, indices, "assign_field")
+                        .ok()?
+                }
             } else {
                 return Some(cg.i64_type.const_int(0, false));
             };
