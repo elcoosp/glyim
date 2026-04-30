@@ -49,6 +49,20 @@ pub fn compile_to_ir_debug(source: &str, enable_debug: bool) -> Result<String, S
     Ok(cg.ir_string())
 }
 
+/// Compile source to LLVM IR with line-tables-only debug info.
+pub fn compile_to_ir_line_tables(source: &str) -> Result<String, String> {
+    let out = glyim_parse::parse(source);
+    if !out.errors.is_empty() {
+        return Err(format!("parse: {:?}", out.errors));
+    }
+    let mut interner = out.interner;
+    let hir = glyim_hir::lower(&out.ast, &mut interner);
+    let ctx = inkwell::context::Context::create();
+    let mut cg = Codegen::with_line_tables(&ctx, interner, vec![], source.to_string())?;
+    cg.generate(&hir)?;
+    Ok(cg.ir_string())
+}
+
 #[cfg(test)]
 mod test_harness_tests {
     use super::*;
@@ -113,5 +127,22 @@ mod debug_ir_tests {
     fn compile_to_ir_debug_has_local_variable() {
         let ir = compile_to_ir_debug("fn main() { let x = 42; x }", true).unwrap();
         assert!(ir.contains("DILocalVariable"), "IR should contain DILocalVariable\nGot:\n{ir}");
+    }
+}
+
+#[cfg(test)]
+mod line_tables_tests {
+    use super::*;
+
+    #[test]
+    fn compile_to_ir_line_tables_has_debug_locations() {
+        let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
+        assert!(ir.contains("!dbg"), "Line tables mode should have debug locations\nGot:\n{ir}");
+    }
+
+    #[test]
+    fn compile_to_ir_line_tables_has_line_tables_only() {
+        let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
+        assert!(ir.contains("emissionKind: LineTablesOnly"), "Line tables mode should specify LineTablesOnly emission kind\nGot:\n{ir}");
     }
 }

@@ -114,7 +114,13 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
+    let mut codegen = Codegen::with_line_tables(
+        &context,
+        interner,
+        typeck.expr_types.clone(),
+        source,
+    )
+    .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -122,7 +128,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
-    link_object(&obj_path, &output)?;
+        link_object(&obj_path, &output)?;
     Ok(output)
 }
 
@@ -174,7 +180,13 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         return Err(PipelineError::TypeCheck(errs));
     }
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, parse_out.interner, vec![]);
+    let mut codegen = Codegen::with_line_tables(
+        &context,
+        parse_out.interner,
+        vec![],
+        source.clone(),
+    )
+    .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -189,7 +201,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let status = Command::new(&exe_path)
         .status()
         .map_err(PipelineError::Run)?;
-    Ok(status.code().unwrap_or(1))
+        Ok(status.code().unwrap_or(1))
 }
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {
@@ -258,7 +270,7 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
     Ok(dir)
 }
 
-pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineError> {
+pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
@@ -294,7 +306,16 @@ pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineErro
         return Err(PipelineError::TypeCheck(errs));
     }
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
+    let mut codegen = match mode {
+        BuildMode::Debug => Codegen::with_debug(
+            &context,
+            parse_out.interner,
+            typeck.expr_types.clone(),
+            source.clone(),
+        )
+        .map_err(PipelineError::Codegen)?,
+        BuildMode::Release => Codegen::new(&context, parse_out.interner, typeck.expr_types.clone()),
+    };
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -302,20 +323,20 @@ pub fn run_with_mode(input: &Path, _mode: BuildMode) -> Result<i32, PipelineErro
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     codegen
-        .write_object_file(&obj_path)
+        .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_out");
     link_object(&obj_path, &exe_path)?;
     let status = Command::new(&exe_path)
         .status()
         .map_err(PipelineError::Run)?;
-    Ok(status.code().unwrap_or(1))
+        Ok(status.code().unwrap_or(1))
 }
 
 pub fn build_with_mode(
     input: &Path,
     output: Option<&Path>,
-    _mode: BuildMode,
+    mode: BuildMode,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
@@ -334,15 +355,24 @@ pub fn build_with_mode(
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
+    let mut codegen = match mode {
+        BuildMode::Debug => Codegen::with_debug(
+            &context,
+            interner,
+            typeck.expr_types.clone(),
+            source.clone(),
+        )
+        .map_err(PipelineError::Codegen)?,
+        BuildMode::Release => Codegen::new(&context, interner, typeck.expr_types.clone()),
+    };
     if is_no_std {
         codegen = codegen.with_no_std();
     }
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
     codegen
-        .write_object_file(&obj_path)
+        .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
-    link_object(&obj_path, &output)?;
+        link_object(&obj_path, &output)?;
     Ok(output)
 }
 
