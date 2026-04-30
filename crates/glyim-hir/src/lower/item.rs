@@ -62,6 +62,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
         Item::StructDef {
             name,
             name_span,
+            type_params,
             fields,
             ..
         } => {
@@ -71,14 +72,16 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             let end = fields.last().map_or(name_span.end, |(_, s, _)| s.end);
             let hir_fields: Vec<StructField> = fields
                 .iter()
-                .map(|(sym, _, _)| StructField {
+                .map(|(sym, _, ty)| StructField {
                     name: *sym,
-                    ty: HirType::Int,
+                    ty: ty.as_ref()
+                        .map(|t| lower_type_expr(t, ctx))
+                        .unwrap_or(HirType::Int),
                 })
                 .collect();
             Some(HirItem::Struct(StructDef {
                 name: *name,
-                type_params: vec![],
+                type_params: type_params.clone(),
                 fields: hir_fields,
                 span: glyim_diag::Span::new(name_span.start, end),
             }))
@@ -86,6 +89,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
         Item::EnumDef {
             name,
             name_span,
+            type_params,
             variants,
             ..
         } => {
@@ -110,7 +114,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 .collect();
             Some(HirItem::Enum(EnumDef {
                 name: *name,
-                type_params: vec![],
+                type_params: type_params.clone(),
                 variants: hir_variants,
                 span: glyim_diag::Span::new(name_span.start, end),
             }))
