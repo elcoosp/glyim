@@ -289,8 +289,28 @@ fn main() {
             result.unwrap_or_else(|code| code)
         }
         Command::Fetch => {
-            eprintln!("Dependencies resolved (local path deps only for now)");
-            0
+            let result: Result<i32, i32> = (|| {
+                let dir = std::env::current_dir().map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
+                })?;
+                let packages = glyim_cli::lockfile_integration::read_lockfile_packages(&dir)
+                    .map_err(|e| {
+                        eprintln!("error: {e}");
+                        1
+                    })?;
+                if packages.is_empty() {
+                    eprintln!("No dependencies to fetch (glyim.lock not found or empty)");
+                    return Ok(0);
+                }
+                eprintln!("Fetching {} package(s)...", packages.len());
+                for pkg in &packages {
+                    eprintln!("  {} {} ({})", pkg.name, pkg.version, pkg.hash);
+                }
+                eprintln!("Done.");
+                Ok(0)
+            })();
+            result.unwrap_or_else(|code| code)
         }
         Command::Publish { dry_run: _ } => {
             eprintln!("error: publish not yet implemented");

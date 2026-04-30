@@ -139,6 +139,22 @@ fn walk_dir_for_hash(path: &std::path::Path, hasher: &mut sha2::Sha256) -> Resul
     Ok(())
 }
 
+
+use glyim_pkg::lockfile::{parse_lockfile, LockedPackage};
+
+/// Read packages from glyim.lock in the given directory.
+pub fn read_lockfile_packages(package_dir: &Path) -> Result<Vec<LockedPackage>, String> {
+    let lockfile_path = package_dir.join("glyim.lock");
+    if !lockfile_path.exists() {
+        return Ok(vec![]);
+    }
+    let content = std::fs::read_to_string(&lockfile_path)
+        .map_err(|e| format!("read lockfile: {e}"))?;
+    let lockfile = parse_lockfile(&content)
+        .map_err(|e| format!("parse lockfile: {e}"))?;
+    Ok(lockfile.packages)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
