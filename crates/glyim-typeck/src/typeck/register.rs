@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 pub(crate) fn register_items(&mut self, hir: &glyim_hir::node::Hir) {
         for item in &hir.items {
             match item {
