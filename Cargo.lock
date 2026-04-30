@@ -821,6 +821,7 @@ dependencies = [
  "glyim-interner",
  "glyim-parse",
  "inkwell",
+ "insta",
  "llvm-sys",
  "thiserror 2.0.18",
  "tracing",
@@ -920,8 +921,10 @@ dependencies = [
 name = "glyim-typeck"
 version = "0.5.0"
 dependencies = [
+ "glyim-diag",
  "glyim-hir",
  "glyim-interner",
+ "glyim-parse",
  "miette",
  "miette-derive",
  "similar",

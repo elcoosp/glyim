@@ -2,4 +2,4 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-  [31m×[0m expected } but reached end of input
+  × expected } but reached end of input

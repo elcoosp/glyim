@@ -53,9 +53,9 @@ demo-math: build
     set -e
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
-    cat > "$TMPDIR/math.g" << 'EOF'
+    cat > "$TMPDIR/math.g" << 'MATH_EOF'
     main = () => 1 + 2 * 3
-    EOF
+    MATH_EOF
     echo "── Source ──────────────────────────"
     cat "$TMPDIR/math.g"
     echo "── Compile & Run ───────────────────"
@@ -122,6 +122,14 @@ fuzz-lexer:
 fuzz-parser:
     cd fuzz && cargo fuzz run fuzz_parser
 
+# Run lexer fuzzer for 1000 iterations (smoke test)
+fuzz-lexer-short:
+    cd fuzz && cargo fuzz run fuzz_lexer -- -runs=1000 -max_len=256
+
+# Run parser fuzzer for 1000 iterations (smoke test)
+fuzz-parser-short:
+    cd fuzz && cargo fuzz run fuzz_parser -- -runs=1000 -max_len=256
+
 # ─── Quality ────────────────────────────────────────────────
 
 # Check for cyclic dependencies
@@ -174,7 +182,6 @@ check-tiers:
     else:
         print("✅ Tier constraints verified: no cross-tier violations")
     '
-
 
 # Check file sizes (max 500 LOC, warn 300)
 check-files:
@@ -234,10 +241,17 @@ clean:
 rebuild: clean build
     @echo "✅ Full rebuild complete"
 
+# ─── Advanced v0.5.0 Demo ───────────────────────────────────
+
+# Run a demo that exercises structs, generics, matches, and Option
+demo-advanced: build
+    sh scripts/demo-advanced.sh
+
 # ─── Help ───────────────────────────────────────────────────
 
 # Show this help
 default:
     just --list
+
 wr:
     watchexec -w ./wr.sh --clear -r "sh ./wr.sh"

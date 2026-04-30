@@ -117,10 +117,6 @@ enum CacheCommand {
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
     let cli = Cli::parse();
 
     // Set up tracing subscriber based on flags

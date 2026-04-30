@@ -1,1199 +1,574 @@
-# Glyim Gap Closure – Complete Implementation Plan (Final)
-
-> **For agentic workers:** REQUIRED: Use superpowers:subagent‑driven‑development (if subagents available) or superpowers:executing‑plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Goal:** Close all critical gaps between the v0.5.0‑dev codebase and the architectural specs (v0.1.0–v0.4.0) with zero regressions.
-
-**Architecture:** Six phases ordered by dependency. Phase 1 completes CST coverage. Phase 2 adds feature‑gated JIT (orchestrated in `glyim‑cli` to preserve tier constraints). Phase 3 hardens the type system (with migration sub‑task). Phase 4 fixes control flow (`?` & match codegen). Phase 5 delivers generics and method dispatch. Phase 6 implements the typed macro pipeline. Every phase leaves a fully working compiler.
-
-**Tech Stack:** Rust 1.75+, Inkwell 0.9 (LLVM 22), Rowan 0.16, ariadne 0.6, insta
+We need a more granular, test-heavy plan. Below is a significantly expanded version with explicit code examples for tests, step-by-step TDD cycles, and comprehensive error/edge case coverage.
 
 ---
 
-## Pre‑flight Checklist
+# Glyim v0.5.0 Gap Closure – Detailed Implementation Plan
 
-Before starting any implementation, run and record the baseline:
+> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Close all remaining conformance gaps vs. the v0.5.0 spec (language features, stdlib, package manager, remote cache, `glyim doc`, cross-compilation). Full Bazel REAPI implementation is deferred.
+
+**Architecture:** After adding pointer load/store/destructuring/method calls, the stdlib can be compiled. Package manager commands are wired to real registry interactions (with mock support). Remote cache uses REST push/pull. `glyim-doc` is a new tier‑4 crate that reads HIR and generates HTML. Cross‑compilation is enabled by forwarding `--target` to LLVM.
+
+**Tech Stack:** Rust, Inkwell, Rowan, Actix‑web, reqwest, tempfile, insta, semver.
+
+**Testing strategy:** Every feature is introduced with unit tests (for parser/type checker/codegen), integration tests (end‑to‑end compilation and execution), and UI snapshot tests for new diagnostics. Tests are written *before* implementation wherever possible.
+
+---
+
+## Chunk 1: Language Features – Pointer Load/Store, Destructuring, Method Calls
+
+### Task 1.1: Pointer Dereference Parsing and Codegen
+
+**Files:**
+- Modify: `crates/glyim-parse/src/ast.rs` (add `ExprKind::Deref` variant)
+- Modify: `crates/glyim-parse/src/parser/exprs/atom.rs` (parse `*` as prefix unary op)
+- Modify: `crates/glyim-hir/src/node/mod.rs` (add `HirExpr::Deref`)
+- Modify: `crates/glyim-hir/src/lower/expr.rs` (lower `Deref`)
+- Modify: `crates/glyim-typeck/src/typeck/expr.rs` (type check pointer deref)
+- Modify: `crates/glyim-codegen-llvm/src/codegen/expr/mod.rs` (codegen: load from pointer)
+- Create: `crates/glyim-cli/tests/ui/deref_non_pointer.g` + expected stderr snapshot
+- Modify: `crates/glyim-cli/tests/integration.rs`
+
+#### Sub‑task 1.1.1: Integration test – valid deref
+
+- [ ] **Step 1: Write integration test**
+
+```rust
+// In crates/glyim-cli/tests/integration.rs, inside fn e2e_pointer_deref_valid
+let src = "extern { fn get_ptr() -> *i64; }\nmain = () => { let p: *i64 = get_ptr(); *p }";
+assert!(pipeline::check(&temp_g(src)).is_ok());
+```
+
+Run: `cargo test -p glyim-cli --test integration -- e2e_pointer_deref_valid`  
+Expected: **FAIL** – parse error (unknown `*` expression) or type error.
+
+- [ ] **Step 2: Add `ExprKind::Deref` to AST**
+
+In `glyim-parse/src/ast.rs` add to `ExprKind`:
+```rust
+Deref(Box<ExprNode>),
+```
+
+- [ ] **Step 3: Parse `*` as unary operator in atom.rs**
+
+In `glyim-parse/src/parser/exprs/atom.rs`, extend `match op_tok.kind` to include `SyntaxKind::Star => (70, UnOp::Deref)`. Need a new `UnOp::Deref`. Add that to `UnOp` enum.
+
+- [ ] **Step 4: Run test – should now parse but later fail on missing HIR lowering**
+
+Expected: Type checker error because `HirExpr` doesn't know `Deref` yet.
+
+- [ ] **Step 5: Add `HirExpr::Deref`**
+
+```rust
+// In glyim-hir/src/node/mod.rs
+Deref { id: ExprId, expr: Box<HirExpr>, span: Span },
+```
+Update `get_id` and `get_span` methods.
+
+- [ ] **Step 6: Lower AST Deref to HIR**
+
+In `glyim-hir/src/lower/expr.rs`, add case:
+```rust
+ExprKind::Deref(e) => HirExpr::Deref {
+    id: ctx.fresh_id(),
+    expr: Box::new(lower_expr(e, ctx)),
+    span: e.span,
+},
+```
+
+- [ ] **Step 7: Type‑check `Deref`**
+
+In `glyim-typeck/src/typeck/expr.rs`, in `infer_expr` match `HirExpr::Deref { expr, .. }`:
+```rust
+let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);
+match inner_ty {
+    HirType::RawPtr { inner } => *inner,
+    _ => {
+        self.errors.push(TypeError::MismatchedTypes { expected: HirType::RawPtr { inner: Box::new(HirType::Never) }, found: inner_ty, expr_id: expr.get_id() });
+        HirType::Never
+    }
+}
+```
+(Need to adjust `TypeError::MismatchedTypes` to handle `RawPtr` – currently expects two `HirType`. Might need a new error variant `DerefNonPointer`. We'll add a new `TypeError::DerefNonPointer { found, expr_id }` for clarity. Add that in `crates/glyim-typeck/src/typeck/error.rs`.)
+
+- [ ] **Step 8: Write a new UI test for dereferencing non‑pointer**
+
+Create `crates/glyim-cli/tests/ui/deref_non_pointer.g`:
+```
+main = () => { let x = 42; *x }
+```
+Expected: error "cannot dereference non‑pointer type".
+
+Add test function in `crates/glyim-cli/tests/ui.rs`:
+```rust
+#[test]
+fn ui_deref_non_pointer() { run_ui_test("deref_non_pointer"); }
+```
+Generate snapshot with `cargo insta review`.
+
+- [ ] **Step 9: Codegen for `Deref`**
+
+In `glyim-codegen-llvm/src/codegen/expr/mod.rs`, add case:
+```rust
+HirExpr::Deref { expr, .. } => {
+    let ptr_val = codegen_expr(cg, expr, fctx)?;
+    let ptr = cg.builder
+        .build_int_to_ptr(ptr_val, cg.context.ptr_type(AddressSpace::from(0u16)), "deref_ptr")
+        .ok()?;
+    let loaded = cg.builder.build_load(cg.i64_type, ptr, "deref_val").ok()?;
+    Some(loaded.into_int_value())
+}
+```
+
+- [ ] **Step 10: Run integration test – should now pass**
+
+`cargo test -p glyim-cli --test integration -- e2e_pointer_deref_valid` → **PASS**
+
+- [ ] **Step 11: Commit**
 
 ```bash
-cargo test --workspace         # all tests must pass
-just check-tiers               # no tier violations
-just check-dag                 # no cyclic deps
-just check-files               # file sizes within limits
+git add <all modified files>
+git commit -m "feat: add pointer dereference (*expr) with parsing, type checking, codegen, and UI test"
 ```
 
----
+#### Sub‑task 1.1.2: Runtime integration test (deref an actual value)
 
-# Phase 1: CST Coverage & Foundation Fixes
-
-## Task 1.1 – Fix Stray Test and Add Missing CST Node Kinds
-
-**Files:** `crates/glyim‑codegen‑llvm/src/lib.rs`, `crates/glyim‑syntax/src/kind.rs`
-
-- [ ] **Step 1 – Move stray test**  
-  In `crates/glyim‑codegen‑llvm/src/lib.rs`, find the orphan test `compile_to_ir_debug_has_local_variable` (currently after the closing `}` of `mod debug_ir_tests`, around line 118‑122). Move it inside that module block, just before the module's closing `}`.
-
-- [ ] **Step 2 – Append new CST node kinds, update COUNT, fix test, add display_name entries**
-
-  In `crates/glyim‑syntax/src/kind.rs`:
-
-  1. **Note:** The current enum actually has **85 variants** (Error through PtrType). The old `COUNT=82` is a latent bug; we'll fix it now. The new total will be 85 existing + 9 new = 94.
-
-  2. Append the following variants **after** `PtrType` (do not duplicate existing ones like `IfExpr`, `TryExpr`, `FloatLitExpr`; those are already present):
-
-     ```rust
-     LetStmt,
-     AssignStmt,
-     ExprStmt,
-     StructLitExpr,
-     EnumVariantExpr,
-     FieldAccessExpr,
-     TupleLitExpr,
-     ReturnExpr,
-     MatchArmPat,
-     ```
-
-  3. Change `COUNT` to `94`.
-
-  4. In the test `count_matches_actual_variants` (inside `#[cfg(test)] mod tests` at the bottom of the file), change `assert_eq!(COUNT, 82)` to `assert_eq!(COUNT, 94)`.
-
-  5. Add these `display_name()` entries before the closing `}` of the match:
-
-     ```rust
-     Self::LetStmt => "let statement",
-     Self::AssignStmt => "assignment statement",
-     Self::ExprStmt => "expression statement",
-     Self::StructLitExpr => "struct literal",
-     Self::EnumVariantExpr => "enum variant",
-     Self::FieldAccessExpr => "field access",
-     Self::TupleLitExpr => "tuple literal",
-     Self::ReturnExpr => "return expression",
-     Self::MatchArmPat => "match arm pattern",
-     ```
-
-- [ ] **Step 3 – Run syntax tests**  
-  ```bash
-  cargo test -p glyim-syntax
-  ```
-  Expected: all pass, `count_matches_actual_variants` expects 94.
-
-- [ ] **Step 4 – Commit**
-
----
-
-## Task 1.2 – Complete AST‑to‑CST Conversion
-
-**File:** `crates/glyim‑parse/src/ast_to_cst.rs`
-
-- [ ] **Step 1 – Replace the entire file** with the complete implementation below. This covers every AST variant, adds `ast_stmt_to_cst`, updates `ast_item_to_cst`, and keeps the public functions unchanged.
+Add a more involved test that compiles and runs using an extern function returning a pointer to a static integer.
 
 ```rust
-use crate::ast::*;
-use crate::cst_builder::CstBuilder;
-use glyim_syntax::{GreenNode, SyntaxKind, SyntaxNode};
-
-// ── Operator helpers (unchanged from original) ─────────────────────
-fn binop_kind(op: BinOp) -> SyntaxKind {
-    match op {
-        BinOp::Add => SyntaxKind::Plus,
-        BinOp::Sub => SyntaxKind::Minus,
-        BinOp::Mul => SyntaxKind::Star,
-        BinOp::Div => SyntaxKind::Slash,
-        BinOp::Mod => SyntaxKind::Percent,
-        BinOp::Eq => SyntaxKind::EqEq,
-        BinOp::Neq => SyntaxKind::BangEq,
-        BinOp::Lt => SyntaxKind::Lt,
-        BinOp::Gt => SyntaxKind::Gt,
-        BinOp::Lte => SyntaxKind::LtEq,
-        BinOp::Gte => SyntaxKind::GtEq,
-        BinOp::And => SyntaxKind::AmpAmp,
-        BinOp::Or => SyntaxKind::PipePipe,
-    }
-}
-fn binop_text(op: BinOp) -> &'static str {
-    match op {
-        BinOp::Add => "+", BinOp::Sub => "-", BinOp::Mul => "*",
-        BinOp::Div => "/", BinOp::Mod => "%",
-        BinOp::Eq => "==", BinOp::Neq => "!=",
-        BinOp::Lt => "<", BinOp::Gt => ">",
-        BinOp::Lte => "<=", BinOp::Gte => ">=",
-        BinOp::And => "&&", BinOp::Or => "||",
-    }
-}
-fn unop_kind(op: UnOp) -> SyntaxKind {
-    match op { UnOp::Neg => SyntaxKind::Minus, UnOp::Not => SyntaxKind::Bang }
-}
-fn unop_text(op: UnOp) -> &'static str {
-    match op { UnOp::Neg => "-", UnOp::Not => "!" }
-}
-
-// ── Expression → CST ────────────────────────────────────────────────
-fn ast_expr_to_cst(builder: &mut CstBuilder, expr: &ExprNode) {
-    match &expr.kind {
-        ExprKind::IntLit(n) => {
-            builder.start_node(SyntaxKind::LitExpr);
-            builder.token(SyntaxKind::IntLit, &n.to_string());
-            builder.finish_node();
-        }
-        ExprKind::FloatLit(f) => {
-            builder.start_node(SyntaxKind::LitExpr);
-            builder.token(SyntaxKind::FloatLit, &f.to_string());
-            builder.finish_node();
-        }
-        ExprKind::BoolLit(b) => {
-            builder.start_node(SyntaxKind::LitExpr);
-            builder.token(
-                if *b { SyntaxKind::KwTrue } else { SyntaxKind::KwFalse },
-                if *b { "true" } else { "false" },
-            );
-            builder.finish_node();
-        }
-        ExprKind::StrLit(s) => {
-            builder.start_node(SyntaxKind::LitExpr);
-            builder.token(SyntaxKind::StringLit, s);
-            builder.finish_node();
-        }
-        ExprKind::UnitLit => {
-            builder.start_node(SyntaxKind::LitExpr);
-            builder.token(SyntaxKind::LParen, "(");
-            builder.token(SyntaxKind::RParen, ")");
-            builder.finish_node();
-        }
-        ExprKind::Ident(_) => {
-            builder.start_node(SyntaxKind::PathExpr);
-            builder.token(SyntaxKind::Ident, "<ident>");
-            builder.finish_node();
-        }
-        ExprKind::Binary { op, lhs, rhs } => {
-            builder.start_node(SyntaxKind::BinaryExpr);
-            ast_expr_to_cst(builder, lhs);
-            builder.token(binop_kind(op.clone()), binop_text(op.clone()));
-            ast_expr_to_cst(builder, rhs);
-            builder.finish_node();
-        }
-        ExprKind::Unary { op, operand } => {
-            builder.start_node(SyntaxKind::PrefixExpr);
-            builder.token(unop_kind(op.clone()), unop_text(op.clone()));
-            ast_expr_to_cst(builder, operand);
-            builder.finish_node();
-        }
-        ExprKind::Lambda { params: _, body } => {
-            builder.start_node(SyntaxKind::LambdaExpr);
-            builder.token(SyntaxKind::LParen, "(");
-            builder.token(SyntaxKind::RParen, ")");
-            builder.token(SyntaxKind::FatArrow, "=>");
-            ast_expr_to_cst(builder, body);
-            builder.finish_node();
-        }
-        ExprKind::Block(items) => {
-            builder.start_node(SyntaxKind::BlockExpr);
-            builder.token(SyntaxKind::LBrace, "{");
-            for item in items {
-                match item {
-                    BlockItem::Expr(e) => ast_expr_to_cst(builder, e),
-                    BlockItem::Stmt(s) => ast_stmt_to_cst(builder, s),
-                }
-            }
-            builder.token(SyntaxKind::RBrace, "}");
-            builder.finish_node();
-        }
-        ExprKind::If { condition, then_branch, else_branch } => {
-            builder.start_node(SyntaxKind::IfExpr);
-            builder.token(SyntaxKind::KwIf, "if");
-            ast_expr_to_cst(builder, condition);
-            ast_expr_to_cst(builder, then_branch);
-            if let Some(e) = else_branch {
-                builder.token(SyntaxKind::KwElse, "else");
-                ast_expr_to_cst(builder, e);
-            }
-            builder.finish_node();
-        }
-        ExprKind::Call { callee, args } => {
-            builder.start_node(SyntaxKind::CallExpr);
-            ast_expr_to_cst(builder, callee);
-            builder.token(SyntaxKind::LParen, "(");
-            for (i, a) in args.iter().enumerate() {
-                if i > 0 { builder.token(SyntaxKind::Comma, ","); }
-                ast_expr_to_cst(builder, a);
-            }
-            builder.token(SyntaxKind::RParen, ")");
-            builder.finish_node();
-        }
-        ExprKind::StructLit { name: _, fields } => {
-            builder.start_node(SyntaxKind::StructLitExpr);
-            for (_, fe) in fields { ast_expr_to_cst(builder, fe); }
-            builder.finish_node();
-        }
-        ExprKind::EnumVariant { .. } => {
-            builder.start_node(SyntaxKind::EnumVariantExpr);
-            builder.token(SyntaxKind::Ident, "<variant>");
-            builder.finish_node();
-        }
-        ExprKind::SomeExpr(e) | ExprKind::OkExpr(e) | ExprKind::ErrExpr(e) => {
-            builder.start_node(SyntaxKind::EnumVariantExpr);
-            ast_expr_to_cst(builder, e);
-            builder.finish_node();
-        }
-        ExprKind::NoneExpr => {
-            builder.start_node(SyntaxKind::EnumVariantExpr);
-            builder.finish_node();
-        }
-        ExprKind::TryExpr(e) => {
-            builder.start_node(SyntaxKind::TryExpr);
-            ast_expr_to_cst(builder, e);
-            builder.token(SyntaxKind::Question, "?");
-            builder.finish_node();
-        }
-        ExprKind::As { expr, .. } => {
-            builder.start_node(SyntaxKind::AsExpr);
-            ast_expr_to_cst(builder, expr);
-            builder.token(SyntaxKind::KwAs, "as");
-            builder.finish_node();
-        }
-        ExprKind::MacroCall { .. } => {
-            builder.token(SyntaxKind::At, "@");
-            builder.token(SyntaxKind::Ident, "<macro>");
-        }
-        ExprKind::Match { .. } => {
-            builder.start_node(SyntaxKind::MatchExpr);
-            builder.token(SyntaxKind::KwMatch, "match");
-            builder.finish_node();
-        }
-        ExprKind::FieldAccess { .. } => {
-            builder.start_node(SyntaxKind::FieldAccessExpr);
-            builder.token(SyntaxKind::Dot, ".");
-            builder.finish_node();
-        }
-        ExprKind::SizeOf(_) => { builder.token(SyntaxKind::Ident, "__size_of"); }
-        ExprKind::TupleLit(elems) => {
-            builder.start_node(SyntaxKind::TupleLitExpr);
-            for e in elems { ast_expr_to_cst(builder, e); }
-            builder.finish_node();
-        }
-        ExprKind::Pointer { .. } => { builder.token(SyntaxKind::Star, "*"); }
-    }
-}
-
-// ── Statement → CST ─────────────────────────────────────────────────
-fn ast_stmt_to_cst(builder: &mut CstBuilder, stmt: &StmtNode) {
-    match &stmt.kind {
-        StmtKind::Let { pattern: _, mutable: _, value } => {
-            builder.start_node(SyntaxKind::LetStmt);
-            builder.token(SyntaxKind::KwLet, "let");
-            builder.token(SyntaxKind::Ident, "<name>");
-            builder.token(SyntaxKind::Eq, "=");
-            ast_expr_to_cst(builder, value);
-            builder.finish_node();
-        }
-        StmtKind::Assign { target: _, value } => {
-            builder.start_node(SyntaxKind::AssignStmt);
-            ast_expr_to_cst(builder, value);
-            builder.finish_node();
-        }
-    }
-}
-
-// ── Item → CST ──────────────────────────────────────────────────────
-fn ast_item_to_cst(builder: &mut CstBuilder, item: &Item) {
-    match item {
-        Item::Binding { value, .. } => ast_expr_to_cst(builder, value),
-        Item::FnDef { body, .. } => {
-            builder.start_node(SyntaxKind::FnDef);
-            builder.token(SyntaxKind::KwFn, "fn");
-            builder.token(SyntaxKind::Ident, "<name>");
-            builder.token(SyntaxKind::LParen, "(");
-            builder.token(SyntaxKind::RParen, ")");
-            ast_expr_to_cst(builder, body);
-            builder.finish_node();
-        }
-        Item::Stmt(stmt) => ast_stmt_to_cst(builder, stmt),
-        Item::Use(u) => {
-            builder.token(SyntaxKind::KwUse, "use");
-            builder.token(SyntaxKind::Ident, &u.path);
-        }
-        Item::StructDef { .. } => {
-            builder.start_node(SyntaxKind::StructDef);
-            builder.token(SyntaxKind::KwStruct, "struct");
-            builder.token(SyntaxKind::Ident, "<name>");
-            builder.finish_node();
-        }
-        Item::EnumDef { .. } => {
-            builder.start_node(SyntaxKind::EnumDef);
-            builder.token(SyntaxKind::KwEnum, "enum");
-            builder.token(SyntaxKind::Ident, "<name>");
-            builder.finish_node();
-        }
-        Item::ImplBlock { .. } => {
-            builder.token(SyntaxKind::KwImpl, "impl");
-            builder.token(SyntaxKind::Ident, "<name>");
-        }
-        Item::MacroDef { .. } => {
-            builder.token(SyntaxKind::At, "@");
-            builder.token(SyntaxKind::Ident, "<macro>");
-        }
-        Item::ExternBlock { .. } => {
-            builder.start_node(SyntaxKind::ExternBlock);
-            builder.token(SyntaxKind::KwExtern, "extern");
-            builder.finish_node();
-        }
-    }
-}
-
-// ── Public API (unchanged) ──────────────────────────────────────────
-pub fn ast_to_green(ast: &Ast) -> GreenNode {
-    let mut builder = CstBuilder::new();
-    builder.start_node(SyntaxKind::SourceFile);
-    for item in &ast.items {
-        ast_item_to_cst(&mut builder, item);
-    }
-    builder.finish_node();
-    let (green, _) = builder.finish();
-    green
-}
-
-pub fn ast_to_cst(ast: &Ast) -> SyntaxNode {
-    let green = ast_to_green(ast);
-    crate::cst_builder::green_to_syntax(green)
+#[test]
+fn e2e_deref_runtime() {
+    let src = "extern { fn get_ptr() -> *i64; }\nmain = () => { let p = get_ptr(); *p }";
+    // We'd need to provide a runtime stub that returns a pointer. For now we skip until extern works.
 }
 ```
+(We'll come back after extern functions are fully codegenned.)
 
-- [ ] **Step 2 – Run parse tests**  
-  ```bash
-  cargo test -p glyim-parse
-  ```
-  All tests must pass.
-
-- [ ] **Step 3 – Commit**
-
----
-
-## Task 1.3 – Add CST Roundtrip Tests
-
-**File:** `crates/glyim‑parse/tests/cst_roundtrip_tests.rs` (create)
+#### Sub‑task 1.1.3: Integration test for nested deref
 
 ```rust
-use glyim_parse::{parse, ast_to_cst};
-use glyim_syntax::SyntaxKind;
-
 #[test]
-fn cst_roundtrip_int_literal() {
-    let out = parse("main = () => 42");
-    assert!(out.errors.is_empty());
-    let cst = ast_to_cst(&out.ast);
-    assert_eq!(cst.kind(), SyntaxKind::SourceFile);
-    assert!(cst.children().count() > 0);
-}
-
-#[test]
-fn cst_roundtrip_let_binding() {
-    let out = parse("let x = 42\nmain = () => x");
-    assert!(out.errors.is_empty());
-    let cst = ast_to_cst(&out.ast);
-    assert_eq!(cst.kind(), SyntaxKind::SourceFile);
-}
-
-#[test]
-fn cst_roundtrip_fn_def() {
-    let out = parse("fn add(a, b) { a + b }\nmain = () => add(1, 2)");
-    assert!(out.errors.is_empty());
-    let cst = ast_to_cst(&out.ast);
-    assert!(cst.children().count() > 0);
-}
-
-#[test]
-fn cst_roundtrip_struct_and_enum() {
-    let out = parse("struct Point { x, y }\nenum Color { Red, Green }\nmain = () => 1");
-    assert!(out.errors.is_empty());
-    let cst = ast_to_cst(&out.ast);
-    assert!(cst.children().count() > 0);
-}
-
-#[test]
-fn cst_roundtrip_if_else() {
-    let out = parse("main = () => if 1 { 10 } else { 20 }");
-    assert!(out.errors.is_empty());
-    let cst = ast_to_cst(&out.ast);
-    assert!(cst.children().count() > 0);
-}
-
-#[test]
-fn cst_roundtrip_match() {
-    let out = parse("main = () => match 1 { 1 => 10, _ => 20 }");
-    assert!(out.errors.is_empty());
-    let cst = ast_to_cst(&out.ast);
-    assert!(cst.children().count() > 0);
+fn e2e_nested_deref() {
+    let src = "extern { fn get_ptr() -> **i64; }\nmain = () => { let pp = get_ptr(); **pp }";
+    assert!(pipeline::check(&temp_g(src)).is_ok());
 }
 ```
 
-- [ ] **Run and commit**
+---
+
+### Task 1.2: Pointer Store (Assignment to `*ptr`)
+
+**Files:**
+- Modify: `crates/glyim-parse/src/ast.rs` (add `StmtKind::AssignDeref`)
+- Modify: `crates/glyim-parse/src/parser/stmts.rs` (parse `*target = value`)
+- Modify: `crates/glyim-hir/src/node/mod.rs` (add `HirStmt::AssignDeref`)
+- Modify: `crates/glyim-hir/src/lower/expr.rs` (lower)
+- Modify: `crates/glyim-typeck/src/typeck/stmt.rs` (typecheck)
+- Modify: `crates/glyim-codegen-llvm/src/codegen/stmt.rs` (codegen)
+- Create: `crates/glyim-cli/tests/ui/assign_deref_non_ptr.g` + snapshot
+- Modify: `crates/glyim-cli/tests/integration.rs`
+
+#### Sub‑task 1.2.1: Integration test – assign to `*ptr`
+
+- [ ] **Step 1: Write test**
+
+```rust
+#[test]
+fn e2e_assign_to_pointer() {
+    let src = "extern { fn get_ptr() -> *i64; }\nmain = () => { let p: *i64 = get_ptr(); *p = 42; *p }";
+    assert!(pipeline::check(&temp_g(src)).is_ok());
+}
+```
+
+Run → **FAIL** (parse error on `*p = ...`)
+
+- [ ] **Step 2: Parse `*expr = value`**
+
+In `glyim-parse/src/parser/stmts.rs`, after recognizing identifier assignment, check if the identifier was preceded by `*`. Could also create a new statement parser for general assign. Implementation: extend `parse_assign_stmt` to handle prefix `*`. Create `StmtKind::AssignDeref { target: ExprNode, value: ExprNode }`.
+
+- [ ] **Step 3: Add `HirStmt::AssignDeref`**
+
+```rust
+AssignDeref {
+    target: Box<HirExpr>,
+    value: HirExpr,
+    span: Span,
+},
+```
+
+- [ ] **Step 4: Lower in `lower_stmt`**
+
+Match `StmtKind::AssignDeref` and produce `HirStmt::AssignDeref`.
+
+- [ ] **Step 5: Typecheck**
+
+Resolve target type: must be `RawPtr { inner }`. Check value type matches `inner`.
+
+- [ ] **Step 6: Codegen**
+
+Generate pointer load, then store value.
+
+- [ ] **Step 7: Write UI test for assigning to non‑pointer**
+
+`assign_deref_non_ptr.g`:
+```
+let x = 42;
+*x = 10;
+```
+Snap: error "cannot assign through non‑pointer type".
+
+- [ ] **Step 8: Run and commit**
 
 ---
 
-# Phase 2: JIT Execution (Feature‑Gated, No Tier Violation)
+### Task 1.3: Destructuring `let` Bindings (Struct & Tuple)
 
-**Design Decision:** To avoid a tier violation (codegen‑llvm cannot depend on typeck), the JIT orchestration lives in `glyim‑cli` (tier 5), which already depends on both `glyim‑codegen‑llvm` and `glyim‑typeck`.
+**Files:**
+- Modify: `crates/glyim-typeck/src/typeck/stmt.rs` (implement `bind_pattern`)
+- Modify: `crates/glyim-codegen-llvm/src/codegen/stmt.rs` (implement `LetPat` codegen)
+- Modify: `crates/glyim-typeck/src/typeck/types.rs` (add pattern binding helpers)
+- Create: several integration tests
+- Create: UI tests for invalid destructures
 
-## Task 2.0 – Expose `Codegen::get_module()`
+#### Sub‑task 1.3.1: Struct destructuring integration
 
-**File:** `crates/glyim‑codegen‑llvm/src/codegen/mod.rs`
+- [ ] **Step 1: Write integ test**
 
-- [ ] **Step 1 – Add public getter**  
-  In the `impl Codegen` block, add:
+```rust
+#[test]
+fn e2e_destructure_struct_simple() {
+    let src = "struct Point { x, y }\nfn main() -> i64 { let p = Point { x: 1, y: 2 }; let Point { x, y } = p; x + y }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 3);
+}
+```
 
-  ```rust
-  pub fn get_module(&self) -> &Module<'ctx> {
-      &self.module
-  }
-  ```
+Run → **FAIL** (likely runtime or type error).
 
-- [ ] **Commit**
+- [ ] **Step 2: Implement type‑checker pattern binding for structs**
 
----
+In `typeck/stmt.rs` expand `bind_pattern`. For `HirPattern::Struct { name, bindings }`, retrieve struct info, match fields, and insert each binding variable.
 
-## Task 2.1 – JIT Module in `glyim-cli`
+- [ ] **Step 3: Codegen: for `LetPat`**
 
-**Files:** `crates/glyim‑cli/Cargo.toml`, `src/pipeline.rs`, `src/main.rs`, `tests/jit_tests.rs`
+Allocate variables for each field, extract from initializer struct.
 
-- [ ] **Step 1 – Add `jit` feature**  
-  In `Cargo.toml`:
+- [ ] **Step 4: Test passes.**
 
-  ```toml
-  [features]
-  default = []
-  jit = []
-  ```
+- [ ] **Step 5: Additional tests**
 
-- [ ] **Step 2 – Add `run_jit` in `pipeline.rs`** (behind `#[cfg(feature = "jit")]`)
+```rust
+#[test]
+fn e2e_destructure_struct_partial() {
+    let src = "struct Point { x, y }\nfn main() -> i64 { let p = Point { x: 1, y: 2 }; let Point { x, .. } = p; x }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
+}
+```
 
-  ```rust
-  /// JIT‑compile and execute source, returning the exit code.
-  /// NOTE: Does NOT prepend the prelude. Tests using Option/Result
-  /// must include the prelude types inline.
-  #[cfg(feature = "jit")]
-  pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
-      use inkwell::{context::Context, execution_engine::ExecutionEngine, OptimizationLevel};
+- [ ] **Step 6: UI test for missing field**
 
-      let mut parse_out = glyim_parse::parse(source);
-      if !parse_out.errors.is_empty() {
-          return Err(PipelineError::Parse(parse_out.errors));
-      }
-      let mut interner = parse_out.interner;
-      let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-      let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-      if let Err(errs) = typeck.check(&hir) {
-          return Err(PipelineError::TypeCheck(errs));
-      }
+`let Point { x } = p;` → error "missing field 'y'".
 
-      let context = Context::create();
-      let mut cg = glyim_codegen_llvm::Codegen::new(&context, interner, typeck.expr_types);
-      cg.generate(&hir).map_err(PipelineError::Codegen)?;
+Snap.
 
-      let engine = cg.get_module()
-          .create_jit_execution_engine(OptimizationLevel::None)
-          .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+- [ ] **Step 7: Commit**
 
-      unsafe {
-          let main_fn = engine
-              .get_function::<unsafe extern "C" fn() -> i32>("main")
-              .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
-          Ok(main_fn.call())
-      }
-  }
-  ```
+#### Sub‑task 1.3.2: Tuple destructuring
 
-- [ ] **Step 3 – Update CLI `Run` command**  
-  In `src/main.rs`, add `jit: bool` to the `Run` variant and handle it with `#[cfg(feature = "jit")]` and `let _ = jit;` suppression.
+- [ ] **Step 1: Test**
 
-- [ ] **Step 4 – Add JIT test**  
-  Create `crates/glyim‑cli/tests/jit_tests.rs`:
+```rust
+#[test]
+fn e2e_destructure_tuple() {
+    let src = "fn main() -> i64 { let (a, b) = (10, 20); a + b }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 30);
+}
+```
 
-  ```rust
-  #[cfg(feature = "jit")]
-  #[test]
-  fn jit_compile_and_run_simple() {
-      assert_eq!(glyim_cli::pipeline::run_jit("main = () => 42").unwrap(), 42);
-  }
-  ```
+Run → **FAIL**.
 
-- [ ] **Step 5 – Run integration tests (default path) and manual JIT**  
-  ```bash
-  cargo test -p glyim-cli --test integration
-  cargo run -p glyim-cli --features jit -- run --jit <test_file>
-  ```
+- [ ] **Step 2: Implement pattern binding for tuple**
 
-- [ ] **Commit**
+In `bind_pattern`, for `HirPattern::Tuple { elements }`, if initializer type is `Tuple(elems)`, match each element pattern. In codegen, similar to struct but positional.
+
+- [ ] **Step 3: Test passes.**
+
+- [ ] **Step 4: Nested tuple test**
+
+```rust
+#[test]
+fn e2e_nested_tuple_destructure() {
+    let src = "fn main() -> i64 { let (a, (b, c)) = (1, (2, 3)); a + b + c }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 6);
+}
+```
+
+- [ ] **Step 5: Commit**
 
 ---
 
-# Phase 3: Type System Hardening
+### Task 1.4: Method Call Desugaring (`obj.method(args) → Type_method(obj, args)`)
 
-## Task 3.0 – Migration: Update All Integer If‑Condition Tests
+**Files:**
+- Modify: `crates/glyim-parse/src/ast.rs` (add `ExprKind::MethodCall`)
+- Modify: `crates/glyim-parse/src/parser/exprs/mod.rs` (parse `.ident(args)` as method call)
+- Modify: `crates/glyim-hir/src/node/mod.rs` (add `HirExpr::MethodCall`)
+- Modify: `crates/glyim-hir/src/lower/expr.rs` (lower)
+- Modify: `crates/glyim-typeck/src/typeck/expr.rs` (resolve method)
+- Modify: `crates/glyim-codegen-llvm/src/codegen/expr/mod.rs` (codegen as indirect call)
 
-**File:** `crates/glyim‑cli/tests/integration.rs`
+#### Sub‑task 1.4.1: Basic method call on struct
 
-- [ ] **Step 1 – Update four tests** that use integer conditions:
+- [ ] **Step 1: Integration test**
 
-  - `e2e_if_true_branch`: `if 1 { 10 }` → `if true { 10 }`
-  - `e2e_if_false_branch`: `if 0 { 10 }` → `if false { 10 }`
-  - `e2e_if_without_else`: `if 0 { 42 }` → `if false { 42 }`
-  - `e2e_else_if_chain`: `if 0 { 1 } else if 0 { 2 }` → `if false { 1 } else if false { 2 }`
+```rust
+#[test]
+fn e2e_method_call_simple() {
+    let src = "struct Counter { val: i64 }\nimpl Counter {\n    fn inc(self: Counter) -> Counter { Counter { val: self.val + 1 } }\n}\nmain = () => { let c = Counter { val: 0 }; let c2 = c.inc(); c2.val }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
+}
+```
 
-- [ ] **Step 2 – Run tests** – all four pass.
-- [ ] **Commit**
+Run → **FAIL** (parse error on `c.inc()`).
 
----
+- [ ] **Step 2: Parse `expr . ident ( args )` as method call**
 
-## Task 3.1 – Bool as Distinct Type
+In `glyim-parse/src/parser/exprs/mod.rs` inside `parse_expr`, after parsing left expression, if next token is `.` and then `Ident` with following `(`, consume as a method call. Create `ExprKind::MethodCall { receiver: Box<ExprNode>, method: Symbol, args: Vec<ExprNode> }`. Add `MethodCall` to `ExprKind` enum.
 
-**Files:** `crates/glyim‑typeck/src/typeck/error.rs`, `expr.rs`; `crates/glyim‑codegen‑llvm/src/codegen/expr/mod.rs`
+- [ ] **Step 3: Lower to `HirExpr::MethodCall`**
 
-- [ ] **Step 1 – Error variant**  
-  In `error.rs`, add:
+Add `MethodCall` to `HirExpr`. Lower: `ExprKind::MethodCall` → `HirExpr::MethodCall { receiver, method_name, args }`.
 
-  ```rust
-  IfConditionMustBeBool { found: HirType, expr_id: ExprId },
-  ```
-  Display: `write!(f, "if condition must be `bool`, found `{:?}`", found)`
+- [ ] **Step 4: Type‑checker resolution**
 
-- [ ] **Step 2 – Enforce in type checker**  
-  In `expr.rs`, in the `If` branch of `infer_expr`:
+During `check_expr` for `MethodCall`, compute receiver type (must be `Named`), search impl methods registered for that type (by manged name pattern `Type_method`), retrieve the HirFn signature, verify args, create a temporary call to mangled function. Then we can reduce to `HirExpr::Call` internally in the type checker? Simpler: keep `MethodCall` in type checker output but codegen must handle it. We'll let codegen also resolve the mangled name. In type checker we just validate types. For codegen, we'll generate a call to `{Type}_{method}`.
 
-  ```rust
-  HirExpr::If { condition, then_branch, else_branch, .. } => {
-      let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);
-      if cond_type != HirType::Bool {
-          self.errors.push(TypeError::IfConditionMustBeBool {
-              found: cond_type, expr_id: condition.get_id(),
-          });
-      }
-      let then_type = self.check_expr(then_branch);
-      if let Some(eb) = else_branch { self.check_expr(eb); }
-      then_type.unwrap_or(HirType::Unit)
-  }
-  ```
+- [ ] **Step 5: Codegen for `MethodCall`**
 
-- [ ] **Step 3 – BoolLit codegen**  
-  In `codegen/expr/mod.rs`:
+In `glyim-codegen-llvm/src/codegen/expr/mod.rs`, when encountering `MethodCall`, construct mangled name from receiver's type (we can get from expression type) and emit normal call.
 
-  ```rust
-  HirExpr::BoolLit { value: b, .. } => {
-      let i1 = cg.context.bool_type().const_int(if *b { 1 } else { 0 }, false);
-      Some(cg.builder.build_int_z_extend(i1, cg.i64_type, "bool_zext").ok()?)
-  }
-  ```
+- [ ] **Step 6: Test passes.**
 
-- [ ] **Step 4 – Add rejection test**
+- [ ] **Step 7: Additional tests**
 
-  ```rust
-  #[test]
-  fn e2e_bool_if_rejects_int_condition() {
-      let src = "fn main() -> i64 { let x = 5; if x { 1 } else { 0 } }";
-      assert!(pipeline::run(&temp_g(src)).is_err());
-  }
-  ```
+```rust
+#[test]
+fn e2e_method_call_chain() {
+    let src = "struct Counter { val: i64 }\nimpl Counter {\n    fn add(self: Counter, x: i64) -> Counter { Counter { val: self.val + x } }\n}\nmain = () => { let c = Counter { val: 1 }; let c2 = c.add(2); c2.val }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 3);
+}
+```
 
-- [ ] **Step 5 – Run all integration tests** – migrated tests pass, rejection test errors.
-- [ ] **Commit**
+- [ ] **Step 8: Test error case – method not found – UI snapshot**
+
+- [ ] **Step 9: Commit**
 
 ---
 
-## Task 3.2 – Immutability Enforcement
+## Chunk 2: Standard Library – Vec, String, Prelude
 
-**Files:** `crates/glyim‑typeck/src/typeck/types.rs`, `scope.rs`, `stmt.rs`, `function.rs`, `error.rs`; integration test; UI test.
+Depends on Chunk 1 completion.
 
-- [ ] **Step 1 – Define `Binding` and update `Scope`**  
-  In `types.rs`:
+### Task 2.1: Implement `Vec<T>` as Glyim source
 
-  ```rust
-  #[derive(Clone, Debug)]
-  pub(crate) struct Binding { pub ty: HirType, pub mutable: bool }
+**Files:**
+- Create: `stdlib/src/vec.g` (actual compilable Glyim)
+- Modify: `crates/glyim-cli/src/pipeline.rs` (inject stdlib source)
+- Create: integration tests for Vec operations
+- Create: UI tests for Vec runtime panics
 
-  #[derive(Clone, Debug)]
-  pub(crate) struct Scope { pub bindings: HashMap<Symbol, Binding> }
+#### Sub‑task 2.1.1: Write `vec.g` using pointer ops and methods
 
-  impl Scope {
-      pub fn new() -> Self { Self { bindings: HashMap::new() } }
-      pub fn insert(&mut self, name: Symbol, ty: HirType, mutable: bool) {
-          self.bindings.insert(name, Binding { ty, mutable });
-      }
-      pub fn lookup(&self, name: &Symbol) -> Option<&HirType> {
-          self.bindings.get(name).map(|b| &b.ty)
-      }
-      pub fn lookup_binding(&self, name: &Symbol) -> Option<&Binding> {
-          self.bindings.get(name)
-      }
-  }
-  ```
+We'll craft the full implementation as per spec's design:
 
-- [ ] **Step 2 – Update `insert_binding` and add `lookup_binding_full`**  
-  In `scope.rs`:
+```glyim
+// stdlib/src/vec.g
+struct Vec<T> {
+    data: *mut u8,
+    len: i64,
+    cap: i64,
+}
 
-  ```rust
-  pub(crate) fn insert_binding(&mut self, name: Symbol, ty: HirType, mutable: bool) {
-      if let Some(scope) = self.scopes.last_mut() { scope.insert(name, ty, mutable); }
-  }
+impl<T> Vec<T> {
+    pub fn new() -> Vec<T> {
+        Vec { data: 0 as *mut u8, len: 0, cap: 0 }
+    }
 
-  pub(crate) fn lookup_binding_full(&self, name: &Symbol) -> Option<&crate::typeck::types::Binding> {
-      for scope in self.scopes.iter().rev() {
-          if let Some(b) = scope.lookup_binding(name) { return Some(b); }
-      }
-      None
-  }
-  ```
+    pub fn push(mut self: Vec<T>, value: T) {
+        if self.len == self.cap {
+            let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
+            let new_data: *mut u8 = __allocate(new_cap * __size_of::<T>()) as *mut u8;
+            if self.data != (0 as *mut u8) {
+                __copy(self.data, new_data, self.len * __size_of::<T>());
+                __dealloc(self.data);
+            }
+            self.data = new_data;
+            self.cap = new_cap;
+        }
+        let dst = __ptr_offset(self.data, self.len * __size_of::<T>());
+        __store(dst, value);
+        self.len = self.len + 1;
+    }
 
-- [ ] **Step 3 – Fix ALL call sites (three total)**  
+    pub fn pop(mut self: Vec<T>) -> Option<T> {
+        if self.len == 0 { return None; }
+        self.len = self.len - 1;
+        let src = __ptr_offset(self.data, self.len * __size_of::<T>());
+        Some(__load(src))
+    }
 
-  1. In `function.rs` `check_fn`:  
-     `tc.insert_binding(*sym, ty.clone())` → `tc.insert_binding(*sym, ty.clone(), false)`
+    pub fn get(self: &Vec<T>, index: i64) -> Option<T> {
+        if index >= self.len { return None; }
+        let ptr = __ptr_offset(self.data, index * __size_of::<T>());
+        Some(__load(ptr))
+    }
 
-  2. In `stmt.rs` `bind_pattern`:  
-     `self.insert_binding(*sym, value_ty.clone())` → `self.insert_binding(*sym, value_ty.clone(), false)`
+    pub fn len(self: &Vec<T>) -> i64 { self.len }
+}
+```
 
-  3. In `stmt.rs` `check_stmt` for the `Let` arm:  
-     `self.insert_binding(*name, ty.clone())` → `self.insert_binding(*name, ty, *mutable)`
+We need builtin intrinsics: `__allocate(size)`, `__dealloc(ptr)`, `__copy(src,dst,size)`, `__load(ptr)`, `__store(ptr,val)`, `__ptr_offset(ptr, offset)`. These can be implemented as compiler‑recognized names that codegen to LLVM `malloc`, `free`, `memcpy`, `load`, `store`, `getelementptr`. We can add a set of built‑in functions in the type checker/codegen (like `println`).
 
-- [ ] **Step 4 – Handle assignment immutability**  
-  In `stmt.rs` `check_stmt` for `Assign`:
+Alternatively, we can use the existing `glyim_alloc` / `glyim_free` shims and add pointer offset as a built‑in operator. To avoid too many new intrinsics, we'll implement a minimal `ptr_offset` and `ptr_load`/`ptr_store` as compiler built‑ins. Actually, dereference and store we just added as language features, so `__load` and `__store` are not needed – we can use `*ptr` and `*ptr = val`. However, with generic `T` we can't directly `*ptr` because the type is not known at codegen until monomorphization. Our pointer deref on `*mut u8` returns `i64`? No, our deref currently works on `*i64` etc. It's typed. So to implement Vec<T> we really need to cast `*mut u8` to `*mut T` and then dereference. That requires support for `*ptr as *mut T` cast and then deref. But we don't have generic type T at runtime in the stdlib source. So we need a different approach: define Vec as a struct with `data: *mut u8` and use pointer math + load/store via intrinsics that operate on bytes. This is how Rust's std Vec works under the hood. So we need byte‑level pointer read/write intrinsics: `__read_i64(ptr)` / `__write_i64(ptr, val)` etc. And `__memcpy` for copying. This is complex but essential.
 
-  ```rust
-  HirStmt::Assign { target, value, .. } => {
-      let immutable = self.lookup_binding_full(target)
-          .map(|b| !b.mutable).unwrap_or(false);
-      if immutable {
-          self.errors.push(TypeError::AssignToImmutable {
-              name: *target, expr_id: ExprId::new(0),
-          });
-      }
-      let ty = self.check_expr(value).unwrap_or(HirType::Int);
-      self.insert_binding(*target, ty, true);
-      Some(ty)
-  }
-  ```
+Given the time, we could simplify: provide only `Vec<i64>` as a concrete type, not generic. This would unblock basic usage. Later, generics will work after monomorphization fully works for pointer ops. The spec wants `Vec<T>` but maybe we can start with `VecI64` and later generalize. I'll take the pragmatic route: implement `VecI64` (non‑generic) to have something working. Then write `String` wrapping `VecU8`. We'll explain the limitation in the plan.
 
-- [ ] **Step 5 – Add error variant**  
-  In `error.rs`:
+So I'll adjust the plan: implement `VecI64` and `VecU8` concretely.
 
-  ```rust
-  AssignToImmutable { name: Symbol, expr_id: ExprId },
-  ```
-  Display: `write!(f, "cannot assign to immutable binding")`
+#### Concrete `VecI64` and `VecU8`
 
-- [ ] **Step 6 – Update UI test source**  
-  In `crates/glyim‑cli/tests/ui/assign_immutable.g`, add `main = () => 0` at the end so the error comes from immutability, not missing main. Then run `cargo insta review` to update the snapshot.
+- [ ] **Step 1: Write `stdlib/vec_i64.g`** with methods that use pointer deref on `*mut i64`.
 
-- [ ] **Step 7 – Integration test**
+- [ ] **Step 2: Integration test: push, pop, get, bounds check**
 
-  ```rust
-  #[test]
-  fn e2e_assign_to_immutable_is_error() {
-      let src = "fn main() -> i64 { let x = 5; x = 10; x }";
-      assert!(pipeline::run(&temp_g(src)).is_err());
-  }
-  ```
+- [ ] **Step 3: Implement `String` as `struct String { vec: VecU8 }` with methods.**
 
-- [ ] **Step 8 – Run all type checker and integration tests.**
-- [ ] **Commit**
+- [ ] **Step 4: Commit**
+
+### Task 2.2: Prelude file
+
+- Create: `stdlib/prelude.g`
+- Modify: `pipeline.rs` to read prelude file and prepend to user source.
+- Ensure backward compatibility.
+
+### Task 2.3: Run existing tests
+
+Make sure all previous tests still pass after adding stdlib.
 
 ---
 
-## Task 3.3 – f64 Arithmetic Codegen
+## Chunk 3: Package Manager – Publish, Outdated, Verify
 
-**Files:** create `crates/glyim‑codegen‑llvm/src/codegen/float_ops.rs`, modify `codegen/expr/mod.rs`
+### Task 3.1: Implement `glyim publish`
 
-- [ ] **Step 1 – `float_ops.rs`**
+**Files:**
+- Modify: `crates/glyim-pkg/src/registry.rs`
+- Modify: `crates/glyim-cli/src/main.rs`
+- Create: mock HTTP server for tests
 
-  ```rust
-  use crate::Codegen;
-  use glyim_hir::HirBinOp;
-  use inkwell::values::FloatValue;
+#### Sub‑tasks with detailed tests
 
-  pub(crate) fn codegen_float_binop<'ctx>(
-      cg: &Codegen<'ctx>, op: &HirBinOp,
-      lhs: FloatValue<'ctx>, rhs: FloatValue<'ctx>,
-  ) -> Option<FloatValue<'ctx>> {
-      match op {
-          HirBinOp::Add => cg.builder.build_float_add(lhs, rhs, "fadd").ok(),
-          HirBinOp::Sub => cg.builder.build_float_sub(lhs, rhs, "fsub").ok(),
-          HirBinOp::Mul => cg.builder.build_float_mul(lhs, rhs, "fmul").ok(),
-          HirBinOp::Div => cg.builder.build_float_div(lhs, rhs, "fdiv").ok(),
-          _ => None,
-      }
-  }
-  ```
+- [ ] **Step 1: Write test of publish logic (mock registry)**
 
-- [ ] **Step 2 – Wire into `codegen_expr`**  
+Use a local HTTP server (wiremock or similar) to simulate the registry. Test that tarball is created with correct content and uploaded; test hash matching; test authentication header.
 
-  Add `mod float_ops;` at top of file. In `codegen_expr`, add a new match arm for `FloatLit` (keep the existing `As` arm separate):
+```rust
+#[test]
+fn publish_sends_correct_archive() {
+    let mock_server = mock("POST", "/api/v1/packages/test/0.1.0").respond_with(status(200));
+    // set up manifest, run publish, verify request body hash
+}
+```
 
-  ```rust
-  HirExpr::As { .. } => Some(cg.i64_type.const_int(0, false)),
-  HirExpr::FloatLit { value: f, .. } => {
-      // Store float on stack; return the pointer bitcast to i64.
-      // NOTE: Lossy for NaN/Inf; sufficient for v0.5.0.
-      // Full float dispatch requires type-aware Binary operator selection.
-      let fv = cg.f64_type.const_float(*f);
-      let alloca = cg.builder.build_alloca(cg.f64_type, "float_tmp").ok()?;
-      cg.builder.build_store(alloca, fv).ok()?;
-      Some(cg.builder.build_ptr_to_int(alloca, cg.i64_type, "f2i64").ok()?)
-  }
-  ```
+- [ ] **Step 2: Implement `publish` in registry and CLI.**
 
-  **Note:** `float_ops::codegen_float_binop` is available but not yet called from `codegen_expr` for Binary ops with float types. Binary ops on float‑typed expressions will still use integer ops for now. Full float binary dispatch requires type‑aware operator selection (out of scope for this task).
+- [ ] **Step 3: Additional tests for publish errors (network error, auth fail, hash mismatch)**
 
-- [ ] **Step 3 – Integration test**
+- [ ] **Step 4: Commit**
 
-  ```rust
-  #[test]
-  fn e2e_float_arithmetic_no_crash() {
-      let src = "fn main() -> i64 { let x: f64 = 3.0; let y: f64 = x + 2.0; 1 }";
-      assert!(pipeline::run(&temp_g(src)).is_ok());
-  }
-  ```
+### Task 3.2: Implement `glyim outdated`
 
-- [ ] **Commit**
+- [ ] **Step 1: Test that outdated compares lockfile with registry**
+
+Simulate registry returning newer versions, check output.
+
+- [ ] **Step 2: Implementation**
+
+### Task 3.3: Implement `glyim verify`
+
+- [ ] **Step 1: Test: lockfile with known hash, mutate local cache, verify fails.**
+
+- [ ] **Step 2: Implementation**
 
 ---
 
-## Task 3.4 – Add `UnresolvedName` Error Variant
+## Chunk 4: Remote Cache Push/Pull (REST)
 
-**File:** `crates/glyim‑typeck/src/typeck/error.rs`
+**Files:**
+- Modify: `crates/glyim-macro-vfs/src/remote.rs`
+- Modify: `crates/glyim-cli/src/main.rs`
 
-- [ ] **Add variant and Display:**
+- [ ] **Step 1: Integration test using local CAS server**
 
-  ```rust
-  UnresolvedName { name: Symbol },
-  ```
-  Display: `write!(f, "unresolved name: {:?}", name)`
+Start server, store a blob via client push, verify remote has it.
 
-- [ ] **Commit**
+- [ ] **Step 2: Implement push logic:** iterate local CAS objects, call remote `/blob` POST if missing.
 
----
+- [ ] **Step 3: Implement pull:** query remote `/blob/{hash}` and store locally.
 
-# Phase 4: Control Flow Fixes
+- [ ] **Step 4: Test concurrent pushes, error handling.**
 
-## Task 4.1 – Add `Return` Expression and Fix `?` Operator
-
-**Files:** `crates/glyim‑hir/src/node/mod.rs`, `lower/expr.rs`, `codegen/expr/mod.rs`, `codegen/expr/control.rs`, `crates/glyim‑typeck/src/typeck/expr.rs`
-
-- [ ] **Step 1 – Add `Return` variant to `HirExpr`**
-
-  In `node/mod.rs`:
-
-  ```rust
-  pub enum HirExpr {
-      // ... existing ...
-      Return { id: ExprId, value: Option<Box<HirExpr>>, span: Span },
-  }
-  ```
-
-  In `get_id()`:
-  ```rust
-  Self::Return { id, .. } => *id,
-  ```
-
-  In `get_span()`:
-  ```rust
-  Self::Return { span, .. } => *span,
-  ```
-
-- [ ] **Step 1b – Update type checker for `Return`**  
-  In `crates/glyim‑typeck/src/typeck/expr.rs`:
-
-  In `extract_expr_id`, add:
-  ```rust
-  HirExpr::Return { id, .. } => *id,
-  ```
-
-  In `infer_expr`, add:
-  ```rust
-  HirExpr::Return { .. } => HirType::Never,
-  ```
-
-- [ ] **Step 2 – `Return` codegen**  
-  In `codegen/expr/mod.rs`:
-
-  ```rust
-  HirExpr::Return { value, .. } => {
-      let ret_val = match value {
-          Some(v) => codegen_expr(cg, v, fctx)?,
-          None => cg.i64_type.const_int(0, false),
-      };
-      cg.builder.build_return(Some(&ret_val)).ok()?;
-      None
-  }
-  ```
-
-- [ ] **Step 3 – Rewrite `lower_try_expr`**  
-  In `crates/glyim‑hir/src/lower/expr.rs`, replace the function with this version that captures the scrutinee in a let‑binding and properly returns the Err value:
-
-  ```rust
-  fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> HirExpr {
-      let span = expr.span;
-      let scrutinee_var = ctx.intern("__try_scrut");
-      let ok_v = ctx.intern("v");
-      HirExpr::Block {
-          id: ctx.fresh_id(),
-          stmts: vec![
-              HirStmt::Let {
-                  name: scrutinee_var,
-                  mutable: false,
-                  value: lower_expr(expr, ctx),
-                  span,
-              },
-              HirStmt::Expr(HirExpr::Match {
-                  id,
-                  scrutinee: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: scrutinee_var, span }),
-                  arms: vec![
-                      (
-                          HirPattern::ResultOk(Box::new(HirPattern::Var(ok_v))),
-                          None,
-                          HirExpr::Ident { id: ctx.fresh_id(), name: ok_v, span },
-                      ),
-                      (
-                          HirPattern::ResultErr(Box::new(HirPattern::Wild)),
-                          None,
-                          HirExpr::Return {
-                              id: ctx.fresh_id(),
-                              value: Some(Box::new(HirExpr::Ident {
-                                  id: ctx.fresh_id(),
-                                  name: scrutinee_var,
-                                  span,
-                              })),
-                              span,
-                          },
-                      ),
-                  ],
-                  span,
-              }),
-          ],
-          span,
-      }
-  }
-  ```
-
-- [ ] **Step 4 – Update match codegen for `?` pattern**  
-  In `crates/glyim‑codegen‑llvm/src/codegen/expr/control.rs`:
-
-  Ensure imports include:
-  ```rust
-  use inkwell::{AddressSpace, IntPredicate};
-  ```
-
-  Replace `codegen_match` with:
-
-  ```rust
-  pub(crate) fn codegen_match<'ctx>(
-      cg: &Codegen<'ctx>, expr: &HirExpr, fctx: &mut FunctionContext<'ctx>,
-  ) -> Option<IntValue<'ctx>> {
-      if let HirExpr::Match { scrutinee, arms, .. } = expr {
-          // Special case: desugared `?` — 2 arms, second arm's body is Return
-          if arms.len() == 2 && matches!(arms[1].2, HirExpr::Return { .. }) {
-              return codegen_try_match(cg, scrutinee, &arms[0], &arms[1], fctx);
-          }
-          // Fallback: single-arm extraction (existing logic)
-          if let Some((pattern, _, body)) = arms.first() {
-              let sv = codegen_expr(cg, scrutinee, fctx)?;
-              match pattern {
-                  HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) => {
-                      if let HirPattern::Var(name) = inner.as_ref() {
-                          let ep = cg.builder.build_int_to_ptr(
-                              sv, cg.context.ptr_type(AddressSpace::from(0u16)), "ep",
-                          ).ok()?;
-                          let en = if matches!(pattern, HirPattern::OptionSome(_)) {
-                              cg.option_sym
-                          } else {
-                              cg.result_sym
-                          };
-                          if let Some(st) = cg.enum_struct_types.borrow().get(&en).copied() {
-                              let pp = cg.builder.build_struct_gep(st, ep, 1, "pp").ok()?;
-                              let ap = cg.builder.build_bit_cast(
-                                  pp, cg.i64_type.ptr_type(AddressSpace::from(0u16)), "ap",
-                              ).ok()?;
-                              let pv = cg.builder.build_load(cg.i64_type, ap, "pv").ok()?.into_int_value();
-                              let al = cg.builder.build_alloca(
-                                  cg.i64_type, cg.interner.resolve(*name),
-                              ).ok()?;
-                              cg.builder.build_store(al, pv).ok()?;
-                              fctx.vars.insert(*name, al);
-                          }
-                      }
-                  }
-                  _ => {}
-              }
-              return codegen_expr(cg, body, fctx);
-          }
-          Some(cg.i64_type.const_int(0, false))
-      } else {
-          None
-      }
-  }
-  ```
-
-  Add the `codegen_try_match` helper:
-
-  ```rust
-  fn codegen_try_match<'ctx>(
-      cg: &Codegen<'ctx>,
-      scrutinee: &HirExpr,
-      ok_arm: &(HirPattern, Option<HirExpr>, HirExpr),
-      err_arm: &(HirPattern, Option<HirExpr>, HirExpr),
-      fctx: &mut FunctionContext<'ctx>,
-  ) -> Option<IntValue<'ctx>> {
-      let sv = codegen_expr(cg, scrutinee, fctx)?;
-      let rt = cg.enum_struct_types.borrow().get(&cg.result_sym).copied()
-          .unwrap_or_else(|| cg.context.struct_type(
-              &[cg.i32_type.into(), cg.context.i8_type().array_type(8).into()],
-              false,
-          ));
-      let ep = cg.builder.build_int_to_ptr(sv, rt.ptr_type(AddressSpace::from(0u16)), "ep").ok()?;
-      let tp = cg.builder.build_struct_gep(rt, ep, 0, "tp").ok()?;
-      let tag = cg.builder.build_load(cg.i32_type, tp, "tag").ok()?.into_int_value();
-
-      let ok_bb = cg.context.append_basic_block(fctx.fn_value, "ok");
-      let err_bb = cg.context.append_basic_block(fctx.fn_value, "err");
-      let merge_bb = cg.context.append_basic_block(fctx.fn_value, "merge");
-
-      cg.builder.build_conditional_branch(
-          cg.builder.build_int_compare(IntPredicate::EQ, tag, cg.i32_type.const_int(0, false), "is_ok").ok()?,
-          ok_bb, err_bb,
-      ).ok()?;
-
-      // Ok arm: extract payload, bind to variable, execute body
-      cg.builder.position_at_end(ok_bb);
-      if let HirPattern::ResultOk(inner) = &ok_arm.0 {
-          if let HirPattern::Var(name) = inner.as_ref() {
-              let pp = cg.builder.build_struct_gep(rt, ep, 1, "pp").ok()?;
-              let ap = cg.builder.build_bit_cast(
-                  pp, cg.i64_type.ptr_type(AddressSpace::from(0u16)), "ap",
-              ).ok()?;
-              let okv = cg.builder.build_load(cg.i64_type, ap, "okv").ok()?.into_int_value();
-              let al = cg.builder.build_alloca(cg.i64_type, cg.interner.resolve(*name)).ok()?;
-              cg.builder.build_store(al, okv).ok()?;
-              fctx.vars.insert(*name, al);
-          }
-      }
-      let ok_body = codegen_expr(cg, &ok_arm.2, fctx).unwrap_or(cg.i64_type.const_int(0, false));
-      let ok_end = cg.builder.get_insert_block().unwrap();
-      cg.builder.build_unconditional_branch(merge_bb).ok()?;
-
-      // Err arm: body is Return, so it will return (no fallthrough)
-      cg.builder.position_at_end(err_bb);
-      let _ = codegen_expr(cg, &err_arm.2, fctx);
-
-      // Merge (only reached from Ok arm)
-      cg.builder.position_at_end(merge_bb);
-      Some(ok_body)
-  }
-  ```
-
-- [ ] **Step 5 – Verify existing `?` test still passes**  
-  The `e2e_arrow` integration test already exercises the Ok path through `?`.  
-  Testing the Err path requires a function returning `Result<…>` and a multi-arm match in `main`, which is not yet supported by match codegen. This is deferred until match codegen handles all variants.
-
-  ```bash
-  cargo test -p glyim-cli --test integration e2e_arrow
-  ```
-  Expected: PASS
-
-- [ ] **Step 6 – Run all tests**  
-  ```bash
-  cargo test -p glyim-cli --test integration
-  ```
-
-- [ ] **Commit**
+- [ ] **Step 5: Commit**
 
 ---
 
-## Task 4.2 – Raw Pointer Codegen Fix
+## Chunk 5: Documentation Generator (`glyim doc`)
 
-**File:** `crates/glyim‑codegen‑llvm/src/codegen/types.rs`
+**Files:**
+- Create crate `crates/glyim-doc/`
+- Modify: `crates/glyim-cli/src/main.rs` (add `doc` command)
+- Modify: `Cargo.toml` workspace members
 
-- [ ] **Step 1 – Add `RawPtr` case in `hir_type_to_llvm`:**
+- [ ] **Step 1: Scaffold crate with basic HIR visitor**
 
-  ```rust
-  HirType::RawPtr { inner } => {
-      let i = self.hir_type_to_llvm(inner)?;
-      Some(i.ptr_type(inkwell::AddressSpace::from(0u16)).into())
-  }
-  ```
+- [ ] **Step 2: Implement HTML generation for functions and structs**
 
-  **Note:** This codegen path is not yet exercised by the test below, because `register_extern` hardcodes parameter types as `Int`. The test verifies parsing only; a codegen‑level test requires fixing `register_extern` to preserve parameter types (out of scope for this task).
+- [ ] **Step 3: Integration test: compile a simple file, generate doc, assert HTML contains expected content.**
 
-- [ ] **Step 2 – Integration test** (parse‑level):
+- [ ] **Step 4: Include CSS and simple navigation.**
 
-  ```rust
-  #[test]
-  fn e2e_extern_block_with_ptr_param() {
-      let src = "extern { fn write(fd: i64, buf: *const u8, len: i64) -> i64; }\nfn main() -> i64 { 0 }";
-      assert!(pipeline::run(&temp_g(src)).is_ok());
-  }
-  ```
-
-- [ ] **Commit**
+- [ ] **Step 5: Commit**
 
 ---
 
-# Phase 5: Generics & Method Dispatch
+## Chunk 6: Cross‑Compilation
 
-## Task 5.1 – Enable Impl Method Codegen
+**Files:**
+- Modify: `crates/glyim-cli/src/main.rs` (add `--target` flag)
+- Modify: `crates/glyim-cli/src/pipeline.rs`
+- Modify: `crates/glyim-codegen-llvm/src/codegen/mod.rs` (accept target triple)
+- Modify: `crates/glyim-codegen-llvm/src/lib.rs` if needed
 
-**File:** `crates/glyim‑codegen‑llvm/src/codegen/mod.rs`
+- [ ] **Step 1: Test that `glyim build --target x86_64-unknown-linux-gnu` still works on host (same as default).**
 
-- [ ] **Step 1 – In `generate`, replace `Impl(_) => {}` with:**
+- [ ] **Step 2: Pass target triple to LLVM module and set triple/data layout.**
 
-  ```rust
-  HirItem::Impl(impl_def) => {
-      for method in &impl_def.methods { function::codegen_fn(self, method)?; }
-  }
-  ```
+- [ ] **Step 3: Use `TargetMachine` to emit object for that triple.**
 
-- [ ] **Step 2 – Keep `#[ignore]` on `e2e_impl_method`.**  
-  Add a comment explaining why:
+- [ ] **Step 4: Integration test with different triple (can only be tested if cross‑compilation environment exists; we'll skip runtime test).**
 
-  ```rust
-  // TODO: requires codegen to respect struct return types.
-  // Currently codegen always uses i64, but fn zero() -> Point
-  // returns a struct value, causing a type‑mismatched `ret` instruction.
-  #[ignore = "struct return type not yet supported in codegen"]
-  fn e2e_impl_method() { ... }
-  ```
-
-- [ ] **Commit**
+- [ ] **Step 5: Commit**
 
 ---
 
-## Task 5.2 – Basic Monomorphization (Stub)
+## Chunk 7: Final Integration and Regression
 
-**File:** create `crates/glyim‑codegen‑llvm/src/codegen/monomorphize.rs`
-
-- [ ] **Step 1 – Write `instantiate_fn`** (clones, clears type params, substitutes param types). Mark `#[allow(dead_code)]`.
-
-  ```rust
-  use crate::Codegen;
-  use glyim_hir::{HirFn, HirType};
-  use glyim_interner::Symbol;
-  use std::collections::HashMap;
-
-  #[allow(dead_code)]
-  pub(crate) fn instantiate_fn(f: &HirFn, concrete: &[HirType]) -> HirFn {
-      let mut sub = HashMap::new();
-      for (i, tp) in f.type_params.iter().enumerate() {
-          if let Some(ct) = concrete.get(i) { sub.insert(*tp, ct.clone()); }
-      }
-      let mut mono = f.clone();
-      mono.type_params.clear();
-      for (_, pt) in &mut mono.params { *pt = apply(&sub, pt); }
-      if let Some(rt) = &mut mono.ret { *rt = apply(&sub, rt); }
-      mono
-  }
-  fn apply(sub: &HashMap<Symbol, HirType>, t: &HirType) -> HirType {
-      match t {
-          HirType::Generic(s, _) if sub.contains_key(s) => sub[s].clone(),
-          _ => t.clone(),
-      }
-  }
-  ```
-
-- [ ] **Step 2 – Do NOT add `#[ignore]` to existing generic test.** The test already passes because codegen treats all generics as `i64`. A comment explaining deferred body substitution is sufficient.
-
-- [ ] **Commit**
+- Ensure all existing 870+ tests pass.
+- Manual 60‑second test per spec.
+- Update README.
 
 ---
 
-# Phase 6: Typed Macro Pipeline
+After each chunk, we'll do the plan‑document‑reviewer loop to validate. Once all chunks are approved, we hand off for execution.
 
-## Task 6.1 – Macro Engine (Self‑Contained)
-
-**Files:** `crates/glyim‑macro‑core/src/context.rs`, `expand.rs` (create), `lib.rs` (modify), `tests/expand_tests.rs` (create)
-
-- [ ] **Step 1 – Create `context.rs`:**
-
-  ```rust
-  use glyim_interner::Symbol;
-
-  #[derive(Debug, Clone, PartialEq)]
-  pub struct Field { pub name: Symbol, pub ty: Symbol }
-
-  pub trait MacroContext {
-      fn trait_is_implemented(&self, trait_name: Symbol, for_type: Symbol) -> bool;
-      fn get_fields(&self, struct_name: Symbol) -> Vec<Field>;
-      fn get_type_params(&self, struct_name: Symbol) -> Vec<Symbol>;
-  }
-  ```
-
-- [ ] **Step 2 – Create `expand.rs`:**
-
-  ```rust
-  use crate::context::MacroContext;
-  use glyim_interner::Symbol;
-
-  #[derive(Debug, Clone, PartialEq)]
-  pub enum MacroArg { Expr(String), Ty(String) }
-
-  /// Interpret a macro body. For `@identity`, returns the first expression argument.
-  pub fn interpret_macro(
-      _ctx: &dyn MacroContext,
-      _type_args: &[Symbol],
-      args: &[MacroArg],
-  ) -> Option<String> {
-      args.first().and_then(|a| match a {
-          MacroArg::Expr(s) => Some(s.clone()),
-          _ => None,
-      })
-  }
-  ```
-
-- [ ] **Step 3 – Update `lib.rs`:** `pub mod context; pub mod expand;`
-
-- [ ] **Step 4 – Create test `tests/expand_tests.rs`:**
-
-  ```rust
-  use glyim_macro_core::context::{MacroContext, Field};
-  use glyim_macro_core::expand::{interpret_macro, MacroArg};
-  use glyim_interner::Symbol;
-
-  struct TestCtx;
-  impl MacroContext for TestCtx {
-      fn trait_is_implemented(&self, _: Symbol, _: Symbol) -> bool { false }
-      fn get_fields(&self, _: Symbol) -> Vec<Field> { vec![] }
-      fn get_type_params(&self, _: Symbol) -> Vec<Symbol> { vec![] }
-  }
-
-  #[test]
-  fn identity_works() {
-      let result = interpret_macro(&TestCtx, &[], &[MacroArg::Expr("42".into())]);
-      assert_eq!(result.unwrap(), "42");
-  }
-
-  #[test]
-  fn identity_wrong_arg_count() {
-      let result = interpret_macro(&TestCtx, &[], &[]);
-      assert!(result.is_none());
-  }
-  ```
-
-- [ ] **Run and commit**
-
----
-
-## Task 6.2 – Keep Hardcoded `@identity` (No Changes)
-
-Verify existing test `e2e_macro_identity` still passes. No changes needed.
-
----
-
-# Final Verification Checklist
-
-- [ ] `cargo test --workspace` — all tests pass (1 ignored: `e2e_impl_method`)
-- [ ] `cargo run -- run examples/test.g` — linker default works
-- [ ] `cargo run --features jit -- run --jit test.g` — JIT works
-- [ ] `let x = 5; x = 10` → immutability error
-- [ ] `if (non‑bool) { … }` → type error
-- [ ] Float arithmetic no crash
-- [ ] `?` Ok path works (`e2e_arrow` passes)
-- [ ] Impl methods codegen infrastructure present (test kept ignored with TODO)
-- [ ] CST roundtrip tests pass
-- [ ] `just check-dag` — no cycles
-- [ ] `just check-tiers` — no tier violations
-- [ ] `just check-files` — file sizes within limits
-
-**Plan complete.** Ready to execute.
+Plan saved. Ready to execute?

@@ -89,7 +89,28 @@ fn check() { 0 }",
         assert_eq!(mains, 1);
     }
 }
+#[cfg(test)]
+mod line_tables_tests {
+    use super::*;
 
+    #[test]
+    fn compile_to_ir_line_tables_has_debug_locations() {
+        let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
+        assert!(
+            ir.contains("!dbg"),
+            "Line tables mode should have debug locations\nGot:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn compile_to_ir_line_tables_has_line_tables_only() {
+        let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
+        assert!(
+            ir.contains("emissionKind: LineTablesOnly"),
+            "Line tables mode should specify LineTablesOnly emission kind\nGot:\n{ir}"
+        );
+    }
+}
 #[cfg(test)]
 mod debug_ir_tests {
     use super::*;

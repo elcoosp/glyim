@@ -2,11 +2,11 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-  [31m×[0m expected expression but found error
-   ╭─[[36;1;4mtests/ui/nested_error.g:2:3[0m]
- [2m1[0m │ fn f() {
- [2m2[0m │   $
-   · [35;1m  ┬[0m
-   ·   [35;1m╰── [35;1munexpected error[0m[0m
- [2m3[0m │ }
+  × expected expression but found error
+   ╭─[tests/ui/nested_error.g:2:3]
+ 1 │ fn f() {
+ 2 │   $
+   ·   ┬
+   ·   ╰── unexpected error
+ 3 │ }
    ╰────
