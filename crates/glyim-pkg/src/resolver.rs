@@ -47,7 +47,10 @@ pub fn satisfies_constraint(version: &str, constraint: &str) -> bool {
         return true;
     }
     if let Some(rest) = constraint.strip_prefix('^') {
-        if let (Ok(ver), Ok(req)) = (semver::Version::parse(version), semver::Version::parse(rest)) {
+        if let (Ok(ver), Ok(req)) = (
+            semver::Version::parse(version),
+            semver::Version::parse(rest),
+        ) {
             // ^1.2.3 means >=1.2.3, <2.0.0
             return ver >= req && ver.major == req.major;
         }
@@ -99,7 +102,10 @@ pub fn resolve(
                 // Queue transitive dependencies
                 for dep in &pkg.deps {
                     if !resolved.contains_key(dep) {
-                        constraints.entry(dep.clone()).or_default().push("*".to_string());
+                        constraints
+                            .entry(dep.clone())
+                            .or_default()
+                            .push("*".to_string());
                         queue.push(dep.clone());
                     }
                 }
@@ -111,17 +117,16 @@ pub fn resolve(
             PkgError::Resolution(format!("package '{name}' not found in available packages"))
         })?;
 
-        let name_constraints = constraints.get(&name).ok_or_else(|| {
-            PkgError::Resolution(format!("no constraints for '{name}'"))
-        })?;
+        let name_constraints = constraints
+            .get(&name)
+            .ok_or_else(|| PkgError::Resolution(format!("no constraints for '{name}'")))?;
 
-        let selected = find_min_satisfying(versions, name_constraints)
-            .ok_or_else(|| {
-                PkgError::Resolution(format!(
-                    "no version of '{name}' satisfies constraints {:?}",
-                    name_constraints
-                ))
-            })?;
+        let selected = find_min_satisfying(versions, name_constraints).ok_or_else(|| {
+            PkgError::Resolution(format!(
+                "no version of '{name}' satisfies constraints {:?}",
+                name_constraints
+            ))
+        })?;
 
         for dep in &selected.deps {
             if !resolved.contains_key(&dep.name) {
@@ -154,7 +159,11 @@ fn find_min_satisfying<'a>(
 ) -> Option<&'a AvailableVersion> {
     let mut satisfying: Vec<&AvailableVersion> = versions
         .iter()
-        .filter(|v| constraints.iter().all(|c| satisfies_constraint(&v.version, c)))
+        .filter(|v| {
+            constraints
+                .iter()
+                .all(|c| satisfies_constraint(&v.version, c))
+        })
         .collect();
 
     if satisfying.is_empty() {

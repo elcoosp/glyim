@@ -97,20 +97,43 @@ enum CacheCommand {
 fn main() {
     let cli = Cli::parse();
     let exit_code = match cli.command {
-        Command::Build { input, output, debug: _, release } => {
-            let mode = if release { BuildMode::Release } else { BuildMode::Debug };
+        Command::Build {
+            input,
+            output,
+            debug: _,
+            release,
+        } => {
+            let mode = if release {
+                BuildMode::Release
+            } else {
+                BuildMode::Debug
+            };
             let result = if input.is_dir() {
                 pipeline::build_package(&input, output.as_deref(), mode)
             } else {
                 pipeline::build_with_mode(&input, output.as_deref(), mode)
             };
             match result {
-                Ok(path) => { eprintln!("Built: {}", path.display()); 0 }
-                Err(e) => { eprintln!("error: {e}"); 1 }
+                Ok(path) => {
+                    eprintln!("Built: {}", path.display());
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
             }
         }
-        Command::Run { input, debug: _, release } => {
-            let mode = if release { BuildMode::Release } else { BuildMode::Debug };
+        Command::Run {
+            input,
+            debug: _,
+            release,
+        } => {
+            let mode = if release {
+                BuildMode::Release
+            } else {
+                BuildMode::Debug
+            };
             let result = if input.is_dir() {
                 pipeline::run_package(&input, mode)
             } else {
@@ -118,22 +141,41 @@ fn main() {
             };
             match result {
                 Ok(code) => code,
-                Err(e) => { eprintln!("error: {e}"); 1 }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
             }
         }
         Command::Ir { input } => match pipeline::print_ir(&input) {
             Ok(()) => 0,
-            Err(e) => { eprintln!("error: {e}"); 1 }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
         },
         Command::Check { input } => match pipeline::check(&input) {
             Ok(()) => 0,
-            Err(e) => { eprintln!("error: {e}"); 1 }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
         },
         Command::Init { name } => match pipeline::init(&name) {
-            Ok(path) => { eprintln!("Created {}/", path.display()); 0 }
-            Err(e) => { eprintln!("error: {e}"); 1 }
+            Ok(path) => {
+                eprintln!("Created {}/", path.display());
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
         },
-        Command::Test { input, ignore, filter } => {
+        Command::Test {
+            input,
+            ignore,
+            filter,
+        } => {
             let include_ignored = ignore;
             let result = if input.is_dir() {
                 pipeline::run_tests_package(&input, filter.as_deref(), include_ignored)
@@ -141,18 +183,28 @@ fn main() {
                 pipeline::run_tests(&input, filter.as_deref(), include_ignored)
             };
             match result {
-                Ok(summary) => { eprintln!("{}", summary.format_summary()); summary.exit_code() }
-                Err(e) => { eprintln!("error: {e}"); 1 }
+                Ok(summary) => {
+                    eprintln!("{}", summary.format_summary());
+                    summary.exit_code()
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
             }
         }
         Command::Export { name, dest } => {
-            eprintln!("error: 'export' not implemented (artifact: {name}, dest: {})", dest.display());
+            eprintln!(
+                "error: 'export' not implemented (artifact: {name}, dest: {})",
+                dest.display()
+            );
             1
         }
         Command::Add { package, macro_dep } => {
             let result: Result<i32, i32> = (|| {
                 let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}"); 1
+                    eprintln!("error: {e}");
+                    1
                 })?;
                 let manifest_path = dir.join("glyim.toml");
                 let toml_str = std::fs::read_to_string(&manifest_path).map_err(|e| {
@@ -164,11 +216,18 @@ fn main() {
                     1
                 })?;
                 let mut m: PackageManifest = glyim_pkg::manifest::parse_manifest(
-                    &toml_str, &manifest_path.to_string_lossy(),
-                ).map_err(|e| {
-                    eprintln!("error: invalid glyim.toml: {e}"); 1
+                    &toml_str,
+                    &manifest_path.to_string_lossy(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: invalid glyim.toml: {e}");
+                    1
                 })?;
-                let target_deps = if macro_dep { &mut m.macros } else { &mut m.dependencies };
+                let target_deps = if macro_dep {
+                    &mut m.macros
+                } else {
+                    &mut m.dependencies
+                };
                 target_deps.insert(
                     package.clone(),
                     Dependency {
@@ -181,9 +240,17 @@ fn main() {
                 );
                 let new_toml = toml::to_string_pretty(&m).unwrap_or_default();
                 std::fs::write(&manifest_path, new_toml).map_err(|e| {
-                    eprintln!("error writing manifest: {e}"); 1
+                    eprintln!("error writing manifest: {e}");
+                    1
                 })?;
-                eprintln!("Added {package} to {}", if macro_dep { "[macros]" } else { "[dependencies]" });
+                eprintln!(
+                    "Added {package} to {}",
+                    if macro_dep {
+                        "[macros]"
+                    } else {
+                        "[dependencies]"
+                    }
+                );
                 // Resolve and write lockfile
                 match glyim_cli::lockfile_integration::resolve_and_write_lockfile(&dir, &m) {
                     Ok(()) => {}
@@ -196,7 +263,8 @@ fn main() {
         Command::Remove { package } => {
             let result: Result<i32, i32> = (|| {
                 let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}"); 1
+                    eprintln!("error: {e}");
+                    1
                 })?;
                 let manifest_path = dir.join("glyim.toml");
                 let toml_str = std::fs::read_to_string(&manifest_path).map_err(|e| {
@@ -208,15 +276,19 @@ fn main() {
                     1
                 })?;
                 let mut m: PackageManifest = glyim_pkg::manifest::parse_manifest(
-                    &toml_str, &manifest_path.to_string_lossy(),
-                ).map_err(|e| {
-                    eprintln!("error: invalid glyim.toml: {e}"); 1
+                    &toml_str,
+                    &manifest_path.to_string_lossy(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: invalid glyim.toml: {e}");
+                    1
                 })?;
                 m.dependencies.remove(&package);
                 m.macros.remove(&package);
                 let new_toml = toml::to_string_pretty(&m).unwrap_or_default();
                 std::fs::write(&manifest_path, new_toml).map_err(|e| {
-                    eprintln!("error writing manifest: {e}"); 1
+                    eprintln!("error writing manifest: {e}");
+                    1
                 })?;
                 eprintln!("Removed {package} from dependencies");
                 // Resolve and write lockfile
@@ -231,11 +303,13 @@ fn main() {
         Command::Fetch => {
             let result: Result<i32, i32> = (|| {
                 let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}"); 1
+                    eprintln!("error: {e}");
+                    1
                 })?;
                 let packages = glyim_cli::lockfile_integration::read_lockfile_packages(&dir)
                     .map_err(|e| {
-                        eprintln!("error: {e}"); 1
+                        eprintln!("error: {e}");
+                        1
                     })?;
                 if packages.is_empty() {
                     eprintln!("No dependencies to fetch (glyim.lock not found or empty)");
@@ -255,31 +329,37 @@ fn main() {
             1
         }
         Command::Cache(cmd) => match cmd {
-            CacheCommand::Store { path } => (|| -> Result<i32,i32> {
+            CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let client = glyim_pkg::cas_client::CasClient::new(&cas_dir).map_err(|e| {
-                    eprintln!("error opening CAS: {e}"); 1
+                    eprintln!("error opening CAS: {e}");
+                    1
                 })?;
                 let content = std::fs::read(&path).map_err(|e| {
-                    eprintln!("error reading {}: {e}", path.display()); 1
+                    eprintln!("error reading {}: {e}", path.display());
+                    1
                 })?;
                 let hash = client.store(&content);
                 println!("{}", hash);
                 Ok(0)
-            })().unwrap_or_else(|code| code),
-            CacheCommand::Retrieve { hash, output } => (|| -> Result<i32,i32> {
+            })()
+            .unwrap_or_else(|code| code),
+            CacheCommand::Retrieve { hash, output } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let client = glyim_pkg::cas_client::CasClient::new(&cas_dir).map_err(|e| {
-                    eprintln!("error opening CAS: {e}"); 1
+                    eprintln!("error opening CAS: {e}");
+                    1
                 })?;
                 let hash: glyim_macro_vfs::ContentHash = hash.parse().map_err(|e| {
-                    eprintln!("invalid hash: {e}"); 1
+                    eprintln!("invalid hash: {e}");
+                    1
                 })?;
                 match client.retrieve(hash) {
                     Some(data) => {
                         if let Some(output_path) = output {
                             std::fs::write(&output_path, &data).map_err(|e| {
-                                eprintln!("error writing {}: {e}", output_path.display()); 1
+                                eprintln!("error writing {}: {e}", output_path.display());
+                                1
                             })?;
                             eprintln!("Wrote {} bytes to {}", data.len(), output_path.display());
                         } else {
@@ -292,7 +372,8 @@ fn main() {
                         Ok(1)
                     }
                 }
-            })().unwrap_or_else(|code| code),
+            })()
+            .unwrap_or_else(|code| code),
             CacheCommand::Status => {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 match glyim_pkg::cas_client::CasClient::new(&cas_dir) {
@@ -306,32 +387,46 @@ fn main() {
                     }
                 }
             }
-            CacheCommand::Push { remote } => (|| -> Result<i32,i32> {
+            CacheCommand::Push { remote } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let remote_url = remote.unwrap_or_else(|| "http://localhost:9090".to_string());
                 let token = std::env::var("GLYIM_CACHE_TOKEN").ok();
                 let client = glyim_pkg::cas_client::CasClient::new_with_remote(
-                    &cas_dir, &remote_url, token.as_deref(),
-                ).map_err(|e| {
-                    eprintln!("error: {e}"); 1
+                    &cas_dir,
+                    &remote_url,
+                    token.as_deref(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
                 })?;
                 eprintln!("Remote cache: {}", remote_url);
-                eprintln!("Cache push: remote store configured (individual blob pushes happen on store)");
+                eprintln!(
+                    "Cache push: remote store configured (individual blob pushes happen on store)"
+                );
                 Ok(0)
-            })().unwrap_or_else(|code| code),
-            CacheCommand::Pull { remote } => (|| -> Result<i32,i32> {
+            })()
+            .unwrap_or_else(|code| code),
+            CacheCommand::Pull { remote } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
                 let remote_url = remote.unwrap_or_else(|| "http://localhost:9090".to_string());
                 let token = std::env::var("GLYIM_CACHE_TOKEN").ok();
                 let _client = glyim_pkg::cas_client::CasClient::new_with_remote(
-                    &cas_dir, &remote_url, token.as_deref(),
-                ).map_err(|e| {
-                    eprintln!("error: {e}"); 1
+                    &cas_dir,
+                    &remote_url,
+                    token.as_deref(),
+                )
+                .map_err(|e| {
+                    eprintln!("error: {e}");
+                    1
                 })?;
                 eprintln!("Remote cache: {}", remote_url);
-                eprintln!("Cache pull: remote store configured (blobs fetched on-demand via retrieve)");
+                eprintln!(
+                    "Cache pull: remote store configured (blobs fetched on-demand via retrieve)"
+                );
                 Ok(0)
-            })().unwrap_or_else(|code| code),
+            })()
+            .unwrap_or_else(|code| code),
             CacheCommand::Clean => {
                 eprintln!("error: cache clean not yet implemented");
                 1

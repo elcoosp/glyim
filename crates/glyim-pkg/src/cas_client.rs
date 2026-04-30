@@ -31,8 +31,8 @@ impl CasClient {
             auth_token: auth_token.map(|s| s.to_string()),
             local_dir: base_dir.to_path_buf(),
         };
-        let remote = RemoteContentStore::new(&config)
-            .map_err(|e| PkgError::Registry(e.to_string()))?;
+        let remote =
+            RemoteContentStore::new(&config).map_err(|e| PkgError::Registry(e.to_string()))?;
         Ok(Self {
             store: Box::new(remote),
         })
@@ -74,8 +74,6 @@ impl CasClient {
         _hash: ContentHash,
         _remote_url: &str,
     ) -> Result<(), PkgError> {
-        Err(PkgError::Registry(
-            "use new_with_remote instead".into(),
-        ))
+        Err(PkgError::Registry("use new_with_remote instead".into()))
     }
 }

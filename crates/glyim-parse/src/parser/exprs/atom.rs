@@ -104,13 +104,32 @@ fn parse_ident_expr(parser: &mut Parser) -> Option<ExprNode> {
     let sym = parser.interner.intern(tok.text);
     let start = tok.start;
     let name = parser.interner.resolve(sym);
-    if name == "__size_of" && parser.tokens.at(SyntaxKind::Colon) && parser.tokens.peek2().is_some_and(|t| t.kind == SyntaxKind::Colon) {
-        parser.tokens.bump(); parser.tokens.bump(); // ::  
-        parser.tokens.expect(SyntaxKind::Lt, &mut parser.errors).ok()?;
+    if name == "__size_of"
+        && parser.tokens.at(SyntaxKind::Colon)
+        && parser
+            .tokens
+            .peek2()
+            .is_some_and(|t| t.kind == SyntaxKind::Colon)
+    {
+        parser.tokens.bump();
+        parser.tokens.bump(); // ::
+        parser
+            .tokens
+            .expect(SyntaxKind::Lt, &mut parser.errors)
+            .ok()?;
         let ty = super::super::types::parse_type_expr(&mut parser.tokens, &mut parser.interner)?;
-        parser.tokens.expect(SyntaxKind::Gt, &mut parser.errors).ok()?;
-        parser.tokens.expect(SyntaxKind::LParen, &mut parser.errors).ok()?;
-        parser.tokens.expect(SyntaxKind::RParen, &mut parser.errors).ok()?;
+        parser
+            .tokens
+            .expect(SyntaxKind::Gt, &mut parser.errors)
+            .ok()?;
+        parser
+            .tokens
+            .expect(SyntaxKind::LParen, &mut parser.errors)
+            .ok()?;
+        parser
+            .tokens
+            .expect(SyntaxKind::RParen, &mut parser.errors)
+            .ok()?;
         let end = parser.tokens.peek().map_or(tok.end, |t| t.start);
         return Some(ExprNode {
             kind: ExprKind::SizeOf(ty),

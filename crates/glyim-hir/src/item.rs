@@ -1,7 +1,7 @@
 use crate::node::HirFn;
 use crate::types::HirType;
-use glyim_interner::Symbol;
 use glyim_diag::Span;
+use glyim_interner::Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnSig {

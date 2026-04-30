@@ -11,11 +11,31 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
     let id = ctx.fresh_id();
     let span = expr.span;
     match &expr.kind {
-        ExprKind::IntLit(n) => HirExpr::IntLit { id, value: *n, span },
-        ExprKind::FloatLit(f) => HirExpr::FloatLit { id, value: *f, span },
-        ExprKind::BoolLit(b) => HirExpr::BoolLit { id, value: *b, span },
-        ExprKind::StrLit(s) => HirExpr::StrLit { id, value: s.clone(), span },
-        ExprKind::Ident(sym) => HirExpr::Ident { id, name: *sym, span },
+        ExprKind::IntLit(n) => HirExpr::IntLit {
+            id,
+            value: *n,
+            span,
+        },
+        ExprKind::FloatLit(f) => HirExpr::FloatLit {
+            id,
+            value: *f,
+            span,
+        },
+        ExprKind::BoolLit(b) => HirExpr::BoolLit {
+            id,
+            value: *b,
+            span,
+        },
+        ExprKind::StrLit(s) => HirExpr::StrLit {
+            id,
+            value: s.clone(),
+            span,
+        },
+        ExprKind::Ident(sym) => HirExpr::Ident {
+            id,
+            name: *sym,
+            span,
+        },
         ExprKind::UnitLit => HirExpr::UnitLit { id, span },
 
         ExprKind::Binary { op, lhs, rhs } => HirExpr::Binary {
@@ -44,9 +64,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             id,
             condition: Box::new(lower_expr(condition, ctx)),
             then_branch: Box::new(lower_expr(then_branch, ctx)),
-            else_branch: else_branch
-                .as_ref()
-                .map(|e| Box::new(lower_expr(e, ctx))),
+            else_branch: else_branch.as_ref().map(|e| Box::new(lower_expr(e, ctx))),
             span,
         },
 
@@ -155,7 +173,11 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
     }
 }
 
-fn lower_block(items: &[BlockItem], block_span: glyim_diag::Span, ctx: &mut LoweringContext) -> HirExpr {
+fn lower_block(
+    items: &[BlockItem],
+    block_span: glyim_diag::Span,
+    ctx: &mut LoweringContext,
+) -> HirExpr {
     let id = ctx.fresh_id();
     let stmts: Vec<HirStmt> = items
         .iter()
@@ -164,7 +186,11 @@ fn lower_block(items: &[BlockItem], block_span: glyim_diag::Span, ctx: &mut Lowe
             BlockItem::Stmt(s) => lower_stmt(s, ctx),
         })
         .collect();
-    HirExpr::Block { id, stmts, span: block_span }
+    HirExpr::Block {
+        id,
+        stmts,
+        span: block_span,
+    }
 }
 
 fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStmt {

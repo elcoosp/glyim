@@ -1,6 +1,6 @@
 use crate::types::{ExprId, HirPattern, HirType};
-use glyim_interner::Symbol;
 use glyim_diag::Span;
+use glyim_interner::Symbol;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum HirBinOp {
@@ -151,7 +151,11 @@ pub enum HirExpr {
         args: Vec<HirExpr>,
         span: Span,
     },
-    SizeOf { id: ExprId, target_type: HirType, span: Span },
+    SizeOf {
+        id: ExprId,
+        target_type: HirType,
+        span: Span,
+    },
     TupleLit {
         id: ExprId,
         elements: Vec<HirExpr>,

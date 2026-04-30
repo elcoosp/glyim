@@ -6,16 +6,16 @@ mod stmt;
 mod string;
 mod types;
 
+use crate::debug::DebugInfoGen;
+use glyim_diag::Span;
 use glyim_hir::{Hir, HirType};
 use glyim_interner::{Interner, Symbol};
 use inkwell::context::Context;
+use inkwell::debug_info::{DISubprogram, DWARFEmissionKind};
 use inkwell::module::Module;
 use inkwell::types::IntType;
-use inkwell::debug_info::{DISubprogram, DWARFEmissionKind};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::debug::DebugInfoGen;
-use glyim_diag::Span;
 
 pub struct Codegen<'ctx> {
     pub(crate) context: &'ctx Context,
@@ -43,7 +43,8 @@ pub struct Codegen<'ctx> {
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,
     current_subprogram: Option<DISubprogram<'ctx>>,
-    pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<glyim_interner::Symbol>>,
+    pub(crate) macro_fn_names:
+        std::cell::RefCell<std::collections::HashSet<glyim_interner::Symbol>>,
     pub(crate) no_std: bool,
 }
 
@@ -135,13 +136,14 @@ impl<'ctx> Codegen<'ctx> {
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
 
-        let debug_info = match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::LineTablesOnly) {
-            Ok(di) => Some(di),
-            Err(e) => {
-                eprintln!("warning: debug info creation failed: {e}");
-                None
-            }
-        };
+        let debug_info =
+            match DebugInfoGen::new(&module, "input.g", DWARFEmissionKind::LineTablesOnly) {
+                Ok(di) => Some(di),
+                Err(e) => {
+                    eprintln!("warning: debug info creation failed: {e}");
+                    None
+                }
+            };
 
         Ok(Self {
             context,
@@ -196,7 +198,7 @@ impl<'ctx> Codegen<'ctx> {
 
         // Finalize debug info before verifying
         self.emit_macro_debug_section();
-                if let Some(ref di) = self.debug_info {
+        if let Some(ref di) = self.debug_info {
             di.finalize();
         }
 
@@ -459,7 +461,8 @@ impl<'ctx> Codegen<'ctx> {
             return;
         }
         // Create a simple metadata string: comma-separated list of macro function names
-        let metadata = names.iter()
+        let metadata = names
+            .iter()
             .map(|sym| self.interner.resolve(*sym).to_string())
             .collect::<Vec<_>>()
             .join(",");
@@ -467,9 +470,11 @@ impl<'ctx> Codegen<'ctx> {
         let bytes = metadata.as_bytes();
         let i8_type = self.context.i8_type();
         let arr_type = i8_type.array_type(bytes.len() as u32);
-        let global = self
-            .module
-            .add_global(arr_type, Some(inkwell::AddressSpace::from(0u16)), "_glyim_macro");
+        let global = self.module.add_global(
+            arr_type,
+            Some(inkwell::AddressSpace::from(0u16)),
+            "_glyim_macro",
+        );
         let elems: Vec<_> = bytes
             .iter()
             .map(|b| i8_type.const_int(*b as u64, false))
@@ -479,5 +484,4 @@ impl<'ctx> Codegen<'ctx> {
         global.set_constant(true);
         global.set_section(Some(".glyim.macro"));
     }
-
 }

@@ -1,15 +1,12 @@
-use actix_web::{web, App, HttpServer, HttpResponse, Result};
-use glyim_macro_vfs::{ContentHash, LocalContentStore, ContentStore};
+use actix_web::{web, App, HttpResponse, HttpServer, Result};
+use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
 use std::sync::Mutex;
 
 struct AppState {
     store: Mutex<LocalContentStore>,
 }
 
-async fn store_blob(
-    state: web::Data<AppState>,
-    bytes: web::Bytes,
-) -> Result<HttpResponse> {
+async fn store_blob(state: web::Data<AppState>, bytes: web::Bytes) -> Result<HttpResponse> {
     let store = state.store.lock().unwrap();
     let hash = store.store(&bytes);
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -22,9 +19,9 @@ async fn retrieve_blob(
     path: web::Path<String>,
 ) -> Result<HttpResponse> {
     let hash_str = path.into_inner();
-    let hash = hash_str.parse::<ContentHash>().map_err(|_| {
-        actix_web::error::ErrorBadRequest("invalid hash")
-    })?;
+    let hash = hash_str
+        .parse::<ContentHash>()
+        .map_err(|_| actix_web::error::ErrorBadRequest("invalid hash"))?;
     let store = state.store.lock().unwrap();
     match store.retrieve(hash) {
         Some(data) => Ok(HttpResponse::Ok().body(data)),

@@ -100,9 +100,7 @@ impl RemoteContentStore {
             // If the endpoint doesn't exist, treat all as missing
             return Ok(hashes.to_vec());
         }
-        let missing: Vec<String> = response
-            .json()
-            .unwrap_or_else(|_| hash_list.clone());
+        let missing: Vec<String> = response.json().unwrap_or_else(|_| hash_list.clone());
         Ok(missing
             .iter()
             .filter_map(|h| h.parse::<ContentHash>().ok())
@@ -153,8 +151,8 @@ impl ContentStore for RemoteContentStore {
         // Store locally always
         let _ = ContentStore::store_action_result(&self.local, action_hash, result.clone());
         // Best-effort remote
-        let json = serde_json::to_vec(&result)
-            .map_err(|e| StoreError::Io(format!("serialize: {e}")))?;
+        let json =
+            serde_json::to_vec(&result).map_err(|e| StoreError::Io(format!("serialize: {e}")))?;
         let _ = self.remote_store_blob(&json);
         Ok(())
     }

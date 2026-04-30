@@ -44,7 +44,11 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
         HirExpr::SizeOf { target_type, .. } => {
             if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
-                Some(llvm_type.size_of().unwrap_or_else(|| cg.i64_type.const_int(0, false)))
+                Some(
+                    llvm_type
+                        .size_of()
+                        .unwrap_or_else(|| cg.i64_type.const_int(0, false)),
+                )
             } else {
                 Some(cg.i64_type.const_int(0, false))
             }

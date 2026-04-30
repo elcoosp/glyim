@@ -37,7 +37,12 @@ fn lower_pattern_with_span(
             bindings: args
                 .iter()
                 .enumerate()
-                .map(|(i, p)| (ctx.intern(&i.to_string()), lower_pattern_with_span(p, None, ctx)))
+                .map(|(i, p)| {
+                    (
+                        ctx.intern(&i.to_string()),
+                        lower_pattern_with_span(p, None, ctx),
+                    )
+                })
                 .collect(),
             span: span.unwrap_or(glyim_diag::Span::new(0, 0)),
         },

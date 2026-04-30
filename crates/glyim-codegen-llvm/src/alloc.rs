@@ -29,7 +29,6 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     let free_ty = void_type.fn_type(&[ptr_type.into()], false);
     let free_fn = module.add_function("free", free_ty, None);
 
-
     // ── glyim_alloc(size: i64) -> *i8 ───────────────────────────
 
     let alloc_fn_type = ptr_type.fn_type(&[i64_type.into()], false);
@@ -45,23 +44,18 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     builder.position_at_end(entry);
     let size_param = alloc_fn.get_first_param().unwrap();
     let raw_ptr = builder
-            .build_call(malloc_fn, &[size_param.into()], "raw_ptr")
-            .unwrap()
-            .try_as_basic_value();
+        .build_call(malloc_fn, &[size_param.into()], "raw_ptr")
+        .unwrap()
+        .try_as_basic_value();
 
-        let raw_ptr = match raw_ptr {
-            inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_pointer_value(),
-            _ => panic!("malloc returned void?"),
-        };
+    let raw_ptr = match raw_ptr {
+        inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_pointer_value(),
+        _ => panic!("malloc returned void?"),
+    };
 
     let null_ptr = ptr_type.const_null();
     let is_null = builder
-        .build_int_compare(
-            inkwell::IntPredicate::EQ,
-            raw_ptr,
-            null_ptr,
-            "is_null",
-        )
+        .build_int_compare(inkwell::IntPredicate::EQ, raw_ptr, null_ptr, "is_null")
         .unwrap();
 
     builder
@@ -84,7 +78,9 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
 
     builder.position_at_end(free_entry);
     let ptr_param = free_wrapper.get_first_param().unwrap();
-    builder.build_call(free_fn, &[ptr_param.into()], "").unwrap();
+    builder
+        .build_call(free_fn, &[ptr_param.into()], "")
+        .unwrap();
     builder.build_return(None).unwrap();
 }
 
@@ -123,8 +119,6 @@ mod tests {
         assert!(module.get_function("malloc").is_some());
     }
 
-
-
     #[test]
     fn emit_shims_no_std_skips_all() {
         let ctx = Context::create();
@@ -155,8 +149,6 @@ mod tests {
         emit_alloc_shims(&module, false);
         assert!(module.get_function("glyim_alloc").is_some());
     }
-
-
 
     #[test]
     fn emit_shims_glyim_alloc_ir_has_null_check() {

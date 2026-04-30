@@ -4,8 +4,7 @@ use std::path::PathBuf;
 
 // ── [package] ───────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Package {
     pub name: String,
     #[serde(default)]
@@ -57,11 +56,9 @@ pub struct CacheConfig {
     pub pull: bool,
 }
 
-
 // ── [features] ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct FeaturesConfig {
     #[serde(default)]
     pub features: HashMap<String, Vec<String>>,
@@ -103,12 +100,11 @@ pub struct PackageManifest {
 
 /// Parse a glyim.toml string into a PackageManifest.
 pub fn parse_manifest(toml_str: &str, file_name: &str) -> Result<PackageManifest, crate::PkgError> {
-    let manifest: PackageManifest = toml::from_str(toml_str).map_err(|e| {
-        crate::PkgError::ParseToml {
+    let manifest: PackageManifest =
+        toml::from_str(toml_str).map_err(|e| crate::PkgError::ParseToml {
             file: file_name.to_string(),
             reason: e.to_string(),
-        }
-    })?;
+        })?;
 
     // Validate required fields
     if manifest.package.name.is_empty() && manifest.workspace.is_none() {

@@ -1,6 +1,6 @@
 use glyim_pkg::lockfile::{generate_lockfile, serialize_lockfile, LockSource};
 use glyim_pkg::manifest::PackageManifest;
-use glyim_pkg::resolver::{Requirement, resolve};
+use glyim_pkg::resolver::{resolve, Requirement};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -61,14 +61,13 @@ pub fn resolve_and_write_lockfile(
     if requirements.is_empty() {
         let lockfile = generate_lockfile(&HashMap::new());
         let serialized = serialize_lockfile(&lockfile);
-        std::fs::write(&lockfile_path, serialized)
-            .map_err(|e| format!("write lockfile: {e}"))?;
+        std::fs::write(&lockfile_path, serialized).map_err(|e| format!("write lockfile: {e}"))?;
         return Ok(());
     }
 
     let existing_lockfile = if lockfile_path.exists() {
-        let content = std::fs::read_to_string(&lockfile_path)
-            .map_err(|e| format!("read lockfile: {e}"))?;
+        let content =
+            std::fs::read_to_string(&lockfile_path).map_err(|e| format!("read lockfile: {e}"))?;
         glyim_pkg::lockfile::parse_lockfile(&content).ok()
     } else {
         None
@@ -95,29 +94,34 @@ pub fn resolve_and_write_lockfile(
     let resolution = resolve(&requirements, existing_lockfile.as_ref(), &available)
         .map_err(|e| format!("resolve: {e}"))?;
 
-    let mut resolved_map: HashMap<String, (String, String, bool, Vec<String>, LockSource)> = HashMap::new();
+    let mut resolved_map: HashMap<String, (String, String, bool, Vec<String>, LockSource)> =
+        HashMap::new();
     for (name, pkg) in &resolution.packages {
-        resolved_map.insert(name.clone(), (
-            pkg.version.clone(),
-            format!("sha256:{}", hex::encode([0u8; 32])),
-            pkg.is_macro,
-            pkg.deps.clone(),
-            pkg.source.clone(),
-        ));
+        resolved_map.insert(
+            name.clone(),
+            (
+                pkg.version.clone(),
+                format!("sha256:{}", hex::encode([0u8; 32])),
+                pkg.is_macro,
+                pkg.deps.clone(),
+                pkg.source.clone(),
+            ),
+        );
     }
 
     let lockfile = generate_lockfile(&resolved_map);
     let serialized = serialize_lockfile(&lockfile);
-    std::fs::write(&lockfile_path, serialized)
-        .map_err(|e| format!("write lockfile: {e}"))?;
-    eprintln!("Generated glyim.lock ({} packages)", resolution.packages.len());
+    std::fs::write(&lockfile_path, serialized).map_err(|e| format!("write lockfile: {e}"))?;
+    eprintln!(
+        "Generated glyim.lock ({} packages)",
+        resolution.packages.len()
+    );
     Ok(())
 }
 
 fn compute_path_hash(path: &std::path::Path) -> Result<String, String> {
     let mut hasher = sha2::Sha256::new();
-    walk_dir_for_hash(path, &mut hasher)
-        .map_err(|e| format!("hash path: {e}"))?;
+    walk_dir_for_hash(path, &mut hasher).map_err(|e| format!("hash path: {e}"))?;
     Ok(hex::encode(hasher.finalize()))
 }
 
@@ -128,8 +132,7 @@ fn walk_dir_for_hash(path: &std::path::Path, hasher: &mut sha2::Sha256) -> Resul
         return Ok(());
     }
     if path.is_dir() {
-        let entries = std::fs::read_dir(path)
-            .map_err(|e| format!("read dir {path:?}: {e}"))?;
+        let entries = std::fs::read_dir(path).map_err(|e| format!("read dir {path:?}: {e}"))?;
         let mut entries: Vec<_> = entries.flatten().collect();
         entries.sort_by_key(|e| e.file_name());
         for entry in entries {
@@ -139,7 +142,6 @@ fn walk_dir_for_hash(path: &std::path::Path, hasher: &mut sha2::Sha256) -> Resul
     Ok(())
 }
 
-
 use glyim_pkg::lockfile::{parse_lockfile, LockedPackage};
 
 /// Read packages from glyim.lock in the given directory.
@@ -148,10 +150,9 @@ pub fn read_lockfile_packages(package_dir: &Path) -> Result<Vec<LockedPackage>, 
     if !lockfile_path.exists() {
         return Ok(vec![]);
     }
-    let content = std::fs::read_to_string(&lockfile_path)
-        .map_err(|e| format!("read lockfile: {e}"))?;
-    let lockfile = parse_lockfile(&content)
-        .map_err(|e| format!("parse lockfile: {e}"))?;
+    let content =
+        std::fs::read_to_string(&lockfile_path).map_err(|e| format!("read lockfile: {e}"))?;
+    let lockfile = parse_lockfile(&content).map_err(|e| format!("parse lockfile: {e}"))?;
     Ok(lockfile.packages)
 }
 
@@ -164,13 +165,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let lockfile_path = dir.path().join("glyim.lock");
         let mut resolved = HashMap::new();
-        resolved.insert("test-pkg".to_string(), (
-            "1.0.0".to_string(),
-            "sha256:abcdef".to_string(),
-            false,
-            vec![],
-            glyim_pkg::lockfile::LockSource::Local,
-        ));
+        resolved.insert(
+            "test-pkg".to_string(),
+            (
+                "1.0.0".to_string(),
+                "sha256:abcdef".to_string(),
+                false,
+                vec![],
+                glyim_pkg::lockfile::LockSource::Local,
+            ),
+        );
         let lock = generate_lockfile(&resolved);
         let serialized = serialize_lockfile(&lock);
         std::fs::write(&lockfile_path, &serialized).unwrap();

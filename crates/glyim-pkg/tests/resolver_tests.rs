@@ -1,5 +1,5 @@
-use glyim_pkg::resolver::*;
 use glyim_pkg::lockfile::LockSource;
+use glyim_pkg::resolver::*;
 use std::collections::HashMap;
 
 fn make_req(name: &str, version: &str, is_macro: bool) -> Requirement {
@@ -17,10 +17,7 @@ fn make_available(_name: &str, version: &str, deps: &[(&str, &str)]) -> Availabl
     AvailableVersion {
         version: version.to_string(),
         is_macro: false,
-        deps: deps
-            .iter()
-            .map(|(n, v)| make_req(n, v, false))
-            .collect(),
+        deps: deps.iter().map(|(n, v)| make_req(n, v, false)).collect(),
         source: LockSource::Registry {
             url: "https://registry.glyim.dev".to_string(),
         },
@@ -73,7 +70,11 @@ fn resolve_single_dep_wildcard() {
 
 #[test]
 fn resolve_unknown_package_errors() {
-    let resolution = resolve(&[make_req("nonexistent", "1.0.0", false)], None, &HashMap::new());
+    let resolution = resolve(
+        &[make_req("nonexistent", "1.0.0", false)],
+        None,
+        &HashMap::new(),
+    );
     assert!(resolution.is_err());
 }
 
@@ -98,10 +99,7 @@ fn resolve_transitive_deps() {
         "a".to_string(),
         vec![make_available("a", "1.0.0", &[("b", "1.0.0")])],
     );
-    available.insert(
-        "b".to_string(),
-        vec![make_available("b", "1.0.0", &[])],
-    );
+    available.insert("b".to_string(), vec![make_available("b", "1.0.0", &[])]);
     let resolution = resolve(&[make_req("a", "^1.0.0", false)], None, &available).unwrap();
     assert_eq!(resolution.packages["a"].version, "1.0.0");
     assert_eq!(resolution.packages["b"].version, "1.0.0");

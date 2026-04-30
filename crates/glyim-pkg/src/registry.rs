@@ -1,6 +1,6 @@
 use crate::error::PkgError;
-use crate::resolver::AvailableVersion;
 use crate::lockfile::LockSource;
+use crate::resolver::AvailableVersion;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -40,7 +40,10 @@ impl RegistryClient {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| PkgError::Registry(format!("create HTTP client: {e}")))?;
-        Ok(Self { endpoint: url, client })
+        Ok(Self {
+            endpoint: url,
+            client,
+        })
     }
 
     pub fn endpoint(&self) -> &str {
@@ -130,11 +133,9 @@ impl RegistryClient {
         let hash = crate::lockfile::compute_content_hash(&bytes);
 
         if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| PkgError::Io(e))?;
+            std::fs::create_dir_all(parent).map_err(|e| PkgError::Io(e))?;
         }
-        std::fs::write(dest, &bytes)
-            .map_err(|e| PkgError::Io(e))?;
+        std::fs::write(dest, &bytes).map_err(|e| PkgError::Io(e))?;
 
         Ok(hash)
     }

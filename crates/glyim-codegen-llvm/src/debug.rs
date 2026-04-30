@@ -1,13 +1,13 @@
-use inkwell::debug_info::{
-    DebugInfoBuilder, DICompileUnit, DIFile, DISubprogram, DILocation, DILocalVariable,
-    DWARFEmissionKind, DWARFSourceLanguage, DIFlagsConstants, AsDIScope,
-};
+use glyim_interner::Symbol;
 use inkwell::context::{AsContextRef, ContextRef};
+use inkwell::debug_info::{
+    AsDIScope, DICompileUnit, DIFile, DIFlagsConstants, DILocalVariable, DILocation, DISubprogram,
+    DWARFEmissionKind, DWARFSourceLanguage, DebugInfoBuilder,
+};
 use inkwell::module::Module;
 use inkwell::values::PointerValue;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use glyim_interner::Symbol;
 
 pub struct DebugInfoGen<'ctx> {
     context: ContextRef<'ctx>,
@@ -64,30 +64,34 @@ impl<'ctx> DebugInfoGen<'ctx> {
             .create_basic_type("i64", 64, 64, 0x05)
             .map_err(|e| format!("create_basic_type: {e}"))?;
 
-        let subroutine_type = self
-            .dibuilder
-            .create_subroutine_type(
-                self.file,
-                Some(i64_type.as_type()),
-                &[],
-                if is_artificial { DIFlagsConstants::ARTIFICIAL } else { DIFlagsConstants::ZERO },
-            );
+        let subroutine_type = self.dibuilder.create_subroutine_type(
+            self.file,
+            Some(i64_type.as_type()),
+            &[],
+            if is_artificial {
+                DIFlagsConstants::ARTIFICIAL
+            } else {
+                DIFlagsConstants::ZERO
+            },
+        );
 
-        let subprogram = self
-            .dibuilder
-            .create_function(
-                self.compile_unit.as_debug_info_scope(),
-                name,
-                None,
-                self.file,
-                line,
-                subroutine_type,
-                false,
-                true,
-                line,
-                if is_artificial { DIFlagsConstants::ARTIFICIAL } else { DIFlagsConstants::ZERO },
-                false,
-            );
+        let subprogram = self.dibuilder.create_function(
+            self.compile_unit.as_debug_info_scope(),
+            name,
+            None,
+            self.file,
+            line,
+            subroutine_type,
+            false,
+            true,
+            line,
+            if is_artificial {
+                DIFlagsConstants::ARTIFICIAL
+            } else {
+                DIFlagsConstants::ZERO
+            },
+            false,
+        );
 
         Ok(subprogram)
     }
@@ -107,15 +111,13 @@ impl<'ctx> DebugInfoGen<'ctx> {
         line: u32,
         column: u32,
     ) -> Result<DILocation<'ctx>, String> {
-        let loc = self
-            .dibuilder
-            .create_debug_location(
-                self.context,
-                line,
-                column,
-                subprogram.as_debug_info_scope(),
-                None,
-            );
+        let loc = self.dibuilder.create_debug_location(
+            self.context,
+            line,
+            column,
+            subprogram.as_debug_info_scope(),
+            None,
+        );
         Ok(loc)
     }
 
@@ -130,18 +132,16 @@ impl<'ctx> DebugInfoGen<'ctx> {
             .create_basic_type("i64", 64, 64, 0x05)
             .map_err(|e| format!("create_basic_type: {e}"))?;
 
-        let var = self
-            .dibuilder
-            .create_auto_variable(
-                subprogram.as_debug_info_scope(),
-                name,
-                self.file,
-                line,
-                i64_type.as_type(),
-                true,
-                DIFlagsConstants::ZERO,
-                0,
-            );
+        let var = self.dibuilder.create_auto_variable(
+            subprogram.as_debug_info_scope(),
+            name,
+            self.file,
+            line,
+            i64_type.as_type(),
+            true,
+            DIFlagsConstants::ZERO,
+            0,
+        );
         Ok(var)
     }
 
@@ -164,21 +164,17 @@ impl<'ctx> DebugInfoGen<'ctx> {
 
         // Convert debug metadata to MetadataValue using unsafe FFI
         let var_md = unsafe {
-            inkwell::values::MetadataValue::new(
-                llvm_sys::core::LLVMMetadataAsValue(
-                    ctx_ptr,
-                    variable.as_mut_ptr(),
-                )
-            )
+            inkwell::values::MetadataValue::new(llvm_sys::core::LLVMMetadataAsValue(
+                ctx_ptr,
+                variable.as_mut_ptr(),
+            ))
         };
 
         let loc_md = unsafe {
-            inkwell::values::MetadataValue::new(
-                llvm_sys::core::LLVMMetadataAsValue(
-                    ctx_ptr,
-                    location.as_mut_ptr(),
-                )
-            )
+            inkwell::values::MetadataValue::new(llvm_sys::core::LLVMMetadataAsValue(
+                ctx_ptr,
+                location.as_mut_ptr(),
+            ))
         };
 
         let empty_md = module.get_context().metadata_node(&[]);
@@ -252,7 +248,7 @@ mod tests {
         let ctx = Context::create();
         let module = ctx.create_module("test");
         match DebugInfoGen::new(&module, "test.g", DWARFEmissionKind::Full) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 eprintln!("DebugInfoGen::new() failed: {e}");
             }

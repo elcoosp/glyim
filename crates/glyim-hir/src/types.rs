@@ -1,7 +1,7 @@
 //! Type system types and patterns for the HIR.
 
-use glyim_interner::Symbol;
 use glyim_diag::Span;
+use glyim_interner::Symbol;
 
 /// Unique identifier for an expression node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

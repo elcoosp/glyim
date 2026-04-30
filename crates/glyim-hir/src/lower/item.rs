@@ -65,9 +65,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             fields,
             ..
         } => {
-            let end = fields
-                .last()
-                .map_or(name_span.end, |(_, s, _)| s.end);
+            let end = fields.last().map_or(name_span.end, |(_, s, _)| s.end);
             let hir_fields: Vec<StructField> = fields
                 .iter()
                 .map(|(sym, _, _ty)| StructField {
@@ -88,9 +86,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             variants,
             ..
         } => {
-            let end = variants
-                .last()
-                .map_or(name_span.end, |v| v.name_span.end);
+            let end = variants.last().map_or(name_span.end, |v| v.name_span.end);
             let hir_variants: Vec<HirVariant> = variants
                 .iter()
                 .enumerate()
@@ -138,11 +134,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     {
                         let all_tp: Vec<_> =
                             type_params.iter().chain(fn_tp.iter()).copied().collect();
-                        let mangled_name = ctx.intern(&format!(
-                            "{}_{}",
-                            ctx.resolve(*target),
-                            ctx.resolve(*name)
-                        ));
+                        let mangled_name =
+                            ctx.intern(&format!("{}_{}", ctx.resolve(*target), ctx.resolve(*name)));
                         Some(HirFn {
                             name: mangled_name,
                             type_params: all_tp,
@@ -189,7 +182,9 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             span: glyim_diag::Span::new(name_span.start, body.span.end),
             is_macro_generated: true,
         })),
-        Item::ExternBlock { span, functions, .. } => {
+        Item::ExternBlock {
+            span, functions, ..
+        } => {
             let ex_fns: Vec<ExternFn> = functions
                 .iter()
                 .map(|f| ExternFn {

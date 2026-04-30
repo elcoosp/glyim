@@ -1,6 +1,6 @@
-mod debug;
 mod alloc;
 pub mod codegen;
+mod debug;
 mod runtime_shims;
 pub use codegen::Codegen;
 
@@ -97,36 +97,51 @@ mod debug_ir_tests {
     #[test]
     fn compile_to_ir_debug_has_subprogram() {
         let ir = compile_to_ir_debug("main = () => 42", true).unwrap();
-        assert!(ir.contains("DISubprogram"), "IR should contain DISubprogram\nGot:\n{ir}");
+        assert!(
+            ir.contains("DISubprogram"),
+            "IR should contain DISubprogram\nGot:\n{ir}"
+        );
     }
 
     #[test]
     fn compile_to_ir_debug_has_debug_locations() {
         let ir = compile_to_ir_debug("main = () => 42", true).unwrap();
-        assert!(ir.contains("!dbg"), "IR should contain debug locations (!dbg)\nGot:\n{ir}");
+        assert!(
+            ir.contains("!dbg"),
+            "IR should contain debug locations (!dbg)\nGot:\n{ir}"
+        );
     }
 
     #[test]
     fn compile_to_ir_release_no_debug() {
         let ir = compile_to_ir_debug("main = () => 42", false).unwrap();
-        assert!(!ir.contains("DISubprogram"), "Release should have no subprograms\nGot:\n{ir}");
-        assert!(!ir.contains("!dbg"), "Release should have no debug locations\nGot:\n{ir}");
+        assert!(
+            !ir.contains("DISubprogram"),
+            "Release should have no subprograms\nGot:\n{ir}"
+        );
+        assert!(
+            !ir.contains("!dbg"),
+            "Release should have no debug locations\nGot:\n{ir}"
+        );
     }
 
     #[test]
     fn compile_to_ir_debug_multi_function() {
-        let ir = compile_to_ir_debug(
-            "fn helper() { 0 }\nmain = () => { helper() }",
-            true,
-        ).unwrap();
+        let ir = compile_to_ir_debug("fn helper() { 0 }\nmain = () => { helper() }", true).unwrap();
         let count = ir.matches("DISubprogram").count();
-        assert!(count >= 2, "Expected >= 2 DISubprogram, got {count}\nIR:\n{ir}");
+        assert!(
+            count >= 2,
+            "Expected >= 2 DISubprogram, got {count}\nIR:\n{ir}"
+        );
     }
 
     #[test]
     fn compile_to_ir_debug_has_local_variable() {
         let ir = compile_to_ir_debug("fn main() { let x = 42; x }", true).unwrap();
-        assert!(ir.contains("DILocalVariable"), "IR should contain DILocalVariable\nGot:\n{ir}");
+        assert!(
+            ir.contains("DILocalVariable"),
+            "IR should contain DILocalVariable\nGot:\n{ir}"
+        );
     }
     #[test]
     fn compile_to_ir_debug_macro_has_artificial_flag() {
@@ -134,15 +149,20 @@ mod debug_ir_tests {
 main = () => @identity(99)";
         let ir = compile_to_ir_debug(src, true).unwrap();
         // Macro-generated function should have DIFlagArtificial
-        assert!(ir.contains("DISubprogram"), "IR should contain DISubprogram
+        assert!(
+            ir.contains("DISubprogram"),
+            "IR should contain DISubprogram
 Got:
-{ir}");
+{ir}"
+        );
         // The transform function is macro-generated, so it should be present
-        assert!(ir.contains("transform"), "IR should contain function transform
+        assert!(
+            ir.contains("transform"),
+            "IR should contain function transform
 Got:
-{ir}");
+{ir}"
+        );
     }
-
 }
 
 #[cfg(test)]
@@ -152,12 +172,18 @@ mod line_tables_tests {
     #[test]
     fn compile_to_ir_line_tables_has_debug_locations() {
         let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
-        assert!(ir.contains("!dbg"), "Line tables mode should have debug locations\nGot:\n{ir}");
+        assert!(
+            ir.contains("!dbg"),
+            "Line tables mode should have debug locations\nGot:\n{ir}"
+        );
     }
 
     #[test]
     fn compile_to_ir_line_tables_has_line_tables_only() {
         let ir = compile_to_ir_line_tables("main = () => 42").unwrap();
-        assert!(ir.contains("emissionKind: LineTablesOnly"), "Line tables mode should specify LineTablesOnly emission kind\nGot:\n{ir}");
+        assert!(
+            ir.contains("emissionKind: LineTablesOnly"),
+            "Line tables mode should specify LineTablesOnly emission kind\nGot:\n{ir}"
+        );
     }
 }

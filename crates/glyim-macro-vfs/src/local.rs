@@ -54,7 +54,6 @@ impl ContentStore for LocalContentStore {
         hex.parse().ok()
     }
 
-
     fn store_action_result(
         &self,
         action_hash: ContentHash,
@@ -69,7 +68,10 @@ impl ContentStore for LocalContentStore {
         Ok(())
     }
 
-    fn retrieve_action_result(&self, action_hash: ContentHash) -> Option<crate::store::ActionResult> {
+    fn retrieve_action_result(
+        &self,
+        action_hash: ContentHash,
+    ) -> Option<crate::store::ActionResult> {
         let name = format!("action:{}", action_hash);
         let hash = self.resolve_name(&name)?;
         let json = self.retrieve(hash)?;

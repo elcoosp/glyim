@@ -62,8 +62,12 @@ impl From<glyim_pkg::error::PkgError> for ManifestError {
     fn from(e: glyim_pkg::error::PkgError) -> Self {
         match e {
             glyim_pkg::error::PkgError::ParseToml { reason, .. } => ManifestError::Parse(reason),
-            glyim_pkg::error::PkgError::MissingSection { section, .. } => ManifestError::MissingSection(section),
-            glyim_pkg::error::PkgError::MissingField { field, .. } => ManifestError::MissingField(field),
+            glyim_pkg::error::PkgError::MissingSection { section, .. } => {
+                ManifestError::MissingSection(section)
+            }
+            glyim_pkg::error::PkgError::MissingField { field, .. } => {
+                ManifestError::MissingField(field)
+            }
             _ => ManifestError::Parse(e.to_string()),
         }
     }

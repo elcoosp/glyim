@@ -1,7 +1,7 @@
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_interner::Interner;
-use glyim_typeck::TypeChecker;
 use glyim_pkg::cas_client::CasClient;
+use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
@@ -114,13 +114,9 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
-    let mut codegen = Codegen::with_line_tables(
-        &context,
-        interner,
-        typeck.expr_types.clone(),
-        source,
-    )
-    .map_err(PipelineError::Codegen)?;
+    let mut codegen =
+        Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source)
+            .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -128,7 +124,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
-        link_object(&obj_path, &output, false)?;
+    link_object(&obj_path, &output, false)?;
     Ok(output)
 }
 
@@ -180,13 +176,9 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         return Err(PipelineError::TypeCheck(errs));
     }
     let context = Context::create();
-    let mut codegen = Codegen::with_line_tables(
-        &context,
-        parse_out.interner,
-        vec![],
-        source.clone(),
-    )
-    .map_err(PipelineError::Codegen)?;
+    let mut codegen =
+        Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone())
+            .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -201,7 +193,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let status = Command::new(&exe_path)
         .status()
         .map_err(PipelineError::Run)?;
-        Ok(status.code().unwrap_or(1))
+    Ok(status.code().unwrap_or(1))
 }
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {
@@ -330,7 +322,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     let status = Command::new(&exe_path)
         .status()
         .map_err(PipelineError::Run)?;
-        Ok(status.code().unwrap_or(1))
+    Ok(status.code().unwrap_or(1))
 }
 
 pub fn build_with_mode(
@@ -372,7 +364,7 @@ pub fn build_with_mode(
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
-        link_object(&obj_path, &output, mode == BuildMode::Release)?;
+    link_object(&obj_path, &output, mode == BuildMode::Release)?;
     Ok(output)
 }
 
@@ -687,7 +679,6 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
     Ok(())
 }
 
-
 /// Compute a source hash for build caching.
 #[allow(dead_code)]
 fn compute_source_hash(source: &str) -> String {
@@ -708,11 +699,14 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let cache_dir = dirs_next::cache_dir()
         .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
         .join("glyim-objects");
-    let cas = CasClient::new(&cache_dir)
-        .map_err(PipelineError::Io)?;
+    let cas = CasClient::new(&cache_dir).map_err(PipelineError::Io)?;
 
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
-        let stem = input.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        let stem = input
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         PathBuf::from(stem)
     });
 
@@ -737,7 +731,9 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let context = Context::create();
     let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
     codegen.generate(&hir).map_err(PipelineError::Codegen)?;
-    codegen.write_object_file(&obj_path).map_err(PipelineError::Codegen)?;
+    codegen
+        .write_object_file(&obj_path)
+        .map_err(PipelineError::Codegen)?;
 
     // Store the object in cache
     let obj_bytes = fs::read(&obj_path)?;
@@ -815,7 +811,9 @@ mod no_std_tests {
     fn detect_no_std_known_limitation_comment() {
         // Comments on their own line are correctly excluded
         // because the trimmed line is "// no_std", not "no_std".
-        assert!(!detect_no_std("// no_std
-fn main() { 0 }"));
+        assert!(!detect_no_std(
+            "// no_std
+fn main() { 0 }"
+        ));
     }
 }

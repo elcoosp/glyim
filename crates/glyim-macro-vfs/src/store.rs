@@ -19,7 +19,10 @@ pub enum StoreError {
     Network(String),
     Auth(String),
     Io(String),
-    HashMismatch { expected: ContentHash, actual: ContentHash },
+    HashMismatch {
+        expected: ContentHash,
+        actual: ContentHash,
+    },
 }
 
 impl std::fmt::Display for StoreError {
@@ -75,7 +78,11 @@ mod tests {
         fn resolve_name(&self, _name: &str) -> Option<ContentHash> {
             None
         }
-        fn store_action_result(&self, _action_hash: ContentHash, _result: ActionResult) -> Result<(), StoreError> {
+        fn store_action_result(
+            &self,
+            _action_hash: ContentHash,
+            _result: ActionResult,
+        ) -> Result<(), StoreError> {
             Ok(())
         }
         fn retrieve_action_result(&self, _action_hash: ContentHash) -> Option<ActionResult> {
@@ -91,11 +98,14 @@ mod tests {
         let store = MockStore;
         let _ = store.store(b"hello");
         let _ = store.retrieve(ContentHash::of_str("test"));
-        let _ = store.store_action_result(ContentHash::of_str("action"), ActionResult {
-            output_files: vec![],
-            exit_code: 0,
-            stdout_hash: None,
-            stderr_hash: None,
-        });
+        let _ = store.store_action_result(
+            ContentHash::of_str("action"),
+            ActionResult {
+                output_files: vec![],
+                exit_code: 0,
+                stdout_hash: None,
+                stderr_hash: None,
+            },
+        );
     }
 }
