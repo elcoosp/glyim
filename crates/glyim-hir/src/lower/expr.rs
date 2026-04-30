@@ -157,11 +157,21 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             span,
         },
 
-        ExprKind::As { expr, target_type } => HirExpr::As {
-            id,
-            expr: Box::new(lower_expr(expr, ctx)),
-            target_type: resolve_type_name(ctx.resolve(*target_type), *target_type),
-            span,
+        ExprKind::As { expr, target_type } => {
+            let target_hir = match ctx.resolve(*target_type) {
+                "i64" | "Int" => HirType::Int,
+                "f64" | "Float" => HirType::Float,
+                "bool" | "Bool" => HirType::Bool,
+                "Str" | "str" => HirType::Str,
+                "ptr" => HirType::RawPtr(Box::new(HirType::Int)),
+                _ => HirType::Named(*target_type),
+            };
+            HirExpr::As {
+                id,
+                expr: Box::new(lower_expr(expr, ctx)),
+                target_type: target_hir,
+                span,
+            }
         },
 
         ExprKind::MacroCall { name, arg } => {
@@ -241,7 +251,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                     span,
                 }),
                 arms: vec![
-                    (HirPattern::OptionSome(Box::new(pattern.clone())), None, body_expr),
+                    (HirPattern::OptionSome(Box::new(lower_pattern(pattern, ctx))), None, body_expr),
                     (HirPattern::OptionNone, None, HirExpr::Block {
                         id: ctx.fresh_id(),
                         stmts: vec![

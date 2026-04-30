@@ -133,17 +133,33 @@ impl Parser<'_> {
             }
             if op_tok.kind == SyntaxKind::KwAs && 85 >= min_bp {
                 self.tokens.bump();
-                let target_tok = self
-                    .tokens
-                    .expect(SyntaxKind::Ident, &mut self.errors)
+                let target_type = super::types::parse_type_expr(&mut self.tokens, &mut self.interner)
+                    .ok_or_else(|| {
+                        self.errors.push(crate::ParseError::expected_expr(
+                            self.tokens.peek().map_or(glyim_syntax::SyntaxKind::Eof, |t| t.kind),
+                            self.tokens.peek().map_or(0, |t| t.start),
+                            self.tokens.peek().map_or(0, |t| t.end),
+                        ));
+                    })
                     .ok()?;
-                let target = self.interner.intern(target_tok.text);
+                let end = self.tokens.peek().map_or(left.span.end, |t| t.start);
+                // Convert TypeExpr to Symbol for the AST
+                let target_sym = match &target_type {
+                    crate::ast::TypeExpr::Int => self.interner.intern("i64"),
+                    crate::ast::TypeExpr::Float => self.interner.intern("f64"),
+                    crate::ast::TypeExpr::Bool => self.interner.intern("bool"),
+                    crate::ast::TypeExpr::Str => self.interner.intern("Str"),
+                    crate::ast::TypeExpr::Unit => self.interner.intern("()"),
+                    crate::ast::TypeExpr::Named(s) => *s,
+                    crate::ast::TypeExpr::RawPtr { .. } => self.interner.intern("ptr"),
+                    _ => self.interner.intern("unknown"),
+                };
                 left = ExprNode {
                     kind: ExprKind::As {
                         expr: Box::new(left.clone()),
-                        target_type: target,
+                        target_type: target_sym,
                     },
-                    span: Span::new(left.span.start, target_tok.end),
+                    span: Span::new(left.span.start, end),
                 };
                 continue;
             }

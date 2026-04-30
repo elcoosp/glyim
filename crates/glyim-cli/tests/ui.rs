@@ -12,6 +12,7 @@ fn ui_dir() -> PathBuf {
 }
 
 fn compile_stderr(source: &str, file_path: &str) -> String {
+    std::env::set_var("NO_COLOR", "1");
     let parse_out = parse(source);
     let mut errors = String::new();
     if !parse_out.errors.is_empty() {
