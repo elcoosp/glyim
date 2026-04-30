@@ -149,6 +149,7 @@ impl<'a> Parser<'a> {
 }
 
 use glyim_lex::tokenize;
+#[tracing::instrument(skip_all)]
 
 pub fn parse(source: &str) -> ParseOutput {
     let tokens = tokenize(source);
