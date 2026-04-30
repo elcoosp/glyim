@@ -102,10 +102,8 @@ pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef)
     cg.struct_types.borrow_mut().insert(def.name, struct_type);
     let mut index_map = cg.struct_field_indices.borrow_mut();
     for (i, field) in def.fields.iter().enumerate() {
-        eprintln!("[codegen_struct_def] inserting key ({:?}, {:?}) at idx {}", def.name, field.name, i);
         index_map.insert((def.name, field.name), i);
     }
-    eprintln!("[codegen_struct_def] struct_field_indices now has keys: {:?}", index_map.keys().collect::<Vec<_>>());
 }
 
 pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {

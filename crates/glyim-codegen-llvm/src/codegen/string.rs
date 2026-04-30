@@ -113,7 +113,8 @@ pub(crate) fn codegen_call<'ctx>(
         }
     };
 
-    // __ptr_offset built‑in: ptr + offset * sizeof(element)
+    eprintln!("[codegen_call] fn_name: {}, module has: {}", fn_name, cg.module.get_function(fn_name).is_some());
+    // __ptr_offset built‑in:
     if fn_name == "__ptr_offset" && args.len() == 2 {
         let ptr_val = codegen_expr(cg, &args[0], fctx)?;
         let offset_val = codegen_expr(cg, &args[1], fctx)?;

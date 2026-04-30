@@ -164,7 +164,6 @@ pub(crate) fn codegen_field_access<'ctx>(
         drop(index_map);
         let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
             Some(HirType::Named(name)) => {
-                eprintln!("[codegen_field_access] looking up struct named {:?}", cg.interner.resolve(*name));
                 cg.struct_types.borrow().get(name).copied()
             }
             _ => None,

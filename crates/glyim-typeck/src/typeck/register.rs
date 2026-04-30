@@ -13,7 +13,10 @@ impl TypeChecker {
                 glyim_hir::item::HirItem::Enum(e) => self.register_enum(e),
                 glyim_hir::item::HirItem::Extern(ext) => self.register_extern(ext),
                 glyim_hir::item::HirItem::Impl(imp) => self.register_impl(imp),
-                glyim_hir::item::HirItem::Fn(f) => self.fns.push(f.clone()),
+                glyim_hir::item::HirItem::Fn(f) => {
+                    eprintln!("[typeck register] registering fn {:?} (type_params={:?})", self.interner.resolve(f.name), f.type_params);
+                    self.fns.push(f.clone());
+                }
             }
         }
     }
