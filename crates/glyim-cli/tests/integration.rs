@@ -383,4 +383,23 @@ fn e2e_assign_to_immutable_is_error() {
 fn e2e_struct_with_ptr_parse_and_typecheck() {
     let src = "struct Ptr { data: *mut i64 }\nmain = () => { 42 }";
     assert!(pipeline::run(&temp_g(src)).is_ok());
+
+#[test]
+fn e2e_veci64_push_get() {
+    let stdlib_vec = std::fs::read_to_string("stdlib/src/vec_i64.g").unwrap();
+    let main_code = r#"
+main = () => {
+    let v = VecI64::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    let x = v.get(1);  // should be 20
+    x
+}
+"#;
+    let full_src = format!("{}\n{}", stdlib_vec, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input).unwrap(), 20);
+}
+
 }

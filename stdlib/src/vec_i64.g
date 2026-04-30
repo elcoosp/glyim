@@ -16,23 +16,23 @@ impl VecI64 {
             if self.data != (0 as *mut i64) {
                 let i = 0;
                 while i < self.len {
-                    let src_ptr = self.data + i;
-                    let dst_ptr = new_data + i;
+                    let src_ptr = __ptr_offset(self.data as *mut u8, i) as *mut i64;
+                    let dst_ptr = __ptr_offset(new_data as *mut u8, i) as *mut i64;
                     *dst_ptr = *src_ptr;
                     i = i + 1
                 };
-                glyim_free(self.data as *mut i64)
+                glyim_free(self.data as *mut u8)
             };
             self.data = new_data;
             self.cap = new_cap
         };
-        let dst = self.data + self.len;
+        let dst = __ptr_offset(self.data as *mut u8, self.len) as *mut i64;
         *dst = value;
         self.len = self.len + 1
     }
 
     pub fn get(self: VecI64, index: i64) -> i64 {
-        if index >= self.len { 0 } else { *(self.data + index) }
+        if index >= self.len { 0 } else { *(__ptr_offset(self.data as *mut u8, index) as *mut i64) }
     }
 
     pub fn len(self: VecI64) -> i64 { self.len }
