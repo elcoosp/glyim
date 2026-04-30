@@ -183,10 +183,6 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_out");
-    eprintln!("----- LLVM IR -----");
-    eprintln!("{}", codegen.ir_string());
-    eprintln!("----- LLVM IR -----");
-    eprintln!("{}", codegen.ir_string());
     link_object(&obj_path, &exe_path, false)?;
     let status = Command::new(&exe_path)
         .status()
@@ -292,10 +288,6 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_out");
-    eprintln!("----- LLVM IR -----");
-    eprintln!("{}", codegen.ir_string());
-    eprintln!("----- LLVM IR -----");
-    eprintln!("{}", codegen.ir_string());
     link_object(&obj_path, &exe_path, mode == BuildMode::Release)?;
     let status = Command::new(&exe_path)
         .status()

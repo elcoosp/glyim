@@ -23,7 +23,7 @@ pub struct TypeChecker {
     pub structs: HashMap<Symbol, StructInfo>,
     pub enums: HashMap<Symbol, EnumInfo>,
     pub extern_fns: HashMap<Symbol, FnSig>,
-    pub impl_methods: HashMap<Symbol, Vec<(Symbol, HirFn)>>,
+    pub impl_methods: HashMap<Symbol, Vec<HirFn>>,
     pub expr_types: Vec<HirType>,
     pub return_type: Option<HirType>,
     pub errors: Vec<TypeError>,
@@ -55,7 +55,8 @@ impl TypeChecker {
         let ok = self.interner.intern("Ok");
         let err = self.interner.intern("Err");
 
-        let opt_variants = [glyim_hir::item::HirVariant {
+        let opt_variants = [
+            glyim_hir::item::HirVariant {
                 name: some,
                 fields: vec![],
                 tag: 0,
@@ -64,8 +65,10 @@ impl TypeChecker {
                 name: none,
                 fields: vec![],
                 tag: 1,
-            }];
-        let res_variants = [glyim_hir::item::HirVariant {
+            },
+        ];
+        let res_variants = [
+            glyim_hir::item::HirVariant {
                 name: ok,
                 fields: vec![],
                 tag: 0,
@@ -74,7 +77,8 @@ impl TypeChecker {
                 name: err,
                 fields: vec![],
                 tag: 1,
-            }];
+            },
+        ];
 
         self.enums.insert(
             opt_name,

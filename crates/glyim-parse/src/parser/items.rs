@@ -368,10 +368,11 @@ fn parse_extern_type(parser: &mut Parser) -> Option<TypeExpr> {
         parser.tokens.bump();
         let mutable = parser.tokens.eat(SyntaxKind::KwMut).is_some();
         if !mutable
-            && parser.tokens.at(SyntaxKind::Ident) && parser.tokens.peek().unwrap().text == "const"
-            {
-                parser.tokens.bump();
-            }
+            && parser.tokens.at(SyntaxKind::Ident)
+            && parser.tokens.peek().unwrap().text == "const"
+        {
+            parser.tokens.bump();
+        }
         let inner = parse_extern_type(parser)?;
         Some(TypeExpr::RawPtr {
             mutable,

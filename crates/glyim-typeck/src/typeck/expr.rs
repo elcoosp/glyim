@@ -149,12 +149,16 @@ impl TypeChecker {
                 for a in args {
                     self.check_expr(a);
                 }
-                // look up method in impl methods by receiver type name
+                // look up method in impl methods by mangled name computed from receiver type
                 if let HirType::Named(type_name) = receiver_ty {
+                    let mangled = format!(
+                        "{}_{}",
+                        self.interner.resolve(type_name),
+                        self.interner.resolve(*method_name)
+                    );
+                    let mangled_sym = self.interner.intern(&mangled);
                     if let Some(methods) = self.impl_methods.get(&type_name) {
-                        if let Some((_, fn_def)) =
-                            methods.iter().find(|(name, _)| *name == *method_name)
-                        {
+                        if let Some(fn_def) = methods.iter().find(|f| f.name == mangled_sym) {
                             return fn_def.ret.clone().unwrap_or(HirType::Int);
                         }
                     }
@@ -282,7 +286,7 @@ impl TypeChecker {
                 .unwrap_or(HirType::Int);
         }
         for methods in self.impl_methods.values() {
-            if let Some((_, fn_def)) = methods.iter().find(|(name, _)| *name == callee) {
+            if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
                 return fn_def.ret.clone().unwrap_or(HirType::Int);
             }
         }

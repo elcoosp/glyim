@@ -359,12 +359,16 @@ fn lower_call(
                 }
             }
             "assert" => {
-                let cond = call_args.into_iter().next().unwrap_or(HirExpr::IntLit {
-                    id: ctx.fresh_id(),
-                    value: 0,
-                    span: glyim_diag::Span::new(0, 0),
-                });
-                let msg = None;
+                let cond = if let Some(first) = args.first() {
+                    lower_expr(first, ctx)
+                } else {
+                    HirExpr::IntLit {
+                        id: ctx.fresh_id(),
+                        value: 0,
+                        span: glyim_diag::Span::new(0, 0),
+                    }
+                };
+                let msg = args.get(1).map(|a| Box::new(lower_expr(a, ctx)));
                 return HirExpr::Assert {
                     id: ctx.fresh_id(),
                     condition: Box::new(cond),
@@ -373,7 +377,6 @@ fn lower_call(
                 };
             }
             _ => {
-                let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
                 return HirExpr::Call {
                     id: ctx.fresh_id(),
                     callee: *sym,

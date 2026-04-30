@@ -146,7 +146,6 @@ fn lower_ident() {
 
 // ---- Statement lowering ----
 #[test]
-#[test]
 fn lower_let_stmt() {
     let (hir, interner) = lower_source("main = () => { let x = 42 }");
     let body = get_main_body(&hir, &interner);
@@ -170,7 +169,6 @@ fn lower_let_stmt() {
     }
 }
 
-#[test]
 #[test]
 fn lower_let_mut_stmt() {
     let (hir, interner) = lower_source("main = () => { let mut x = 10 }");
@@ -361,7 +359,6 @@ fn lower_none_expr() {
 }
 
 #[test]
-#[test]
 fn lower_ok_err_expr() {
     let (hir, interner) = lower_source("main = () => { let r = Ok(42); let e = Err(0); 0 }");
     let body = get_main_body(&hir, &interner);
@@ -421,7 +418,6 @@ fn lower_field_access() {
     assert!(matches!(val, HirExpr::FieldAccess { .. }));
 }
 
-#[test]
 #[test]
 fn lower_as_expr() {
     let (hir, interner) = lower_source("main = () => 42 as f64");
@@ -487,6 +483,8 @@ fn lower_empty_source() {
     let (hir, _) = lower_source("");
     assert!(hir.items.is_empty());
 }
+#[test]
+#[test]
 fn lower_enum_variant_construction() {
     let (hir, interner) =
         lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Green; c }");
