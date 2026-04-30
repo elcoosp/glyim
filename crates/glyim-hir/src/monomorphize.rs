@@ -83,14 +83,11 @@ impl<'a> MonoContext<'a> {
     }
 
     fn collect_and_specialize(&mut self) {
-        // Seed work queue from call_type_args
-        for (expr_id, type_args) in self.call_type_args.iter() {
-            for item in &self.hir.items {
-                if let HirItem::Fn(f) = item {
-                    if let Some(callee) = self.find_call_callee_by_id(&f.body, *expr_id) {
-                        self.fn_work_queue.push((callee, type_args.clone()));
-                    }
-                }
+        // Seed work queue: scan ALL function bodies for generic calls.
+        // This allows inference from expr_types even when call_type_args is empty.
+        for item in &self.hir.items {
+            if let HirItem::Fn(f) = item {
+                self.scan_expr_for_generic_calls(&f.body);
             }
         }
 
@@ -245,11 +242,17 @@ impl<'a> MonoContext<'a> {
                             .iter()
                             .map(|a| self.expr_types.get(a.get_id().as_usize()).cloned().unwrap_or(HirType::Never))
                             .collect();
+                        // Map type params to concrete types by matching param positions
+                        // where the declared type equals the type param symbol.
                         let mut sub = HashMap::new();
-                        for (i, tp) in fn_def.type_params.iter().enumerate() {
-                            if let Some(at) = arg_types.get(i) {
-                                if *at != HirType::Never {
-                                    sub.insert(*tp, at.clone());
+                        for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
+                            if let HirType::Named(param_sym) = param_ty {
+                                if fn_def.type_params.contains(param_sym) {
+                                    if let Some(at) = arg_types.get(param_idx) {
+                                        if *at != HirType::Never {
+                                            sub.insert(*param_sym, at.clone());
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -336,9 +339,9 @@ impl<'a> MonoContext<'a> {
         let fn_keys: Vec<(Symbol, Vec<HirType>)> = self.fn_specs.keys().cloned().collect();
         let struct_keys: Vec<(Symbol, Vec<HirType>)> = self.struct_specs.keys().cloned().collect();
 
-        let fn_mangle_map: HashMap<Symbol, Symbol> = fn_keys
+        let fn_mangle_map: HashMap<(Symbol, Vec<HirType>), Symbol> = fn_keys
             .iter()
-            .map(|(name, args)| (*name, self.mangle_name(*name, args)))
+            .map(|(name, args)| ((*name, args.clone()), self.mangle_name(*name, args)))
             .collect();
 
         let struct_mangle_map: HashMap<Symbol, Symbol> = struct_keys
@@ -424,13 +427,13 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    fn rewrite_fn(&mut self, f: &HirFn, fn_map: &HashMap<Symbol, Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirFn {
+    fn rewrite_fn(&mut self, f: &HirFn, fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirFn {
         let mut mono = f.clone();
         mono.body = self.rewrite_expr(&f.body, fn_map, struct_map);
         mono
     }
 
-    fn rewrite_impl(&mut self, imp: &HirImplDef, fn_map: &HashMap<Symbol, Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirImplDef {
+    fn rewrite_impl(&mut self, imp: &HirImplDef, fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirImplDef {
         let mut mono = imp.clone();
         for method in &mut mono.methods {
             method.body = self.rewrite_expr(&method.body, fn_map, struct_map);
@@ -438,10 +441,17 @@ impl<'a> MonoContext<'a> {
         mono
     }
 
-    fn rewrite_expr(&mut self, expr: &HirExpr, fn_map: &HashMap<Symbol, Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirExpr {
+    fn rewrite_expr(&mut self, expr: &HirExpr, fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirExpr {
         match expr {
             HirExpr::Call { id, callee, args, span } => {
-                let new_callee = fn_map.get(callee).copied().unwrap_or(*callee);
+                // Look up with concrete type args (from call_type_args or inferred)
+                let key = if let Some(type_args) = self.call_type_args.get(id) {
+                    (*callee, type_args.clone())
+                } else {
+                    // Fallback: try just the name (will miss collisions)
+                    (*callee, vec![])
+                };
+                let new_callee = fn_map.get(&key).copied().unwrap_or(*callee);
                 HirExpr::Call {
                     id: *id,
                     callee: new_callee,
@@ -533,7 +543,7 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    fn rewrite_stmt(&mut self, stmt: &HirStmt, fn_map: &HashMap<Symbol, Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirStmt {
+    fn rewrite_stmt(&mut self, stmt: &HirStmt, fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirStmt {
         match stmt {
             HirStmt::Let { name, mutable, value, span } => {
                 HirStmt::Let { name: *name, mutable: *mutable, value: self.rewrite_expr(value, fn_map, struct_map), span: *span }

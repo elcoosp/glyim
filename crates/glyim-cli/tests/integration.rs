@@ -408,4 +408,38 @@ fn e2e_generic_identity_call() {
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
 }
 
+
+// ── Monomorphization verification tests ──────────────────────────
+
+#[test]
+fn e2e_mono_generic_fn_discovered_without_call_type_args() {
+    // Bug 1: seed queue by scanning function bodies, not just call_type_args.
+    // This should work even though no explicit type arguments are provided.
+    let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+}
+
+#[test]
+fn e2e_mono_non_generic_param_before_generic() {
+    // Bug 2: structural param mapping — first param is concrete, second is generic.
+    // fn wrap<T>(label: i64, value: T) -> T { value }
+    let src = "fn wrap<T>(label: i64, value: T) -> T { value }\nfn main() -> i64 { wrap(0, 99) }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 99);
+}
+
+#[test]
+fn e2e_mono_two_instantiations_same_fn() {
+    // Bug 4: two specialisations of the same generic function should not collide.
+    // id<i64> and id<bool> must both exist with mangled names.
+    let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { let a = id(42); let b = id(true); if b { a } else { 0 } }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+}
+
+#[test]
+fn e2e_mono_generic_fn_with_two_type_params() {
+    // Verify that multi-param generics work correctly.
+    let src = "fn pair<A,B>(a: A, b: B) -> B { b }\nfn main() -> i64 { pair(1, 42) }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+}
+
 }
