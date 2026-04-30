@@ -83,8 +83,18 @@ impl<'a> MonoContext<'a> {
     }
 
     fn collect_and_specialize(&mut self) {
-        // Seed work queue: scan ALL function bodies for generic calls.
-        // This allows inference from expr_types even when call_type_args is empty.
+        // Seed work queue from call_type_args (provided by type checker)
+        for (expr_id, type_args) in self.call_type_args.iter() {
+            for item in &self.hir.items {
+                if let HirItem::Fn(f) = item {
+                    if let Some(callee) = self.find_call_callee_by_id(&f.body, *expr_id) {
+                        self.fn_work_queue.push((callee, type_args.clone()));
+                    }
+                }
+            }
+        }
+        // Also scan all function bodies to discover generic calls
+        // not yet in call_type_args (backward compatibility fallback).
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
                 self.scan_expr_for_generic_calls(&f.body);
