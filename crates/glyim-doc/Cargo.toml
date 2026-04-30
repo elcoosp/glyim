@@ -1,0 +1,13 @@
+[package]
+name = "glyim-doc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Documentation generator for Glyim"
+
+[dependencies]
+glyim-hir = { path = "../glyim-hir" }
+glyim-interner = { path = "../glyim-interner" }
+
+[dev-dependencies]
+glyim-parse = { path = "../glyim-parse" }

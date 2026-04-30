@@ -853,6 +853,7 @@ dependencies = [
  "dirs-next",
  "glyim-codegen-llvm",
  "glyim-diag",
+ "glyim-doc",
  "glyim-hir",
  "glyim-interner",
  "glyim-lex",
@@ -902,6 +903,15 @@ dependencies = [
  "miette-derive",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "glyim-doc"
+version = "0.5.0"
+dependencies = [
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-parse",
 ]
 
 [[package]]

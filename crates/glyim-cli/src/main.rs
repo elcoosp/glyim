@@ -76,6 +76,11 @@ enum Command {
     },
     Outdated,
     Verify,
+    Doc {
+        input: PathBuf,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
     DumpTokens {
         input: PathBuf,
     },
@@ -361,7 +366,7 @@ fn main() {
                 }
                 eprintln!("Fetching {} package(s)...", packages.len());
                 for pkg in &packages {
-                    eprintln!("  {} {} ({})", pkg.name, pkg.version, pkg.hash);
+                    eprintln!("  {} {} ({:?})", pkg.name, pkg.version, pkg.source);
                 }
                 eprintln!("Done.");
                 Ok(0)
@@ -442,6 +447,28 @@ fn main() {
                 Ok(0)
             })();
             result.unwrap_or_else(|code| code)
+        }
+        Command::Doc { input, output } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            let parse_out = glyim_parse::parse(&source);
+            if !parse_out.errors.is_empty() {
+                eprintln!("parse errors: {:?}", parse_out.errors);
+                1
+            } else {
+                let mut interner = parse_out.interner;
+                let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+                let html = glyim_doc::generate_html(&hir, &interner);
+                let out_path = output.as_deref().unwrap_or(std::path::Path::new("doc/index.html"));
+                if let Some(parent) = out_path.parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                if let Err(e) = std::fs::write(out_path, html) {
+                    eprintln!("error: {e}");
+                    1
+                } else {
+                    0
+                }
+            }
         }
         Command::DumpTokens { input } => {
             let source = std::fs::read_to_string(&input).unwrap_or_default();
