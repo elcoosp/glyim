@@ -247,7 +247,11 @@ fn e2e_test_should_panic_passes() {
 fn e2e_test_should_panic_fails_on_zero() {
     let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
     let summary = pipeline::run_tests(&input, None, false).unwrap();
-    assert_eq!(summary.failed(), 1, "should_panic test that returns 0 should fail");
+    assert_eq!(
+        summary.failed(),
+        1,
+        "should_panic test that returns 0 should fail"
+    );
     assert_eq!(summary.exit_code(), 1);
 }
 
@@ -265,7 +269,10 @@ fn e2e_test_filter_no_match() {
     let result = pipeline::run_tests(&input, Some("nonexistent"), false);
     assert!(result.is_err());
     let msg = format!("{:?}", result.unwrap_err());
-    assert!(msg.contains("no #[test]"), "error should mention no test functions: {msg}");
+    assert!(
+        msg.contains("no #[test]"),
+        "error should mention no test functions: {msg}"
+    );
 }
 
 #[test]
@@ -367,7 +374,13 @@ main = () => {
 "#;
     let full_src = format!("{}\n{}", vec_src, main_code);
     let input = temp_g(&full_src);
-    assert_eq!(pipeline::run(&input).unwrap(), 20);
+    match pipeline::run(&input) {
+        Ok(v) => assert_eq!(v, 20),
+        Err(e) => {
+            eprintln!("Vec test error: {:?}", e);
+            panic!("Vec test failed");
+        }
+    }
 }
 
 #[test]
@@ -434,4 +447,124 @@ main = () => {
 }
 "#;
     assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+}
+#[test]
+fn e2e_generic_wrapper_i64() {
+    let src = r#"
+struct Wrapper<T> { value: T }
+impl<T> Wrapper<T> { fn new(v: T) -> Wrapper<T> { Wrapper { value: v } } }
+main = () => {
+    let w = Wrapper::new(42);
+    w.value
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+}
+
+#[test]
+fn e2e_generic_wrapper_bool() {
+    let src = r#"
+struct Wrapper<T> { value: T }
+impl<T> Wrapper<T> { fn new(v: T) -> Wrapper<T> { Wrapper { value: v } } }
+main = () => {
+    let w = Wrapper::new(true);
+    if w.value { 1 } else { 0 }
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
+}
+
+#[test]
+fn e2e_vec_generic_push_get() {
+    let src = r#"
+struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
+impl<T> Vec<T> { fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } } }
+main = () => { let v = Vec::new(); v.len }
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+}
+
+
+#[test]
+fn e2e_string_generic_len() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let string_src = include_str!("../../../stdlib/src/string.g");
+    let main_code = r#"
+main = () => {
+    let s = String::new();
+    s.len()
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, string_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input).unwrap(), 0);
+
+#[test]
+fn e2e_vec_generic_len() {
+    let src = r#"
+struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
+impl<T> Vec<T> {
+    fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } }
+    fn len(&self) -> i64 { self.len }
+}
+main = () => { let v = Vec::new(); v.len() }
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+}
+
+
+#[test]
+fn e2e_vec_generic_push() {
+    let src = r#"
+struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
+impl<T> Vec<T> {
+    fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } }
+    fn push(&mut self, value: T) {
+        let elem_size = 8;
+        if self.len == self.cap {
+            let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
+            self.cap = new_cap;
+        };
+        let dst = __ptr_offset(self.data, self.len * elem_size) as *mut i64;
+        *dst = value;
+        self.len = self.len + 1;
+    }
+    fn get(&self, index: i64) -> i64 {
+        if index >= self.len { 0 }
+        else { *(__ptr_offset(self.data, index * 8) as *mut i64) }
+    }
+}
+main = () => {
+    let v = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    v.get(1)
+}
+"#;
+    match pipeline::run(&temp_g(src)) {
+        Ok(v) => assert_eq!(v, 20),
+        Err(e) => {
+            eprintln!("Push test error: {:?}", e);
+            panic!("Push test failed");
+        }
+    }
+}
+
+
+#[test]
+fn e2e_string_generic_len() {
+    let src = r#"
+struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
+impl<T> Vec<T> { fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } } }
+struct String { vec: Vec<u8> }
+impl String {
+    fn new() -> String { String { vec: Vec::new() } }
+    fn len(&self) -> i64 { self.vec.len() }
+}
+main = () => { let s = String::new(); s.len() }
+"#;
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+}
+
 }
