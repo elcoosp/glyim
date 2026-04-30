@@ -175,12 +175,13 @@ pub struct MatchArm {
     pub body: ExprNode,
 }
 
+// *** CHANGED: carries types ***
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExternFn {
     pub name: Symbol,
     pub name_span: Span,
-    pub params: Vec<(Symbol, Span)>,
-    pub ret: Option<(Symbol, Span)>,
+    pub params: Vec<(Symbol, Span, Option<TypeExpr>)>,
+    pub ret: Option<TypeExpr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

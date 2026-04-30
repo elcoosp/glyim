@@ -68,7 +68,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             let end = fields.last().map_or(name_span.end, |(_, s, _)| s.end);
             let hir_fields: Vec<StructField> = fields
                 .iter()
-                .map(|(sym, _, _ty)| StructField {
+                .map(|(sym, _, _)| StructField {
                     name: *sym,
                     ty: HirType::Int,
                 })
@@ -189,8 +189,20 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 .iter()
                 .map(|f| ExternFn {
                     name: f.name,
-                    params: f.params.iter().map(|_| HirType::Int).collect(),
-                    ret: HirType::Int,
+                    params: f
+                        .params
+                        .iter()
+                        .map(|(_, _, ty)| {
+                            ty.as_ref()
+                                .map(|t| lower_type_expr(t, ctx))
+                                .unwrap_or(HirType::Int)
+                        })
+                        .collect(),
+                    ret: f
+                        .ret
+                        .as_ref()
+                        .map(|t| lower_type_expr(t, ctx))
+                        .unwrap_or(HirType::Int),
                 })
                 .collect();
             Some(HirItem::Extern(ExternBlock {

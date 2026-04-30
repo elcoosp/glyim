@@ -26,7 +26,15 @@ log = { version = "*" }
     let m = parse_manifest(toml, "glyim.toml").unwrap();
     assert_eq!(m.dependencies.len(), 2);
     assert_eq!(m.dependencies["serde"].version.as_deref(), Some("1.0"));
-    assert_eq!(m.dependencies["serde"].path.as_ref().unwrap().to_str().unwrap(), "../serde");
+    assert_eq!(
+        m.dependencies["serde"]
+            .path
+            .as_ref()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "../serde"
+    );
     assert!(m.dependencies["log"].is_macro == false);
 }
 

@@ -56,12 +56,28 @@ impl TypeChecker {
         let err = self.interner.intern("Err");
 
         let opt_variants = vec![
-            glyim_hir::item::HirVariant { name: some, fields: vec![], tag: 0 },
-            glyim_hir::item::HirVariant { name: none, fields: vec![], tag: 1 },
+            glyim_hir::item::HirVariant {
+                name: some,
+                fields: vec![],
+                tag: 0,
+            },
+            glyim_hir::item::HirVariant {
+                name: none,
+                fields: vec![],
+                tag: 1,
+            },
         ];
         let res_variants = vec![
-            glyim_hir::item::HirVariant { name: ok, fields: vec![], tag: 0 },
-            glyim_hir::item::HirVariant { name: err, fields: vec![], tag: 1 },
+            glyim_hir::item::HirVariant {
+                name: ok,
+                fields: vec![],
+                tag: 0,
+            },
+            glyim_hir::item::HirVariant {
+                name: err,
+                fields: vec![],
+                tag: 1,
+            },
         ];
 
         self.enums.insert(

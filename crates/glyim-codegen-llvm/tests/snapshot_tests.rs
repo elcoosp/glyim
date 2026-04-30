@@ -1,6 +1,6 @@
+use glyim_codegen_llvm::compile_to_ir;
 use std::fs;
 use std::path::PathBuf;
-use glyim_codegen_llvm::compile_to_ir;
 
 fn snap_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -15,6 +15,15 @@ fn run_snapshot(name: &str) {
     insta::assert_snapshot!(name, ir);
 }
 
-#[test] fn ir_return_42()   { run_snapshot("return_42"); }
-#[test] fn ir_let_and_add() { run_snapshot("let_and_add"); }
-#[test] fn ir_if_else()     { run_snapshot("if_else"); }
+#[test]
+fn ir_return_42() {
+    run_snapshot("return_42");
+}
+#[test]
+fn ir_let_and_add() {
+    run_snapshot("let_and_add");
+}
+#[test]
+fn ir_if_else() {
+    run_snapshot("if_else");
+}

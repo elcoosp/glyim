@@ -1,5 +1,5 @@
-use crate::{Hir, HirExpr, HirStmt};
 use crate::HirItem;
+use crate::{Hir, HirExpr, HirStmt};
 
 fn lower_source(source: &str) -> (Hir, glyim_interner::Interner) {
     let parse_out = glyim_parse::parse(source);
@@ -27,12 +27,14 @@ fn get_main_body<'a>(hir: &'a Hir, interner: &'a glyim_interner::Interner) -> &'
 /// Otherwise return the expression itself.
 fn expr_value<'a>(expr: &'a HirExpr) -> &'a HirExpr {
     match expr {
-        HirExpr::Block { stmts, .. } => {
-            stmts.iter().rev().find_map(|s| match s {
+        HirExpr::Block { stmts, .. } => stmts
+            .iter()
+            .rev()
+            .find_map(|s| match s {
                 HirStmt::Expr(e) => Some(e),
                 _ => None,
-            }).unwrap_or(expr)
-        }
+            })
+            .unwrap_or(expr),
         other => other,
     }
 }
@@ -43,7 +45,14 @@ fn lower_int_lit() {
     let (hir, mut interner) = lower_source("main = () => 42");
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
-    assert_eq!(val, &HirExpr::IntLit { id: val.get_id(), value: 42, span: val.get_span() });
+    assert_eq!(
+        val,
+        &HirExpr::IntLit {
+            id: val.get_id(),
+            value: 42,
+            span: val.get_span()
+        }
+    );
     let sym = interner.intern("test");
     assert_eq!(interner.resolve(sym), "test");
 }
@@ -65,7 +74,7 @@ fn lower_bool_lit() {
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
     match val {
-        HirExpr::BoolLit { value: true, .. } => {},
+        HirExpr::BoolLit { value: true, .. } => {}
         _ => panic!("expected BoolLit true"),
     }
 }
@@ -86,7 +95,13 @@ fn lower_binary_expr() {
     let (hir, interner) = lower_source("main = () => 1 + 2");
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
-    assert!(matches!(val, HirExpr::Binary { op: crate::HirBinOp::Add, .. }));
+    assert!(matches!(
+        val,
+        HirExpr::Binary {
+            op: crate::HirBinOp::Add,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -94,7 +109,13 @@ fn lower_unary_neg() {
     let (hir, interner) = lower_source("main = () => -5");
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
-    assert!(matches!(val, HirExpr::Unary { op: crate::HirUnOp::Neg, .. }));
+    assert!(matches!(
+        val,
+        HirExpr::Unary {
+            op: crate::HirUnOp::Neg,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -102,7 +123,13 @@ fn lower_unary_not() {
     let (hir, interner) = lower_source("main = () => !true");
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
-    assert!(matches!(val, HirExpr::Unary { op: crate::HirUnOp::Not, .. }));
+    assert!(matches!(
+        val,
+        HirExpr::Unary {
+            op: crate::HirUnOp::Not,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -139,12 +166,14 @@ fn lower_let_mut_stmt() {
     let (hir, interner) = lower_source("main = () => { let mut x = 10 }");
     let body = get_main_body(&hir, &interner);
     match body {
-        HirExpr::Block { stmts, .. } => {
-            match &stmts[0] {
-                HirStmt::Let { mutable: true, name, .. } => assert_eq!(interner.resolve(*name), "x"),
-                _ => panic!("expected mut Let"),
-            }
-        }
+        HirExpr::Block { stmts, .. } => match &stmts[0] {
+            HirStmt::Let {
+                mutable: true,
+                name,
+                ..
+            } => assert_eq!(interner.resolve(*name), "x"),
+            _ => panic!("expected mut Let"),
+        },
         _ => panic!("expected Block"),
     }
 }
@@ -171,7 +200,11 @@ fn lower_if_without_else() {
     let (hir, interner) = lower_source("main = () => { if 1 { 42 } }");
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
-    assert!(matches!(val, HirExpr::If { .. }), "expected If, got {:?}", val);
+    assert!(
+        matches!(val, HirExpr::If { .. }),
+        "expected If, got {:?}",
+        val
+    );
 }
 
 #[test]
@@ -221,7 +254,10 @@ fn lower_else_if_chain() {
 #[test]
 fn lower_fn_def_with_params() {
     let (hir, interner) = lower_source("fn add(a, b) { a + b }\nmain = () => add(1, 2)");
-    let add_fn = hir.items.iter().find(|item| matches!(item, HirItem::Fn(f) if interner.resolve(f.name) == "add"));
+    let add_fn = hir
+        .items
+        .iter()
+        .find(|item| matches!(item, HirItem::Fn(f) if interner.resolve(f.name) == "add"));
     assert!(add_fn.is_some());
     if let Some(HirItem::Fn(f)) = add_fn {
         assert_eq!(f.params.len(), 2);
@@ -231,7 +267,13 @@ fn lower_fn_def_with_params() {
 #[test]
 fn lower_struct_def() {
     let (hir, interner) = lower_source("struct Point { x, y }");
-    let s = hir.items.iter().find_map(|i| if let HirItem::Struct(s) = i { Some(s) } else { None });
+    let s = hir.items.iter().find_map(|i| {
+        if let HirItem::Struct(s) = i {
+            Some(s)
+        } else {
+            None
+        }
+    });
     assert!(s.is_some());
     let s = s.unwrap();
     assert_eq!(interner.resolve(s.name), "Point");
@@ -241,7 +283,13 @@ fn lower_struct_def() {
 #[test]
 fn lower_enum_def() {
     let (hir, interner) = lower_source("enum Color { Red, Green, Blue }");
-    let e = hir.items.iter().find_map(|i| if let HirItem::Enum(e) = i { Some(e) } else { None });
+    let e = hir.items.iter().find_map(|i| {
+        if let HirItem::Enum(e) = i {
+            Some(e)
+        } else {
+            None
+        }
+    });
     assert!(e.is_some());
     let e = e.unwrap();
     assert_eq!(interner.resolve(e.name), "Color");
@@ -251,7 +299,13 @@ fn lower_enum_def() {
 #[test]
 fn lower_impl_block_mangles_methods() {
     let (hir, interner) = lower_source("struct Point { x, y }\nimpl Point {\n    fn zero() -> Point { Point { x: 0, y: 0 } }\n}\nmain = () => 0");
-    let imp = hir.items.iter().find_map(|i| if let HirItem::Impl(imp) = i { Some(imp) } else { None });
+    let imp = hir.items.iter().find_map(|i| {
+        if let HirItem::Impl(imp) = i {
+            Some(imp)
+        } else {
+            None
+        }
+    });
     assert!(imp.is_some());
     let imp = imp.unwrap();
     assert_eq!(imp.methods.len(), 1);
@@ -260,7 +314,9 @@ fn lower_impl_block_mangles_methods() {
 
 #[test]
 fn lower_extern_block() {
-    let (hir, _) = lower_source("extern {\n    fn write(fd: i64, buf: *mut u8, len: i64) -> i64\n}\nmain = () => 0");
+    let (hir, _) = lower_source(
+        "extern {\n    fn write(fd: i64, buf: *mut u8, len: i64) -> i64\n}\nmain = () => 0",
+    );
     let ext = hir.items.iter().find(|i| matches!(i, HirItem::Extern(_)));
     assert!(ext.is_some());
 }
@@ -272,7 +328,7 @@ fn lower_some_expr() {
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
     match val {
-        HirExpr::EnumVariant { variant_name, .. } if interner.resolve(*variant_name) == "Some" => {},
+        HirExpr::EnumVariant { variant_name, .. } if interner.resolve(*variant_name) == "Some" => {}
         _ => panic!("expected Some enum variant, got {:?}", val),
     }
 }
@@ -283,7 +339,9 @@ fn lower_none_expr() {
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
     match val {
-        HirExpr::EnumVariant { variant_name, args, .. } if interner.resolve(*variant_name) == "None" && args.is_empty() => {},
+        HirExpr::EnumVariant {
+            variant_name, args, ..
+        } if interner.resolve(*variant_name) == "None" && args.is_empty() => {}
         _ => panic!("expected None variant, got {:?}", val),
     }
 }
@@ -293,7 +351,16 @@ fn lower_ok_err_expr() {
     let (hir, interner) = lower_source("main = () => { let r = Ok(42); let e = Err(0); 0 }");
     let body = get_main_body(&hir, &interner);
     let let_stmts: Vec<_> = match body {
-        HirExpr::Block { stmts, .. } => stmts.iter().filter_map(|s| if let HirStmt::Let { value, .. } = s { Some(value) } else { None }).collect(),
+        HirExpr::Block { stmts, .. } => stmts
+            .iter()
+            .filter_map(|s| {
+                if let HirStmt::Let { value, .. } = s {
+                    Some(value)
+                } else {
+                    None
+                }
+            })
+            .collect(),
         _ => vec![],
     };
     let has_ok = let_stmts.iter().any(|v| matches!(v, HirExpr::EnumVariant { variant_name, .. } if interner.resolve(*variant_name) == "Ok"));
@@ -307,8 +374,16 @@ fn lower_try_expr_desugars_to_match() {
     let body = get_main_body(&hir, &interner);
     match body {
         HirExpr::Block { stmts, .. } => {
-            assert!(stmts.iter().any(|s| matches!(s, HirStmt::Let { value: HirExpr::Match { .. }, .. })),
-                "expected Match to appear as right-hand side of a let binding");
+            assert!(
+                stmts.iter().any(|s| matches!(
+                    s,
+                    HirStmt::Let {
+                        value: HirExpr::Match { .. },
+                        ..
+                    }
+                )),
+                "expected Match to appear as right-hand side of a let binding"
+            );
         }
         _ => panic!("expected Block, got {:?}", body),
     }
@@ -324,7 +399,8 @@ fn lower_struct_literal() {
 
 #[test]
 fn lower_field_access() {
-    let (hir, interner) = lower_source("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.x }");
+    let (hir, interner) =
+        lower_source("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.x }");
     let body = get_main_body(&hir, &interner);
     let val = expr_value(body);
     assert!(matches!(val, HirExpr::FieldAccess { .. }));
@@ -332,10 +408,20 @@ fn lower_field_access() {
 
 #[test]
 fn lower_enum_variant_construction() {
-    let (hir, interner) = lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Green; c }");
+    let (hir, interner) =
+        lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Green; c }");
     let body = get_main_body(&hir, &interner);
     let has_enum = match body {
-        HirExpr::Block { stmts, .. } => stmts.iter().any(|s| matches!(s, HirStmt::Expr(HirExpr::EnumVariant { .. }) | HirStmt::Let { value: HirExpr::EnumVariant { .. }, .. })),
+        HirExpr::Block { stmts, .. } => stmts.iter().any(|s| {
+            matches!(
+                s,
+                HirStmt::Expr(HirExpr::EnumVariant { .. })
+                    | HirStmt::Let {
+                        value: HirExpr::EnumVariant { .. },
+                        ..
+                    }
+            )
+        }),
         _ => false,
     };
     assert!(has_enum, "expected EnumVariant somewhere");
@@ -360,7 +446,9 @@ fn expr_ids_are_monotonic() {
                 for stmt in stmts {
                     match stmt {
                         HirStmt::Expr(e) => collect_ids(e, ids),
-                        HirStmt::Let { value, .. } | HirStmt::Assign { value, .. } => collect_ids(value, ids),
+                        HirStmt::Let { value, .. } | HirStmt::Assign { value, .. } => {
+                            collect_ids(value, ids)
+                        }
                         _ => {}
                     }
                 }
@@ -370,10 +458,17 @@ fn expr_ids_are_monotonic() {
                 collect_ids(rhs, ids);
             }
             HirExpr::Unary { operand, .. } => collect_ids(operand, ids),
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 collect_ids(condition, ids);
                 collect_ids(then_branch, ids);
-                if let Some(e) = else_branch { collect_ids(e, ids); }
+                if let Some(e) = else_branch {
+                    collect_ids(e, ids);
+                }
             }
             _ => {}
         }
@@ -382,7 +477,12 @@ fn expr_ids_are_monotonic() {
     collect_ids(body, &mut ids);
     let mut last_id: i32 = -1;
     for &id in &ids {
-        assert!(id as i32 > last_id, "ExprId not monotonic: {} after {}", id, last_id);
+        assert!(
+            id as i32 > last_id,
+            "ExprId not monotonic: {} after {}",
+            id,
+            last_id
+        );
         last_id = id as i32;
     }
 }

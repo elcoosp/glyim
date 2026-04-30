@@ -1,7 +1,7 @@
 use super::{TypeChecker, TypeError};
 use glyim_diag::Span;
 use glyim_hir::types::{ExprId, HirType};
-use glyim_hir::{HirExpr, HirStmt, HirBinOp, HirUnOp};
+use glyim_hir::{HirBinOp, HirExpr, HirStmt, HirUnOp};
 use glyim_interner::Interner;
 
 fn typecheck(source: &str) -> TypeChecker {
@@ -202,8 +202,16 @@ fn infer_binary_returns_int() {
     let expr = HirExpr::Binary {
         id: ExprId::new(1),
         op: HirBinOp::Add,
-        lhs: Box::new(HirExpr::IntLit { id: ExprId::new(0), value: 1, span: Span::new(0, 1) }),
-        rhs: Box::new(HirExpr::IntLit { id: ExprId::new(2), value: 2, span: Span::new(4, 5) }),
+        lhs: Box::new(HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 1,
+            span: Span::new(0, 1),
+        }),
+        rhs: Box::new(HirExpr::IntLit {
+            id: ExprId::new(2),
+            value: 2,
+            span: Span::new(4, 5),
+        }),
         span: Span::new(0, 5),
     };
     assert_eq!(tc.check_expr(&expr), Some(HirType::Int));
@@ -215,7 +223,11 @@ fn infer_unary_neg_returns_int() {
     let expr = HirExpr::Unary {
         id: ExprId::new(1),
         op: HirUnOp::Neg,
-        operand: Box::new(HirExpr::IntLit { id: ExprId::new(0), value: 5, span: Span::new(1, 2) }),
+        operand: Box::new(HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 5,
+            span: Span::new(1, 2),
+        }),
         span: Span::new(0, 2),
     };
     assert_eq!(tc.check_expr(&expr), Some(HirType::Int));
@@ -227,8 +239,16 @@ fn infer_block_returns_last_expr_type() {
     let expr = HirExpr::Block {
         id: ExprId::new(2),
         stmts: vec![
-            HirStmt::Expr(HirExpr::IntLit { id: ExprId::new(0), value: 1, span: Span::new(0, 1) }),
-            HirStmt::Expr(HirExpr::BoolLit { id: ExprId::new(1), value: true, span: Span::new(3, 7) }),
+            HirStmt::Expr(HirExpr::IntLit {
+                id: ExprId::new(0),
+                value: 1,
+                span: Span::new(0, 1),
+            }),
+            HirStmt::Expr(HirExpr::BoolLit {
+                id: ExprId::new(1),
+                value: true,
+                span: Span::new(3, 7),
+            }),
         ],
         span: Span::new(0, 8),
     };
@@ -251,8 +271,16 @@ fn infer_if_returns_then_type() {
     let mut tc = TypeChecker::new(Interner::new());
     let expr = HirExpr::If {
         id: ExprId::new(3),
-        condition: Box::new(HirExpr::BoolLit { id: ExprId::new(0), value: true, span: Span::new(3, 7) }),
-        then_branch: Box::new(HirExpr::IntLit { id: ExprId::new(1), value: 10, span: Span::new(10, 12) }),
+        condition: Box::new(HirExpr::BoolLit {
+            id: ExprId::new(0),
+            value: true,
+            span: Span::new(3, 7),
+        }),
+        then_branch: Box::new(HirExpr::IntLit {
+            id: ExprId::new(1),
+            value: 10,
+            span: Span::new(10, 12),
+        }),
         else_branch: None,
         span: Span::new(0, 12),
     };
@@ -264,9 +292,21 @@ fn infer_if_else_branches() {
     let mut tc = TypeChecker::new(Interner::new());
     let expr = HirExpr::If {
         id: ExprId::new(4),
-        condition: Box::new(HirExpr::BoolLit { id: ExprId::new(0), value: true, span: Span::new(3, 7) }),
-        then_branch: Box::new(HirExpr::IntLit { id: ExprId::new(1), value: 1, span: Span::new(10, 11) }),
-        else_branch: Some(Box::new(HirExpr::BoolLit { id: ExprId::new(2), value: false, span: Span::new(17, 22) })),
+        condition: Box::new(HirExpr::BoolLit {
+            id: ExprId::new(0),
+            value: true,
+            span: Span::new(3, 7),
+        }),
+        then_branch: Box::new(HirExpr::IntLit {
+            id: ExprId::new(1),
+            value: 1,
+            span: Span::new(10, 11),
+        }),
+        else_branch: Some(Box::new(HirExpr::BoolLit {
+            id: ExprId::new(2),
+            value: false,
+            span: Span::new(17, 22),
+        })),
         span: Span::new(0, 22),
     };
     assert_eq!(tc.check_expr(&expr), Some(HirType::Int));
@@ -278,9 +318,15 @@ fn struct_lit_unknown_field_pushes_error() {
     let has_unknown_z = tc.errors.iter().any(|e| {
         if let TypeError::UnknownField { field, .. } = e {
             tc.interner.resolve(*field) == "z"
-        } else { false }
+        } else {
+            false
+        }
     });
-    assert!(has_unknown_z, "expected UnknownField error for 'z', got: {:?}", tc.errors);
+    assert!(
+        has_unknown_z,
+        "expected UnknownField error for 'z', got: {:?}",
+        tc.errors
+    );
 }
 
 #[test]
@@ -289,9 +335,15 @@ fn struct_lit_missing_field_pushes_error() {
     let has_missing = tc.errors.iter().any(|e| {
         if let TypeError::MissingField { field, .. } = e {
             tc.interner.resolve(*field) == "y"
-        } else { false }
+        } else {
+            false
+        }
     });
-    assert!(has_missing, "expected MissingField error for 'y', got: {:?}", tc.errors);
+    assert!(
+        has_missing,
+        "expected MissingField error for 'y', got: {:?}",
+        tc.errors
+    );
 }
 
 #[test]
@@ -300,105 +352,217 @@ fn field_access_unknown_field_pushes_error() {
     let has_unknown = tc.errors.iter().any(|e| {
         if let TypeError::UnknownField { field, .. } = e {
             tc.interner.resolve(*field) == "z"
-        } else { false }
+        } else {
+            false
+        }
     });
-    assert!(has_unknown, "expected UnknownField error for 'z', got: {:?}", tc.errors);
+    assert!(
+        has_unknown,
+        "expected UnknownField error for 'z', got: {:?}",
+        tc.errors
+    );
 }
 
 #[test]
 fn field_access_valid_field_no_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.x }");
-    let field_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::UnknownField { .. })).collect();
-    assert!(field_errors.is_empty(), "unexpected field errors: {:?}", field_errors);
+    let field_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::UnknownField { .. }))
+        .collect();
+    assert!(
+        field_errors.is_empty(),
+        "unexpected field errors: {:?}",
+        field_errors
+    );
 }
 
 #[test]
 fn struct_lit_all_fields_present_no_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1, y: 2 }");
-    let struct_errors: Vec<_> = tc.errors.iter().filter(|e| {
-        matches!(e, TypeError::UnknownField { .. } | TypeError::MissingField { .. } | TypeError::ExtraField { .. })
-    }).collect();
-    assert!(struct_errors.is_empty(), "unexpected struct errors: {:?}", struct_errors);
+    let struct_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                TypeError::UnknownField { .. }
+                    | TypeError::MissingField { .. }
+                    | TypeError::ExtraField { .. }
+            )
+        })
+        .collect();
+    assert!(
+        struct_errors.is_empty(),
+        "unexpected struct errors: {:?}",
+        struct_errors
+    );
 }
 
 #[test]
 fn match_exhaustive_with_wildcard_ok() {
     let tc = typecheck("enum Color { Red, Green }\nmain = () => match Color::Red { _ => 1 }");
-    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
-    assert!(exhaustive_errors.is_empty(), "unexpected non-exhaustive error: {:?}", exhaustive_errors);
+    let exhaustive_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
+        .collect();
+    assert!(
+        exhaustive_errors.is_empty(),
+        "unexpected non-exhaustive error: {:?}",
+        exhaustive_errors
+    );
 }
 
 #[test]
 fn match_exhaustive_all_variants_ok() {
     let tc = typecheck("enum Color { Red, Green }\nmain = () => match Color::Red { Color::Red => 1, Color::Green => 2 }");
-    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
-    assert!(exhaustive_errors.is_empty(), "unexpected non-exhaustive error: {:?}", exhaustive_errors);
+    let exhaustive_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
+        .collect();
+    assert!(
+        exhaustive_errors.is_empty(),
+        "unexpected non-exhaustive error: {:?}",
+        exhaustive_errors
+    );
 }
 
 #[test]
 fn match_non_exhaustive_pushes_error() {
-    let tc = typecheck("enum Color { Red, Green, Blue }\nmain = () => match Color::Red { Color::Red => 1 }");
-    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
-    assert_eq!(exhaustive_errors.len(), 1, "expected exactly 1 NonExhaustiveMatch error, got: {:?}", tc.errors);
+    let tc = typecheck(
+        "enum Color { Red, Green, Blue }\nmain = () => match Color::Red { Color::Red => 1 }",
+    );
+    let exhaustive_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
+        .collect();
+    assert_eq!(
+        exhaustive_errors.len(),
+        1,
+        "expected exactly 1 NonExhaustiveMatch error, got: {:?}",
+        tc.errors
+    );
 }
 
 #[test]
 fn match_on_non_enum_no_exhaustive_error() {
     let tc = typecheck("main = () => match 42 { 1 => 10, _ => 20 }");
-    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
-    assert!(exhaustive_errors.is_empty(), "matching on non-enum should not produce exhaustive error");
+    let exhaustive_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
+        .collect();
+    assert!(
+        exhaustive_errors.is_empty(),
+        "matching on non-enum should not produce exhaustive error"
+    );
 }
 
 #[test]
 fn match_option_some_none_exhaustive() {
     let tc = typecheck("main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }");
-    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
-    assert!(exhaustive_errors.is_empty(), "Some/None should be exhaustive");
+    let exhaustive_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
+        .collect();
+    assert!(
+        exhaustive_errors.is_empty(),
+        "Some/None should be exhaustive"
+    );
 }
 
 #[test]
 fn match_option_non_exhaustive_pushes_error() {
     let tc = typecheck("main = () => { let m = Some(42); match m { Some(v) => v } }");
-    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
-    assert_eq!(exhaustive_errors.len(), 1, "missing None variant should be non-exhaustive");
+    let exhaustive_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
+        .collect();
+    assert_eq!(
+        exhaustive_errors.len(),
+        1,
+        "missing None variant should be non-exhaustive"
+    );
 }
 
 #[test]
 fn cast_int_to_float_valid() {
     let tc = typecheck("main = () => 42 as f64");
-    let cast_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::MismatchedTypes { .. })).collect();
-    assert!(cast_errors.is_empty(), "int→float cast should be valid, got: {:?}", cast_errors);
+    let cast_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
+        .collect();
+    assert!(
+        cast_errors.is_empty(),
+        "int→float cast should be valid, got: {:?}",
+        cast_errors
+    );
 }
 
 #[test]
 fn cast_int_to_str_invalid() {
     let tc = typecheck("main = () => 42 as Str");
-    let cast_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::MismatchedTypes { .. })).collect();
+    let cast_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
+        .collect();
     assert_eq!(cast_errors.len(), 1, "int→Str cast should be invalid");
 }
 
 #[test]
 fn multiple_errors_accumulate() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1, z: 3, w: 4 }");
-    let field_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::UnknownField { .. })).collect();
-    assert!(field_errors.len() >= 2, "expected ≥2 UnknownField errors, got {}: {:?}", field_errors.len(), tc.errors);
+    let field_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::UnknownField { .. }))
+        .collect();
+    assert!(
+        field_errors.len() >= 2,
+        "expected ≥2 UnknownField errors, got {}: {:?}",
+        field_errors.len(),
+        tc.errors
+    );
 }
 
 #[test]
 fn check_returns_ok_when_no_errors() {
     let tc = typecheck("main = () => 42");
-    assert!(tc.errors.is_empty(), "valid program should have no type errors");
+    assert!(
+        tc.errors.is_empty(),
+        "valid program should have no type errors"
+    );
 }
 
 #[test]
 fn check_fn_return_mismatch_pushes_error() {
     let tc = typecheck("fn foo() -> bool { 42 }\nmain = () => foo()");
-    let ret_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::InvalidReturnType { .. })).collect();
-    assert_eq!(ret_errors.len(), 1, "return type mismatch should produce InvalidReturnType error");
+    let ret_errors: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::InvalidReturnType { .. }))
+        .collect();
+    assert_eq!(
+        ret_errors.len(),
+        1,
+        "return type mismatch should produce InvalidReturnType error"
+    );
 }
 
 #[test]
 fn check_fn_params_bound_in_body() {
     let tc = typecheck("fn add(a, b) { a + b }\nmain = () => add(1, 2)");
-    assert!(tc.errors.is_empty(), "param usage should typecheck: {:?}", tc.errors);
+    assert!(
+        tc.errors.is_empty(),
+        "param usage should typecheck: {:?}",
+        tc.errors
+    );
 }
