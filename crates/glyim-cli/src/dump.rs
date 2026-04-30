@@ -103,7 +103,7 @@ fn write_expr(
 }
 
 /// Print the HIR in a pretty, indented tree.
-pub fn dump_hir(source: &str, interner: &glyim_interner::Interner, out: &mut dyn Write) {
+pub fn dump_hir(source: &str, _interner: &glyim_interner::Interner, out: &mut dyn Write) {
     let parse_out = glyim_parse::parse(source);
     let mut local_interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut local_interner);
