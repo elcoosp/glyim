@@ -181,7 +181,6 @@ fn e2e_generic_identity() {
     let _ = pipeline::run(&temp_g("fn id<T>(x: T) -> T { x }\nmain = () => id(42)")).unwrap();
 }
 #[test]
-#[ignore]
 fn e2e_generic_struct() {
     assert_eq!(pipeline::run(&temp_g("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }")).unwrap(), 42);
 }
@@ -400,6 +399,13 @@ main = () => {
     let full_src = format!("{}\n{}", stdlib_vec, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input).unwrap(), 20);
+}
+
+
+#[test]
+fn e2e_generic_identity_call() {
+    let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
+    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
 }
 
 }

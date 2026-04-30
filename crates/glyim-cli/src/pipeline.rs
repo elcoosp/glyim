@@ -1,5 +1,6 @@
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_interner::Interner;
+use glyim_hir::types::HirType;
 use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
@@ -72,13 +73,6 @@ impl From<std::io::Error> for PipelineError {
     }
 }
 
-/// Detect whether the source contains a bare `no_std` declaration.
-///
-/// A `no_std` declaration is a line where `no_std` appears as a standalone
-/// identifier — not part of a larger word, not inside a string literal.
-///
-/// Known limitation: does not filter out `no_std` inside comments.
-/// This is acceptable for v0.5.1 — the full parser handles comments correctly.
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
         let trimmed = line.trim();
@@ -89,8 +83,6 @@ fn detect_no_std(source: &str) -> bool {
     false
 }
 
-/// Load source with prelude prepended, detect no_std.
-/// Returns (full_source, is_no_std_flag).
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let is_no_std = detect_no_std(&source);
@@ -100,11 +92,31 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
 #[tracing::instrument(name = "build", skip_all)]
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
+    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let type_overrides = mono_result.type_overrides;
+    let mut merged_types = expr_types;
+    for (id, ty) in type_overrides {
+        if id.as_usize() < merged_types.len() {
+            merged_types[id.as_usize()] = ty;
+        } else {
+            merged_types.resize(id.as_usize() + 1, HirType::Never);
+            merged_types[id.as_usize()] = ty;
+        }
+    }
+
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -119,12 +131,12 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     let context = Context::create();
     info!("starting codegen");
     let mut codegen =
-        Codegen::with_line_tables(&context, interner, typeck.expr_types.clone(), source, &input.to_string_lossy())
+        Codegen::with_line_tables(&context, interner, merged_types, source, &input.to_string_lossy())
             .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
@@ -166,16 +178,35 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut parse_out.interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let type_overrides = mono_result.type_overrides;
+    let mut merged_types = expr_types;
+    for (id, ty) in type_overrides {
+        if id.as_usize() < merged_types.len() {
+            merged_types[id.as_usize()] = ty;
+        } else {
+            merged_types.resize(id.as_usize() + 1, HirType::Never);
+            merged_types[id.as_usize()] = ty;
+        }
+    }
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
     let mut codegen =
-        Codegen::with_line_tables(&context, parse_out.interner, vec![], source.clone(), &input.to_string_lossy())
+        Codegen::with_line_tables(&context, parse_out.interner, merged_types, source, &input.to_string_lossy())
             .map_err(PipelineError::Codegen)?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -264,6 +295,25 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut parse_out.interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let type_overrides = mono_result.type_overrides;
+    let mut merged_types = expr_types;
+    for (id, ty) in type_overrides {
+        if id.as_usize() < merged_types.len() {
+            merged_types[id.as_usize()] = ty;
+        } else {
+            merged_types.resize(id.as_usize() + 1, HirType::Never);
+            merged_types[id.as_usize()] = ty;
+        }
+    }
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
@@ -271,17 +321,17 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         BuildMode::Debug => Codegen::with_debug(
             &context,
             parse_out.interner,
-            typeck.expr_types.clone(),
+            merged_types,
             source.clone(),
             &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => Codegen::new(&context, parse_out.interner, typeck.expr_types.clone()),
+        BuildMode::Release => Codegen::new(&context, parse_out.interner, merged_types),
     };
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -302,11 +352,31 @@ pub fn build_with_mode(
     mode: BuildMode,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
+    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let type_overrides = mono_result.type_overrides;
+    let mut merged_types = expr_types;
+    for (id, ty) in type_overrides {
+        if id.as_usize() < merged_types.len() {
+            merged_types[id.as_usize()] = ty;
+        } else {
+            merged_types.resize(id.as_usize() + 1, HirType::Never);
+            merged_types[id.as_usize()] = ty;
+        }
+    }
+
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -324,17 +394,17 @@ pub fn build_with_mode(
         BuildMode::Debug => Codegen::with_debug(
             &context,
             interner,
-            typeck.expr_types.clone(),
+            merged_types,
             source.clone(),
             &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => Codegen::new(&context, interner, typeck.expr_types.clone()),
+        BuildMode::Release => Codegen::new(&context, interner, merged_types),
     };
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
@@ -343,7 +413,6 @@ pub fn build_with_mode(
     Ok(output)
 }
 
-/// Walk from `start` upward looking for `glyim.toml`.
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     let mut current = if start.is_file() {
         start.parent()?.to_path_buf()
@@ -488,7 +557,6 @@ pub fn run_tests(
         filter_name,
         true,
     );
-    // Collect should_panic test names from AST attributes
     let should_panic: std::collections::HashSet<String> = test_fns
         .iter()
         .filter(|t| {
@@ -535,6 +603,7 @@ pub fn run_tests(
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
     }
+
     let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     info!("lowered to HIR");
@@ -545,15 +614,35 @@ pub fn run_tests(
         return Err(PipelineError::TypeCheck(errs));
     }
 
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut parse_out.interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let type_overrides = mono_result.type_overrides;
+    let mut merged_types = expr_types;
+    for (id, ty) in type_overrides {
+        if id.as_usize() < merged_types.len() {
+            merged_types[id.as_usize()] = ty;
+        } else {
+            merged_types.resize(id.as_usize() + 1, HirType::Never);
+            merged_types[id.as_usize()] = ty;
+        }
+    }
+
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
-    let mut codegen = Codegen::new(&context, parse_out.interner, typeck.expr_types.clone());
+    let mut codegen = Codegen::new(&context, parse_out.interner, merged_types);
     if is_no_std {
         codegen = codegen.with_no_std();
     }
     codegen
-        .generate_for_tests(&hir, &active_names, &should_panic)
+        .generate_for_tests(&mono_hir, &active_names, &should_panic)
         .map_err(PipelineError::Codegen)?;
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
@@ -643,19 +732,15 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
     Ok(())
 }
 
-/// Compute a source hash for build caching.
 #[allow(dead_code)]
 fn compute_source_hash(source: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(source.as_bytes());
-    // Mix in glyim version to invalidate cache on compiler changes
     hasher.update(env!("CARGO_PKG_VERSION"));
     hex::encode(hasher.finalize())
 }
 
-/// Build using a content-addressable cache.
-/// If the source hash matches a cached object, reuse it; otherwise compile and store.
 #[allow(dead_code)]
 fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
@@ -684,25 +769,44 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         return Ok(output);
     }
 
-    // Compile as usual
-    let (hir, _ir, interner) = compile_to_hir_and_ir(&source)?;
+    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let type_overrides = mono_result.type_overrides;
+    let mut merged_types = expr_types;
+    for (id, ty) in type_overrides {
+        if id.as_usize() < merged_types.len() {
+            merged_types[id.as_usize()] = ty;
+        } else {
+            merged_types.resize(id.as_usize() + 1, HirType::Never);
+            merged_types[id.as_usize()] = ty;
+        }
+    }
+
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
-    let mut codegen = Codegen::new(&context, interner, typeck.expr_types.clone());
-    codegen.generate(&hir).map_err(PipelineError::Codegen)?;
+    let mut codegen = Codegen::new(&context, interner, merged_types);
+    codegen.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
 
-    // Store the object in cache
     let obj_bytes = fs::read(&obj_path)?;
     cas.store(&obj_bytes);
     eprintln!("[cache] Stored object for {}", input.display());
@@ -725,70 +829,57 @@ mod no_std_tests {
     use super::*;
 
     #[test]
-
     fn detect_no_std_simple() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
 
     #[test]
-
     fn detect_no_std_at_start() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
 
     #[test]
-
     fn detect_no_std_false_when_absent() {
         assert!(!detect_no_std("fn main() { 0 }"));
     }
 
     #[test]
-
     fn detect_no_std_false_in_string() {
         assert!(!detect_no_std(r#"fn main() { "no_std" }"#));
     }
 
     #[test]
-
     fn detect_no_std_false_as_part_of_ident() {
         assert!(!detect_no_std("fn no_std_helper() { 0 }"));
     }
 
     #[test]
-
     fn detect_no_std_false_as_field_name() {
         assert!(!detect_no_std("struct S { no_std: bool }"));
     }
 
     #[test]
-
     fn detect_no_std_with_trailing_whitespace() {
         assert!(detect_no_std("no_std   \nfn main() { 0 }"));
     }
 
     #[test]
-
     fn detect_no_std_false_empty() {
         assert!(!detect_no_std(""));
     }
 
     #[test]
-
     fn detect_no_std_false_only_whitespace() {
         assert!(!detect_no_std("  \n  \n"));
     }
 
     #[test]
-
     fn detect_no_std_after_other_code() {
         assert!(detect_no_std("fn foo() { 0 }\nno_std\nfn bar() { 0 }"));
     }
 
     #[test]
-
     fn detect_no_std_known_limitation_comment() {
-        // Comments on their own line are correctly excluded
-        // because the trimmed line is "// no_std", not "no_std".
         assert!(!detect_no_std(
             "// no_std
 fn main() { 0 }"
@@ -798,12 +889,6 @@ fn main() { 0 }"
 
 #[cfg(feature = "jit")]
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
-    use glyim_codegen_llvm::Codegen;
-    use glyim_interner::Interner;
-    use glyim_typeck::TypeChecker;
-    use inkwell::context::Context;
-    use inkwell::OptimizationLevel;
-
     let mut parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
@@ -815,9 +900,29 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         return Err(PipelineError::TypeCheck(errs));
     }
 
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let mono_result = glyim_hir::monomorphize::monomorphize(
+        &hir,
+        &mut parse_out.interner,
+        &expr_types,
+        &call_type_args,
+    );
+    let mono_hir = mono_result.hir;
+    let merged_types: Vec<HirType> = expr_types
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| {
+            mono_result.type_overrides
+                .get(&ExprId::new(i as u32))
+                .cloned()
+                .unwrap_or_else(|| ty.clone())
+        })
+        .collect();
+
     let context = Context::create();
-    let mut cg = Codegen::new(&context, interner, typeck.expr_types);
-    cg.generate(&hir).map_err(PipelineError::Codegen)?;
+    let mut cg = Codegen::new(&context, interner, merged_types);
+    cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
 
     let engine = cg
         .get_module()

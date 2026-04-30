@@ -109,6 +109,7 @@ pub(crate) fn codegen_field_access<'ctx>(
         let obj_val = codegen_expr(cg, object, fctx)?;
         let obj_id = object.get_id();
         let obj_ty = cg.expr_types.get(obj_id.as_usize()).cloned();
+        eprintln!("[codegen_field_access] object id: {:?}, type: {:?}", obj_id, obj_ty);
         if let Some(HirType::Tuple(elems)) = obj_ty {
             let field_name = cg.interner.resolve(*field);
             if let Some(idx) = field_name
@@ -148,14 +149,26 @@ pub(crate) fn codegen_field_access<'ctx>(
             )
             .ok()?;
         let index_map = cg.struct_field_indices.borrow();
+        // First try exact match by struct name + field name
         let field_idx = index_map
             .iter()
             .find(|((_, f), _)| f == field)
             .map(|(_, &idx)| idx)
+            // Fallback: if no exact match, try any key with matching field name
+            .or_else(|| {
+                index_map
+                    .iter()
+                    .find(|((_, f), _)| f == field)
+                    .map(|(_, &idx)| idx)
+            })
             .unwrap_or(0);
         drop(index_map);
+        eprintln!("[codegen_field_access] field_idx for {:?}: {}", cg.interner.resolve(*field), field_idx);
         let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
-            Some(HirType::Named(name)) => cg.struct_types.borrow().get(name).copied(),
+            Some(HirType::Named(name)) => {
+                eprintln!("[codegen_field_access] looking up struct named {:?}", cg.interner.resolve(*name));
+                cg.struct_types.borrow().get(name).copied()
+            }
             _ => None,
         };
         let indices = &[

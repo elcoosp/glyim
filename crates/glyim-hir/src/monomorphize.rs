@@ -194,6 +194,7 @@ impl<'a> MonoContext<'a> {
                                 self.struct_specs.insert(key, specialized);
                             }
                             let mangled = self.mangle_name(*struct_name, &concrete);
+                            eprintln!("[mono] struct specialization: {:?} -> {}", concrete, self.interner.resolve(mangled));
                             self.type_overrides.insert(*id, HirType::Named(mangled));
                         }
                     }
@@ -411,6 +412,12 @@ impl<'a> MonoContext<'a> {
             }
         }
 
+        eprintln!("[mono] final type_overrides: {:?}", final_type_overrides.iter().map(|(id, ty)| (id.as_usize(), format!("{:?}", ty))).collect::<Vec<_>>());
+        for item in &items {
+            if let HirItem::Struct(s) = item {
+                eprintln!("[mono] struct in HIR: {} (params: {:?})", self.interner.resolve(s.name), s.type_params);
+            }
+        }
         MonoResult {
             hir: crate::Hir { items },
             type_overrides: final_type_overrides,

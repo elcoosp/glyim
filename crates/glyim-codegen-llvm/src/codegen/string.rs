@@ -124,7 +124,7 @@ pub(crate) fn codegen_call<'ctx>(
         let gep = unsafe {
             cg.builder
                 .build_gep(
-                    cg.i64_type.ptr_type(inkwell::AddressSpace::from(0u16)),
+                    cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
                     base_ptr,
                     &[offset_val],
                     "ptr_offset",

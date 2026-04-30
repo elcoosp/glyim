@@ -184,13 +184,40 @@ impl<'ctx> Codegen<'ctx> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
         types::register_builtin_enums(self);
+        // Pass 1: register all type definitions and extern declarations
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Extern(ext) => {
+                    for f in &ext.functions {
+                        let name = self.interner.resolve(f.name);
+                        let param_types: Vec<inkwell::types::BasicTypeEnum> =
+                            f.params.iter().map(|_| self.i64_type.into()).collect();
+                        let fn_type = self.i64_type.fn_type(
+                            &param_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                            false,
+                        );
+                        self.module.add_function(name, fn_type, None);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Pass 2: codegen all functions and impls
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
                     function::codegen_fn(self, f)?;
                 }
-                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
-                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Struct(s) => {
+                    eprintln!("[codegen generate] registering struct {:?}", self.interner.resolve(s.name));
+                    types::codegen_struct_def(self, s)
+                }
+                glyim_hir::item::HirItem::Enum(e) => {
+                    eprintln!("[codegen generate] registering enum {:?}", self.interner.resolve(e.name));
+                    types::codegen_enum_def(self, e)
+                }
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
@@ -323,6 +350,27 @@ impl<'ctx> Codegen<'ctx> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
         types::register_builtin_enums(self);
+        // Pass 1: register all type definitions and extern declarations
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Extern(ext) => {
+                    for f in &ext.functions {
+                        let name = self.interner.resolve(f.name);
+                        let param_types: Vec<inkwell::types::BasicTypeEnum> =
+                            f.params.iter().map(|_| self.i64_type.into()).collect();
+                        let fn_type = self.i64_type.fn_type(
+                            &param_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                            false,
+                        );
+                        self.module.add_function(name, fn_type, None);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Pass 2: codegen all functions and impls
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
@@ -332,8 +380,14 @@ impl<'ctx> Codegen<'ctx> {
                     }
                     function::codegen_fn(self, f)?;
                 }
-                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
-                glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                glyim_hir::item::HirItem::Struct(s) => {
+                    eprintln!("[codegen generate] registering struct {:?}", self.interner.resolve(s.name));
+                    types::codegen_struct_def(self, s)
+                }
+                glyim_hir::item::HirItem::Enum(e) => {
+                    eprintln!("[codegen generate] registering enum {:?}", self.interner.resolve(e.name));
+                    types::codegen_enum_def(self, e)
+                }
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
