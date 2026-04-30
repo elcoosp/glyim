@@ -133,9 +133,9 @@ impl RegistryClient {
         let hash = crate::lockfile::compute_content_hash(&bytes);
 
         if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| PkgError::Io(e))?;
+            std::fs::create_dir_all(parent).map_err(PkgError::Io)?;
         }
-        std::fs::write(dest, &bytes).map_err(|e| PkgError::Io(e))?;
+        std::fs::write(dest, &bytes).map_err(PkgError::Io)?;
 
         Ok(hash)
     }

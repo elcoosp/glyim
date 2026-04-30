@@ -78,7 +78,6 @@ impl From<std::io::Error> for PipelineError {
 ///
 /// Known limitation: does not filter out `no_std` inside comments.
 /// This is acceptable for v0.5.1 — the full parser handles comments correctly.
-
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
         let trimmed = line.trim();
@@ -145,11 +144,11 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-            for e in &parse_out.errors {
-                eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
-            }
-            return Err(PipelineError::Parse(parse_out.errors));
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -180,11 +179,11 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-            for e in &parse_out.errors {
-                eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
-            }
-            return Err(PipelineError::Parse(parse_out.errors));
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -225,11 +224,11 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-            for e in &parse_out.errors {
-                eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
-            }
-            return Err(PipelineError::Parse(parse_out.errors));
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
     let mut typeck = TypeChecker::new(parse_out.interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -437,11 +436,11 @@ pub fn run_tests(
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let mut parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-            for e in &parse_out.errors {
-                eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
-            }
-            return Err(PipelineError::Parse(parse_out.errors));
+        for e in &parse_out.errors {
+            eprintln!("{:?}", glyim_diag::Report::new(e.clone()));
         }
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
 
     let test_fns = crate::test_runner::collect_test_functions(
         &parse_out.ast,
@@ -675,68 +674,68 @@ mod no_std_tests {
     use super::*;
 
     #[test]
-    
-fn detect_no_std_simple() {
+
+    fn detect_no_std_simple() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
 
     #[test]
-    
-fn detect_no_std_at_start() {
+
+    fn detect_no_std_at_start() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
 
     #[test]
-    
-fn detect_no_std_false_when_absent() {
+
+    fn detect_no_std_false_when_absent() {
         assert!(!detect_no_std("fn main() { 0 }"));
     }
 
     #[test]
-    
-fn detect_no_std_false_in_string() {
+
+    fn detect_no_std_false_in_string() {
         assert!(!detect_no_std(r#"fn main() { "no_std" }"#));
     }
 
     #[test]
-    
-fn detect_no_std_false_as_part_of_ident() {
+
+    fn detect_no_std_false_as_part_of_ident() {
         assert!(!detect_no_std("fn no_std_helper() { 0 }"));
     }
 
     #[test]
-    
-fn detect_no_std_false_as_field_name() {
+
+    fn detect_no_std_false_as_field_name() {
         assert!(!detect_no_std("struct S { no_std: bool }"));
     }
 
     #[test]
-    
-fn detect_no_std_with_trailing_whitespace() {
+
+    fn detect_no_std_with_trailing_whitespace() {
         assert!(detect_no_std("no_std   \nfn main() { 0 }"));
     }
 
     #[test]
-    
-fn detect_no_std_false_empty() {
+
+    fn detect_no_std_false_empty() {
         assert!(!detect_no_std(""));
     }
 
     #[test]
-    
-fn detect_no_std_false_only_whitespace() {
+
+    fn detect_no_std_false_only_whitespace() {
         assert!(!detect_no_std("  \n  \n"));
     }
 
     #[test]
-    
-fn detect_no_std_after_other_code() {
+
+    fn detect_no_std_after_other_code() {
         assert!(detect_no_std("fn foo() { 0 }\nno_std\nfn bar() { 0 }"));
     }
 
     #[test]
-    
-fn detect_no_std_known_limitation_comment() {
+
+    fn detect_no_std_known_limitation_comment() {
         // Comments on their own line are correctly excluded
         // because the trimmed line is "// no_std", not "no_std".
         assert!(!detect_no_std(
