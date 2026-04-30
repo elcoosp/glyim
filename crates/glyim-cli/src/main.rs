@@ -3,7 +3,7 @@ use glyim_cli::pipeline::{self, BuildMode};
 use glyim_pkg::manifest::{Dependency, PackageManifest};
 use std::path::PathBuf;
 use std::process;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 
 #[derive(Parser)]
@@ -14,6 +14,12 @@ use tracing_subscriber::EnvFilter;
     after_help = "Examples:\n  glyim init myproject\n  glyim run src/main.g\n  glyim check src/main.g\n  glyim ir src/main.g"
 )]
 struct Cli {
+    /// Output a Chrome trace file (for perfetto.dev)
+    #[arg(long = "trace", global = true, help = "Write a Chrome trace file")]
+    trace: bool,
+    /// Use hierarchical span output instead of flat
+    #[arg(long = "tree", global = true, help = "Show spans as an indented tree")]
+    tree: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -114,6 +120,28 @@ fn main() {
         .with_writer(std::io::stderr)
         .init();
     let cli = Cli::parse();
+
+    // Set up tracing subscriber based on flags
+    if cli.trace {
+        let (chrome_layer, _guard) = tracing_chrome::ChromeLayerBuilder::new()
+            .file("glyim-trace.json")
+            .build();
+        tracing_subscriber::registry()
+            .with(chrome_layer)
+            .init();
+    } else if cli.tree {
+        tracing_subscriber::registry()
+            .with(
+                tracing_tree::HierarchicalLayer::new(2)
+                    .with_targets(true)
+            )
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .with_writer(std::io::stderr)
+            .init();
+    }
     let exit_code = match cli.command {
         Command::Build {
             input,
