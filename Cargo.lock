@@ -788,6 +788,7 @@ dependencies = [
  "glyim-diag",
  "glyim-hir",
  "glyim-interner",
+ "glyim-lex",
  "glyim-macro-core",
  "glyim-macro-vfs",
  "glyim-parse",

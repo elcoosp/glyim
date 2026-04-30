@@ -70,6 +70,18 @@ enum Command {
         dry_run: bool,
     },
     Outdated,
+    /// Dump tokens with colors
+    DumpTokens {
+        input: PathBuf,
+    },
+    /// Dump AST as indented tree
+    DumpAst {
+        input: PathBuf,
+    },
+    /// Dump HIR as indented tree
+    DumpHir {
+        input: PathBuf,
+    },
     #[command(subcommand)]
     Cache(CacheCommand),
 }
@@ -333,6 +345,23 @@ fn main() {
         Command::Publish { dry_run: _ } => {
             eprintln!("error: publish not yet implemented");
             1
+        }
+        Command::DumpTokens { input } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            glyim_cli::dump::dump_tokens(&source, &mut std::io::stdout());
+            0
+        }
+        Command::DumpAst { input } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            let interner = glyim_interner::Interner::new();
+            glyim_cli::dump::dump_ast(&source, &interner, &mut std::io::stdout());
+            0
+        }
+        Command::DumpHir { input } => {
+            let source = std::fs::read_to_string(&input).unwrap_or_default();
+            let interner = glyim_interner::Interner::new();
+            glyim_cli::dump::dump_hir(&source, &interner, &mut std::io::stdout());
+            0
         }
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
