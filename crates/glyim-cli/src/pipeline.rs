@@ -793,3 +793,38 @@ fn main() { 0 }"
         ));
     }
 }
+
+#[cfg(feature = "jit")]
+pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
+    use glyim_codegen_llvm::Codegen;
+    use glyim_interner::Interner;
+    use glyim_typeck::TypeChecker;
+    use inkwell::context::Context;
+    use inkwell::OptimizationLevel;
+
+    let mut parse_out = glyim_parse::parse(source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+    let mut typeck = TypeChecker::new(interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+
+    let context = Context::create();
+    let mut cg = Codegen::new(&context, interner, typeck.expr_types);
+    cg.generate(&hir).map_err(PipelineError::Codegen)?;
+
+    let engine = cg.get_module()
+        .create_jit_execution_engine(OptimizationLevel::None)
+        .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+
+    unsafe {
+        let main_fn = engine
+            .get_function::<unsafe extern "C" fn() -> i32>("main")
+            .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
+        Ok(main_fn.call())
+    }
+}
