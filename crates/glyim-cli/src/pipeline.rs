@@ -1,14 +1,13 @@
-
-use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_codegen_llvm::runtime_shims;
+use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
 use glyim_hir::ExprId;
 use glyim_interner::Interner;
-use inkwell::OptimizationLevel;
 use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
 use inkwell::context::Context;
+use inkwell::OptimizationLevel;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
 use tracing::{info, info_span};
@@ -77,14 +76,6 @@ impl From<std::io::Error> for PipelineError {
     }
 }
 
-
-
-
-
-
-
-
-
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
         let trimmed = line.trim();
@@ -94,9 +85,6 @@ fn detect_no_std(source: &str) -> bool {
     }
     false
 }
-
-
-
 
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
@@ -161,7 +149,6 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -208,12 +195,8 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     for (_id, _args) in &call_type_args {}
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
     eprintln!(
@@ -247,7 +230,6 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -257,8 +239,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
-
-
+    runtime_shims::map_runtime_shims_for_jit(&engine, codegen.get_module());
 
     unsafe {
         let main_fn = engine
@@ -343,12 +324,8 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     for (_id, _args) in &call_type_args {}
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
     eprintln!(
@@ -385,7 +362,6 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -394,6 +370,9 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+
+    runtime_shims::map_runtime_shims_for_jit(&engine, codegen.get_module());
+
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -465,7 +444,6 @@ pub fn build_with_mode(
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -680,12 +658,8 @@ pub fn run_tests(
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     for (_id, _args) in &call_type_args {}
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let type_overrides = mono_result.type_overrides;
     eprintln!(
@@ -713,7 +687,6 @@ pub fn run_tests(
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen;
     codegen
         .generate_for_tests(&mono_hir, &active_names, &should_panic)
         .map_err(PipelineError::Codegen)?;
@@ -880,7 +853,6 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let context = Context::create();
     info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, merged_types);
-    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -968,7 +940,6 @@ fn main() { 0 }"
     }
 }
 
-
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
@@ -984,12 +955,8 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     for (_id, _args) in &call_type_args {}
-    let mono_result = glyim_hir::monomorphize::monomorphize(
-        &hir,
-        &mut interner,
-        &expr_types,
-        &call_type_args,
-    );
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
     let merged_types: Vec<HirType> = expr_types
         .iter()
@@ -1005,15 +972,13 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let context = Context::create();
     let mut cg = Codegen::new(&context, interner, merged_types);
-    cg = cg;
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     let engine = cg
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
-
-
+    runtime_shims::map_runtime_shims_for_jit(&engine, cg.get_module());
 
     unsafe {
         let main_fn = engine
