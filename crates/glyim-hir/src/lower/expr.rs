@@ -189,12 +189,16 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             receiver,
             method,
             args,
-        } => HirExpr::MethodCall {
-            id,
-            receiver: Box::new(lower_expr(receiver, ctx)),
-            method_name: *method,
-            args: args.iter().map(|a| lower_expr(a, ctx)).collect(),
-            span,
+        } => {
+            // AST args include the receiver as first element; strip it
+            let method_args: Vec<_> = args.iter().skip(1).map(|a| lower_expr(a, ctx)).collect();
+            HirExpr::MethodCall {
+                id,
+                receiver: Box::new(lower_expr(receiver, ctx)),
+                method_name: *method,
+                args: method_args,
+                span,
+            }
         },
 
         ExprKind::TupleLit(elems) => HirExpr::TupleLit {

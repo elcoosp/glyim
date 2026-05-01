@@ -144,7 +144,7 @@ pub(crate) fn codegen_call<'ctx>(
             .get_param_types()
             .into_iter()
             .collect();
-        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
+let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
             .filter_map(|a| codegen_expr(cg, a, fctx))
             .enumerate()

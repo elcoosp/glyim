@@ -207,8 +207,6 @@ pub(crate) fn codegen_field_access<'ctx>(
             .build_load(cg.i64_type, field_ptr, "field_val")
             .ok()?;
         let field_val_int = field_val_raw.into_int_value();
-        eprintln!("FIELD_ACCESS: field={:?} idx={} loaded_val (from IR) = ? we can't print value at runtime, but we can print the IR instruction",
-                cg.interner.resolve(*field), field_idx);
         Some(field_val_int)
     } else {
         None

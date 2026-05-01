@@ -242,9 +242,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 ),
                 _ => cg.interner.resolve(*method_name).to_string(),
             };
-            eprintln!("METHODCALL: looking for {:?} (mangled: {:?})", cg.interner.resolve(*method_name), &mangled_name);
             let maybe_fn = cg.module.get_function(&mangled_name);
-            eprintln!("METHODCALL: function lookup result: {:?}", maybe_fn.is_some());
             if let Some(fn_val) = maybe_fn {
                 let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
                 call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(receiver_val));
@@ -264,7 +262,6 @@ pub(crate) fn codegen_expr<'ctx>(
                     _ => Some(cg.i64_type.const_int(0, false)),
                 }
             } else {
-                eprintln!("METHODCALL: function not found for {:?}, returning 0", mangled_name);
                 Some(cg.i64_type.const_int(0, false))
             }
         }

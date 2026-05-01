@@ -99,7 +99,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -176,7 +176,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {}
+        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
@@ -190,7 +190,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -254,7 +254,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {}
+        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
@@ -305,7 +305,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {}
+        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
@@ -319,7 +319,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -392,7 +392,7 @@ pub fn build_with_mode(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -585,7 +585,7 @@ pub fn run_tests(
     let mut parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for e in &parse_out.errors {}
+        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
 
@@ -654,7 +654,7 @@ pub fn run_tests(
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
         &mut parse_out.interner,
@@ -823,7 +823,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;

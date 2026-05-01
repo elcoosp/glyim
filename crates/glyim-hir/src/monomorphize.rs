@@ -1,6 +1,6 @@
 use crate::item::{HirImplDef, HirItem, StructDef};
 use crate::node::{HirExpr, HirFn, HirStmt};
-use crate::types::{ExprId, HirPattern, HirType};
+use crate::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
 use std::collections::{HashMap, HashSet};
 
@@ -129,13 +129,10 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-        eprintln!("MONO: fn_work_queue size = {}", self.fn_work_queue.len());
-        for (name, args) in &self.fn_work_queue {
-            eprintln!("MONO: queued fn: {:?} with args {:?}", self.interner.resolve(*name), args);
+        for (_name, _args) in &self.fn_work_queue {
         }
         self.current_type_params = vec![];
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
-            eprintln!("MONO: processing queued fn: {:?} with args {:?}", self.interner.resolve(fn_name), type_args);
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
                 continue;
@@ -544,12 +541,10 @@ impl<'a> MonoContext<'a> {
                 HirItem::Enum(e) => items.push(HirItem::Enum(e.clone())),
                 HirItem::Extern(e) => items.push(HirItem::Extern(e.clone())),
                 HirItem::Impl(imp) => {
-                    let rewritten = self.rewrite_impl(imp, &fn_mangle_map, &struct_mangle_map);
-                    for method in &rewritten.methods {
-                        let mangled_key = method.name;
+                    for method in &imp.methods {
                         let already_specialized = fn_mangle_map
                             .iter()
-                            .any(|((sym, _), _)| *sym == mangled_key);
+                            .any(|((sym, _), _)| *sym == method.name);
                         if !already_specialized {
                             items.push(HirItem::Fn(method.clone()));
                         }

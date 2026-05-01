@@ -73,11 +73,8 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     // Clear subprogram
     cg.current_subprogram = None;
 
-    eprintln!("CODEGEN_FN: finished generating body for {:?}", name);
     if !fn_value.verify(true) {
-        eprintln!("CODEGEN_FN: verification FAILED for {:?}", name);
         return Err("verification fail".into());
     }
-    eprintln!("CODEGEN_FN: verification passed for {:?}", name);
     Ok(())
 }
