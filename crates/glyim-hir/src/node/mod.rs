@@ -193,6 +193,11 @@ pub enum HirExpr {
         elements: Vec<HirExpr>,
         span: Span,
     },
+    AddrOf {
+        id: ExprId,
+        target: Symbol,
+        span: Span,
+    },
     Deref {
         id: ExprId,
         expr: Box<HirExpr>,
@@ -231,6 +236,7 @@ impl HirExpr {
             Self::While { id, .. } => *id,
             Self::SizeOf { id, .. } => *id,
             Self::TupleLit { id, .. } => *id,
+            Self::AddrOf { id, .. } => *id,
             Self::Deref { id, .. } => *id,
             Self::Return { id, .. } => *id,
         }
@@ -261,6 +267,7 @@ impl HirExpr {
             Self::While { span, .. } => *span,
             Self::SizeOf { span, .. } => *span,
             Self::TupleLit { span, .. } => *span,
+            Self::AddrOf { span, .. } => *span,
             Self::Deref { span, .. } => *span,
             Self::Return { span, .. } => *span,
         }

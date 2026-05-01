@@ -50,6 +50,7 @@ impl TypeChecker {
             HirExpr::EnumVariant { id, .. } => *id,
             HirExpr::TupleLit { id, .. } => *id,
             HirExpr::SizeOf { id, .. } => *id,
+        HirExpr::AddrOf { id, .. } => *id,
             HirExpr::Return { id, .. } => *id,
             HirExpr::Deref { id, .. } => *id,
             HirExpr::ForIn { id, .. } => *id,
@@ -164,7 +165,9 @@ impl TypeChecker {
                 HirType::Unit
             }
             HirExpr::SizeOf { .. } => HirType::Int,
-            HirExpr::Return { .. } => HirType::Never,
+            HirExpr::AddrOf { .. } => HirType::Int,
+                        HirExpr::AddrOf { .. } => HirType::Int,
+HirExpr::Return { .. } => HirType::Never,
             HirExpr::Deref { expr, id, .. } => {
                 let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);
                 match inner_ty {

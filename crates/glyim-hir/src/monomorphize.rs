@@ -1129,8 +1129,11 @@ impl<'a> MonoContext<'a> {
         for item in &original_items {
             match item {
                 HirItem::Fn(f) => {
-                    let rewritten = self.rewrite_fn(f, &fn_mangle_map, &struct_mangle_map);
-                    items.push(HirItem::Fn(rewritten));
+                    // Skip all generic functions (they are replaced by specializations)
+                    if f.type_params.is_empty() {
+                        let rewritten = self.rewrite_fn(f, &fn_mangle_map, &struct_mangle_map);
+                        items.push(HirItem::Fn(rewritten));
+                    }
                 }
                 HirItem::Struct(s) => items.push(HirItem::Struct(s.clone())),
                 HirItem::Enum(e) => items.push(HirItem::Enum(e.clone())),

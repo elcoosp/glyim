@@ -139,7 +139,12 @@ pub(crate) fn codegen_expr<'ctx>(
                 Some(v) => codegen_expr(cg, v, fctx)?,
                 None => cg.i64_type.const_int(0, false),
             };
-            cg.builder.build_return(Some(&ret_val)).ok()?;
+            if let (Some(ret_ptr), Some(ret_bb)) = (fctx.ret_val_ptr, fctx.ret_bb) {
+                cg.builder.build_store(ret_ptr, ret_val).ok()?;
+                cg.builder.build_unconditional_branch(ret_bb).ok()?;
+            } else {
+                cg.builder.build_return(Some(&ret_val)).ok()?;
+            }
             None
         }
         HirExpr::As {
@@ -282,6 +287,12 @@ pub(crate) fn codegen_expr<'ctx>(
                     .build_ptr_to_int(alloca, cg.i64_type, "f2i64")
                     .ok()?,
             )
+        }
+        HirExpr::AddrOf { target, .. } => {
+            let ptr = fctx.vars.get(target)?;
+            cg.builder
+                .build_ptr_to_int(*ptr, cg.i64_type, cg.interner.resolve(*target))
+                .ok()
         }
         HirExpr::Deref { expr, id, .. } => {
             let ptr_val = codegen_expr(cg, expr, fctx)?;
