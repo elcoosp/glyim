@@ -157,7 +157,17 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     Ok(output)
 }
 
-const PRELUDE: &str = include_str!("../../../stdlib/src/prelude.g");
+const PRELUDE: &str = "\
+pub enum Option<T> {
+    Some(T),
+    None,
+}
+
+pub enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+";
 
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
