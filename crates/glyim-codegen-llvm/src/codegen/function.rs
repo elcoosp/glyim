@@ -6,9 +6,12 @@ use inkwell::values::PointerValue;
 use std::collections::HashMap;
 
 #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 pub(crate) fn declare_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) {
     let name = cg.interner.resolve(f.name);
+    eprintln!("[codegen] declare_fn: {} (type_params={:?})", name, f.type_params);
     if cg.module.get_function(name).is_some() {
+        eprintln!("[codegen]   -> already exists, skipping");
         return;
     }
     let is_main = name == "main";

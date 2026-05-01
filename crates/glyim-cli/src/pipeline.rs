@@ -70,11 +70,8 @@ impl From<std::io::Error> for PipelineError {
         Self::Io(e)
     }
 }
-// Custom assert handler for JIT tests
 static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
 static CUSTOM_ABORT_FN: Mutex<Option<unsafe extern "C" fn()>> = Mutex::new(None);
-/// Set a custom handler for glyim_assert_fail in JIT mode.
-/// Call before pipeline::run() to catch assertion failures.
 pub fn set_jit_abort_handler(handler: unsafe extern "C" fn()) {
     *CUSTOM_ABORT_FN.lock().unwrap() = Some(handler);
 }
@@ -95,6 +92,34 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
     let is_no_std = detect_no_std(&source);
     Ok((source, is_no_std))
 }
+
+// ── shared monomorphize→merged_types helper ──────────────────────
+fn merge_mono_types(
+    hir: &glyim_hir::Hir,
+    interner: &mut Interner,
+    expr_types: &[HirType],
+    call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
+) -> (Vec<HirType>, glyim_hir::Hir) {
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(hir, interner, expr_types, call_type_args);
+    let mut merged = expr_types.to_vec();
+    for (id, ty) in &mono_result.type_overrides {
+        if id.as_usize() < merged.len() {
+            merged[id.as_usize()] = ty.clone();
+        } else {
+            merged.resize(id.as_usize() + 1, HirType::Never);
+            merged[id.as_usize()] = ty.clone();
+        }
+    }
+    // Generic → Named fallback
+    for ty in &mut merged {
+        if let HirType::Generic(sym, _args) = ty {
+            *ty = HirType::Named(*sym);
+        }
+    }
+    (merged, mono_result.hir)
+}
+
 #[tracing::instrument(name = "build", skip_all)]
 pub fn build(
     input: &Path,
@@ -107,76 +132,10 @@ pub fn build(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            _ => {}
-        }
-    }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -237,121 +196,34 @@ extern {
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
-    for item in &parse_out.ast.items {}
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                eprintln!(
-                    "[pipeline]   Fn name={:?}, type_params={:?}, ret={:?}, body={:?}",
-                    interner.resolve(f.name),
-                    f.type_params,
-                    f.ret,
-                    f.body
-                );
-            }
-            glyim_hir::HirItem::Impl(imp) => {
-                for m in &imp.methods {
-                    eprintln!(
-                        "[pipeline]     method name={:?}, type_params={:?}, ret={:?}",
-                        interner.resolve(m.name),
-                        m.type_params,
-                        m.ret
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
+    eprintln!("[pipeline] mono_hir.items.len() = {}", mono_hir.items.len());
+    for item in &mono_hir.items {
         match item {
             glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
+                let name = interner.resolve(f.name);
+                if name.contains("Vec") || name.contains("push") || name.contains("len") || name.contains("pop") || name.contains("get") {
+                    eprintln!("[pipeline]   mono fn: {} (type_params={:?})", name, f.type_params);
                 }
             }
             _ => {}
         }
     }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = Codegen::with_line_tables(
         &context,
         interner,
@@ -373,10 +245,9 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
     let engine = codegen
         .get_module()
-        .create_jit_execution_engine(inkwell::OptimizationLevel::None)
+        .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
     runtime_shims::map_runtime_shims_for_jit(
         &engine,
@@ -394,45 +265,13 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 #[tracing::instrument(name = "check", skip_all)]
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
-    for item in &parse_out.ast.items {}
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                eprintln!(
-                    "[pipeline]   Fn name={:?}, type_params={:?}, ret={:?}, body={:?}",
-                    interner.resolve(f.name),
-                    f.type_params,
-                    f.ret,
-                    f.body
-                );
-            }
-            glyim_hir::HirItem::Impl(imp) => {
-                for m in &imp.methods {
-                    eprintln!(
-                        "[pipeline]     method name={:?}, type_params={:?}, ret={:?}",
-                        interner.resolve(m.name),
-                        m.type_params,
-                        m.ret
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
-    let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
+    let mut typeck = TypeChecker::new(interner);
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
@@ -472,121 +311,21 @@ pub fn run_with_mode(
     target: Option<&str>,
 ) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
-    for item in &parse_out.ast.items {}
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                eprintln!(
-                    "[pipeline]   Fn name={:?}, type_params={:?}, ret={:?}, body={:?}",
-                    interner.resolve(f.name),
-                    f.type_params,
-                    f.ret,
-                    f.body
-                );
-            }
-            glyim_hir::HirItem::Impl(imp) => {
-                for m in &imp.methods {
-                    eprintln!(
-                        "[pipeline]     method name={:?}, type_params={:?}, ret={:?}",
-                        interner.resolve(m.name),
-                        m.type_params,
-                        m.ret
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            _ => {}
-        }
-    }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -615,7 +354,6 @@ pub fn run_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
@@ -645,76 +383,10 @@ pub fn build_with_mode(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            _ => {}
-        }
-    }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -727,7 +399,6 @@ pub fn build_with_mode(
     let obj_path = tmp_dir.path().join("output.o");
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -750,7 +421,6 @@ pub fn build_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
@@ -779,8 +449,10 @@ mod root_tests {
     fn find_package_root_in_current_dir() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
-        let result = find_package_root(dir.path());
-        assert_eq!(result, Some(dir.path().to_path_buf()));
+        assert_eq!(
+            find_package_root(dir.path()),
+            Some(dir.path().to_path_buf())
+        );
     }
     #[test]
     fn find_package_root_in_parent_dir() {
@@ -788,14 +460,12 @@ mod root_tests {
         std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
         let child = dir.path().join("src");
         std::fs::create_dir_all(&child).unwrap();
-        let result = find_package_root(&child);
-        assert_eq!(result, Some(dir.path().to_path_buf()));
+        assert_eq!(find_package_root(&child), Some(dir.path().to_path_buf()));
     }
     #[test]
     fn find_package_root_not_found() {
         let dir = tempfile::tempdir().unwrap();
-        let result = find_package_root(dir.path());
-        assert_eq!(result, None);
+        assert_eq!(find_package_root(dir.path()), None);
     }
     #[test]
     fn find_package_root_stops_at_file() {
@@ -804,8 +474,10 @@ mod root_tests {
         let file_path = dir.path().join("src/main.g");
         std::fs::create_dir_all(dir.path().join("src")).unwrap();
         std::fs::write(&file_path, "main = () => 42").unwrap();
-        let result = find_package_root(&file_path);
-        assert_eq!(result, Some(dir.path().to_path_buf()));
+        assert_eq!(
+            find_package_root(&file_path),
+            Some(dir.path().to_path_buf())
+        );
     }
 }
 pub fn build_package(
@@ -856,8 +528,7 @@ pub fn run_package(
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
     for line in stdout.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("test ") {
+        if let Some(rest) = line.trim().strip_prefix("test ") {
             if let Some(name_end) = rest.find(" ... ") {
                 let name = &rest[..name_end];
                 let status = &rest[name_end + 5..];
@@ -877,12 +548,8 @@ pub fn run_tests(
     include_ignored: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
-    for item in &parse_out.ast.items {}
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let test_fns = crate::test_runner::collect_test_functions(
@@ -912,15 +579,17 @@ pub fn run_tests(
         return Err(PipelineError::Codegen("no #[test] functions found".into()));
     }
     let (active_names, ignored_names) = if include_ignored {
-        let all: Vec<String> = test_fns.iter().map(|t| t.name.clone()).collect();
-        (all, Vec::new())
+        (
+            test_fns.iter().map(|t| t.name.clone()).collect(),
+            Vec::new(),
+        )
     } else {
-        let active: Vec<String> = test_fns
+        let active: Vec<_> = test_fns
             .iter()
             .filter(|t| !t.ignored)
             .map(|t| t.name.clone())
             .collect();
-        let ignored: Vec<String> = test_fns
+        let ignored: Vec<_> = test_fns
             .iter()
             .filter(|t| t.ignored)
             .map(|t| t.name.clone())
@@ -934,126 +603,17 @@ pub fn run_tests(
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                eprintln!(
-                    "[pipeline]   Fn name={:?}, type_params={:?}, ret={:?}, body={:?}",
-                    interner.resolve(f.name),
-                    f.type_params,
-                    f.ret,
-                    f.body
-                );
-            }
-            glyim_hir::HirItem::Impl(imp) => {
-                for m in &imp.methods {
-                    eprintln!(
-                        "[pipeline]     method name={:?}, type_params={:?}, ret={:?}",
-                        interner.resolve(m.name),
-                        m.type_params,
-                        m.ret
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            _ => {}
-        }
-    }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-    // Post‑processing: replace any remaining Generic(T, _) with the concrete type
-    // that was registered during monomorphization. This ensures that codegen never
-    // sees an unresolved generic type when dereferencing pointers or computing sizes.
-    for ty in &mut merged_types {
-        if let HirType::Generic(sym, _args) = ty {
-            // The monomorphized type should have been registered under the mangled name
-            // in the struct_types map. We don't have access to that map here; instead,
-            // we rely on the fact that the monomorphization pass already substituted
-            // all generic types. If any remain, they are a bug. We'll fall back to
-            // the base Named type for now, but ideally this should never happen.
-            *ty = HirType::Named(*sym);
-        }
-    }
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, merged_types);
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -1106,9 +666,7 @@ fn compile_to_hir_and_ir(
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
-    info!("lowered to HIR");
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
 }
@@ -1180,97 +738,18 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            _ => {}
-        }
-    }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-    eprintln!("[pipeline] === Monomorphized HIR items before codegen ===");
-    for item in &mono_hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                eprintln!("[pipeline]   Fn {} (type_params={:?})", interner.resolve(f.name), f.type_params);
-            }
-            _ => {}
-        }
-    }
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner.clone(), merged_types);
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
-    eprintln!("[pipeline] === LLVM IR after monomorphization ===");
-    eprintln!("{}", codegen.get_module().print_to_string());
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
@@ -1332,10 +811,7 @@ mod no_std_tests {
     }
     #[test]
     fn detect_no_std_known_limitation_comment() {
-        assert!(!detect_no_std(
-            "// no_std
-fn main() { 0 }"
-        ));
+        assert!(!detect_no_std("// no_std\nfn main() { 0 }"));
     }
 }
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
@@ -1349,69 +825,10 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    let mut expr_types = typeck.expr_types.clone();
+    let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-
-    // Ground any remaining type parameter references to `Int`
-    let mut all_type_params = std::collections::HashSet::new();
-    for item in &hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                for &tp in &f.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Impl(i) => {
-                for &tp in &i.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Struct(s) => {
-                for &tp in &s.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            glyim_hir::HirItem::Enum(e) => {
-                for &tp in &e.type_params {
-                    all_type_params.insert(tp);
-                }
-            }
-            _ => {}
-        }
-    }
-    for ty in &mut expr_types {
-        match ty {
-            glyim_hir::types::HirType::Named(s) if all_type_params.contains(s) => {
-                *ty = glyim_hir::types::HirType::Int
-            }
-            glyim_hir::types::HirType::Generic(_, args) => {
-                for a in args {
-                    if let glyim_hir::types::HirType::Named(s) = a {
-                        if all_type_params.contains(s) {
-                            *a = glyim_hir::types::HirType::Int;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let merged_types: Vec<HirType> = expr_types
-        .iter()
-        .enumerate()
-        .map(|(i, ty)| {
-            mono_result
-                .type_overrides
-                .get(&ExprId::new(i as u32))
-                .cloned()
-                .unwrap_or_else(|| ty.clone())
-        })
-        .collect();
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
     let mut cg = Codegen::new(&context, interner, merged_types);
     cg = cg.with_jit_mode();

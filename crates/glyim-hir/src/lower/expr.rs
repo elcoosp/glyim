@@ -234,7 +234,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                     id: ctx.fresh_id(),
                     value: false,
                     span,
-            },
+                },
                 ty: None,
                 span,
             };
@@ -243,7 +243,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 mutable: true,
                 value: iter_expr,
                 span,
-            ty: None,
+                ty: None,
             };
 
             let body_expr = lower_expr(body, ctx);
@@ -356,7 +356,12 @@ fn lower_block(
 fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStmt {
     let span = stmt.span;
     match &stmt.kind {
-        StmtKind::Let { pattern, mutable, value, ty: _ty } => {
+        StmtKind::Let {
+            pattern,
+            mutable,
+            value,
+            ty: _ty,
+        } => {
             let val = lower_expr(value, ctx);
             let pat = lower_pattern(pattern, ctx);
             HirStmt::LetPat {
@@ -364,7 +369,7 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
                 mutable: *mutable,
                 value: val,
                 span,
-            ty: None,
+                ty: None,
             }
         }
         StmtKind::Assign { target, value } => HirStmt::Assign {

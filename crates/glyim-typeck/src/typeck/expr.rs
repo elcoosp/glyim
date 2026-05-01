@@ -129,6 +129,12 @@ impl TypeChecker {
             } => {
                 let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args);
                 if let Some(type_args) = inferred_args {
+                    eprintln!(
+                        "[typeck] Call INSERT id={} callee={} type_args={:?}",
+                        id.as_usize(),
+                        self.interner.try_resolve(*callee).unwrap_or("<?>"),
+                        type_args
+                    );
                     self.call_type_args.insert(*id, type_args);
                 }
                 ret_ty
@@ -175,13 +181,15 @@ impl TypeChecker {
                 }
             }
             HirExpr::MethodCall {
+                id,
                 receiver,
                 method_name,
                 args,
                 ..
             } => {
                 let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
-                let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
+                let arg_types: Vec<HirType> =
+                    args.iter().filter_map(|a| self.check_expr(a)).collect();
                 // look up method in impl methods by mangled name computed from receiver type
                 let type_sym = match &receiver_ty {
                     HirType::Named(s) | HirType::Generic(s, _) => Some(*s),
@@ -204,14 +212,33 @@ impl TypeChecker {
                                 }
                             }
                             // Infer from argument types (params[0] is self, args[0] matches params[1])
-                            for (arg_ty, (_, param_ty)) in arg_types.iter().zip(fn_def.params.iter().skip(1)) {
+                            for (arg_ty, (_, param_ty)) in
+                                arg_types.iter().zip(fn_def.params.iter().skip(1))
+                            {
                                 if let HirType::Named(param_sym) = param_ty {
                                     if fn_def.type_params.contains(param_sym) {
-                                        if *arg_ty != HirType::Never && *arg_ty != HirType::Named(*param_sym) {
+                                        if *arg_ty != HirType::Never
+                                            && *arg_ty != HirType::Named(*param_sym)
+                                        {
                                             sub.insert(*param_sym, arg_ty.clone());
                                         }
                                     }
                                 }
+                            }
+                            // Record call_type_args for monomorphizer
+                            if !sub.is_empty() {
+                                let concrete_args: Vec<HirType> = fn_def
+                                    .type_params
+                                    .iter()
+                                    .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                    .collect();
+                                eprintln!(
+                                    "[typeck] MethodCall INSERT id={} method={} args={:?}",
+                                    id.as_usize(),
+                                    self.interner.resolve(*method_name),
+                                    concrete_args
+                                );
+                                self.call_type_args.insert(*id, concrete_args);
                             }
                             let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                             let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
@@ -416,8 +443,35 @@ impl TypeChecker {
             }
             return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
         }
-        for methods in self.impl_methods.values() {
+        // Look up in impl_methods by mangled name; also infer type params
+        for (_type_name, methods) in &self.impl_methods {
             if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
+                if !fn_def.type_params.is_empty() && !arg_types.is_empty() {
+                    let sub: HashMap<Symbol, HirType> = fn_def
+                        .type_params
+                        .iter()
+                        .zip(arg_types.iter())
+                        .filter_map(|(tp, at)| {
+                            if at == &HirType::Never {
+                                None
+                            } else {
+                                Some((*tp, at.clone()))
+                            }
+                        })
+                        .collect();
+                    if sub.len() == fn_def.type_params.len() {
+                        let type_args: Vec<HirType> = fn_def
+                            .type_params
+                            .iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                            .collect();
+                        let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
+                        return (
+                            glyim_hir::types::substitute_type(&ret, &sub),
+                            Some(type_args),
+                        );
+                    }
+                }
                 return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
             }
         }

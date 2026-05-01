@@ -59,8 +59,24 @@ impl TypeChecker {
     fn register_impl(&mut self, imp: &glyim_hir::item::HirImplDef) {
         let methods: Vec<glyim_hir::node::HirFn> = imp.methods.to_vec();
         // Push each method into fns so they're visible to check_call
+        // Also push mangled versions if the method has type_params
         for m in &methods {
             self.fns.push(m.clone());
+            if !m.type_params.is_empty() {
+                // Also register under base name for lookup in check_call_with_type_args
+                let base_name = self.interner.resolve(m.name).to_string();
+                if let Some(pos) = base_name.rfind('_') {
+                    let prefix = &base_name[..pos];
+                    let prefix_sym = self.interner.intern(prefix);
+                    if self.structs.contains_key(&prefix_sym) {
+                        let short_name = base_name[pos + 1..].to_string();
+                        let short_sym = self.interner.intern(&short_name);
+                        let mut short_fn = m.clone();
+                        short_fn.name = short_sym;
+                        self.fns.push(short_fn);
+                    }
+                }
+            }
         }
         self.impl_methods.insert(imp.target_name, methods);
     }

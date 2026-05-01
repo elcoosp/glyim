@@ -99,13 +99,13 @@ pub enum HirPattern {
 /// `sub` maps type parameter symbols to their concrete types.
 pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType {
     match ty {
-        HirType::Named(sym) => {
-            sub.get(sym).cloned().unwrap_or_else(|| ty.clone())
-        }
+        HirType::Named(sym) => sub.get(sym).cloned().unwrap_or_else(|| ty.clone()),
         HirType::Generic(sym, args) => {
             let new_args: Vec<HirType> = args.iter().map(|a| substitute_type(a, sub)).collect();
             // If all args are now concrete (no type params remain), just return Named
-            let has_params = new_args.iter().any(|a| matches!(a, HirType::Named(s) if sub.contains_key(s)));
+            let has_params = new_args
+                .iter()
+                .any(|a| matches!(a, HirType::Named(s) if sub.contains_key(s)));
             if !has_params && !new_args.is_empty() {
                 HirType::Generic(*sym, new_args)
             } else {

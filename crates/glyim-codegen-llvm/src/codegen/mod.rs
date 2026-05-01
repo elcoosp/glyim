@@ -177,6 +177,19 @@ impl<'ctx> Codegen<'ctx> {
 
     #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
+        eprintln!("[codegen] generate() received {} items:", hir.items.len());
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    eprintln!("[codegen]   Fn: {} (type_params={:?})",
+                        self.interner.resolve(f.name), f.type_params);
+                }
+                glyim_hir::item::HirItem::Struct(s) => {
+                    eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
+                }
+                _ => {}
+            }
+        }
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
         crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
@@ -217,6 +230,18 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
+        // Pass 2b debug: list all functions in module
+        eprintln!("[codegen] Functions in module before Pass 3:");
+        if let Some(func) = self.module.get_first_function() {
+            let mut f = Some(func);
+            while let Some(func) = f {
+                let name = func.get_name().to_string_lossy();
+                if true {
+                    eprintln!("[codegen]   {}", name);
+                }
+                f = func.get_next_function();
+            }
+        }
         // Pass 3 — emit bodies (all forward declarations already present)
         for item in &hir.items {
             match item {

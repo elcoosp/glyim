@@ -27,7 +27,10 @@ impl TypeChecker {
                 // If the pattern is a Var with a type annotation, use it to infer
                 // concrete type args for MethodCall/Call expressoins
                 if let HirPattern::Var(_) = pattern {
-                    if let Some(binding_ty) = self.lookup_binding(&match pattern { HirPattern::Var(s) => *s, _ => unreachable!() }) {
+                    if let Some(binding_ty) = self.lookup_binding(&match pattern {
+                        HirPattern::Var(s) => *s,
+                        _ => unreachable!(),
+                    }) {
                         // Try to extract type args from the binding's type
                         if let HirType::Generic(_, type_args) = &binding_ty {
                             let value_id = value.get_id();

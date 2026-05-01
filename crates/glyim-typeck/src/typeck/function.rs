@@ -5,6 +5,8 @@ use glyim_hir::types::HirType;
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_fn(&mut self, f: &HirFn) {
+        // Clear call_type_args to prevent ExprId collisions across functions
+        self.call_type_args.clear();
         self.current_fn_type_params = f.type_params.clone();
         let fn_name = self.interner.resolve(f.name).to_string();
         self.with_scope(|tc| {

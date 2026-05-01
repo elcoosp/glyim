@@ -1,7 +1,7 @@
 use crate::ast::{StmtKind, StmtNode};
 use crate::parser::patterns::parse_pattern;
-use crate::parser::Parser;
 use crate::parser::types::parse_type_expr;
+use crate::parser::Parser;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
