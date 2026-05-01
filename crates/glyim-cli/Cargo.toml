@@ -44,6 +44,7 @@ sha2 = "0.11"
 hex = "0.4"
 dirs-next = "2"
 
+libc = "0.2"
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
