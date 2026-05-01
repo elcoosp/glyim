@@ -25,7 +25,6 @@ impl TypeChecker {
                 ..
             } => {
                 let inferred = self.check_expr(value).unwrap_or(HirType::Int);
-                    std::mem::discriminant(pattern), annotation, inferred);
                 // If there's an annotation, use it as the binding type (overriding inference)
                 let ty = if let Some(annotated) = annotation {
                     let resolved_annotated =

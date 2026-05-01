@@ -1035,15 +1035,9 @@ impl<'a> MonoContext<'a> {
     }
 
     fn build_result(mut self) -> MonoResult {
-            "[mono] build_result: fn_specs.len()={}, items.len()={}",
-            self.fn_specs.len(),
-            self.hir.items.len()
-        );
-
         let mut items = Vec::new();
 
         // 1. Specialized structs first (clone to avoid borrow conflict)
-
         let struct_specs: Vec<_> = self
             .struct_specs
             .iter()
@@ -1052,13 +1046,11 @@ impl<'a> MonoContext<'a> {
 
         for ((_orig_name, args), s) in &struct_specs {
             let mut mono_s = s.clone();
-
             mono_s.name = self.mangle_name(s.name, args);
-
             items.push(HirItem::Struct(mono_s));
         }
 
-        // Build mangling maps for rewriting call sites (precompute mangled names)
+        // Build mangling maps for rewriting call sites
         let fn_keys: Vec<(Symbol, Vec<HirType>)> = self.fn_specs.keys().cloned().collect();
         let fn_mangled_names: Vec<((Symbol, Vec<HirType>), Symbol)> = {
             let mut names = Vec::new();
@@ -1081,6 +1073,7 @@ impl<'a> MonoContext<'a> {
             names
         };
         let struct_mangle_map: HashMap<Symbol, Symbol> = struct_mangled_names.into_iter().collect();
+
         // 2. Original items (include ALL functions, not just non-generic)
         let original_items: Vec<crate::item::HirItem> = self
             .hir
@@ -1120,7 +1113,6 @@ impl<'a> MonoContext<'a> {
         }
 
         // 3. Specialized functions with MANGLED names
-
         let fn_specs_clone: Vec<_> = self
             .fn_specs
             .iter()
@@ -1129,24 +1121,15 @@ impl<'a> MonoContext<'a> {
 
         for ((orig_name, args), f) in &fn_specs_clone {
             let mut mono_f = f.clone();
-
             mono_f.name = self.mangle_name(*orig_name, args);
-
-                "[mono]   adding specialized fn: {} (was {})",
-                self.interner.resolve(mono_f.name),
-                self.interner.resolve(*orig_name)
-            );
-
             items.push(HirItem::Fn(mono_f));
         }
 
         MonoResult {
             hir: crate::Hir { items },
-
             type_overrides: self.type_overrides,
         }
     }
-
     fn rewrite_fn(
         &mut self,
         f: &HirFn,
@@ -1172,14 +1155,9 @@ impl<'a> MonoContext<'a> {
                 span,
             } => {
                 let type_args = self.call_type_args.get(id).cloned().unwrap_or_else(|| {
-                    args.iter()
-                        .map(|a| {
-                            self.expr_types
-                                .get(a.get_id().as_usize())
-                                .cloned()
-                                .unwrap_or(HirType::Int)
-                        })
-                        .collect()
+                    // Fallback: use only the first type_params.len() args
+                    // (the rest are value args, not type args)
+                    vec![]
                 });
                 let new_callee = fn_map
                     .get(&(*callee, type_args))
@@ -1244,6 +1222,9 @@ impl<'a> MonoContext<'a> {
                             }
                         })
                     {
+                        // Wrap the receiver so the Call arm sees a single argument
+                        // (the receiver), preventing the fallback from collecting
+                        // receiver + method_args as separate type args.
                         let mut all_args = vec![*rewritten_receiver.clone()];
                         all_args.extend(rewritten_args);
                         return HirExpr::Call {

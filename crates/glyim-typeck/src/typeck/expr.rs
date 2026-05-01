@@ -143,11 +143,6 @@ impl TypeChecker {
             } => {
                 let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args);
                 if let Some(type_args) = inferred_args {
-                        "[typeck] Call INSERT id={} callee={} type_args={:?}",
-                        id.as_usize(),
-                        self.interner.try_resolve(*callee).unwrap_or("<?>"),
-                        type_args
-                    );
                     self.call_type_args.insert(*id, type_args);
                 }
                 ret_ty
@@ -201,7 +196,6 @@ impl TypeChecker {
                 ..
             } => {
                 let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
-                    id.as_usize(), self.interner.resolve(*method_name), receiver_ty);
                 let arg_types: Vec<HirType> =
                     args.iter().filter_map(|a| self.check_expr(a)).collect();
                 // look up method in impl methods by mangled name computed from receiver type
@@ -245,11 +239,6 @@ impl TypeChecker {
                                     .iter()
                                     .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                                     .collect();
-                                    "[typeck] MethodCall INSERT id={} method={} args={:?}",
-                                    id.as_usize(),
-                                    self.interner.resolve(*method_name),
-                                    concrete_args
-                                );
                                 self.call_type_args.insert(*id, concrete_args);
                             }
                             let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
