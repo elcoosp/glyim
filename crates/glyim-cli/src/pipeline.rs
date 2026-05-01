@@ -196,6 +196,13 @@ pub enum Result<T, E> {
     Ok(T),
     Err(E),
 }
+
+type u8 = i64;
+
+extern {
+    fn glyim_alloc(size: i64) -> *mut u8;
+    fn glyim_free(ptr: *mut u8);
+}
 ";
 
 #[tracing::instrument(name = "run", skip_all)]
