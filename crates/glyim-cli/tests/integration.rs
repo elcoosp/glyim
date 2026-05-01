@@ -987,3 +987,31 @@ main = () => {
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 1);
 }
+
+#[test]
+fn e2e_zero_as_struct_field_access() {
+    let src = r#"
+struct Vec<T> { data: *mut T, len: i64, cap: i64 }
+impl<T> Vec<T> {
+    pub fn new() -> Vec<T> { Vec { data: 0 as *mut T, len: 0, cap: 0 } }
+    pub fn get(self: Vec<T>, index: i64) -> T {
+        if index >= self.len {
+            0 as T
+        } else {
+            let elem_size = __size_of::<T>();
+            let ptr = __ptr_offset(self.data as *mut u8, index * elem_size) as *mut T;
+            *ptr
+        }
+    }
+}
+
+struct Entry<K, V> { key: K, value: V, occupied: i64 }
+
+main = () => {
+    let v: Vec<Entry<i64, i64>> = Vec::new();
+    let entry = v.get(0);
+    entry.key
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
+}
