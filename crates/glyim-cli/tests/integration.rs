@@ -12,6 +12,7 @@ fn temp_g(content: &str) -> PathBuf {
 // ─── longjmp-based assert/abort catching ──────────────────────────
 use std::sync::Mutex;
 
+#[allow(dead_code)]
 extern "C" {
     fn setjmp(buf: *mut usize) -> i32;
     fn longjmp(buf: *mut usize, val: i32) -> !;
@@ -25,11 +26,13 @@ unsafe extern "C" fn assert_handler_impl(_msg: *const u8, _len: i64) {
     unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn abort_handler_impl() {
     ASSERT_FIRED.store(true, std::sync::atomic::Ordering::SeqCst);
     unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
 }
 
+#[allow(dead_code)]
 fn run_with_abort_catcher<F: FnOnce() -> i32>(f: F) -> i32 {
     let ret = unsafe { setjmp(JMP_BUF.lock().unwrap().as_mut_ptr()) };
     if ret != 0 {
