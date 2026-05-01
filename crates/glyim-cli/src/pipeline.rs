@@ -12,14 +12,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process::Command};
 use tracing::{info, info_span};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
     #[default]
     Debug,
     Release,
 }
-
 impl BuildMode {
     pub fn opt_level(&self) -> inkwell::OptimizationLevel {
         match self {
@@ -27,12 +25,10 @@ impl BuildMode {
             BuildMode::Release => inkwell::OptimizationLevel::Aggressive,
         }
     }
-
     pub fn is_release(&self) -> bool {
         matches!(self, BuildMode::Release)
     }
 }
-
 #[derive(Debug)]
 pub enum PipelineError {
     Io(std::io::Error),
@@ -43,7 +39,6 @@ pub enum PipelineError {
     Run(std::io::Error),
     Manifest(crate::manifest::ManifestError),
 }
-
 impl std::fmt::Display for PipelineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -69,28 +64,20 @@ impl std::fmt::Display for PipelineError {
         }
     }
 }
-
 impl std::error::Error for PipelineError {}
 impl From<std::io::Error> for PipelineError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
     }
 }
-
-// Custom assert handler for JIT tests
 static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
 static CUSTOM_ABORT_FN: Mutex<Option<unsafe extern "C" fn()>> = Mutex::new(None);
-
-/// Set a custom handler for glyim_assert_fail in JIT mode.
-/// Call before pipeline::run() to catch assertion failures.
 pub fn set_jit_abort_handler(handler: unsafe extern "C" fn()) {
     *CUSTOM_ABORT_FN.lock().unwrap() = Some(handler);
 }
-
 pub fn set_jit_assert_handler(handler: unsafe extern "C" fn(*const u8, i64)) {
     *CUSTOM_ASSERT_FN.lock().unwrap() = Some(handler);
 }
-
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
         let trimmed = line.trim();
@@ -100,11 +87,37 @@ fn detect_no_std(source: &str) -> bool {
     }
     false
 }
-
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let is_no_std = detect_no_std(&source);
     Ok((source, is_no_std))
+}
+
+// ── shared monomorphize→merged_types helper ──────────────────────
+fn merge_mono_types(
+    hir: &glyim_hir::Hir,
+    interner: &mut Interner,
+    expr_types: &[HirType],
+    call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
+) -> (Vec<HirType>, glyim_hir::Hir) {
+    let mono_result =
+        glyim_hir::monomorphize::monomorphize(hir, interner, expr_types, call_type_args);
+    let mut merged = expr_types.to_vec();
+    for (id, ty) in &mono_result.type_overrides {
+        if id.as_usize() < merged.len() {
+            merged[id.as_usize()] = ty.clone();
+        } else {
+            merged.resize(id.as_usize() + 1, HirType::Never);
+            merged[id.as_usize()] = ty.clone();
+        }
+    }
+    // Generic → Named fallback
+    for ty in &mut merged {
+        if let HirType::Generic(sym, _args) = ty {
+            *ty = HirType::Named(*sym);
+        }
+    }
+    (merged, mono_result.hir)
 }
 
 #[tracing::instrument(name = "build", skip_all)]
@@ -121,29 +134,8 @@ pub fn build(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -185,66 +177,50 @@ pub fn build(
     link_object(&obj_path, &output, false)?;
     Ok(output)
 }
-
 const PRELUDE: &str = "\
 pub enum Option<T> {
     Some(T),
     None,
 }
-
 pub enum Result<T, E> {
     Ok(T),
     Err(E),
 }
+extern {
+    fn glyim_alloc(size: i64) -> *mut u8;
+    fn glyim_free(ptr: *mut u8);
+    fn glyim_hash_bytes(data: *const u8, len: i64) -> i64;
+    fn glyim_hash_seed() -> i64;
+}
 ";
-
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
+    eprintln!("[pipeline] mono_hir.items.len() = {}", mono_hir.items.len());
+    for item in &mono_hir.items {
+        if let glyim_hir::HirItem::Fn(f) = item {
+            let name = interner.resolve(f.name);
+            if name.contains("Vec") || name.contains("push") || name.contains("len") || name.contains("pop") || name.contains("get") {
+                eprintln!("[pipeline]   mono fn: {} (type_params={:?})", name, f.type_params);
+            }
         }
     }
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = Codegen::with_line_tables(
         &context,
         interner,
@@ -266,19 +242,17 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
+    eprintln!("=== LLVM IR ===\n{}", codegen.ir_string());
     let engine = codegen
         .get_module()
-        .create_jit_execution_engine(inkwell::OptimizationLevel::None)
+        .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-
     runtime_shims::map_runtime_shims_for_jit(
         &engine,
         codegen.get_module(),
         *CUSTOM_ASSERT_FN.lock().unwrap(),
         *CUSTOM_ABORT_FN.lock().unwrap(),
     );
-
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -286,30 +260,21 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
         Ok(main_fn.call())
     }
 }
-
 #[tracing::instrument(name = "check", skip_all)]
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
-    let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
+    let mut typeck = TypeChecker::new(interner);
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
     Ok(())
 }
-
 #[tracing::instrument(name = "print_ir", skip_all)]
 pub fn print_ir(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
@@ -317,7 +282,6 @@ pub fn print_ir(input: &Path) -> Result<(), PipelineError> {
     println!("{ir}");
     Ok(())
 }
-
 pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
     let dir = PathBuf::from(name);
     if dir.exists() {
@@ -338,7 +302,6 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
     )?;
     Ok(dir)
 }
-
 #[tracing::instrument(name = "run_with_mode", skip_all)]
 pub fn run_with_mode(
     input: &Path,
@@ -346,50 +309,21 @@ pub fn run_with_mode(
     target: Option<&str>,
 ) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -418,19 +352,16 @@ pub fn run_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-
     runtime_shims::map_runtime_shims_for_jit(
         &engine,
         codegen.get_module(),
         *CUSTOM_ASSERT_FN.lock().unwrap(),
         *CUSTOM_ABORT_FN.lock().unwrap(),
     );
-
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -438,7 +369,6 @@ pub fn run_with_mode(
         Ok(main_fn.call())
     }
 }
-
 pub fn build_with_mode(
     input: &Path,
     output: Option<&Path>,
@@ -453,29 +383,8 @@ pub fn build_with_mode(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -488,7 +397,6 @@ pub fn build_with_mode(
     let obj_path = tmp_dir.path().join("output.o");
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
@@ -511,14 +419,12 @@ pub fn build_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
     link_object(&obj_path, &output, mode == BuildMode::Release)?;
     Ok(output)
 }
-
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     let mut current = if start.is_file() {
         start.parent()?.to_path_buf()
@@ -534,36 +440,31 @@ pub fn find_package_root(start: &Path) -> Option<PathBuf> {
         }
     }
 }
-
 #[cfg(test)]
 mod root_tests {
     use super::*;
-
     #[test]
     fn find_package_root_in_current_dir() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
-        let result = find_package_root(dir.path());
-        assert_eq!(result, Some(dir.path().to_path_buf()));
+        assert_eq!(
+            find_package_root(dir.path()),
+            Some(dir.path().to_path_buf())
+        );
     }
-
     #[test]
     fn find_package_root_in_parent_dir() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
         let child = dir.path().join("src");
         std::fs::create_dir_all(&child).unwrap();
-        let result = find_package_root(&child);
-        assert_eq!(result, Some(dir.path().to_path_buf()));
+        assert_eq!(find_package_root(&child), Some(dir.path().to_path_buf()));
     }
-
     #[test]
     fn find_package_root_not_found() {
         let dir = tempfile::tempdir().unwrap();
-        let result = find_package_root(dir.path());
-        assert_eq!(result, None);
+        assert_eq!(find_package_root(dir.path()), None);
     }
-
     #[test]
     fn find_package_root_stops_at_file() {
         let dir = tempfile::tempdir().unwrap();
@@ -571,11 +472,12 @@ mod root_tests {
         let file_path = dir.path().join("src/main.g");
         std::fs::create_dir_all(dir.path().join("src")).unwrap();
         std::fs::write(&file_path, "main = () => 42").unwrap();
-        let result = find_package_root(&file_path);
-        assert_eq!(result, Some(dir.path().to_path_buf()));
+        assert_eq!(
+            find_package_root(&file_path),
+            Some(dir.path().to_path_buf())
+        );
     }
 }
-
 pub fn build_package(
     package_dir: &Path,
     output: Option<&Path>,
@@ -591,17 +493,14 @@ pub fn build_package(
         }
     })?;
     let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
-
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-
     build_with_mode(&main_path, output, mode, target)
 }
-
 pub fn run_package(
     package_dir: &Path,
     mode: BuildMode,
@@ -616,22 +515,18 @@ pub fn run_package(
         }
     })?;
     let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
-
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-
     run_with_mode(&main_path, mode, target)
 }
-
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
     for line in stdout.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("test ") {
+        if let Some(rest) = line.trim().strip_prefix("test ") {
             if let Some(name_end) = rest.find(" ... ") {
                 let name = &rest[..name_end];
                 let status = &rest[name_end + 5..];
@@ -645,21 +540,16 @@ fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResul
     }
     results
 }
-
 pub fn run_tests(
     input: &Path,
     filter_name: Option<&str>,
     include_ignored: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
-        for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
-
     let test_fns = crate::test_runner::collect_test_functions(
         &parse_out.ast,
         &parse_out.interner,
@@ -683,28 +573,27 @@ pub fn run_tests(
         })
         .map(|t| t.name.clone())
         .collect();
-
     if test_fns.is_empty() {
         return Err(PipelineError::Codegen("no #[test] functions found".into()));
     }
-
     let (active_names, ignored_names) = if include_ignored {
-        let all: Vec<String> = test_fns.iter().map(|t| t.name.clone()).collect();
-        (all, Vec::new())
+        (
+            test_fns.iter().map(|t| t.name.clone()).collect(),
+            Vec::new(),
+        )
     } else {
-        let active: Vec<String> = test_fns
+        let active: Vec<_> = test_fns
             .iter()
             .filter(|t| !t.ignored)
             .map(|t| t.name.clone())
             .collect();
-        let ignored: Vec<String> = test_fns
+        let ignored: Vec<_> = test_fns
             .iter()
             .filter(|t| t.ignored)
             .map(|t| t.name.clone())
             .collect();
         (active, ignored)
     };
-
     if active_names.is_empty() {
         let results: Vec<_> = ignored_names
             .iter()
@@ -712,46 +601,17 @@ pub fn run_tests(
             .collect();
         return Ok(crate::test_runner::TestRunSummary { results });
     }
-
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    info!("lowered to HIR");
-    let _typeck_span = info_span!("phase", name = "typeck").entered();
     let mut typeck = TypeChecker::new(interner.clone());
-    info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, merged_types);
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -766,17 +626,14 @@ pub fn run_tests(
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_test_out");
     link_object(&obj_path, &exe_path, false)?;
-
     let output = Command::new(&exe_path)
         .output()
         .map_err(PipelineError::Run)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results = parse_test_output(&stdout);
-
     for name in &ignored_names {
         results.push((name.clone(), crate::test_runner::TestResult::Ignored));
     }
-
     if !output.status.success() && output.status.code().is_none() {
         for (_, ref mut result) in results.iter_mut() {
             if *result == crate::test_runner::TestResult::Passed {
@@ -784,10 +641,8 @@ pub fn run_tests(
             }
         }
     }
-
     Ok(crate::test_runner::TestRunSummary { results })
 }
-
 pub fn run_tests_package(
     package_dir: &Path,
     filter_name: Option<&str>,
@@ -802,7 +657,6 @@ pub fn run_tests_package(
     }
     run_tests(&main_path, filter_name, include_ignored)
 }
-
 fn compile_to_hir_and_ir(
     source: &str,
 ) -> Result<(glyim_hir::Hir, String, Interner), PipelineError> {
@@ -810,13 +664,10 @@ fn compile_to_hir_and_ir(
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
-    let _lower_span = info_span!("phase", name = "lower").entered();
     let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
-    info!("lowered to HIR");
     let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
     Ok((hir, ir, parse_out.interner))
 }
-
 fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(), PipelineError> {
     let linker = if which("cc") {
         "cc"
@@ -848,7 +699,6 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
     }
     Ok(())
 }
-
 #[allow(dead_code)]
 fn compute_source_hash(source: &str) -> String {
     use sha2::{Digest, Sha256};
@@ -857,7 +707,6 @@ fn compute_source_hash(source: &str) -> String {
     hasher.update(env!("CARGO_PKG_VERSION"));
     hex::encode(hasher.finalize())
 }
-
 #[allow(dead_code)]
 fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
@@ -866,7 +715,6 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
         .join("glyim-objects");
     let cas = CasClient::new(&cache_dir).map_err(PipelineError::Io)?;
-
     let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
@@ -875,7 +723,6 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
             .to_string();
         PathBuf::from(stem)
     });
-
     let hash_content = hash.parse::<glyim_macro_vfs::ContentHash>().unwrap();
     if let Some(cached_obj) = cas.retrieve(hash_content) {
         let tmp_dir = tempfile::tempdir()?;
@@ -884,59 +731,31 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         link_object(&obj_path, &output, false)?;
         return Ok(output);
     }
-
     let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let type_overrides = mono_result.type_overrides;
-    eprintln!(
-        "[pipeline] type_overrides (len={}): {:?}",
-        type_overrides.len(),
-        type_overrides
-            .iter()
-            .map(|(k, v)| (k.as_usize(), format!("{:?}", v)))
-            .collect::<Vec<_>>()
-    );
-    let mut merged_types = expr_types;
-    for (id, ty) in type_overrides {
-        if id.as_usize() < merged_types.len() {
-            merged_types[id.as_usize()] = ty;
-        } else {
-            merged_types.resize(id.as_usize() + 1, HirType::Never);
-            merged_types[id.as_usize()] = ty;
-        }
-    }
-
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
-    let mut codegen = Codegen::new(&context, interner, merged_types);
+    let mut codegen = Codegen::new(&context, interner.clone(), merged_types);
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
-
     let obj_bytes = fs::read(&obj_path)?;
     cas.store(&obj_bytes);
-
     link_object(&obj_path, &output, false)?;
     Ok(output)
 }
-
 fn which(cmd: &str) -> bool {
     Command::new(cmd)
         .arg("--version")
@@ -945,70 +764,54 @@ fn which(cmd: &str) -> bool {
         .status()
         .is_ok_and(|s| s.success())
 }
-
 #[cfg(test)]
 mod no_std_tests {
     use super::*;
-
     #[test]
     fn detect_no_std_simple() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
-
     #[test]
     fn detect_no_std_at_start() {
         assert!(detect_no_std("no_std\nfn main() { 0 }"));
     }
-
     #[test]
     fn detect_no_std_false_when_absent() {
         assert!(!detect_no_std("fn main() { 0 }"));
     }
-
     #[test]
     fn detect_no_std_false_in_string() {
         assert!(!detect_no_std(r#"fn main() { "no_std" }"#));
     }
-
     #[test]
     fn detect_no_std_false_as_part_of_ident() {
         assert!(!detect_no_std("fn no_std_helper() { 0 }"));
     }
-
     #[test]
     fn detect_no_std_false_as_field_name() {
         assert!(!detect_no_std("struct S { no_std: bool }"));
     }
-
     #[test]
     fn detect_no_std_with_trailing_whitespace() {
         assert!(detect_no_std("no_std   \nfn main() { 0 }"));
     }
-
     #[test]
     fn detect_no_std_false_empty() {
         assert!(!detect_no_std(""));
     }
-
     #[test]
     fn detect_no_std_false_only_whitespace() {
         assert!(!detect_no_std("  \n  \n"));
     }
-
     #[test]
     fn detect_no_std_after_other_code() {
         assert!(detect_no_std("fn foo() { 0 }\nno_std\nfn bar() { 0 }"));
     }
-
     #[test]
     fn detect_no_std_known_limitation_comment() {
-        assert!(!detect_no_std(
-            "// no_std
-fn main() { 0 }"
-        ));
+        assert!(!detect_no_std("// no_std\nfn main() { 0 }"));
     }
 }
-
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
@@ -1020,25 +823,10 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for _args in call_type_args.values() {}
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono_hir = mono_result.hir;
-    let merged_types: Vec<HirType> = expr_types
-        .iter()
-        .enumerate()
-        .map(|(i, ty)| {
-            mono_result
-                .type_overrides
-                .get(&ExprId::new(i as u32))
-                .cloned()
-                .unwrap_or_else(|| ty.clone())
-        })
-        .collect();
-
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
     let mut cg = Codegen::new(&context, interner, merged_types);
     cg = cg.with_jit_mode();
@@ -1047,14 +835,12 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-
     runtime_shims::map_runtime_shims_for_jit(
         &engine,
         cg.get_module(),
         *CUSTOM_ASSERT_FN.lock().unwrap(),
         *CUSTOM_ABORT_FN.lock().unwrap(),
     );
-
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")

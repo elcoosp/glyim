@@ -47,7 +47,6 @@ pub struct Codegen<'ctx> {
     pub(crate) no_std: bool,
     pub(crate) jit_mode: bool,
     pub(crate) target_triple: Option<String>,
-    
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -80,7 +79,7 @@ impl<'ctx> Codegen<'ctx> {
             no_std: false,
             jit_mode: false,
             target_triple: None,
-                        macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         }
     }
 
@@ -120,7 +119,7 @@ impl<'ctx> Codegen<'ctx> {
             no_std: false,
             jit_mode: false,
             target_triple: None,
-                        macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -135,7 +134,8 @@ impl<'ctx> Codegen<'ctx> {
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-        let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
+        let debug_info =
+            DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
         Ok(Self {
             context,
             module,
@@ -160,7 +160,7 @@ impl<'ctx> Codegen<'ctx> {
             no_std: false,
             jit_mode: false,
             target_triple: None,
-                        macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -177,8 +177,22 @@ impl<'ctx> Codegen<'ctx> {
 
     #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
+        eprintln!("[codegen] generate() received {} items:", hir.items.len());
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    eprintln!("[codegen]   Fn: {} (type_params={:?})",
+                        self.interner.resolve(f.name), f.type_params);
+                }
+                glyim_hir::item::HirItem::Struct(s) => {
+                    eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
+                }
+                _ => {}
+            }
+        }
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -201,6 +215,13 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
+        // Pass 1b — register specialized struct types from the HIR
+        for item in &hir.items {
+            if let glyim_hir::item::HirItem::Struct(s) = item {
+                types::codegen_struct_def(self, s);
+            }
+        }
+
         // Pass 2 — forward-declare ALL functions before any body is compiled
         for item in &hir.items {
             match item {
@@ -216,6 +237,18 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
+        // Pass 2b debug: list all functions in module
+        eprintln!("[codegen] Functions in module before Pass 3:");
+        if let Some(func) = self.module.get_first_function() {
+            let mut f = Some(func);
+            while let Some(func) = f {
+                let name = func.get_name().to_string_lossy();
+                if true {
+                    eprintln!("[codegen]   {}", name);
+                }
+                f = func.get_next_function();
+            }
+        }
         // Pass 3 — emit bodies (all forward declarations already present)
         for item in &hir.items {
             match item {
@@ -342,6 +375,7 @@ impl<'ctx> Codegen<'ctx> {
     ) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -517,8 +551,6 @@ impl<'ctx> Codegen<'ctx> {
         self
     }
 
-
-
     fn emit_macro_debug_section(&self) {
         let names = self.macro_fn_names.borrow();
         if names.is_empty() {
@@ -548,4 +580,3 @@ impl<'ctx> Codegen<'ctx> {
         global.set_section(Some(".glyim.macro"));
     }
 }
-

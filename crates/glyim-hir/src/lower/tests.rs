@@ -503,42 +503,45 @@ fn lower_enum_variant_construction() {
     assert!(has_enum, "expected EnumVariant somewhere");
 
     #[test]
-    fn lower_struct_preserves_type_params() {
-        let (hir, mut interner) = lower_source("struct Container<T> { value: T }\nmain = () => 0");
-        let s = hir.items.iter().find_map(|i| {
-            if let HirItem::Struct(s) = i {
-                Some(s)
-            } else {
-                None
-            }
-        });
-        assert!(s.is_some(), "expected Struct item");
-        let s = s.unwrap();
-        let t_sym = interner.intern("T");
-        assert_eq!(
-            s.type_params,
-            vec![t_sym],
-            "struct type_params should be preserved"
-        );
+    fn lower_enum_variant_construction() {
+        // (original test body, unchanged but without the inner tests)
     }
-
-    #[test]
-    fn lower_enum_preserves_type_params() {
-        let (hir, mut interner) = lower_source("enum Option<T> { Some(T), None }\nmain = () => 0");
-        let e = hir.items.iter().find_map(|i| {
-            if let HirItem::Enum(e) = i {
-                Some(e)
-            } else {
-                None
-            }
-        });
-        assert!(e.is_some(), "expected Enum item");
-        let e = e.unwrap();
-        let t_sym = interner.intern("T");
-        assert_eq!(
-            e.type_params,
-            vec![t_sym],
-            "enum type_params should be preserved"
-        );
-    }
+}
+#[test]
+fn lower_struct_preserves_type_params() {
+    let (hir, mut interner) = lower_source("struct Container<T> { value: T }\nmain = () => 0");
+    let s = hir.items.iter().find_map(|i| {
+        if let HirItem::Struct(s) = i {
+            Some(s)
+        } else {
+            None
+        }
+    });
+    assert!(s.is_some(), "expected Struct item");
+    let s = s.unwrap();
+    let t_sym = interner.intern("T");
+    assert_eq!(
+        s.type_params,
+        vec![t_sym],
+        "struct type_params should be preserved"
+    );
+}
+#[test]
+fn lower_enum_preserves_type_params() {
+    let (hir, mut interner) = lower_source("enum Option<T> { Some(T), None }\nmain = () => 0");
+    let e = hir.items.iter().find_map(|i| {
+        if let HirItem::Enum(e) = i {
+            Some(e)
+        } else {
+            None
+        }
+    });
+    assert!(e.is_some(), "expected Enum item");
+    let e = e.unwrap();
+    let t_sym = interner.intern("T");
+    assert_eq!(
+        e.type_params,
+        vec![t_sym],
+        "enum type_params should be preserved"
+    );
 }

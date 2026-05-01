@@ -12,6 +12,7 @@ fn temp_g(content: &str) -> PathBuf {
 // ─── longjmp-based assert/abort catching ──────────────────────────
 use std::sync::Mutex;
 
+#[allow(dead_code)]
 extern "C" {
     fn setjmp(buf: *mut usize) -> i32;
     fn longjmp(buf: *mut usize, val: i32) -> !;
@@ -25,11 +26,13 @@ unsafe extern "C" fn assert_handler_impl(_msg: *const u8, _len: i64) {
     unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn abort_handler_impl() {
     ASSERT_FIRED.store(true, std::sync::atomic::Ordering::SeqCst);
     unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
 }
 
+#[allow(dead_code)]
 fn run_with_abort_catcher<F: FnOnce() -> i32>(f: F) -> i32 {
     let ret = unsafe { setjmp(JMP_BUF.lock().unwrap().as_mut_ptr()) };
     if ret != 0 {
@@ -45,11 +48,17 @@ fn e2e_main_42() {
 }
 #[test]
 fn e2e_add() {
-    assert_eq!(pipeline::run(&temp_g("main = () => 1 + 2"), None).unwrap(), 3);
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => 1 + 2"), None).unwrap(),
+        3
+    );
 }
 #[test]
 fn e2e_block_last() {
-    assert_eq!(pipeline::run(&temp_g("main = () => { 1 2 }"), None).unwrap(), 2);
+    assert_eq!(
+        pipeline::run(&temp_g("main = () => { 1 2 }"), None).unwrap(),
+        2
+    );
 }
 #[test]
 fn e2e_missing_main() {
@@ -69,7 +78,11 @@ fn e2e_let_binding() {
 #[test]
 fn e2e_let_mut_assign() {
     assert_eq!(
-        pipeline::run(&temp_g("main = () => { let mut x = 10\nx = x + 5\nx }"), None).unwrap(),
+        pipeline::run(
+            &temp_g("main = () => { let mut x = 10\nx = x + 5\nx }"),
+            None
+        )
+        .unwrap(),
         15
     );
 }
@@ -83,7 +96,11 @@ fn e2e_if_true_branch() {
 #[test]
 fn e2e_if_false_branch() {
     assert_eq!(
-        pipeline::run(&temp_g("main = () => { if false { 10 } else { 20 } }"), None).unwrap(),
+        pipeline::run(
+            &temp_g("main = () => { if false { 10 } else { 20 } }"),
+            None
+        )
+        .unwrap(),
         20
     );
 }
@@ -97,9 +114,10 @@ fn e2e_if_without_else() {
 #[test]
 fn e2e_else_if_chain() {
     assert_eq!(
-        pipeline::run(&temp_g(
-            "main = () => { if false { 1 } else if false { 2 } else { 3 } }"
-        ), None)
+        pipeline::run(
+            &temp_g("main = () => { if false { 1 } else if false { 2 } else { 3 } }"),
+            None
+        )
         .unwrap(),
         3
     );
@@ -154,9 +172,10 @@ fn e2e_float() {
 #[test]
 fn e2e_enum() {
     assert_eq!(
-        pipeline::run(&temp_g(
-            "enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Green; 1 }"
-        ), None)
+        pipeline::run(
+            &temp_g("enum Color { Red, Green, Blue }\nmain = () => { let c = Color::Green; 1 }"),
+            None
+        )
         .unwrap(),
         1
     );
@@ -164,9 +183,10 @@ fn e2e_enum() {
 #[test]
 fn e2e_struct() {
     assert_eq!(
-        pipeline::run(&temp_g(
-            "struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; 42 }"
-        ), None)
+        pipeline::run(
+            &temp_g("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; 42 }"),
+            None
+        )
         .unwrap(),
         42
     );
@@ -178,9 +198,10 @@ fn e2e_match() {
 #[test]
 fn e2e_some_and_none() {
     assert_eq!(
-        pipeline::run(&temp_g(
-            "main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"
-        ), None)
+        pipeline::run(
+            &temp_g("main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"),
+            None
+        )
         .unwrap(),
         42
     );
@@ -188,9 +209,10 @@ fn e2e_some_and_none() {
 #[test]
 fn e2e_ok_and_err() {
     assert_eq!(
-        pipeline::run(&temp_g(
-            "main = () => { let r = Ok(42); match r { Ok(v) => v, Err(_) => 0 } }"
-        ), None)
+        pipeline::run(
+            &temp_g("main = () => { let r = Ok(42); match r { Ok(v) => v, Err(_) => 0 } }"),
+            None
+        )
         .unwrap(),
         42
     );
@@ -215,7 +237,11 @@ fn e2e_arrow() {
 // v0.4.0
 #[test]
 fn e2e_generic_identity() {
-    let _ = pipeline::run(&temp_g("fn id<T>(x: T) -> T { x }\nmain = () => id(42)"), None).unwrap();
+    let _ = pipeline::run(
+        &temp_g("fn id<T>(x: T) -> T { x }\nmain = () => id(42)"),
+        None,
+    )
+    .unwrap();
 }
 #[test]
 fn e2e_generic_struct() {
@@ -246,9 +272,10 @@ fn e2e_prelude_result() {
 #[test]
 fn e2e_enum_match_prelude() {
     assert_eq!(
-        pipeline::run(&temp_g(
-            "main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"
-        ), None)
+        pipeline::run(
+            &temp_g("main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }"),
+            None
+        )
         .unwrap(),
         42
     );
@@ -259,9 +286,10 @@ fn e2e_invalid_cast_fails() {
 }
 #[test]
 fn e2e_wrong_field_fails() {
-    assert!(pipeline::run(&temp_g(
-        "struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }"
-    ), None)
+    assert!(pipeline::run(
+        &temp_g("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }"),
+        None
+    )
     .is_err());
 }
 #[test]
@@ -328,7 +356,10 @@ fn e2e_type_error_invalid_cast() {
 fn e2e_type_error_int_plus_bool() {
     let input = temp_g("fn main() -> i64 { let x: i64 = true; x }");
     let result = pipeline::run(&input, None);
-    assert!(result.is_err(), "expected type error for bool in i64 variable");
+    assert!(
+        result.is_err(),
+        "expected type error for bool in i64 variable"
+    );
 }
 
 #[test]
@@ -477,29 +508,6 @@ main = () => {
 }
 
 #[test]
-fn e2e_vec_generic_push_get() {
-    let src = r#"
-struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
-impl<T> Vec<T> { fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } } }
-main = () => { let v = Vec::new(); v.len }
-"#;
-    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
-}
-
-#[test]
-fn e2e_vec_generic_len() {
-    let src = r#"
-struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
-impl<T> Vec<T> {
-    fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } }
-    fn len(&self) -> i64 { self.len }
-}
-main = () => { let v = Vec::new(); v.len() }
-"#;
-    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
-}
-
-#[test]
 fn e2e_vec_generic_push() {
     let src = r#"
 struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
@@ -558,4 +566,118 @@ main = () => {
 }
 "#;
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
+}
+#[test]
+fn e2e_intrinsic_ptr_alloc() {
+    let src = r#"
+        main = () => {
+            let ptr = glyim_alloc(8);
+            *(ptr as *mut i64) = 42;
+            let val = *(ptr as *mut i64);
+            glyim_free(ptr as *mut u8);
+            val
+        }
+    "#;
+    let result = pipeline::run(&temp_g(src), None);
+    assert_eq!(result.unwrap(), 42);
+}
+
+#[test]
+fn e2e_size_of_generic_struct() {
+    let src = "struct Container<T> { value: T }
+fn container_size() -> i64 { __size_of::<Container<i64>>() }
+main = () => container_size()";
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 8);
+}
+
+#[test]
+fn e2e_size_of_generic_function_param() {
+    let src = "fn size_of_val<T>(x: T) -> i64 { __size_of::<T>() }
+main = () => size_of_val(42)";
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 8);
+}
+
+#[test]
+fn e2e_deref_generic_ptr() {
+    let src = "fn deref_generic<T>(p: *mut T) -> T { *p }
+main = () => {
+    let ptr = glyim_alloc(8) as *mut i64;
+    *ptr = 123;
+    deref_generic(ptr)
+}";
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 123);
+}
+
+#[test]
+fn e2e_vec_generic_push_get() {
+    let stdlib_vec = include_str!("../../../stdlib/src/vec.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(10);
+    let v = v.push(20);
+    let v = v.push(30);
+    match v.get(1) {
+        Some(x) => x,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}", stdlib_vec, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 20);
+}
+
+#[test]
+fn e2e_vec_generic_pop() {
+    let stdlib_vec = include_str!("../../../stdlib/src/vec.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(100);
+    let v = v.push(200);
+    match v.pop() {
+        Some(x) => x,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}", stdlib_vec, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 200);
+}
+
+#[test]
+fn e2e_vec_generic_len() {
+    let stdlib_vec = include_str!("../../../stdlib/src/vec.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(1);
+    let v = v.push(2);
+    let v = v.push(3);
+    v.len()
+}
+"#;
+    let full_src = format!("{}\n{}", stdlib_vec, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 3);
+}
+
+#[test]
+fn e2e_vec_get_debug() {
+    let stdlib_vec = include_str!("../../../stdlib/src/vec.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(10);
+    let v = v.push(20);
+    let v = v.push(30);
+    v.get(1)
+}
+"#;
+    let full_src = format!("{}\n{}", stdlib_vec, main_code);
+    let input = temp_g(&full_src);
+    let result = pipeline::run(&input, None);
+    eprintln!("e2e_vec_get_debug raw result: {:?}", result);
 }

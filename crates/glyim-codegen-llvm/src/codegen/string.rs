@@ -128,12 +128,7 @@ pub(crate) fn codegen_call<'ctx>(
             .ok()?;
         let gep = unsafe {
             cg.builder
-                .build_gep(
-                    cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
-                    base_ptr,
-                    &[offset_val],
-                    "ptr_offset",
-                )
+                .build_gep(cg.context.i8_type(), base_ptr, &[offset_val], "ptr_offset")
                 .ok()?
         };
         return cg
@@ -143,27 +138,23 @@ pub(crate) fn codegen_call<'ctx>(
     }
 
     if let Some(fn_val) = cg.module.get_function(fn_name) {
-        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = fn_val
-            .get_type()
-            .get_param_types()
-            .into_iter()
-            .collect();
-let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
+        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+            fn_val.get_type().get_param_types().into_iter().collect();
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
             .filter_map(|a| codegen_expr(cg, a, fctx))
             .enumerate()
             .map(|(i, int_val)| {
                 let param_type = param_types.get(i);
-                if matches!(param_type, Some(inkwell::types::BasicMetadataTypeEnum::PointerType(..))) {
-                    // Convert i64 to pointer
-                    if let Ok(ptr) = cg.builder.build_int_to_ptr(
+                if param_type.is_some_and(|ty| ty.is_pointer_type()) {
+                    // Convert i64 to pointer for extern functions expecting ptr
+                    match cg.builder.build_int_to_ptr(
                         int_val,
                         cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
                         "inttoptr_cast",
                     ) {
-                        inkwell::values::BasicMetadataValueEnum::PointerValue(ptr)
-                    } else {
-                        inkwell::values::BasicMetadataValueEnum::IntValue(int_val)
+                        Ok(ptr) => inkwell::values::BasicMetadataValueEnum::PointerValue(ptr),
+                        Err(_) => inkwell::values::BasicMetadataValueEnum::IntValue(int_val),
                     }
                 } else {
                     inkwell::values::BasicMetadataValueEnum::IntValue(int_val)
@@ -174,9 +165,10 @@ let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
         match result.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(basic_val) => match basic_val {
                 inkwell::values::BasicValueEnum::IntValue(iv) => Some(iv),
-                inkwell::values::BasicValueEnum::PointerValue(pv) => {
-                    cg.builder.build_ptr_to_int(pv, cg.i64_type, "ptrtoint").ok()
-                }
+                inkwell::values::BasicValueEnum::PointerValue(pv) => cg
+                    .builder
+                    .build_ptr_to_int(pv, cg.i64_type, "ptrtoint")
+                    .ok(),
                 _ => Some(cg.i64_type.const_int(0, false)),
             },
             _ => Some(cg.i64_type.const_int(0, false)),

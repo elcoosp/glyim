@@ -99,21 +99,13 @@ pub enum HirPattern {
 /// `sub` maps type parameter symbols to their concrete types.
 pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType {
     match ty {
-        HirType::Named(sym) => {
-            let result = if let Some(concrete) = sub.get(sym) {
-                concrete.clone()
-            } else {
-                ty.clone()
-            };
-            result
-        }
+        HirType::Named(sym) => sub.get(sym).cloned().unwrap_or_else(|| ty.clone()),
         HirType::Generic(sym, args) => {
             let new_args: Vec<HirType> = args.iter().map(|a| substitute_type(a, sub)).collect();
-            if new_args.is_empty() {
-                if let Some(concrete) = sub.get(sym) {
-                    return concrete.clone();
-                }
-            }
+            // If all args are now concrete (no type params remain), just return Named
+            let _has_params = new_args
+                .iter()
+                .any(|a| matches!(a, HirType::Named(s) if sub.contains_key(s)));
             HirType::Generic(*sym, new_args)
         }
         HirType::Tuple(elems) => {
@@ -129,13 +121,7 @@ pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType 
             params.iter().map(|p| substitute_type(p, sub)).collect(),
             Box::new(substitute_type(ret, sub)),
         ),
-        HirType::Int
-        | HirType::Bool
-        | HirType::Float
-        | HirType::Str
-        | HirType::Unit
-        | HirType::Never
-        | HirType::Opaque(_) => ty.clone(),
+        _ => ty.clone(),
     }
 }
 

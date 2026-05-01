@@ -77,7 +77,7 @@ pub enum ExprKind {
     },
     As {
         expr: Box<ExprNode>,
-        target_type: Symbol,
+        target_type: TypeExpr,
     },
     MacroCall {
         name: Symbol,
@@ -126,6 +126,7 @@ pub enum StmtKind {
         pattern: Pattern,
         mutable: bool,
         value: ExprNode,
+        ty: Option<TypeExpr>,
     },
     AssignDeref {
         target: Box<ExprNode>,
