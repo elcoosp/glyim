@@ -24,7 +24,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 .map(|v| v.into_int_value())
         }
         HirExpr::Binary {
-            id, op, lhs, rhs, ..
+            id: _, op, lhs, rhs, ..
         } => {
             let lhs_id = lhs.get_id();
             let is_float = cg

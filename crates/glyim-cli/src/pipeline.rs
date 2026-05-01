@@ -213,14 +213,11 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     eprintln!("[pipeline] mono_hir.items.len() = {}", mono_hir.items.len());
     for item in &mono_hir.items {
-        match item {
-            glyim_hir::HirItem::Fn(f) => {
-                let name = interner.resolve(f.name);
-                if name.contains("Vec") || name.contains("push") || name.contains("len") || name.contains("pop") || name.contains("get") {
-                    eprintln!("[pipeline]   mono fn: {} (type_params={:?})", name, f.type_params);
-                }
+        if let glyim_hir::HirItem::Fn(f) = item {
+            let name = interner.resolve(f.name);
+            if name.contains("Vec") || name.contains("push") || name.contains("len") || name.contains("pop") || name.contains("get") {
+                eprintln!("[pipeline]   mono fn: {} (type_params={:?})", name, f.type_params);
             }
-            _ => {}
         }
     }
     let context = Context::create();

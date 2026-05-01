@@ -146,7 +146,7 @@ pub(crate) fn codegen_call<'ctx>(
             .enumerate()
             .map(|(i, int_val)| {
                 let param_type = param_types.get(i);
-                if param_type.map_or(false, |ty| ty.is_pointer_type()) {
+                if param_type.is_some_and(|ty| ty.is_pointer_type()) {
                     // Convert i64 to pointer for extern functions expecting ptr
                     match cg.builder.build_int_to_ptr(
                         int_val,

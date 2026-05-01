@@ -450,7 +450,7 @@ impl<'a> MonoContext<'a> {
                 let receiver_ty = self.expr_types.get(receiver.get_id().as_usize());
                 if let Some(HirType::Generic(type_name, type_args)) = receiver_ty {
                     // Resolve any Named(Symbol) type args to concrete types via the impl
-                    let resolved_args: Vec<HirType> = type_args
+                    let _resolved_args: Vec<HirType> = type_args
                         .iter()
                         .map(|ta| {
                             match ta {

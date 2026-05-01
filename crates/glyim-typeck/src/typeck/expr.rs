@@ -216,13 +216,12 @@ impl TypeChecker {
                                 arg_types.iter().zip(fn_def.params.iter().skip(1))
                             {
                                 if let HirType::Named(param_sym) = param_ty {
-                                    if fn_def.type_params.contains(param_sym) {
-                                        if *arg_ty != HirType::Never
+                                    if fn_def.type_params.contains(param_sym)
+                                        && *arg_ty != HirType::Never
                                             && *arg_ty != HirType::Named(*param_sym)
                                         {
                                             sub.insert(*param_sym, arg_ty.clone());
                                         }
-                                    }
                                 }
                             }
                             // Record call_type_args for monomorphizer
@@ -444,7 +443,7 @@ impl TypeChecker {
             return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
         }
         // Look up in impl_methods by mangled name; also infer type params
-        for (_type_name, methods) in &self.impl_methods {
+        for methods in self.impl_methods.values() {
             if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
                 if !fn_def.type_params.is_empty() && !arg_types.is_empty() {
                     let sub: HashMap<Symbol, HirType> = fn_def
