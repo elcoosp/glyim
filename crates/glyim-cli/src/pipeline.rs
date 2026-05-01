@@ -1,4 +1,5 @@
 
+use libc;
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
 use glyim_hir::ExprId;
@@ -248,6 +249,16 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
 
 
 
+    // Register external symbols so the JIT can resolve them at runtime
+    {
+        let module = codegen.get_module();
+        if let Some(f) = module.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
+        if let Some(f) = module.get_function("write")  { engine.add_global_mapping(&f, libc::write as usize); }
+        if let Some(f) = module.get_function("abort")  { engine.add_global_mapping(&f, libc::abort as usize); }
+        if let Some(f) = module.get_function("exit")   { engine.add_global_mapping(&f, libc::exit as usize); }
+        if let Some(f) = module.get_function("malloc") { engine.add_global_mapping(&f, libc::malloc as usize); }
+        if let Some(f) = module.get_function("free")   { engine.add_global_mapping(&f, libc::free as usize); }
+    }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -381,6 +392,16 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+    // Register external symbols so the JIT can resolve them at runtime
+    {
+        let module = codegen.get_module();
+        if let Some(f) = module.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
+        if let Some(f) = module.get_function("write")  { engine.add_global_mapping(&f, libc::write as usize); }
+        if let Some(f) = module.get_function("abort")  { engine.add_global_mapping(&f, libc::abort as usize); }
+        if let Some(f) = module.get_function("exit")   { engine.add_global_mapping(&f, libc::exit as usize); }
+        if let Some(f) = module.get_function("malloc") { engine.add_global_mapping(&f, libc::malloc as usize); }
+        if let Some(f) = module.get_function("free")   { engine.add_global_mapping(&f, libc::free as usize); }
+    }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -995,6 +1016,16 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
 
+    // Register external symbols so the JIT can resolve them at runtime
+    {
+        let module = cg.get_module();
+        if let Some(f) = module.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
+        if let Some(f) = module.get_function("write")  { engine.add_global_mapping(&f, libc::write as usize); }
+        if let Some(f) = module.get_function("abort")  { engine.add_global_mapping(&f, libc::abort as usize); }
+        if let Some(f) = module.get_function("exit")   { engine.add_global_mapping(&f, libc::exit as usize); }
+        if let Some(f) = module.get_function("malloc") { engine.add_global_mapping(&f, libc::malloc as usize); }
+        if let Some(f) = module.get_function("free")   { engine.add_global_mapping(&f, libc::free as usize); }
+    }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
