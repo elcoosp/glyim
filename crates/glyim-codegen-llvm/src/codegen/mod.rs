@@ -95,10 +95,7 @@ impl<'ctx> Codegen<'ctx> {
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-        let debug_info = match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full) {
-            Ok(di) => Some(di),
-            Err(_e) => None,
-        };
+        let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full).ok();
         Ok(Self {
             context,
             module,
@@ -138,11 +135,7 @@ impl<'ctx> Codegen<'ctx> {
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-        let debug_info =
-            match DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly) {
-                Ok(di) => Some(di),
-                Err(_e) => None,
-            };
+        let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
         Ok(Self {
             context,
             module,

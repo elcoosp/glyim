@@ -121,7 +121,7 @@ pub fn build(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -220,7 +220,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -365,7 +365,7 @@ pub fn run_with_mode(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -402,7 +402,7 @@ pub fn run_with_mode(
         BuildMode::Release => Codegen::new(&context, interner, merged_types),
     };
     if let Some(t) = target {
-        crate::cross::validate_target(t).map_err(|e| PipelineError::Codegen(e))?;
+        crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -453,7 +453,7 @@ pub fn build_with_mode(
     }
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -501,7 +501,7 @@ pub fn build_with_mode(
         BuildMode::Release => Codegen::new(&context, interner, merged_types),
     };
     if let Some(t) = target {
-        crate::cross::validate_target(t).map_err(|e| PipelineError::Codegen(e))?;
+        crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -726,7 +726,7 @@ pub fn run_tests(
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -893,7 +893,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;
@@ -1023,7 +1023,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (_id, _args) in &call_type_args {}
+    for _args in call_type_args.values() {}
     let mono_result =
         glyim_hir::monomorphize::monomorphize(&hir, &mut interner, &expr_types, &call_type_args);
     let mono_hir = mono_result.hir;

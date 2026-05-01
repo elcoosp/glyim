@@ -161,7 +161,7 @@ pub(crate) fn codegen_stmt<'ctx>(
                 let idx_map = cg.struct_field_indices.borrow();
                 struct_types.iter().find_map(|(sym, st)| {
                     if idx_map.contains_key(&(*sym, *field)) {
-                        Some(st.clone())
+                        Some(*st)
                     } else {
                         None
                     }

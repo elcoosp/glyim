@@ -303,11 +303,10 @@ impl<'a> MonoContext<'a> {
             HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
                 self.scan_expr_for_struct_instantiations(operand)
             }
-            HirExpr::Return { value, .. } => {
-                if let Some(v) = value {
-                    self.scan_expr_for_struct_instantiations(v);
-                }
+            HirExpr::Return { value: Some(v), .. } => {
+                self.scan_expr_for_struct_instantiations(v);
             }
+            HirExpr::Return { value: None, .. } => {}
             HirExpr::MethodCall { args, .. } => {
                 for a in args {
                     self.scan_expr_for_struct_instantiations(a);
@@ -418,11 +417,10 @@ impl<'a> MonoContext<'a> {
             HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
                 self.scan_expr_for_generic_calls(operand)
             }
-            HirExpr::Return { value, .. } => {
-                if let Some(v) = value {
-                    self.scan_expr_for_generic_calls(v);
-                }
+            HirExpr::Return { value: Some(v), .. } => {
+                self.scan_expr_for_generic_calls(v);
             }
+            HirExpr::Return { value: None, .. } => {}
             HirExpr::MethodCall { args, .. } => {
                 for a in args {
                     self.scan_expr_for_generic_calls(a);
@@ -605,6 +603,7 @@ impl<'a> MonoContext<'a> {
         mono.body = self.rewrite_expr(&f.body, fn_map, struct_map);
         mono
     }
+    #[allow(dead_code)]
     fn rewrite_impl(
         &mut self,
         imp: &HirImplDef,

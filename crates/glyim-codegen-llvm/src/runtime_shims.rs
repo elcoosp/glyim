@@ -1,3 +1,4 @@
+#![allow(clippy::missing_safety_doc)]
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::AddressSpace;
@@ -79,7 +80,7 @@ pub fn map_runtime_shims_for_jit(
         }
         if let Some(f) = module.get_function("abort") {
             // abort is a diverging function (!), so cast to the correct pointer type
-            let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(std::mem::transmute(abort as unsafe extern "C" fn() -> !));
+            let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(std::mem::transmute::<unsafe extern "C" fn() -> !, unsafe extern "C" fn()>(abort as unsafe extern "C" fn() -> !));
             engine.add_global_mapping(&f, ptr as *const () as usize);
         }
     }
