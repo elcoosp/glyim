@@ -1240,9 +1240,14 @@ impl<'a> MonoContext<'a> {
                     );
                     let mangled_sym = self.interner.intern(&mangled);
                     // Try to find a monomorphized version
+                    // Collect the receiver's concrete type args to match
+                    let receiver_type_args: Vec<HirType> = match receiver_ty {
+                        Some(HirType::Generic(_, ref args)) => args.clone(),
+                        _ => vec![],
+                    };
                     if let Some(concrete_key) =
                         fn_map.iter().find_map(|((sym, args), mono_name)| {
-                            if *sym == mangled_sym {
+                            if *sym == mangled_sym && *args == receiver_type_args {
                                 Some((args.clone(), *mono_name))
                             } else {
                                 None
