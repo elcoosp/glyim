@@ -711,9 +711,12 @@ main = () => {
     if s.is_empty() { 1 } else { 0 }
 }
 "#;
-    let full_src = format!("{}
+    let full_src = format!(
+        "{}
 {}
-{}", vec_src, string_src, main_code);
+{}",
+        vec_src, string_src, main_code
+    );
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 1);
 }
@@ -753,8 +756,11 @@ main = () => {
     r.next()
 }
 "#;
-    let full_src = format!("{}
-{}", range_src, main_code);
+    let full_src = format!(
+        "{}
+{}",
+        range_src, main_code
+    );
     let input = temp_g(&full_src);
     // Empty range returns None — just verify compilation works
     assert!(pipeline::run(&input, None).is_ok());
@@ -768,8 +774,11 @@ main = () => {
     r.next()
 }
 "#;
-    let full_src = format!("{}
-{}", range_src, main_code);
+    let full_src = format!(
+        "{}
+{}",
+        range_src, main_code
+    );
     let input = temp_g(&full_src);
     // Just verify Range compiles and runs without crashing
     assert!(pipeline::run(&input, None).is_ok());
@@ -787,8 +796,11 @@ main = () => {
     v2
 }
 "#;
-    let full_src = format!("{}
-{}", range_src, main_code);
+    let full_src = format!(
+        "{}
+{}",
+        range_src, main_code
+    );
     let input = temp_g(&full_src);
     assert!(pipeline::run(&input, None).is_ok());
 }
@@ -828,4 +840,150 @@ main = () => {
     let full_src = format!("{}\n{}", range_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 10); // 1+2+3+4
+}
+
+#[test]
+fn e2e_io_stdout_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let out = stdout();
+    42
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[test]
+fn e2e_io_stderr_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let err = stderr();
+    0
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+#[ignore]
+#[test]
+fn e2e_io_write_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let out = stdout();
+    out.write("hello");
+    42
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[ignore]
+#[test]
+fn e2e_io_extern_write_compile() {
+    let main_code = r#"
+extern {
+    fn write(fd: i64, buf: *const u8, count: i64) -> i64;
+}
+main = () => {
+    let ptr = "hello" as *const u8;
+    write(1, ptr, 0);
+    42
+}
+"#;
+    let input = temp_g(main_code);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[test]
+fn e2e_option_tag_order() {
+    let src = r#"
+main = () => {
+    let m: Option<i64> = Some(42);
+    match m {
+        Some(v) => v,
+        None => 0,
+    }
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
+}
+
+#[test]
+fn e2e_generic_equality() {
+    let src = r#"
+fn eq<K>(a: K, b: K) -> bool { a == b }
+main = () => {
+    if eq(42, 42) { 1 } else { 0 }
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 1);
+}
+
+#[test]
+fn e2e_generic_equality_false() {
+    let src = r#"
+fn eq<K>(a: K, b: K) -> bool { a == b }
+main = () => {
+    if eq(42, 99) { 1 } else { 0 }
+}
+"#;
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
+}
+
+#[test]
+fn e2e_hashmap_new_len() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m: HashMap<i64, i64> = HashMap::new();
+    m.len()
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[test]
+fn e2e_hashmap_insert_get() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m = HashMap::new();
+    let m = m.insert(1, 100);
+    let m = m.insert(2, 200);
+    match m.get(2) {
+        Some(v) => v,
+        None => -1,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 200);
+}
+
+#[test]
+fn e2e_hashmap_basic() {
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m: HashMap<i64, i64> = HashMap::new();
+    let m = m.insert(1, 100);
+    m.len()
+}
+"#;
+    let full_src = format!("{}\n{}", hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 1);
 }
