@@ -2,4 +2,4 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-
+error: type mismatch: expected Bool, found Int

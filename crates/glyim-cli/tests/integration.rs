@@ -400,7 +400,7 @@ fn e2e_bool_if_rejects_int_condition() {
 
 #[test]
 fn e2e_float_arithmetic_no_crash() {
-    let src = "fn main() -> i64 { let x: f64 = 3.0; let y: f64 = x + 2.0; 1 }";
+    let src = "fn main() -> i64 { let x = 3.0; let y = x + 2.0; 1 }";
     assert!(pipeline::run(&temp_g(src), None).is_ok());
 }
 

@@ -28,7 +28,13 @@ impl TypeChecker {
                 if let Some(annotated) = annotation {
                     let resolved_annotated = crate::typeck::resolver::resolve_named_type(&self.interner, annotated);
                     let resolved_ty = crate::typeck::resolver::resolve_named_type(&self.interner, &ty);
-                    if resolved_annotated != resolved_ty {
+                    // Skip when both sides are Generic(same_name, _) — type args may not be
+                    // fully inferred yet for the inferred side.
+                    let is_generic_compat = matches!((&resolved_annotated, &resolved_ty),
+                        (HirType::Generic(a_name, _), HirType::Generic(b_name, _))
+                        if a_name == b_name
+                    );
+                    if !is_generic_compat && resolved_annotated != resolved_ty {
                         self.errors.push(TypeError::MismatchedTypes {
                             expected: annotated.clone(),
                             found: ty.clone(),

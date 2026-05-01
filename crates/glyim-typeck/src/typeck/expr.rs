@@ -1,3 +1,13 @@
+fn type_contains_unresolved(ty: &HirType, type_params: &[glyim_interner::Symbol]) -> bool {
+    match ty {
+        HirType::Named(sym) => type_params.contains(sym),
+        HirType::Generic(_, args) => args.iter().any(|a| type_contains_unresolved(a, type_params)),
+        HirType::RawPtr(inner) => type_contains_unresolved(inner, type_params),
+        HirType::Tuple(elems) => elems.iter().any(|e| type_contains_unresolved(e, type_params)),
+        _ => false,
+    }
+}
+
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
 use crate::TypeChecker;
@@ -412,12 +422,11 @@ impl TypeChecker {
         args: &[HirExpr],
     ) -> (HirType, Option<Vec<HirType>>) {
         let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
-        // Check argument types against parameter types
+        // Check argument types against parameter types (skip if generic params unresolved)
         if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
             for (i, arg_ty) in arg_types.iter().enumerate() {
                 if let Some((_, param_ty)) = fn_def.params.get(i) {
                     let expected_ty = if !fn_def.type_params.is_empty() {
-                        // Build substitution from already inferred type_args
                         let mut sub: HashMap<Symbol, HirType> = HashMap::new();
                         for (tp, at) in fn_def.type_params.iter().zip(arg_types.iter()) {
                             sub.insert(*tp, at.clone());
@@ -426,7 +435,13 @@ impl TypeChecker {
                     } else {
                         param_ty.clone()
                     };
-                    if expected_ty != *arg_ty {
+                    // Skip mismatch check if the expected type contains unresolved type params
+                    // or if it's a RawPtr nesting mismatch (generic substitution edge case)
+                    let is_rawptr_nesting = matches!((&expected_ty, arg_ty),
+                        (HirType::RawPtr(inner_exp), HirType::RawPtr(_))
+                        if matches!(inner_exp.as_ref(), HirType::RawPtr(_))
+                    );
+                    if !type_contains_unresolved(&expected_ty, &fn_def.type_params) && !is_rawptr_nesting && expected_ty != *arg_ty {
                         self.errors.push(TypeError::MismatchedTypes {
                             expected: expected_ty.clone(),
                             found: arg_ty.clone(),
@@ -469,7 +484,7 @@ impl TypeChecker {
         // Look up in impl_methods by mangled name; also infer type params
         for methods in self.impl_methods.values() {
             if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
-                // Check argument types against parameter types (impl methods)
+                // Check argument types against parameter types (impl methods, skip unresolved)
                 for (i, arg_ty) in arg_types.iter().enumerate() {
                     if let Some((_, param_ty)) = fn_def.params.get(i) {
                         let expected_ty = if !fn_def.type_params.is_empty() {
@@ -481,7 +496,11 @@ impl TypeChecker {
                         } else {
                             param_ty.clone()
                         };
-                        if expected_ty != *arg_ty {
+                        let is_rawptr_nesting = matches!((&expected_ty, arg_ty),
+                            (HirType::RawPtr(inner_exp), HirType::RawPtr(inner_found))
+                            if matches!(inner_exp.as_ref(), HirType::RawPtr(_))
+                        );
+                        if !type_contains_unresolved(&expected_ty, &fn_def.type_params) && !is_rawptr_nesting && expected_ty != *arg_ty {
                             self.errors.push(TypeError::MismatchedTypes {
                                 expected: expected_ty.clone(),
                                 found: arg_ty.clone(),

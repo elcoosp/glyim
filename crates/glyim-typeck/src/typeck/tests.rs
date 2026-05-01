@@ -612,12 +612,10 @@ fn call_with_wrong_argument_type_reports_error() {
 #[test]
 fn let_annotation_mismatch_reports_error() {
     let tc = typecheck("fn main() -> i64 { let x: f64 = 42; x }");
-    eprintln!("Type errors found: {:?}", tc.errors);
     let mismatches: Vec<_> = tc
         .errors
         .iter()
         .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
         .collect();
-    eprintln!("MismatchedTypes found: {:?}", mismatches);
-    assert!(!mismatches.is_empty(), "expected at least one MismatchedTypes for annotation vs value");
+    assert_eq!(mismatches.len(), 1, "expected one MismatchedTypes for annotation vs value");
 }
