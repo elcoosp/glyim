@@ -24,36 +24,37 @@ impl TypeChecker {
                 ty: annotation,
                 ..
             } => {
-                let ty = self.check_expr(value).unwrap_or(HirType::Int);
-                if let Some(annotated) = annotation {
+                let inferred = self.check_expr(value).unwrap_or(HirType::Int);
+                    std::mem::discriminant(pattern), annotation, inferred);
+                // If there's an annotation, use it as the binding type (overriding inference)
+                let ty = if let Some(annotated) = annotation {
                     let resolved_annotated =
                         crate::typeck::resolver::resolve_named_type(&self.interner, annotated);
-                    let resolved_ty =
-                        crate::typeck::resolver::resolve_named_type(&self.interner, &ty);
-                    // Skip when both sides reference the same type, even if one
-                    // is Generic(name, _) and the other is Named(name) or vice versa.
-                    let is_same_type = resolved_annotated == resolved_ty
-                        || match (&resolved_annotated, &resolved_ty) {
+                    let resolved_inferred =
+                        crate::typeck::resolver::resolve_named_type(&self.interner, &inferred);
+                    // Accept Generic<->Named compatibility (same base type)
+                    let is_compat = resolved_annotated == resolved_inferred
+                        || match (&resolved_annotated, &resolved_inferred) {
                             (HirType::Generic(a, _), HirType::Named(b)) => a == b,
                             (HirType::Named(a), HirType::Generic(b, _)) => a == b,
                             (HirType::Generic(a, _), HirType::Generic(b, _)) => a == b,
                             _ => false,
                         };
-                    if !is_same_type {
+                    if !is_compat {
                         self.errors.push(TypeError::MismatchedTypes {
                             expected: annotated.clone(),
-                            found: ty.clone(),
+                            found: inferred,
                             expr_id: value.get_id(),
                         });
                     }
-                }
+                    // CRITICAL: use the annotation type, not inferred, for the binding
+                    annotated.clone()
+                } else {
+                    inferred
+                };
+                // Propagate type args to monomorphizer for MethodCall/Call expressions
                 if let HirPattern::Var(_) = pattern {
-                    if let Some(HirType::Generic(_, type_args)) =
-                        self.lookup_binding(&match pattern {
-                            HirPattern::Var(s) => *s,
-                            _ => unreachable!(),
-                        })
-                    {
+                    if let HirType::Generic(_, type_args) = &ty {
                         let value_id = value.get_id();
                         if !type_args.is_empty() {
                             self.call_type_args.insert(value_id, type_args.clone());

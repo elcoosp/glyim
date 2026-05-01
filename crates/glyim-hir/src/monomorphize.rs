@@ -1035,7 +1035,6 @@ impl<'a> MonoContext<'a> {
     }
 
     fn build_result(mut self) -> MonoResult {
-        eprintln!(
             "[mono] build_result: fn_specs.len()={}, items.len()={}",
             self.fn_specs.len(),
             self.hir.items.len()
@@ -1133,7 +1132,6 @@ impl<'a> MonoContext<'a> {
 
             mono_f.name = self.mangle_name(*orig_name, args);
 
-            eprintln!(
                 "[mono]   adding specialized fn: {} (was {})",
                 self.interner.resolve(mono_f.name),
                 self.interner.resolve(*orig_name)
