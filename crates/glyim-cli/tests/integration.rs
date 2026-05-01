@@ -687,7 +687,6 @@ main = () => {
 // causes an infinite loop during codegen for the u8 instantiation.
 // See: https://github.com/elcoosp/glyim/issues/XXX
 #[test]
-#[ignore = "codegen hang with full Vec<u8> instantiation"]
 fn e2e_string_new_len() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let string_src = include_str!("../../../stdlib/src/string.g");
@@ -700,4 +699,21 @@ main = () => {
     let full_src = format!("{}\n{}\n{}", vec_src, string_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 0);
+}
+
+#[test]
+fn e2e_string_is_empty() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let string_src = include_str!("../../../stdlib/src/string.g");
+    let main_code = r#"
+main = () => {
+    let s = String::new();
+    if s.is_empty() { 1 } else { 0 }
+}
+"#;
+    let full_src = format!("{}
+{}
+{}", vec_src, string_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 1);
 }
