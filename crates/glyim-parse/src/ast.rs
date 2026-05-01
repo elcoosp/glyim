@@ -234,7 +234,7 @@ pub enum Item {
         name: Symbol,
         name_span: Span,
         type_params: Vec<Symbol>,
-        params: Vec<(Symbol, Span, Option<TypeExpr>)>,
+        params: Vec<(Symbol, Span, Option<TypeExpr>, bool)>,
         ret: Option<TypeExpr>,
         body: ExprNode,
         attrs: Vec<Attribute>,

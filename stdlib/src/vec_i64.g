@@ -14,7 +14,7 @@ impl VecI64 {
             let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
             let new_data: *mut i64 = glyim_alloc(new_cap * 8) as *mut i64;
             if self.data != (0 as *mut i64) {
-                let i = 0;
+                let mut i = 0;
                 while i < self.len {
                     let src_ptr = __ptr_offset(self.data as *mut u8, i) as *mut i64;
                     let dst_ptr = __ptr_offset(new_data as *mut u8, i) as *mut i64;

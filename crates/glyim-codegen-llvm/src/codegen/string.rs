@@ -139,14 +139,42 @@ pub(crate) fn codegen_call<'ctx>(
     }
 
     if let Some(fn_val) = cg.module.get_function(fn_name) {
+        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = fn_val
+            .get_type()
+            .get_param_types()
+            .into_iter()
+            .collect();
         let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
             .filter_map(|a| codegen_expr(cg, a, fctx))
-            .map(|v| v.into())
+            .enumerate()
+            .map(|(i, int_val)| {
+                let param_type = param_types.get(i);
+                if matches!(param_type, Some(inkwell::types::BasicMetadataTypeEnum::PointerType(..))) {
+                    // Convert i64 to pointer
+                    if let Ok(ptr) = cg.builder.build_int_to_ptr(
+                        int_val,
+                        cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
+                        "inttoptr_cast",
+                    ) {
+                        inkwell::values::BasicMetadataValueEnum::PointerValue(ptr)
+                    } else {
+                        inkwell::values::BasicMetadataValueEnum::IntValue(int_val)
+                    }
+                } else {
+                    inkwell::values::BasicMetadataValueEnum::IntValue(int_val)
+                }
+            })
             .collect();
         let result = cg.builder.build_call(fn_val, &call_args, "call").ok()?;
         match result.try_as_basic_value() {
-            inkwell::values::ValueKind::Basic(basic_val) => Some(basic_val.into_int_value()),
+            inkwell::values::ValueKind::Basic(basic_val) => match basic_val {
+                inkwell::values::BasicValueEnum::IntValue(iv) => Some(iv),
+                inkwell::values::BasicValueEnum::PointerValue(pv) => {
+                    cg.builder.build_ptr_to_int(pv, cg.i64_type, "ptrtoint").ok()
+                }
+                _ => Some(cg.i64_type.const_int(0, false)),
+            },
             _ => Some(cg.i64_type.const_int(0, false)),
         }
     } else {

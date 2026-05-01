@@ -29,8 +29,8 @@ impl TypeChecker {
                 None
             }
             HirStmt::Assign { target, value, .. } => {
-                let immutable = self
-                    .lookup_binding_full(target)
+                let binding = self.lookup_binding_full(target);
+                let immutable = binding
                     .map(|b| !b.mutable)
                     .unwrap_or(false);
                 if immutable {

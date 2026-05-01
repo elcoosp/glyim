@@ -222,28 +222,32 @@ pub(crate) fn codegen_expr<'ctx>(
             }
         }
         HirExpr::MethodCall {
-            receiver: _,
+            receiver,
             method_name,
             args,
             ..
         } => {
-            let receiver = args.first()?;
+            let receiver_val = codegen_expr(cg, receiver, fctx)?;
             let receiver_id = receiver.get_id();
             let receiver_ty = cg
                 .expr_types
                 .get(receiver_id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
-            let mangled_name = match receiver_ty {
-                HirType::Named(type_name) => format!(
+            let mangled_name = match &receiver_ty {
+                HirType::Named(type_name) | HirType::Generic(type_name, _) => format!(
                     "{}_{}",
-                    cg.interner.resolve(type_name),
+                    cg.interner.resolve(*type_name),
                     cg.interner.resolve(*method_name)
                 ),
                 _ => cg.interner.resolve(*method_name).to_string(),
             };
-            if let Some(fn_val) = cg.module.get_function(&mangled_name) {
+            eprintln!("METHODCALL: looking for {:?} (mangled: {:?})", cg.interner.resolve(*method_name), &mangled_name);
+            let maybe_fn = cg.module.get_function(&mangled_name);
+            eprintln!("METHODCALL: function lookup result: {:?}", maybe_fn.is_some());
+            if let Some(fn_val) = maybe_fn {
                 let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
+                call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(receiver_val));
                 for a in args {
                     if let Some(v) = codegen_expr(cg, a, fctx) {
                         call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));
@@ -260,6 +264,7 @@ pub(crate) fn codegen_expr<'ctx>(
                     _ => Some(cg.i64_type.const_int(0, false)),
                 }
             } else {
+                eprintln!("METHODCALL: function not found for {:?}, returning 0", mangled_name);
                 Some(cg.i64_type.const_int(0, false))
             }
         }

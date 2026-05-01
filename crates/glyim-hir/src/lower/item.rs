@@ -22,6 +22,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 name: *name,
                 type_params: vec![],
                 params: vec![],
+                param_mutability: vec![],
                 ret: None,
                 body: lower_expr(value, ctx),
                 span: glyim_diag::Span::new(start, value.span.end),
@@ -39,20 +40,25 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             ..
         } => {
             let start = attrs.first().map_or(name_span.start, |a| a.span.start);
-            Some(HirItem::Fn(HirFn {
-                name: *name,
-                type_params: type_params.clone(),
-                params: params
-                    .iter()
-                    .map(|(sym, _, ty)| {
+            let (hir_params, mutabilities): (Vec<_>, Vec<_>) = params
+                .iter()
+                .map(|(sym, _, ty, mutable)| {
+                    (
                         (
                             *sym,
                             ty.as_ref()
                                 .map(|t| lower_type_expr(t, ctx))
                                 .unwrap_or(HirType::Int),
-                        )
-                    })
-                    .collect(),
+                        ),
+                        *mutable,
+                    )
+                })
+                .unzip();
+            Some(HirItem::Fn(HirFn {
+                name: *name,
+                type_params: type_params.clone(),
+                params: hir_params,
+                param_mutability: mutabilities,
                 ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                 body: lower_expr(body, ctx),
                 span: glyim_diag::Span::new(start, body.span.end),
@@ -144,20 +150,25 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             type_params.iter().chain(fn_tp.iter()).copied().collect();
                         let mangled_name =
                             ctx.intern(&format!("{}_{}", ctx.resolve(*target), ctx.resolve(*name)));
-                        Some(HirFn {
-                            name: mangled_name,
-                            type_params: all_tp,
-                            params: params
-                                .iter()
-                                .map(|(sym, _, ty)| {
+                        let (hir_params, mutabilities): (Vec<_>, Vec<_>) = params
+                            .iter()
+                            .map(|(sym, _, ty, mutable)| {
+                                (
                                     (
                                         *sym,
                                         ty.as_ref()
                                             .map(|t| lower_type_expr(t, ctx))
                                             .unwrap_or(HirType::Int),
-                                    )
-                                })
-                                .collect(),
+                                    ),
+                                    *mutable,
+                                )
+                            })
+                            .unzip();
+                        Some(HirFn {
+                            name: mangled_name,
+                            type_params: all_tp,
+                            params: hir_params,
+                            param_mutability: mutabilities,
                             ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                             body: lower_expr(body, ctx),
                             span: glyim_diag::Span::new(span.start, body.span.end),
@@ -185,6 +196,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             name: *name,
             type_params: vec![],
             params: vec![],
+            param_mutability: vec![],
             ret: None,
             body: lower_expr(body, ctx),
             span: glyim_diag::Span::new(name_span.start, body.span.end),

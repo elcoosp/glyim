@@ -52,7 +52,7 @@ fn write_ast_items(
             } => {
                 let params_str = params
                     .iter()
-                    .map(|(sym, _, _)| interner.resolve(*sym).to_string())
+                    .map(|(sym, _, _, _)| interner.resolve(*sym).to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = writeln!(

@@ -359,7 +359,6 @@ fn e2e_struct_with_ptr_parse_and_typecheck() {
 }
 
 #[test]
-#[ignore = "requires impl blocks with self"]
 fn e2e_veci64_push_get() {
     let vec_src = include_str!("../../../stdlib/src/vec_i64.g");
     let main_code = r#"

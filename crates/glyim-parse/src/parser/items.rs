@@ -110,8 +110,10 @@ fn parse_fn_def_with_attrs(
     attrs: Vec<crate::ast::Attribute>,
     self_type: Option<TypeExpr>,
 ) -> Option<Item> {
-    parser.tokens.bump(); // fn
-    let _ = parser.tokens.eat(SyntaxKind::KwPub);
+    // Optional visibility modifier
+    parser.tokens.eat(SyntaxKind::KwPub);
+    // Mandatory 'fn' keyword
+    parser.tokens.expect(SyntaxKind::KwFn, &mut parser.errors).ok()?;
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)
@@ -139,7 +141,7 @@ fn parse_fn_def_with_attrs(
             } else {
                 None
             };
-            params.push((self_sym, self_span, ty));
+            params.push((self_sym, self_span, ty, mutable));
             if parser.tokens.eat(SyntaxKind::Comma).is_none() {
                 break;
             }
@@ -157,7 +159,7 @@ fn parse_fn_def_with_attrs(
         } else {
             None
         };
-        params.push((param_sym, param_span, ty));
+        params.push((param_sym, param_span, ty, false));
         if parser.tokens.eat(SyntaxKind::Comma).is_none() {
             break;
         }
@@ -185,7 +187,6 @@ fn parse_fn_def_with_attrs(
 
 fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
     parser.tokens.bump(); // struct
-    let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)
@@ -228,7 +229,6 @@ fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
 
 fn parse_enum_def(parser: &mut Parser) -> Option<Item> {
     parser.tokens.bump(); // enum
-    let _ = parser.tokens.eat(SyntaxKind::KwPub);
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)

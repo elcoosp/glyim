@@ -278,6 +278,7 @@ pub struct HirFn {
     pub name: Symbol,
     pub type_params: Vec<Symbol>,
     pub params: Vec<(Symbol, HirType)>,
+    pub param_mutability: Vec<bool>,
     pub ret: Option<HirType>,
     pub body: HirExpr,
     pub span: Span,
