@@ -245,6 +245,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    eprintln!("=== LLVM IR ===\n{}", codegen.ir_string());
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
