@@ -14,6 +14,7 @@ glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
 inkwell = { version = "0.9", features = ["llvm22-1"] }
+libc = "0.2"
 llvm-sys = "221"
 
 [dev-dependencies]

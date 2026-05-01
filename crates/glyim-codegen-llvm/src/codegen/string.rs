@@ -45,8 +45,12 @@ pub(crate) fn codegen_println<'ctx>(
     let val = codegen_expr(cg, arg, fctx)?;
     if matches!(arg, HirExpr::StrLit { .. }) {
         let fat = build_str_fat_ptr(cg, arg)?;
+        let ptr = cg.builder.build_extract_value(fat, 0, "str_ptr").ok()?;
+        let len = cg.builder.build_extract_value(fat, 1, "str_len").ok()?;
         let shim = cg.module.get_function("glyim_println_str").unwrap();
-        cg.builder.build_call(shim, &[fat.into()], "println").ok()?;
+        cg.builder
+            .build_call(shim, &[ptr.into(), len.into()], "println")
+            .ok()?;
     } else {
         let shim = cg.module.get_function("glyim_println_int").unwrap();
         cg.builder.build_call(shim, &[val.into()], "println").ok()?;

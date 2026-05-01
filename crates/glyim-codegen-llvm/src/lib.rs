@@ -1,7 +1,7 @@
 mod alloc;
 pub mod codegen;
 mod debug;
-mod runtime_shims;
+pub mod runtime_shims;
 pub use codegen::Codegen;
 
 pub fn compile_to_ir(source: &str) -> Result<String, String> {
