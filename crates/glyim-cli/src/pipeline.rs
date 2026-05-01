@@ -248,7 +248,6 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         codegen = codegen.with_no_std();
     }
     codegen = codegen;
-    let mut codegen = codegen.with_extern_shims();
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -387,7 +386,6 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         codegen = codegen.with_no_std();
     }
     codegen = codegen;
-    let mut codegen = codegen.with_extern_shims();
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
