@@ -173,22 +173,21 @@ pub(crate) fn codegen_call<'ctx>(
             .get_param_types()
             .into_iter()
             .collect();
-let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
+    let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
             .filter_map(|a| codegen_expr(cg, a, fctx))
             .enumerate()
             .map(|(i, int_val)| {
                 let param_type = param_types.get(i);
-                if matches!(param_type, Some(inkwell::types::BasicMetadataTypeEnum::PointerType(..))) {
-                    // Convert i64 to pointer
-                    if let Ok(ptr) = cg.builder.build_int_to_ptr(
+                if param_type.map_or(false, |ty| ty.is_pointer_type()) {
+                    // Convert i64 to pointer for extern functions expecting ptr
+                    match cg.builder.build_int_to_ptr(
                         int_val,
                         cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
                         "inttoptr_cast",
                     ) {
-                        inkwell::values::BasicMetadataValueEnum::PointerValue(ptr)
-                    } else {
-                        inkwell::values::BasicMetadataValueEnum::IntValue(int_val)
+                        Ok(ptr) => inkwell::values::BasicMetadataValueEnum::PointerValue(ptr),
+                        Err(_) => inkwell::values::BasicMetadataValueEnum::IntValue(int_val),
                     }
                 } else {
                     inkwell::values::BasicMetadataValueEnum::IntValue(int_val)
