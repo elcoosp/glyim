@@ -33,17 +33,35 @@ impl<'ctx> Codegen<'ctx> {
                         .get(sym)
                         .map(|st| (*st).into())
                 }),
-            HirType::Generic(sym, _args) => self
-                .struct_types
-                .borrow()
-                .get(sym)
-                .map(|st| (*st).into())
-                .or_else(|| {
-                    self.enum_struct_types
-                        .borrow()
-                        .get(sym)
-                        .map(|st| (*st).into())
-                }),
+            HirType::Generic(sym, _args) => {
+                // Try the base struct type first; if it’s a concrete monomorphised version,
+                // it will have been registered under the mangled name.
+                let mangled_sym = *sym;
+                self.struct_types
+                    .borrow()
+                    .get(&mangled_sym)
+                    .map(|st| (*st).into())
+                    .or_else(|| {
+                        self.enum_struct_types
+                            .borrow()
+                            .get(&mangled_sym)
+                            .map(|st| (*st).into())
+                    })
+                    .or_else(|| {
+                        // Fallback: try the original (non-mangled) name in case it's a generic
+                        // that was not monomorphised yet, but still has a struct definition.
+                        self.struct_types
+                            .borrow()
+                            .get(sym)
+                            .map(|st| (*st).into())
+                            .or_else(|| {
+                                self.enum_struct_types
+                                    .borrow()
+                                    .get(sym)
+                                    .map(|st| (*st).into())
+                            })
+                    })
+            }
             HirType::Tuple(elems) => {
                 let field_types: Vec<_> = elems
                     .iter()
@@ -55,7 +73,14 @@ impl<'ctx> Codegen<'ctx> {
                     Some(self.context.struct_type(&field_types, false).into())
                 }
             }
-            HirType::RawPtr { .. } => Some(self.context.ptr_type(AddressSpace::from(0u16)).into()),
+            HirType::RawPtr(_) => {
+                // All raw pointers are represented as i8* at the LLVM level.
+                Some(self.context.ptr_type(AddressSpace::from(0u16)).into())
+            }
+            HirType::Never | HirType::Opaque(_) => {
+                // Uninhabited types have zero size; we return i8* to allow sizeof.
+                Some(self.context.i8_type().into())
+            }
             _ => Some(self.i64_type.into()),
         }
     }
