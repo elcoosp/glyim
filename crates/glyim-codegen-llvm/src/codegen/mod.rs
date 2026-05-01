@@ -179,6 +179,7 @@ impl<'ctx> Codegen<'ctx> {
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -342,6 +343,7 @@ impl<'ctx> Codegen<'ctx> {
     ) -> Result<(), String> {
         crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {

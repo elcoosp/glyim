@@ -79,9 +79,15 @@ pub fn map_runtime_shims_for_jit(
             engine.add_global_mapping(&f, ptr as *const () as usize);
         }
         if let Some(f) = module.get_function("abort") {
-            // abort is a diverging function (!), so cast to the correct pointer type
-            let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(std::mem::transmute::<unsafe extern "C" fn() -> !, unsafe extern "C" fn()>(abort as unsafe extern "C" fn() -> !));
+            // CUSTOM_ABORT_FN is now directly `fn()`, no transmute needed
+            let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(abort_handler_default);
             engine.add_global_mapping(&f, ptr as *const () as usize);
+        }
+
+        // Default abort handler (for non-custom paths) that actually aborts
+        #[unsafe(no_mangle)]
+        unsafe extern "C" fn abort_handler_default() {
+            std::process::abort();
         }
     }
 }

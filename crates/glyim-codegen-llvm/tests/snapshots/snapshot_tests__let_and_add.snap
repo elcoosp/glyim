@@ -53,6 +53,41 @@ entry:
   ret void
 }
 
+define i64 @glyim_hash_seed() {
+entry:
+  ret i64 0
+}
+
+define i64 @glyim_hash_bytes(ptr %0, i64 %1) {
+entry:
+  %hash = alloca i64, align 8
+  store i64 -3750763034362895579, ptr %hash, align 4
+  %i = alloca i64, align 8
+  store i64 0, ptr %i, align 4
+  br label %loop.cond
+
+loop.cond:                                        ; preds = %loop.body, %entry
+  %i.ld = load i64, ptr %i, align 4
+  %cmp = icmp slt i64 %i.ld, %1
+  br i1 %cmp, label %loop.body, label %exit
+
+loop.body:                                        ; preds = %loop.cond
+  %byte_ptr = getelementptr ptr, ptr %0, i64 %i.ld
+  %byte = load i8, ptr %byte_ptr, align 1
+  %byte64 = zext i8 %byte to i64
+  %cur = load i64, ptr %hash, align 4
+  %xored = xor i64 %cur, %byte64
+  %mul = mul i64 %xored, 1099511628211
+  store i64 %mul, ptr %hash, align 4
+  %inc = add i64 %i.ld, 1
+  store i64 %inc, ptr %i, align 4
+  br label %loop.cond
+
+exit:                                             ; preds = %loop.cond
+  %final = load i64, ptr %hash, align 4
+  ret i64 %final
+}
+
 define i32 @main() {
 entry:
   %x = alloca i64, align 8
