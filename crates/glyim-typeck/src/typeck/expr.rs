@@ -412,6 +412,30 @@ impl TypeChecker {
         args: &[HirExpr],
     ) -> (HirType, Option<Vec<HirType>>) {
         let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
+        // Check argument types against parameter types
+        if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
+            for (i, arg_ty) in arg_types.iter().enumerate() {
+                if let Some((_, param_ty)) = fn_def.params.get(i) {
+                    let expected_ty = if !fn_def.type_params.is_empty() {
+                        // Build substitution from already inferred type_args
+                        let mut sub: HashMap<Symbol, HirType> = HashMap::new();
+                        for (tp, at) in fn_def.type_params.iter().zip(arg_types.iter()) {
+                            sub.insert(*tp, at.clone());
+                        }
+                        glyim_hir::types::substitute_type(param_ty, &sub)
+                    } else {
+                        param_ty.clone()
+                    };
+                    if expected_ty != *arg_ty {
+                        self.errors.push(TypeError::MismatchedTypes {
+                            expected: expected_ty.clone(),
+                            found: arg_ty.clone(),
+                            expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
+                        });
+                    }
+                }
+            }
+        }
         let fn_def = self.fns.iter().find(|f| f.name == callee);
         if let Some(fn_def) = fn_def {
             if !fn_def.type_params.is_empty() {
@@ -445,6 +469,27 @@ impl TypeChecker {
         // Look up in impl_methods by mangled name; also infer type params
         for methods in self.impl_methods.values() {
             if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
+                // Check argument types against parameter types (impl methods)
+                for (i, arg_ty) in arg_types.iter().enumerate() {
+                    if let Some((_, param_ty)) = fn_def.params.get(i) {
+                        let expected_ty = if !fn_def.type_params.is_empty() {
+                            let mut sub: HashMap<Symbol, HirType> = HashMap::new();
+                            for (tp, at) in fn_def.type_params.iter().zip(arg_types.iter()) {
+                                sub.insert(*tp, at.clone());
+                            }
+                            glyim_hir::types::substitute_type(param_ty, &sub)
+                        } else {
+                            param_ty.clone()
+                        };
+                        if expected_ty != *arg_ty {
+                            self.errors.push(TypeError::MismatchedTypes {
+                                expected: expected_ty.clone(),
+                                found: arg_ty.clone(),
+                                expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
+                            });
+                        }
+                    }
+                }
                 if !fn_def.type_params.is_empty() && !arg_types.is_empty() {
                     let sub: HashMap<Symbol, HirType> = fn_def
                         .type_params

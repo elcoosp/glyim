@@ -593,3 +593,18 @@ fn infer_type_args_for_generic_struct_lit() {
         tc.errors
     );
 }
+
+#[test]
+fn call_with_wrong_argument_type_reports_error() {
+    let tc = typecheck("fn take_bool(b: bool) -> i64 { 0 }\nmain = () => take_bool(42)");
+    assert!(
+        !tc.errors.is_empty(),
+        "should report type error for passing i64 to bool parameter"
+    );
+    let mismatches: Vec<_> = tc
+        .errors
+        .iter()
+        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
+        .collect();
+    assert_eq!(mismatches.len(), 1, "expected exactly one MismatchedTypes error");
+}
