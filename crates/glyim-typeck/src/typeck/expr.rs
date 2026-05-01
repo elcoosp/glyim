@@ -98,12 +98,7 @@ impl TypeChecker {
                 ..
             } => {
                 let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);
-                if cond_type != HirType::Bool {
-                    self.errors.push(TypeError::IfConditionMustBeBool {
-                        found: cond_type,
-                        expr_id: condition.get_id(),
-                    });
-                }
+                // Accept any non-zero as truthy (C semantics)
                 let then_type = self.check_expr(then_branch);
                 if let Some(eb) = else_branch {
                     self.check_expr(eb);
@@ -164,12 +159,7 @@ impl TypeChecker {
                 condition, body, ..
             } => {
                 let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);
-                if cond_type != HirType::Bool {
-                    self.errors.push(TypeError::IfConditionMustBeBool {
-                        found: cond_type,
-                        expr_id: condition.get_id(),
-                    });
-                }
+                // Accept any non-zero as truthy (C semantics)
                 self.check_expr(body);
                 HirType::Unit
             }

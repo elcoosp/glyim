@@ -8,6 +8,7 @@ use glyim_hir::{HirBinOp, HirExpr, HirType, HirUnOp};
 use inkwell::types::BasicType;
 use inkwell::values::IntValue;
 
+#[tracing::instrument(skip_all)]
 pub(crate) fn codegen_expr<'ctx>(
     cg: &Codegen<'ctx>,
     expr: &HirExpr,

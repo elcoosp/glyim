@@ -21,6 +21,8 @@ impl TypeChecker {
                     let is_match = expected == actual
                         || match (expected, actual) {
                             (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
+                            (HirType::Named(s1), HirType::Generic(s2, _)) => s1 == s2,
+                            (HirType::Generic(s1, _), HirType::Generic(s2, _)) => s1 == s2,
                             _ => false,
                         };
                     if !is_match {

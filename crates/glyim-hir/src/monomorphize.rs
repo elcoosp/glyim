@@ -9,6 +9,7 @@ pub struct MonoResult {
     pub type_overrides: HashMap<ExprId, HirType>,
 }
 
+#[tracing::instrument(skip_all)]
 pub fn monomorphize(
     hir: &crate::Hir,
     interner: &mut Interner,
@@ -124,6 +125,7 @@ impl<'a> MonoContext<'a> {
         self.interner.intern(&format!("{}__{}", base_str, args_str))
     }
 
+    #[tracing::instrument(skip_all)]
     fn collect_and_specialize(&mut self) {
         // Phase A: Use call_type_args from explicit calls AND method calls
         // First, resolve any naked type params (Named(sym) where sym is a type param) to Int
@@ -401,6 +403,7 @@ impl<'a> MonoContext<'a> {
         self.fn_work_queue.push(key);
     }
 
+    #[tracing::instrument(skip_all)]
     fn scan_expr_for_generic_calls(&mut self, expr: &HirExpr) {
         match expr {
             HirExpr::Call { callee, args, .. } => {
@@ -610,6 +613,7 @@ impl<'a> MonoContext<'a> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
         for (i, tp) in f.type_params.iter().enumerate() {
@@ -1061,6 +1065,7 @@ impl<'a> MonoContext<'a> {
         mono
     }
 
+    #[tracing::instrument(skip_all)]
     fn build_result(mut self) -> MonoResult {
         let mut items = Vec::new();
 
@@ -1149,7 +1154,9 @@ impl<'a> MonoContext<'a> {
         for ((orig_name, args), f) in &fn_specs_clone {
             let mut mono_f = f.clone();
             mono_f.name = self.mangle_name(*orig_name, args);
-            items.push(HirItem::Fn(mono_f));
+            // Rewrite internal MethodCall nodes to use mangled names
+            let rewritten = self.rewrite_fn(&mono_f, &fn_mangle_map, &struct_mangle_map);
+            items.push(HirItem::Fn(rewritten));
         }
 
         MonoResult {
@@ -1168,6 +1175,7 @@ impl<'a> MonoContext<'a> {
         mono
     }
 
+    #[tracing::instrument(skip_all)]
     fn rewrite_expr(
         &mut self,
         expr: &HirExpr,
@@ -1230,6 +1238,11 @@ impl<'a> MonoContext<'a> {
                     .map(|a| self.rewrite_expr(a, fn_map, struct_map))
                     .collect();
                 let receiver_ty = self.expr_types.get(receiver.get_id().as_usize());
+                tracing::info!(
+                    method = %self.interner.resolve(*method_name),
+                    receiver_ty = ?receiver_ty,
+                    "Processing MethodCall"
+                );
                 if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) =
                     receiver_ty
                 {
@@ -1239,15 +1252,26 @@ impl<'a> MonoContext<'a> {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
+                    tracing::info!(mangled = %self.interner.resolve(mangled_sym), "Looking up mangled name");
                     // Try to find a monomorphized version
                     // Collect the receiver's concrete type args to match
                     let receiver_type_args: Vec<HirType> = match receiver_ty {
                         Some(HirType::Generic(_, ref args)) => args.clone(),
                         _ => vec![],
                     };
+                    tracing::info!(receiver_type_args = ?receiver_type_args, "Collected receiver type args");
                     if let Some(concrete_key) =
                         fn_map.iter().find_map(|((sym, args), mono_name)| {
-                            if *sym == mangled_sym && *args == receiver_type_args {
+                            let matched = *sym == mangled_sym && *args == receiver_type_args;
+                            tracing::info!(
+                                check_sym = %self.interner.resolve(*sym),
+                                check_args = ?args,
+                                target_sym = %self.interner.resolve(mangled_sym),
+                                target_args = ?receiver_type_args,
+                                matched = matched,
+                                "Checking fn_map entry"
+                            );
+                            if matched {
                                 Some((args.clone(), *mono_name))
                             } else {
                                 None
@@ -1259,6 +1283,7 @@ impl<'a> MonoContext<'a> {
                         // receiver + method_args as separate type args.
                         let mut all_args = vec![*rewritten_receiver.clone()];
                         all_args.extend(rewritten_args);
+                        tracing::info!(mono_name = %self.interner.resolve(concrete_key.1), "Specialization matched, rewriting to Call");
                         return HirExpr::Call {
                             id: *id,
                             callee: concrete_key.1,
@@ -1267,6 +1292,7 @@ impl<'a> MonoContext<'a> {
                         };
                     }
                 }
+                tracing::info!("No specialization found for MethodCall, keeping as-is");
                 HirExpr::MethodCall {
                     id: *id,
                     receiver: rewritten_receiver,
@@ -1388,6 +1414,7 @@ impl<'a> MonoContext<'a> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn rewrite_stmt(
         &mut self,
         stmt: &HirStmt,

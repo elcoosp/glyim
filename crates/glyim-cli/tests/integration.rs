@@ -1017,7 +1017,6 @@ main = () => {
 }
 
 #[test]
-#[ignore = "needs Vec::set + grow implementation for full insert"]
 fn e2e_hashmap_full_get() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");

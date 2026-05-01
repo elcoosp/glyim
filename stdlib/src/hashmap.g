@@ -23,7 +23,27 @@ impl<K, V> HashMap<K, V> {
     }
 
     pub fn insert(mut self: HashMap<K, V>, key: K, value: V) -> HashMap<K, V> {
-        self.len = self.len + 1;
+        if self.len * 10 >= self.cap * 7 || self.cap == 0 {
+            self = self.grow()
+        };
+        let hash = self.hash(key);
+        let mut idx = hash - (hash / self.cap) * self.cap;
+        loop {
+            let entry = self.buckets.get(idx);
+            if entry.occupied == 0 {
+                let new_entry = Entry { key, value, occupied: 1 };
+                self.buckets = self.buckets.set(idx, new_entry);
+                self.len = self.len + 1;
+                return self
+            };
+            if entry.key == key {
+                let new_entry = Entry { key, value, occupied: 1 };
+                self.buckets = self.buckets.set(idx, new_entry);
+                return self
+            };
+            idx = idx + 1;
+            if idx >= self.cap { idx = 0 }
+        };
         self
     }
 
@@ -36,7 +56,8 @@ impl<K, V> HashMap<K, V> {
             let entry = self.buckets.get(idx);
             if entry.occupied == 0 { return None; }
             if entry.key == key { return Some(entry.value); }
-            idx = idx + 1; if idx >= self.cap { idx = 0; }
+            idx = idx + 1;
+            if idx >= self.cap { idx = 0; }
             count = count + 1;
             if count >= self.cap { return None; }
         };
@@ -44,4 +65,27 @@ impl<K, V> HashMap<K, V> {
     }
 
     pub fn len(self: HashMap<K, V>) -> i64 { self.len }
+
+    fn grow(mut self: HashMap<K, V>) -> HashMap<K, V> {
+        let old_buckets = self.buckets;
+        let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
+        self.buckets = Vec::new();
+        self.cap = new_cap;
+        self.len = 0;
+        let mut i = 0;
+        while i < new_cap {
+            let empty = Entry { key: 0 as K, value: 0 as V, occupied: 0 };
+            self.buckets = self.buckets.push(empty);
+            i = i + 1
+        };
+        let mut i = 0;
+        while i < old_buckets.len() {
+            let entry = old_buckets.get(i);
+            if entry.occupied != 0 {
+                self = self.insert(entry.key, entry.value)
+            };
+            i = i + 1
+        };
+        self
+    }
 }

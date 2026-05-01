@@ -997,6 +997,7 @@ dependencies = [
  "glyim-interner",
  "glyim-parse",
  "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]

@@ -11,3 +11,4 @@ thiserror = "2"
 glyim-parse = { path = "../glyim-parse" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
+tracing = "0.1"
