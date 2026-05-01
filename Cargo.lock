@@ -938,8 +938,6 @@ dependencies = [
  "hex",
  "inkwell",
  "insta",
- "libc",
- "llvm-sys",
  "owo-colors",
  "pretty",
  "serde",

@@ -147,6 +147,9 @@ fn main() {
             .init();
     }
 
+    // Load all process symbols so the ORC JIT can resolve printf, write, abort, etc.
+    inkwell::support::load_visible_symbols();
+
     let exit_code = match cli.command {
         Command::Build {
             input,

@@ -87,26 +87,7 @@ fn detect_no_std(source: &str) -> bool {
 }
 
 
-/// Register external libc symbols with the JIT engine.
-/// Uses LLVM's own symbol lookup which handles platform-specific
-/// symbol mangling (e.g., underscore prefix on macOS).
-/// Must be called AFTER JIT engine creation but BEFORE any function calls.
-unsafe fn register_jit_symbols(module: &inkwell::module::Module, engine: &inkwell::execution_engine::ExecutionEngine) {
-    use llvm_sys::support::LLVMSearchForAddressOfSymbol;
-    use std::ffi::CString;
 
-    let symbols = ["printf", "write", "abort", "exit"];
-
-    for sym_name in &symbols {
-        let cname = CString::new(*sym_name).unwrap();
-        let addr = LLVMSearchForAddressOfSymbol(cname.as_ptr());
-        if !addr.is_null() {
-            if let Some(func) = module.get_function(sym_name) {
-                engine.add_global_mapping(&func, addr as usize);
-            }
-        }
-    }
-}
 
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
@@ -400,7 +381,6 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    unsafe { register_jit_symbols(codegen.get_module(), &engine); }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
