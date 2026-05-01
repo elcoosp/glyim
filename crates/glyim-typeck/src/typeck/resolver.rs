@@ -45,6 +45,7 @@ pub fn is_valid_cast(from: &HirType, to: &HirType) -> bool {
         (HirType::Int, HirType::Int) | (HirType::Float, HirType::Float) => true,
         (_, HirType::RawPtr { .. }) => true,
         (HirType::RawPtr { .. }, _) => true, // RawPtr -> anything (identity)
+        (_, HirType::Named(_)) => true,     // Allow cast to generic/opaque types
         (a, b) if a == b => true,
         _ => false,
     }
