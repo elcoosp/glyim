@@ -562,3 +562,17 @@ main = () => {
 "#;
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
 }
+#[test]
+fn e2e_intrinsic_ptr_alloc() {
+    let src = r#"
+        main = () => {
+            let ptr = glyim_alloc(8);
+            *(ptr as *mut i64) = 42;
+            let val = *(ptr as *mut i64);
+            glyim_free(ptr as *mut u8);
+            val
+        }
+    "#;
+    let result = pipeline::run(&temp_g(src), None);
+    assert_eq!(result.unwrap(), 42);
+}
