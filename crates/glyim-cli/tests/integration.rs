@@ -1,4 +1,3 @@
-mod assert_handler;
 use glyim_cli::pipeline;
 use std::path::PathBuf;
 
@@ -8,6 +7,36 @@ fn temp_g(content: &str) -> PathBuf {
     std::fs::write(&path, content).unwrap();
     Box::leak(Box::new(dir));
     path
+}
+
+// ─── longjmp-based assert/abort catching ──────────────────────────
+use std::sync::Mutex;
+
+extern "C" {
+    fn setjmp(buf: *mut usize) -> i32;
+    fn longjmp(buf: *mut usize, val: i32) -> !;
+}
+
+static JMP_BUF: Mutex<[usize; 64]> = Mutex::new([0; 64]);
+static ASSERT_FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+unsafe extern "C" fn assert_handler_impl(_msg: *const u8, _len: i64) {
+    ASSERT_FIRED.store(true, std::sync::atomic::Ordering::SeqCst);
+    unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
+}
+
+unsafe extern "C" fn abort_handler_impl() {
+    ASSERT_FIRED.store(true, std::sync::atomic::Ordering::SeqCst);
+    unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
+}
+
+fn run_with_abort_catcher<F: FnOnce() -> i32>(f: F) -> i32 {
+    let ret = unsafe { setjmp(JMP_BUF.lock().unwrap().as_mut_ptr()) };
+    if ret != 0 {
+        // longjmp'd back from assert/abort → the Glyim program aborted
+        return 1;
+    }
+    f()
 }
 
 #[test]
@@ -90,8 +119,8 @@ fn e2e_assert_pass() {
 #[test]
 #[ignore = "abort() kills JIT test runner"]
 fn e2e_assert_fail() {
-    glyim_cli::pipeline::set_jit_assert_handler(assert_handler::glyim_assert_fail_test_impl);
-    let caught = assert_handler::setup_assert_catcher();
+    glyim_cli::pipeline::set_jit_assert_handler(assert_handler_impl);
+    let caught = false /* should not be called */;
     if caught {
         // The longjmp returned here — assertion was triggered successfully!
         return;

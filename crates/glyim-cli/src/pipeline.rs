@@ -79,9 +79,14 @@ impl From<std::io::Error> for PipelineError {
 
 // Custom assert handler for JIT tests
 static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
+static CUSTOM_ABORT_FN: Mutex<Option<unsafe extern "C" fn()>> = Mutex::new(None);
 
 /// Set a custom handler for glyim_assert_fail in JIT mode.
 /// Call before pipeline::run() to catch assertion failures.
+pub fn set_jit_abort_handler(handler: unsafe extern "C" fn()) {
+    *CUSTOM_ABORT_FN.lock().unwrap() = Some(handler);
+}
+
 pub fn set_jit_assert_handler(handler: unsafe extern "C" fn(*const u8, i64)) {
     *CUSTOM_ASSERT_FN.lock().unwrap() = Some(handler);
 }
@@ -271,6 +276,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
         &engine,
         codegen.get_module(),
         *CUSTOM_ASSERT_FN.lock().unwrap(),
+        *CUSTOM_ABORT_FN.lock().unwrap(),
     );
 
     unsafe {
@@ -422,6 +428,7 @@ pub fn run_with_mode(
         &engine,
         codegen.get_module(),
         *CUSTOM_ASSERT_FN.lock().unwrap(),
+        *CUSTOM_ABORT_FN.lock().unwrap(),
     );
 
     unsafe {
@@ -1045,6 +1052,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         &engine,
         cg.get_module(),
         *CUSTOM_ASSERT_FN.lock().unwrap(),
+        *CUSTOM_ABORT_FN.lock().unwrap(),
     );
 
     unsafe {

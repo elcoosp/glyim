@@ -68,12 +68,18 @@ pub fn map_runtime_shims_for_jit(
     engine: &inkwell::execution_engine::ExecutionEngine,
     module: &Module,
     custom_assert_fn: Option<unsafe extern "C" fn(*const u8, i64)>,
+    custom_abort_fn: Option<unsafe extern "C" fn()>,
 ) {
     unsafe {
         if let Some(f) = module.get_function("glyim_println_int") { engine.add_global_mapping(&f, glyim_println_int_impl  as *const () as usize); }
         if let Some(f) = module.get_function("glyim_println_str") { engine.add_global_mapping(&f, glyim_println_str_impl  as *const () as usize); }
         if let Some(f) = module.get_function("glyim_assert_fail") {
             let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
+            engine.add_global_mapping(&f, ptr as *const () as usize);
+        }
+        if let Some(f) = module.get_function("abort") {
+            // abort is a diverging function (!), so cast to the correct pointer type
+            let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(std::mem::transmute(abort as unsafe extern "C" fn() -> !));
             engine.add_global_mapping(&f, ptr as *const () as usize);
         }
     }
