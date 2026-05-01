@@ -87,22 +87,16 @@ fn detect_no_std(source: &str) -> bool {
 }
 
 
-/// Register external symbols (printf, write, abort) with the DynamicLibrary
-/// so the ORC JIT can resolve them. Must be called BEFORE JIT engine creation.
+/// Register ALL process symbols with the ORC JIT so external functions
+/// like printf, write, abort are available at runtime.
+/// Must be called BEFORE JIT engine creation.
 unsafe fn register_jit_symbols() {
-    use std::ffi::CString;
-    use llvm_sys::support::LLVMAddSymbol;
-
-    let symbols: &[(&str, *mut std::ffi::c_void)] = &[
-        ("printf", libc::printf as *mut std::ffi::c_void),
-        ("write", libc::write as *mut std::ffi::c_void),
-        ("abort", libc::abort as *mut std::ffi::c_void),
-    ];
-
-    for (name, ptr) in symbols {
-        let cname = CString::new(*name).unwrap();
-        LLVMAddSymbol(cname.as_ptr(), *ptr);
-    }
+    // Load the current process as a dynamic library.
+    // This makes all symbols (libc, etc.) available to the ORC JIT.
+    // NULL pointer means "load the main program".
+    use llvm_sys::support::LLVMLoadLibraryPermanently;
+    use std::ptr;
+    LLVMLoadLibraryPermanently(ptr::null());
 }
 
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
