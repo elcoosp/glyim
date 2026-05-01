@@ -83,14 +83,8 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>) 
                 "write_stderr",
             )
             .unwrap();
-        let exit_fn = module.add_function(
-            "exit",
-            void_type.fn_type(&[i32_type.into()], false),
-            None,
-        );
-        let one = i32_type.const_int(1, false);
         builder
-            .build_call(exit_fn, &[one.into()], "exit")
+            .build_call(module.get_function("abort").unwrap(), &[], "abort")
             .unwrap();
         builder.build_unreachable().unwrap();
     }
