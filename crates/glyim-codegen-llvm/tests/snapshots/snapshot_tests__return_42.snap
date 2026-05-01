@@ -13,20 +13,19 @@ declare i32 @printf(ptr, ...)
 
 define void @glyim_println_int(i64 %0) {
 entry:
-  %printf_call = call i32 (ptr, ...) @printf([6 x i8] c"%lld\0A\00", i64 %0)
+  %c = call i32 (ptr, ...) @printf([6 x i8] c"%lld\0A\00", i64 %0)
   ret void
 }
 
-define void @glyim_println_str({ ptr, i64 } %0) {
+define void @glyim_println_str(ptr %0, i64 %1) {
 entry:
-  %data = extractvalue { ptr, i64 } %0, 0
-  %printf_call = call i32 (ptr, ...) @printf([4 x i8] c"%s\0A\00", ptr %data)
+  %c = call i32 (ptr, ...) @printf([4 x i8] c"%s\0A\00", ptr %0)
   ret void
 }
 
 define void @glyim_assert_fail(ptr %0, i64 %1) {
 entry:
-  %write_stderr = call i64 @write(i32 2, ptr %0, i64 %1)
+  %w = call i64 @write(i32 2, ptr %0, i64 %1)
   call void @abort()
   unreachable
 }
