@@ -103,7 +103,7 @@ pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType 
         HirType::Generic(sym, args) => {
             let new_args: Vec<HirType> = args.iter().map(|a| substitute_type(a, sub)).collect();
             // If all args are now concrete (no type params remain), just return Named
-            let has_params = new_args
+            let _has_params = new_args
                 .iter()
                 .any(|a| matches!(a, HirType::Named(s) if sub.contains_key(s)));
             HirType::Generic(*sym, new_args)

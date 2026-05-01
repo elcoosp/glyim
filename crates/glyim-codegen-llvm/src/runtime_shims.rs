@@ -131,18 +131,18 @@ pub fn map_runtime_shims_for_jit(
     custom_abort_fn: Option<unsafe extern "C" fn()>,
 ) {
     if let Some(f) = module.get_function("glyim_println_int") {
-        unsafe { engine.add_global_mapping(&f, glyim_println_int_impl as *const () as usize); }
+        engine.add_global_mapping(&f, glyim_println_int_impl as *const () as usize);
     }
     if let Some(f) = module.get_function("glyim_println_str") {
-        unsafe { engine.add_global_mapping(&f, glyim_println_str_impl as *const () as usize); }
+        engine.add_global_mapping(&f, glyim_println_str_impl as *const () as usize);
     }
     if let Some(f) = module.get_function("glyim_assert_fail") {
         let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
-        unsafe { engine.add_global_mapping(&f, ptr as *const () as usize); }
+        engine.add_global_mapping(&f, ptr as *const () as usize);
     }
     if let Some(f) = module.get_function("abort") {
         let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(abort_handler_default);
-        unsafe { engine.add_global_mapping(&f, ptr as *const () as usize); }
+        engine.add_global_mapping(&f, ptr as *const () as usize);
     }
 
     // Default abort handler (for non-custom paths) that actually aborts
