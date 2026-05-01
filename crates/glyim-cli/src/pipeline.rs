@@ -83,37 +83,6 @@ impl From<std::io::Error> for PipelineError {
 
 
 
-// ── Inline Rust runtime shims for JIT ──────────────────────
-// These extern "C" functions replace the LLVM IR shims.
-// They are compiled into the test binary and mapped directly
-// into the JIT engine via add_global_mapping, avoiding any
-// external symbol resolution.
-
-extern "C" fn glyim_println_int_impl(val: i64) {
-    println!("{}", val);
-}
-
-extern "C" fn glyim_println_str_impl(ptr: *const u8, len: i64) {
-    if len > 0 && !ptr.is_null() {
-        let bytes = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
-        if let Ok(s) = std::str::from_utf8(bytes) {
-            println!("{}", s);
-        }
-    }
-}
-
-extern "C" fn glyim_assert_fail_impl(msg: *const u8, len: i64) {
-    use std::io::Write;
-    let stderr = std::io::stderr();
-    let mut handle = stderr.lock();
-    let _ = handle.write_all(b"assertion failed: ");
-    if len > 0 && !msg.is_null() {
-        let bytes = unsafe { std::slice::from_raw_parts(msg, len as usize) };
-        let _ = handle.write_all(bytes);
-    }
-    let _ = handle.write_all(b"\n");
-    std::process::abort();
-}
 
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
@@ -191,7 +160,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_extern_shims();
+    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -277,7 +246,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_extern_shims();
+    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -414,7 +383,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_extern_shims();
+    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -494,7 +463,7 @@ pub fn build_with_mode(
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_extern_shims();
+    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -742,7 +711,7 @@ pub fn run_tests(
     if is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_extern_shims();
+    codegen = codegen;
     codegen
         .generate_for_tests(&mono_hir, &active_names, &should_panic)
         .map_err(PipelineError::Codegen)?;
@@ -818,6 +787,8 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
         "-o".into(),
         output_path.as_os_str().into(),
         obj_path.as_os_str().into(),
+        "-lc".into(),
+        "-no-pie".into(),
     ];
     if use_lto {
         args.push("-flto=thin".into());
@@ -907,7 +878,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let context = Context::create();
     info!("starting codegen");
     let mut codegen = Codegen::new(&context, interner, merged_types);
-    codegen = codegen.with_extern_shims();
+    codegen = codegen;
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -1032,7 +1003,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let context = Context::create();
     let mut cg = Codegen::new(&context, interner, merged_types);
-    cg = cg.with_extern_shims();
+    cg = cg;
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     let engine = cg
         .get_module()
