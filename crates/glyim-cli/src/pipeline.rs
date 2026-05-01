@@ -197,8 +197,6 @@ pub enum Result<T, E> {
     Err(E),
 }
 
-type u8 = i64;
-
 extern {
     fn glyim_alloc(size: i64) -> *mut u8;
     fn glyim_free(ptr: *mut u8);
