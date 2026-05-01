@@ -1,4 +1,5 @@
 // HashMap<K,V> using Vec<Entry<K,V>> from vec.g
+// get() is a stub — full linear probing blocked by codegen limitations with Vec<T>
 struct Entry<K, V> {
     key: K,
     value: V,
