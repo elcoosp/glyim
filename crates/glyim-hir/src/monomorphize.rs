@@ -485,7 +485,128 @@ impl<'a> MonoContext<'a> {
         if let Some(rt) = &mut mono.ret {
             *rt = crate::types::substitute_type(rt, &sub);
         }
+        // Substitute types within the body (SizeOf, As, etc.)
+        mono.body = self.substitute_expr_types(&mono.body, &sub);
         mono
+    }
+
+    fn substitute_expr_types(&mut self, expr: &HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
+        match expr {
+            HirExpr::SizeOf { id, target_type, span } => {
+                HirExpr::SizeOf {
+                    id: *id,
+                    target_type: crate::types::substitute_type(target_type, sub),
+                    span: *span,
+                }
+            }
+            HirExpr::As { id, expr: inner, target_type, span } => {
+                HirExpr::As {
+                    id: *id,
+                    expr: Box::new(self.substitute_expr_types(inner, sub)),
+                    target_type: crate::types::substitute_type(target_type, sub),
+                    span: *span,
+                }
+            }
+            HirExpr::Block { id, stmts, span } => {
+                HirExpr::Block {
+                    id: *id,
+                    stmts: stmts.iter().map(|s| self.substitute_stmt_types(s, sub)).collect(),
+                    span: *span,
+                }
+            }
+            HirExpr::Binary { id, op, lhs, rhs, span } => {
+                HirExpr::Binary {
+                    id: *id,
+                    op: op.clone(),
+                    lhs: Box::new(self.substitute_expr_types(lhs, sub)),
+                    rhs: Box::new(self.substitute_expr_types(rhs, sub)),
+                    span: *span,
+                }
+            }
+            HirExpr::If { id, condition, then_branch, else_branch, span } => {
+                HirExpr::If {
+                    id: *id,
+                    condition: Box::new(self.substitute_expr_types(condition, sub)),
+                    then_branch: Box::new(self.substitute_expr_types(then_branch, sub)),
+                    else_branch: else_branch.as_ref().map(|e| Box::new(self.substitute_expr_types(e, sub))),
+                    span: *span,
+                }
+            }
+            HirExpr::Match { id, scrutinee, arms, span } => {
+                HirExpr::Match {
+                    id: *id,
+                    scrutinee: Box::new(self.substitute_expr_types(scrutinee, sub)),
+                    arms: arms.iter().map(|(pat, guard, body)| {
+                        (pat.clone(), guard.as_ref().map(|g| self.substitute_expr_types(g, sub)), self.substitute_expr_types(body, sub))
+                    }).collect(),
+                    span: *span,
+                }
+            }
+            HirExpr::Call { id, callee, args, span } => {
+                HirExpr::Call {
+                    id: *id,
+                    callee: *callee,
+                    args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
+                    span: *span,
+                }
+            }
+            HirExpr::Unary { id, op, operand, span } => {
+                HirExpr::Unary {
+                    id: *id,
+                    op: op.clone(),
+                    operand: Box::new(self.substitute_expr_types(operand, sub)),
+                    span: *span,
+                }
+            }
+            HirExpr::Return { id, value, span } => {
+                HirExpr::Return {
+                    id: *id,
+                    value: value.as_ref().map(|v| Box::new(self.substitute_expr_types(v, sub))),
+                    span: *span,
+                }
+            }
+            HirExpr::StructLit { id, struct_name, fields, span } => {
+                HirExpr::StructLit {
+                    id: *id,
+                    struct_name: *struct_name,
+                    fields: fields.iter().map(|(s, e)| (*s, self.substitute_expr_types(e, sub))).collect(),
+                    span: *span,
+                }
+            }
+            HirExpr::EnumVariant { id, enum_name, variant_name, args, span } => {
+                HirExpr::EnumVariant {
+                    id: *id,
+                    enum_name: *enum_name,
+                    variant_name: *variant_name,
+                    args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
+                    span: *span,
+                }
+            }
+            // Copy everything else unchanged
+            other => other.clone(),
+        }
+    }
+
+    fn substitute_stmt_types(&mut self, stmt: &HirStmt, sub: &HashMap<Symbol, HirType>) -> HirStmt {
+        match stmt {
+            HirStmt::Let { name, mutable, value, span } => {
+                HirStmt::Let {
+                    name: *name,
+                    mutable: *mutable,
+                    value: self.substitute_expr_types(value, sub),
+                    span: *span,
+                }
+            }
+            HirStmt::Assign { target, value, span } => {
+                HirStmt::Assign {
+                    target: *target,
+                    value: self.substitute_expr_types(value, sub),
+                    span: *span,
+                }
+            }
+            HirStmt::Expr(e) => HirStmt::Expr(self.substitute_expr_types(e, sub)),
+            _ => stmt.clone(),
+        }
     }
 
     fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {

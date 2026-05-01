@@ -576,3 +576,29 @@ fn e2e_intrinsic_ptr_alloc() {
     let result = pipeline::run(&temp_g(src), None);
     assert_eq!(result.unwrap(), 42);
 }
+
+#[test]
+fn e2e_size_of_generic_struct() {
+    let src = "struct Container<T> { value: T }
+fn container_size() -> i64 { __size_of::<Container<i64>>() }
+main = () => container_size()";
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 8);
+}
+
+#[test]
+fn e2e_size_of_generic_function_param() {
+    let src = "fn size_of_val<T>(x: T) -> i64 { __size_of::<T>() }
+main = () => size_of_val(42)";
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 8);
+}
+
+#[test]
+fn e2e_deref_generic_ptr() {
+    let src = "fn deref_generic<T>(p: *mut T) -> T { *p }
+main = () => {
+    let ptr = glyim_alloc(8) as *mut i64;
+    *ptr = 123;
+    deref_generic(ptr)
+}";
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 123);
+}
