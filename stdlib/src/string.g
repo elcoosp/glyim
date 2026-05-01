@@ -1,3 +1,4 @@
+// String type using Vec<u8> from vec.g
 struct String {
     vec: Vec<u8>,
 }

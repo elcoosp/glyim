@@ -974,6 +974,7 @@ main = () => {
 
 #[test]
 fn e2e_hashmap_basic() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
     let main_code = r#"
 main = () => {
