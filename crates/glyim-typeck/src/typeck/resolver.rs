@@ -44,6 +44,7 @@ pub fn is_valid_cast(from: &HirType, to: &HirType) -> bool {
         (HirType::Int, HirType::Float) | (HirType::Float, HirType::Int) => true,
         (HirType::Int, HirType::Int) | (HirType::Float, HirType::Float) => true,
         (_, HirType::RawPtr { .. }) => true,
+        (HirType::RawPtr { .. }, _) => true,  // RawPtr -> anything (identity)
         (a, b) if a == b => true,
         _ => false,
     }
