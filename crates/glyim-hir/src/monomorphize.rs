@@ -1092,15 +1092,15 @@ impl<'a> MonoContext<'a> {
             names
         };
         let struct_mangle_map: HashMap<Symbol, Symbol> = struct_mangled_names.into_iter().collect();
-        // 2. Original non-generic items (collect then rewrite to avoid borrow conflict)
+        // 2. Original items (include ALL functions, not just non-generic)
         let original_items: Vec<crate::item::HirItem> = self.hir.items.iter().filter_map(|item| {
             match item {
-                HirItem::Fn(f) if f.type_params.is_empty() => Some(item.clone()),
+                HirItem::Fn(_) => Some(item.clone()),
                 HirItem::Struct(_) => Some(item.clone()),
                 HirItem::Enum(_) => Some(item.clone()),
                 HirItem::Extern(_) => Some(item.clone()),
                 HirItem::Impl(imp) => {
-                    if imp.methods.iter().any(|m| m.type_params.is_empty()) {
+                    if !imp.methods.is_empty() {
                         Some(item.clone())
                     } else {
                         None
@@ -1121,10 +1121,8 @@ impl<'a> MonoContext<'a> {
                 HirItem::Extern(e) => items.push(HirItem::Extern(e.clone())),
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        if m.type_params.is_empty() {
-                            let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map);
-                            items.push(HirItem::Fn(rewritten));
-                        }
+                        let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map);
+                        items.push(HirItem::Fn(rewritten));
                     }
                 }
                 _ => {}

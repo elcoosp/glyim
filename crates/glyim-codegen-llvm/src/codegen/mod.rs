@@ -215,6 +215,13 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
+        // Pass 1b — register specialized struct types from the HIR
+        for item in &hir.items {
+            if let glyim_hir::item::HirItem::Struct(s) = item {
+                types::codegen_struct_def(self, s);
+            }
+        }
+
         // Pass 2 — forward-declare ALL functions before any body is compiled
         for item in &hir.items {
             match item {
