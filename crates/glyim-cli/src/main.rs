@@ -27,6 +27,8 @@ struct Cli {
 enum Command {
     Build {
         input: PathBuf,
+        #[arg(long)]
+        target: Option<String>,
         #[arg(short, long)]
         output: Option<PathBuf>,
         #[arg(long, conflicts_with = "release")]
@@ -36,6 +38,8 @@ enum Command {
     },
     Run {
         input: PathBuf,
+        #[arg(long)]
+        target: Option<String>,
         #[arg(long, conflicts_with = "release")]
         debug: bool,
         #[arg(long, conflicts_with = "debug")]
@@ -153,6 +157,7 @@ fn main() {
         Command::Build {
             input,
             output,
+            target,
             debug: _,
             release,
         } => {
@@ -162,9 +167,9 @@ fn main() {
                 BuildMode::Debug
             };
             let result = if input.is_dir() {
-                pipeline::build_package(&input, output.as_deref(), mode)
+                pipeline::build_package(&input, output.as_deref(), mode, target.as_deref())
             } else {
-                pipeline::build_with_mode(&input, output.as_deref(), mode)
+                pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref())
             };
             match result {
                 Ok(path) => {
@@ -179,6 +184,7 @@ fn main() {
         }
         Command::Run {
             input,
+            target,
             debug: _,
             release,
         } => {
@@ -188,9 +194,9 @@ fn main() {
                 BuildMode::Debug
             };
             let result = if input.is_dir() {
-                pipeline::run_package(&input, mode)
+                pipeline::run_package(&input, mode, target.as_deref())
             } else {
-                pipeline::run_with_mode(&input, mode)
+                pipeline::run_with_mode(&input, mode, target.as_deref())
             };
             match result {
                 Ok(code) => code,

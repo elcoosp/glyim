@@ -28,7 +28,7 @@ fn e2e_missing_main() {
 }
 #[test]
 fn e2e_parse_error() {
-    assert!(pipeline::run(&temp_g("main = +")).is_err());
+    assert!(pipeline::run(&temp_g("main = +"), None).is_err());
 }
 #[test]
 fn e2e_let_binding() {
@@ -191,12 +191,12 @@ fn e2e_generic_struct() {
 #[ignore]
 fn e2e_tuple() {
     let src = "main = () => { let p = (1, 2); p._0 }";
-    let _result = pipeline::run(&temp_g(src)).unwrap();
+    let _result = pipeline::run(&temp_g(src), None).unwrap();
 }
 #[test]
 fn e2e_impl_method() {
     let src = "struct Point { x, y }\nimpl Point {\n    fn zero() -> Point { Point { x: 0, y: 0 } }\n}\nmain = () => { let p = Point::zero(); p.x }";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
 #[test]
 fn e2e_cast_int_to_float() {
@@ -235,7 +235,7 @@ fn e2e_wrong_field_fails() {
 #[ignore]
 fn e2e_generic_edge() {
     let src = "struct Edge<T> { from: T, to: T }\nimpl<T> Edge<T> {\n    fn new(from: T, to: T) -> Edge<T> { Edge { from, to } }\n}\nfn main() -> i64 {\n    let e: Edge<i64> = Edge::new(0, 100)\n    let (from, to) = (e.from, e.to)\n    from - to\n}";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), -100);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), -100);
 }
 
 #[test]
@@ -333,32 +333,32 @@ fn e2e_size_of_unit() {
 #[test]
 fn e2e_bool_if_rejects_int_condition() {
     let src = "fn main() -> i64 { let x = 5; if x { 1 } else { 0 } }";
-    assert!(pipeline::run(&temp_g(src)).is_err());
+    assert!(pipeline::run(&temp_g(src), None).is_err());
 }
 
 #[test]
 fn e2e_float_arithmetic_no_crash() {
     let src = "fn main() -> i64 { let x: f64 = 3.0; let y: f64 = x + 2.0; 1 }";
-    assert!(pipeline::run(&temp_g(src)).is_ok());
+    assert!(pipeline::run(&temp_g(src), None).is_ok());
 }
 
 #[test]
 fn e2e_extern_block_with_ptr_param() {
     let src =
         "extern { fn write(fd: i64, buf: *const u8, len: i64) -> i64; }\nfn main() -> i64 { 0 }";
-    assert!(pipeline::run(&temp_g(src)).is_ok());
+    assert!(pipeline::run(&temp_g(src), None).is_ok());
 }
 
 #[test]
 fn e2e_assign_to_immutable_is_error() {
     let src = "fn main() -> i64 { let x = 5; x = 10; x }";
-    assert!(pipeline::run(&temp_g(src)).is_err());
+    assert!(pipeline::run(&temp_g(src), None).is_err());
 }
 
 #[test]
 fn e2e_struct_with_ptr_parse_and_typecheck() {
     let src = "struct Ptr { data: *mut i64 }\nmain = () => { 42 }";
-    assert!(pipeline::run(&temp_g(src)).is_ok());
+    assert!(pipeline::run(&temp_g(src), None).is_ok());
 }
 
 #[test]
@@ -382,7 +382,7 @@ main = () => {
 #[test]
 fn e2e_generic_identity_call() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
 }
 
 // ── Monomorphization verification tests ──────────────────────────
@@ -390,25 +390,25 @@ fn e2e_generic_identity_call() {
 #[test]
 fn e2e_mono_generic_fn_discovered_without_call_type_args() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
 }
 
 #[test]
 fn e2e_mono_non_generic_param_before_generic() {
     let src = "fn wrap<T>(label: i64, value: T) -> T { value }\nfn main() -> i64 { wrap(0, 99) }";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 99);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 99);
 }
 
 #[test]
 fn e2e_mono_two_instantiations_same_fn() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { let a = id(42); let b = id(true); if b { a } else { 0 } }";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
 }
 
 #[test]
 fn e2e_mono_generic_fn_with_two_type_params() {
     let src = "fn pair<A,B>(a: A, b: B) -> B { b }\nfn main() -> i64 { pair(1, 42) }";
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
 }
 
 #[test]
@@ -424,7 +424,7 @@ main = () => {
     sum
 }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 10);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 10);
 }
 
 #[test]
@@ -442,7 +442,7 @@ main = () => {
     v.len()
 }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
 
 #[test]
@@ -452,7 +452,7 @@ struct Vec<T> { data: *mut u8, len: i64, cap: i64 }
 impl<T> Vec<T> { fn new() -> Vec<T> { Vec { data: 0 as *mut u8, len: 0, cap: 0 } } }
 main = () => { let v = Vec::new(); v.len }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
 
 #[test]
@@ -465,7 +465,7 @@ impl<T> Vec<T> {
 }
 main = () => { let v = Vec::new(); v.len() }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
 
 #[test]
@@ -488,7 +488,7 @@ main = () => {
     v.len
 }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 3);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 3);
 }
 
 #[test]
@@ -501,7 +501,7 @@ struct String { vec: Vec<u8> }
 impl String { fn new() -> String { String { vec: Vec::new() } } fn len(&self) -> i64 { self.vec.len() } }
 main = () => { let s = String::new(); s.len() }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 0);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
 
 #[test]
@@ -514,7 +514,7 @@ main = () => {
     if w.value { 1 } else { 0 }
 }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 1);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 1);
 }
 
 #[test]
@@ -527,5 +527,5 @@ main = () => {
     w.value
 }
 "#;
-    assert_eq!(pipeline::run(&temp_g(src)).unwrap(), 42);
+    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
 }

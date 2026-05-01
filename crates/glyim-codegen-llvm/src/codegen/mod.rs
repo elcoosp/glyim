@@ -46,6 +46,7 @@ pub struct Codegen<'ctx> {
     pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
     pub(crate) no_std: bool,
     pub(crate) jit_mode: bool,
+    pub(crate) target_triple: Option<String>,
     
 }
 
@@ -78,6 +79,7 @@ impl<'ctx> Codegen<'ctx> {
             current_subprogram: None,
             no_std: false,
             jit_mode: false,
+            target_triple: None,
                         macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         }
     }
@@ -120,6 +122,7 @@ impl<'ctx> Codegen<'ctx> {
             current_subprogram: None,
             no_std: false,
             jit_mode: false,
+            target_triple: None,
                         macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
@@ -163,6 +166,7 @@ impl<'ctx> Codegen<'ctx> {
             current_subprogram: None,
             no_std: false,
             jit_mode: false,
+            target_triple: None,
                         macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
@@ -512,6 +516,11 @@ impl<'ctx> Codegen<'ctx> {
 
     pub fn with_jit_mode(mut self) -> Self {
         self.jit_mode = true;
+        self
+    }
+
+    pub fn with_target(mut self, triple: &str) -> Self {
+        self.target_triple = Some(triple.to_string());
         self
     }
 

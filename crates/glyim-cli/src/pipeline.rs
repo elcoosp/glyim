@@ -93,7 +93,7 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
 }
 
 #[tracing::instrument(name = "build", skip_all)]
-pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
+pub fn build(input: &Path, output: Option<&Path>, target: Option<&str>) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
@@ -146,6 +146,12 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
         &input.to_string_lossy(),
     )
     .map_err(PipelineError::Codegen)?;
+    if let Some(t) = target {
+        if let Err(e) = crate::cross::validate_target(t) {
+            return Err(PipelineError::Codegen(e));
+        }
+        codegen = codegen.with_target(t);
+    }
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -174,7 +180,7 @@ pub enum Result<T, E> {
 ";
 
 #[tracing::instrument(name = "run", skip_all)]
-pub fn run(input: &Path) -> Result<i32, PipelineError> {
+pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let _parse_span = info_span!("phase", name = "parse").entered();
     let parse_out = glyim_parse::parse(&source);
@@ -228,6 +234,12 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         &input.to_string_lossy(),
     )
     .map_err(PipelineError::Codegen)?;
+    if let Some(t) = target {
+        if let Err(e) = crate::cross::validate_target(t) {
+            return Err(PipelineError::Codegen(e));
+        }
+        codegen = codegen.with_target(t);
+    }
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -304,7 +316,7 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
 }
 
 #[tracing::instrument(name = "run_with_mode", skip_all)]
-pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
+pub fn run_with_mode(input: &Path, mode: BuildMode, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let _parse_span = info_span!("phase", name = "parse").entered();
     let mut parse_out = glyim_parse::parse(&source);
@@ -361,10 +373,20 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .map_err(PipelineError::Codegen)?,
         BuildMode::Release => Codegen::new(&context, interner, merged_types),
     };
+    if let Some(t) = target {
+        crate::cross::validate_target(t).map_err(|e| PipelineError::Codegen(e))?;
+        codegen = codegen.with_target(t);
+    }
     if is_no_std {
         codegen = codegen.with_no_std();
     }
     codegen = codegen.with_jit_mode();
+    if let Some(t) = target {
+        if let Err(e) = crate::cross::validate_target(t) {
+            return Err(PipelineError::Codegen(e));
+        }
+        codegen = codegen.with_target(t);
+    }
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -388,6 +410,7 @@ pub fn build_with_mode(
     input: &Path,
     output: Option<&Path>,
     mode: BuildMode,
+    target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
@@ -444,6 +467,10 @@ pub fn build_with_mode(
         .map_err(PipelineError::Codegen)?,
         BuildMode::Release => Codegen::new(&context, interner, merged_types),
     };
+    if let Some(t) = target {
+        crate::cross::validate_target(t).map_err(|e| PipelineError::Codegen(e))?;
+        codegen = codegen.with_target(t);
+    }
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -520,6 +547,7 @@ pub fn build_package(
     package_dir: &Path,
     output: Option<&Path>,
     mode: BuildMode,
+    target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
     let manifest_path = package_dir.join("glyim.toml");
     let toml_str = fs::read_to_string(&manifest_path).map_err(|e| {
@@ -538,10 +566,10 @@ pub fn build_package(
         ));
     }
 
-    build_with_mode(&main_path, output, mode)
+    build_with_mode(&main_path, output, mode, target)
 }
 
-pub fn run_package(package_dir: &Path, mode: BuildMode) -> Result<i32, PipelineError> {
+pub fn run_package(package_dir: &Path, mode: BuildMode, target: Option<&str>) -> Result<i32, PipelineError> {
     let manifest_path = package_dir.join("glyim.toml");
     let toml_str = fs::read_to_string(&manifest_path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
@@ -559,7 +587,7 @@ pub fn run_package(package_dir: &Path, mode: BuildMode) -> Result<i32, PipelineE
         ));
     }
 
-    run_with_mode(&main_path, mode)
+    run_with_mode(&main_path, mode, target)
 }
 
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
