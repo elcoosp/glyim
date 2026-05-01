@@ -215,8 +215,16 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     for item in &mono_hir.items {
         if let glyim_hir::HirItem::Fn(f) = item {
             let name = interner.resolve(f.name);
-            if name.contains("Vec") || name.contains("push") || name.contains("len") || name.contains("pop") || name.contains("get") {
-                eprintln!("[pipeline]   mono fn: {} (type_params={:?})", name, f.type_params);
+            if name.contains("Vec")
+                || name.contains("push")
+                || name.contains("len")
+                || name.contains("pop")
+                || name.contains("get")
+            {
+                eprintln!(
+                    "[pipeline]   mono fn: {} (type_params={:?})",
+                    name, f.type_params
+                );
             }
         }
     }

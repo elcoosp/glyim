@@ -26,8 +26,10 @@ impl TypeChecker {
             } => {
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
                 if let Some(annotated) = annotation {
-                    let resolved_annotated = crate::typeck::resolver::resolve_named_type(&self.interner, annotated);
-                    let resolved_ty = crate::typeck::resolver::resolve_named_type(&self.interner, &ty);
+                    let resolved_annotated =
+                        crate::typeck::resolver::resolve_named_type(&self.interner, annotated);
+                    let resolved_ty =
+                        crate::typeck::resolver::resolve_named_type(&self.interner, &ty);
                     // Skip when both sides are Generic(same_name, _) — type args may not be
                     // fully inferred yet for the inferred side.
                     let is_generic_compat = matches!((&resolved_annotated, &resolved_ty),
@@ -43,10 +45,12 @@ impl TypeChecker {
                     }
                 }
                 if let HirPattern::Var(_) = pattern {
-                    if let Some(HirType::Generic(_, type_args)) = self.lookup_binding(&match pattern {
-                        HirPattern::Var(s) => *s,
-                        _ => unreachable!(),
-                    }) {
+                    if let Some(HirType::Generic(_, type_args)) =
+                        self.lookup_binding(&match pattern {
+                            HirPattern::Var(s) => *s,
+                            _ => unreachable!(),
+                        })
+                    {
                         let value_id = value.get_id();
                         if !type_args.is_empty() {
                             self.call_type_args.insert(value_id, type_args.clone());

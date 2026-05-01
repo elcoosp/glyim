@@ -181,8 +181,11 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!("[codegen]   Fn: {} (type_params={:?})",
-                        self.interner.resolve(f.name), f.type_params);
+                    eprintln!(
+                        "[codegen]   Fn: {} (type_params={:?})",
+                        self.interner.resolve(f.name),
+                        f.type_params
+                    );
                 }
                 glyim_hir::item::HirItem::Struct(s) => {
                     eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));

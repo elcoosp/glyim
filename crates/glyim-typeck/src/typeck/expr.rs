@@ -1,9 +1,13 @@
 fn type_contains_unresolved(ty: &HirType, type_params: &[glyim_interner::Symbol]) -> bool {
     match ty {
         HirType::Named(sym) => type_params.contains(sym),
-        HirType::Generic(_, args) => args.iter().any(|a| type_contains_unresolved(a, type_params)),
+        HirType::Generic(_, args) => args
+            .iter()
+            .any(|a| type_contains_unresolved(a, type_params)),
         HirType::RawPtr(inner) => type_contains_unresolved(inner, type_params),
-        HirType::Tuple(elems) => elems.iter().any(|e| type_contains_unresolved(e, type_params)),
+        HirType::Tuple(elems) => elems
+            .iter()
+            .any(|e| type_contains_unresolved(e, type_params)),
         _ => false,
     }
 }
@@ -228,10 +232,10 @@ impl TypeChecker {
                                 if let HirType::Named(param_sym) = param_ty {
                                     if fn_def.type_params.contains(param_sym)
                                         && *arg_ty != HirType::Never
-                                            && *arg_ty != HirType::Named(*param_sym)
-                                        {
-                                            sub.insert(*param_sym, arg_ty.clone());
-                                        }
+                                        && *arg_ty != HirType::Named(*param_sym)
+                                    {
+                                        sub.insert(*param_sym, arg_ty.clone());
+                                    }
                                 }
                             }
                             // Record call_type_args for monomorphizer
@@ -441,7 +445,10 @@ impl TypeChecker {
                         (HirType::RawPtr(inner_exp), HirType::RawPtr(_))
                         if matches!(inner_exp.as_ref(), HirType::RawPtr(_))
                     );
-                    if !type_contains_unresolved(&expected_ty, &fn_def.type_params) && !is_rawptr_nesting && expected_ty != *arg_ty {
+                    if !type_contains_unresolved(&expected_ty, &fn_def.type_params)
+                        && !is_rawptr_nesting
+                        && expected_ty != *arg_ty
+                    {
                         self.errors.push(TypeError::MismatchedTypes {
                             expected: expected_ty.clone(),
                             found: arg_ty.clone(),
@@ -500,7 +507,10 @@ impl TypeChecker {
                             (HirType::RawPtr(inner_exp), HirType::RawPtr(inner_found))
                             if matches!(inner_exp.as_ref(), HirType::RawPtr(_))
                         );
-                        if !type_contains_unresolved(&expected_ty, &fn_def.type_params) && !is_rawptr_nesting && expected_ty != *arg_ty {
+                        if !type_contains_unresolved(&expected_ty, &fn_def.type_params)
+                            && !is_rawptr_nesting
+                            && expected_ty != *arg_ty
+                        {
                             self.errors.push(TypeError::MismatchedTypes {
                                 expected: expected_ty.clone(),
                                 found: arg_ty.clone(),

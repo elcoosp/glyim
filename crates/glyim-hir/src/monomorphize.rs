@@ -1035,40 +1035,29 @@ impl<'a> MonoContext<'a> {
     }
 
     fn build_result(mut self) -> MonoResult {
-
-
-        eprintln!("[mono] build_result: fn_specs.len()={}, items.len()={}",
-
-
-            self.fn_specs.len(), self.hir.items.len());
-
+        eprintln!(
+            "[mono] build_result: fn_specs.len()={}, items.len()={}",
+            self.fn_specs.len(),
+            self.hir.items.len()
+        );
 
         let mut items = Vec::new();
 
-
-
         // 1. Specialized structs first (clone to avoid borrow conflict)
 
-
-        let struct_specs: Vec<_> = self.struct_specs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
+        let struct_specs: Vec<_> = self
+            .struct_specs
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         for ((_orig_name, args), s) in &struct_specs {
-
-
             let mut mono_s = s.clone();
-
 
             mono_s.name = self.mangle_name(s.name, args);
 
-
             items.push(HirItem::Struct(mono_s));
-
-
         }
-
-
-
 
         // Build mangling maps for rewriting call sites (precompute mangled names)
         let fn_keys: Vec<(Symbol, Vec<HirType>)> = self.fn_specs.keys().cloned().collect();
@@ -1080,7 +1069,8 @@ impl<'a> MonoContext<'a> {
             }
             names
         };
-        let fn_mangle_map: HashMap<(Symbol, Vec<HirType>), Symbol> = fn_mangled_names.into_iter().collect();
+        let fn_mangle_map: HashMap<(Symbol, Vec<HirType>), Symbol> =
+            fn_mangled_names.into_iter().collect();
 
         let struct_keys: Vec<(Symbol, Vec<HirType>)> = self.struct_specs.keys().cloned().collect();
         let struct_mangled_names: Vec<(Symbol, Symbol)> = {
@@ -1093,8 +1083,11 @@ impl<'a> MonoContext<'a> {
         };
         let struct_mangle_map: HashMap<Symbol, Symbol> = struct_mangled_names.into_iter().collect();
         // 2. Original items (include ALL functions, not just non-generic)
-        let original_items: Vec<crate::item::HirItem> = self.hir.items.iter().filter_map(|item| {
-            match item {
+        let original_items: Vec<crate::item::HirItem> = self
+            .hir
+            .items
+            .iter()
+            .filter_map(|item| match item {
                 HirItem::Fn(_) => Some(item.clone()),
                 HirItem::Struct(_) => Some(item.clone()),
                 HirItem::Enum(_) => Some(item.clone()),
@@ -1106,8 +1099,8 @@ impl<'a> MonoContext<'a> {
                         None
                     }
                 }
-            }
-        }).collect();
+            })
+            .collect();
 
         for item in &original_items {
             match item {
@@ -1127,48 +1120,33 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-
-
         // 3. Specialized functions with MANGLED names
 
-
-        let fn_specs_clone: Vec<_> = self.fn_specs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
+        let fn_specs_clone: Vec<_> = self
+            .fn_specs
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         for ((orig_name, args), f) in &fn_specs_clone {
-
-
             let mut mono_f = f.clone();
-
 
             mono_f.name = self.mangle_name(*orig_name, args);
 
-
-            eprintln!("[mono]   adding specialized fn: {} (was {})",
-
-
-                self.interner.resolve(mono_f.name), self.interner.resolve(*orig_name));
-
+            eprintln!(
+                "[mono]   adding specialized fn: {} (was {})",
+                self.interner.resolve(mono_f.name),
+                self.interner.resolve(*orig_name)
+            );
 
             items.push(HirItem::Fn(mono_f));
-
-
         }
-
-
 
         MonoResult {
-
-
             hir: crate::Hir { items },
 
-
             type_overrides: self.type_overrides,
-
-
         }
-
-
     }
 
     fn rewrite_fn(

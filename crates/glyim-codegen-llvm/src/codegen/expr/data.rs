@@ -49,21 +49,35 @@ pub(crate) fn codegen_struct_lit<'ctx>(
             None => {
                 // Fallback: allocate at least enough for the fields
                 let fallback_size = cg.i64_type.const_int((fields.len() as u64) * 8, false);
-                let alloc_fn = cg.module.get_function("glyim_alloc")
+                let alloc_fn = cg
+                    .module
+                    .get_function("glyim_alloc")
                     .or_else(|| cg.module.get_function("malloc"))?;
-                let call_result = cg.builder.build_call(alloc_fn, &[fallback_size.into()], "struct_alloc")
-                    .ok()?.try_as_basic_value();
+                let call_result = cg
+                    .builder
+                    .build_call(alloc_fn, &[fallback_size.into()], "struct_alloc")
+                    .ok()?
+                    .try_as_basic_value();
                 let ptr = match call_result {
                     inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_pointer_value(),
                     _ => return Some(cg.i64_type.const_int(0, false)),
                 };
                 for (i, (_fn, fe)) in fields.iter().enumerate() {
                     let fv = codegen_expr(cg, fe, fctx)?;
-                    let indices = &[cg.i32_type.const_int(0, false), cg.i32_type.const_int(i as u64, false)];
-                    let i8_ptr = unsafe { cg.builder.build_gep(cg.context.i8_type(), ptr, indices, "field").ok()? };
+                    let indices = &[
+                        cg.i32_type.const_int(0, false),
+                        cg.i32_type.const_int(i as u64, false),
+                    ];
+                    let i8_ptr = unsafe {
+                        cg.builder
+                            .build_gep(cg.context.i8_type(), ptr, indices, "field")
+                            .ok()?
+                    };
                     cg.builder.build_store(i8_ptr, fv).ok()?;
                 }
-                cg.builder.build_ptr_to_int(ptr, cg.i64_type, "struct_ptr").ok()
+                cg.builder
+                    .build_ptr_to_int(ptr, cg.i64_type, "struct_ptr")
+                    .ok()
             }
         }
     } else {

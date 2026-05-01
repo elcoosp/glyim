@@ -606,7 +606,11 @@ fn call_with_wrong_argument_type_reports_error() {
         .iter()
         .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
         .collect();
-    assert_eq!(mismatches.len(), 1, "expected exactly one MismatchedTypes error");
+    assert_eq!(
+        mismatches.len(),
+        1,
+        "expected exactly one MismatchedTypes error"
+    );
 }
 
 #[test]
@@ -617,5 +621,9 @@ fn let_annotation_mismatch_reports_error() {
         .iter()
         .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
         .collect();
-    assert_eq!(mismatches.len(), 1, "expected one MismatchedTypes for annotation vs value");
+    assert_eq!(
+        mismatches.len(),
+        1,
+        "expected one MismatchedTypes for annotation vs value"
+    );
 }
