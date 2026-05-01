@@ -1,3 +1,4 @@
+use libc;
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
 use glyim_hir::ExprId;
@@ -241,6 +242,36 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .get_module()
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+    // Map external libc symbols so the JIT can find printf, write, abort
+    if let Some(printf_fn) = codegen.get_module().get_function("printf") {
+        engine.add_global_mapping(&printf_fn, libc::printf as usize);
+    }
+    if let Some(write_fn) = codegen.get_module().get_function("write") {
+        engine.add_global_mapping(&write_fn, libc::write as usize);
+    }
+    if let Some(abort_fn) = codegen.get_module().get_function("abort") {
+        engine.add_global_mapping(&abort_fn, libc::abort as usize);
+    }
+    if let Some(exit_fn) = codegen.get_module().get_function("exit") {
+        engine.add_global_mapping(&exit_fn, libc::exit as usize);
+    }
+
+
+    // Map external libc symbols so the JIT can find printf, write, abort
+    if let Some(printf_fn) = codegen.get_module().get_function("printf") {
+        engine.add_global_mapping(&printf_fn, libc::printf as usize);
+    }
+    if let Some(write_fn) = codegen.get_module().get_function("write") {
+        engine.add_global_mapping(&write_fn, libc::write as usize);
+    }
+    if let Some(abort_fn) = codegen.get_module().get_function("abort") {
+        engine.add_global_mapping(&abort_fn, libc::abort as usize);
+    }
+    if let Some(exit_fn) = codegen.get_module().get_function("exit") {
+        engine.add_global_mapping(&exit_fn, libc::exit as usize);
+    }
+
+
 
     unsafe {
         let main_fn = engine
@@ -988,6 +1019,21 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+    // Map external libc symbols so the JIT can find printf, write, abort
+    if let Some(printf_fn) = cg.get_module().get_function("printf") {
+        engine.add_global_mapping(&printf_fn, libc::printf as usize);
+    }
+    if let Some(write_fn) = cg.get_module().get_function("write") {
+        engine.add_global_mapping(&write_fn, libc::write as usize);
+    }
+    if let Some(abort_fn) = cg.get_module().get_function("abort") {
+        engine.add_global_mapping(&abort_fn, libc::abort as usize);
+    }
+    if let Some(exit_fn) = cg.get_module().get_function("exit") {
+        engine.add_global_mapping(&exit_fn, libc::exit as usize);
+    }
+
+
 
     unsafe {
         let main_fn = engine
