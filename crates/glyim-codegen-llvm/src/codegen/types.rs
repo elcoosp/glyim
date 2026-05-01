@@ -61,36 +61,7 @@ impl<'ctx> Codegen<'ctx> {
     }
 }
 
-pub(crate) fn register_builtin_enums(cg: &mut Codegen) {
-    let tag_type = cg.i32_type;
-    let payload_type = cg.context.i8_type().array_type(8);
-    let enum_struct_type = cg.context.struct_type(
-        &[
-            BasicTypeEnum::IntType(tag_type),
-            BasicTypeEnum::ArrayType(payload_type),
-        ],
-        false,
-    );
-    let option_name = cg.interner.intern("Option");
-    cg.enum_types
-        .borrow_mut()
-        .insert(option_name, (tag_type, payload_type));
-    cg.enum_struct_types
-        .borrow_mut()
-        .insert(option_name, enum_struct_type);
-    let mut tag_map = cg.enum_variant_tags.borrow_mut();
-    tag_map.insert((option_name, cg.interner.intern("None")), 0);
-    tag_map.insert((option_name, cg.interner.intern("Some")), 1);
-    let result_name = cg.interner.intern("Result");
-    cg.enum_types
-        .borrow_mut()
-        .insert(result_name, (tag_type, payload_type));
-    cg.enum_struct_types
-        .borrow_mut()
-        .insert(result_name, enum_struct_type);
-    tag_map.insert((result_name, cg.interner.intern("Ok")), 0);
-    tag_map.insert((result_name, cg.interner.intern("Err")), 1);
-}
+
 
 pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef) {
     let field_types: Vec<BasicTypeEnum> = def
