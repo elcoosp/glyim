@@ -617,6 +617,10 @@ impl<'a> MonoContext<'a> {
                 sub.insert(*tp, ct.clone());
             }
         }
+        // Register any concrete structs used as type arguments so codegen can find them
+        for ct in concrete {
+            self.ensure_struct_specialized(ct);
+        }
         // CRITICAL: collect type overrides before substitution so codegen gets resolved types
         self.collect_type_overrides_for_expr(&f.body, &sub);
         let mut mono = f.clone();
@@ -629,6 +633,29 @@ impl<'a> MonoContext<'a> {
         }
         mono.body = self.substitute_expr_types(&mono.body, &sub);
         mono
+    }
+
+    /// Ensure a struct type used as a concrete type argument is registered
+    fn ensure_struct_specialized(&mut self, ty: &HirType) {
+        match ty {
+            HirType::Generic(sym, args) => {
+                if self.find_struct(*sym).is_some() {
+                    let concrete: Vec<HirType> = args.clone();
+                    let key = (*sym, concrete.clone());
+                    if !self.struct_specs.contains_key(&key) {
+                        if let Some(s) = self.find_struct(*sym) {
+                            let specialized = self.specialize_struct(&s, &concrete);
+                            self.struct_specs.insert(key, specialized);
+                        }
+                    }
+                }
+                // Recurse into nested generic args
+                for arg in args {
+                    self.ensure_struct_specialized(arg);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn collect_type_overrides_for_expr(&mut self, expr: &HirExpr, sub: &HashMap<Symbol, HirType>) {
