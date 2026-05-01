@@ -149,6 +149,7 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineErr
     if is_no_std {
         codegen = codegen.with_no_std();
     }
+    codegen = codegen.with_jit_mode();
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -230,6 +231,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     if is_no_std {
         codegen = codegen.with_no_std();
     }
+    codegen = codegen.with_jit_mode();
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -362,6 +364,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     if is_no_std {
         codegen = codegen.with_no_std();
     }
+    codegen = codegen.with_jit_mode();
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -444,6 +447,7 @@ pub fn build_with_mode(
     if is_no_std {
         codegen = codegen.with_no_std();
     }
+    codegen = codegen.with_jit_mode();
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -972,6 +976,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let context = Context::create();
     let mut cg = Codegen::new(&context, interner, merged_types);
+    cg = cg.with_jit_mode();
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     let engine = cg
         .get_module()
