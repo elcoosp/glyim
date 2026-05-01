@@ -9,6 +9,7 @@ use glyim_typeck::TypeError;
 use inkwell::context::Context;
 use inkwell::OptimizationLevel;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::{fs, process::Command};
 use tracing::{info, info_span};
 
@@ -76,6 +77,15 @@ impl From<std::io::Error> for PipelineError {
     }
 }
 
+// Custom assert handler for JIT tests
+static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
+
+/// Set a custom handler for glyim_assert_fail in JIT mode.
+/// Call before pipeline::run() to catch assertion failures.
+pub fn set_jit_assert_handler(handler: unsafe extern "C" fn(*const u8, i64)) {
+    *CUSTOM_ASSERT_FN.lock().unwrap() = Some(handler);
+}
+
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
         let trimmed = line.trim();
@@ -93,7 +103,11 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
 }
 
 #[tracing::instrument(name = "build", skip_all)]
-pub fn build(input: &Path, output: Option<&Path>, target: Option<&str>) -> Result<PathBuf, PipelineError> {
+pub fn build(
+    input: &Path,
+    output: Option<&Path>,
+    target: Option<&str>,
+) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
@@ -253,7 +267,11 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
-    runtime_shims::map_runtime_shims_for_jit(&engine, codegen.get_module());
+    runtime_shims::map_runtime_shims_for_jit(
+        &engine,
+        codegen.get_module(),
+        *CUSTOM_ASSERT_FN.lock().unwrap(),
+    );
 
     unsafe {
         let main_fn = engine
@@ -267,7 +285,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let _parse_span = info_span!("phase", name = "parse").entered();
-    let mut parse_out = glyim_parse::parse(&source);
+    let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for _e in &parse_out.errors {}
@@ -316,10 +334,14 @@ pub fn init(name: &str) -> Result<PathBuf, PipelineError> {
 }
 
 #[tracing::instrument(name = "run_with_mode", skip_all)]
-pub fn run_with_mode(input: &Path, mode: BuildMode, target: Option<&str>) -> Result<i32, PipelineError> {
+pub fn run_with_mode(
+    input: &Path,
+    mode: BuildMode,
+    target: Option<&str>,
+) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let _parse_span = info_span!("phase", name = "parse").entered();
-    let mut parse_out = glyim_parse::parse(&source);
+    let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for _e in &parse_out.errors {}
@@ -396,7 +418,11 @@ pub fn run_with_mode(input: &Path, mode: BuildMode, target: Option<&str>) -> Res
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
-    runtime_shims::map_runtime_shims_for_jit(&engine, codegen.get_module());
+    runtime_shims::map_runtime_shims_for_jit(
+        &engine,
+        codegen.get_module(),
+        *CUSTOM_ASSERT_FN.lock().unwrap(),
+    );
 
     unsafe {
         let main_fn = engine
@@ -569,7 +595,11 @@ pub fn build_package(
     build_with_mode(&main_path, output, mode, target)
 }
 
-pub fn run_package(package_dir: &Path, mode: BuildMode, target: Option<&str>) -> Result<i32, PipelineError> {
+pub fn run_package(
+    package_dir: &Path,
+    mode: BuildMode,
+    target: Option<&str>,
+) -> Result<i32, PipelineError> {
     let manifest_path = package_dir.join("glyim.toml");
     let toml_str = fs::read_to_string(&manifest_path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
@@ -616,7 +646,7 @@ pub fn run_tests(
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let _parse_span = info_span!("phase", name = "parse").entered();
-    let mut parse_out = glyim_parse::parse(&source);
+    let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for _e in &parse_out.errors {}
@@ -1011,7 +1041,11 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
-    runtime_shims::map_runtime_shims_for_jit(&engine, cg.get_module());
+    runtime_shims::map_runtime_shims_for_jit(
+        &engine,
+        cg.get_module(),
+        *CUSTOM_ASSERT_FN.lock().unwrap(),
+    );
 
     unsafe {
         let main_fn = engine

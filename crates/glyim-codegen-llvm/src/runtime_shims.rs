@@ -64,10 +64,17 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     }
 }
 
-pub fn map_runtime_shims_for_jit(engine: &inkwell::execution_engine::ExecutionEngine, module: &Module) {
+pub fn map_runtime_shims_for_jit(
+    engine: &inkwell::execution_engine::ExecutionEngine,
+    module: &Module,
+    custom_assert_fn: Option<unsafe extern "C" fn(*const u8, i64)>,
+) {
     unsafe {
         if let Some(f) = module.get_function("glyim_println_int") { engine.add_global_mapping(&f, glyim_println_int_impl  as *const () as usize); }
         if let Some(f) = module.get_function("glyim_println_str") { engine.add_global_mapping(&f, glyim_println_str_impl  as *const () as usize); }
-        if let Some(f) = module.get_function("glyim_assert_fail") { engine.add_global_mapping(&f, glyim_assert_fail_impl  as *const () as usize); }
+        if let Some(f) = module.get_function("glyim_assert_fail") {
+            let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
+            engine.add_global_mapping(&f, ptr as *const () as usize);
+        }
     }
 }
