@@ -1,4 +1,5 @@
 
+use libc;
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
 use glyim_hir::ExprId;
@@ -255,6 +256,14 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .get_module()
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+    // Explicitly map libc symbols for the JIT (required on macOS)
+    {
+        let m = codegen.get_module();
+        if let Some(f) = m.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
+        if let Some(f) = m.get_function("abort")  { engine.add_global_mapping(&f, libc::abort  as usize); }
+        if let Some(f) = m.get_function("write")  { engine.add_global_mapping(&f, libc::write  as usize); }
+    }
+
 
 
 
@@ -1009,6 +1018,22 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+    // Explicitly map libc symbols for the JIT (required on macOS)
+    {
+        let m = cg.get_module();
+        if let Some(f) = m.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
+        if let Some(f) = m.get_function("abort")  { engine.add_global_mapping(&f, libc::abort  as usize); }
+        if let Some(f) = m.get_function("write")  { engine.add_global_mapping(&f, libc::write  as usize); }
+    }
+
+    // Explicitly map libc symbols for the JIT (required on macOS)
+    {
+        let m = cg.get_module();
+        if let Some(f) = m.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
+        if let Some(f) = m.get_function("abort")  { engine.add_global_mapping(&f, libc::abort  as usize); }
+        if let Some(f) = m.get_function("write")  { engine.add_global_mapping(&f, libc::write  as usize); }
+    }
+
 
 
     unsafe {
