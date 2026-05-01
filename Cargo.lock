@@ -939,6 +939,7 @@ dependencies = [
  "inkwell",
  "insta",
  "libc",
+ "llvm-sys",
  "owo-colors",
  "pretty",
  "serde",

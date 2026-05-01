@@ -1,5 +1,4 @@
 
-use libc;
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
 use glyim_hir::ExprId;
@@ -75,6 +74,31 @@ impl From<std::io::Error> for PipelineError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
     }
+}
+
+
+/// Register external libc symbols using LLVMAddSymbol.
+/// This is the ONLY method that works reliably with ORC JIT (LLVM 22).
+/// Must be called BEFORE creating any JIT execution engine.
+/// See: https://stackoverflow.com/questions/32413217
+unsafe fn register_external_symbols() {
+    use llvm_sys::support::LLVMAddSymbol;
+    use std::ffi::CString;
+
+    // Register each libc symbol. LLVMAddSymbol takes (*const c_char, *mut c_void).
+    // The function pointer must be cast to *mut c_void via usize to satisfy the type system.
+    let cname = CString::new("printf").unwrap();
+    LLVMAddSymbol(cname.as_ptr(), libc::printf as *mut std::ffi::c_void);
+    let cname = CString::new("write").unwrap();
+    LLVMAddSymbol(cname.as_ptr(), libc::write as *mut std::ffi::c_void);
+    let cname = CString::new("abort").unwrap();
+    LLVMAddSymbol(cname.as_ptr(), libc::abort as *mut std::ffi::c_void);
+    let cname = CString::new("exit").unwrap();
+    LLVMAddSymbol(cname.as_ptr(), libc::exit as *mut std::ffi::c_void);
+    let cname = CString::new("malloc").unwrap();
+    LLVMAddSymbol(cname.as_ptr(), libc::malloc as *mut std::ffi::c_void);
+    let cname = CString::new("free").unwrap();
+    LLVMAddSymbol(cname.as_ptr(), libc::free as *mut std::ffi::c_void);
 }
 
 fn detect_no_std(source: &str) -> bool {
@@ -242,6 +266,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
+    unsafe { register_external_symbols(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
@@ -249,16 +274,6 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
 
 
 
-    // Register external symbols so the JIT can resolve them at runtime
-    {
-        let module = codegen.get_module();
-        if let Some(f) = module.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
-        if let Some(f) = module.get_function("write")  { engine.add_global_mapping(&f, libc::write as usize); }
-        if let Some(f) = module.get_function("abort")  { engine.add_global_mapping(&f, libc::abort as usize); }
-        if let Some(f) = module.get_function("exit")   { engine.add_global_mapping(&f, libc::exit as usize); }
-        if let Some(f) = module.get_function("malloc") { engine.add_global_mapping(&f, libc::malloc as usize); }
-        if let Some(f) = module.get_function("free")   { engine.add_global_mapping(&f, libc::free as usize); }
-    }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -388,20 +403,11 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
+    unsafe { register_external_symbols(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    // Register external symbols so the JIT can resolve them at runtime
-    {
-        let module = codegen.get_module();
-        if let Some(f) = module.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
-        if let Some(f) = module.get_function("write")  { engine.add_global_mapping(&f, libc::write as usize); }
-        if let Some(f) = module.get_function("abort")  { engine.add_global_mapping(&f, libc::abort as usize); }
-        if let Some(f) = module.get_function("exit")   { engine.add_global_mapping(&f, libc::exit as usize); }
-        if let Some(f) = module.get_function("malloc") { engine.add_global_mapping(&f, libc::malloc as usize); }
-        if let Some(f) = module.get_function("free")   { engine.add_global_mapping(&f, libc::free as usize); }
-    }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -1010,22 +1016,13 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut cg = Codegen::new(&context, interner, merged_types);
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
 
+    unsafe { register_external_symbols(); }
     let engine = cg
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
 
 
-    // Register external symbols so the JIT can resolve them at runtime
-    {
-        let module = cg.get_module();
-        if let Some(f) = module.get_function("printf") { engine.add_global_mapping(&f, libc::printf as usize); }
-        if let Some(f) = module.get_function("write")  { engine.add_global_mapping(&f, libc::write as usize); }
-        if let Some(f) = module.get_function("abort")  { engine.add_global_mapping(&f, libc::abort as usize); }
-        if let Some(f) = module.get_function("exit")   { engine.add_global_mapping(&f, libc::exit as usize); }
-        if let Some(f) = module.get_function("malloc") { engine.add_global_mapping(&f, libc::malloc as usize); }
-        if let Some(f) = module.get_function("free")   { engine.add_global_mapping(&f, libc::free as usize); }
-    }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
