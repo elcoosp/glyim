@@ -23,7 +23,6 @@ fn invalid_target_fails_validation() {
     assert!(cross::validate_target("bogus-triple").is_err());
 }
 
-use std::process::Command;
 use std::fs;
 
 #[test]
