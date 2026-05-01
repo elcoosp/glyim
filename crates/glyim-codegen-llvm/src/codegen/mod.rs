@@ -270,7 +270,7 @@ impl<'ctx> Codegen<'ctx> {
                 "",
                 "",
                 opt_level,
-                RelocMode::PIC,
+                RelocMode::Default,
                 CodeModel::Default,
             )
             .ok_or("target machine")?;
