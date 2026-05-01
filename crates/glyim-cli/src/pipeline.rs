@@ -1,6 +1,8 @@
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
+use glyim_hir::ExprId;
 use glyim_interner::Interner;
+use inkwell::OptimizationLevel;
 use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
@@ -173,17 +175,18 @@ pub enum Result<T, E> {
 pub fn run(input: &Path) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let _parse_span = info_span!("phase", name = "parse").entered();
-    let mut parse_out = glyim_parse::parse(&source);
+    let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
         for _e in &parse_out.errors {}
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
-    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut interner = parse_out.interner;
+    let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
     info!("lowered to HIR");
     let _typeck_span = info_span!("phase", name = "typeck").entered();
-    let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let mut typeck = TypeChecker::new(interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
@@ -193,7 +196,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
-        &mut parse_out.interner,
+        &mut interner,
         &expr_types,
         &call_type_args,
     );
@@ -221,7 +224,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
     info!("starting codegen");
     let mut codegen = Codegen::with_line_tables(
         &context,
-        parse_out.interner,
+        interner,
         merged_types,
         source,
         &input.to_string_lossy(),
@@ -234,17 +237,17 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
-    let tmp_dir = tempfile::tempdir()?;
-    let obj_path = tmp_dir.path().join("output.o");
-    codegen
-        .write_object_file(&obj_path)
-        .map_err(PipelineError::Codegen)?;
-    let exe_path = tmp_dir.path().join("glyim_out");
-    link_object(&obj_path, &exe_path, false)?;
-    let status = Command::new(&exe_path)
-        .status()
-        .map_err(PipelineError::Run)?;
-    Ok(status.code().unwrap_or(1))
+    let engine = codegen
+        .get_module()
+        .create_jit_execution_engine(inkwell::OptimizationLevel::None)
+        .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+
+    unsafe {
+        let main_fn = engine
+            .get_function::<unsafe extern "C" fn() -> i32>("main")
+            .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
+        Ok(main_fn.call())
+    }
 }
 
 #[tracing::instrument(name = "check", skip_all)]
@@ -258,10 +261,11 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
-    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut interner = parse_out.interner;
+    let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
     info!("lowered to HIR");
     let _typeck_span = info_span!("phase", name = "typeck").entered();
-    let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let mut typeck = TypeChecker::new(interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
@@ -309,10 +313,11 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let _lower_span = info_span!("phase", name = "lower").entered();
-    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut interner = parse_out.interner;
+    let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
     info!("lowered to HIR");
     let _typeck_span = info_span!("phase", name = "typeck").entered();
-    let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let mut typeck = TypeChecker::new(interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
@@ -322,7 +327,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
-        &mut parse_out.interner,
+        &mut interner,
         &expr_types,
         &call_type_args,
     );
@@ -351,13 +356,13 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
-            parse_out.interner,
+            interner,
             merged_types,
             source.clone(),
             &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => Codegen::new(&context, parse_out.interner, merged_types),
+        BuildMode::Release => Codegen::new(&context, interner, merged_types),
     };
     if is_no_std {
         codegen = codegen.with_no_std();
@@ -366,17 +371,17 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
-    let tmp_dir = tempfile::tempdir()?;
-    let obj_path = tmp_dir.path().join("output.o");
-    codegen
-        .write_object_file_with_opt(&obj_path, mode.opt_level())
-        .map_err(PipelineError::Codegen)?;
-    let exe_path = tmp_dir.path().join("glyim_out");
-    link_object(&obj_path, &exe_path, mode == BuildMode::Release)?;
-    let status = Command::new(&exe_path)
-        .status()
-        .map_err(PipelineError::Run)?;
-    Ok(status.code().unwrap_or(1))
+    let engine = codegen
+        .get_module()
+        .create_jit_execution_engine(mode.opt_level())
+        .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+
+    unsafe {
+        let main_fn = engine
+            .get_function::<unsafe extern "C" fn() -> i32>("main")
+            .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
+        Ok(main_fn.call())
+    }
 }
 
 pub fn build_with_mode(
@@ -643,10 +648,11 @@ pub fn run_tests(
     }
 
     let _lower_span = info_span!("phase", name = "lower").entered();
-    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
+    let mut interner = parse_out.interner;
+    let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
     info!("lowered to HIR");
     let _typeck_span = info_span!("phase", name = "typeck").entered();
-    let mut typeck = TypeChecker::new(parse_out.interner.clone());
+    let mut typeck = TypeChecker::new(interner.clone());
     info!("typeck registered items");
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
@@ -657,7 +663,7 @@ pub fn run_tests(
     for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
-        &mut parse_out.interner,
+        &mut interner,
         &expr_types,
         &call_type_args,
     );
@@ -684,7 +690,7 @@ pub fn run_tests(
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");
-    let mut codegen = Codegen::new(&context, parse_out.interner, merged_types);
+    let mut codegen = Codegen::new(&context, interner, merged_types);
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -939,9 +945,9 @@ fn main() { 0 }"
     }
 }
 
-#[cfg(feature = "jit")]
+
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
-    let mut parse_out = glyim_parse::parse(source);
+    let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
@@ -954,10 +960,10 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    for (id, args) in &call_type_args {}
+    for (_id, _args) in &call_type_args {}
     let mono_result = glyim_hir::monomorphize::monomorphize(
         &hir,
-        &mut parse_out.interner,
+        &mut interner,
         &expr_types,
         &call_type_args,
     );
