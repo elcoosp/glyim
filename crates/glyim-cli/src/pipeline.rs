@@ -1,4 +1,4 @@
-use libc;
+
 use glyim_codegen_llvm::{compile_to_ir, Codegen};
 use glyim_hir::types::HirType;
 use glyim_hir::ExprId;
@@ -87,16 +87,25 @@ fn detect_no_std(source: &str) -> bool {
 }
 
 
-/// Register ALL process symbols with the ORC JIT so external functions
-/// like printf, write, abort are available at runtime.
-/// Must be called BEFORE JIT engine creation.
-unsafe fn register_jit_symbols() {
-    // Load the current process as a dynamic library.
-    // This makes all symbols (libc, etc.) available to the ORC JIT.
-    // NULL pointer means "load the main program".
-    use llvm_sys::support::LLVMLoadLibraryPermanently;
-    use std::ptr;
-    LLVMLoadLibraryPermanently(ptr::null());
+/// Register external libc symbols with the JIT engine.
+/// Uses LLVM's own symbol lookup which handles platform-specific
+/// symbol mangling (e.g., underscore prefix on macOS).
+/// Must be called AFTER JIT engine creation but BEFORE any function calls.
+unsafe fn register_jit_symbols(module: &inkwell::module::Module, engine: &inkwell::execution_engine::ExecutionEngine) {
+    use llvm_sys::support::LLVMSearchForAddressOfSymbol;
+    use std::ffi::CString;
+
+    let symbols = ["printf", "write", "abort", "exit"];
+
+    for sym_name in &symbols {
+        let cname = CString::new(*sym_name).unwrap();
+        let addr = LLVMSearchForAddressOfSymbol(cname.as_ptr());
+        if !addr.is_null() {
+            if let Some(func) = module.get_function(sym_name) {
+                engine.add_global_mapping(&func, addr as usize);
+            }
+        }
+    }
 }
 
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
@@ -251,7 +260,6 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
-    unsafe { register_jit_symbols(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
@@ -388,12 +396,11 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
-    unsafe { register_jit_symbols(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-
+    unsafe { register_jit_symbols(codegen.get_module(), &engine); }
     unsafe {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
@@ -1002,7 +1009,6 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut cg = Codegen::new(&context, interner, merged_types);
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
 
-    unsafe { register_jit_symbols(); }
     let engine = cg
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
