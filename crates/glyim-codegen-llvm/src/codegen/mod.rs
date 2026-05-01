@@ -45,6 +45,7 @@ pub struct Codegen<'ctx> {
     current_subprogram: Option<DISubprogram<'ctx>>,
     pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
     pub(crate) no_std: bool,
+    pub(crate) extern_shims: bool,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -75,6 +76,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: None,
             current_subprogram: None,
             no_std: false,
+            extern_shims: false,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         }
     }
@@ -116,6 +118,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: Some(source_str),
             current_subprogram: None,
             no_std: false,
+            extern_shims: false,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
@@ -158,6 +161,7 @@ impl<'ctx> Codegen<'ctx> {
             source_str: Some(source_str),
             current_subprogram: None,
             no_std: false,
+            extern_shims: false,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
@@ -175,7 +179,7 @@ impl<'ctx> Codegen<'ctx> {
 
     #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
-        crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
+        crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.extern_shims);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
 
         // Pass 1 — register all types and extern declarations
@@ -338,7 +342,7 @@ impl<'ctx> Codegen<'ctx> {
         test_names: &[String],
         should_panic: &std::collections::HashSet<String>,
     ) -> Result<(), String> {
-        crate::runtime_shims::emit_runtime_shims(self.context, &self.module);
+        crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.extern_shims);
         crate::alloc::emit_alloc_shims(&self.module, self.no_std);
 
         // Pass 1 — register all types and extern declarations
@@ -505,6 +509,11 @@ impl<'ctx> Codegen<'ctx> {
         self
     }
 
+    pub fn with_extern_shims(mut self) -> Self {
+        self.extern_shims = true;
+        self
+    }
+
     fn emit_macro_debug_section(&self) {
         let names = self.macro_fn_names.borrow();
         if names.is_empty() {
@@ -534,3 +543,4 @@ impl<'ctx> Codegen<'ctx> {
         global.set_section(Some(".glyim.macro"));
     }
 }
+

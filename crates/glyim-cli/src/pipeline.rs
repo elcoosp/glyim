@@ -79,6 +79,17 @@ impl From<std::io::Error> for PipelineError {
 
 
 
+
+/// Make all process symbols available to the ORC JIT engine.
+/// Must be called before creating any JIT execution engine.
+/// This enables the JIT to find our native Rust runtime shims
+/// (glyim_println_int, etc.) defined with #[no_mangle].
+unsafe fn load_process_symbols_for_jit() {
+    use llvm_sys::support::LLVMLoadLibraryPermanently;
+    use std::ptr;
+    LLVMLoadLibraryPermanently(ptr::null());
+}
+
 fn detect_no_std(source: &str) -> bool {
     for line in source.lines() {
         let trimmed = line.trim();
@@ -244,6 +255,7 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
+    unsafe { load_process_symbols_for_jit(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
@@ -380,6 +392,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
+    unsafe { load_process_symbols_for_jit(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
@@ -991,6 +1004,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let context = Context::create();
     let mut cg = Codegen::new(&context, interner, merged_types);
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    unsafe { load_process_symbols_for_jit(); }
     let engine = cg
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)

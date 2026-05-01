@@ -1,6 +1,6 @@
-//! Native runtime shims for the JIT.
-//! These #[no_mangle] extern "C" functions are linked into the test binary
-//! and automatically available to the JIT engine without any symbol mapping.
+//! Native Rust implementations of runtime shims for the JIT.
+//! These #[no_mangle] functions are linked into the test binary and
+//! will be found by the ORC JIT after LLVMLoadLibraryPermanently(nullptr).
 
 use std::io::Write;
 
