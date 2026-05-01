@@ -21,6 +21,7 @@ pub struct StructDef {
     pub type_params: Vec<Symbol>,
     pub fields: Vec<StructField>,
     pub span: Span,
+    pub is_pub: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +46,7 @@ pub struct EnumDef {
     pub type_params: Vec<Symbol>,
     pub variants: Vec<HirVariant>,
     pub span: Span,
+    pub is_pub: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,8 +54,8 @@ pub struct HirImplDef {
     pub target_name: Symbol,
     pub type_params: Vec<Symbol>,
     pub methods: Vec<HirFn>,
-    pub is_pub: bool,
     pub span: Span,
+    pub is_pub: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

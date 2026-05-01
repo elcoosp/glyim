@@ -282,6 +282,7 @@ pub struct HirFn {
     pub ret: Option<HirType>,
     pub body: HirExpr,
     pub span: Span,
+    pub is_pub: bool,
     pub is_macro_generated: bool,
 }
 

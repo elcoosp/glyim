@@ -26,6 +26,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 ret: None,
                 body: lower_expr(value, ctx),
                 span: glyim_diag::Span::new(start, value.span.end),
+                is_pub: false,
                 is_macro_generated: false,
             }))
         }
@@ -62,6 +63,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                 body: lower_expr(body, ctx),
                 span: glyim_diag::Span::new(start, body.span.end),
+                is_pub: false,
                 is_macro_generated: false,
             }))
         }
@@ -90,7 +92,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 name: *name,
                 type_params: type_params.clone(),
                 fields: hir_fields,
-                span: glyim_diag::Span::new(name_span.start, end),
+                is_pub: false,
+            span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
         Item::EnumDef {
@@ -123,7 +126,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 name: *name,
                 type_params: type_params.clone(),
                 variants: hir_variants,
-                span: glyim_diag::Span::new(name_span.start, end),
+                is_pub: false,
+            span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
         Item::ImplBlock {
@@ -172,7 +176,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                             body: lower_expr(body, ctx),
                             span: glyim_diag::Span::new(span.start, body.span.end),
-                            is_macro_generated: false,
+                is_pub: false,
+                is_macro_generated: false,
                         })
                     } else {
                         None
@@ -200,6 +205,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             ret: None,
             body: lower_expr(body, ctx),
             span: glyim_diag::Span::new(name_span.start, body.span.end),
+            is_pub: false,
             is_macro_generated: true,
         })),
         Item::ExternBlock {

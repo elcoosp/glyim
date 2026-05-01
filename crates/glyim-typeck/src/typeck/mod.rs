@@ -28,6 +28,7 @@ pub struct TypeChecker {
     pub call_type_args: HashMap<ExprId, Vec<HirType>>,
     pub return_type: Option<HirType>,
     pub errors: Vec<TypeError>,
+    pub(crate) visibility: HashMap<Symbol, bool>,  // true = pub, false = private
     fns: Vec<HirFn>,
 }
 
@@ -44,6 +45,7 @@ impl TypeChecker {
             call_type_args: HashMap::new(),
             return_type: None,
             errors: Vec::new(),
+            visibility: HashMap::new(),
             fns: Vec::new(),
         }
     }
@@ -60,6 +62,10 @@ impl TypeChecker {
 
     fn dummy_symbol(&self) -> Symbol {
         glyim_interner::Interner::new().intern("__dummy")
+    }
+
+    pub(crate) fn register_visibility(&mut self, name: Symbol, is_pub: bool) {
+        self.visibility.insert(name, is_pub);
     }
 
     #[tracing::instrument(skip_all)]
@@ -99,3 +105,4 @@ impl Default for TypeChecker {
 
 #[cfg(test)]
 mod tests;
+

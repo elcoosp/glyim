@@ -9,12 +9,13 @@ impl TypeChecker {
     pub(crate) fn register_items(&mut self, hir: &glyim_hir::node::Hir) {
         for item in &hir.items {
             match item {
-                glyim_hir::item::HirItem::Struct(s) => self.register_struct(s),
-                glyim_hir::item::HirItem::Enum(e) => self.register_enum(e),
+                glyim_hir::item::HirItem::Struct(s) => { self.register_struct(s); self.register_visibility(s.name, s.is_pub); }
+                glyim_hir::item::HirItem::Enum(e) => { self.register_enum(e); self.register_visibility(e.name, e.is_pub); }
                 glyim_hir::item::HirItem::Extern(ext) => self.register_extern(ext),
-                glyim_hir::item::HirItem::Impl(imp) => self.register_impl(imp),
+                glyim_hir::item::HirItem::Impl(imp) => { self.register_impl(imp); self.register_visibility(imp.target_name, imp.is_pub); }
                 glyim_hir::item::HirItem::Fn(f) => {
                     self.fns.push(f.clone());
+                    self.register_visibility(f.name, f.is_pub);
                 }
             }
         }
