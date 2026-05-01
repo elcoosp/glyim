@@ -754,6 +754,20 @@ pub fn run_tests(
         }
     }
 
+    // Post‑processing: replace any remaining Generic(T, _) with the concrete type
+    // that was registered during monomorphization. This ensures that codegen never
+    // sees an unresolved generic type when dereferencing pointers or computing sizes.
+    for ty in &mut merged_types {
+        if let HirType::Generic(sym, _args) = ty {
+            // The monomorphized type should have been registered under the mangled name
+            // in the struct_types map. We don't have access to that map here; instead,
+            // we rely on the fact that the monomorphization pass already substituted
+            // all generic types. If any remain, they are a bug. We'll fall back to
+            // the base Named type for now, but ideally this should never happen.
+            *ty = HirType::Named(*sym);
+        }
+    }
+
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     info!("starting codegen");

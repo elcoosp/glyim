@@ -223,6 +223,12 @@ pub(crate) fn codegen_expr<'ctx>(
                 .get(id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
+            // Debug assertion: monomorphization should have resolved all generics.
+            // If this fires, the pipeline didn't fully replace a generic type.
+            debug_assert!(
+                !matches!(pointed_ty, HirType::Generic(_, _)),
+                "Deref sees unresolved generic type"
+            );
             let load_type = cg
                 .hir_type_to_llvm(&pointed_ty)
                 .unwrap_or(cg.i64_type.into());
