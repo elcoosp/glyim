@@ -86,6 +86,25 @@ fn detect_no_std(source: &str) -> bool {
     false
 }
 
+
+/// Register external symbols (printf, write, abort) with the DynamicLibrary
+/// so the ORC JIT can resolve them. Must be called BEFORE JIT engine creation.
+unsafe fn register_jit_symbols() {
+    use std::ffi::CString;
+    use llvm_sys::support::LLVMAddSymbol;
+
+    let symbols: &[(&str, *mut std::ffi::c_void)] = &[
+        ("printf", libc::printf as *mut std::ffi::c_void),
+        ("write", libc::write as *mut std::ffi::c_void),
+        ("abort", libc::abort as *mut std::ffi::c_void),
+    ];
+
+    for (name, ptr) in symbols {
+        let cname = CString::new(*name).unwrap();
+        LLVMAddSymbol(cname.as_ptr(), *ptr);
+    }
+}
+
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let is_no_std = detect_no_std(&source);
@@ -238,38 +257,11 @@ pub fn run(input: &Path) -> Result<i32, PipelineError> {
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
+    unsafe { register_jit_symbols(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(inkwell::OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    // Map external libc symbols so the JIT can find printf, write, abort
-    if let Some(printf_fn) = codegen.get_module().get_function("printf") {
-        engine.add_global_mapping(&printf_fn, libc::printf as usize);
-    }
-    if let Some(write_fn) = codegen.get_module().get_function("write") {
-        engine.add_global_mapping(&write_fn, libc::write as usize);
-    }
-    if let Some(abort_fn) = codegen.get_module().get_function("abort") {
-        engine.add_global_mapping(&abort_fn, libc::abort as usize);
-    }
-    if let Some(exit_fn) = codegen.get_module().get_function("exit") {
-        engine.add_global_mapping(&exit_fn, libc::exit as usize);
-    }
-
-
-    // Map external libc symbols so the JIT can find printf, write, abort
-    if let Some(printf_fn) = codegen.get_module().get_function("printf") {
-        engine.add_global_mapping(&printf_fn, libc::printf as usize);
-    }
-    if let Some(write_fn) = codegen.get_module().get_function("write") {
-        engine.add_global_mapping(&write_fn, libc::write as usize);
-    }
-    if let Some(abort_fn) = codegen.get_module().get_function("abort") {
-        engine.add_global_mapping(&abort_fn, libc::abort as usize);
-    }
-    if let Some(exit_fn) = codegen.get_module().get_function("exit") {
-        engine.add_global_mapping(&exit_fn, libc::exit as usize);
-    }
 
 
 
@@ -402,6 +394,7 @@ pub fn run_with_mode(input: &Path, mode: BuildMode) -> Result<i32, PipelineError
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
     info!("codegen complete");
+    unsafe { register_jit_symbols(); }
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
@@ -1015,24 +1008,11 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut cg = Codegen::new(&context, interner, merged_types);
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
 
+    unsafe { register_jit_symbols(); }
     let engine = cg
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    // Map external libc symbols so the JIT can find printf, write, abort
-    if let Some(printf_fn) = cg.get_module().get_function("printf") {
-        engine.add_global_mapping(&printf_fn, libc::printf as usize);
-    }
-    if let Some(write_fn) = cg.get_module().get_function("write") {
-        engine.add_global_mapping(&write_fn, libc::write as usize);
-    }
-    if let Some(abort_fn) = cg.get_module().get_function("abort") {
-        engine.add_global_mapping(&abort_fn, libc::abort as usize);
-    }
-    if let Some(exit_fn) = cg.get_module().get_function("exit") {
-        engine.add_global_mapping(&exit_fn, libc::exit as usize);
-    }
-
 
 
     unsafe {
