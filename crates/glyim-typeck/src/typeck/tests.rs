@@ -464,7 +464,8 @@ fn match_on_non_enum_no_exhaustive_error() {
 
 #[test]
 fn match_option_some_none_exhaustive() {
-    let tc = typecheck("main = () => { let m = Some(42); match m { Some(v) => v, None => 0 } }");
+    let src = "enum Option<T> { Some(T), None }\nmain = () => { let m = Option::Some(42); match m { Option::Some(v) => v, Option::None => 0 } }";
+    let tc = typecheck(src);
     let exhaustive_errors: Vec<_> = tc
         .errors
         .iter()
@@ -478,7 +479,8 @@ fn match_option_some_none_exhaustive() {
 
 #[test]
 fn match_option_non_exhaustive_pushes_error() {
-    let tc = typecheck("main = () => { let m = Some(42); match m { Some(v) => v } }");
+    let src = "enum Option<T> { Some(T), None }\nmain = () => { let m = Option::Some(42); match m { Option::Some(v) => v } }";
+    let tc = typecheck(src);
     let exhaustive_errors: Vec<_> = tc
         .errors
         .iter()
