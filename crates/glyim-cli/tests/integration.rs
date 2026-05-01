@@ -681,3 +681,23 @@ main = () => {
     let result = pipeline::run(&input, None);
     eprintln!("e2e_vec_get_debug raw result: {:?}", result);
 }
+
+// String tests: blocked by codegen hang with Vec<u8> monomorphization.
+// The inline test (minimal Vec<T> + String) passes, but the full vec.g
+// causes an infinite loop during codegen for the u8 instantiation.
+// See: https://github.com/elcoosp/glyim/issues/XXX
+#[test]
+#[ignore = "codegen hang with full Vec<u8> instantiation"]
+fn e2e_string_new_len() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let string_src = include_str!("../../../stdlib/src/string.g");
+    let main_code = r#"
+main = () => {
+    let s = String::new();
+    s.len()
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, string_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 0);
+}
