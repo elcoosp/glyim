@@ -130,27 +130,24 @@ pub fn map_runtime_shims_for_jit(
     custom_assert_fn: Option<unsafe extern "C" fn(*const u8, i64)>,
     custom_abort_fn: Option<unsafe extern "C" fn()>,
 ) {
-    unsafe {
-        if let Some(f) = module.get_function("glyim_println_int") {
-            engine.add_global_mapping(&f, glyim_println_int_impl as *const () as usize);
-        }
-        if let Some(f) = module.get_function("glyim_println_str") {
-            engine.add_global_mapping(&f, glyim_println_str_impl as *const () as usize);
-        }
-        if let Some(f) = module.get_function("glyim_assert_fail") {
-            let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
-            engine.add_global_mapping(&f, ptr as *const () as usize);
-        }
-        if let Some(f) = module.get_function("abort") {
-            // CUSTOM_ABORT_FN is now directly `fn()`, no transmute needed
-            let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(abort_handler_default);
-            engine.add_global_mapping(&f, ptr as *const () as usize);
-        }
+    if let Some(f) = module.get_function("glyim_println_int") {
+        unsafe { engine.add_global_mapping(&f, glyim_println_int_impl as *const () as usize); }
+    }
+    if let Some(f) = module.get_function("glyim_println_str") {
+        unsafe { engine.add_global_mapping(&f, glyim_println_str_impl as *const () as usize); }
+    }
+    if let Some(f) = module.get_function("glyim_assert_fail") {
+        let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
+        unsafe { engine.add_global_mapping(&f, ptr as *const () as usize); }
+    }
+    if let Some(f) = module.get_function("abort") {
+        let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(abort_handler_default);
+        unsafe { engine.add_global_mapping(&f, ptr as *const () as usize); }
+    }
 
-        // Default abort handler (for non-custom paths) that actually aborts
-        #[unsafe(no_mangle)]
-        unsafe extern "C" fn abort_handler_default() {
-            std::process::abort();
-        }
+    // Default abort handler (for non-custom paths) that actually aborts
+    #[unsafe(no_mangle)]
+    unsafe extern "C" fn abort_handler_default() {
+        std::process::abort();
     }
 }

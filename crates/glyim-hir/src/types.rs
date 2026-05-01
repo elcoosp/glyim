@@ -106,11 +106,7 @@ pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType 
             let has_params = new_args
                 .iter()
                 .any(|a| matches!(a, HirType::Named(s) if sub.contains_key(s)));
-            if !has_params && !new_args.is_empty() {
-                HirType::Generic(*sym, new_args)
-            } else {
-                HirType::Generic(*sym, new_args)
-            }
+            HirType::Generic(*sym, new_args)
         }
         HirType::Tuple(elems) => {
             HirType::Tuple(elems.iter().map(|e| substitute_type(e, sub)).collect())

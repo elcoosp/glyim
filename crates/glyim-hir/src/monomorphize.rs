@@ -1106,7 +1106,6 @@ impl<'a> MonoContext<'a> {
                         None
                     }
                 }
-                _ => None,
             }
         }).collect();
 
@@ -1125,7 +1124,6 @@ impl<'a> MonoContext<'a> {
                         items.push(HirItem::Fn(rewritten));
                     }
                 }
-                _ => {}
             }
         }
 
