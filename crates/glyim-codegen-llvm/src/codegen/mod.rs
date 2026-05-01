@@ -298,13 +298,19 @@ impl<'ctx> Codegen<'ctx> {
     ) -> Result<(), String> {
         use inkwell::targets::{
             CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
+            TargetTriple,
         };
         Target::initialize_native(&InitializationConfig::default()).map_err(|e| e.to_string())?;
-        let triple = TargetMachine::get_default_triple();
-        let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
+        let triple_obj = if let Some(ref t) = self.target_triple {
+            TargetTriple::create(t)
+        } else {
+            TargetMachine::get_default_triple()
+        };
+        let target = Target::from_triple(&triple_obj)
+            .map_err(|e| format!("unsupported target triple '{}': {}", triple_obj, e))?;
         let machine = target
             .create_target_machine(
-                &triple,
+                &triple_obj,
                 "",
                 "",
                 opt_level,
