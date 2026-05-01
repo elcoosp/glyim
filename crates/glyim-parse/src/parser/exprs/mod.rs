@@ -146,21 +146,10 @@ impl Parser<'_> {
                         })
                         .ok()?;
                 let end = self.tokens.peek().map_or(left.span.end, |t| t.start);
-                // Convert TypeExpr to Symbol for the AST
-                let target_sym = match &target_type {
-                    crate::ast::TypeExpr::Int => self.interner.intern("i64"),
-                    crate::ast::TypeExpr::Float => self.interner.intern("f64"),
-                    crate::ast::TypeExpr::Bool => self.interner.intern("bool"),
-                    crate::ast::TypeExpr::Str => self.interner.intern("Str"),
-                    crate::ast::TypeExpr::Unit => self.interner.intern("()"),
-                    crate::ast::TypeExpr::Named(s) => *s,
-                    crate::ast::TypeExpr::RawPtr { .. } => self.interner.intern("ptr"),
-                    _ => self.interner.intern("unknown"),
-                };
                 left = ExprNode {
                     kind: ExprKind::As {
                         expr: Box::new(left.clone()),
-                        target_type: target_sym,
+                        target_type,
                     },
                     span: Span::new(left.span.start, end),
                 };

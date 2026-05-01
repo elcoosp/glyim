@@ -37,6 +37,7 @@ pub enum HirStmt {
         pattern: HirPattern,
         mutable: bool,
         value: HirExpr,
+        ty: Option<crate::types::HirType>,
         span: Span,
     },
     AssignDeref {

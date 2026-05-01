@@ -113,7 +113,10 @@ fn parse_fn_def_with_attrs(
     // Optional visibility modifier
     parser.tokens.eat(SyntaxKind::KwPub);
     // Mandatory 'fn' keyword
-    parser.tokens.expect(SyntaxKind::KwFn, &mut parser.errors).ok()?;
+    parser
+        .tokens
+        .expect(SyntaxKind::KwFn, &mut parser.errors)
+        .ok()?;
     let name_tok = parser
         .tokens
         .expect(SyntaxKind::Ident, &mut parser.errors)

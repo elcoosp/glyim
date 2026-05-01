@@ -203,7 +203,8 @@ pub(crate) fn codegen_field_access<'ctx>(
         } else {
             return Some(cg.i64_type.const_int(0, false));
         };
-        let field_val_raw = cg.builder
+        let field_val_raw = cg
+            .builder
             .build_load(cg.i64_type, field_ptr, "field_val")
             .ok()?;
         let field_val_int = field_val_raw.into_int_value();

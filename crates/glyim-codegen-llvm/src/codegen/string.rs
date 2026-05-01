@@ -168,12 +168,9 @@ pub(crate) fn codegen_call<'ctx>(
     }
 
     if let Some(fn_val) = cg.module.get_function(fn_name) {
-        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = fn_val
-            .get_type()
-            .get_param_types()
-            .into_iter()
-            .collect();
-    let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
+        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+            fn_val.get_type().get_param_types().into_iter().collect();
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
             .filter_map(|a| codegen_expr(cg, a, fctx))
             .enumerate()
@@ -198,9 +195,10 @@ pub(crate) fn codegen_call<'ctx>(
         match result.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(basic_val) => match basic_val {
                 inkwell::values::BasicValueEnum::IntValue(iv) => Some(iv),
-                inkwell::values::BasicValueEnum::PointerValue(pv) => {
-                    cg.builder.build_ptr_to_int(pv, cg.i64_type, "ptrtoint").ok()
-                }
+                inkwell::values::BasicValueEnum::PointerValue(pv) => cg
+                    .builder
+                    .build_ptr_to_int(pv, cg.i64_type, "ptrtoint")
+                    .ok(),
                 _ => Some(cg.i64_type.const_int(0, false)),
             },
             _ => Some(cg.i64_type.const_int(0, false)),

@@ -9,7 +9,11 @@ fn host_target_is_valid() {
 #[test]
 fn all_supported_targets_are_valid() {
     for target in cross::SUPPORTED_TARGETS {
-        assert!(cross::validate_target(target).is_ok(), "target {} should be valid", target);
+        assert!(
+            cross::validate_target(target).is_ok(),
+            "target {} should be valid",
+            target
+        );
     }
 }
 

@@ -251,6 +251,7 @@ fn ast_stmt_to_cst(builder: &mut CstBuilder, stmt: &StmtNode) {
             pattern: _,
             mutable: _,
             value,
+            ty: _,
         } => {
             builder.start_node(SyntaxKind::LetStmt);
             builder.token(SyntaxKind::KwLet, "let");

@@ -28,7 +28,8 @@ pub struct TypeChecker {
     pub call_type_args: HashMap<ExprId, Vec<HirType>>,
     pub return_type: Option<HirType>,
     pub errors: Vec<TypeError>,
-    pub(crate) visibility: HashMap<Symbol, bool>,  // true = pub, false = private
+    pub(crate) visibility: HashMap<Symbol, bool>, // true = pub, false = private
+    pub(crate) current_fn_type_params: Vec<Symbol>,
     fns: Vec<HirFn>,
 }
 
@@ -46,11 +47,10 @@ impl TypeChecker {
             return_type: None,
             errors: Vec::new(),
             visibility: HashMap::new(),
+            current_fn_type_params: Vec::new(),
             fns: Vec::new(),
         }
     }
-
-
 
     fn set_type(&mut self, id: ExprId, ty: HirType) {
         let idx = id.as_usize();
@@ -105,4 +105,3 @@ impl Default for TypeChecker {
 
 #[cfg(test)]
 mod tests;
-

@@ -47,7 +47,6 @@ pub struct Codegen<'ctx> {
     pub(crate) no_std: bool,
     pub(crate) jit_mode: bool,
     pub(crate) target_triple: Option<String>,
-    
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -80,7 +79,7 @@ impl<'ctx> Codegen<'ctx> {
             no_std: false,
             jit_mode: false,
             target_triple: None,
-                        macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         }
     }
 
@@ -120,7 +119,7 @@ impl<'ctx> Codegen<'ctx> {
             no_std: false,
             jit_mode: false,
             target_triple: None,
-                        macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -135,7 +134,8 @@ impl<'ctx> Codegen<'ctx> {
         let builder = context.create_builder();
         let option_sym = interner.intern("Option");
         let result_sym = interner.intern("Result");
-        let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
+        let debug_info =
+            DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
         Ok(Self {
             context,
             module,
@@ -160,7 +160,7 @@ impl<'ctx> Codegen<'ctx> {
             no_std: false,
             jit_mode: false,
             target_triple: None,
-                        macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
         })
     }
 
@@ -519,8 +519,6 @@ impl<'ctx> Codegen<'ctx> {
         self
     }
 
-
-
     fn emit_macro_debug_section(&self) {
         let names = self.macro_fn_names.borrow();
         if names.is_empty() {
@@ -550,4 +548,3 @@ impl<'ctx> Codegen<'ctx> {
         global.set_section(Some(".glyim.macro"));
     }
 }
-

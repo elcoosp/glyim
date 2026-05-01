@@ -4,7 +4,7 @@ mod float_ops;
 
 use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
-use glyim_hir::{HirExpr, HirBinOp, HirType, HirUnOp};
+use glyim_hir::{HirBinOp, HirExpr, HirType, HirUnOp};
 use inkwell::types::BasicType;
 use inkwell::values::IntValue;
 
@@ -23,7 +23,9 @@ pub(crate) fn codegen_expr<'ctx>(
                 .ok()
                 .map(|v| v.into_int_value())
         }
-        HirExpr::Binary { id, op, lhs, rhs, .. } => {
+        HirExpr::Binary {
+            id, op, lhs, rhs, ..
+        } => {
             let lhs_id = lhs.get_id();
             let is_float = cg
                 .expr_types
@@ -36,11 +38,24 @@ pub(crate) fn codegen_expr<'ctx>(
                 let ptr_ty = cg.context.ptr_type(inkwell::AddressSpace::from(0u16));
                 let l_ptr = cg.builder.build_int_to_ptr(l_i64, ptr_ty, "fl_ptr").ok()?;
                 let r_ptr = cg.builder.build_int_to_ptr(r_i64, ptr_ty, "fr_ptr").ok()?;
-                let l_f = cg.builder.build_load(cg.f64_type, l_ptr, "fl_val").ok()?.into_float_value();
-                let r_f = cg.builder.build_load(cg.f64_type, r_ptr, "fr_val").ok()?.into_float_value();
+                let l_f = cg
+                    .builder
+                    .build_load(cg.f64_type, l_ptr, "fl_val")
+                    .ok()?
+                    .into_float_value();
+                let r_f = cg
+                    .builder
+                    .build_load(cg.f64_type, r_ptr, "fr_val")
+                    .ok()?
+                    .into_float_value();
                 let is_cmp = matches!(
                     op,
-                    HirBinOp::Eq | HirBinOp::Neq | HirBinOp::Lt | HirBinOp::Gt | HirBinOp::Lte | HirBinOp::Gte
+                    HirBinOp::Eq
+                        | HirBinOp::Neq
+                        | HirBinOp::Lt
+                        | HirBinOp::Gt
+                        | HirBinOp::Lte
+                        | HirBinOp::Gte
                 );
                 if is_cmp {
                     super::ops::codegen_float_cmp(cg, op, l_f, r_f)
@@ -48,7 +63,9 @@ pub(crate) fn codegen_expr<'ctx>(
                     let result_f = super::ops::codegen_float_binop(cg, op, l_f, r_f)?;
                     let alloca = cg.builder.build_alloca(cg.f64_type, "fres_tmp").ok()?;
                     cg.builder.build_store(alloca, result_f).ok()?;
-                    cg.builder.build_ptr_to_int(alloca, cg.i64_type, "fres_i64").ok()
+                    cg.builder
+                        .build_ptr_to_int(alloca, cg.i64_type, "fres_i64")
+                        .ok()
                 }
             } else {
                 let l = codegen_expr(cg, lhs, fctx)?;
@@ -278,7 +295,9 @@ pub(crate) fn codegen_expr<'ctx>(
             let maybe_fn = cg.module.get_function(&mangled_name);
             if let Some(fn_val) = maybe_fn {
                 let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
-                call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(receiver_val));
+                call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
+                    receiver_val,
+                ));
                 for a in args {
                     if let Some(v) = codegen_expr(cg, a, fctx) {
                         call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));

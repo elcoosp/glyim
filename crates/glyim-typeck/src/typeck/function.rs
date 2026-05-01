@@ -2,10 +2,11 @@ use crate::typeck::error::TypeError;
 use crate::TypeChecker;
 use glyim_hir::node::HirFn;
 use glyim_hir::types::HirType;
-
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_fn(&mut self, f: &HirFn) {
+        self.current_fn_type_params = f.type_params.clone();
+        let fn_name = self.interner.resolve(f.name).to_string();
         self.with_scope(|tc| {
             for (i, (sym, ty)) in f.params.iter().enumerate() {
                 let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
@@ -21,6 +22,10 @@ impl TypeChecker {
                             _ => false,
                         };
                     if !is_match {
+                        eprintln!(
+                            "[typeck] check_fn {}: expected {:?}, found {:?}",
+                            fn_name, expected, actual
+                        );
                         tc.errors.push(TypeError::InvalidReturnType {
                             expected: expected.clone(),
                             found: actual.clone(),

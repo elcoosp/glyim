@@ -86,8 +86,6 @@ impl<'ctx> Codegen<'ctx> {
     }
 }
 
-
-
 pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef) {
     let field_types: Vec<BasicTypeEnum> = def
         .fields

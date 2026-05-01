@@ -1,6 +1,7 @@
 use crate::ast::{StmtKind, StmtNode};
 use crate::parser::patterns::parse_pattern;
 use crate::parser::Parser;
+use crate::parser::types::parse_type_expr;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
@@ -15,9 +16,12 @@ impl Parser<'_> {
             false
         };
         let pattern = parse_pattern(&mut self.tokens, &mut self.interner, &mut self.errors)?;
-        if self.tokens.eat(SyntaxKind::Colon).is_some() {
-            crate::parser::types::parse_type_expr(&mut self.tokens, &mut self.interner);
-        }
+        // Capture optional type annotation (the original parser already consumed it but discarded)
+        let ty = if self.tokens.eat(SyntaxKind::Colon).is_some() {
+            parse_type_expr(&mut self.tokens, &mut self.interner)
+        } else {
+            None
+        };
         self.tokens.expect(SyntaxKind::Eq, &mut self.errors).ok()?;
         let value = self.parse_expr(0)?;
         let value_span = value.span;
@@ -26,6 +30,7 @@ impl Parser<'_> {
                 pattern,
                 mutable,
                 value,
+                ty,
             },
             span: Span::new(start, value_span.end),
         })

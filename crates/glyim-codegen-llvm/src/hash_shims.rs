@@ -42,28 +42,47 @@ pub fn emit_hash_shims<'ctx>(context: &'ctx Context, module: &Module<'ctx>, no_s
 
     // i = 0
     let i_ptr = builder.build_alloca(i64_type, "i").unwrap();
-    builder.build_store(i_ptr, i64_type.const_int(0, false)).unwrap();
+    builder
+        .build_store(i_ptr, i64_type.const_int(0, false))
+        .unwrap();
 
     builder.build_unconditional_branch(loop_cond_bb).unwrap();
 
     // ── loop.cond ─────────────────────────────────────────────
     builder.position_at_end(loop_cond_bb);
-    let i_val = builder.build_load(i64_type, i_ptr, "i.ld").unwrap().into_int_value();
-    let cond = builder.build_int_compare(IntPredicate::SLT, i_val, len, "cmp").unwrap();
-    builder.build_conditional_branch(cond, loop_body_bb, exit_bb).unwrap();
+    let i_val = builder
+        .build_load(i64_type, i_ptr, "i.ld")
+        .unwrap()
+        .into_int_value();
+    let cond = builder
+        .build_int_compare(IntPredicate::SLT, i_val, len, "cmp")
+        .unwrap();
+    builder
+        .build_conditional_branch(cond, loop_body_bb, exit_bb)
+        .unwrap();
 
     // ── loop.body ─────────────────────────────────────────────
     builder.position_at_end(loop_body_bb);
 
     // byte = data[i]
     let byte_ptr = unsafe {
-        builder.build_gep(ptr_type, data, &[i_val], "byte_ptr").unwrap()
+        builder
+            .build_gep(ptr_type, data, &[i_val], "byte_ptr")
+            .unwrap()
     };
-    let byte_val = builder.build_load(context.i8_type(), byte_ptr, "byte").unwrap().into_int_value();
+    let byte_val = builder
+        .build_load(context.i8_type(), byte_ptr, "byte")
+        .unwrap()
+        .into_int_value();
 
     // hash ^= byte (zero-extended to i64)
-    let byte_i64 = builder.build_int_z_extend(byte_val, i64_type, "byte64").unwrap();
-    let cur_hash = builder.build_load(i64_type, hash_ptr, "cur").unwrap().into_int_value();
+    let byte_i64 = builder
+        .build_int_z_extend(byte_val, i64_type, "byte64")
+        .unwrap();
+    let cur_hash = builder
+        .build_load(i64_type, hash_ptr, "cur")
+        .unwrap()
+        .into_int_value();
     let xored = builder.build_xor(cur_hash, byte_i64, "xored").unwrap();
 
     // hash *= FNV_PRIME
@@ -72,13 +91,18 @@ pub fn emit_hash_shims<'ctx>(context: &'ctx Context, module: &Module<'ctx>, no_s
     builder.build_store(hash_ptr, mul).unwrap();
 
     // i += 1
-    let inc = builder.build_int_add(i_val, i64_type.const_int(1, false), "inc").unwrap();
+    let inc = builder
+        .build_int_add(i_val, i64_type.const_int(1, false), "inc")
+        .unwrap();
     builder.build_store(i_ptr, inc).unwrap();
 
     builder.build_unconditional_branch(loop_cond_bb).unwrap();
 
     // ── exit ──────────────────────────────────────────────────
     builder.position_at_end(exit_bb);
-    let final_hash = builder.build_load(i64_type, hash_ptr, "final").unwrap().into_int_value();
+    let final_hash = builder
+        .build_load(i64_type, hash_ptr, "final")
+        .unwrap()
+        .into_int_value();
     builder.build_return(Some(&final_hash)).unwrap();
 }

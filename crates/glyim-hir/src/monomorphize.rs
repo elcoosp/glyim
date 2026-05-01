@@ -1,4 +1,4 @@
-use crate::item::{HirImplDef, HirItem, StructDef};
+use crate::item::{HirItem, StructDef};
 use crate::node::{HirExpr, HirFn, HirStmt};
 use crate::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
@@ -96,17 +96,18 @@ impl<'a> MonoContext<'a> {
     }
 
     fn collect_and_specialize(&mut self) {
+        // Phase A: Use call_type_args from explicit calls AND method calls
         for (expr_id, type_args) in self.call_type_args.iter() {
             for item in &self.hir.items {
                 match item {
                     HirItem::Fn(f) => {
-                        if let Some(callee) = self.find_call_callee_by_id(&f.body, *expr_id) {
+                        if let Some(callee) = self.find_callee_by_id(&f.body, *expr_id) {
                             self.queue_fn_specialization(callee, type_args.clone());
                         }
                     }
                     HirItem::Impl(imp) => {
                         for m in &imp.methods {
-                            if let Some(callee) = self.find_call_callee_by_id(&m.body, *expr_id) {
+                            if let Some(callee) = self.find_callee_by_id(&m.body, *expr_id) {
                                 self.queue_fn_specialization(callee, type_args.clone());
                             }
                         }
@@ -115,6 +116,8 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
+
+        // Phase B: Walk all function bodies to discover more generic calls
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item {
                 self.current_type_params = f.type_params.clone();
@@ -129,9 +132,10 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-        for (_name, _args) in &self.fn_work_queue {
-        }
+
         self.current_type_params = vec![];
+
+        // Phase C: Transitive closure
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
@@ -147,20 +151,30 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    fn find_call_callee_by_id(&self, expr: &HirExpr, search_id: ExprId) -> Option<Symbol> {
+    fn find_callee_by_id(&mut self, expr: &HirExpr, search_id: ExprId) -> Option<Symbol> {
+        // Matches both Call and MethodCall nodes
         match expr {
             HirExpr::Call { id, callee, .. } if *id == search_id => Some(*callee),
+            HirExpr::MethodCall { id, receiver, method_name, .. } if *id == search_id => {
+                let receiver_ty = self.expr_types.get(receiver.get_id().as_usize());
+                if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = receiver_ty {
+                    let mangled = format!("{}_{}", self.interner.resolve(*type_name), self.interner.resolve(*method_name));
+                    Some(self.interner.intern(&mangled))
+                } else {
+                    None
+                }
+            }
             HirExpr::Block { stmts, .. } => stmts.iter().find_map(|s| match s {
-                HirStmt::Expr(e) => self.find_call_callee_by_id(e, search_id),
+                HirStmt::Expr(e) => self.find_callee_by_id(e, search_id),
                 HirStmt::Let { value, .. }
                 | HirStmt::LetPat { value, .. }
                 | HirStmt::Assign { value, .. }
                 | HirStmt::AssignField { value, .. } => {
-                    self.find_call_callee_by_id(value, search_id)
+                    self.find_callee_by_id(value, search_id)
                 }
                 HirStmt::AssignDeref { target, value, .. } => self
-                    .find_call_callee_by_id(target, search_id)
-                    .or_else(|| self.find_call_callee_by_id(value, search_id)),
+                    .find_callee_by_id(target, search_id)
+                    .or_else(|| self.find_callee_by_id(value, search_id)),
             }),
             HirExpr::If {
                 condition,
@@ -168,61 +182,46 @@ impl<'a> MonoContext<'a> {
                 else_branch,
                 ..
             } => self
-                .find_call_callee_by_id(condition, search_id)
-                .or_else(|| self.find_call_callee_by_id(then_branch, search_id))
+                .find_callee_by_id(condition, search_id)
+                .or_else(|| self.find_callee_by_id(then_branch, search_id))
                 .or_else(|| {
                     else_branch
                         .as_ref()
-                        .and_then(|e| self.find_call_callee_by_id(e, search_id))
+                        .and_then(|e| self.find_callee_by_id(e, search_id))
                 }),
             HirExpr::Match {
                 scrutinee, arms, ..
             } => self
-                .find_call_callee_by_id(scrutinee, search_id)
+                .find_callee_by_id(scrutinee, search_id)
                 .or_else(|| {
                     arms.iter().find_map(|(_, guard, body)| {
                         guard
                             .as_ref()
-                            .and_then(|g| self.find_call_callee_by_id(g, search_id))
-                            .or_else(|| self.find_call_callee_by_id(body, search_id))
+                            .and_then(|g| self.find_callee_by_id(g, search_id))
+                            .or_else(|| self.find_callee_by_id(body, search_id))
                     })
                 }),
             HirExpr::Binary { lhs, rhs, .. } => self
-                .find_call_callee_by_id(lhs, search_id)
-                .or_else(|| self.find_call_callee_by_id(rhs, search_id)),
-            HirExpr::Unary { operand, .. } => self.find_call_callee_by_id(operand, search_id),
-            HirExpr::Return { value: Some(v), .. } => self.find_call_callee_by_id(v, search_id),
-            HirExpr::Deref { expr, .. } => self.find_call_callee_by_id(expr, search_id),
-            HirExpr::MethodCall { args, .. } => {
-                for a in args {
-                    if let Some(sym) = self.find_call_callee_by_id(a, search_id) {
-                        return Some(sym);
-                    }
-                }
-                None
-            }
+                .find_callee_by_id(lhs, search_id)
+                .or_else(|| self.find_callee_by_id(rhs, search_id)),
+            HirExpr::Unary { operand, .. } => self.find_callee_by_id(operand, search_id),
+            HirExpr::Return { value: Some(v), .. } => self.find_callee_by_id(v, search_id),
+            HirExpr::Deref { expr, .. } => self.find_callee_by_id(expr, search_id),
+            HirExpr::While { condition, body, .. } => self
+                .find_callee_by_id(condition, search_id)
+                .or_else(|| self.find_callee_by_id(body, search_id)),
             _ => None,
         }
     }
 
     fn scan_expr_for_struct_instantiations(&mut self, expr: &HirExpr) {
         match expr {
-            HirExpr::StructLit {
-                id,
-                struct_name,
-                fields,
-                ..
-            } => {
+            HirExpr::StructLit { id, struct_name, fields, .. } => {
                 if let Some(struct_def) = self.find_struct(*struct_name) {
                     if !struct_def.type_params.is_empty() {
                         let field_types: Vec<HirType> = fields
                             .iter()
-                            .map(|(_, f)| {
-                                self.expr_types
-                                    .get(f.get_id().as_usize())
-                                    .cloned()
-                                    .unwrap_or(HirType::Never)
-                            })
+                            .map(|(_, f)| self.expr_types.get(f.get_id().as_usize()).cloned().unwrap_or(HirType::Never))
                             .collect();
                         let mut sub = HashMap::new();
                         for (i, tp) in struct_def.type_params.iter().enumerate() {
@@ -237,9 +236,7 @@ impl<'a> MonoContext<'a> {
                             }
                         }
                         if sub.len() == struct_def.type_params.len() && !sub.is_empty() {
-                            let concrete: Vec<HirType> = struct_def
-                                .type_params
-                                .iter()
+                            let concrete: Vec<HirType> = struct_def.type_params.iter()
                                 .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                                 .collect();
                             let key = (*struct_name, concrete.clone());
@@ -263,9 +260,7 @@ impl<'a> MonoContext<'a> {
                         HirStmt::Let { value, .. }
                         | HirStmt::LetPat { value, .. }
                         | HirStmt::Assign { value, .. }
-                        | HirStmt::AssignField { value, .. } => {
-                            self.scan_expr_for_struct_instantiations(value)
-                        }
+                        | HirStmt::AssignField { value, .. } => self.scan_expr_for_struct_instantiations(value),
                         HirStmt::AssignDeref { target, value, .. } => {
                             self.scan_expr_for_struct_instantiations(target);
                             self.scan_expr_for_struct_instantiations(value);
@@ -273,26 +268,15 @@ impl<'a> MonoContext<'a> {
                     }
                 }
             }
-            HirExpr::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
                 self.scan_expr_for_struct_instantiations(condition);
                 self.scan_expr_for_struct_instantiations(then_branch);
-                if let Some(e) = else_branch {
-                    self.scan_expr_for_struct_instantiations(e);
-                }
+                if let Some(e) = else_branch { self.scan_expr_for_struct_instantiations(e); }
             }
-            HirExpr::Match {
-                scrutinee, arms, ..
-            } => {
+            HirExpr::Match { scrutinee, arms, .. } => {
                 self.scan_expr_for_struct_instantiations(scrutinee);
                 for (_, guard, body) in arms {
-                    if let Some(g) = guard {
-                        self.scan_expr_for_struct_instantiations(g);
-                    }
+                    if let Some(g) = guard { self.scan_expr_for_struct_instantiations(g); }
                     self.scan_expr_for_struct_instantiations(body);
                 }
             }
@@ -300,18 +284,16 @@ impl<'a> MonoContext<'a> {
                 self.scan_expr_for_struct_instantiations(lhs);
                 self.scan_expr_for_struct_instantiations(rhs);
             }
-            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
-                self.scan_expr_for_struct_instantiations(operand)
-            }
-            HirExpr::Return { value: Some(v), .. } => {
-                self.scan_expr_for_struct_instantiations(v);
-            }
+            HirExpr::Unary { operand, .. }
+            | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::As { expr: operand, .. } => self.scan_expr_for_struct_instantiations(operand),
+            HirExpr::Return { value: Some(v), .. } => self.scan_expr_for_struct_instantiations(v),
             HirExpr::Return { value: None, .. } => {}
-            HirExpr::MethodCall { args, .. } => {
-                for a in args {
-                    self.scan_expr_for_struct_instantiations(a);
-                }
+            HirExpr::MethodCall { receiver, args, .. } => {
+                self.scan_expr_for_struct_instantiations(receiver);
+                for a in args { self.scan_expr_for_struct_instantiations(a); }
             }
+            HirExpr::Call { args, .. } => for a in args { self.scan_expr_for_struct_instantiations(a); },
             _ => {}
         }
     }
@@ -332,12 +314,7 @@ impl<'a> MonoContext<'a> {
                     if !fn_def.type_params.is_empty() {
                         let arg_types: Vec<HirType> = args
                             .iter()
-                            .map(|a| {
-                                self.expr_types
-                                    .get(a.get_id().as_usize())
-                                    .cloned()
-                                    .unwrap_or(HirType::Never)
-                            })
+                            .map(|a| self.expr_types.get(a.get_id().as_usize()).cloned().unwrap_or(HirType::Never))
                             .collect();
                         let mut sub = HashMap::new();
                         for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
@@ -352,84 +329,67 @@ impl<'a> MonoContext<'a> {
                             }
                         }
                         if sub.len() == fn_def.type_params.len() {
-                            let concrete: Vec<HirType> = fn_def
-                                .type_params
-                                .iter()
+                            let concrete: Vec<HirType> = fn_def.type_params.iter()
                                 .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                                 .collect();
                             self.queue_fn_specialization(*callee, concrete);
                         }
                     }
                 }
-                for a in args {
-                    self.scan_expr_for_generic_calls(a);
-                }
+                for a in args { self.scan_expr_for_generic_calls(a); }
             }
-            HirExpr::StructLit { fields, .. } => {
-                for (_, f) in fields {
-                    self.scan_expr_for_generic_calls(f);
-                }
-            }
-            HirExpr::Block { stmts, .. } => {
-                for s in stmts {
-                    match s {
-                        HirStmt::Expr(e) => self.scan_expr_for_generic_calls(e),
-                        HirStmt::Let { value, .. }
-                        | HirStmt::LetPat { value, .. }
-                        | HirStmt::Assign { value, .. }
-                        | HirStmt::AssignField { value, .. } => {
-                            self.scan_expr_for_generic_calls(value)
-                        }
-                        HirStmt::AssignDeref { target, value, .. } => {
-                            self.scan_expr_for_generic_calls(target);
-                            self.scan_expr_for_generic_calls(value);
-                        }
+            HirExpr::MethodCall { receiver, method_name, args, .. } => {
+                let receiver_ty = self.expr_types.get(receiver.get_id().as_usize());
+                if let Some(HirType::Generic(type_name, type_args)) = receiver_ty {
+                    let mangled = format!("{}_{}", self.interner.resolve(*type_name), self.interner.resolve(*method_name));
+                    let mangled_sym = self.interner.intern(&mangled);
+                    if self.find_fn(mangled_sym).is_some() && !type_args.is_empty() {
+                        self.queue_fn_specialization(mangled_sym, type_args.clone());
                     }
                 }
+                self.scan_expr_for_generic_calls(receiver);
+                for a in args { self.scan_expr_for_generic_calls(a); }
             }
-            HirExpr::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
+            HirExpr::Block { stmts, .. } => for s in stmts {
+                match s {
+                    HirStmt::Expr(e) => self.scan_expr_for_generic_calls(e),
+                    HirStmt::Let { value, .. }
+                    | HirStmt::LetPat { value, .. }
+                    | HirStmt::Assign { value, .. }
+                    | HirStmt::AssignField { value, .. } => self.scan_expr_for_generic_calls(value),
+                    HirStmt::AssignDeref { target, value, .. } => {
+                        self.scan_expr_for_generic_calls(target);
+                        self.scan_expr_for_generic_calls(value);
+                    }
+                }
+            },
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
                 self.scan_expr_for_generic_calls(condition);
                 self.scan_expr_for_generic_calls(then_branch);
-                if let Some(e) = else_branch {
-                    self.scan_expr_for_generic_calls(e);
-                }
+                if let Some(e) = else_branch { self.scan_expr_for_generic_calls(e); }
             }
-            HirExpr::Match {
-                scrutinee, arms, ..
-            } => {
+            HirExpr::Match { scrutinee, arms, .. } => {
                 self.scan_expr_for_generic_calls(scrutinee);
                 for (_, guard, body) in arms {
-                    if let Some(g) = guard {
-                        self.scan_expr_for_generic_calls(g);
-                    }
+                    if let Some(g) = guard { self.scan_expr_for_generic_calls(g); }
                     self.scan_expr_for_generic_calls(body);
                 }
+            }
+            HirExpr::While { condition, body, .. } => {
+                self.scan_expr_for_generic_calls(condition);
+                self.scan_expr_for_generic_calls(body);
             }
             HirExpr::Binary { lhs, rhs, .. } => {
                 self.scan_expr_for_generic_calls(lhs);
                 self.scan_expr_for_generic_calls(rhs);
             }
-            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
-                self.scan_expr_for_generic_calls(operand)
-            }
-            HirExpr::Return { value: Some(v), .. } => {
-                self.scan_expr_for_generic_calls(v);
-            }
+            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::As { expr: operand, .. } => self.scan_expr_for_generic_calls(operand),
+            HirExpr::Return { value: Some(v), .. } => self.scan_expr_for_generic_calls(v),
             HirExpr::Return { value: None, .. } => {}
-            HirExpr::MethodCall { args, .. } => {
-                for a in args {
-                    self.scan_expr_for_generic_calls(a);
-                }
-            }
             _ => {}
         }
     }
-
     fn format_type_short(&self, ty: &HirType) -> String {
         match ty {
             HirType::Int => "i64".to_string(),
@@ -440,32 +400,14 @@ impl<'a> MonoContext<'a> {
             HirType::Never => "never".to_string(),
             HirType::Named(s) => self.interner.resolve(*s).to_string(),
             HirType::Generic(s, args) => {
-                let inner = args
-                    .iter()
-                    .map(|a| self.format_type_short(a))
-                    .collect::<Vec<_>>()
-                    .join("_");
-                if inner.is_empty() {
-                    self.interner.resolve(*s).to_string()
-                } else {
-                    format!("{}_{}", self.interner.resolve(*s), inner)
-                }
+                let inner = args.iter().map(|a| self.format_type_short(a)).collect::<Vec<_>>().join("_");
+                if inner.is_empty() { self.interner.resolve(*s).to_string() }
+                else { format!("{}_{}", self.interner.resolve(*s), inner) }
             }
-            HirType::Tuple(elems) => format!(
-                "tup_{}",
-                elems
-                    .iter()
-                    .map(|e| self.format_type_short(e))
-                    .collect::<Vec<_>>()
-                    .join("_")
-            ),
+            HirType::Tuple(elems) => format!("tup_{}", elems.iter().map(|e| self.format_type_short(e)).collect::<Vec<_>>().join("_")),
             HirType::RawPtr(inner) => format!("ptr_{}", self.format_type_short(inner)),
             HirType::Option(inner) => format!("opt_{}", self.format_type_short(inner)),
-            HirType::Result(ok, err) => format!(
-                "res_{}_{}",
-                self.format_type_short(ok),
-                self.format_type_short(err)
-            ),
+            HirType::Result(ok, err) => format!("res_{}_{}", self.format_type_short(ok), self.format_type_short(err)),
             _ => format!("ty{:?}", std::mem::discriminant(ty)),
         }
     }
@@ -473,154 +415,191 @@ impl<'a> MonoContext<'a> {
     fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
         for (i, tp) in f.type_params.iter().enumerate() {
-            if let Some(ct) = concrete.get(i) {
-                sub.insert(*tp, ct.clone());
-            }
+            if let Some(ct) = concrete.get(i) { sub.insert(*tp, ct.clone()); }
         }
+        // CRITICAL: collect type overrides before substitution so codegen gets resolved types
+        self.collect_type_overrides_for_expr(&f.body, &sub);
         let mut mono = f.clone();
         mono.type_params.clear();
-        for (_, pt) in &mut mono.params {
-            *pt = crate::types::substitute_type(pt, &sub);
-        }
-        if let Some(rt) = &mut mono.ret {
-            *rt = crate::types::substitute_type(rt, &sub);
-        }
-        // Substitute types within the body (SizeOf, As, etc.)
+        for (_, pt) in &mut mono.params { *pt = crate::types::substitute_type(pt, &sub); }
+        if let Some(rt) = &mut mono.ret { *rt = crate::types::substitute_type(rt, &sub); }
         mono.body = self.substitute_expr_types(&mono.body, &sub);
         mono
     }
 
+    fn collect_type_overrides_for_expr(&mut self, expr: &HirExpr, sub: &HashMap<Symbol, HirType>) {
+        let id = expr.get_id();
+        if let Some(original_ty) = self.expr_types.get(id.as_usize()) {
+            let new_ty = crate::types::substitute_type(original_ty, sub);
+            if new_ty != *original_ty {
+                self.type_overrides.insert(id, new_ty);
+            }
+        }
+        match expr {
+            HirExpr::Block { stmts, .. } => for s in stmts { self.collect_type_overrides_for_stmt(s, sub); },
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
+                self.collect_type_overrides_for_expr(condition, sub);
+                self.collect_type_overrides_for_expr(then_branch, sub);
+                if let Some(e) = else_branch { self.collect_type_overrides_for_expr(e, sub); }
+            }
+            HirExpr::Match { scrutinee, arms, .. } => {
+                self.collect_type_overrides_for_expr(scrutinee, sub);
+                for (_, guard, body) in arms {
+                    if let Some(g) = guard { self.collect_type_overrides_for_expr(g, sub); }
+                    self.collect_type_overrides_for_expr(body, sub);
+                }
+            }
+            HirExpr::Binary { lhs, rhs, .. } => { self.collect_type_overrides_for_expr(lhs, sub); self.collect_type_overrides_for_expr(rhs, sub); }
+            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } | HirExpr::FieldAccess { object: operand, .. } | HirExpr::As { expr: operand, .. } => self.collect_type_overrides_for_expr(operand, sub),
+            HirExpr::Return { value: Some(v), .. } => self.collect_type_overrides_for_expr(v, sub),
+            HirExpr::While { condition, body, .. } | HirExpr::ForIn { iter: condition, body, .. } => {
+                self.collect_type_overrides_for_expr(condition, sub);
+                self.collect_type_overrides_for_expr(body, sub);
+            }
+            HirExpr::MethodCall { receiver, args, .. } => {
+                self.collect_type_overrides_for_expr(receiver, sub);
+                for a in args { self.collect_type_overrides_for_expr(a, sub); }
+            }
+            HirExpr::Call { args, .. } => for a in args { self.collect_type_overrides_for_expr(a, sub); },
+            HirExpr::StructLit { fields, .. } => for (_, f) in fields { self.collect_type_overrides_for_expr(f, sub); },
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => for a in args { self.collect_type_overrides_for_expr(a, sub); },
+            HirExpr::Println { arg, .. } => self.collect_type_overrides_for_expr(arg, sub),
+            HirExpr::Assert { condition, message, .. } => {
+                self.collect_type_overrides_for_expr(condition, sub);
+                if let Some(m) = message { self.collect_type_overrides_for_expr(m, sub); }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_type_overrides_for_stmt(&mut self, stmt: &HirStmt, sub: &HashMap<Symbol, HirType>) {
+        match stmt {
+            HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. } | HirStmt::Assign { value, .. } => self.collect_type_overrides_for_expr(value, sub),
+            HirStmt::AssignField { object, value, .. } => { self.collect_type_overrides_for_expr(object, sub); self.collect_type_overrides_for_expr(value, sub); }
+            HirStmt::AssignDeref { target, value, .. } => { self.collect_type_overrides_for_expr(target, sub); self.collect_type_overrides_for_expr(value, sub); }
+            HirStmt::Expr(e) => self.collect_type_overrides_for_expr(e, sub),
+        }
+    }
+
     fn substitute_expr_types(&mut self, expr: &HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
         match expr {
-            HirExpr::SizeOf { id, target_type, span } => {
-                HirExpr::SizeOf {
-                    id: *id,
-                    target_type: crate::types::substitute_type(target_type, sub),
-                    span: *span,
-                }
-            }
-            HirExpr::As { id, expr: inner, target_type, span } => {
-                HirExpr::As {
-                    id: *id,
-                    expr: Box::new(self.substitute_expr_types(inner, sub)),
-                    target_type: crate::types::substitute_type(target_type, sub),
-                    span: *span,
-                }
-            }
-            HirExpr::Block { id, stmts, span } => {
-                HirExpr::Block {
-                    id: *id,
-                    stmts: stmts.iter().map(|s| self.substitute_stmt_types(s, sub)).collect(),
-                    span: *span,
-                }
-            }
-            HirExpr::Binary { id, op, lhs, rhs, span } => {
-                HirExpr::Binary {
-                    id: *id,
-                    op: op.clone(),
-                    lhs: Box::new(self.substitute_expr_types(lhs, sub)),
-                    rhs: Box::new(self.substitute_expr_types(rhs, sub)),
-                    span: *span,
-                }
-            }
-            HirExpr::If { id, condition, then_branch, else_branch, span } => {
-                HirExpr::If {
-                    id: *id,
-                    condition: Box::new(self.substitute_expr_types(condition, sub)),
-                    then_branch: Box::new(self.substitute_expr_types(then_branch, sub)),
-                    else_branch: else_branch.as_ref().map(|e| Box::new(self.substitute_expr_types(e, sub))),
-                    span: *span,
-                }
-            }
-            HirExpr::Match { id, scrutinee, arms, span } => {
-                HirExpr::Match {
-                    id: *id,
-                    scrutinee: Box::new(self.substitute_expr_types(scrutinee, sub)),
-                    arms: arms.iter().map(|(pat, guard, body)| {
-                        (pat.clone(), guard.as_ref().map(|g| self.substitute_expr_types(g, sub)), self.substitute_expr_types(body, sub))
-                    }).collect(),
-                    span: *span,
-                }
-            }
-            HirExpr::Call { id, callee, args, span } => {
-                HirExpr::Call {
-                    id: *id,
-                    callee: *callee,
-                    args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
-                    span: *span,
-                }
-            }
-            HirExpr::Unary { id, op, operand, span } => {
-                HirExpr::Unary {
-                    id: *id,
-                    op: op.clone(),
-                    operand: Box::new(self.substitute_expr_types(operand, sub)),
-                    span: *span,
-                }
-            }
-            HirExpr::Return { id, value, span } => {
-                HirExpr::Return {
-                    id: *id,
-                    value: value.as_ref().map(|v| Box::new(self.substitute_expr_types(v, sub))),
-                    span: *span,
-                }
-            }
-            HirExpr::StructLit { id, struct_name, fields, span } => {
-                HirExpr::StructLit {
-                    id: *id,
-                    struct_name: *struct_name,
-                    fields: fields.iter().map(|(s, e)| (*s, self.substitute_expr_types(e, sub))).collect(),
-                    span: *span,
-                }
-            }
-            HirExpr::EnumVariant { id, enum_name, variant_name, args, span } => {
-                HirExpr::EnumVariant {
-                    id: *id,
-                    enum_name: *enum_name,
-                    variant_name: *variant_name,
-                    args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
-                    span: *span,
-                }
-            }
-            // Copy everything else unchanged
-            other => other.clone(),
+            HirExpr::SizeOf { id, target_type, span } => HirExpr::SizeOf {
+                id: *id, target_type: crate::types::substitute_type(target_type, sub), span: *span,
+            },
+            HirExpr::As { id, expr: inner, target_type, span } => HirExpr::As {
+                id: *id, expr: Box::new(self.substitute_expr_types(inner, sub)),
+                target_type: crate::types::substitute_type(target_type, sub), span: *span,
+            },
+            HirExpr::Block { id, stmts, span } => HirExpr::Block {
+                id: *id, stmts: stmts.iter().map(|s| self.substitute_stmt_types(s, sub)).collect(), span: *span,
+            },
+            HirExpr::Binary { id, op, lhs, rhs, span } => HirExpr::Binary {
+                id: *id, op: op.clone(),
+                lhs: Box::new(self.substitute_expr_types(lhs, sub)),
+                rhs: Box::new(self.substitute_expr_types(rhs, sub)), span: *span,
+            },
+            HirExpr::If { id, condition, then_branch, else_branch, span } => HirExpr::If {
+                id: *id,
+                condition: Box::new(self.substitute_expr_types(condition, sub)),
+                then_branch: Box::new(self.substitute_expr_types(then_branch, sub)),
+                else_branch: else_branch.as_ref().map(|e| Box::new(self.substitute_expr_types(e, sub))),
+                span: *span,
+            },
+            HirExpr::Match { id, scrutinee, arms, span } => HirExpr::Match {
+                id: *id,
+                scrutinee: Box::new(self.substitute_expr_types(scrutinee, sub)),
+                arms: arms.iter().map(|(pat, guard, body)| {
+                    (pat.clone(), guard.as_ref().map(|g| self.substitute_expr_types(g, sub)), self.substitute_expr_types(body, sub))
+                }).collect(),
+                span: *span,
+            },
+            HirExpr::Call { id, callee, args, span } => HirExpr::Call {
+                id: *id, callee: *callee,
+                args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(), span: *span,
+            },
+            HirExpr::Unary { id, op, operand, span } => HirExpr::Unary {
+                id: *id, op: op.clone(), operand: Box::new(self.substitute_expr_types(operand, sub)), span: *span,
+            },
+            HirExpr::Return { id, value, span } => HirExpr::Return {
+                id: *id, value: value.as_ref().map(|v| Box::new(self.substitute_expr_types(v, sub))), span: *span,
+            },
+            HirExpr::StructLit { id, struct_name, fields, span } => HirExpr::StructLit {
+                id: *id, struct_name: *struct_name,
+                fields: fields.iter().map(|(s, e)| (*s, self.substitute_expr_types(e, sub))).collect(), span: *span,
+            },
+            HirExpr::EnumVariant { id, enum_name, variant_name, args, span } => HirExpr::EnumVariant {
+                id: *id, enum_name: *enum_name, variant_name: *variant_name,
+                args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(), span: *span,
+            },
+            HirExpr::While { id, condition, body, span } => HirExpr::While {
+                id: *id,
+                condition: Box::new(self.substitute_expr_types(condition, sub)),
+                body: Box::new(self.substitute_expr_types(body, sub)),
+                span: *span,
+            },
+            HirExpr::Deref { id, expr: inner, span } => HirExpr::Deref {
+                id: *id, expr: Box::new(self.substitute_expr_types(inner, sub)), span: *span,
+            },
+            HirExpr::FieldAccess { id, object, field, span } => HirExpr::FieldAccess {
+                id: *id, object: Box::new(self.substitute_expr_types(object, sub)), field: *field, span: *span,
+            },
+            HirExpr::MethodCall { id, receiver, method_name, args, span } => HirExpr::MethodCall {
+                id: *id,
+                receiver: Box::new(self.substitute_expr_types(receiver, sub)),
+                method_name: *method_name,
+                args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
+                span: *span,
+            },
+            HirExpr::TupleLit { id, elements, span } => HirExpr::TupleLit {
+                id: *id, elements: elements.iter().map(|e| self.substitute_expr_types(e, sub)).collect(), span: *span,
+            },
+            HirExpr::Println { id, arg, span } => HirExpr::Println {
+                id: *id, arg: Box::new(self.substitute_expr_types(arg, sub)), span: *span,
+            },
+            HirExpr::Assert { id, condition, message, span } => HirExpr::Assert {
+                id: *id,
+                condition: Box::new(self.substitute_expr_types(condition, sub)),
+                message: message.as_ref().map(|m| Box::new(self.substitute_expr_types(m, sub))),
+                span: *span,
+            },
+            _ => expr.clone(),
         }
     }
 
     fn substitute_stmt_types(&mut self, stmt: &HirStmt, sub: &HashMap<Symbol, HirType>) -> HirStmt {
         match stmt {
-            HirStmt::Let { name, mutable, value, span } => {
-                HirStmt::Let {
-                    name: *name,
-                    mutable: *mutable,
-                    value: self.substitute_expr_types(value, sub),
-                    span: *span,
-                }
-            }
-            HirStmt::Assign { target, value, span } => {
-                HirStmt::Assign {
-                    target: *target,
-                    value: self.substitute_expr_types(value, sub),
-                    span: *span,
-                }
-            }
+            HirStmt::Let { name, mutable, value, span } => HirStmt::Let {
+                name: *name, mutable: *mutable, value: self.substitute_expr_types(value, sub), span: *span,
+            },
+            HirStmt::LetPat { pattern, mutable, value, span, ty } => HirStmt::LetPat {
+                pattern: pattern.clone(), mutable: *mutable,
+                value: self.substitute_expr_types(value, sub),
+                ty: ty.clone(),
+                span: *span,
+            },
+            HirStmt::Assign { target, value, span } => HirStmt::Assign {
+                target: *target, value: self.substitute_expr_types(value, sub), span: *span,
+            },
+            HirStmt::AssignField { object, field, value, span } => HirStmt::AssignField {
+                object: Box::new(self.substitute_expr_types(object, sub)),
+                field: *field, value: self.substitute_expr_types(value, sub), span: *span,
+            },
+            HirStmt::AssignDeref { target, value, span } => HirStmt::AssignDeref {
+                target: Box::new(self.substitute_expr_types(target, sub)),
+                value: self.substitute_expr_types(value, sub), span: *span,
+            },
             HirStmt::Expr(e) => HirStmt::Expr(self.substitute_expr_types(e, sub)),
-            _ => stmt.clone(),
         }
     }
 
     fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {
         let mut sub = HashMap::new();
         for (i, tp) in s.type_params.iter().enumerate() {
-            if let Some(ct) = concrete.get(i) {
-                sub.insert(*tp, ct.clone());
-            }
+            if let Some(ct) = concrete.get(i) { sub.insert(*tp, ct.clone()); }
         }
         let mut mono = s.clone();
         mono.type_params.clear();
-        for field in &mut mono.fields {
-            field.ty = crate::types::substitute_type(&field.ty, &sub);
-        }
+        for field in &mut mono.fields { field.ty = crate::types::substitute_type(&field.ty, &sub); }
         mono
     }
 
@@ -638,19 +617,13 @@ impl<'a> MonoContext<'a> {
         let mut items = Vec::new();
 
         // 1. Specialized structs first
-        {
-            let struct_entries: Vec<_> = self
-                .struct_specs
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
-            for ((_, args), mut s) in struct_entries {
-                s.name = self.mangle_name(s.name, &args);
-                items.push(HirItem::Struct(s));
-            }
+        let struct_entries: Vec<_> = self.struct_specs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        for ((_, args), mut s) in struct_entries {
+            s.name = self.mangle_name(s.name, &args);
+            items.push(HirItem::Struct(s));
         }
 
-        // 2. Non-generic items
+        // 2. Non-generic items (rewrite MethodCall -> Call for concrete types)
         for item in &self.hir.items {
             match item {
                 HirItem::Fn(f) if f.type_params.is_empty() => items.push(HirItem::Fn(
@@ -661,11 +634,8 @@ impl<'a> MonoContext<'a> {
                 HirItem::Extern(e) => items.push(HirItem::Extern(e.clone())),
                 HirItem::Impl(imp) => {
                     for method in &imp.methods {
-                        let already_specialized = fn_mangle_map
-                            .iter()
-                            .any(|((sym, _), _)| *sym == method.name);
-                        if !already_specialized {
-                            items.push(HirItem::Fn(method.clone()));
+                        if method.type_params.is_empty() {
+                            items.push(HirItem::Fn(self.rewrite_fn(method, &fn_mangle_map, &struct_mangle_map)));
                         }
                     }
                 }
@@ -674,17 +644,11 @@ impl<'a> MonoContext<'a> {
         }
 
         // 3. Specialized functions
-        {
-            let fn_entries: Vec<_> = self
-                .fn_specs
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
-            for ((_, args), mut f) in fn_entries {
-                f.name = self.mangle_name(f.name, &args);
-                f.body = self.rewrite_expr(&f.body, &fn_mangle_map, &struct_mangle_map);
-                items.push(HirItem::Fn(f));
-            }
+        let fn_entries: Vec<_> = self.fn_specs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        for ((_, args), mut f) in fn_entries {
+            f.name = self.mangle_name(f.name, &args);
+            f.body = self.rewrite_expr(&f.body, &fn_mangle_map, &struct_mangle_map);
+            items.push(HirItem::Fn(f));
         }
 
         let mut final_type_overrides = HashMap::new();
@@ -692,11 +656,7 @@ impl<'a> MonoContext<'a> {
             if let HirType::Named(orig) = ty {
                 final_type_overrides.insert(
                     *expr_id,
-                    struct_mangle_map
-                        .get(orig)
-                        .cloned()
-                        .map(HirType::Named)
-                        .unwrap_or_else(|| ty.clone()),
+                    struct_mangle_map.get(orig).cloned().map(HirType::Named).unwrap_or_else(|| ty.clone()),
                 );
             }
         }
@@ -708,10 +668,7 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        MonoResult {
-            hir: crate::Hir { items },
-            type_overrides: final_type_overrides,
-        }
+        MonoResult { hir: crate::Hir { items }, type_overrides: final_type_overrides }
     }
 
     fn rewrite_fn(
@@ -724,19 +681,6 @@ impl<'a> MonoContext<'a> {
         mono.body = self.rewrite_expr(&f.body, fn_map, struct_map);
         mono
     }
-    #[allow(dead_code)]
-    fn rewrite_impl(
-        &mut self,
-        imp: &HirImplDef,
-        fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>,
-        struct_map: &HashMap<Symbol, Symbol>,
-    ) -> HirImplDef {
-        let mut mono = imp.clone();
-        for method in &mut mono.methods {
-            method.body = self.rewrite_expr(&method.body, fn_map, struct_map);
-        }
-        mono
-    }
 
     fn rewrite_expr(
         &mut self,
@@ -745,165 +689,77 @@ impl<'a> MonoContext<'a> {
         struct_map: &HashMap<Symbol, Symbol>,
     ) -> HirExpr {
         match expr {
-            HirExpr::Call {
-                id,
-                callee,
-                args,
-                span,
-            } => {
+            HirExpr::Call { id, callee, args, span } => {
                 let type_args = self.call_type_args.get(id).cloned().unwrap_or_else(|| {
-                    args.iter()
-                        .map(|a| {
-                            self.expr_types
-                                .get(a.get_id().as_usize())
-                                .cloned()
-                                .unwrap_or(HirType::Int)
-                        })
-                        .collect()
+                    args.iter().map(|a| self.expr_types.get(a.get_id().as_usize()).cloned().unwrap_or(HirType::Int)).collect()
                 });
-                let new_callee = fn_map
-                    .get(&(*callee, type_args))
-                    .copied()
-                    .unwrap_or(*callee);
-                HirExpr::Call {
-                    id: *id,
-                    callee: new_callee,
-                    args: args
-                        .iter()
-                        .map(|a| self.rewrite_expr(a, fn_map, struct_map))
-                        .collect(),
-                    span: *span,
-                }
+                let new_callee = fn_map.get(&(*callee, type_args)).copied().unwrap_or(*callee);
+                HirExpr::Call { id: *id, callee: new_callee,
+                    args: args.iter().map(|a| self.rewrite_expr(a, fn_map, struct_map)).collect(), span: *span }
             }
-            HirExpr::StructLit {
-                id,
-                struct_name,
-                fields,
-                span,
-            } => {
+            HirExpr::StructLit { id, struct_name, fields, span } => {
                 let new_name = struct_map.get(struct_name).copied().unwrap_or(*struct_name);
-                HirExpr::StructLit {
-                    id: *id,
-                    struct_name: new_name,
-                    fields: fields
-                        .iter()
-                        .map(|(s, e)| (*s, self.rewrite_expr(e, fn_map, struct_map)))
-                        .collect(),
-                    span: *span,
+                HirExpr::StructLit { id: *id, struct_name: new_name,
+                    fields: fields.iter().map(|(s,e)| (*s, self.rewrite_expr(e, fn_map, struct_map))).collect(), span: *span }
+            }
+            HirExpr::MethodCall { id, receiver, method_name, args, span } => {
+                let rewritten_receiver = Box::new(self.rewrite_expr(receiver, fn_map, struct_map));
+                let rewritten_args: Vec<HirExpr> = args.iter().map(|a| self.rewrite_expr(a, fn_map, struct_map)).collect();
+                let receiver_ty = self.expr_types.get(receiver.get_id().as_usize());
+                if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = receiver_ty {
+                    let mangled = format!("{}_{}", self.interner.resolve(*type_name), self.interner.resolve(*method_name));
+                    let mangled_sym = self.interner.intern(&mangled);
+                    // Try to find a monomorphized version
+                    if let Some(concrete_key) = fn_map.iter().find_map(|((sym, args), mono_name)| {
+                        if *sym == mangled_sym { Some((args.clone(), *mono_name)) } else { None }
+                    }) {
+                        let mut all_args = vec![*rewritten_receiver.clone()];
+                        all_args.extend(rewritten_args);
+                        return HirExpr::Call { id: *id, callee: concrete_key.1, args: all_args, span: *span };
+                    }
                 }
+                HirExpr::MethodCall { id: *id, receiver: rewritten_receiver, method_name: *method_name, args: rewritten_args, span: *span }
             }
             HirExpr::Block { id, stmts, span } => HirExpr::Block {
-                id: *id,
-                stmts: stmts
-                    .iter()
-                    .map(|s| self.rewrite_stmt(s, fn_map, struct_map))
-                    .collect(),
-                span: *span,
+                id: *id, stmts: stmts.iter().map(|s| self.rewrite_stmt(s, fn_map, struct_map)).collect(), span: *span,
             },
-            HirExpr::If {
-                id,
-                condition,
-                then_branch,
-                else_branch,
-                span,
-            } => HirExpr::If {
+            HirExpr::If { id, condition, then_branch, else_branch, span } => HirExpr::If {
                 id: *id,
                 condition: Box::new(self.rewrite_expr(condition, fn_map, struct_map)),
                 then_branch: Box::new(self.rewrite_expr(then_branch, fn_map, struct_map)),
-                else_branch: else_branch
-                    .as_ref()
-                    .map(|e| Box::new(self.rewrite_expr(e, fn_map, struct_map))),
+                else_branch: else_branch.as_ref().map(|e| Box::new(self.rewrite_expr(e, fn_map, struct_map))),
                 span: *span,
             },
-            HirExpr::Match {
-                id,
-                scrutinee,
-                arms,
-                span,
-            } => {
-                let new_arms: Vec<_> = arms
-                    .iter()
-                    .map(|(pat, guard, body)| {
-                        (
-                            pat.clone(),
-                            guard
-                                .as_ref()
-                                .map(|g| Box::new(self.rewrite_expr(g, fn_map, struct_map)))
-                                .map(|b| *b),
-                            self.rewrite_expr(body, fn_map, struct_map),
-                        )
-                    })
-                    .collect();
-                HirExpr::Match {
-                    id: *id,
-                    scrutinee: Box::new(self.rewrite_expr(scrutinee, fn_map, struct_map)),
-                    arms: new_arms,
-                    span: *span,
-                }
-            }
-            HirExpr::Binary {
-                id,
-                op,
-                lhs,
-                rhs,
-                span,
-            } => HirExpr::Binary {
-                id: *id,
-                op: op.clone(),
+            HirExpr::Match { id, scrutinee, arms, span } => {
+                let new_arms: Vec<_> = arms.iter().map(|(pat, guard, body)| {
+                    (pat.clone(), guard.as_ref().map(|g| Box::new(self.rewrite_expr(g, fn_map, struct_map))).map(|b| *b),
+                     self.rewrite_expr(body, fn_map, struct_map))
+                }).collect();
+                HirExpr::Match { id: *id, scrutinee: Box::new(self.rewrite_expr(scrutinee, fn_map, struct_map)), arms: new_arms, span: *span }
+            },
+            HirExpr::Binary { id, op, lhs, rhs, span } => HirExpr::Binary {
+                id: *id, op: op.clone(),
                 lhs: Box::new(self.rewrite_expr(lhs, fn_map, struct_map)),
-                rhs: Box::new(self.rewrite_expr(rhs, fn_map, struct_map)),
-                span: *span,
+                rhs: Box::new(self.rewrite_expr(rhs, fn_map, struct_map)), span: *span,
             },
-            HirExpr::Unary {
-                id,
-                op,
-                operand,
-                span,
-            } => HirExpr::Unary {
-                id: *id,
-                op: op.clone(),
-                operand: Box::new(self.rewrite_expr(operand, fn_map, struct_map)),
-                span: *span,
+            HirExpr::Unary { id, op, operand, span } => HirExpr::Unary {
+                id: *id, op: op.clone(), operand: Box::new(self.rewrite_expr(operand, fn_map, struct_map)), span: *span,
             },
             HirExpr::Return { id, value, span } => HirExpr::Return {
-                id: *id,
-                value: value
-                    .as_ref()
-                    .map(|v| Box::new(self.rewrite_expr(v, fn_map, struct_map))),
-                span: *span,
+                id: *id, value: value.as_ref().map(|v| Box::new(self.rewrite_expr(v, fn_map, struct_map))), span: *span,
             },
             HirExpr::Deref { id, expr, span } => HirExpr::Deref {
-                id: *id,
-                expr: Box::new(self.rewrite_expr(expr, fn_map, struct_map)),
-                span: *span,
+                id: *id, expr: Box::new(self.rewrite_expr(expr, fn_map, struct_map)), span: *span,
             },
-            HirExpr::ForIn {
-                id,
-                pattern,
-                iter,
-                body,
-                span,
-            } => HirExpr::ForIn {
-                id: *id,
-                pattern: pattern.clone(),
+            HirExpr::ForIn { id, pattern, iter, body, span } => HirExpr::ForIn {
+                id: *id, pattern: pattern.clone(),
                 iter: Box::new(self.rewrite_expr(iter, fn_map, struct_map)),
-                body: Box::new(self.rewrite_expr(body, fn_map, struct_map)),
-                span: *span,
+                body: Box::new(self.rewrite_expr(body, fn_map, struct_map)), span: *span,
             },
-            HirExpr::MethodCall {
-                id,
-                receiver,
-                method_name,
-                args,
-                span,
-            } => HirExpr::MethodCall {
+            HirExpr::While { id, condition, body, span } => HirExpr::While {
                 id: *id,
-                receiver: Box::new(self.rewrite_expr(receiver, fn_map, struct_map)),
-                method_name: *method_name,
-                args: args
-                    .iter()
-                    .map(|a| self.rewrite_expr(a, fn_map, struct_map))
-                    .collect(),
+                condition: Box::new(self.rewrite_expr(condition, fn_map, struct_map)),
+                body: Box::new(self.rewrite_expr(body, fn_map, struct_map)),
                 span: *span,
             },
             _ => expr.clone(),
@@ -917,56 +773,25 @@ impl<'a> MonoContext<'a> {
         struct_map: &HashMap<Symbol, Symbol>,
     ) -> HirStmt {
         match stmt {
-            HirStmt::Let {
-                name,
-                mutable,
-                value,
-                span,
-            } => HirStmt::Let {
-                name: *name,
-                mutable: *mutable,
+            HirStmt::Let { name, mutable, value, span } => HirStmt::Let {
+                name: *name, mutable: *mutable, value: self.rewrite_expr(value, fn_map, struct_map), span: *span,
+            },
+            HirStmt::LetPat { pattern, mutable, value, span, ty } => HirStmt::LetPat {
+                pattern: pattern.clone(), mutable: *mutable,
                 value: self.rewrite_expr(value, fn_map, struct_map),
+                ty: ty.clone(),
                 span: *span,
             },
-            HirStmt::LetPat {
-                pattern,
-                mutable,
-                value,
-                span,
-            } => HirStmt::LetPat {
-                pattern: pattern.clone(),
-                mutable: *mutable,
-                value: self.rewrite_expr(value, fn_map, struct_map),
-                span: *span,
+            HirStmt::Assign { target, value, span } => HirStmt::Assign {
+                target: *target, value: self.rewrite_expr(value, fn_map, struct_map), span: *span,
             },
-            HirStmt::Assign {
-                target,
-                value,
-                span,
-            } => HirStmt::Assign {
-                target: *target,
-                value: self.rewrite_expr(value, fn_map, struct_map),
-                span: *span,
-            },
-            HirStmt::AssignDeref {
-                target,
-                value,
-                span,
-            } => HirStmt::AssignDeref {
+            HirStmt::AssignDeref { target, value, span } => HirStmt::AssignDeref {
                 target: Box::new(self.rewrite_expr(target, fn_map, struct_map)),
-                value: self.rewrite_expr(value, fn_map, struct_map),
-                span: *span,
+                value: self.rewrite_expr(value, fn_map, struct_map), span: *span,
             },
-            HirStmt::AssignField {
-                object,
-                field,
-                value,
-                span,
-            } => HirStmt::AssignField {
+            HirStmt::AssignField { object, field, value, span } => HirStmt::AssignField {
                 object: Box::new(self.rewrite_expr(object, fn_map, struct_map)),
-                field: *field,
-                value: self.rewrite_expr(value, fn_map, struct_map),
-                span: *span,
+                field: *field, value: self.rewrite_expr(value, fn_map, struct_map), span: *span,
             },
             HirStmt::Expr(e) => HirStmt::Expr(self.rewrite_expr(e, fn_map, struct_map)),
         }
@@ -981,9 +806,7 @@ mod tests {
 
     fn lower_source(source: &str) -> (crate::Hir, Interner) {
         let parse_out = glyim_parse::parse(source);
-        if !parse_out.errors.is_empty() {
-            panic!("parse errors: {:?}", parse_out.errors);
-        }
+        if !parse_out.errors.is_empty() { panic!("parse errors: {:?}", parse_out.errors); }
         let mut interner = parse_out.interner;
         (crate::lower(&parse_out.ast, &mut interner), interner)
     }
@@ -998,23 +821,12 @@ mod tests {
     #[test]
     fn mono_generic_fn_with_call_type_args() {
         let (hir, mut interner) = lower_source("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
-        let main_fn = hir
-            .items
-            .iter()
-            .find(|i| matches!(i, HirItem::Fn(f) if interner.resolve(f.name) == "main"))
-            .unwrap();
-        let main_fn_body = if let HirItem::Fn(f) = main_fn {
-            &f.body
-        } else {
-            panic!("expected Fn")
-        };
+        let main_fn = hir.items.iter().find(|i| matches!(i, HirItem::Fn(f) if interner.resolve(f.name) == "main")).unwrap();
+        let main_fn_body = if let HirItem::Fn(f) = main_fn { &f.body } else { panic!("expected Fn") };
         let call_id = find_call_id(main_fn_body, interner.intern("id")).expect("call id");
         let call_type_args = HashMap::from([(call_id, vec![HirType::Int])]);
         let result = monomorphize(&hir, &mut interner, &[], &call_type_args);
-        let has_specialized =
-            result.hir.items.iter().any(
-                |i| matches!(i, HirItem::Fn(f) if interner.resolve(f.name).starts_with("id__")),
-            );
+        let has_specialized = result.hir.items.iter().any(|i| matches!(i, HirItem::Fn(f) if interner.resolve(f.name).starts_with("id__")));
         assert!(has_specialized);
     }
 
@@ -1026,15 +838,9 @@ mod tests {
                 HirStmt::Let { value, .. } => find_call_id(value, callee),
                 _ => None,
             }),
-            HirExpr::If {
-                then_branch,
-                else_branch,
-                ..
-            } => find_call_id(then_branch, callee)
+            HirExpr::If { then_branch, else_branch, .. } => find_call_id(then_branch, callee)
                 .or_else(|| else_branch.as_ref().and_then(|e| find_call_id(e, callee))),
-            HirExpr::Match { arms, .. } => arms
-                .iter()
-                .find_map(|(_, _, body)| find_call_id(body, callee)),
+            HirExpr::Match { arms, .. } => arms.iter().find_map(|(_, _, body)| find_call_id(body, callee)),
             HirExpr::Return { value: Some(v), .. } => find_call_id(v, callee),
             _ => None,
         }

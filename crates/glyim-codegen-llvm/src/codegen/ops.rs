@@ -67,6 +67,11 @@ pub(crate) fn codegen_float_cmp<'ctx>(
         glyim_hir::HirBinOp::Gte => FloatPredicate::OGE,
         _ => return None,
     };
-    let c = cg.builder.build_float_compare(pred, lhs, rhs, "fcmp").ok()?;
-    cg.builder.build_int_z_extend(c, cg.i64_type, "fcmp_zext").ok()
+    let c = cg
+        .builder
+        .build_float_compare(pred, lhs, rhs, "fcmp")
+        .ok()?;
+    cg.builder
+        .build_int_z_extend(c, cg.i64_type, "fcmp_zext")
+        .ok()
 }

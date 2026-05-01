@@ -93,7 +93,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 type_params: type_params.clone(),
                 fields: hir_fields,
                 is_pub: false,
-            span: glyim_diag::Span::new(name_span.start, end),
+                span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
         Item::EnumDef {
@@ -127,7 +127,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 type_params: type_params.clone(),
                 variants: hir_variants,
                 is_pub: false,
-            span: glyim_diag::Span::new(name_span.start, end),
+                span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
         Item::ImplBlock {
@@ -176,8 +176,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
                             body: lower_expr(body, ctx),
                             span: glyim_diag::Span::new(span.start, body.span.end),
-                is_pub: false,
-                is_macro_generated: false,
+                            is_pub: false,
+                            is_macro_generated: false,
                         })
                     } else {
                         None

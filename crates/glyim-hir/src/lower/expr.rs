@@ -157,14 +157,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
         },
 
         ExprKind::As { expr, target_type } => {
-            let target_hir = match ctx.resolve(*target_type) {
-                "i64" | "Int" => HirType::Int,
-                "f64" | "Float" => HirType::Float,
-                "bool" | "Bool" => HirType::Bool,
-                "Str" | "str" => HirType::Str,
-                "ptr" => HirType::RawPtr(Box::new(HirType::Int)),
-                _ => HirType::Named(*target_type),
-            };
+            let target_hir = crate::lower::types::lower_type_expr(target_type, ctx);
             HirExpr::As {
                 id,
                 expr: Box::new(lower_expr(expr, ctx)),
@@ -199,7 +192,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 args: method_args,
                 span,
             }
-        },
+        }
 
         ExprKind::TupleLit(elems) => HirExpr::TupleLit {
             id,
@@ -241,7 +234,8 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                     id: ctx.fresh_id(),
                     value: false,
                     span,
-                },
+            },
+                ty: None,
                 span,
             };
             let let_iter = HirStmt::LetPat {
@@ -249,6 +243,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 mutable: true,
                 value: iter_expr,
                 span,
+            ty: None,
             };
 
             let body_expr = lower_expr(body, ctx);
@@ -361,11 +356,7 @@ fn lower_block(
 fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStmt {
     let span = stmt.span;
     match &stmt.kind {
-        StmtKind::Let {
-            pattern,
-            mutable,
-            value,
-        } => {
+        StmtKind::Let { pattern, mutable, value, ty: _ty } => {
             let val = lower_expr(value, ctx);
             let pat = lower_pattern(pattern, ctx);
             HirStmt::LetPat {
@@ -373,6 +364,7 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
                 mutable: *mutable,
                 value: val,
                 span,
+            ty: None,
             }
         }
         StmtKind::Assign { target, value } => HirStmt::Assign {

@@ -3,7 +3,6 @@ use crate::TypeError;
 use glyim_hir::node::HirStmt;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_hir::{HirExpr, HirPattern};
-
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_stmt(&mut self, stmt: &HirStmt) -> Option<HirType> {
@@ -25,14 +24,25 @@ impl TypeChecker {
                 ..
             } => {
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
+                // If the pattern is a Var with a type annotation, use it to infer
+                // concrete type args for MethodCall/Call expressoins
+                if let HirPattern::Var(_) = pattern {
+                    if let Some(binding_ty) = self.lookup_binding(&match pattern { HirPattern::Var(s) => *s, _ => unreachable!() }) {
+                        // Try to extract type args from the binding's type
+                        if let HirType::Generic(_, type_args) = &binding_ty {
+                            let value_id = value.get_id();
+                            if !type_args.is_empty() {
+                                self.call_type_args.insert(value_id, type_args.clone());
+                            }
+                        }
+                    }
+                }
                 self.bind_pattern(pattern, &ty, *mutable);
                 None
             }
             HirStmt::Assign { target, value, .. } => {
                 let binding = self.lookup_binding_full(target);
-                let immutable = binding
-                    .map(|b| !b.mutable)
-                    .unwrap_or(false);
+                let immutable = binding.map(|b| !b.mutable).unwrap_or(false);
                 if immutable {
                     self.errors.push(TypeError::AssignToImmutable {
                         name: *target,
@@ -83,7 +93,6 @@ impl TypeChecker {
             HirStmt::Expr(e) => self.check_expr(e),
         }
     }
-
     pub(crate) fn bind_pattern(&mut self, pattern: &HirPattern, value_ty: &HirType, mutable: bool) {
         match pattern {
             HirPattern::Var(sym) => {
