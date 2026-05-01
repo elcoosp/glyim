@@ -1,6 +1,7 @@
 use glyim_cli::pipeline;
 use std::path::PathBuf;
 
+mod jit_runtime;
 fn temp_g(content: &str) -> PathBuf {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.g");
