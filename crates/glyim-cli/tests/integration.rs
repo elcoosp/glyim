@@ -1015,3 +1015,31 @@ main = () => {
 "#;
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
+
+#[test]
+#[ignore = "needs Vec::set + grow implementation for full insert"]
+fn e2e_hashmap_full_get() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m = HashMap::new();
+    let m = m.insert(1, 100);
+    let m = m.insert(2, 200);
+    let m = m.insert(3, 300);
+    let m = m.insert(4, 400);
+    let m = m.insert(5, 500);
+    let m = m.insert(6, 600);
+    let m = m.insert(7, 700);
+    let m = m.insert(8, 800);
+    let m = m.insert(9, 900);
+    match m.get(5) {
+        Some(v) => v,
+        None => -1,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 500);
+}
