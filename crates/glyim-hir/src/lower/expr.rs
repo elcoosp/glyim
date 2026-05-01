@@ -360,7 +360,7 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
             pattern,
             mutable,
             value,
-            ty: _ty,
+            ty,
         } => {
             let val = lower_expr(value, ctx);
             let pat = lower_pattern(pattern, ctx);
@@ -369,7 +369,7 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
                 mutable: *mutable,
                 value: val,
                 span,
-                ty: None,
+                ty: ty.as_ref().map(|t| crate::lower::types::lower_type_expr(t, ctx)),
             }
         }
         StmtKind::Assign { target, value } => HirStmt::Assign {

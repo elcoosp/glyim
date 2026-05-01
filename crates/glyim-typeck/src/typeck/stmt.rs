@@ -21,11 +21,21 @@ impl TypeChecker {
                 pattern,
                 mutable,
                 value,
+                ty: annotation,
                 ..
             } => {
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
-                // If the pattern is a Var with a type annotation, use it to infer
-                // concrete type args for MethodCall/Call expressoins
+                if let Some(annotated) = annotation {
+                    let resolved_annotated = crate::typeck::resolver::resolve_named_type(&self.interner, annotated);
+                    let resolved_ty = crate::typeck::resolver::resolve_named_type(&self.interner, &ty);
+                    if resolved_annotated != resolved_ty {
+                        self.errors.push(TypeError::MismatchedTypes {
+                            expected: annotated.clone(),
+                            found: ty.clone(),
+                            expr_id: value.get_id(),
+                        });
+                    }
+                }
                 if let HirPattern::Var(_) = pattern {
                     if let Some(HirType::Generic(_, type_args)) = self.lookup_binding(&match pattern {
                         HirPattern::Var(s) => *s,
