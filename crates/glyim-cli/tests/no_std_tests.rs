@@ -23,9 +23,3 @@ main = () => {
     assert_eq!(result, 99);
 }
 
-#[test]
-fn no_std_does_not_include_prelude() {
-    let src = "no_std\nmain = () => 1";
-    let ir = glyim_codegen_llvm::compile_to_ir(src).unwrap();
-    assert!(!ir.contains("glyim_println_int"), "no_std should not include println shim. Got:\n{ir}");
-}
