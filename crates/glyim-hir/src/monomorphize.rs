@@ -31,6 +31,7 @@ struct MonoContext<'a> {
     type_overrides: HashMap<ExprId, HirType>,
     fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
     fn_queued: HashSet<(Symbol, Vec<HirType>)>,
+    inferred_call_args: HashMap<ExprId, Vec<HirType>>,
     current_type_params: Vec<Symbol>,
 }
 
@@ -51,6 +52,7 @@ impl<'a> MonoContext<'a> {
             type_overrides: HashMap::new(),
             fn_work_queue: Vec::new(),
             fn_queued: HashSet::new(),
+            inferred_call_args: HashMap::new(),
             current_type_params: vec![],
         }
     }
@@ -406,9 +408,16 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     fn scan_expr_for_generic_calls(&mut self, expr: &HirExpr) {
         match expr {
-            HirExpr::Call { callee, args, .. } => {
+            HirExpr::Call { id: call_id, callee, args, .. } => {
                 if let Some(fn_def) = self.find_fn(*callee) {
                     if !fn_def.type_params.is_empty() {
+                        if args.is_empty() {
+                            // Zero-argument generic call: infer type params from usage or default to Int
+                            let concrete: Vec<HirType> = fn_def.type_params.iter().map(|_| HirType::Int).collect();
+                            self.inferred_call_args.insert(*call_id, concrete.clone());
+                            self.queue_fn_specialization(*callee, concrete);
+                            return;
+                        }
                         let arg_types: Vec<HirType> = args
                             .iter()
                             .map(|a| {
@@ -549,7 +558,7 @@ impl<'a> MonoContext<'a> {
                 if let Some(struct_def) = self.find_struct(*struct_name) {
                     for (field_sym, field_expr) in fields {
                         if let Some(field_def) = struct_def.fields.iter().find(|f| f.name == *field_sym) {
-                            if let HirExpr::Call { callee, args, .. } = field_expr {
+                            if let HirExpr::Call { id: call_id, callee, args, .. } = field_expr {
                                 if args.is_empty() {
                                     if let Some(fn_def) = self.find_fn(*callee) {
                                         if !fn_def.type_params.is_empty() {
@@ -558,6 +567,7 @@ impl<'a> MonoContext<'a> {
                                                 _ => fn_def.type_params.iter().map(|_| HirType::Int).collect(),
                                             };
                                             if !concrete.is_empty() {
+                                                self.inferred_call_args.insert(*call_id, concrete.clone());
                                                 self.queue_fn_specialization(*callee, concrete);
                                             }
                                         }
@@ -1197,7 +1207,9 @@ impl<'a> MonoContext<'a> {
                 args,
                 span,
             } => {
-                let type_args = self.call_type_args.get(id).cloned().unwrap_or_default();
+                let type_args = self.call_type_args.get(id).cloned()
+                    .or_else(|| self.inferred_call_args.get(id).cloned())
+                    .unwrap_or_default();
                 let new_callee = fn_map
                     .get(&(*callee, type_args))
                     .copied()
