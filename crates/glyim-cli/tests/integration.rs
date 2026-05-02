@@ -952,6 +952,28 @@ main = () => {
     let input = temp_g(&full_src);
     assert!(pipeline::run(&input, None).is_ok());
 }
+#[test]
+fn e2e_hashmap_full_get() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m: HashMap<i64, i64> = HashMap::new();
+    let m = m.insert(1, 100);
+    let m = m.insert(2, 200);
+    let m = m.insert(3, 300);
+    
+    match m.get(3) {
+        Some(v) => v,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 300);
+}
+
 
 #[test]
 fn e2e_hashmap_insert_get() {

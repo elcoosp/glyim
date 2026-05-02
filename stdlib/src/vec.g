@@ -42,6 +42,16 @@ impl<T> Vec<T> {
             Some(*ptr)
         }
     }
+    pub fn set(mut self: Vec<T>, index: i64, value: T) -> Vec<T> {
+        if index < 0 || index >= self.len {
+            return self;
+        };
+        let elem_size = __size_of::<T>();
+        let dst = __ptr_offset(self.data as *mut u8, index * elem_size) as *mut T;
+        *dst = value;
+        self
+    }
+
 
     pub fn set(mut self: Vec<T>, index: i64, value: T) -> Vec<T> {
         if index >= self.len {

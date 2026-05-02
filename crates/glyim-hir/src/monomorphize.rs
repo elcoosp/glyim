@@ -1140,9 +1140,11 @@ impl<'a> MonoContext<'a> {
                 HirItem::Extern(e) => items.push(HirItem::Extern(e.clone())),
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
+                        if m.type_params.is_empty() {
                         let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map);
                         items.push(HirItem::Fn(rewritten));
                     }
+                        }
                 }
             }
         }

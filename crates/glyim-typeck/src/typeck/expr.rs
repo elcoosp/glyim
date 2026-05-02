@@ -50,7 +50,7 @@ impl TypeChecker {
             HirExpr::EnumVariant { id, .. } => *id,
             HirExpr::TupleLit { id, .. } => *id,
             HirExpr::SizeOf { id, .. } => *id,
-        HirExpr::AddrOf { id, .. } => *id,
+            HirExpr::AddrOf { id, .. } => *id,
             HirExpr::Return { id, .. } => *id,
             HirExpr::Deref { id, .. } => *id,
             HirExpr::ForIn { id, .. } => *id,
@@ -98,8 +98,7 @@ impl TypeChecker {
                 else_branch,
                 ..
             } => {
-                let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);
-                // Accept any non-zero as truthy (C semantics)
+                self.check_expr(condition);
                 let then_type = self.check_expr(then_branch);
                 if let Some(eb) = else_branch {
                     self.check_expr(eb);
@@ -159,15 +158,14 @@ impl TypeChecker {
             HirExpr::While {
                 condition, body, ..
             } => {
-                let cond_type = self.check_expr(condition).unwrap_or(HirType::Int);
-                // Accept any non-zero as truthy (C semantics)
+                self.check_expr(condition);
                 self.check_expr(body);
                 HirType::Unit
             }
             HirExpr::SizeOf { .. } => HirType::Int,
             HirExpr::AddrOf { .. } => HirType::Int,
-                        HirExpr::AddrOf { .. } => HirType::Int,
-HirExpr::Return { .. } => HirType::Never,
+            HirExpr::AddrOf { .. } => HirType::Int,
+            HirExpr::Return { .. } => HirType::Never,
             HirExpr::Deref { expr, id, .. } => {
                 let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);
                 match inner_ty {
