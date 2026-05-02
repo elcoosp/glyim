@@ -35,6 +35,14 @@ impl Interner {
     pub fn try_resolve(&self, sym: Symbol) -> Option<&str> {
         self.strings.get(sym.0 as usize).map(|s| s.as_str())
     }
+    /// Returns Some(Symbol) if `index` is a valid symbol index.
+    pub fn get_symbol(&self, index: u32) -> Option<Symbol> {
+        if index < self.strings.len() as u32 {
+            Some(Symbol(index))
+        } else {
+            None
+        }
+    }
     pub fn len(&self) -> usize {
         self.strings.len()
     }

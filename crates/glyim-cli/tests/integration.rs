@@ -979,6 +979,7 @@ main = () => {
 fn e2e_hashmap_insert_get() {
     // get() is a stub returning None — method-call return value bug means
     // the match may take the wrong arm. Test verifies compilation + insert/len only.
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
     let main_code = r#"
 main = () => {
@@ -990,8 +991,9 @@ main = () => {
 "#;
     let full_src = format!(
         "{}
+{}
 {}",
-        hashmap_src, main_code
+        vec_src, hashmap_src, main_code
     );
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 2);

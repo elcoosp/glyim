@@ -16,10 +16,8 @@ impl<K, V> HashMap<K, V> {
     }
 
     fn hash(self: HashMap<K, V>, key: K) -> i64 {
-        let seed = glyim_hash_seed();
-        let bytes = 0 as *const u8;
-        let hash = glyim_hash_bytes(bytes, __size_of::<K>());
-        if hash < 0 { 0 - hash } else { hash }
+        let h = key as i64;
+        if h < 0 { 0 - h } else { h }
     }
 
     pub fn insert(mut self: HashMap<K, V>, key: K, value: V) -> HashMap<K, V> {
@@ -28,22 +26,30 @@ impl<K, V> HashMap<K, V> {
         };
         let hash = self.hash(key);
         let mut idx = hash - (hash / self.cap) * self.cap;
-        loop {
-            let entry = self.buckets.get(idx);
-            if entry.occupied == 0 {
-                let new_entry = Entry { key, value, occupied: 1 };
-                self.buckets = self.buckets.set(idx, new_entry);
-                self.len = self.len + 1;
-                return self
-            };
-            if entry.key == key {
-                let new_entry = Entry { key, value, occupied: 1 };
-                self.buckets = self.buckets.set(idx, new_entry);
-                return self
-            };
-            idx = idx + 1;
-            if idx >= self.cap { idx = 0 }
-        }
+        let mut done = 0;
+        while done == 0 {
+            match self.buckets.get(idx) {
+                Some(entry) => {
+                    if entry.occupied == 0 {
+                        let new_entry = Entry { key, value, occupied: 1 };
+                        self.buckets = self.buckets.set(idx, new_entry);
+                        self.len = self.len + 1;
+                        done = 1
+                    } else {
+                        if entry.key == key {
+                            let new_entry = Entry { key, value, occupied: 1 };
+                            self.buckets = self.buckets.set(idx, new_entry);
+                            done = 1
+                        } else {
+                            idx = idx + 1;
+                            if idx >= self.cap { idx = 0 }
+                        }
+                    }
+                },
+                None => { done = 1 }
+            }
+        };
+        self
     }
 
     pub fn get(self: HashMap<K, V>, key: K) -> Option<V> {
@@ -51,15 +57,31 @@ impl<K, V> HashMap<K, V> {
         let hash = self.hash(key);
         let mut idx = hash - (hash / self.cap) * self.cap;
         let mut count = 0;
-        loop {
-            let entry = self.buckets.get(idx);
-            if entry.occupied == 0 { return None; }
-            if entry.key == key { return Some(entry.value); }
-            idx = idx + 1;
-            if idx >= self.cap { idx = 0; }
-            count = count + 1;
-            if count >= self.cap { return None; }
-        }
+        let mut found_val: V = 0 as V;
+        let mut is_found = 0;
+        let mut done = 0;
+        while done == 0 {
+            match self.buckets.get(idx) {
+                Some(entry) => {
+                    if entry.occupied == 0 {
+                        done = 1
+                    } else {
+                        if entry.key == key {
+                            found_val = entry.value;
+                            is_found = 1;
+                            done = 1
+                        } else {
+                            idx = idx + 1;
+                            if idx >= self.cap { idx = 0; }
+                            count = count + 1;
+                            if count >= self.cap { done = 1 }
+                        }
+                    }
+                },
+                None => { done = 1 }
+            }
+        };
+        if is_found != 0 { Some(found_val) } else { None }
     }
 
     pub fn len(self: HashMap<K, V>) -> i64 { self.len }
@@ -78,9 +100,13 @@ impl<K, V> HashMap<K, V> {
         };
         let mut i = 0;
         while i < old_buckets.len() {
-            let entry = old_buckets.get(i);
-            if entry.occupied != 0 {
-                self = self.insert(entry.key, entry.value)
+            match old_buckets.get(i) {
+                Some(entry) => {
+                    if entry.occupied != 0 {
+                        self = self.insert(entry.key, entry.value)
+                    }
+                },
+                None => {}
             };
             i = i + 1
         };

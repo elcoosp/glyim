@@ -41,7 +41,13 @@ pub(crate) fn codegen_while<'ctx>(
         // Body block
         cg.builder.position_at_end(body_bb);
         codegen_block(cg, body, fctx)?;
-        cg.builder.build_unconditional_branch(cond_bb).ok()?;
+        if cg.builder
+            .get_insert_block()
+            .and_then(|b| b.get_terminator())
+            .is_none()
+        {
+            cg.builder.build_unconditional_branch(cond_bb).ok();
+        }
 
         // End block
         cg.builder.position_at_end(end_bb);
