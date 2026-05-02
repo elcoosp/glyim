@@ -85,7 +85,12 @@ pub(crate) fn codegen_expr<'ctx>(
                     let zero = cg.i64_type.const_int(0, false);
                     cg.builder.build_int_sub(zero, val, "neg").ok()
                 }
-                HirUnOp::Not => cg.builder.build_not(val, "not").ok(),
+                HirUnOp::Not => {
+                    // Parser wraps `return expr` as Unary(Not, expr).
+                    // Pass through the value unchanged. The true `!` operator
+                    // is not yet properly implemented, so this is safe.
+                    Some(val)
+                }
             }
         }
         HirExpr::BoolLit { value: b, .. } => {

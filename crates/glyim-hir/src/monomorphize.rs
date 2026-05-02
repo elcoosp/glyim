@@ -481,7 +481,7 @@ impl<'a> MonoContext<'a> {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
-                eprintln!("[mono] MethodCall mangled={} mangled_sym={} fn_map_keys: {:?}", mangled, self.interner.resolve(mangled_sym), fn_map.keys().map(|(s,_)| self.interner.resolve(*s)).collect::<Vec<_>>());
+
 
                     // Try to find the method; if it exists with type_params, queue specialization
                     // with concrete args from the receiver type (not the naked type params)
@@ -1150,19 +1150,28 @@ impl<'a> MonoContext<'a> {
             }
         }
 
+        std::fs::write("/tmp/mono_debug.txt", "ENTERING step 3\n").ok();
         // 3. Specialized functions with MANGLED names
+        std::fs::write("/tmp/mono_debug.txt", "created fn_specs_clone\n").ok();
         let fn_specs_clone: Vec<_> = self
             .fn_specs
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
 
+        std::fs::write("/tmp/mono_debug.txt", "entering for loop\n").ok();
         for ((orig_name, args), f) in &fn_specs_clone {
+            std::fs::write("/tmp/mono_debug.txt", &format!("processing {}\n", self.interner.resolve(f.name))).ok();
+            std::fs::write("/tmp/mono_debug.txt", "before clone\n").ok();
             let mut mono_f = f.clone();
+            std::fs::write("/tmp/mono_debug.txt", "after clone\n").ok();
+            std::fs::write("/tmp/mono_debug.txt", "before mangle\n").ok();
             mono_f.name = self.mangle_name(*orig_name, args);
-            // Rewrite internal MethodCall nodes to use mangled names
-            let rewritten = self.rewrite_fn(&mono_f, &fn_mangle_map, &struct_mangle_map);
-            items.push(HirItem::Fn(rewritten));
+            std::fs::write("/tmp/mono_debug.txt", "after mangle\n").ok();
+            eprintln!("[mono] BEFORE rewrite_fn for {}", self.interner.resolve(mono_f.name));
+            let mono_f = self.rewrite_fn(&mono_f, &fn_mangle_map, &struct_mangle_map);
+            eprintln!("[mono] AFTER rewrite_fn for {}", self.interner.resolve(mono_f.name));
+            items.push(HirItem::Fn(mono_f));
         }
 
         MonoResult {
@@ -1258,7 +1267,7 @@ impl<'a> MonoContext<'a> {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
-                eprintln!("[mono] MethodCall mangled={} mangled_sym={} fn_map_keys: {:?}", mangled, self.interner.resolve(mangled_sym), fn_map.keys().map(|(s,_)| self.interner.resolve(*s)).collect::<Vec<_>>());
+
                     // Try to find a monomorphized version
                     // Collect the receiver's concrete type args to match
                     let receiver_type_args: Vec<HirType> = match receiver_ty {
