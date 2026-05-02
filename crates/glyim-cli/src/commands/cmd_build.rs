@@ -1,11 +1,12 @@
-use super::*;
+use std::path::PathBuf;
+use crate::pipeline::{self, BuildMode};
 
 pub fn cmd_build(
     input: PathBuf,
     output: Option<PathBuf>,
     target: Option<String>,
+    _debug: bool,
     release: bool,
-    debug: bool,
 ) -> i32 {
     let mode = if release {
         BuildMode::Release

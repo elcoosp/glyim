@@ -1,4 +1,5 @@
-use super::*;
+use std::path::PathBuf;
+use crate::pipeline;
 
 pub fn cmd_ir(input: PathBuf) -> i32 {
     match pipeline::print_ir(&input) {

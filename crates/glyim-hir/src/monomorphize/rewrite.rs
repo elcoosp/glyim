@@ -81,7 +81,7 @@ impl<'a> MonoContext<'a> {
                 if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = inner_ty {
                     let mangled = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
                     let mangled_sym = self.interner.intern(&mangled);
-                    let receiver_type_args: Vec<HirType> = match receiver_ty { Some(HirType::Generic(_, ref args)) => args.clone(), _ => vec![] };
+                    let receiver_type_args: Vec<HirType> = match receiver_ty { Some(HirType::Generic(_, args)) => args.clone(), _ => vec![] };
                     let concrete_key = fn_map.iter().find_map(|((sym, args), mono_name)| if *sym == mangled_sym && *args == receiver_type_args { Some((args.clone(), *mono_name)) } else { None });
                     let concrete_key = concrete_key.or_else(|| {
                         if receiver_type_args.is_empty() { fn_map.iter().find(|((sym, _), _)| *sym == mangled_sym).map(|((_, args), mono_name)| (args.clone(), *mono_name)) } else { None }

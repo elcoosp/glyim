@@ -176,7 +176,7 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     fn set_debug_location_for_span(&self, span: Span) {
-        if let (Some(ref di), Some(ref src), Some(sp)) =
+        if let (Some(di), Some(src), Some(sp)) =
             (&self.debug_info, &self.source_str, &self.current_subprogram)
         {
             let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
@@ -365,7 +365,7 @@ impl<'ctx> Codegen<'ctx> {
         };
         Target::initialize_native(&InitializationConfig::default()).map_err(|e| e.to_string())?;
         let triple_obj = if let Some(ref t) = self.target_triple {
-            TargetTriple::create(t)
+            TargetTriple::create(&t)
         } else {
             TargetMachine::get_default_triple()
         };

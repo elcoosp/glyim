@@ -1,5 +1,3 @@
-use super::*;
-
 pub fn cmd_publish(dry_run: bool) -> i32 {
     let result: Result<i32, i32> = (|| {
         let dir = std::env::current_dir().map_err(|e| { eprintln!("error: {e}"); 1 })?;

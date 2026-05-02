@@ -55,7 +55,7 @@ pub(crate) fn codegen_stmt<'ctx>(
                 .ok()?;
             cg.builder.build_store(alloca, val).ok()?;
 
-            if let (Some(ref di), Some(ref src), Some(sp)) =
+            if let (Some(di), Some(src), Some(sp)) =
                 (&cg.debug_info, &cg.source_str, &cg.current_subprogram)
             {
                 let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
@@ -83,7 +83,7 @@ pub(crate) fn codegen_stmt<'ctx>(
                     .build_alloca(cg.i64_type, cg.interner.resolve(*name))
                     .ok()?;
                 cg.builder.build_store(alloca, val).ok()?;
-                if let (Some(ref di), Some(ref src), Some(sp)) =
+                if let (Some(di), Some(src), Some(sp)) =
                     (&cg.debug_info, &cg.source_str, &cg.current_subprogram)
                 {
                     let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);

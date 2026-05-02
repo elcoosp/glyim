@@ -1,4 +1,5 @@
-use super::*;
+use std::path::PathBuf;
+use crate::pipeline;
 
 pub fn cmd_test(input: PathBuf, ignore: bool, filter: Option<String>) -> i32 {
     let include_ignored = ignore;

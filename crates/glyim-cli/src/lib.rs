@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod dump;
 pub mod lockfile_integration;
 pub mod manifest;

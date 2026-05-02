@@ -15,7 +15,7 @@ fn temp_g(content: &str) -> PathBuf {
 use std::sync::Mutex;
 
 #[allow(dead_code)]
-extern "C" {
+unsafe extern "C" {
     fn setjmp(buf: *mut usize) -> i32;
     fn longjmp(buf: *mut usize, val: i32) -> !;
 }

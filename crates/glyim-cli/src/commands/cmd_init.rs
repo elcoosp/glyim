@@ -1,4 +1,4 @@
-use super::*;
+use crate::pipeline;
 
 pub fn cmd_init(name: String) -> i32 {
     match pipeline::init(&name) {

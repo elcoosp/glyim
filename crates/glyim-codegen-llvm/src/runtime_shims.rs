@@ -4,13 +4,13 @@ use inkwell::module::Module;
 use inkwell::values::{ArrayValue, IntValue, PointerValue};
 use inkwell::AddressSpace;
 
-extern "C" {
+unsafe extern "C" {
     fn printf(fmt: *const libc::c_char, ...) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     fn write(fd: libc::c_int, buf: *const libc::c_void, count: libc::size_t) -> libc::ssize_t;
 }
-extern "C" {
+unsafe extern "C" {
     fn abort() -> !;
 }
 
@@ -56,14 +56,12 @@ unsafe fn create_fmt_ptr<'ctx>(
         .iter()
         .map(|&b| context.i8_type().const_int(b as u64, false))
         .collect();
-    let arr = ArrayValue::new_const_array(&ty, &elems);
+    let arr = unsafe { ArrayValue::new_const_array(&ty, &elems) };
     global.set_initializer(&arr);
     global.set_constant(true);
     global.set_linkage(inkwell::module::Linkage::Private);
     let zero = context.i32_type().const_int(0, false);
-    global
-        .as_pointer_value()
-        .const_in_bounds_gep(ty, &[zero, zero])
+    unsafe { global.as_pointer_value().const_in_bounds_gep(ty, &[zero, zero]) }
 }
 
 pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, jit: bool) {

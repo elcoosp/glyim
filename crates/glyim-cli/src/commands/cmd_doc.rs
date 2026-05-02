@@ -1,4 +1,7 @@
-use super::*;
+use std::path::PathBuf;
+use glyim_parse;
+use glyim_hir;
+use glyim_doc;
 
 pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>) -> i32 {
     let source = std::fs::read_to_string(&input).unwrap_or_default();

@@ -1,10 +1,9 @@
+extern crate glyim_cli;
 use clap::{Parser, Subcommand};
-use glyim_cli::pipeline::{self, BuildMode};
-use glyim_pkg::manifest::{Dependency, PackageManifest};
+use glyim_cli::commands::*;
 use std::path::PathBuf;
 use std::process;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
 #[command(
     name = "glyim",
@@ -99,6 +98,7 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+#[allow(dead_code)]
 enum CacheCommand {
     Store {
         path: PathBuf,
@@ -151,360 +151,39 @@ fn main() {
             .init();
     }
 
-    // Load all process symbols so the ORC JIT can resolve printf, write, abort, etc.
-
     let exit_code = match cli.command {
         Command::Build {
             input,
             output,
             target,
-            debug: _,
+            debug,
             release,
-        } => {
-            let mode = if release {
-                BuildMode::Release
-            } else {
-                BuildMode::Debug
-            };
-            let result = if input.is_dir() {
-                pipeline::build_package(&input, output.as_deref(), mode, target.as_deref())
-            } else {
-                pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref())
-            };
-            match result {
-                Ok(path) => {
-                    eprintln!("Built: {}", path.display());
-                    0
-                }
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    1
-                }
-            }
-        }
+        } => cmd_build(input, output, target, debug, release),
         Command::Run {
             input,
             target,
-            debug: _,
+            debug,
             release,
-        } => {
-            let mode = if release {
-                BuildMode::Release
-            } else {
-                BuildMode::Debug
-            };
-            let result = if input.is_dir() {
-                pipeline::run_package(&input, mode, target.as_deref())
-            } else {
-                pipeline::run_with_mode(&input, mode, target.as_deref())
-            };
-            match result {
-                Ok(code) => code,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    1
-                }
-            }
-        }
-        Command::Ir { input } => match pipeline::print_ir(&input) {
-            Ok(()) => 0,
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        },
-        Command::Check { input } => match pipeline::check(&input) {
-            Ok(()) => 0,
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        },
-        Command::Init { name } => match pipeline::init(&name) {
-            Ok(path) => {
-                eprintln!("Created {}/", path.display());
-                0
-            }
-            Err(e) => {
-                eprintln!("error: {e}");
-                1
-            }
-        },
+        } => cmd_run(input, target, debug, release),
+        Command::Ir { input } => cmd_ir(input),
+        Command::Check { input } => cmd_check(input),
+        Command::Init { name } => cmd_init(name),
         Command::Test {
             input,
             ignore,
             filter,
-        } => {
-            let include_ignored = ignore;
-            let result = if input.is_dir() {
-                pipeline::run_tests_package(&input, filter.as_deref(), include_ignored)
-            } else {
-                pipeline::run_tests(&input, filter.as_deref(), include_ignored)
-            };
-            match result {
-                Ok(summary) => {
-                    eprintln!("{}", summary.format_summary());
-                    summary.exit_code()
-                }
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    1
-                }
-            }
-        }
-        Command::Export { name, dest } => {
-            eprintln!(
-                "error: 'export' not implemented (artifact: {name}, dest: {})",
-                dest.display()
-            );
-            1
-        }
-        Command::Add { package, macro_dep } => {
-            let result: Result<i32, i32> = (|| {
-                let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let manifest_path = dir.join("glyim.toml");
-                let toml_str = std::fs::read_to_string(&manifest_path).map_err(|e| {
-                    if e.kind() == std::io::ErrorKind::NotFound {
-                        eprintln!("error: glyim.toml not found");
-                    } else {
-                        eprintln!("error: {e}");
-                    }
-                    1
-                })?;
-                let mut m: PackageManifest = glyim_pkg::manifest::parse_manifest(
-                    &toml_str,
-                    &manifest_path.to_string_lossy(),
-                )
-                .map_err(|e| {
-                    eprintln!("error: invalid glyim.toml: {e}");
-                    1
-                })?;
-                let target_deps = if macro_dep {
-                    &mut m.macros
-                } else {
-                    &mut m.dependencies
-                };
-                target_deps.insert(
-                    package.clone(),
-                    Dependency {
-                        version: Some("*".into()),
-                        path: None,
-                        registry: None,
-                        workspace: false,
-                        is_macro: macro_dep,
-                    },
-                );
-                let new_toml = toml::to_string_pretty(&m).unwrap_or_default();
-                std::fs::write(&manifest_path, new_toml).map_err(|e| {
-                    eprintln!("error writing manifest: {e}");
-                    1
-                })?;
-                eprintln!(
-                    "Added {package} to {}",
-                    if macro_dep {
-                        "[macros]"
-                    } else {
-                        "[dependencies]"
-                    }
-                );
-                match glyim_cli::lockfile_integration::resolve_and_write_lockfile(&dir, &m) {
-                    Ok(()) => {}
-                    Err(e) => eprintln!("warning: could not resolve dependencies: {e}"),
-                }
-                Ok(0)
-            })();
-            result.unwrap_or_else(|code| code)
-        }
-        Command::Remove { package } => {
-            let result: Result<i32, i32> = (|| {
-                let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let manifest_path = dir.join("glyim.toml");
-                let toml_str = std::fs::read_to_string(&manifest_path).map_err(|e| {
-                    if e.kind() == std::io::ErrorKind::NotFound {
-                        eprintln!("error: glyim.toml not found");
-                    } else {
-                        eprintln!("error: {e}");
-                    }
-                    1
-                })?;
-                let mut m: PackageManifest = glyim_pkg::manifest::parse_manifest(
-                    &toml_str,
-                    &manifest_path.to_string_lossy(),
-                )
-                .map_err(|e| {
-                    eprintln!("error: invalid glyim.toml: {e}");
-                    1
-                })?;
-                m.dependencies.remove(&package);
-                m.macros.remove(&package);
-                let new_toml = toml::to_string_pretty(&m).unwrap_or_default();
-                std::fs::write(&manifest_path, new_toml).map_err(|e| {
-                    eprintln!("error writing manifest: {e}");
-                    1
-                })?;
-                eprintln!("Removed {package} from dependencies");
-                match glyim_cli::lockfile_integration::resolve_and_write_lockfile(&dir, &m) {
-                    Ok(()) => {}
-                    Err(e) => eprintln!("warning: could not resolve dependencies: {e}"),
-                }
-                Ok(0)
-            })();
-            result.unwrap_or_else(|code| code)
-        }
-        Command::Fetch => {
-            let result: Result<i32, i32> = (|| {
-                let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let packages = glyim_cli::lockfile_integration::read_lockfile_packages(&dir)
-                    .map_err(|e| {
-                        eprintln!("error: {e}");
-                        1
-                    })?;
-                if packages.is_empty() {
-                    eprintln!("No dependencies to fetch (glyim.lock not found or empty)");
-                    return Ok(0);
-                }
-                eprintln!("Fetching {} package(s)...", packages.len());
-                for pkg in &packages {
-                    eprintln!("  {} {} ({:?})", pkg.name, pkg.version, pkg.source);
-                }
-                eprintln!("Done.");
-                Ok(0)
-            })();
-            result.unwrap_or_else(|code| code)
-        }
-        Command::Publish { dry_run } => {
-            let result: Result<i32, i32> = (|| {
-                let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let manifest_path = dir.join("glyim.toml");
-                if !manifest_path.exists() {
-                    eprintln!("error: glyim.toml not found; run 'glyim init' first");
-                    return Ok(1);
-                }
-                if dry_run {
-                    eprintln!("Dry run: would publish from {}", dir.display());
-                } else {
-                    eprintln!("error: publish not yet implemented");
-                    return Ok(1);
-                }
-                Ok(0)
-            })();
-            result.unwrap_or_else(|code| code)
-        }
-        Command::Outdated => {
-            let result: Result<i32, i32> = (|| {
-                let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let lockfile_path = dir.join("glyim.lock");
-                if !lockfile_path.exists() {
-                    eprintln!("No glyim.lock found. Run 'glyim fetch' first.");
-                    return Ok(1);
-                }
-                let content = std::fs::read_to_string(&lockfile_path).map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let lockfile = glyim_pkg::lockfile::parse_lockfile(&content).map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                eprintln!("Checking for outdated dependencies...");
-                for pkg in &lockfile.packages {
-                    eprintln!("  {} {} ({:?})", pkg.name, pkg.version, pkg.source);
-                }
-                eprintln!("All dependencies are up to date.");
-                Ok(0)
-            })();
-            result.unwrap_or_else(|code| code)
-        }
-        Command::Verify => {
-            let result: Result<i32, i32> = (|| {
-                let dir = std::env::current_dir().map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let lockfile_path = dir.join("glyim.lock");
-                if !lockfile_path.exists() {
-                    eprintln!("No glyim.lock found.");
-                    return Ok(1);
-                }
-                let content = std::fs::read_to_string(&lockfile_path).map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                let lockfile = glyim_pkg::lockfile::parse_lockfile(&content).map_err(|e| {
-                    eprintln!("error: {e}");
-                    1
-                })?;
-                eprintln!("Verifying lockfile integrity...");
-                eprintln!("Lockfile contains {} packages.", lockfile.packages.len());
-                eprintln!("Lockfile verified.");
-                Ok(0)
-            })();
-            result.unwrap_or_else(|code| code)
-        }
-        Command::Doc { input, output } => {
-            let source = std::fs::read_to_string(&input).unwrap_or_default();
-            let parse_out = glyim_parse::parse(&source);
-            if !parse_out.errors.is_empty() {
-                eprintln!("parse errors: {:?}", parse_out.errors);
-                1
-            } else {
-                let mut interner = parse_out.interner;
-                let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-                let html = glyim_doc::generate_html(&hir, &interner);
-                let out_path = output
-                    .as_deref()
-                    .unwrap_or(std::path::Path::new("doc/index.html"));
-                if let Some(parent) = out_path.parent() {
-                    std::fs::create_dir_all(parent).ok();
-                }
-                if let Err(e) = std::fs::write(out_path, html) {
-                    eprintln!("error: {e}");
-                    1
-                } else {
-                    0
-                }
-            }
-        }
-        Command::DumpTokens { input } => {
-            let source = std::fs::read_to_string(&input).unwrap_or_default();
-            glyim_cli::dump::dump_tokens(&source, &mut std::io::stdout());
-            0
-        }
-        Command::DumpAst { input } => {
-            let source = std::fs::read_to_string(&input).unwrap_or_default();
-            let parse_out = glyim_parse::parse(&source);
-            let interner = parse_out.interner;
-            glyim_cli::dump::dump_ast(&source, &interner, &mut std::io::stdout());
-            if !parse_out.errors.is_empty() {
-                for e in &parse_out.errors {
-                    eprintln!("error: {e}");
-                }
-                1
-            } else {
-                0
-            }
-        }
-        Command::DumpHir { input } => {
-            let source = std::fs::read_to_string(&input).unwrap_or_default();
-            let interner = glyim_interner::Interner::new();
-            glyim_cli::dump::dump_hir(&source, &interner, &mut std::io::stdout());
-            0
-        }
+        } => cmd_test(input, ignore, filter),
+        Command::Export { name, dest } => cmd_export(name, dest),
+        Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
+        Command::Remove { package } => cmd_remove(package),
+        Command::Fetch => cmd_fetch(),
+        Command::Publish { dry_run } => cmd_publish(dry_run),
+        Command::Outdated => cmd_outdated(),
+        Command::Verify => cmd_verify(),
+        Command::Doc { input, output } => cmd_doc(input, output),
+        Command::DumpTokens { input } => cmd_dump_tokens(input),
+        Command::DumpAst { input } => cmd_dump_ast(input),
+        Command::DumpHir { input } => cmd_dump_hir(input),
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
@@ -606,6 +285,7 @@ fn main() {
             }
         },
     };
+
     if cli.json {
         let summary = serde_json::json!({
             "success": exit_code == 0,

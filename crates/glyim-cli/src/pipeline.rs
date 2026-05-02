@@ -608,7 +608,7 @@ pub fn run_tests(
         results.push((name.clone(), crate::test_runner::TestResult::Ignored));
     }
     if !output.status.success() && output.status.code().is_none() {
-        for (_, ref mut result) in results.iter_mut() {
+        for (_, result) in results.iter_mut() {
             if *result == crate::test_runner::TestResult::Passed {
                 *result = crate::test_runner::TestResult::Failed;
             }
