@@ -9,7 +9,9 @@ description = "Typed macro expansion engine for Glyim"
 [dependencies]
 wasmtime = { version = "44", default-features = true }
 wasmtime-wasi = "44"
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 anyhow = "1"
+sha2 = "0.11"
 glyim-syntax = { path = "../glyim-syntax" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
