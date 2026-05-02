@@ -128,7 +128,35 @@ pub(crate) fn codegen_enum_variant<'ctx>(
                     .into_pointer_value();
                 let arg_val =
                     codegen_expr(cg, &args[0], fctx).unwrap_or(cg.i64_type.const_int(0, false));
-                cg.builder.build_store(arg_ptr, arg_val).unwrap();
+                // If arg is a struct pointer, load the full struct
+                let arg_id = args[0].get_id();
+                let arg_ty = cg.expr_types.get(arg_id.as_usize());
+                let is_struct = match arg_ty {
+                    Some(HirType::Named(sym)) | Some(HirType::Generic(sym, _)) => {
+                        cg.struct_types.borrow().contains_key(sym)
+                    }
+                    _ => false,
+                };
+                if is_struct {
+                    let sym = match arg_ty {
+                        Some(HirType::Named(s)) => *s,
+                        Some(HirType::Generic(s, _)) => *s,
+                        _ => return None,
+                    };
+                    if let Some(llvm_struct) = cg.struct_types.borrow().get(&sym).copied() {
+                        let val_ptr = cg.builder.build_int_to_ptr(
+                            arg_val,
+                            cg.context.ptr_type(AddressSpace::from(0u16)),
+                            "val_ptr"
+                        ).ok()?;
+                        let loaded = cg.builder.build_load(llvm_struct, val_ptr, "struct_val").ok()?;
+                        cg.builder.build_store(arg_ptr, loaded).unwrap();
+                    } else {
+                        cg.builder.build_store(arg_ptr, arg_val).unwrap();
+                    }
+                } else {
+                    cg.builder.build_store(arg_ptr, arg_val).unwrap();
+                }
             }
             let ptr_i64 = cg
                 .builder

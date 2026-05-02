@@ -329,6 +329,11 @@ pub(crate) fn codegen_expr<'ctx>(
                 inkwell::values::BasicValueEnum::PointerValue(pv) => {
                     cg.builder.build_ptr_to_int(pv, cg.i64_type, "p2i").ok()
                 }
+                inkwell::values::BasicValueEnum::StructValue(_)
+                | inkwell::values::BasicValueEnum::ArrayValue(_) => {
+                    // Return the pointer to the aggregate (not the value itself)
+                    cg.builder.build_ptr_to_int(ptr, cg.i64_type, "agg_ptr").ok()
+                }
                 _ => Some(cg.i64_type.const_int(0, false)),
             }
         }
