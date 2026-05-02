@@ -133,6 +133,7 @@ pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
 
 /// Get or create the LLVM struct type for a concrete enum variant.
 /// For built-in Option and Result, the payload size is computed from the actual argument types.
+#[allow(dead_code)]
 pub(crate) fn get_or_create_enum_struct_type<'ctx>(
     cg: &Codegen<'ctx>,
     enum_name: glyim_interner::Symbol,

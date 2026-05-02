@@ -803,8 +803,6 @@ main = () => {
 }
 
 #[test]
-#[test]
-#[test]
 fn e2e_for_in_vec() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let main_code = r#"

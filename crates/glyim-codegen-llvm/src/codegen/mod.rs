@@ -38,7 +38,9 @@ pub struct Codegen<'ctx> {
         RefCell<HashMap<Symbol, (IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
     pub(crate) enum_struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
     pub(crate) enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
+    #[allow(dead_code)]
     pub(crate) option_sym: Symbol,
+    #[allow(dead_code)]
     pub(crate) result_sym: Symbol,
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,

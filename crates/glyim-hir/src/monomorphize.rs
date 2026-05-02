@@ -658,10 +658,6 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    fn format_type_short(&self, ty: &HirType) -> String {
-        type_to_short_string(ty, &self.interner)
-    }
-
     #[tracing::instrument(skip_all)]
     fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();

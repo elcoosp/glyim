@@ -501,11 +501,6 @@ fn lower_enum_variant_construction() {
         _ => false,
     };
     assert!(has_enum, "expected EnumVariant somewhere");
-
-    #[test]
-    fn lower_enum_variant_construction() {
-        // (original test body, unchanged but without the inner tests)
-    }
 }
 #[test]
 fn lower_struct_preserves_type_params() {

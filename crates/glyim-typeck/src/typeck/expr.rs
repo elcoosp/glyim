@@ -1,17 +1,3 @@
-fn type_contains_unresolved(ty: &HirType, type_params: &[glyim_interner::Symbol]) -> bool {
-    match ty {
-        HirType::Named(sym) => type_params.contains(sym),
-        HirType::Generic(_, args) => args
-            .iter()
-            .any(|a| type_contains_unresolved(a, type_params)),
-        HirType::RawPtr(inner) => type_contains_unresolved(inner, type_params),
-        HirType::Tuple(elems) => elems
-            .iter()
-            .any(|e| type_contains_unresolved(e, type_params)),
-        _ => false,
-    }
-}
-
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
 use crate::TypeChecker;
