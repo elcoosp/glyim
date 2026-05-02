@@ -1,0 +1,47 @@
+use crate::item::StructDef;
+use crate::node::HirFn;
+use crate::types::{ExprId, HirType};
+use glyim_interner::{Interner, Symbol};
+use std::collections::{HashMap, HashSet};
+
+pub mod mangling;
+pub use mangling::{type_to_short_string, mangle_type_name};
+
+mod context;
+mod collect;
+mod specialize;
+mod rewrite;
+mod build_result;
+#[cfg(test)]
+mod tests;
+
+pub struct MonoResult {
+    pub hir: crate::Hir,
+    pub type_overrides: HashMap<ExprId, HirType>,
+}
+
+#[tracing::instrument(skip_all)]
+pub fn monomorphize(
+    hir: &crate::Hir,
+    interner: &mut Interner,
+    expr_types: &[HirType],
+    call_type_args: &HashMap<ExprId, Vec<HirType>>,
+) -> MonoResult {
+    let mut ctx = MonoContext::new(hir, interner, expr_types, call_type_args);
+    ctx.collect_and_specialize();
+    ctx.build_result()
+}
+
+pub(crate) struct MonoContext<'a> {
+    pub(crate) hir: &'a crate::Hir,
+    pub(crate) interner: &'a mut Interner,
+    pub(crate) expr_types: &'a [HirType],
+    pub(crate) call_type_args: &'a HashMap<ExprId, Vec<HirType>>,
+    pub(crate) fn_specs: HashMap<(Symbol, Vec<HirType>), HirFn>,
+    pub(crate) struct_specs: HashMap<(Symbol, Vec<HirType>), StructDef>,
+    pub(crate) type_overrides: HashMap<ExprId, HirType>,
+    pub(crate) fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
+    pub(crate) fn_queued: HashSet<(Symbol, Vec<HirType>)>,
+    pub(crate) inferred_call_args: HashMap<ExprId, Vec<HirType>>,
+    pub(crate) current_type_params: Vec<Symbol>,
+}

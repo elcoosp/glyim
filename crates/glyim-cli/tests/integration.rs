@@ -23,6 +23,7 @@ extern "C" {
 static JMP_BUF: Mutex<[usize; 64]> = Mutex::new([0; 64]);
 static ASSERT_FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+#[allow(dead_code)]
 unsafe extern "C" fn assert_handler_impl(_msg: *const u8, _len: i64) {
     ASSERT_FIRED.store(true, std::sync::atomic::Ordering::SeqCst);
     unsafe { longjmp(JMP_BUF.lock().unwrap().as_mut_ptr(), 1) };
