@@ -73,13 +73,14 @@ impl<K, V> HashMap<K, V> {
 =======
         let n = self.buckets.len();
         let mut i = 0;
+        let mut result: Option<V> = None;
         while i < n {
             let entry = self.buckets.get(i);
             match entry {
                 Some(e) => {
                     if e.occupied {
                         if e.key == key {
-                            return Some(e.value);
+                            result = Some(e.value);
                         };
                     };
                 },
@@ -88,7 +89,7 @@ impl<K, V> HashMap<K, V> {
             i = i + 1;
 >>>>>>> ae8fa15 (interim: 85 integration tests passing, hashmap compile+run but get returns None)
         };
-        None
+        result
     }
 
     pub fn len(self: HashMap<K, V>) -> i64 { self.len }
