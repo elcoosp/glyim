@@ -7,7 +7,8 @@ rust-version.workspace = true
 description = "Typed macro expansion engine for Glyim"
 
 [dependencies]
-wasmtime = { version = "44.0.1", default-features = true }
+wasmtime = { version = "44", default-features = true }
+wasmtime-wasi = "44"
 anyhow = "1"
 glyim-syntax = { path = "../glyim-syntax" }
 glyim-interner = { path = "../glyim-interner" }
