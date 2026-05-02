@@ -47,6 +47,7 @@ dirs-next = "2"
 
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }
+rstest = "0.24"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }

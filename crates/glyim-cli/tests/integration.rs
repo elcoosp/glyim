@@ -1155,3 +1155,31 @@ main = () => {
 "#;
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
+
+// ── Parametrised e2e arithmetic tests (rstest) ──────────────────
+use rstest::rstest;
+
+#[rstest]
+#[case("main = () => 42", 42)]
+#[case("main = () => 1 + 2", 3)]
+#[case("main = () => 1 + 2 * 3", 7)]
+#[case("main = () => { let x = 10; x }", 10)]
+#[case("main = () => { let mut x = 5; x = x + 10; x }", 15)]
+fn e2e_arithmetic_param(#[case] source: &str, #[case] expected: i32) {
+    assert_eq!(pipeline::run(&temp_g(source), None).unwrap(), expected);
+}
+
+#[rstest]
+#[case("main = () => if true { 10 } else { 20 }", 10)]
+#[case("main = () => if false { 10 } else { 20 }", 20)]
+#[case("main = () => if true { 10 }", 10)]
+fn e2e_conditional_param(#[case] source: &str, #[case] expected: i32) {
+    assert_eq!(pipeline::run(&temp_g(source), None).unwrap(), expected);
+}
+
+#[rstest]
+#[case("fn id<T>(x: T) -> T { x }\nmain = () => id(42)", 42)]
+#[case("fn id<T>(x: T) -> T { x }\nmain = () => id(true)", 1)]
+fn e2e_generic_param(#[case] source: &str, #[case] expected: i32) {
+    assert_eq!(pipeline::run(&temp_g(source), None).unwrap(), expected);
+}
