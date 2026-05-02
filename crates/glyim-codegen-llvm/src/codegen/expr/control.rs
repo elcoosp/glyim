@@ -115,43 +115,66 @@ pub(crate) fn codegen_match<'ctx>(
     } = expr
     {
         let scrutinee_val = codegen_expr(cg, scrutinee, fctx)?;
-        if let Some((pattern, _, body)) = arms.first() {
-            match pattern {
-                HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) => {
+        // If we have exactly two arms: OptionSome/ResultOk and OptionNone/ResultErr,
+        // perform a proper tagged dispatch.
+        if arms.len() == 2 {
+            let (pat0, _guard0, body0) = &arms[0];
+            let (_pat1, _guard1, body1) = &arms[1];
+            let is_some_like = matches!(pat0, HirPattern::OptionSome(_) | HirPattern::ResultOk(_));
+
+            if is_some_like {
+                let enum_ptr = cg.builder.build_int_to_ptr(
+                    scrutinee_val,
+                    cg.context.ptr_type(AddressSpace::from(0u16)),
+                    "enum_ptr",
+                ).ok()?;
+                let st = cg.context.struct_type(
+                    &[cg.i32_type.into(), cg.i64_type.into()],
+                    false,
+                );
+                // Load and test tag
+                let tag_ptr = cg.builder.build_struct_gep(st, enum_ptr, 0, "tag_ptr").ok()?;
+                let tag_val = cg.builder.build_load(cg.i32_type, tag_ptr, "tag_val").ok()?.into_int_value();
+                let is_some = cg.builder.build_int_compare(IntPredicate::EQ, tag_val, cg.i32_type.const_int(0, false), "is_some").ok()?;
+                let some_bb = cg.context.append_basic_block(fctx.fn_value, "some");
+                let none_bb = cg.context.append_basic_block(fctx.fn_value, "none");
+                let merge_bb = cg.context.append_basic_block(fctx.fn_value, "match_merge");
+                cg.builder.build_conditional_branch(is_some, some_bb, none_bb).ok()?;
+
+                // Some branch
+                cg.builder.position_at_end(some_bb);
+                if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pat0 {
                     if let HirPattern::Var(name) = inner.as_ref() {
-                        let enum_ptr = cg
-                            .builder
-                            .build_int_to_ptr(
-                                scrutinee_val,
-                                cg.context.ptr_type(AddressSpace::from(0u16)),
-                                "enum_ptr",
-                            )
-                            .ok()?;
-
-                        // Uniform { i32, i64 } representation
-                        let st = cg
-                            .context
-                            .struct_type(&[cg.i32_type.into(), cg.i64_type.into()], false);
-                        let payload_ptr = cg
-                            .builder
-                            .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
-                            .ok()?;
-                        let payload_val = cg
-                            .builder
-                            .build_load(cg.i64_type, payload_ptr, "payload_val")
-                            .ok()?
-                            .into_int_value();
-
-                        let alloca = cg
-                            .builder
-                            .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                            .ok()?;
+                        let payload_ptr = cg.builder.build_struct_gep(st, enum_ptr, 1, "payload_ptr").ok()?;
+                        let payload_val = cg.builder.build_load(cg.i64_type, payload_ptr, "payload_val").ok()?.into_int_value();
+                        let alloca = cg.builder.build_alloca(cg.i64_type, cg.interner.resolve(*name)).ok()?;
                         cg.builder.build_store(alloca, payload_val).ok()?;
                         fctx.vars.insert(*name, alloca);
                     }
                 }
-                _ => {}
+                let some_val = codegen_expr(cg, body0, fctx)?;
+                let some_end = cg.builder.get_insert_block().unwrap();
+                if cg.builder.get_insert_block().and_then(|b| b.get_terminator()).is_none() {
+                    cg.builder.build_unconditional_branch(merge_bb).ok()?;
+                }
+
+                // None branch
+                cg.builder.position_at_end(none_bb);
+                let none_val = codegen_expr(cg, body1, fctx)?;
+                let none_end = cg.builder.get_insert_block().unwrap();
+                if cg.builder.get_insert_block().and_then(|b| b.get_terminator()).is_none() {
+                    cg.builder.build_unconditional_branch(merge_bb).ok()?;
+                }
+
+                // Merge
+                cg.builder.position_at_end(merge_bb);
+                let phi = cg.builder.build_phi(cg.i64_type, "match_result").ok()?;
+                phi.add_incoming(&[(&some_val as &dyn BasicValue, some_end), (&none_val as &dyn BasicValue, none_end)]);
+                return Some(phi.as_basic_value().into_int_value());
             }
+        }
+        // Fallback for single-arm or other matches
+        if let Some((_pattern, _, body)) = arms.first() {
             codegen_expr(cg, body, fctx)
         } else {
             Some(cg.i64_type.const_int(0, false))

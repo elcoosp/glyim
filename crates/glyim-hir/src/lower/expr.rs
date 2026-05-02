@@ -262,11 +262,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                         span,
                     }),
                     method_name: next_sym,
-                    args: vec![HirExpr::Ident {
-                        id: ctx.fresh_id(),
-                        name: iter_sym,
-                        span,
-                    }],
+                    args: vec![],
                     span,
                 }),
                 arms: vec![
@@ -298,12 +294,17 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
 
             let while_expr = HirExpr::While {
                 id,
-                condition: Box::new(HirExpr::Unary {
+                condition: Box::new(HirExpr::Binary {
                     id: ctx.fresh_id(),
-                    op: crate::node::HirUnOp::Not,
-                    operand: Box::new(HirExpr::Ident {
+                    op: crate::node::HirBinOp::Eq,
+                    lhs: Box::new(HirExpr::Ident {
                         id: ctx.fresh_id(),
                         name: done_sym,
+                        span,
+                    }),
+                    rhs: Box::new(HirExpr::IntLit {
+                        id: ctx.fresh_id(),
+                        value: 0,
                         span,
                     }),
                     span,

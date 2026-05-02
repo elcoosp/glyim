@@ -806,6 +806,24 @@ main = () => {
 }
 
 #[test]
+
+#[test]
+fn e2e_for_in_range() {
+    let range_src = include_str!("../../../stdlib/src/range.g");
+    let main_code = r#"
+main = () => {
+    let mut sum = 0;
+    for i in Range::new(1, 5) {
+        sum = sum + i
+    };
+    sum
+}
+"#;
+    let full_src = format!("{}\n{}", range_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 10); // 1+2+3+4
+}
+
 fn e2e_range_next() {
     let range_src = include_str!("../../../stdlib/src/range.g");
     let main_code = r#"
