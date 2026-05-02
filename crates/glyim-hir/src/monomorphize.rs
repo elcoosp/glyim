@@ -1210,10 +1210,20 @@ impl<'a> MonoContext<'a> {
                 let type_args = self.call_type_args.get(id).cloned()
                     .or_else(|| self.inferred_call_args.get(id).cloned())
                     .unwrap_or_default();
+                let type_args_empty = type_args.is_empty();
                 let new_callee = fn_map
-                    .get(&(*callee, type_args))
+                    .get(&(*callee, type_args.clone()))
                     .copied()
                     .unwrap_or(*callee);
+                // Fallback: if not found and type_args is empty, try any specialization
+                let new_callee = if new_callee == *callee && type_args_empty {
+                    fn_map.iter()
+                        .find(|((sym, _), _)| *sym == *callee)
+                        .map(|(_, mono)| *mono)
+                        .unwrap_or(new_callee)
+                } else {
+                    new_callee
+                };
                 HirExpr::Call {
                     id: *id,
                     callee: new_callee,
