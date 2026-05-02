@@ -1,15 +1,14 @@
 // Glyim Standard Library — I/O Types
-//
-// Minimal implementation: provides stdout() and stderr()
-// that return structs with the correct file descriptors.
-// Method calls like write() are blocked by compiler limitations
-// (see original design comments).
 
-struct Stdout {
+extern {
+    fn write(fd: i32, buf: *const u8, len: i64) -> i64;
+}
+
+pub struct Stdout {
     fd: i64,
 }
 
-struct Stderr {
+pub struct Stderr {
     fd: i64,
 }
 

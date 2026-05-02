@@ -28,6 +28,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 span: glyim_diag::Span::new(start, value.span.end),
                 is_pub: false,
                 is_macro_generated: false,
+                is_extern_backed: false,
             }))
         }
         Item::FnDef {
@@ -65,6 +66,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 span: glyim_diag::Span::new(start, body.span.end),
                 is_pub: false,
                 is_macro_generated: false,
+                is_extern_backed: false,
             }))
         }
         Item::StructDef {
@@ -178,6 +180,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             span: glyim_diag::Span::new(span.start, body.span.end),
                             is_pub: false,
                             is_macro_generated: false,
+                is_extern_backed: false,
                         })
                     } else {
                         None
@@ -207,6 +210,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             span: glyim_diag::Span::new(name_span.start, body.span.end),
             is_pub: false,
             is_macro_generated: true,
+                is_extern_backed: false,
         })),
         Item::ExternBlock {
             span, functions, ..

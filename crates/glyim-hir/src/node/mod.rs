@@ -292,6 +292,7 @@ pub struct HirFn {
     pub span: Span,
     pub is_pub: bool,
     pub is_macro_generated: bool,
+    pub is_extern_backed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
