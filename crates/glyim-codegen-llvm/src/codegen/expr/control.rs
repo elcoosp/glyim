@@ -148,6 +148,7 @@ pub(crate) fn codegen_match<'ctx>(
                                 .build_load(cg.i64_type, arg_ptr, "payload_val")
                                 .ok()?
                                 .into_int_value();
+                            eprintln!("MATCH payload_val={}", payload_val);
                             let alloca = cg
                                 .builder
                                 .build_alloca(cg.i64_type, cg.interner.resolve(*name))

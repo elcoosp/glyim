@@ -162,6 +162,7 @@ pub(crate) fn codegen_call<'ctx>(
             })
             .collect();
         let result = cg.builder.build_call(fn_val, &call_args, "call").ok()?;
+        eprintln!("CALL {} returned {:?}", fn_name, result);
         match result.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(basic_val) => match basic_val {
                 inkwell::values::BasicValueEnum::IntValue(iv) => Some(iv),
