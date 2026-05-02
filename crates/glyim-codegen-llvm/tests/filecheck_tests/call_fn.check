@@ -1,0 +1,4 @@
+; CHECK: define i64 @add
+; CHECK: add i64
+; CHECK: define i32 @main
+; CHECK: call i64 @add

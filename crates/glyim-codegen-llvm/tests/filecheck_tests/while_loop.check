@@ -1,0 +1,7 @@
+; CHECK: define i32 @main
+; CHECK: br label %while.cond
+; CHECK: while.cond:
+; CHECK: icmp slt
+; CHECK: br i1
+; CHECK: while.body:
+; CHECK: while.end:

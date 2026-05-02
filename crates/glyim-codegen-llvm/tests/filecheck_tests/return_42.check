@@ -1,0 +1,2 @@
+; CHECK: define i32 @main
+; CHECK: ret i32

@@ -1,0 +1,6 @@
+; CHECK: define i32 @main
+; CHECK: icmp ne
+; CHECK: br i1
+; CHECK: assert_pass:
+; CHECK: assert_fail:
+; CHECK: call void @__glyim_assert_fail

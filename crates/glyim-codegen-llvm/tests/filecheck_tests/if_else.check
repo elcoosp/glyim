@@ -1,0 +1,4 @@
+; CHECK: define i32 @main
+; CHECK: icmp ne
+; CHECK: br i1
+; CHECK: phi i64

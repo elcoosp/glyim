@@ -1,0 +1,4 @@
+; CHECK: define i32 @main
+; CHECK: call ptr @__glyim_alloc
+; CHECK: getelementptr
+; CHECK: store i64
