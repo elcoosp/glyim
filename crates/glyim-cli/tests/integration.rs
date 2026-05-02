@@ -450,6 +450,63 @@ fn e2e_extern_write_i32_fd() {
     assert!(pipeline::run(&temp_g(src), None).is_ok());
 }
 
+
+#[test]
+fn e2e_io_write_stdout_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let out = stdout();
+    write(out.fd as i32, 0 as *const u8, 0)
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[test]
+fn e2e_io_write_stderr_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let err = stderr();
+    write(err.fd as i32, 0 as *const u8, 0)
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[test]
+fn e2e_io_method_stdout_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let out = stdout();
+    out.write(0 as *const u8, 0)
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+#[test]
+fn e2e_io_method_stderr_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let err = stderr();
+    err.write(0 as *const u8, 0)
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
 fn e2e_generic_identity_call() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
