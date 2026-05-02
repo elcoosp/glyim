@@ -1,0 +1,3 @@
+$ glyim check check_unknown_field.g
+? failed
+unknown field

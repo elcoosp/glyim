@@ -1,0 +1,3 @@
+$ glyim check check_missing_main.g
+? failed
+no 'main' function

@@ -1,0 +1,3 @@
+$ glyim check check_type_mismatch.g
+? failed
+type mismatch: expected Bool, found Int

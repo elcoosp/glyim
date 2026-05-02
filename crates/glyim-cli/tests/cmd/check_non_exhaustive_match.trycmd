@@ -1,0 +1,3 @@
+$ glyim check check_non_exhaustive_match.g
+? failed
+non-exhaustive match
