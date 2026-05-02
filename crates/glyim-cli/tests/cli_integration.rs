@@ -1,0 +1,129 @@
+use std::process::{Command, Output};
+use std::path::PathBuf;
+
+/// Locate the `glyim` binary next to the test executable.
+fn glyim_bin() -> PathBuf {
+    let exe = std::env::current_exe().unwrap();
+    let dir = exe.parent().unwrap().parent().unwrap();
+    dir.join("glyim")
+}
+
+/// Run `glyim` with given arguments on a temporary source file.
+fn run_glyim(args: &[&str], source: &str) -> Output {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("main.g");
+    std::fs::write(&input, source).unwrap();
+    let mut cmd = Command::new(glyim_bin());
+    for arg in args {
+        cmd.arg(arg);
+    }
+    cmd.arg(&input);
+    cmd.output().expect("failed to execute glyim")
+}
+
+#[test]
+fn cli_run_returns_exit_code() {
+    let output = run_glyim(&["run"], "main = () => 42");
+    assert_eq!(output.status.code(), Some(42));
+}
+
+#[test]
+fn cli_run_with_println_output() {
+    let output = run_glyim(&["run"], r#"main = () => { println(42) }"#);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("42"));
+}
+
+#[test]
+fn cli_ir_output() {
+    let output = run_glyim(&["ir"], "main = () => 42");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("define i32 @main"));
+}
+
+#[test]
+fn cli_check_valid() {
+    let output = run_glyim(&["check"], "main = () => 42");
+    assert!(output.status.success());
+}
+
+#[test]
+fn cli_check_invalid() {
+    let output = run_glyim(&["check"], "main = () => 42 as Str");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("error") || stderr.contains("type mismatch"));
+}
+
+#[test]
+fn cli_dump_tokens() {
+    let output = run_glyim(&["dump-tokens"], "main = () => 42");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("TOK"));
+    assert!(stdout.contains("ident"));
+}
+
+#[test]
+fn cli_dump_ast() {
+    let output = run_glyim(&["dump-ast"], "main = () => 42");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.is_empty(), "dump-ast should produce output. stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(stdout.contains("main"), "dump-ast output should mention 'main'. got: {}", stdout);
+}
+
+#[test]
+fn cli_dump_hir() {
+    let output = run_glyim(&["dump-hir"], "main = () => 42");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("HIR fn main"));
+}
+
+#[test]
+fn cli_test_passing() {
+    let src = "#[test]\nfn a() { 0 }\n#[test]\nfn b() { 0 }";
+    let output = run_glyim(&["test"], src);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success());
+    assert!(stderr.contains("2 passed"));
+}
+
+#[test]
+fn cli_test_with_failure() {
+    let src = "#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }";
+    let output = run_glyim(&["test"], src);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("FAILED"));
+}
+
+#[test]
+fn cli_test_filter() {
+    let src = "#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }";
+    let output = run_glyim(&["test", "--filter", "a"], src);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success());
+    assert!(stderr.contains("1 passed"));
+    assert!(!stderr.contains("2 passed"));
+}
+
+#[test]
+fn cli_init_creates_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = Command::new(glyim_bin())
+        .arg("init")
+        .arg("myapp")
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(dir.path().join("myapp").join("glyim.toml").exists());
+    assert!(dir.path().join("myapp").join("src").join("main.g").exists());
+}
+
+#[test]
+fn cli_build_produces_message() {
+    let output = run_glyim(&["build"], "main = () => 42");
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Built:"));
+}
