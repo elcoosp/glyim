@@ -6,6 +6,10 @@ license.workspace = true
 rust-version.workspace = true
 description = "Pratt parser and recursive-descent parser for Glyim"
 
+[dev-dependencies]
+proptest = "1"
+arbitrary = { version = "1", features = ["derive"] }
+
 [dependencies]
 tracing = { version = "0.1", features = ["attributes"] }
 miette = { version = "7", features = ["fancy-no-backtrace"] }
