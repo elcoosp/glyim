@@ -49,3 +49,13 @@ mutants:
     - uses: dtolnay/rust-toolchain@stable
     - name: Run cargo-mutants
       run: cargo mutants -j 4 --workspace --fail-under 90
+
+  miri:
+    name: Miri UB check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - run: cargo miri test --workspace -- --skip integration --skip fuzz

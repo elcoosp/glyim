@@ -130,6 +130,10 @@ fuzz-lexer-short:
 fuzz-parser-short:
     cd fuzz && cargo fuzz run fuzz_parser -- -runs=1000 -max_len=256
 
+# Run Miri for undefined behaviour detection (requires nightly)
+miri-test:
+    cargo +nightly miri test --workspace -- --skip integration --skip fuzz
+
 # ─── Quality ────────────────────────────────────────────────
 
 # Check for cyclic dependencies
