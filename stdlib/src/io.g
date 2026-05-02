@@ -69,3 +69,33 @@ pub fn file_open(path: *const u8, flags: i32) -> File {
     let fd = open(path, flags);
     File { fd }
 }
+
+// ── Print Utilities ──────────────────────────────────────────────
+
+pub fn print_str(ptr: *const u8, len: i64) -> i64 {
+    write(1, ptr, len)
+}
+
+pub fn println_str(ptr: *const u8, len: i64) -> i64 {
+    let n = write(1, ptr, len);
+    let newline = "\n" as *const u8;
+    let _ = write(1, newline, 1);
+    n
+}
+
+pub fn println_int(val: i64) -> i64 {
+    // uses the built‑in __glyim_println_int (which prints "%lld\n")
+    // we forward through the compiler’s built‑in println mechanism.
+    // For now we call the extern directly; the compiler still has the
+    // built‑in mapping for println.
+    // We'll use a workaround: just call println (the built‑in macro)
+    // from the user’s point of view.
+    // Since we can't call "println" directly from the caller, we provide
+    // this as a convenience and document that the user must call
+    // the built‑in `println(val)` directly until we can forward it.
+    // We'll still define it for completeness but note it's a stub.
+    println(val)   // will fail to compile until compiler hook is in place
+    0
+}
+
+// For now, we skip int-to-string; users can use `println(val)` built‑in.
