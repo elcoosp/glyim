@@ -117,46 +117,36 @@ pub(crate) fn codegen_stmt<'ctx>(
             };
             let ptr_val = super::expr::codegen_expr(cg, pointer_expr, fctx)?;
             let new_val = super::expr::codegen_expr(cg, value, fctx)?;
-            // Deep-copy if value is a struct pointer
-            let value_id = value.get_id();
-            let value_ty = cg.expr_types.get(value_id.as_usize());
-            let is_struct = match value_ty {
-                Some(HirType::Named(sym)) | Some(HirType::Generic(sym, _)) => {
-                    cg.struct_types.borrow().contains_key(sym)
-                }
-                _ => false,
+            // Determine the pointed type from the target's type
+            let target_id = target.get_id();
+            let target_ty = cg.expr_types.get(target_id.as_usize()).cloned();
+            let pointed_ty = match target_ty {
+                Some(HirType::RawPtr(inner)) => *inner,
+                other => other.unwrap_or(HirType::Int),
             };
-            if is_struct {
-                let sym = match value_ty {
-                    Some(HirType::Named(s)) => *s,
-                    Some(HirType::Generic(s, _)) => *s,
-                    _ => return Some(new_val),
-                };
-                if let Some(llvm_struct) = cg.struct_types.borrow().get(&sym).copied() {
-                    let val_ptr = cg
-                        .builder
-                        .build_int_to_ptr(
-                            new_val,
-                            cg.context.ptr_type(AddressSpace::from(0u16)),
-                            "val_ptr",
-                        )
-                        .ok()?;
-                    let loaded = cg
-                        .builder
-                        .build_load(llvm_struct, val_ptr, "struct_val")
-                        .ok()?;
-                    let target_typed = cg
-                        .builder
-                        .build_int_to_ptr(
-                            ptr_val,
-                            cg.context.ptr_type(AddressSpace::from(0u16)),
-                            "target_ptr",
-                        )
-                        .ok()?;
-                    cg.builder.build_store(target_typed, loaded).ok()?;
-                    return Some(new_val);
-                }
+            // If the pointed type is a struct, deep copy from the value pointer
+            if let Some(st) = cg.resolve_struct_type(&pointed_ty) {
+                let val_ptr = cg
+                    .builder
+                    .build_int_to_ptr(
+                        new_val,
+                        cg.context.ptr_type(AddressSpace::from(0u16)),
+                        "val_ptr",
+                    )
+                    .ok()?;
+                let loaded = cg.builder.build_load(st, val_ptr, "struct_val").ok()?;
+                let target_typed = cg
+                    .builder
+                    .build_int_to_ptr(
+                        ptr_val,
+                        cg.context.ptr_type(AddressSpace::from(0u16)),
+                        "target_ptr",
+                    )
+                    .ok()?;
+                cg.builder.build_store(target_typed, loaded).ok()?;
+                return Some(new_val);
             }
+            // Non-struct: plain i64 store
             let ptr = cg
                 .builder
                 .build_int_to_ptr(

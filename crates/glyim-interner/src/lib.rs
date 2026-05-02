@@ -43,6 +43,10 @@ impl Interner {
             None
         }
     }
+    /// Return the symbol for a string if it's already interned, otherwise None.
+    pub fn resolve_symbol(&self, s: &str) -> Option<Symbol> {
+        self.map.get(s).map(|&id| Symbol(id))
+    }
     pub fn len(&self) -> usize {
         self.strings.len()
     }

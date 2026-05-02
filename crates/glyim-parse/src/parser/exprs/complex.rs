@@ -210,9 +210,14 @@ pub(crate) fn parse_for_in(parser: &mut Parser) -> Option<ExprNode> {
     let start_tok = parser.tokens.bump()?; // 'for'
     let start = start_tok.start;
     let pattern = crate::parser::patterns::parse_pattern(
-        &mut parser.tokens, &mut parser.interner, &mut parser.errors,
+        &mut parser.tokens,
+        &mut parser.interner,
+        &mut parser.errors,
     )?;
-    parser.tokens.expect(SyntaxKind::KwIn, &mut parser.errors).ok()?;
+    parser
+        .tokens
+        .expect(SyntaxKind::KwIn, &mut parser.errors)
+        .ok()?;
     let iter = parser.parse_expr(0)?;
     let body = parse_block(parser)?;
     let end = body.span.end;

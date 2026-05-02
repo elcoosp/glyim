@@ -45,7 +45,8 @@ pub struct Codegen<'ctx> {
     current_subprogram: Option<DISubprogram<'ctx>>,
     pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
     pub(crate) no_std: bool,
-    pub(crate) extern_methods: std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
+    pub(crate) extern_methods:
+        std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
     pub(crate) errors: RefCell<Vec<String>>,
     pub(crate) jit_mode: bool,
     pub(crate) target_triple: Option<String>,
@@ -219,19 +220,26 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
-                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-                            f.params.iter().map(|pt| {
-                                match pt {
-                                    glyim_hir::types::HirType::Int => self.i64_type.into(),
-                                    glyim_hir::types::HirType::Bool => self.i32_type.into(),
-                                    glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
-                                    _ => self.i64_type.into(),
-                                }
-                            }).collect();
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f
+                            .params
+                            .iter()
+                            .map(|pt| match pt {
+                                glyim_hir::types::HirType::Int => self.i64_type.into(),
+                                glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                                glyim_hir::types::HirType::RawPtr(_) => self
+                                    .context
+                                    .ptr_type(inkwell::AddressSpace::from(0u16))
+                                    .into(),
+                                _ => self.i64_type.into(),
+                            })
+                            .collect();
                         let ret_type = match &f.ret {
                             glyim_hir::types::HirType::Int => self.i64_type.into(),
                             glyim_hir::types::HirType::Bool => self.i32_type.into(),
-                            glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            glyim_hir::types::HirType::RawPtr(_) => self
+                                .context
+                                .ptr_type(inkwell::AddressSpace::from(0u16))
+                                .into(),
                             _ => self.i64_type.into(),
                         };
                         // Only add if not already declared (avoids duplicates)
@@ -239,7 +247,9 @@ impl<'ctx> Codegen<'ctx> {
                             let _fn_val = self.module.add_function(
                                 name,
                                 match ret_type {
-                                    inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                    inkwell::types::BasicTypeEnum::IntType(t) => {
+                                        t.fn_type(&param_types, false)
+                                    }
                                     _ => self.i64_type.fn_type(&param_types, false),
                                 },
                                 None,
@@ -445,19 +455,26 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
-                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-                            f.params.iter().map(|pt| {
-                                match pt {
-                                    glyim_hir::types::HirType::Int => self.i64_type.into(),
-                                    glyim_hir::types::HirType::Bool => self.i32_type.into(),
-                                    glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
-                                    _ => self.i64_type.into(),
-                                }
-                            }).collect();
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f
+                            .params
+                            .iter()
+                            .map(|pt| match pt {
+                                glyim_hir::types::HirType::Int => self.i64_type.into(),
+                                glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                                glyim_hir::types::HirType::RawPtr(_) => self
+                                    .context
+                                    .ptr_type(inkwell::AddressSpace::from(0u16))
+                                    .into(),
+                                _ => self.i64_type.into(),
+                            })
+                            .collect();
                         let ret_type = match &f.ret {
                             glyim_hir::types::HirType::Int => self.i64_type.into(),
                             glyim_hir::types::HirType::Bool => self.i32_type.into(),
-                            glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            glyim_hir::types::HirType::RawPtr(_) => self
+                                .context
+                                .ptr_type(inkwell::AddressSpace::from(0u16))
+                                .into(),
                             _ => self.i64_type.into(),
                         };
                         // Only add if not already declared (avoids duplicates)
@@ -465,7 +482,9 @@ impl<'ctx> Codegen<'ctx> {
                             let _fn_val = self.module.add_function(
                                 name,
                                 match ret_type {
-                                    inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                    inkwell::types::BasicTypeEnum::IntType(t) => {
+                                        t.fn_type(&param_types, false)
+                                    }
                                     _ => self.i64_type.fn_type(&param_types, false),
                                 },
                                 None,
@@ -643,6 +662,30 @@ impl<'ctx> Codegen<'ctx> {
     pub fn with_jit_mode(mut self) -> Self {
         self.jit_mode = true;
         self
+    }
+
+    /// Given a HirType, return the LLVM StructType if it represents a struct.
+    /// Handles Named and Generic (via mangling) types.
+    pub(crate) fn resolve_struct_type(
+        &self,
+        ty: &HirType,
+    ) -> Option<inkwell::types::StructType<'ctx>> {
+        let struct_sym = match ty {
+            HirType::Named(sym) => *sym,
+            HirType::Generic(sym, args) => {
+                let base_str = self.interner.resolve(*sym).to_string();
+                let args_str = args
+                    .iter()
+                    .map(|a| glyim_hir::monomorphize::type_to_short_string(a, &self.interner))
+                    .collect::<Vec<_>>()
+                    .join("_");
+                let mangled_str = format!("{}__{}", base_str, args_str);
+                self.interner.resolve_symbol(&mangled_str)?
+            }
+            HirType::RawPtr(inner) => return self.resolve_struct_type(inner),
+            _ => return None,
+        };
+        self.struct_types.borrow().get(&struct_sym).copied()
     }
 
     pub fn with_target(mut self, triple: &str) -> Self {

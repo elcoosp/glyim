@@ -4,6 +4,56 @@ use crate::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
 use std::collections::{HashMap, HashSet};
 
+/// Convert a HirType to a short string representation suitable for mangling.
+/// e.g., Int → "i64", Named("Entry") → "Entry", Generic("Entry", [Int, Int]) → "Entry_i64_i64"
+pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> String {
+    match ty {
+        HirType::Int => "i64".to_string(),
+        HirType::Bool => "bool".to_string(),
+        HirType::Float => "f64".to_string(),
+        HirType::Str => "str".to_string(),
+        HirType::Unit => "unit".to_string(),
+        HirType::Never => "never".to_string(),
+        HirType::Named(s) => interner.resolve(*s).to_string(),
+        HirType::Generic(s, args) => {
+            let inner = args
+                .iter()
+                .map(|a| type_to_short_string(a, interner))
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("{}_{}", interner.resolve(*s), inner)
+        }
+        HirType::Tuple(elems) => format!(
+            "tup_{}",
+            elems
+                .iter()
+                .map(|e| type_to_short_string(e, interner))
+                .collect::<Vec<_>>()
+                .join("_")
+        ),
+        HirType::RawPtr(inner) => format!("ptr_{}", type_to_short_string(inner, interner)),
+        HirType::Option(inner) => format!("opt_{}", type_to_short_string(inner, interner)),
+        HirType::Result(ok, err) => format!(
+            "res_{}_{}",
+            type_to_short_string(ok, interner),
+            type_to_short_string(err, interner)
+        ),
+        _ => format!("ty{:?}", std::mem::discriminant(ty)),
+    }
+}
+
+/// Mangle a struct name with its concrete type arguments into a single symbol.
+/// e.g., ("Entry", [Int, Int]) → symbol for "Entry__i64_i64"
+pub fn mangle_type_name(interner: &mut Interner, base: Symbol, type_args: &[HirType]) -> Symbol {
+    let base_str = interner.resolve(base).to_string();
+    let args_str = type_args
+        .iter()
+        .map(|t| type_to_short_string(t, interner))
+        .collect::<Vec<_>>()
+        .join("_");
+    interner.intern(&format!("{}__{}", base_str, args_str))
+}
+
 pub struct MonoResult {
     pub hir: crate::Hir,
     pub type_overrides: HashMap<ExprId, HirType>,
@@ -111,13 +161,7 @@ impl<'a> MonoContext<'a> {
     }
 
     fn mangle_name(&mut self, base: Symbol, type_args: &[HirType]) -> Symbol {
-        let base_str = self.interner.resolve(base).to_string();
-        let args_str = type_args
-            .iter()
-            .map(|t| self.format_type_short(t))
-            .collect::<Vec<_>>()
-            .join("_");
-        self.interner.intern(&format!("{}__{}", base_str, args_str))
+        mangle_type_name(&mut self.interner, base, type_args)
     }
 
     #[tracing::instrument(skip_all)]
@@ -615,43 +659,7 @@ impl<'a> MonoContext<'a> {
     }
 
     fn format_type_short(&self, ty: &HirType) -> String {
-        match ty {
-            HirType::Int => "i64".to_string(),
-            HirType::Bool => "bool".to_string(),
-            HirType::Float => "f64".to_string(),
-            HirType::Str => "str".to_string(),
-            HirType::Unit => "unit".to_string(),
-            HirType::Never => "never".to_string(),
-            HirType::Named(s) => self.interner.resolve(*s).to_string(),
-            HirType::Generic(s, args) => {
-                let inner = args
-                    .iter()
-                    .map(|a| self.format_type_short(a))
-                    .collect::<Vec<_>>()
-                    .join("_");
-                if inner.is_empty() {
-                    self.interner.resolve(*s).to_string()
-                } else {
-                    format!("{}_{}", self.interner.resolve(*s), inner)
-                }
-            }
-            HirType::Tuple(elems) => format!(
-                "tup_{}",
-                elems
-                    .iter()
-                    .map(|e| self.format_type_short(e))
-                    .collect::<Vec<_>>()
-                    .join("_")
-            ),
-            HirType::RawPtr(inner) => format!("ptr_{}", self.format_type_short(inner)),
-            HirType::Option(inner) => format!("opt_{}", self.format_type_short(inner)),
-            HirType::Result(ok, err) => format!(
-                "res_{}_{}",
-                self.format_type_short(ok),
-                self.format_type_short(err)
-            ),
-            _ => format!("ty{:?}", std::mem::discriminant(ty)),
-        }
+        type_to_short_string(ty, &self.interner)
     }
 
     #[tracing::instrument(skip_all)]

@@ -513,7 +513,6 @@ main = () => {
     assert!(pipeline::run(&input, None).is_ok());
 }
 
-
 #[test]
 fn e2e_io_stdin_read_compile() {
     let io_src = include_str!("../../../stdlib/src/io.g");
@@ -528,8 +527,6 @@ main = () => {
     let input = temp_g(&full_src);
     assert!(pipeline::run(&input, None).is_ok());
 }
-
-
 
 // ── Monomorphization verification tests ──────────────────────────
 
@@ -806,9 +803,7 @@ main = () => {
 }
 
 #[test]
-
 #[test]
-
 #[test]
 fn e2e_for_in_vec() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");

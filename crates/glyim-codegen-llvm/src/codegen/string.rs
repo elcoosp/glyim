@@ -37,9 +37,6 @@ pub(crate) fn codegen_string_literal<'ctx>(cg: &Codegen<'ctx>, s: &str) -> Optio
         .ok()
 }
 
-
-
-
 pub(crate) fn extract_str_data_ptr<'ctx>(
     cg: &Codegen<'ctx>,
     str_val: IntValue<'ctx>,
@@ -47,8 +44,14 @@ pub(crate) fn extract_str_data_ptr<'ctx>(
     // str_val is a pointer (as i64) to a stack-allocated {i8*, i64} struct.
     // Load the first field (data pointer) from that struct.
     let ptr_type = cg.context.ptr_type(AddressSpace::from(0u16));
-    let ptr = cg.builder.build_int_to_ptr(str_val, ptr_type, "str_ptr").ok()?;
-    let data_ptr = cg.builder.build_load(cg.i64_type, ptr, "data_ptr_val").ok()?;
+    let ptr = cg
+        .builder
+        .build_int_to_ptr(str_val, ptr_type, "str_ptr")
+        .ok()?;
+    let data_ptr = cg
+        .builder
+        .build_load(cg.i64_type, ptr, "data_ptr_val")
+        .ok()?;
     Some(data_ptr.into_int_value())
 }
 
@@ -204,7 +207,10 @@ pub(crate) fn codegen_call<'ctx>(
                 // Truncate i64 to i32 if extern parameter expects i32
                 if let Some(inkwell::types::BasicMetadataTypeEnum::IntType(t)) = param_type {
                     if t.get_bit_width() == 32 {
-                        if let Ok(trunc) = cg.builder.build_int_truncate(int_val, cg.i32_type, "i32_trunc") {
+                        if let Ok(trunc) =
+                            cg.builder
+                                .build_int_truncate(int_val, cg.i32_type, "i32_trunc")
+                        {
                             return inkwell::values::BasicMetadataValueEnum::IntValue(trunc);
                         }
                     }

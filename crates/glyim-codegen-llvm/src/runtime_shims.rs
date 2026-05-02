@@ -181,7 +181,7 @@ pub fn map_runtime_shims_for_jit(
         let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
         engine.add_global_mapping(&f, ptr as *const () as usize);
     }
-        if let Some(f) = module.get_function("open") {
+    if let Some(f) = module.get_function("open") {
         engine.add_global_mapping(&f, libc::open as *const () as usize);
     }
     if let Some(f) = module.get_function("close") {
