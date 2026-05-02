@@ -74,6 +74,11 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
 
     let write_type = i64_type.fn_type(&[i32_type.into(), ptr_type.into(), i64_type.into()], false);
     module.add_function("write", write_type, None);
+    let open_type = i64_type.fn_type(&[ptr_type.into(), i32_type.into()], false);
+    module.add_function("open", open_type, None);
+    let close_type = i32_type.fn_type(&[i32_type.into()], false);
+    module.add_function("close", close_type, None);
+
     module.add_function("abort", void_type.fn_type(&[], false), None);
     module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
     module.add_function("abort", void_type.fn_type(&[], false), None);
@@ -161,6 +166,12 @@ pub fn map_runtime_shims_for_jit(
     if let Some(f) = module.get_function("__glyim_assert_fail") {
         let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
         engine.add_global_mapping(&f, ptr as *const () as usize);
+    }
+        if let Some(f) = module.get_function("open") {
+        engine.add_global_mapping(&f, libc::open as *const () as usize);
+    }
+    if let Some(f) = module.get_function("close") {
+        engine.add_global_mapping(&f, libc::close as *const () as usize);
     }
     if let Some(f) = module.get_function("abort") {
         let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(abort_handler_default);

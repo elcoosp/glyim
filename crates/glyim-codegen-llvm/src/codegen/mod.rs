@@ -224,12 +224,14 @@ impl<'ctx> Codegen<'ctx> {
                                 match pt {
                                     glyim_hir::types::HirType::Int => self.i64_type.into(),
                                     glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                                    glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
                                     _ => self.i64_type.into(),
                                 }
                             }).collect();
                         let ret_type = match &f.ret {
                             glyim_hir::types::HirType::Int => self.i64_type.into(),
                             glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                            glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
                             _ => self.i64_type.into(),
                         };
                         let _fn_val = self.module.add_function(
@@ -445,12 +447,14 @@ impl<'ctx> Codegen<'ctx> {
                                 match pt {
                                     glyim_hir::types::HirType::Int => self.i64_type.into(),
                                     glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                                    glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
                                     _ => self.i64_type.into(),
                                 }
                             }).collect();
                         let ret_type = match &f.ret {
                             glyim_hir::types::HirType::Int => self.i64_type.into(),
                             glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                            glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
                             _ => self.i64_type.into(),
                         };
                         let _fn_val = self.module.add_function(

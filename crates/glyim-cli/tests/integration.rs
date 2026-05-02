@@ -443,8 +443,6 @@ main = () => {
 }
 
 #[test]
-
-#[test]
 fn e2e_extern_write_i32_fd() {
     let src = "extern { fn write(fd: i32, buf: *const u8, len: i64) -> i64; } main = () => { write(1, 0 as *const u8, 0) }";
     assert!(pipeline::run(&temp_g(src), None).is_ok());
@@ -524,11 +522,6 @@ main = () => {
 }
 
 
-
-fn e2e_generic_identity_call() {
-    let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
-    assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
-}
 
 // ── Monomorphization verification tests ──────────────────────────
 

@@ -11,6 +11,10 @@ source_filename = "glyim_out"
 
 declare i64 @write(i32, ptr, i64)
 
+declare i64 @open(ptr, i32)
+
+declare i32 @close(i32)
+
 declare void @abort()
 
 declare i32 @printf(ptr, ...)
