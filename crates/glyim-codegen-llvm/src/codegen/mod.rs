@@ -45,6 +45,7 @@ pub struct Codegen<'ctx> {
     current_subprogram: Option<DISubprogram<'ctx>>,
     pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
     pub(crate) no_std: bool,
+    pub(crate) errors: RefCell<Vec<String>>,
     pub(crate) jit_mode: bool,
     pub(crate) target_triple: Option<String>,
 }
@@ -80,6 +81,7 @@ impl<'ctx> Codegen<'ctx> {
             jit_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            errors: RefCell::new(Vec::new()),
         }
     }
 
@@ -120,6 +122,7 @@ impl<'ctx> Codegen<'ctx> {
             jit_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            errors: RefCell::new(Vec::new()),
         })
     }
 
@@ -161,6 +164,7 @@ impl<'ctx> Codegen<'ctx> {
             jit_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            errors: RefCell::new(Vec::new()),
         })
     }
 
@@ -173,6 +177,12 @@ impl<'ctx> Codegen<'ctx> {
                 self.builder.set_current_debug_location(loc);
             }
         }
+    }
+
+    /// Report a non-fatal error during codegen.
+    /// Report a non-fatal error during codegen.
+    pub fn report_error(&self, msg: String) {
+        self.errors.borrow_mut().push(msg);
     }
 
     #[tracing::instrument(skip_all)]
@@ -256,11 +266,15 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    function::codegen_fn(self, f)?;
+                    if let Err(e) = function::codegen_fn(self, f) {
+                        self.report_error(e);
+                    }
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        function::codegen_fn(self, m)?;
+                        if let Err(e) = function::codegen_fn(self, m) {
+                            self.report_error(e);
+                        }
                     }
                 }
                 _ => {}
@@ -272,10 +286,19 @@ impl<'ctx> Codegen<'ctx> {
             di.finalize();
         }
 
+        let errors = self.errors.borrow().clone();
+        if !errors.is_empty() {
+            return Err(errors.join("\n"));
+        }
+
         if self.module.get_function("main").is_none() {
             Err("no 'main' function".into())
         } else {
-            Ok(())
+            if let Err(msg) = self.module.verify() {
+                Err(format!("LLVM module verification failed: {}", msg.to_string()))
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -433,11 +456,15 @@ impl<'ctx> Codegen<'ctx> {
                     if name == "main" {
                         continue;
                     }
-                    function::codegen_fn(self, f)?;
+                    if let Err(e) = function::codegen_fn(self, f) {
+                        self.report_error(e);
+                    }
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        function::codegen_fn(self, m)?;
+                        if let Err(e) = function::codegen_fn(self, m) {
+                            self.report_error(e);
+                        }
                     }
                 }
                 _ => {}
@@ -446,8 +473,19 @@ impl<'ctx> Codegen<'ctx> {
         if let Some(ref di) = self.debug_info {
             di.finalize();
         }
+
+        let errors = self.errors.borrow().clone();
+        if !errors.is_empty() {
+            return Err(errors.join("\n"));
+        }
+
         self.emit_test_harness(test_names, should_panic)?;
-        Ok(())
+
+        if let Err(msg) = self.module.verify() {
+            Err(format!("LLVM module verification failed: {}", msg.to_string()))
+        } else {
+            Ok(())
+        }
     }
 
     fn emit_test_harness(

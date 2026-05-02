@@ -175,6 +175,7 @@ pub(crate) fn codegen_call<'ctx>(
             _ => Some(cg.i64_type.const_int(0, false)),
         }
     } else {
+        cg.report_error(format!("function '{}' not found", fn_name));
         Some(cg.i64_type.const_int(0, false))
     }
 }

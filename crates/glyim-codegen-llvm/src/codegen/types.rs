@@ -1,6 +1,7 @@
 use crate::Codegen;
 use glyim_hir::HirType;
 use inkwell::types::BasicTypeEnum;
+use inkwell::types::BasicType;
 use inkwell::AddressSpace;
 
 impl<'ctx> Codegen<'ctx> {
@@ -101,6 +102,7 @@ pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef)
 }
 
 pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
+    // Compute max payload size as max over variants of (fields.len() * 8) because all fields are i64
     let max_fields = def
         .variants
         .iter()
@@ -127,4 +129,51 @@ pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
     for (i, variant) in def.variants.iter().enumerate() {
         tag_map.insert((def.name, variant.name), i as u32);
     }
+}
+
+/// Get or create the LLVM struct type for a concrete enum variant.
+/// For built-in Option and Result, the payload size is computed from the actual argument types.
+pub(crate) fn get_or_create_enum_struct_type<'ctx>(
+    cg: &Codegen<'ctx>,
+    enum_name: glyim_interner::Symbol,
+    _variant_name: glyim_interner::Symbol,
+    arg_types: &[inkwell::types::BasicTypeEnum<'ctx>],
+) -> inkwell::types::StructType<'ctx> {
+    let tag_type = cg.i32_type;
+    let payload_bytes: u32 = if enum_name == cg.option_sym || enum_name == cg.result_sym {
+        if arg_types.is_empty() {
+            0
+        } else {
+            // Compute the size of the concrete argument type (i64 or struct type)
+            match arg_types[0].size_of() {
+                Some(size_val) => {
+                    // size_of returns an IntValue; extract constant if possible
+                    if let Some(const_int) = size_val.get_zero_extended_constant() {
+                        const_int as u32
+                    } else {
+                        8
+                    }
+                }
+                None => 8,
+            }
+        }
+    } else {
+        // user-defined: use the stored payload array size
+        if let Some((_, arr_ty)) = cg.enum_types.borrow().get(&enum_name) {
+            arr_ty.len() as u32
+        } else {
+            8
+        }
+    };
+    let payload_type = cg.context.i8_type().array_type(payload_bytes);
+    let enum_struct_type = cg.context.struct_type(
+        &[
+            BasicTypeEnum::IntType(tag_type),
+            BasicTypeEnum::ArrayType(payload_type),
+        ],
+        false,
+    );
+    // Store the result in the cache for future use
+    cg.enum_struct_types.borrow_mut().insert(enum_name, enum_struct_type);
+    enum_struct_type
 }

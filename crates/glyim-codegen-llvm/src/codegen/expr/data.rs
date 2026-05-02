@@ -97,77 +97,84 @@ pub(crate) fn codegen_enum_variant<'ctx>(
         ..
     } = expr
     {
-        let enum_struct_type = cg.enum_struct_types.borrow().get(enum_name).copied();
+        // Compute argument LLVM types for sizing
+        let arg_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = args
+            .iter()
+            .filter_map(|a| codegen_expr(cg, a, fctx))
+            .map(|_| {
+                // All values are currently i64; for struct types we need the true type.
+                // For now, we use i64 as a placeholder. Proper type resolution will come later.
+                inkwell::types::BasicTypeEnum::IntType(cg.i64_type)
+            })
+            .collect();
+        let st = super::super::types::get_or_create_enum_struct_type(
+            cg, *enum_name, *variant_name, &arg_types,
+        );
         let tag_map = cg.enum_variant_tags.borrow();
         let tag = tag_map
             .get(&(*enum_name, *variant_name))
             .copied()
             .unwrap_or(0);
         drop(tag_map);
-        if let Some(st) = enum_struct_type {
-            let alloca = cg.builder.build_alloca(st, "enum_tmp").unwrap();
-            let tag_val = cg.i32_type.const_int(tag as u64, false);
-            let tag_ptr = cg
+        // st is already the correct struct type
+        let alloca = cg.builder.build_alloca(st, "enum_tmp").unwrap();
+        let tag_val = cg.i32_type.const_int(tag as u64, false);
+        let tag_ptr = cg
+            .builder
+            .build_struct_gep(st, alloca, 0, "tag_ptr")
+            .unwrap();
+        cg.builder.build_store(tag_ptr, tag_val).unwrap();
+        if !args.is_empty() {
+            let payload_ptr = cg
                 .builder
-                .build_struct_gep(st, alloca, 0, "tag_ptr")
+                .build_struct_gep(st, alloca, 1, "payload_ptr")
                 .unwrap();
-            cg.builder.build_store(tag_ptr, tag_val).unwrap();
-            if !args.is_empty() {
-                let payload_ptr = cg
-                    .builder
-                    .build_struct_gep(st, alloca, 1, "payload_ptr")
-                    .unwrap();
-                let arg_ptr = cg
-                    .builder
-                    .build_bit_cast(
-                        payload_ptr,
-                        cg.context.ptr_type(AddressSpace::from(0u16)),
-                        "arg_ptr",
-                    )
-                    .unwrap()
-                    .into_pointer_value();
-                let arg_val =
-                    codegen_expr(cg, &args[0], fctx).unwrap_or(cg.i64_type.const_int(0, false));
-                // If arg is a struct pointer, load the full struct
-                let arg_id = args[0].get_id();
-                let arg_ty = cg.expr_types.get(arg_id.as_usize());
-                let is_struct = match arg_ty {
-                    Some(HirType::Named(sym)) | Some(HirType::Generic(sym, _)) => {
-                        cg.struct_types.borrow().contains_key(sym)
-                    }
-                    _ => false,
+            let arg_ptr = cg
+                .builder
+                .build_bit_cast(
+                    payload_ptr,
+                    cg.context.ptr_type(AddressSpace::from(0u16)),
+                    "arg_ptr",
+                )
+                .unwrap()
+                .into_pointer_value();
+            let arg_val =
+                codegen_expr(cg, &args[0], fctx).unwrap_or(cg.i64_type.const_int(0, false));
+            // If arg is a struct pointer, load the full struct
+            let arg_id = args[0].get_id();
+            let arg_ty = cg.expr_types.get(arg_id.as_usize());
+            let is_struct = match arg_ty {
+                Some(HirType::Named(sym)) | Some(HirType::Generic(sym, _)) => {
+                    cg.struct_types.borrow().contains_key(sym)
+                }
+                _ => false,
+            };
+            if is_struct {
+                let sym = match arg_ty {
+                    Some(HirType::Named(s)) => *s,
+                    Some(HirType::Generic(s, _)) => *s,
+                    _ => return None,
                 };
-                if is_struct {
-                    let sym = match arg_ty {
-                        Some(HirType::Named(s)) => *s,
-                        Some(HirType::Generic(s, _)) => *s,
-                        _ => return None,
-                    };
-                    if let Some(llvm_struct) = cg.struct_types.borrow().get(&sym).copied() {
-                        let val_ptr = cg.builder.build_int_to_ptr(
-                            arg_val,
-                            cg.context.ptr_type(AddressSpace::from(0u16)),
-                            "val_ptr"
-                        ).ok()?;
-                        let loaded = cg.builder.build_load(llvm_struct, val_ptr, "struct_val").ok()?;
-                        cg.builder.build_store(arg_ptr, loaded).unwrap();
-                    } else {
-                        cg.builder.build_store(arg_ptr, arg_val).unwrap();
-                    }
+                if let Some(llvm_struct) = cg.struct_types.borrow().get(&sym).copied() {
+                    let val_ptr = cg.builder.build_int_to_ptr(
+                        arg_val,
+                        cg.context.ptr_type(AddressSpace::from(0u16)),
+                        "val_ptr"
+                    ).ok()?;
+                    let loaded = cg.builder.build_load(llvm_struct, val_ptr, "struct_val").ok()?;
+                    cg.builder.build_store(arg_ptr, loaded).unwrap();
                 } else {
                     cg.builder.build_store(arg_ptr, arg_val).unwrap();
                 }
+            } else {
+                cg.builder.build_store(arg_ptr, arg_val).unwrap();
             }
-            let ptr_i64 = cg
-                .builder
-                .build_ptr_to_int(alloca, cg.i64_type, "enum_ptr")
-                .unwrap();
-            Some(ptr_i64)
-        } else {
-            args.first()
-                .and_then(|a| codegen_expr(cg, a, fctx))
-                .or(Some(cg.i64_type.const_int(0, false)))
         }
+        let ptr_i64 = cg
+            .builder
+            .build_ptr_to_int(alloca, cg.i64_type, "enum_ptr")
+            .unwrap();
+        Some(ptr_i64)
     } else {
         None
     }
