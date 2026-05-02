@@ -37,22 +37,23 @@ impl TypeChecker {
     }
 
     fn get_enum_variants(&mut self, scrutinee_type: &HirType) -> Vec<Symbol> {
-        match scrutinee_type {
-            HirType::Named(name) => {
-                if let Some(info) = self.enums.get(name) {
-                    info.variants.iter().map(|v| v.name).collect()
-                } else {
-                    self.get_builtin_enum_variants(name)
-                }
-            }
+        let base_name = match scrutinee_type {
+            HirType::Named(name) => *name,
+            HirType::Generic(name, _) => *name,
             HirType::Option(_) => {
-                vec![self.interner.intern("Some"), self.interner.intern("None")]
+                return vec![self.interner.intern("Some"), self.interner.intern("None")];
             }
             HirType::Result(_, _) => {
-                vec![self.interner.intern("Ok"), self.interner.intern("Err")]
+                return vec![self.interner.intern("Ok"), self.interner.intern("Err")];
             }
-            _ => vec![],
+            _ => return vec![],
+        };
+        // Look up user-defined enum first
+        if let Some(info) = self.enums.get(&base_name) {
+            return info.variants.iter().map(|v| v.name).collect();
         }
+        // Fallback to built-in heuristics
+        self.get_builtin_enum_variants(&base_name)
     }
 
     fn get_builtin_enum_variants(&mut self, name: &Symbol) -> Vec<Symbol> {
