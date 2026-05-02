@@ -482,7 +482,6 @@ impl<'a> MonoContext<'a> {
                     );
                     let mangled_sym = self.interner.intern(&mangled);
 
-
                     // Try to find the method; if it exists with type_params, queue specialization
                     // with concrete args from the receiver type (not the naked type params)
                     let has_impl = self.find_fn(mangled_sym).is_some();
@@ -1142,10 +1141,10 @@ impl<'a> MonoContext<'a> {
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
                         if m.type_params.is_empty() {
-                        let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map);
-                        items.push(HirItem::Fn(rewritten));
-                    }
+                            let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map);
+                            items.push(HirItem::Fn(rewritten));
                         }
+                    }
                 }
             }
         }
@@ -1161,16 +1160,26 @@ impl<'a> MonoContext<'a> {
 
         std::fs::write("/tmp/mono_debug.txt", "entering for loop\n").ok();
         for ((orig_name, args), f) in &fn_specs_clone {
-            std::fs::write("/tmp/mono_debug.txt", &format!("processing {}\n", self.interner.resolve(f.name))).ok();
+            std::fs::write(
+                "/tmp/mono_debug.txt",
+                &format!("processing {}\n", self.interner.resolve(f.name)),
+            )
+            .ok();
             std::fs::write("/tmp/mono_debug.txt", "before clone\n").ok();
             let mut mono_f = f.clone();
             std::fs::write("/tmp/mono_debug.txt", "after clone\n").ok();
             std::fs::write("/tmp/mono_debug.txt", "before mangle\n").ok();
             mono_f.name = self.mangle_name(*orig_name, args);
             std::fs::write("/tmp/mono_debug.txt", "after mangle\n").ok();
-            eprintln!("[mono] BEFORE rewrite_fn for {}", self.interner.resolve(mono_f.name));
+            eprintln!(
+                "[mono] BEFORE rewrite_fn for {}",
+                self.interner.resolve(mono_f.name)
+            );
             let mono_f = self.rewrite_fn(&mono_f, &fn_mangle_map, &struct_mangle_map);
-            eprintln!("[mono] AFTER rewrite_fn for {}", self.interner.resolve(mono_f.name));
+            eprintln!(
+                "[mono] AFTER rewrite_fn for {}",
+                self.interner.resolve(mono_f.name)
+            );
             items.push(HirItem::Fn(mono_f));
         }
 
@@ -1298,12 +1307,7 @@ impl<'a> MonoContext<'a> {
                         // receiver + method_args as separate type args.
                         let mut all_args = vec![*rewritten_receiver.clone()];
                         all_args.extend(rewritten_args);
-<<<<<<< HEAD
                         tracing::info!(mono_name = %self.interner.resolve(concrete_key.1), "Specialization matched, rewriting to Call");
-||||||| parent of d514b58 (debug: MethodCall rewrite not firing for let n = self.buckets.len())
-=======
-                        eprintln!("[mono] Rewrote MethodCall to Call");
->>>>>>> d514b58 (debug: MethodCall rewrite not firing for let n = self.buckets.len())
                         return HirExpr::Call {
                             id: *id,
                             callee: concrete_key.1,
