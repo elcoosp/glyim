@@ -507,6 +507,24 @@ main = () => {
     assert!(pipeline::run(&input, None).is_ok());
 }
 
+
+#[test]
+fn e2e_io_stdin_read_compile() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let input = stdin();
+    let buf = __glyim_alloc(16) as *mut u8;
+    read(input.fd as i32, buf, 16)
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let input = temp_g(&full_src);
+    assert!(pipeline::run(&input, None).is_ok());
+}
+
+
+
 fn e2e_generic_identity_call() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);
