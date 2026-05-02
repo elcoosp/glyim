@@ -29,6 +29,7 @@ pub(crate) fn codegen_stmt<'ctx>(
     stmt: &HirStmt,
     fctx: &mut FunctionContext<'ctx>,
 ) -> Option<IntValue<'ctx>> {
+    eprintln!("STMT: {:?}", stmt);
     let span = match stmt {
         HirStmt::Let { span, .. } => *span,
         HirStmt::LetPat { span, .. } => *span,
@@ -47,6 +48,7 @@ pub(crate) fn codegen_stmt<'ctx>(
             span,
         } => {
             let val = super::expr::codegen_expr(cg, value, fctx)?;
+            eprintln!("LET {} = {}", cg.interner.resolve(*name), val);
             let alloca = cg
                 .builder
                 .build_alloca(cg.i64_type, cg.interner.resolve(*name))
