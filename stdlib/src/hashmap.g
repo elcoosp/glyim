@@ -23,7 +23,6 @@ impl<K, V> HashMap<K, V> {
     }
 
     pub fn insert(mut self: HashMap<K, V>, key: K, value: V) -> HashMap<K, V> {
-<<<<<<< HEAD
         if self.len * 10 >= self.cap * 7 || self.cap == 0 {
             self = self.grow()
         };
@@ -44,19 +43,10 @@ impl<K, V> HashMap<K, V> {
             };
             idx = idx + 1;
             if idx >= self.cap { idx = 0 }
-        };
-||||||| parent of ae8fa15 (interim: 85 integration tests passing, hashmap compile+run but get returns None)
-        self.len = self.len + 1;
-=======
-        let entry = Entry { key: key, value: value, occupied: true };
-        self.buckets = self.buckets.push(entry);
-        self.len = self.len + 1;
->>>>>>> ae8fa15 (interim: 85 integration tests passing, hashmap compile+run but get returns None)
-        self
+        }
     }
 
     pub fn get(self: HashMap<K, V>, key: K) -> Option<V> {
-<<<<<<< HEAD
         if self.cap == 0 { return None; }
         let hash = self.hash(key);
         let mut idx = hash - (hash / self.cap) * self.cap;
@@ -69,27 +59,7 @@ impl<K, V> HashMap<K, V> {
             if idx >= self.cap { idx = 0; }
             count = count + 1;
             if count >= self.cap { return None; }
-||||||| parent of ae8fa15 (interim: 85 integration tests passing, hashmap compile+run but get returns None)
-=======
-        let n = self.buckets.len();
-        let mut i = 0;
-        let mut result: Option<V> = None;
-        while i < n {
-            let entry = self.buckets.get(i);
-            match entry {
-                Some(e) => {
-                    if e.occupied {
-                        if e.key == key {
-                            result = Some(e.value);
-                        };
-                    };
-                },
-                None => {},
-            };
-            i = i + 1;
->>>>>>> ae8fa15 (interim: 85 integration tests passing, hashmap compile+run but get returns None)
-        };
-        result
+        }
     }
 
     pub fn len(self: HashMap<K, V>) -> i64 { self.len }
