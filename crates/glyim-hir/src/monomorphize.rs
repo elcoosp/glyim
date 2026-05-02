@@ -1211,19 +1211,17 @@ impl<'a> MonoContext<'a> {
                     .or_else(|| self.inferred_call_args.get(id).cloned())
                     .unwrap_or_default();
                 let type_args_empty = type_args.is_empty();
-                let new_callee = fn_map
+                let mut new_callee = fn_map
                     .get(&(*callee, type_args.clone()))
                     .copied()
                     .unwrap_or(*callee);
-                // Fallback: if not found and type_args is empty, try any specialization
-                let new_callee = if new_callee == *callee && type_args_empty {
-                    fn_map.iter()
+                if new_callee == *callee && type_args_empty {
+                    if let Some(((_, _), mono)) = fn_map.iter()
                         .find(|((sym, _), _)| *sym == *callee)
-                        .map(|(_, mono)| *mono)
-                        .unwrap_or(new_callee)
-                } else {
-                    new_callee
-                };
+                    {
+                        new_callee = *mono;
+                    }
+                }
                 HirExpr::Call {
                     id: *id,
                     callee: new_callee,
@@ -1277,15 +1275,24 @@ impl<'a> MonoContext<'a> {
                         Some(HirType::Generic(_, ref args)) => args.clone(),
                         _ => vec![],
                     };
-                    if let Some(concrete_key) =
-                        fn_map.iter().find_map(|((sym, args), mono_name)| {
-                            if *sym == mangled_sym && *args == receiver_type_args {
-                                Some((args.clone(), *mono_name))
-                            } else {
-                                None
-                            }
-                        })
-                    {
+                    let concrete_key = fn_map.iter().find_map(|((sym, args), mono_name)| {
+                        if *sym == mangled_sym && *args == receiver_type_args {
+                            Some((args.clone(), *mono_name))
+                        } else {
+                            None
+                        }
+                    });
+                    // Fallback: if no exact match and receiver_type_args is empty, try any specialization
+                    let concrete_key = concrete_key.or_else(|| {
+                        if receiver_type_args.is_empty() {
+                            fn_map.iter()
+                                .find(|((sym, _), _)| *sym == mangled_sym)
+                                .map(|((_, args), mono_name)| (args.clone(), *mono_name))
+                        } else {
+                            None
+                        }
+                    });
+                    if let Some(concrete_key) = concrete_key {
                         let mut all_args = vec![*rewritten_receiver.clone()];
                         all_args.extend(rewritten_args);
                         return HirExpr::Call {
