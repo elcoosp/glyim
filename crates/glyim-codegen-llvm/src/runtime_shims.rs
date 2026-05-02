@@ -1,8 +1,8 @@
 #![allow(clippy::missing_safety_doc)]
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::AddressSpace;
 use inkwell::values::{ArrayValue, IntValue, PointerValue};
+use inkwell::AddressSpace;
 
 extern "C" {
     fn printf(fmt: *const libc::c_char, ...) -> libc::c_int;
@@ -17,7 +17,9 @@ extern "C" {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_println_int_impl(val: i64) {
     let f = b"%lld\n\0".as_ptr() as *const libc::c_char;
-    unsafe { printf(f, val); }
+    unsafe {
+        printf(f, val);
+    }
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_println_str_impl(ptr: *const u8, len: i64) {
@@ -50,13 +52,18 @@ unsafe fn create_fmt_ptr<'ctx>(
 ) -> PointerValue<'ctx> {
     let ty = context.i8_type().array_type(bytes.len() as u32);
     let global = module.add_global(ty, Some(AddressSpace::from(0u16)), name);
-    let elems: Vec<IntValue> = bytes.iter().map(|&b| context.i8_type().const_int(b as u64, false)).collect();
+    let elems: Vec<IntValue> = bytes
+        .iter()
+        .map(|&b| context.i8_type().const_int(b as u64, false))
+        .collect();
     let arr = ArrayValue::new_const_array(&ty, &elems);
     global.set_initializer(&arr);
     global.set_constant(true);
     global.set_linkage(inkwell::module::Linkage::Private);
     let zero = context.i32_type().const_int(0, false);
-    global.as_pointer_value().const_in_bounds_gep(ty, &[zero, zero])
+    global
+        .as_pointer_value()
+        .const_in_bounds_gep(ty, &[zero, zero])
 }
 
 pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, jit: bool) {
@@ -130,7 +137,8 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
                 "w",
             )
             .unwrap();
-            b.build_call(module.get_function("abort").unwrap(), &[], "a").unwrap();
+            b.build_call(module.get_function("abort").unwrap(), &[], "a")
+                .unwrap();
             b.build_unreachable().unwrap();
         }
     }

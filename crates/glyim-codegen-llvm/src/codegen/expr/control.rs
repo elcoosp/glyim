@@ -38,7 +38,8 @@ pub(crate) fn codegen_while<'ctx>(
 
         cg.builder.position_at_end(body_bb);
         codegen_block(cg, body, fctx)?;
-        if cg.builder
+        if cg
+            .builder
             .get_insert_block()
             .and_then(|b| b.get_terminator())
             .is_none()
@@ -128,19 +129,21 @@ pub(crate) fn codegen_match<'ctx>(
                             .ok()?;
 
                         // Uniform { i32, i64 } representation
-                        let st = cg.context.struct_type(
-                            &[cg.i32_type.into(), cg.i64_type.into()],
-                            false,
-                        );
-                        let payload_ptr = cg.builder
+                        let st = cg
+                            .context
+                            .struct_type(&[cg.i32_type.into(), cg.i64_type.into()], false);
+                        let payload_ptr = cg
+                            .builder
                             .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
                             .ok()?;
-                        let payload_val = cg.builder
+                        let payload_val = cg
+                            .builder
                             .build_load(cg.i64_type, payload_ptr, "payload_val")
                             .ok()?
                             .into_int_value();
 
-                        let alloca = cg.builder
+                        let alloca = cg
+                            .builder
                             .build_alloca(cg.i64_type, cg.interner.resolve(*name))
                             .ok()?;
                         cg.builder.build_store(alloca, payload_val).ok()?;
