@@ -481,6 +481,7 @@ impl<'a> MonoContext<'a> {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
+                eprintln!("[mono] MethodCall mangled={} mangled_sym={} fn_map_keys: {:?}", mangled, self.interner.resolve(mangled_sym), fn_map.keys().map(|(s,_)| self.interner.resolve(*s)).collect::<Vec<_>>());
 
                     // Try to find the method; if it exists with type_params, queue specialization
                     // with concrete args from the receiver type (not the naked type params)
@@ -1257,7 +1258,7 @@ impl<'a> MonoContext<'a> {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
-                    tracing::info!(mangled = %self.interner.resolve(mangled_sym), "Looking up mangled name");
+                eprintln!("[mono] MethodCall mangled={} mangled_sym={} fn_map_keys: {:?}", mangled, self.interner.resolve(mangled_sym), fn_map.keys().map(|(s,_)| self.interner.resolve(*s)).collect::<Vec<_>>());
                     // Try to find a monomorphized version
                     // Collect the receiver's concrete type args to match
                     let receiver_type_args: Vec<HirType> = match receiver_ty {
@@ -1288,7 +1289,12 @@ impl<'a> MonoContext<'a> {
                         // receiver + method_args as separate type args.
                         let mut all_args = vec![*rewritten_receiver.clone()];
                         all_args.extend(rewritten_args);
+<<<<<<< HEAD
                         tracing::info!(mono_name = %self.interner.resolve(concrete_key.1), "Specialization matched, rewriting to Call");
+||||||| parent of d514b58 (debug: MethodCall rewrite not firing for let n = self.buckets.len())
+=======
+                        eprintln!("[mono] Rewrote MethodCall to Call");
+>>>>>>> d514b58 (debug: MethodCall rewrite not firing for let n = self.buckets.len())
                         return HirExpr::Call {
                             id: *id,
                             callee: concrete_key.1,
