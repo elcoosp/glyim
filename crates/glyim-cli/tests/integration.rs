@@ -443,6 +443,7 @@ main = () => {
 }
 
 #[test]
+
 fn e2e_generic_identity_call() {
     let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 42);

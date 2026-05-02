@@ -174,6 +174,14 @@ pub(crate) fn codegen_call<'ctx>(
             .enumerate()
             .map(|(i, int_val)| {
                 let param_type = param_types.get(i);
+                // Truncate i64 to i32 if extern parameter expects i32
+                if let Some(inkwell::types::BasicMetadataTypeEnum::IntType(t)) = param_type {
+                    if t.get_bit_width() == 32 {
+                        if let Ok(trunc) = cg.builder.build_int_truncate(int_val, cg.i32_type, "i32_trunc") {
+                            return inkwell::values::BasicMetadataValueEnum::IntValue(trunc);
+                        }
+                    }
+                }
                 if param_type.is_some_and(|ty| ty.is_pointer_type()) {
                     // Convert i64 to pointer for extern functions expecting ptr
                     match cg.builder.build_int_to_ptr(

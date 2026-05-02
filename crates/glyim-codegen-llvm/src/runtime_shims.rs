@@ -76,6 +76,8 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     module.add_function("write", write_type, None);
     module.add_function("abort", void_type.fn_type(&[], false), None);
     module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
+    module.add_function("abort", void_type.fn_type(&[], false), None);
+    module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
 
     let pint_fn = module.add_function(
         "__glyim_println_int",

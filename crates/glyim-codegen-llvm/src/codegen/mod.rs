@@ -216,10 +216,24 @@ impl<'ctx> Codegen<'ctx> {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
                         let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-                            f.params.iter().map(|_| self.i64_type.into()).collect();
+                            f.params.iter().map(|pt| {
+                                match pt {
+                                    glyim_hir::types::HirType::Int => self.i64_type.into(),
+                                    glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                                    _ => self.i64_type.into(),
+                                }
+                            }).collect();
+                        let ret_type = match &f.ret {
+                            glyim_hir::types::HirType::Int => self.i64_type.into(),
+                            glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                            _ => self.i64_type.into(),
+                        };
                         self.module.add_function(
                             name,
-                            self.i64_type.fn_type(&param_types, false),
+                            match ret_type {
+                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                _ => self.i64_type.fn_type(&param_types, false),
+                            },
                             None,
                         );
                     }
@@ -421,10 +435,24 @@ impl<'ctx> Codegen<'ctx> {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
                         let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-                            f.params.iter().map(|_| self.i64_type.into()).collect();
+                            f.params.iter().map(|pt| {
+                                match pt {
+                                    glyim_hir::types::HirType::Int => self.i64_type.into(),
+                                    glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                                    _ => self.i64_type.into(),
+                                }
+                            }).collect();
+                        let ret_type = match &f.ret {
+                            glyim_hir::types::HirType::Int => self.i64_type.into(),
+                            glyim_hir::types::HirType::Bool => self.i32_type.into(),
+                            _ => self.i64_type.into(),
+                        };
                         self.module.add_function(
                             name,
-                            self.i64_type.fn_type(&param_types, false),
+                            match ret_type {
+                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                _ => self.i64_type.fn_type(&param_types, false),
+                            },
                             None,
                         );
                     }

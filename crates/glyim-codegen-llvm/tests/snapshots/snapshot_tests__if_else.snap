@@ -1,5 +1,6 @@
 ---
 source: crates/glyim-codegen-llvm/tests/snapshot_tests.rs
+assertion_line: 15
 expression: ir
 ---
 ; ModuleID = 'glyim_out'
@@ -13,6 +14,10 @@ declare i64 @write(i32, ptr, i64)
 declare void @abort()
 
 declare i32 @printf(ptr, ...)
+
+declare void @abort.1()
+
+declare i32 @printf.2(ptr, ...)
 
 define void @__glyim_println_int(i64 %0) {
 entry:
