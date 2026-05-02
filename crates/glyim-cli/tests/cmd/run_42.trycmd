@@ -1,0 +1,3 @@
+$ glyim run return_42.g
+[..]
+42

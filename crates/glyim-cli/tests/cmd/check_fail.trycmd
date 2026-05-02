@@ -1,0 +1,4 @@
+$ glyim check non_existent_file.g
+[..]
+error
+[..]

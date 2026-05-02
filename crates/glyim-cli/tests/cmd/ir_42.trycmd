@@ -1,0 +1,3 @@
+$ glyim ir return_42.g
+define i32 @main
+[..]

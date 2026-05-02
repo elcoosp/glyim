@@ -1,0 +1,5 @@
+$ glyim --help
+[..]
+USAGE:
+    glyim [OPTIONS] <COMMAND>
+[..]
