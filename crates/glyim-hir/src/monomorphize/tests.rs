@@ -1,7 +1,9 @@
 use super::*;
 use crate::node::{HirExpr, HirStmt};
 use crate::item::HirItem;
-use glyim_interner::Interner;
+use crate::types::HirType;
+use glyim_interner::{Interner, Symbol};
+use std::collections::HashMap;
 
 fn lower_source(source: &str) -> (crate::Hir, Interner) {
     let parse_out = glyim_parse::parse(source);
@@ -42,4 +44,69 @@ fn find_call_id(expr: &HirExpr, callee: Symbol) -> Option<ExprId> {
         HirExpr::Return { value: Some(v), .. } => find_call_id(v, callee),
         _ => None,
     }
+}
+
+// ── New property tests ──────────────────────────────────────────────
+
+#[test]
+fn mangle_simple_type() {
+    let mut interner = Interner::new();
+    let base = interner.intern("Vec");
+    let args = vec![HirType::Int];
+    let mangled = mangle_type_name(&mut interner, base, &args);
+    assert_eq!(interner.resolve(mangled), "Vec__i64");
+}
+
+#[test]
+fn mangle_multiple_type_args() {
+    let mut interner = Interner::new();
+    let base = interner.intern("HashMap");
+    let args = vec![HirType::Str, HirType::Int];
+    let mangled = mangle_type_name(&mut interner, base, &args);
+    assert_eq!(interner.resolve(mangled), "HashMap__str_i64");
+}
+
+#[test]
+fn substitute_generic_with_nested_types() {
+    let mut interner = Interner::new();
+    let t = interner.intern("T");
+    let u = interner.intern("U");
+    let ty = HirType::Generic(
+        interner.intern("Result"),
+        vec![HirType::Named(t), HirType::Named(u)]
+    );
+    let mut sub = HashMap::new();
+    sub.insert(t, HirType::Int);
+    sub.insert(u, HirType::Str);
+    let result = crate::types::substitute_type(&ty, &sub);
+    assert_eq!(result, HirType::Generic(
+        interner.intern("Result"),
+        vec![HirType::Int, HirType::Str]
+    ));
+}
+
+#[test]
+fn monomorphize_eliminates_all_generics_for_known_types() {
+    let src = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
+    let (hir, mut interner) = lower_source(src);
+    let is_main = |i: &&HirItem| {
+        if let HirItem::Fn(f) = i {
+            interner.resolve(f.name) == "main"
+        } else {
+            false
+        }
+    };
+    let main_fn = hir.items.iter().find(is_main).unwrap();
+    let main_fn_body = if let HirItem::Fn(f) = main_fn { &f.body } else { panic!() };
+    let call_id = find_call_id(main_fn_body, interner.intern("id")).expect("call id");
+    let call_type_args = HashMap::from([(call_id, vec![HirType::Int])]);
+    let result = monomorphize(&hir, &mut interner, &[], &call_type_args);
+    let has_generic = result.hir.items.iter().any(|item| {
+        if let HirItem::Fn(f) = item {
+            f.params.iter().any(|(_, ty)| matches!(ty, HirType::Generic(_, _)))
+        } else {
+            false
+        }
+    });
+    assert!(!has_generic, "monomorphize should eliminate all Generic types in concrete functions");
 }
