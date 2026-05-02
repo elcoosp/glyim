@@ -137,7 +137,35 @@ pub(crate) fn codegen_call<'ctx>(
             .ok();
     }
 
-    if let Some(fn_val) = cg.module.get_function(fn_name) {
+    let mut fn_val = cg.module.get_function(fn_name);
+    if fn_val.is_none() {
+        // Fallback: try `fn_name__i64` for zero-arg generic calls
+        let guess = format!("{}__i64", fn_name);
+        fn_val = cg.module.get_function(&guess);
+        if fn_val.is_none() {
+            // Fallback: try `fn_name__i64_i64` for two-arg generics
+            let guess2 = format!("{}__i64_i64", fn_name);
+            fn_val = cg.module.get_function(&guess2);
+        }
+        if fn_val.is_none() {
+            // Fallback: search any function starting with `fn_name__`
+            let prefix = format!("{}__", fn_name);
+            let mut found = None;
+            if let Some(first) = cg.module.get_first_function() {
+                let mut cur = Some(first);
+                while let Some(f) = cur {
+                    let name = f.get_name().to_string_lossy();
+                    if name.starts_with(&prefix) {
+                        found = Some(f);
+                        break;
+                    }
+                    cur = f.get_next_function();
+                }
+            }
+            fn_val = found;
+        }
+    }
+    if let Some(fn_val) = fn_val {
         let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
             fn_val.get_type().get_param_types().into_iter().collect();
         let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
