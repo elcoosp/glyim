@@ -19,10 +19,8 @@ pub(crate) fn codegen_while<'ctx>(
         let body_bb = cg.context.append_basic_block(fctx.fn_value, "while.body");
         let end_bb = cg.context.append_basic_block(fctx.fn_value, "while.end");
 
-        // Jump to condition check
         cg.builder.build_unconditional_branch(cond_bb).ok()?;
 
-        // Condition block
         cg.builder.position_at_end(cond_bb);
         let cond_val = codegen_expr(cg, condition, fctx)?;
         let cond_bool = cg
@@ -38,7 +36,6 @@ pub(crate) fn codegen_while<'ctx>(
             .build_conditional_branch(cond_bool, body_bb, end_bb)
             .ok()?;
 
-        // Body block
         cg.builder.position_at_end(body_bb);
         codegen_block(cg, body, fctx)?;
         if cg.builder
@@ -49,7 +46,6 @@ pub(crate) fn codegen_while<'ctx>(
             cg.builder.build_unconditional_branch(cond_bb).ok();
         }
 
-        // End block
         cg.builder.position_at_end(end_bb);
         Some(cg.i64_type.const_int(0, false))
     } else {
@@ -130,38 +126,25 @@ pub(crate) fn codegen_match<'ctx>(
                                 "enum_ptr",
                             )
                             .ok()?;
-                        let enum_name = if matches!(pattern, HirPattern::OptionSome(_)) {
-                            cg.option_sym
-                        } else {
-                            cg.result_sym
-                        };
-                        if let Some(st) = cg.enum_struct_types.borrow().get(&enum_name).copied() {
-                            let payload_ptr = cg
-                                .builder
-                                .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
-                                .ok()?;
-                            let arg_ptr = cg
-                                .builder
-                                .build_bit_cast(
-                                    payload_ptr,
-                                    cg.context.ptr_type(AddressSpace::from(0u16)),
-                                    "arg_ptr",
-                                )
-                                .ok()?
-                                .into_pointer_value();
-                            let payload_val = cg
-                                .builder
-                                .build_load(cg.i64_type, arg_ptr, "payload_val")
-                                .ok()?
-                                .into_int_value();
-                            eprintln!("MATCH payload_val={}", payload_val);
-                            let alloca = cg
-                                .builder
-                                .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                                .ok()?;
-                            cg.builder.build_store(alloca, payload_val).ok()?;
-                            fctx.vars.insert(*name, alloca);
-                        }
+
+                        // Uniform { i32, i64 } representation
+                        let st = cg.context.struct_type(
+                            &[cg.i32_type.into(), cg.i64_type.into()],
+                            false,
+                        );
+                        let payload_ptr = cg.builder
+                            .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
+                            .ok()?;
+                        let payload_val = cg.builder
+                            .build_load(cg.i64_type, payload_ptr, "payload_val")
+                            .ok()?
+                            .into_int_value();
+
+                        let alloca = cg.builder
+                            .build_alloca(cg.i64_type, cg.interner.resolve(*name))
+                            .ok()?;
+                        cg.builder.build_store(alloca, payload_val).ok()?;
+                        fctx.vars.insert(*name, alloca);
                     }
                 }
                 _ => {}

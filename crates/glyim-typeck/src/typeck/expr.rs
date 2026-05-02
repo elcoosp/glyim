@@ -375,10 +375,17 @@ impl TypeChecker {
                 });
             }
         }
+        let mut arg_types = Vec::new();
         for arg in args {
-            self.check_expr(arg);
+            if let Some(ty) = self.check_expr(arg) {
+                arg_types.push(ty);
+            }
         }
-        HirType::Named(enum_name)
+        if arg_types.len() == 1 {
+            HirType::Generic(enum_name, arg_types)
+        } else {
+            HirType::Named(enum_name)
+        }
     }
     fn check_match(
         &mut self,
