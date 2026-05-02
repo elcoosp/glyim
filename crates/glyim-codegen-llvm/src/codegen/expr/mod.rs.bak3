@@ -374,12 +374,12 @@ pub(crate) fn codegen_expr<'ctx>(
             // Unwrap RawPtr to get the real struct type
             let inner_ty = match &receiver_ty {
                 HirType::RawPtr(inner) => inner.as_ref().clone(),
-                other => other.clone(),
+                other => other,
             };
             let mangled_name = match &inner_ty {
                 HirType::Named(type_name) | HirType::Generic(type_name, _) => format!(
                     "{}_{}",
-                    cg.interner.resolve(type_name.clone()),
+                    cg.interner.resolve(*type_name),
                     cg.interner.resolve(*method_name)
                 ),
                 _ => cg.interner.resolve(*method_name).to_string(),
