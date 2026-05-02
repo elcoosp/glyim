@@ -1,0 +1,10 @@
+---
+source: crates/glyim-cli/tests/ui.rs
+expression: actual
+---
+  × type mismatch: expected Str, found Int
+   ╭─[tests/ui/invalid_cast.g:1:1]
+ 1 │ main = () => 42 as Str
+   · ▲
+   · ╰── type mismatch: expected Str, found Int
+   ╰────

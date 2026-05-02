@@ -1,0 +1,11 @@
+---
+source: crates/glyim-cli/tests/ui.rs
+expression: actual
+---
+  × missing field Symbol(2) in struct Symbol(0)
+   ╭─[tests/ui/struct_missing_field.g:1:1]
+ 1 │ struct Point { x, y }
+   · ▲
+   · ╰── missing field Symbol(2) in struct Symbol(0)
+ 2 │ main = () => Point { x: 1 }
+   ╰────

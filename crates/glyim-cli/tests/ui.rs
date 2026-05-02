@@ -114,3 +114,17 @@ fn ui_bool_mismatch() {
 fn ui_type_mismatch() {
     run_ui_test("type_mismatch");
 }
+#[test]
+fn ui_assign_deref_non_ptr() { run_ui_test("assign_deref_non_ptr"); }
+#[test]
+fn ui_deref_non_pointer() { run_ui_test("deref_non_pointer"); }
+#[test]
+fn ui_non_exhaustive_match() { run_ui_test("non_exhaustive_match"); }
+#[test]
+fn ui_invalid_question() { run_ui_test("invalid_question"); }
+#[test]
+fn ui_invalid_cast() { run_ui_test("invalid_cast"); }
+#[test]
+fn ui_struct_unknown_field() { run_ui_test("struct_unknown_field"); }
+#[test]
+fn ui_struct_missing_field() { run_ui_test("struct_missing_field"); }
