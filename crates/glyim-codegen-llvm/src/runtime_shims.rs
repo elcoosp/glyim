@@ -73,16 +73,30 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     let ptr_type = context.ptr_type(AddressSpace::from(0u16));
 
     let write_type = i64_type.fn_type(&[i32_type.into(), ptr_type.into(), i64_type.into()], false);
-    module.add_function("write", write_type, None);
+    if module.get_function("write").is_none() {
+        module.add_function("write", write_type, None);
+    }
     let open_type = i64_type.fn_type(&[ptr_type.into(), i32_type.into()], false);
-    module.add_function("open", open_type, None);
+    if module.get_function("open").is_none() {
+        module.add_function("open", open_type, None);
+    }
     let close_type = i32_type.fn_type(&[i32_type.into()], false);
-    module.add_function("close", close_type, None);
+    if module.get_function("close").is_none() {
+        module.add_function("close", close_type, None);
+    }
 
-    module.add_function("abort", void_type.fn_type(&[], false), None);
-    module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
-    module.add_function("abort", void_type.fn_type(&[], false), None);
-    module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
+    if module.get_function("abort").is_none() {
+        module.add_function("abort", void_type.fn_type(&[], false), None);
+    }
+    if module.get_function("printf").is_none() {
+        module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
+    }
+    if module.get_function("abort").is_none() {
+        module.add_function("abort", void_type.fn_type(&[], false), None);
+    }
+    if module.get_function("printf").is_none() {
+        module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
+    }
 
     let pint_fn = module.add_function(
         "__glyim_println_int",

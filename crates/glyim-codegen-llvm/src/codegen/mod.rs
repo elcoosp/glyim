@@ -234,14 +234,17 @@ impl<'ctx> Codegen<'ctx> {
                             glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
                             _ => self.i64_type.into(),
                         };
-                        let _fn_val = self.module.add_function(
-                            name,
-                            match ret_type {
-                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
-                                _ => self.i64_type.fn_type(&param_types, false),
-                            },
-                            None,
-                        );
+                        // Only add if not already declared (avoids duplicates)
+                        if self.module.get_function(name).is_none() {
+                            let _fn_val = self.module.add_function(
+                                name,
+                                match ret_type {
+                                    inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                    _ => self.i64_type.fn_type(&param_types, false),
+                                },
+                                None,
+                            );
+                        }
                         // Register in extern_methods for impl backing
                         self.extern_methods.insert(f.name, f.name);
                     }
@@ -457,14 +460,17 @@ impl<'ctx> Codegen<'ctx> {
                             glyim_hir::types::HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
                             _ => self.i64_type.into(),
                         };
-                        let _fn_val = self.module.add_function(
-                            name,
-                            match ret_type {
-                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
-                                _ => self.i64_type.fn_type(&param_types, false),
-                            },
-                            None,
-                        );
+                        // Only add if not already declared (avoids duplicates)
+                        if self.module.get_function(name).is_none() {
+                            let _fn_val = self.module.add_function(
+                                name,
+                                match ret_type {
+                                    inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                    _ => self.i64_type.fn_type(&param_types, false),
+                                },
+                                None,
+                            );
+                        }
                         // Register in extern_methods for impl backing
                         self.extern_methods.insert(f.name, f.name);
                     }

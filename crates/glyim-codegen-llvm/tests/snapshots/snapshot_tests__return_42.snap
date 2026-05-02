@@ -19,10 +19,6 @@ declare void @abort()
 
 declare i32 @printf(ptr, ...)
 
-declare void @abort.1()
-
-declare i32 @printf.2(ptr, ...)
-
 define void @__glyim_println_int(i64 %0) {
 entry:
   %c = call i32 (ptr, ...) @printf(ptr @newline_fmt, i64 %0)
