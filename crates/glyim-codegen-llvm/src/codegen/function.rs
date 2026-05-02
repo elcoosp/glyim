@@ -2,7 +2,6 @@ use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
 use glyim_hir::HirFn;
 use glyim_interner::Symbol;
-use inkwell::types::BasicTypeEnum;
 use inkwell::values::PointerValue;
 use std::collections::HashMap;
 

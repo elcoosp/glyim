@@ -155,7 +155,7 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::As {
             expr,
             target_type,
-            id,
+            id: _,
             ..
         } => {
             let src_val = codegen_expr(cg, expr, fctx)?;

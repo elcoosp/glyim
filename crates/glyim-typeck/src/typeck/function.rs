@@ -8,7 +8,7 @@ impl TypeChecker {
     pub(crate) fn check_fn(&mut self, f: &HirFn) {
         self.call_type_args.clear();
         self.current_fn_type_params = f.type_params.clone();
-        let fn_name = self.interner.resolve(f.name).to_string();
+        let _fn_name = self.interner.resolve(f.name).to_string();
         self.with_scope(|tc| {
             for (i, (sym, ty)) in f.params.iter().enumerate() {
                 let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
