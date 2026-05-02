@@ -1010,7 +1010,7 @@ main = () => {
     m.len()
 }
 "#;
-    let full_src = format!("{}\n{}", hashmap_src, main_code);
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 1);
 }
