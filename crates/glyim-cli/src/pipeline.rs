@@ -449,43 +449,8 @@ pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     }
 }
 #[cfg(test)]
-mod root_tests {
-    use super::*;
-    #[test]
-    fn find_package_root_in_current_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
-        assert_eq!(
-            find_package_root(dir.path()),
-            Some(dir.path().to_path_buf())
-        );
-    }
-    #[test]
-    fn find_package_root_in_parent_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
-        let child = dir.path().join("src");
-        std::fs::create_dir_all(&child).unwrap();
-        assert_eq!(find_package_root(&child), Some(dir.path().to_path_buf()));
-    }
-    #[test]
-    fn find_package_root_not_found() {
-        let dir = tempfile::tempdir().unwrap();
-        assert_eq!(find_package_root(dir.path()), None);
-    }
-    #[test]
-    fn find_package_root_stops_at_file() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("glyim.toml"), "[package]\nname = \"x\"\n").unwrap();
-        let file_path = dir.path().join("src/main.g");
-        std::fs::create_dir_all(dir.path().join("src")).unwrap();
-        std::fs::write(&file_path, "main = () => 42").unwrap();
-        assert_eq!(
-            find_package_root(&file_path),
-            Some(dir.path().to_path_buf())
-        );
-    }
-}
+mod root_tests;
+
 pub fn build_package(
     package_dir: &Path,
     output: Option<&Path>,
@@ -773,53 +738,8 @@ fn which(cmd: &str) -> bool {
         .is_ok_and(|s| s.success())
 }
 #[cfg(test)]
-mod no_std_tests {
-    use super::*;
-    #[test]
-    fn detect_no_std_simple() {
-        assert!(detect_no_std("no_std\nfn main() { 0 }"));
-    }
-    #[test]
-    fn detect_no_std_at_start() {
-        assert!(detect_no_std("no_std\nfn main() { 0 }"));
-    }
-    #[test]
-    fn detect_no_std_false_when_absent() {
-        assert!(!detect_no_std("fn main() { 0 }"));
-    }
-    #[test]
-    fn detect_no_std_false_in_string() {
-        assert!(!detect_no_std(r#"fn main() { "no_std" }"#));
-    }
-    #[test]
-    fn detect_no_std_false_as_part_of_ident() {
-        assert!(!detect_no_std("fn no_std_helper() { 0 }"));
-    }
-    #[test]
-    fn detect_no_std_false_as_field_name() {
-        assert!(!detect_no_std("struct S { no_std: bool }"));
-    }
-    #[test]
-    fn detect_no_std_with_trailing_whitespace() {
-        assert!(detect_no_std("no_std   \nfn main() { 0 }"));
-    }
-    #[test]
-    fn detect_no_std_false_empty() {
-        assert!(!detect_no_std(""));
-    }
-    #[test]
-    fn detect_no_std_false_only_whitespace() {
-        assert!(!detect_no_std("  \n  \n"));
-    }
-    #[test]
-    fn detect_no_std_after_other_code() {
-        assert!(detect_no_std("fn foo() { 0 }\nno_std\nfn bar() { 0 }"));
-    }
-    #[test]
-    fn detect_no_std_known_limitation_comment() {
-        assert!(!detect_no_std("// no_std\nfn main() { 0 }"));
-    }
-}
+mod no_std_tests;
+
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
