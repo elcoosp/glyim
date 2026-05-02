@@ -364,6 +364,12 @@ pub(crate) fn codegen_expr<'ctx>(
             args,
             ..
         } => {
+            // Check if this method is backed by an extern function
+            if let Some(extern_name) = cg.extern_methods.get(method_name).copied() {
+                let mut all_args = vec![receiver.as_ref().clone()];
+                all_args.extend(args.clone());
+                return super::string::codegen_call(cg, &extern_name, &all_args, fctx);
+            }
             let receiver_val = codegen_expr(cg, receiver, fctx)?;
             let receiver_id = receiver.get_id();
             let receiver_ty = cg

@@ -232,7 +232,7 @@ impl<'ctx> Codegen<'ctx> {
                             glyim_hir::types::HirType::Bool => self.i32_type.into(),
                             _ => self.i64_type.into(),
                         };
-                        self.module.add_function(
+                        let _fn_val = self.module.add_function(
                             name,
                             match ret_type {
                                 inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
@@ -240,6 +240,8 @@ impl<'ctx> Codegen<'ctx> {
                             },
                             None,
                         );
+                        // Register in extern_methods for impl backing
+                        self.extern_methods.insert(f.name, f.name);
                     }
                 }
                 _ => {}
@@ -451,7 +453,7 @@ impl<'ctx> Codegen<'ctx> {
                             glyim_hir::types::HirType::Bool => self.i32_type.into(),
                             _ => self.i64_type.into(),
                         };
-                        self.module.add_function(
+                        let _fn_val = self.module.add_function(
                             name,
                             match ret_type {
                                 inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
@@ -459,6 +461,8 @@ impl<'ctx> Codegen<'ctx> {
                             },
                             None,
                         );
+                        // Register in extern_methods for impl backing
+                        self.extern_methods.insert(f.name, f.name);
                     }
                 }
                 _ => {}
