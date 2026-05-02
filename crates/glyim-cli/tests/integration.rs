@@ -856,7 +856,7 @@ fn e2e_io_stdout_compile() {
     let main_code = r#"
 main = () => {
     let out = stdout();
-    42
+    write(out.fd, 0 as *const u8, 0)
 }
 "#;
     let full_src = format!("{}\n{}", io_src, main_code);
@@ -870,7 +870,7 @@ fn e2e_io_stderr_compile() {
     let main_code = r#"
 main = () => {
     let err = stderr();
-    0
+    write(err.fd, 0 as *const u8, 0)
 }
 "#;
     let full_src = format!("{}\n{}", io_src, main_code);
