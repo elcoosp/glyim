@@ -545,6 +545,34 @@ impl<'a> MonoContext<'a> {
             | HirExpr::Deref { expr: operand, .. }
             | HirExpr::As { expr: operand, .. } => self.scan_expr_for_generic_calls(operand),
             HirExpr::Return { value: Some(v), .. } => self.scan_expr_for_generic_calls(v),
+            HirExpr::StructLit { struct_name, fields, .. } => {
+                if let Some(struct_def) = self.find_struct(*struct_name) {
+                    for (field_sym, field_expr) in fields {
+                        if let Some(field_def) = struct_def.fields.iter().find(|f| f.name == *field_sym) {
+                            if let HirExpr::Call { callee, args, .. } = field_expr {
+                                if args.is_empty() {
+                                    if let Some(fn_def) = self.find_fn(*callee) {
+                                        if !fn_def.type_params.is_empty() {
+                                            let concrete: Vec<HirType> = match &field_def.ty {
+                                                HirType::Generic(_, type_args) => type_args.clone(),
+                                                _ => fn_def.type_params.iter().map(|_| HirType::Int).collect(),
+                                            };
+                                            if !concrete.is_empty() {
+                                                self.queue_fn_specialization(*callee, concrete);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        self.scan_expr_for_generic_calls(field_expr);
+                    }
+                } else {
+                    for (_, field_expr) in fields {
+                        self.scan_expr_for_generic_calls(field_expr);
+                    }
+                }
+            }
             HirExpr::Return { value: None, .. } => {}
             _ => {}
         }

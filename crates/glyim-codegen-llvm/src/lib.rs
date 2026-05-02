@@ -14,6 +14,7 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     let mut cg = Codegen::new(&ctx, interner, vec![]);
+    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
@@ -50,6 +51,7 @@ pub fn compile_to_ir_debug(
     } else {
         Codegen::new(&ctx, interner, vec![])
     };
+    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
@@ -64,6 +66,7 @@ pub fn compile_to_ir_line_tables(source: &str, file_name: &str) -> Result<String
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     let mut cg = Codegen::with_line_tables(&ctx, interner, vec![], source.to_string(), file_name)?;
+    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }

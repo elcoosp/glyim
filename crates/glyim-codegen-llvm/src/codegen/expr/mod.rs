@@ -310,6 +310,16 @@ pub(crate) fn codegen_expr<'ctx>(
                 .get(id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
+            // Structs are always behind a pointer; deref is identity.
+            let is_struct = match &pointed_ty {
+                HirType::Named(sym) | HirType::Generic(sym, _) => {
+                    cg.struct_types.borrow().contains_key(sym)
+                }
+                _ => false,
+            };
+            if is_struct {
+                return Some(ptr_val);
+            }
             // Debug assertion: monomorphization should have resolved all generics.
             // If this fires, the pipeline didn't fully replace a generic type.
             debug_assert!(

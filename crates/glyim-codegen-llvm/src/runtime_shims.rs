@@ -2,8 +2,8 @@
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::AddressSpace;
+use inkwell::values::{ArrayValue, IntValue, PointerValue};
 
-// Rust-native implementations (mapped into JIT via add_global_mapping)
 extern "C" {
     fn printf(fmt: *const libc::c_char, ...) -> libc::c_int;
 }
@@ -17,9 +17,7 @@ extern "C" {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_println_int_impl(val: i64) {
     let f = b"%lld\n\0".as_ptr() as *const libc::c_char;
-    unsafe {
-        printf(f, val);
-    }
+    unsafe { printf(f, val); }
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_println_str_impl(ptr: *const u8, len: i64) {
@@ -43,7 +41,24 @@ pub unsafe extern "C" fn glyim_assert_fail_impl(msg: *const u8, len: i64) {
     }
 }
 
-// ── Module declarations (AOT or JIT) ──
+/// Helper: create a global constant null-terminated string and return an i8* pointer to it.
+unsafe fn create_fmt_ptr<'ctx>(
+    context: &'ctx Context,
+    module: &Module<'ctx>,
+    bytes: &[u8],
+    name: &str,
+) -> PointerValue<'ctx> {
+    let ty = context.i8_type().array_type(bytes.len() as u32);
+    let global = module.add_global(ty, Some(AddressSpace::from(0u16)), name);
+    let elems: Vec<IntValue> = bytes.iter().map(|&b| context.i8_type().const_int(b as u64, false)).collect();
+    let arr = ArrayValue::new_const_array(&ty, &elems);
+    global.set_initializer(&arr);
+    global.set_constant(true);
+    global.set_linkage(inkwell::module::Linkage::Private);
+    let zero = context.i32_type().const_int(0, false);
+    global.as_pointer_value().const_in_bounds_gep(ty, &[zero, zero])
+}
+
 pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, jit: bool) {
     let i32_type = context.i32_type();
     let i64_type = context.i64_type();
@@ -55,19 +70,16 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     module.add_function("abort", void_type.fn_type(&[], false), None);
     module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
 
-    // glyim_println_int(i64)
     let pint_fn = module.add_function(
         "glyim_println_int",
         void_type.fn_type(&[i64_type.into()], false),
         None,
     );
-    // glyim_println_str(ptr, len) — flat params
     let pstr_fn = module.add_function(
         "glyim_println_str",
         void_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
         None,
     );
-    // glyim_assert_fail(ptr, len)
     let afail_fn = module.add_function(
         "glyim_assert_fail",
         void_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
@@ -75,52 +87,52 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     );
 
     if jit {
-        // No bodies — the JIT resolves these via add_global_mapping
         return;
     }
 
-    // AOT: emit IR bodies
-    let newline_fmt = context.const_string(b"%lld\n", true);
-    let str_fmt = context.const_string(b"%s\n", true);
+    // AOT: emit IR bodies with correct format string pointers
+    unsafe {
+        let newline_fmt = create_fmt_ptr(context, module, b"%lld\n\0", "newline_fmt");
+        let str_fmt = create_fmt_ptr(context, module, b"%s\n\0", "str_fmt");
 
-    {
-        let b = context.create_builder();
-        b.position_at_end(context.append_basic_block(pint_fn, "entry"));
-        let v = pint_fn.get_nth_param(0).unwrap().into_int_value();
-        b.build_call(
-            module.get_function("printf").unwrap(),
-            &[newline_fmt.into(), v.into()],
-            "c",
-        )
-        .unwrap();
-        b.build_return(None).unwrap();
-    }
-    {
-        let b = context.create_builder();
-        b.position_at_end(context.append_basic_block(pstr_fn, "entry"));
-        let p = pstr_fn.get_nth_param(0).unwrap().into_pointer_value();
-        b.build_call(
-            module.get_function("printf").unwrap(),
-            &[str_fmt.into(), p.into()],
-            "c",
-        )
-        .unwrap();
-        b.build_return(None).unwrap();
-    }
-    {
-        let b = context.create_builder();
-        b.position_at_end(context.append_basic_block(afail_fn, "entry"));
-        let m = afail_fn.get_nth_param(0).unwrap().into_pointer_value();
-        let l = afail_fn.get_nth_param(1).unwrap().into_int_value();
-        b.build_call(
-            module.get_function("write").unwrap(),
-            &[i32_type.const_int(2, false).into(), m.into(), l.into()],
-            "w",
-        )
-        .unwrap();
-        b.build_call(module.get_function("abort").unwrap(), &[], "a")
+        {
+            let b = context.create_builder();
+            b.position_at_end(context.append_basic_block(pint_fn, "entry"));
+            let v = pint_fn.get_nth_param(0).unwrap().into_int_value();
+            b.build_call(
+                module.get_function("printf").unwrap(),
+                &[newline_fmt.into(), v.into()],
+                "c",
+            )
             .unwrap();
-        b.build_unreachable().unwrap();
+            b.build_return(None).unwrap();
+        }
+        {
+            let b = context.create_builder();
+            b.position_at_end(context.append_basic_block(pstr_fn, "entry"));
+            let p = pstr_fn.get_nth_param(0).unwrap().into_pointer_value();
+            b.build_call(
+                module.get_function("printf").unwrap(),
+                &[str_fmt.into(), p.into()],
+                "c",
+            )
+            .unwrap();
+            b.build_return(None).unwrap();
+        }
+        {
+            let b = context.create_builder();
+            b.position_at_end(context.append_basic_block(afail_fn, "entry"));
+            let m = afail_fn.get_nth_param(0).unwrap().into_pointer_value();
+            let l = afail_fn.get_nth_param(1).unwrap().into_int_value();
+            b.build_call(
+                module.get_function("write").unwrap(),
+                &[i32_type.const_int(2, false).into(), m.into(), l.into()],
+                "w",
+            )
+            .unwrap();
+            b.build_call(module.get_function("abort").unwrap(), &[], "a").unwrap();
+            b.build_unreachable().unwrap();
+        }
     }
 }
 
@@ -145,7 +157,6 @@ pub fn map_runtime_shims_for_jit(
         engine.add_global_mapping(&f, ptr as *const () as usize);
     }
 
-    // Default abort handler (for non-custom paths) that actually aborts
     #[unsafe(no_mangle)]
     unsafe extern "C" fn abort_handler_default() {
         std::process::abort();
