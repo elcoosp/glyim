@@ -47,12 +47,12 @@ pub(crate) fn codegen_println<'ctx>(
         let fat = build_str_fat_ptr(cg, arg)?;
         let ptr = cg.builder.build_extract_value(fat, 0, "str_ptr").ok()?;
         let len = cg.builder.build_extract_value(fat, 1, "str_len").ok()?;
-        let shim = cg.module.get_function("glyim_println_str").unwrap();
+        let shim = cg.module.get_function("__glyim_println_str").unwrap();
         cg.builder
             .build_call(shim, &[ptr.into(), len.into()], "println")
             .ok()?;
     } else {
-        let shim = cg.module.get_function("glyim_println_int").unwrap();
+        let shim = cg.module.get_function("__glyim_println_int").unwrap();
         cg.builder.build_call(shim, &[val.into()], "println").ok()?;
     }
     Some(cg.i64_type.const_int(0, false))
@@ -80,7 +80,7 @@ pub(crate) fn codegen_assert<'ctx>(
         .build_conditional_branch(is_true, pass_bb, fail_bb)
         .ok()?;
     cg.builder.position_at_end(fail_bb);
-    let shim = cg.module.get_function("glyim_assert_fail").unwrap();
+    let shim = cg.module.get_function("__glyim_assert_fail").unwrap();
     let null_ptr = cg.context.ptr_type(AddressSpace::from(0u16)).const_null();
     let zero = cg.i64_type.const_int(0, false);
     let (p, l) = match message {

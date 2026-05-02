@@ -32,7 +32,7 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     // ── glyim_alloc(size: i64) -> *i8 ───────────────────────────
 
     let alloc_fn_type = ptr_type.fn_type(&[i64_type.into()], false);
-    let alloc_fn = module.add_function("glyim_alloc", alloc_fn_type, None);
+    let alloc_fn = module.add_function("__glyim_alloc", alloc_fn_type, None);
 
     let entry = ctx.append_basic_block(alloc_fn, "entry");
     let oom_block = ctx.append_basic_block(alloc_fn, "oom");
@@ -73,7 +73,7 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     // ── glyim_free(ptr: *i8) -> void ─────────────────────────────
 
     let free_wrapper_type = void_type.fn_type(&[ptr_type.into()], false);
-    let free_wrapper = module.add_function("glyim_free", free_wrapper_type, None);
+    let free_wrapper = module.add_function("__glyim_free", free_wrapper_type, None);
     let free_entry = ctx.append_basic_block(free_wrapper, "entry");
 
     builder.position_at_end(free_entry);
@@ -95,7 +95,7 @@ mod tests {
         let module = ctx.create_module("test");
         emit_alloc_shims(&module, false);
         assert!(
-            module.get_function("glyim_alloc").is_some(),
+            module.get_function("__glyim_alloc").is_some(),
             "glyim_alloc should be defined"
         );
     }
@@ -106,7 +106,7 @@ mod tests {
         let module = ctx.create_module("test");
         emit_alloc_shims(&module, false);
         assert!(
-            module.get_function("glyim_free").is_some(),
+            module.get_function("__glyim_free").is_some(),
             "glyim_free should be defined"
         );
     }
@@ -124,8 +124,8 @@ mod tests {
         let ctx = Context::create();
         let module = ctx.create_module("test");
         emit_alloc_shims(&module, true);
-        assert!(module.get_function("glyim_alloc").is_none());
-        assert!(module.get_function("glyim_free").is_none());
+        assert!(module.get_function("__glyim_alloc").is_none());
+        assert!(module.get_function("__glyim_free").is_none());
         assert!(module.get_function("malloc").is_none());
         assert!(module.get_function("free").is_none());
         assert!(module.get_function("malloc").is_none());
@@ -147,7 +147,7 @@ mod tests {
         let module = ctx.create_module("test");
         emit_alloc_shims(&module, false);
         emit_alloc_shims(&module, false);
-        assert!(module.get_function("glyim_alloc").is_some());
+        assert!(module.get_function("__glyim_alloc").is_some());
     }
 
     #[test]

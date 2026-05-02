@@ -572,10 +572,10 @@ main = () => {
 fn e2e_intrinsic_ptr_alloc() {
     let src = r#"
         main = () => {
-            let ptr = glyim_alloc(8);
+            let ptr = __glyim_alloc(8);
             *(ptr as *mut i64) = 42;
             let val = *(ptr as *mut i64);
-            glyim_free(ptr as *mut u8);
+            __glyim_free(ptr as *mut u8);
             val
         }
     "#;
@@ -602,7 +602,7 @@ main = () => size_of_val(42)";
 fn e2e_deref_generic_ptr() {
     let src = "fn deref_generic<T>(p: *mut T) -> T { *p }
 main = () => {
-    let ptr = glyim_alloc(8) as *mut i64;
+    let ptr = __glyim_alloc(8) as *mut i64;
     *ptr = 123;
     deref_generic(ptr)
 }";

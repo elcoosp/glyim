@@ -249,7 +249,7 @@ pub(crate) fn codegen_expr<'ctx>(
                                 .unwrap_or_else(|| cg.i64_type.const_int(0, false));
                             let alloc_fn = cg
                                 .module
-                                .get_function("glyim_alloc")
+                                .get_function("__glyim_alloc")
                                 .or_else(|| cg.module.get_function("malloc"))?;
                             let call_result = cg
                                 .builder

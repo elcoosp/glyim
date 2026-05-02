@@ -187,10 +187,10 @@ pub enum Result<T, E> {
     Err(E),
 }
 extern {
-    fn glyim_alloc(size: i64) -> *mut u8;
-    fn glyim_free(ptr: *mut u8);
-    fn glyim_hash_bytes(data: *const u8, len: i64) -> i64;
-    fn glyim_hash_seed() -> i64;
+    fn __glyim_alloc(size: i64) -> *mut u8;
+    fn __glyim_free(ptr: *mut u8);
+    fn __glyim_hash_bytes(data: *const u8, len: i64) -> i64;
+    fn __glyim_hash_seed() -> i64;
 }
 ";
 #[tracing::instrument(name = "run", skip_all)]

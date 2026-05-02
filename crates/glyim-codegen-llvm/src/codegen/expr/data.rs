@@ -22,7 +22,7 @@ pub(crate) fn codegen_struct_lit<'ctx>(
                 let size = st.size_of()?;
                 let alloc_fn = cg
                     .module
-                    .get_function("glyim_alloc")
+                    .get_function("__glyim_alloc")
                     .or_else(|| cg.module.get_function("malloc"))?;
                 let call_result = cg
                     .builder
@@ -50,7 +50,7 @@ pub(crate) fn codegen_struct_lit<'ctx>(
                 let fallback_size = cg.i64_type.const_int((fields.len() as u64) * 8, false);
                 let alloc_fn = cg
                     .module
-                    .get_function("glyim_alloc")
+                    .get_function("__glyim_alloc")
                     .or_else(|| cg.module.get_function("malloc"))?;
                 let call_result = cg
                     .builder
@@ -107,7 +107,7 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             // None / unit variant – heap-allocate { i32 }
             let st = cg.context.struct_type(&[cg.i32_type.into()], false);
             let size = st.size_of().unwrap_or(cg.i64_type.const_int(4, false));
-            let alloc_fn = cg.module.get_function("glyim_alloc")
+            let alloc_fn = cg.module.get_function("__glyim_alloc")
                 .or_else(|| cg.module.get_function("malloc"))?;
             let call_result = cg.builder.build_call(alloc_fn, &[size.into()], "enum_alloc")
                 .ok()?
@@ -130,7 +130,7 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             false,
         );
         let size = st.size_of().unwrap_or(cg.i64_type.const_int(8, false));
-        let alloc_fn = cg.module.get_function("glyim_alloc")
+        let alloc_fn = cg.module.get_function("__glyim_alloc")
             .or_else(|| cg.module.get_function("malloc"))?;
         let call_result = cg.builder.build_call(alloc_fn, &[size.into()], "enum_alloc")
             .ok()?

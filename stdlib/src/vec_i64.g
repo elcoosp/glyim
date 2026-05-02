@@ -12,7 +12,7 @@ impl VecI64 {
     pub fn push(mut self: VecI64, value: i64) {
         if self.len == self.cap {
             let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
-            let new_data: *mut i64 = glyim_alloc(new_cap * 8) as *mut i64;
+            let new_data: *mut i64 = __glyim_alloc(new_cap * 8) as *mut i64;
             if self.data != (0 as *mut i64) {
                 let mut i = 0;
                 while i < self.len {
@@ -21,7 +21,7 @@ impl VecI64 {
                     *dst_ptr = *src_ptr;
                     i = i + 1
                 };
-                glyim_free(self.data as *mut u8)
+                __glyim_free(self.data as *mut u8)
             };
             self.data = new_data;
             self.cap = new_cap

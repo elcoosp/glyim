@@ -71,17 +71,17 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
 
     let pint_fn = module.add_function(
-        "glyim_println_int",
+        "__glyim_println_int",
         void_type.fn_type(&[i64_type.into()], false),
         None,
     );
     let pstr_fn = module.add_function(
-        "glyim_println_str",
+        "__glyim_println_str",
         void_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
         None,
     );
     let afail_fn = module.add_function(
-        "glyim_assert_fail",
+        "__glyim_assert_fail",
         void_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
         None,
     );
@@ -142,13 +142,13 @@ pub fn map_runtime_shims_for_jit(
     custom_assert_fn: Option<unsafe extern "C" fn(*const u8, i64)>,
     custom_abort_fn: Option<unsafe extern "C" fn()>,
 ) {
-    if let Some(f) = module.get_function("glyim_println_int") {
+    if let Some(f) = module.get_function("__glyim_println_int") {
         engine.add_global_mapping(&f, glyim_println_int_impl as *const () as usize);
     }
-    if let Some(f) = module.get_function("glyim_println_str") {
+    if let Some(f) = module.get_function("__glyim_println_str") {
         engine.add_global_mapping(&f, glyim_println_str_impl as *const () as usize);
     }
-    if let Some(f) = module.get_function("glyim_assert_fail") {
+    if let Some(f) = module.get_function("__glyim_assert_fail") {
         let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
         engine.add_global_mapping(&f, ptr as *const () as usize);
     }

@@ -13,7 +13,7 @@ impl<T> Vec<T> {
         if self.len == self.cap {
             let new_cap = if self.cap == 0 { 8 } else { self.cap * 2 };
             let elem_size = __size_of::<T>();
-            let new_data: *mut T = glyim_alloc(new_cap * elem_size) as *mut T;
+            let new_data: *mut T = __glyim_alloc(new_cap * elem_size) as *mut T;
             if self.data != (0 as *mut T) {
                 let mut i = 0;
                 while i < self.len {
@@ -22,7 +22,7 @@ impl<T> Vec<T> {
                     *dst_ptr = *src_ptr;
                     i = i + 1
                 };
-                glyim_free(self.data as *mut u8)
+                __glyim_free(self.data as *mut u8)
             };
             self.data = new_data;
             self.cap = new_cap

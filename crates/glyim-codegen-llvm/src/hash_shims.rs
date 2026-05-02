@@ -14,7 +14,7 @@ pub fn emit_hash_shims<'ctx>(context: &'ctx Context, module: &Module<'ctx>, no_s
 
     // ── glyim_hash_seed() -> i64 ───────────────────────────────
     let seed_fn_type = i64_type.fn_type(&[], false);
-    let seed_fn = module.add_function("glyim_hash_seed", seed_fn_type, None);
+    let seed_fn = module.add_function("__glyim_hash_seed", seed_fn_type, None);
     let entry = context.append_basic_block(seed_fn, "entry");
     let builder = context.create_builder();
     builder.position_at_end(entry);
@@ -23,7 +23,7 @@ pub fn emit_hash_shims<'ctx>(context: &'ctx Context, module: &Module<'ctx>, no_s
 
     // ── glyim_hash_bytes(ptr: *const u8, len: i64) -> i64 ─────
     let hash_fn_type = i64_type.fn_type(&[ptr_type.into(), i64_type.into()], false);
-    let hash_fn = module.add_function("glyim_hash_bytes", hash_fn_type, None);
+    let hash_fn = module.add_function("__glyim_hash_bytes", hash_fn_type, None);
 
     let entry_bb = context.append_basic_block(hash_fn, "entry");
     let loop_cond_bb = context.append_basic_block(hash_fn, "loop.cond");
