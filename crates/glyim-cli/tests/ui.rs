@@ -30,7 +30,13 @@ fn compile_stderr(source: &str, file_path: &str) -> String {
     if let Err(type_errors) = tc.check(&hir) {
         for e in &type_errors {
             use std::fmt::Write;
-            let _ = writeln!(errors, "error: {e}");
+            let report = glyim_diag::Report::new(
+                glyim_parse::ParseError::Message {
+                    msg: e.to_string(),
+                    span: (0, 0),
+                }
+            ).with_source_code(miette::NamedSource::new(file_path, source.to_string()));
+            let _ = writeln!(errors, "{:?}", report);
         }
         return errors;
     }

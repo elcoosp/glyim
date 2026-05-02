@@ -2,4 +2,9 @@
 source: crates/glyim-cli/tests/ui.rs
 expression: actual
 ---
-error: type mismatch: expected Bool, found Int
+  × type mismatch: expected Bool, found Int
+   ╭─[tests/ui/bool_mismatch.g:1:1]
+ 1 │ main = () => { let x: bool = 42; x }
+   · ▲
+   · ╰── type mismatch: expected Bool, found Int
+   ╰────
