@@ -448,6 +448,14 @@ fn e2e_extern_write_i32_fd() {
     assert!(pipeline::run(&temp_g(src), None).is_ok());
 }
 
+#[test]
+fn e2e_write_string_literal() {
+    let src = r#"extern { fn write(fd: i32, buf: *const u8, len: i64) -> i64; }
+main = () => {
+    write(1, "hello\n", 6)
+}"#;
+    assert!(pipeline::run(&temp_g(src), None).is_ok());
+}
 
 #[test]
 fn e2e_io_write_stdout_compile() {

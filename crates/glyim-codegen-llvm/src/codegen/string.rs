@@ -39,6 +39,19 @@ pub(crate) fn codegen_string_literal<'ctx>(cg: &Codegen<'ctx>, s: &str) -> Optio
 
 
 
+
+pub(crate) fn extract_str_data_ptr<'ctx>(
+    cg: &Codegen<'ctx>,
+    str_val: IntValue<'ctx>,
+) -> Option<IntValue<'ctx>> {
+    // str_val is a pointer (as i64) to a stack-allocated {i8*, i64} struct.
+    // Load the first field (data pointer) from that struct.
+    let ptr_type = cg.context.ptr_type(AddressSpace::from(0u16));
+    let ptr = cg.builder.build_int_to_ptr(str_val, ptr_type, "str_ptr").ok()?;
+    let data_ptr = cg.builder.build_load(cg.i64_type, ptr, "data_ptr_val").ok()?;
+    Some(data_ptr.into_int_value())
+}
+
 pub(crate) fn codegen_println<'ctx>(
     cg: &Codegen<'ctx>,
     arg: &HirExpr,
@@ -172,7 +185,19 @@ pub(crate) fn codegen_call<'ctx>(
             fn_val.get_type().get_param_types().into_iter().collect();
         let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
             .iter()
-            .filter_map(|a| codegen_expr(cg, a, fctx))
+            .filter_map(|a| {
+                let val = codegen_expr(cg, a, fctx)?;
+                // If Glyim type is Str and parameter expects a pointer, extract the data pointer
+                let arg_type = cg.expr_types.get(a.get_id().as_usize()).cloned();
+                if arg_type == Some(glyim_hir::types::HirType::Str) {
+                    let param_idx = args.iter().position(|x| std::ptr::eq(x, a)).unwrap_or(0);
+                    let param_type = param_types.get(param_idx);
+                    if param_type.is_some_and(|ty| ty.is_pointer_type()) {
+                        return extract_str_data_ptr(cg, val);
+                    }
+                }
+                Some(val)
+            })
             .enumerate()
             .map(|(i, int_val)| {
                 let param_type = param_types.get(i);
