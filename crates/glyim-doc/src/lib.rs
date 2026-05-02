@@ -48,4 +48,48 @@ mod tests {
         assert!(html.contains("get_x"));
         assert!(html.contains("</html>"));
     }
+
+    #[test]
+    fn generate_html_includes_all_item_types() {
+        let src = r#"
+struct Point { x, y }
+enum Color { Red, Green, Blue }
+fn get_x() -> i64 { 0 }
+main = () => 42
+"#;
+        let parse_out = glyim_parse::parse(src);
+        let mut interner = parse_out.interner;
+        let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+        let html = generate_html(&hir, &interner);
+        assert!(html.contains("Point"));
+        assert!(html.contains("Color"));
+        assert!(html.contains("Red"));
+        assert!(html.contains("Green"));
+        assert!(html.contains("Blue"));
+        assert!(html.contains("get_x"));
+        assert!(html.contains("<html>"));
+        assert!(html.contains("</html>"));
+    }
+
+    #[test]
+    fn generate_html_empty_module() {
+        let src = "main = () => 42";
+        let parse_out = glyim_parse::parse(src);
+        let mut interner = parse_out.interner;
+        let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+        let html = generate_html(&hir, &interner);
+        assert!(html.contains("<h1>Module Documentation</h1>"));
+    }
+
+    #[test]
+    fn generate_html_struct_fields_listed() {
+        let src = "struct Person { name, age }\nmain = () => 0";
+        let parse_out = glyim_parse::parse(src);
+        let mut interner = parse_out.interner;
+        let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+        let html = generate_html(&hir, &interner);
+        assert!(html.contains("name"));
+        assert!(html.contains("age"));
+        assert!(html.contains("<li>"));
+    }
 }
