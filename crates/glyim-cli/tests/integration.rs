@@ -823,6 +823,7 @@ main = () => {
     assert_eq!(pipeline::run(&input, None).unwrap(), 60); // 10+20+30
 }
 
+#[test]
 fn e2e_for_in_range() {
     let range_src = include_str!("../../../stdlib/src/range.g");
     let main_code = r#"
@@ -838,7 +839,7 @@ main = () => {
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 10); // 1+2+3+4
 }
-
+#[test]
 fn e2e_range_next() {
     let range_src = include_str!("../../../stdlib/src/range.g");
     let main_code = r#"
