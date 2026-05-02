@@ -310,7 +310,34 @@ pub(crate) fn codegen_expr<'ctx>(
                 .get(id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
-            // Structs are always behind a pointer; deref is identity.
+
+            // Structs: deep-copy from the source into a fresh heap allocation
+            if let HirType::Named(sym) | HirType::Generic(sym, _) = &pointed_ty {
+                if let Some(st) = cg.struct_types.borrow().get(sym).copied() {
+                    let ptr = cg.builder.build_int_to_ptr(
+                        ptr_val,
+                        cg.context.ptr_type(inkwell::AddressSpace::from(0u16)),
+                        "deref_ptr",
+                    ).ok()?;
+                    // Allocate new struct
+                    let size = st.size_of().unwrap_or(cg.i64_type.const_int(8, false));
+                    let alloc_fn = cg.module.get_function("__glyim_alloc")
+                        .or_else(|| cg.module.get_function("malloc"))?;
+                    let call_result = cg.builder.build_call(alloc_fn, &[size.into()], "deref_alloc")
+                        .ok()?
+                        .try_as_basic_value();
+                    let new_ptr = match call_result {
+                        inkwell::values::ValueKind::Basic(bv) => bv.into_pointer_value(),
+                        _ => return Some(cg.i64_type.const_int(0, false)),
+                    };
+                    // Deep copy from source (ptr_val points to source) to new allocation
+                    let loaded = cg.builder.build_load(st, ptr, "struct_val").ok()?;
+                    cg.builder.build_store(new_ptr, loaded).ok()?;
+                    return cg.builder.build_ptr_to_int(new_ptr, cg.i64_type, "struct_ptr").ok();
+                }
+            }
+
+            // Non-struct type: load the value directly
             let is_struct = match &pointed_ty {
                 HirType::Named(sym) | HirType::Generic(sym, _) => {
                     cg.struct_types.borrow().contains_key(sym)
