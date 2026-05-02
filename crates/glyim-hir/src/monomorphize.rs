@@ -1112,6 +1112,10 @@ impl<'a> MonoContext<'a> {
             for (name, args) in &fn_keys {
                 let mangled = self.mangle_name(*name, args);
                 names.push(((*name, args.clone()), mangled));
+                // Also insert with empty type args (for MethodCall resolution when receiver has no type args)
+                if !args.is_empty() {
+                    names.push(((*name, Vec::new()), mangled));
+                }
             }
             names
         };
