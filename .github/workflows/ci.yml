@@ -39,3 +39,13 @@ jobs:
       - run: cargo clippy --workspace -- -D warnings
       - run: cargo fmt --all -- --check
       - run: python3 scripts/check_file_sizes.py
+
+
+mutants:
+  name: Mutation Testing
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Run cargo-mutants
+      run: cargo mutants -j 4 --workspace --fail-under 90

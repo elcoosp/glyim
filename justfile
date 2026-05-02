@@ -191,6 +191,14 @@ check-files:
 qa: check check-dag check-tiers test
     @echo "✅ All quality checks passed"
 
+# Run mutation testing (requires cargo-mutants)
+mutants:
+    cargo mutants -j 4 --workspace --timeout-multiplier 2
+
+# Run mutation testing with a fail threshold (for CI)
+mutants-ci:
+    cargo mutants -j 4 --workspace --fail-under 90
+
 # ─── Counting ───────────────────────────────────────────────
 
 # Count total tests across workspace
