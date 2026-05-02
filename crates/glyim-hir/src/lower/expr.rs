@@ -185,7 +185,11 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
         } => {
             // AST args include the receiver as first element; strip it
             let method_args: Vec<_> = args.iter().skip(1).map(|a| lower_expr(a, ctx)).collect();
-            eprintln!("LOWER MethodCall: receiver={:?} method={:?}", receiver.kind, ctx.resolve(*method));
+            eprintln!(
+                "LOWER MethodCall: receiver={:?} method={:?}",
+                receiver.kind,
+                ctx.resolve(*method)
+            );
             HirExpr::MethodCall {
                 id,
                 receiver: Box::new(lower_expr(receiver, ctx)),
@@ -381,11 +385,6 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
             value: lower_expr(value, ctx),
             span,
         },
-        StmtKind::AssignDeref { target, value } => HirStmt::AssignDeref {
-            target: Box::new(lower_expr(target, ctx)),
-            value: lower_expr(value, ctx),
-            span,
-        },
         StmtKind::AssignField {
             object,
             field,
@@ -393,6 +392,11 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
         } => HirStmt::AssignField {
             object: Box::new(lower_expr(object, ctx)),
             field: *field,
+            value: lower_expr(value, ctx),
+            span,
+        },
+        StmtKind::AssignDeref { target, value } => HirStmt::AssignDeref {
+            target: Box::new(lower_expr(target, ctx)),
             value: lower_expr(value, ctx),
             span,
         },

@@ -133,17 +133,26 @@ pub(crate) fn codegen_stmt<'ctx>(
                     _ => return Some(new_val),
                 };
                 if let Some(llvm_struct) = cg.struct_types.borrow().get(&sym).copied() {
-                    let val_ptr = cg.builder.build_int_to_ptr(
-                        new_val,
-                        cg.context.ptr_type(AddressSpace::from(0u16)),
-                        "val_ptr"
-                    ).ok()?;
-                    let loaded = cg.builder.build_load(llvm_struct, val_ptr, "struct_val").ok()?;
-                    let target_typed = cg.builder.build_int_to_ptr(
-                        ptr_val,
-                        cg.context.ptr_type(AddressSpace::from(0u16)),
-                        "target_ptr"
-                    ).ok()?;
+                    let val_ptr = cg
+                        .builder
+                        .build_int_to_ptr(
+                            new_val,
+                            cg.context.ptr_type(AddressSpace::from(0u16)),
+                            "val_ptr",
+                        )
+                        .ok()?;
+                    let loaded = cg
+                        .builder
+                        .build_load(llvm_struct, val_ptr, "struct_val")
+                        .ok()?;
+                    let target_typed = cg
+                        .builder
+                        .build_int_to_ptr(
+                            ptr_val,
+                            cg.context.ptr_type(AddressSpace::from(0u16)),
+                            "target_ptr",
+                        )
+                        .ok()?;
                     cg.builder.build_store(target_typed, loaded).ok()?;
                     return Some(new_val);
                 }

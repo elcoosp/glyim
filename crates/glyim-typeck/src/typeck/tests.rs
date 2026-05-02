@@ -630,7 +630,9 @@ fn let_annotation_mismatch_reports_error() {
 
 #[test]
 fn generic_equality_compiles() {
-    let tc = typecheck("fn eq<K>(a: K, b: K) -> bool { a == b }\nmain = () => { if eq(42, 42) { 1 } else { 0 } }");
+    let tc = typecheck(
+        "fn eq<K>(a: K, b: K) -> bool { a == b }\nmain = () => { if eq(42, 42) { 1 } else { 0 } }",
+    );
     if !tc.errors.is_empty() {
         eprintln!("Generic equality errors: {:?}", tc.errors);
     }

@@ -1,7 +1,7 @@
 use crate::Codegen;
 use glyim_hir::HirType;
-use inkwell::types::BasicTypeEnum;
 use inkwell::types::BasicType;
+use inkwell::types::BasicTypeEnum;
 use inkwell::AddressSpace;
 
 impl<'ctx> Codegen<'ctx> {
@@ -174,6 +174,8 @@ pub(crate) fn get_or_create_enum_struct_type<'ctx>(
         false,
     );
     // Store the result in the cache for future use
-    cg.enum_struct_types.borrow_mut().insert(enum_name, enum_struct_type);
+    cg.enum_struct_types
+        .borrow_mut()
+        .insert(enum_name, enum_struct_type);
     enum_struct_type
 }

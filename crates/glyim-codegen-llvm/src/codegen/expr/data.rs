@@ -108,7 +108,10 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             })
             .collect();
         let st = super::super::types::get_or_create_enum_struct_type(
-            cg, *enum_name, *variant_name, &arg_types,
+            cg,
+            *enum_name,
+            *variant_name,
+            &arg_types,
         );
         let tag_map = cg.enum_variant_tags.borrow();
         let tag = tag_map
@@ -156,12 +159,18 @@ pub(crate) fn codegen_enum_variant<'ctx>(
                     _ => return None,
                 };
                 if let Some(llvm_struct) = cg.struct_types.borrow().get(&sym).copied() {
-                    let val_ptr = cg.builder.build_int_to_ptr(
-                        arg_val,
-                        cg.context.ptr_type(AddressSpace::from(0u16)),
-                        "val_ptr"
-                    ).ok()?;
-                    let loaded = cg.builder.build_load(llvm_struct, val_ptr, "struct_val").ok()?;
+                    let val_ptr = cg
+                        .builder
+                        .build_int_to_ptr(
+                            arg_val,
+                            cg.context.ptr_type(AddressSpace::from(0u16)),
+                            "val_ptr",
+                        )
+                        .ok()?;
+                    let loaded = cg
+                        .builder
+                        .build_load(llvm_struct, val_ptr, "struct_val")
+                        .ok()?;
                     cg.builder.build_store(arg_ptr, loaded).unwrap();
                 } else {
                     cg.builder.build_store(arg_ptr, arg_val).unwrap();

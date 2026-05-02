@@ -164,7 +164,6 @@ impl TypeChecker {
             }
             HirExpr::SizeOf { .. } => HirType::Int,
             HirExpr::AddrOf { .. } => HirType::Int,
-            HirExpr::AddrOf { .. } => HirType::Int,
             HirExpr::Return { .. } => HirType::Never,
             HirExpr::Deref { expr, id, .. } => {
                 let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);

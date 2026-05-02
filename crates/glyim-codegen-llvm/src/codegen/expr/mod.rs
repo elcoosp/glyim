@@ -244,11 +244,15 @@ pub(crate) fn codegen_expr<'ctx>(
                     };
                     if let Some(sym) = struct_sym {
                         if let Some(st) = cg.struct_types.borrow().get(&sym).copied() {
-                            let size = st.size_of()
+                            let size = st
+                                .size_of()
                                 .unwrap_or_else(|| cg.i64_type.const_int(0, false));
-                            let alloc_fn = cg.module.get_function("glyim_alloc")
+                            let alloc_fn = cg
+                                .module
+                                .get_function("glyim_alloc")
                                 .or_else(|| cg.module.get_function("malloc"))?;
-                            let call_result = cg.builder
+                            let call_result = cg
+                                .builder
                                 .build_call(alloc_fn, &[size.into()], "zero_struct_alloc")
                                 .ok()?
                                 .try_as_basic_value();
@@ -279,7 +283,7 @@ pub(crate) fn codegen_expr<'ctx>(
                         Some(cg.i64_type.const_int(0, false))
                     }
                 }
-            // RawPtr and everything else (identity or bitcast)
+                // RawPtr and everything else (identity or bitcast)
                 _ => Some(src_val),
             }
         }
@@ -337,7 +341,9 @@ pub(crate) fn codegen_expr<'ctx>(
                 inkwell::values::BasicValueEnum::StructValue(_)
                 | inkwell::values::BasicValueEnum::ArrayValue(_) => {
                     // Return the pointer to the aggregate (not the value itself)
-                    cg.builder.build_ptr_to_int(ptr, cg.i64_type, "agg_ptr").ok()
+                    cg.builder
+                        .build_ptr_to_int(ptr, cg.i64_type, "agg_ptr")
+                        .ok()
                 }
                 _ => Some(cg.i64_type.const_int(0, false)),
             }

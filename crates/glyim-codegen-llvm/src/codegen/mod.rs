@@ -295,7 +295,10 @@ impl<'ctx> Codegen<'ctx> {
             Err("no 'main' function".into())
         } else {
             if let Err(msg) = self.module.verify() {
-                Err(format!("LLVM module verification failed: {}", msg.to_string()))
+                Err(format!(
+                    "LLVM module verification failed: {}",
+                    msg.to_string()
+                ))
             } else {
                 Ok(())
             }
@@ -482,7 +485,10 @@ impl<'ctx> Codegen<'ctx> {
         self.emit_test_harness(test_names, should_panic)?;
 
         if let Err(msg) = self.module.verify() {
-            Err(format!("LLVM module verification failed: {}", msg.to_string()))
+            Err(format!(
+                "LLVM module verification failed: {}",
+                msg.to_string()
+            ))
         } else {
             Ok(())
         }
