@@ -210,7 +210,9 @@ impl<'a> MonoContext<'a> {
                     Some(HirType::RawPtr(inner)) => Some(inner.as_ref().clone()),
                     other => other.cloned(),
                 };
-                if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = inner_ty {
+                if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) =
+                    inner_ty
+                {
                     let mangled = format!(
                         "{}_{}",
                         self.interner.resolve(type_name),
@@ -411,18 +413,12 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     fn scan_expr_for_generic_calls(&mut self, expr: &HirExpr) {
         match expr {
-            HirExpr::Call {
-                id: call_id,
-                callee,
-                args,
-                ..
-            } => {
+            HirExpr::Call { id: call_id, callee, args, .. } => {
                 if let Some(fn_def) = self.find_fn(*callee) {
                     if !fn_def.type_params.is_empty() {
                         if args.is_empty() {
                             // Zero-argument generic call: infer type params from usage or default to Int
-                            let concrete: Vec<HirType> =
-                                fn_def.type_params.iter().map(|_| HirType::Int).collect();
+                            let concrete: Vec<HirType> = fn_def.type_params.iter().map(|_| HirType::Int).collect();
                             self.inferred_call_args.insert(*call_id, concrete.clone());
                             self.queue_fn_specialization(*callee, concrete);
                             return;
@@ -472,7 +468,7 @@ impl<'a> MonoContext<'a> {
                 if let Some(HirType::Generic(type_name, type_args)) = receiver_ty {
                     let mangled = format!(
                         "{}_{}",
-                        self.interner.resolve(*type_name),
+                        self.interner.resolve(type_name),
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
@@ -563,37 +559,20 @@ impl<'a> MonoContext<'a> {
             | HirExpr::Deref { expr: operand, .. }
             | HirExpr::As { expr: operand, .. } => self.scan_expr_for_generic_calls(operand),
             HirExpr::Return { value: Some(v), .. } => self.scan_expr_for_generic_calls(v),
-            HirExpr::StructLit {
-                struct_name,
-                fields,
-                ..
-            } => {
+            HirExpr::StructLit { struct_name, fields, .. } => {
                 if let Some(struct_def) = self.find_struct(*struct_name) {
                     for (field_sym, field_expr) in fields {
-                        if let Some(field_def) =
-                            struct_def.fields.iter().find(|f| f.name == *field_sym)
-                        {
-                            if let HirExpr::Call {
-                                id: call_id,
-                                callee,
-                                args,
-                                ..
-                            } = field_expr
-                            {
+                        if let Some(field_def) = struct_def.fields.iter().find(|f| f.name == *field_sym) {
+                            if let HirExpr::Call { id: call_id, callee, args, .. } = field_expr {
                                 if args.is_empty() {
                                     if let Some(fn_def) = self.find_fn(*callee) {
                                         if !fn_def.type_params.is_empty() {
                                             let concrete: Vec<HirType> = match &field_def.ty {
                                                 HirType::Generic(_, type_args) => type_args.clone(),
-                                                _ => fn_def
-                                                    .type_params
-                                                    .iter()
-                                                    .map(|_| HirType::Int)
-                                                    .collect(),
+                                                _ => fn_def.type_params.iter().map(|_| HirType::Int).collect(),
                                             };
                                             if !concrete.is_empty() {
-                                                self.inferred_call_args
-                                                    .insert(*call_id, concrete.clone());
+                                                self.inferred_call_args.insert(*call_id, concrete.clone());
                                                 self.queue_fn_specialization(*callee, concrete);
                                             }
                                         }
@@ -1237,10 +1216,7 @@ impl<'a> MonoContext<'a> {
                 args,
                 span,
             } => {
-                let type_args = self
-                    .call_type_args
-                    .get(id)
-                    .cloned()
+                let type_args = self.call_type_args.get(id).cloned()
                     .or_else(|| self.inferred_call_args.get(id).cloned())
                     .unwrap_or_default();
                 let type_args_empty = type_args.is_empty();
@@ -1249,8 +1225,8 @@ impl<'a> MonoContext<'a> {
                     .copied()
                     .unwrap_or(*callee);
                 if new_callee == *callee && type_args_empty {
-                    if let Some(((_, _), mono)) =
-                        fn_map.iter().find(|((sym, _), _)| *sym == *callee)
+                    if let Some(((_, _), mono)) = fn_map.iter()
+                        .find(|((sym, _), _)| *sym == *callee)
                     {
                         new_callee = *mono;
                     }
@@ -1300,7 +1276,9 @@ impl<'a> MonoContext<'a> {
                     Some(HirType::RawPtr(inner)) => Some(inner.as_ref().clone()),
                     other => other.cloned(),
                 };
-                if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = inner_ty {
+                if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) =
+                    inner_ty
+                {
                     let mangled = format!(
                         "{}_{}",
                         self.interner.resolve(type_name),
@@ -1321,8 +1299,7 @@ impl<'a> MonoContext<'a> {
                     // Fallback: if no exact match and receiver_type_args is empty, try any specialization
                     let concrete_key = concrete_key.or_else(|| {
                         if receiver_type_args.is_empty() {
-                            fn_map
-                                .iter()
+                            fn_map.iter()
                                 .find(|((sym, _), _)| *sym == mangled_sym)
                                 .map(|((_, args), mono_name)| (args.clone(), *mono_name))
                         } else {
