@@ -72,16 +72,15 @@ fn parse_invalid_toml_fails() {
 fn parse_empty_manifest_fails() {
     let res = parse_manifest("", "glyim.toml");
     assert!(res.is_err());
-
-    #[test]
-    fn parse_manifest_with_no_std() {
-        let toml = r#"
+}
+#[test]
+fn parse_manifest_with_no_std() {
+    let toml = r#"
 [package]
 name = "bare"
 version = "0.1.0"
 no_std = true
 "#;
-        let m = glyim_pkg::manifest::parse_manifest(toml, "glyim.toml").unwrap();
-        assert_eq!(m.package.no_std, Some(true));
-    }
+    let m = glyim_pkg::manifest::parse_manifest(toml, "glyim.toml").unwrap();
+    assert_eq!(m.package.no_std, Some(true));
 }
