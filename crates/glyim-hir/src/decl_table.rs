@@ -133,7 +133,7 @@ impl DeclTable {
                     .iter()
                     .map(|(sym, _ty, _mut)| (*sym, HirType::Int))
                     .collect();
-                let hir_method = HirFn {
+                let hir_method = HirFn { doc: None,
                     name: mangled_name,
                     type_params: imp
                         .type_params

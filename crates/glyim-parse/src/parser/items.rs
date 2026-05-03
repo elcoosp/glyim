@@ -20,6 +20,7 @@ pub(crate) fn parse_item_declaration(parser: &mut Parser) -> Option<Item> {
 }
 pub(crate) fn parse_item(parser: &mut Parser) -> Option<Item> {
     let attrs = parser.parse_attributes();
+
     match parser.tokens.peek()?.kind {
         SyntaxKind::At => parse_macro_def(parser),
         SyntaxKind::KwFn => parse_fn_def_with_attrs(parser, attrs, None),
@@ -90,7 +91,7 @@ fn parse_macro_def(parser: &mut Parser) -> Option<Item> {
         .ok()?;
     skip_return_type(parser);
     let body = crate::parser::exprs::complex::parse_block(parser)?;
-    Some(Item::MacroDef {
+    Some(Item::MacroDef { doc: None,
         name: fn_name,
         name_span: fn_name_span,
         params,
@@ -110,7 +111,7 @@ fn parse_binding_with_attrs(
         .expect(SyntaxKind::Eq, &mut parser.errors)
         .ok()?;
     let value = parser.parse_expr(0)?;
-    Some(Item::Binding {
+    Some(Item::Binding { doc: None,
         name,
         name_span,
         value,
@@ -190,7 +191,7 @@ fn parse_fn_def_with_attrs(
         None
     };
     let body = crate::parser::exprs::complex::parse_block(parser)?;
-    Some(Item::FnDef {
+    Some(Item::FnDef { doc: None,
         name,
         name_span,
         type_params,
@@ -235,7 +236,7 @@ fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::StructDef {
+    Some(Item::StructDef { doc: None,
         name,
         name_span,
         type_params,
@@ -278,7 +279,7 @@ fn parse_enum_def(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::EnumDef {
+    Some(Item::EnumDef { doc: None,
         name,
         name_span,
         type_params,
@@ -326,7 +327,7 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::ImplBlock {
+    Some(Item::ImplBlock { doc: None,
         target,
         target_span: Span::new(target_tok.start, target_tok.end),
         type_params,
@@ -402,7 +403,7 @@ fn parse_extern_block(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::ExternBlock {
+    Some(Item::ExternBlock { doc: None,
         abi: "C".into(),
         span: Span::new(start, end_tok.end),
         functions,
@@ -600,7 +601,7 @@ fn parse_fn_def_with_attrs_skip_body(
             }
         }
     }
-    Some(Item::FnDef {
+    Some(Item::FnDef { doc: None,
         name,
         name_span,
         type_params,
@@ -633,7 +634,7 @@ fn parse_impl_block_declaration(parser: &mut Parser) -> Option<Item> {
         }
     }
     let end_tok = parser.tokens.expect(SyntaxKind::RBrace, &mut parser.errors).ok()?;
-    Some(Item::ImplBlock {
+    Some(Item::ImplBlock { doc: None,
         target,
         target_span: Span::new(target_tok.start, target_tok.end),
         type_params,

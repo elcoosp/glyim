@@ -283,6 +283,7 @@ pub struct MatchArm {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirFn {
+    pub doc: Option<String>,
     pub name: Symbol,
     pub type_params: Vec<Symbol>,
     pub params: Vec<(Symbol, HirType)>,

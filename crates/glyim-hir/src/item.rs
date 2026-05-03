@@ -17,6 +17,7 @@ pub struct StructField {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDef {
+    pub doc: Option<String>,
     pub name: Symbol,
     pub type_params: Vec<Symbol>,
     pub fields: Vec<StructField>,
@@ -42,6 +43,7 @@ pub struct HirVariant {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
+    pub doc: Option<String>,
     pub name: Symbol,
     pub type_params: Vec<Symbol>,
     pub variants: Vec<HirVariant>,
@@ -51,6 +53,7 @@ pub struct EnumDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirImplDef {
+    pub doc: Option<String>,
     pub target_name: Symbol,
     pub type_params: Vec<Symbol>,
     pub methods: Vec<HirFn>,
@@ -67,6 +70,7 @@ pub struct ExternFn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExternBlock {
+    pub doc: Option<String>,
     pub functions: Vec<ExternFn>,
     pub span: Span,
 }

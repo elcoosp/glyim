@@ -28,7 +28,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             ..
         } => {
             let start = attrs.first().map_or(name_span.start, |a| a.span.start);
-            Some(HirItem::Fn(HirFn {
+            Some(HirItem::Fn(HirFn { doc: None,
                 name: *name,
                 type_params: vec![],
                 params: vec![],
@@ -66,7 +66,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     )
                 })
                 .unzip();
-            Some(HirItem::Fn(HirFn {
+            Some(HirItem::Fn(HirFn { doc: None,
                 name: *name,
                 type_params: type_params.clone(),
                 params: hir_params,
@@ -79,7 +79,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 is_extern_backed: false,
             }))
         }
-        Item::StructDef {
+        Item::StructDef { doc: _,
             name,
             name_span,
             type_params,
@@ -100,7 +100,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                         .unwrap_or(HirType::Int),
                 })
                 .collect();
-            Some(HirItem::Struct(StructDef {
+            Some(HirItem::Struct(StructDef { doc: None,
                 name: *name,
                 type_params: type_params.clone(),
                 fields: hir_fields,
@@ -108,7 +108,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 span: glyim_diag::Span::new(name_span.start, end),
             }))
         }
-        Item::EnumDef {
+        Item::EnumDef { doc: _,
             name,
             name_span,
             type_params,
@@ -134,7 +134,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     tag: i as u32,
                 })
                 .collect();
-            Some(HirItem::Enum(EnumDef {
+            Some(HirItem::Enum(EnumDef { doc: None,
                 name: *name,
                 type_params: type_params.clone(),
                 variants: hir_variants,
@@ -180,7 +180,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                                 )
                             })
                             .unzip();
-                        Some(HirFn {
+                        Some(HirFn { doc: None,
                             name: mangled_name,
                             type_params: all_tp,
                             params: hir_params,
@@ -197,7 +197,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     }
                 })
                 .collect();
-            Some(HirItem::Impl(HirImplDef {
+            Some(HirItem::Impl(HirImplDef { doc: None,
                 target_name: *target,
                 type_params: type_params.clone(),
                 methods: hir_methods,
@@ -210,7 +210,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             name_span,
             body,
             ..
-        } => Some(HirItem::Fn(HirFn {
+        } => Some(HirItem::Fn(HirFn { doc: None,
             name: *name,
             type_params: vec![],
             params: vec![],
@@ -222,7 +222,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             is_macro_generated: true,
             is_extern_backed: false,
         })),
-        Item::ExternBlock {
+        Item::ExternBlock { doc: _,
             span, functions, ..
         } => {
             let ex_fns: Vec<ExternFn> = functions
@@ -245,7 +245,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                         .unwrap_or(HirType::Int),
                 })
                 .collect();
-            Some(HirItem::Extern(ExternBlock {
+            Some(HirItem::Extern(ExternBlock { doc: None,
                 functions: ex_fns,
                 span: *span,
             }))

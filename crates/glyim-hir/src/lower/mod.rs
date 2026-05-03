@@ -43,3 +43,30 @@ pub fn lower_with_declarations(
         .collect();
     Hir { items }
 }
+
+
+/// After lowering, scan the original tokens and attach doc comments
+/// to items based on source position (Go‑style).
+pub fn attach_doc_comments(
+    hir: &mut Hir,
+    tokens: &[glyim_lex::Token],
+) {
+    for item in &mut hir.items {
+        let span = match item {
+            crate::item::HirItem::Fn(f) => f.span,
+            crate::item::HirItem::Struct(s) => s.span,
+            crate::item::HirItem::Enum(e) => e.span,
+            crate::item::HirItem::Impl(i) => i.span,
+            crate::item::HirItem::Extern(e) => e.span,
+        };
+        if let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, span.start) {
+            match item {
+                crate::item::HirItem::Fn(f) => f.doc = Some(doc),
+                crate::item::HirItem::Struct(s) => s.doc = Some(doc),
+                crate::item::HirItem::Enum(e) => e.doc = Some(doc),
+                crate::item::HirItem::Impl(i) => i.doc = Some(doc),
+                crate::item::HirItem::Extern(e) => e.doc = Some(doc),
+            }
+        }
+    }
+}

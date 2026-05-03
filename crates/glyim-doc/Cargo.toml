@@ -6,6 +6,7 @@ license.workspace = true
 description = "Documentation generator for Glyim"
 
 [dependencies]
+pulldown-cmark = "0.13"
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 
