@@ -168,8 +168,9 @@ fn parse_ident_expr(parser: &mut Parser) -> Option<ExprNode> {
         });
     }
     let is_uppercase = name.chars().next().is_some_and(|c| c.is_uppercase());
+    let is_known_struct_name = parser.known_structs.contains(&sym);
 
-    if is_uppercase && parser.tokens.at(SyntaxKind::LBrace) {
+    if (is_uppercase || is_known_struct_name) && parser.tokens.at(SyntaxKind::LBrace) {
         parse_struct_literal(parser, sym, start)
     } else if parser.tokens.at(SyntaxKind::LParen) && matches!(name, "Some" | "Ok" | "Err") {
         parse_option_result_ctor(parser, name.to_string(), start)

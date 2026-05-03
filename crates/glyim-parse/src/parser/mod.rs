@@ -15,6 +15,7 @@ pub struct Parser<'a> {
     pub(crate) tokens: tokens::Tokens<'a>,
     pub errors: Vec<ParseError>,
     pub interner: Interner,
+    pub(crate) known_structs: std::collections::HashSet<glyim_interner::Symbol>,
 }
 
 impl<'a> Parser<'a> {
@@ -23,6 +24,7 @@ impl<'a> Parser<'a> {
             tokens: tokens::Tokens::new(tokens),
             errors: vec![],
             interner: Interner::new(),
+            known_structs: std::collections::HashSet::new(),
         }
     }
     #[tracing::instrument(skip_all)]
@@ -109,7 +111,60 @@ impl<'a> Parser<'a> {
     }
     #[tracing::instrument(skip_all)]
 
-    pub fn parse_source_file(&mut self) -> Ast {
+    
+    /// Two‑pass parser: first scans for type declarations, then parses
+    /// full bodies. This resolves forward references without changing the API.
+    pub fn parse_source_file_two_pass(&mut self) -> Ast {
+        // Pass 1: collect struct and enum names
+        // Save current position by cloning the tokens? No — we'll reset later.
+        let mut type_names = std::collections::HashSet::new();
+        while !self.tokens.is_eof() {
+            match self.tokens.peek().map(|t| t.kind) {
+                Some(glyim_syntax::SyntaxKind::KwStruct) | Some(glyim_syntax::SyntaxKind::KwEnum) => {
+                    if let Some(kind) = self.tokens.peek().map(|t| t.kind) {
+                        if kind == glyim_syntax::SyntaxKind::KwStruct {
+                            self.tokens.bump(); // skip 'struct'
+                        } else {
+                            self.tokens.bump(); // skip 'enum'
+                        }
+                        if let Some(name_tok) = self.tokens.bump() {
+                            if name_tok.kind == glyim_syntax::SyntaxKind::Ident {
+                                let sym = self.interner.intern(name_tok.text);
+                                type_names.insert(sym);
+                            }
+                        }
+                        // Skip the rest of the declaration (fields/variants)
+                        let mut depth = 0u32;
+                        while let Some(tok) = self.tokens.peek() {
+                            match tok.kind {
+                                glyim_syntax::SyntaxKind::LBrace => { self.tokens.bump(); depth += 1; }
+                                glyim_syntax::SyntaxKind::RBrace => {
+                                    self.tokens.bump();
+                                    if depth == 0 { break; }
+                                    depth -= 1;
+                                }
+                                _ => { self.tokens.bump(); }
+                            }
+                        }
+                    }
+                }
+                _ => { self.tokens.bump(); }
+            }
+        }
+
+        // Reset token position and build struct_names set
+        self.tokens.reset();
+        for sym in type_names {
+            // Store in parser's own state - we'll check it during item parsing
+            // For now, add to a new field: known_structs
+            self.known_structs.insert(sym);
+        }
+
+        // Pass 2: full parse
+        self.parse_source_file()
+    }
+
+pub fn parse_source_file(&mut self) -> Ast {
         let mut items = vec![];
         while !self.tokens.is_eof() {
             if let Some(item) = items::parse_item(self) {
@@ -168,7 +223,7 @@ use glyim_lex::tokenize;
 pub fn parse(source: &str) -> ParseOutput {
     let tokens = tokenize(source);
     let mut parser = Parser::new(&tokens);
-    let ast = parser.parse_source_file();
+    let ast = parser.parse_source_file_two_pass();
     ParseOutput {
         ast,
         errors: parser.errors,

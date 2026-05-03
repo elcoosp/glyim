@@ -87,6 +87,11 @@ impl<'a> Tokens<'a> {
         }
     }
 
+    /// Reset the token stream back to the beginning.
+    pub fn reset(&mut self) {
+        self.pos = 0;
+    }
+
     pub fn is_lambda_start(&self) -> bool {
         let mut p = self.pos;
         while p < self.tokens.len() && self.tokens[p].kind.is_trivia() {
