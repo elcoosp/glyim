@@ -384,14 +384,15 @@ pub(crate) fn codegen_expr<'ctx>(
                 "[codegen MethodCall] method_name={}",
                 cg.interner.resolve(*method_name)
             );
-            // Also print receiver type id for debugging
             eprintln!("[codegen MethodCall] receiver_id={:?}", receiver.get_id());
+
             // Check if this method is backed by an extern function
             if let Some(extern_name) = cg.extern_methods.get(method_name).copied() {
                 let mut all_args = vec![receiver.as_ref().clone()];
                 all_args.extend(args.clone());
                 return super::string::codegen_call(cg, &extern_name, &all_args, fctx);
             }
+
             let receiver_val = codegen_expr(cg, receiver, fctx)?;
             let receiver_id = receiver.get_id();
             let receiver_ty = cg
@@ -399,30 +400,96 @@ pub(crate) fn codegen_expr<'ctx>(
                 .get(receiver_id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
+
             // Unwrap RawPtr to get the real struct type
             let inner_ty = match &receiver_ty {
                 HirType::RawPtr(inner) => inner.as_ref().clone(),
                 other => other.clone(),
             };
-            let mangled_name = match &inner_ty {
-                HirType::Named(type_name) | HirType::Generic(type_name, _) => format!(
-                    "{}_{}",
-                    cg.interner.resolve(*type_name),
-                    cg.interner.resolve(*method_name)
-                ),
-                _ => cg.interner.resolve(*method_name).to_string(),
-            };
-            let mut fn_val = cg.module.get_function(&mangled_name);
-            // Fallback: try __i64 or __i64_i64 suffixed versions
-            if fn_val.is_none() {
-                let guess = format!("{}__i64", mangled_name);
-                fn_val = cg.module.get_function(&guess);
-                if fn_val.is_none() {
-                    let guess2 = format!("{}__i64_i64", mangled_name);
-                    fn_val = cg.module.get_function(&guess2);
+
+            // Helper function to mangle a HirType to a string
+            fn mangle_type(cg: &Codegen, ty: &HirType) -> String {
+                match ty {
+                    HirType::Int => "i64".to_string(),
+                    HirType::Bool => "i64".to_string(),
+                    HirType::Float => "f64".to_string(),
+                    HirType::Str => "Str".to_string(),
+                    HirType::Unit => "()".to_string(),
+                    HirType::Never => "Never".to_string(),
+                    HirType::Named(sym) => {
+                        let name = cg.interner.resolve(*sym);
+                        match name {
+                            "i64" | "Int" => "i64".to_string(),
+                            "f64" | "Float" => "f64".to_string(),
+                            "bool" | "Bool" => "i64".to_string(),
+                            other => other.to_string(),
+                        }
+                    }
+                    HirType::Generic(_, type_args) if !type_args.is_empty() => {
+                        let base = match ty {
+                            HirType::Generic(sym, _) => cg.interner.resolve(*sym),
+                            _ => unreachable!(),
+                        };
+                        let args_str = type_args
+                            .iter()
+                            .map(|arg| mangle_type(cg, arg))
+                            .collect::<Vec<_>>()
+                            .join("_");
+                        format!("{}_{}", base, args_str)
+                    }
+                    HirType::Generic(sym, _) => {
+                        let name = cg.interner.resolve(*sym);
+                        match name {
+                            "i64" | "Int" => "i64".to_string(),
+                            other => other.to_string(),
+                        }
+                    }
+                    HirType::RawPtr(inner) => mangle_type(cg, inner),
+                    HirType::Opaque(sym) => cg.interner.resolve(*sym).to_string(),
+                    HirType::Func(_, _) => "fn".to_string(),
+                    HirType::Option(inner) => format!("Option_{}", mangle_type(cg, inner)),
+                    HirType::Result(ok, err) => {
+                        format!("Result_{}_{}", mangle_type(cg, ok), mangle_type(cg, err))
+                    }
+                    HirType::Tuple(elems) => elems
+                        .iter()
+                        .map(|e| mangle_type(cg, e))
+                        .collect::<Vec<_>>()
+                        .join("_"),
                 }
             }
-            if let Some(fn_val) = fn_val {
+            // Generate the mangled function name with proper type suffix
+            let mangled_name = match &inner_ty {
+                HirType::Named(type_name) | HirType::Generic(type_name, _) => {
+                    let base = format!(
+                        "{}_{}",
+                        cg.interner.resolve(*type_name),
+                        cg.interner.resolve(*method_name)
+                    );
+                    // Generate type suffix from generic type arguments
+                    let suffix = match &inner_ty {
+                        HirType::Generic(_, type_args) if !type_args.is_empty() => type_args
+                            .iter()
+                            .map(|arg| mangle_type(cg, arg))
+                            .collect::<Vec<_>>()
+                            .join("_"),
+                        _ => String::new(),
+                    };
+                    if suffix.is_empty() {
+                        base
+                    } else {
+                        format!("{}__{}", base, suffix)
+                    }
+                }
+                _ => cg.interner.resolve(*method_name).to_string(),
+            };
+
+            eprintln!(
+                "[codegen MethodCall] looking for function: {}",
+                mangled_name
+            );
+
+            if let Some(fn_val) = cg.module.get_function(&mangled_name) {
                 let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
                 call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
                     receiver_val,
@@ -443,6 +510,10 @@ pub(crate) fn codegen_expr<'ctx>(
                     _ => Some(cg.i64_type.const_int(0, false)),
                 }
             } else {
+                eprintln!(
+                    "[codegen MethodCall] WARNING: function '{}' not found",
+                    mangled_name
+                );
                 Some(cg.i64_type.const_int(0, false))
             }
         }

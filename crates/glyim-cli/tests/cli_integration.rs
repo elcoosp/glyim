@@ -216,22 +216,22 @@ fn cli_macro_inspect_shows_expansion() {
         stdout.contains("main = () => 42"),
         "missing expanded content"
     );
+}
+#[test]
+fn cli_verify_checks_lockfile() {
+    let Some(bin) = glyim_bin() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
 
-    #[test]
-    fn cli_verify_checks_lockfile() {
-        let Some(bin) = glyim_bin() else {
-            return;
-        };
-        let dir = tempfile::tempdir().unwrap();
+    let cas_dir = dir.path().join("cas");
+    std::fs::create_dir_all(cas_dir.join("objects")).unwrap();
+    let store = glyim_macro_vfs::LocalContentStore::new(&cas_dir).unwrap();
+    let blob = b"hello verify";
+    let hash = store.store(blob);
 
-        let cas_dir = dir.path().join("cas");
-        std::fs::create_dir_all(cas_dir.join("objects")).unwrap();
-        let store = glyim_macro_vfs::LocalContentStore::new(&cas_dir).unwrap();
-        let blob = b"hello verify";
-        let hash = store.store(blob);
-
-        let lockfile_content = format!(
-            r#"
+    let lockfile_content = format!(
+        r#"
 [[package]]
 name = "testpkg"
 version = "1.0.0"
@@ -240,33 +240,33 @@ hash = "{}"
 [package.source]
 type = "local"
 "#,
-            hash
-        );
-        std::fs::write(dir.path().join("glyim.lock"), lockfile_content).unwrap();
+        hash
+    );
+    std::fs::write(dir.path().join("glyim.lock"), lockfile_content).unwrap();
 
-        let output = std::process::Command::new(bin)
-            .arg("verify")
-            .env("GLYIM_DATA_DIR", dir.path())
-            .current_dir(dir.path())
-            .output()
-            .expect("glyim verify");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("Lockfile verified"),
-            "unexpected: {}",
-            stderr
-        );
-        assert!(output.status.success());
-    }
+    let output = std::process::Command::new(bin)
+        .arg("verify")
+        .env("GLYIM_DATA_DIR", dir.path())
+        .current_dir(dir.path())
+        .output()
+        .expect("glyim verify");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Lockfile verified"),
+        "unexpected: {}",
+        stderr
+    );
+    assert!(output.status.success());
+}
 
-    #[test]
-    fn cli_outdated_with_missing_registry() {
-        let Some(bin) = glyim_bin() else {
-            return;
-        };
-        let dir = tempfile::tempdir().unwrap();
-        // Create a lockfile with some dummy packages
-        let lockfile_content = r#"
+#[test]
+fn cli_outdated_with_missing_registry() {
+    let Some(bin) = glyim_bin() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    // Create a lockfile with some dummy packages
+    let lockfile_content = r#"
 [[package]]
 name = "foo"
 version = "1.0.0"
@@ -275,49 +275,48 @@ hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 [package.source]
 type = "local"
 "#;
-        std::fs::write(dir.path().join("glyim.lock"), lockfile_content).unwrap();
+    std::fs::write(dir.path().join("glyim.lock"), lockfile_content).unwrap();
 
-        // Use a non‑existent registry so that the tool handles errors gracefully
-        let output = std::process::Command::new(bin)
-            .arg("outdated")
-            .env("GLYIM_REGISTRY", "http://localhost:99999")
-            .current_dir(dir.path())
-            .output()
-            .expect("glyim outdated");
-        // Should exit with code 1 because registry unavailable
-        assert!(!output.status.success());
-    }
+    // Use a non‑existent registry so that the tool handles errors gracefully
+    let output = std::process::Command::new(bin)
+        .arg("outdated")
+        .env("GLYIM_REGISTRY", "http://localhost:99999")
+        .current_dir(dir.path())
+        .output()
+        .expect("glyim outdated");
+    // Should exit with code 1 because registry unavailable
+    assert!(!output.status.success());
+}
 
-    #[test]
-    fn cli_cache_clean_removes_unused() {
-        let Some(bin) = glyim_bin() else {
-            return;
-        };
-        let dir = tempfile::tempdir().unwrap();
-        let cache_dir = dir.path().join(".glyim").join("cas");
-        std::fs::create_dir_all(cache_dir.join("objects")).unwrap();
-        // store a blob not referenced by any name
-        let store = glyim_macro_vfs::LocalContentStore::new(&cache_dir).unwrap();
-        let hash_unused = store.store(b"unused");
-        let hash_used = store.store(b"used");
-        store.register_name("my-crate", hash_used);
+#[test]
+fn cli_cache_clean_removes_unused() {
+    let Some(bin) = glyim_bin() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let cache_dir = dir.path().join(".glyim").join("cas");
+    std::fs::create_dir_all(cache_dir.join("objects")).unwrap();
+    // store a blob not referenced by any name
+    let store = glyim_macro_vfs::LocalContentStore::new(&cache_dir).unwrap();
+    let hash_unused = store.store(b"unused");
+    let hash_used = store.store(b"used");
+    store.register_name("my-crate", hash_used);
 
-        let output = std::process::Command::new(bin)
-            .arg("cache")
-            .arg("clean")
-            .env("HOME", dir.path())
-            .current_dir(dir.path())
-            .output()
-            .expect("glyim cache clean");
-        assert!(output.status.success());
-        // The unused blob should be gone, the used one should remain
-        assert!(
-            store.retrieve(hash_used).is_some(),
-            "used blob should still exist"
-        );
-        assert!(
-            store.retrieve(hash_unused).is_none(),
-            "unused blob should be removed"
-        );
-    }
+    let output = std::process::Command::new(bin)
+        .arg("cache")
+        .arg("clean")
+        .env("HOME", dir.path())
+        .current_dir(dir.path())
+        .output()
+        .expect("glyim cache clean");
+    assert!(output.status.success());
+    // The unused blob should be gone, the used one should remain
+    assert!(
+        store.retrieve(hash_used).is_some(),
+        "used blob should still exist"
+    );
+    assert!(
+        store.retrieve(hash_unused).is_none(),
+        "unused blob should be removed"
+    );
 }

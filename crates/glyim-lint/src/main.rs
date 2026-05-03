@@ -1,4 +1,3 @@
-use glyim_parse::Item;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -40,7 +39,10 @@ fn main() {
     for item in &hir.items {
         if let glyim_hir::HirItem::Fn(f) = item {
             if f.params.is_empty() && !fn_counts.contains_key(&f.name) {
-                eprintln!("warning: function '{}' has no parameters and may be unused", interner.resolve(f.name));
+                eprintln!(
+                    "warning: function '{}' has no parameters and may be unused",
+                    interner.resolve(f.name)
+                );
                 found += 1;
             }
         }

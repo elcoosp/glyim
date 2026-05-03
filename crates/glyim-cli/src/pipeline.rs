@@ -89,6 +89,11 @@ fn detect_no_std(source: &str) -> bool {
     }
     false
 }
+
+fn is_manifest_no_std(manifest: &glyim_pkg::manifest::PackageManifest) -> bool {
+    manifest.package.no_std == Some(true)
+}
+
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let is_no_std = detect_no_std(&source);
@@ -348,9 +353,10 @@ pub fn run_with_mode(
     input: &Path,
     mode: BuildMode,
     target: Option<&str>,
-    _force_no_std: Option<bool>,
+    force_no_std: Option<bool>,
 ) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let is_no_std = force_no_std.unwrap_or(is_no_std);
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
     let source = crate::macro_expand::expand_macros(
@@ -432,9 +438,10 @@ pub fn build_with_mode(
     output: Option<&Path>,
     mode: BuildMode,
     target: Option<&str>,
-    _force_no_std: Option<bool>,
+    force_no_std: Option<bool>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let is_no_std = force_no_std.unwrap_or(is_no_std);
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
     let source = crate::macro_expand::expand_macros(
@@ -525,14 +532,16 @@ pub fn build_package(
             PipelineError::Io(e)
         }
     })?;
-    let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+    let full_manifest = glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml")
+        .map_err(|e| PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string())))?;
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-    build_with_mode(&main_path, output, mode, target, None)
+    let force_no_std = Some(is_manifest_no_std(&full_manifest));
+    build_with_mode(&main_path, output, mode, target, force_no_std)
 }
 pub fn run_package(
     package_dir: &Path,
@@ -547,14 +556,16 @@ pub fn run_package(
             PipelineError::Io(e)
         }
     })?;
-    let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+    let full_manifest = glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml")
+        .map_err(|e| PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string())))?;
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-    run_with_mode(&main_path, mode, target, None)
+    let force_no_std = Some(is_manifest_no_std(&full_manifest));
+    run_with_mode(&main_path, mode, target, force_no_std)
 }
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
@@ -577,9 +588,10 @@ pub fn run_tests(
     input: &Path,
     filter_name: Option<&str>,
     include_ignored: bool,
-    _force_no_std: Option<bool>,
+    force_no_std: Option<bool>,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let is_no_std = force_no_std.unwrap_or(is_no_std);
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
     let source = crate::macro_expand::expand_macros(
