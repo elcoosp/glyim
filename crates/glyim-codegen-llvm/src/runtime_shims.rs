@@ -16,7 +16,7 @@ unsafe extern "C" {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_println_int_impl(val: i64) {
-    let f = b"%lld\n\0".as_ptr() as *const libc::c_char;
+    let f = c"%lld\n".as_ptr() as *const libc::c_char;
     unsafe {
         printf(f, val);
     }
