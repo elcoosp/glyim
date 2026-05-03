@@ -15,6 +15,7 @@ sha2 = "0.11"
 hex = "0.4"
 glyim-syntax = { path = "../glyim-syntax" }
 glyim-interner = { path = "../glyim-interner" }
+glyim-hir = { path = "../glyim-hir" }
 glyim-diag = { path = "../glyim-diag" }
 
 [dev-dependencies]

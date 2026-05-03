@@ -5,6 +5,15 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Symbol(u32);
 
+impl Symbol {
+    /// Construct a Symbol from a raw index. The caller must ensure the index
+    /// is valid (i.e. obtained from an Interner).
+    pub fn from_raw(id: u32) -> Self {
+        Symbol(id)
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub struct Interner {
     strings: Vec<String>,
