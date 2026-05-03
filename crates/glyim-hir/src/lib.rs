@@ -10,3 +10,4 @@ pub use item::{
 pub use lower::lower;
 pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
 pub use types::{ExprId, HirPattern, HirType};
+pub mod decl_table;

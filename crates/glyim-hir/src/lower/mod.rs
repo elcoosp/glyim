@@ -23,3 +23,7 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
 
 #[cfg(test)]
 mod tests;
+
+
+/// Re‑export from glyim‑parse so downstream crates can build DeclTable.
+pub type DeclaredItems = glyim_parse::declarations::DeclaredItems;
