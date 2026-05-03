@@ -8,6 +8,7 @@ use crate::lower::types::lower_type_expr;
 use crate::types::HirType;
 use glyim_parse::Item;
 
+#[allow(dead_code)]
 /// Check the declaration table for a type name, returning true if it
 /// is known to be a struct (as opposed to an enum or unknown).
 fn is_known_struct(ctx: &LoweringContext, name: glyim_interner::Symbol) -> bool {
