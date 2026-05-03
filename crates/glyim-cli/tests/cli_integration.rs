@@ -144,13 +144,24 @@ fn cli_build_produces_message() {
 
 #[test]
 fn cli_doc_open_flag_works() {
-    let output = try_glyim!(&["doc", "--open"], "fn main() -> i64 { 42 }");
-    // It may fail to open browser in CI, but should not crash
-    assert!(output.status.success() || !output.status.success()); // just verify it ran
-    let doc_dir = std::env::current_dir().unwrap().join("doc").join("index.html");
-    if doc_dir.exists() {
-        std::fs::remove_dir_all(doc_dir.parent().unwrap()).ok();
-    }
+    let Some(bin) = glyim_bin() else { return; };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("test.g");
+    std::fs::write(&input, "fn main() -> i64 { 42 }").unwrap();
+    let out_dir = dir.path().join("outdoc");
+    let output = std::process::Command::new(bin)
+        .arg("doc")
+        .arg(&input)
+        .arg("--output")
+        .arg(&out_dir)
+        .output()
+        .expect("glyim doc");
+    assert!(output.status.success(), "doc command failed: {}
+stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr));
+    let index_html = out_dir.join("index.html");
+    assert!(index_html.exists(), "expected {} to exist", index_html.display());
 }
 
 
