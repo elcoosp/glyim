@@ -435,8 +435,9 @@ impl<'a> MonoContext<'a> {
                 };
 
                 if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = inner_ty {
+                    // FIX: No leading underscore - match the actual mangling format
                     let mangled = format!(
-                        "_{}_{}",
+                        "{}_{}",
                         self.interner.resolve(type_name),
                         self.interner.resolve(*method_name)
                     );
