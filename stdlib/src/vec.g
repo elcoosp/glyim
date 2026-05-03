@@ -4,10 +4,6 @@ struct Vec<T> {
     cap: i64,
 }
 
-struct VecIter<T> {
-    vec: Vec<T>,
-    pos: i64,
-}
 
 impl<T> Vec<T> {
     pub fn new() -> Vec<T> {
@@ -78,21 +74,5 @@ impl<T> Vec<T> {
 
     pub fn iter(self: Vec<T>) -> VecIter<T> {
         VecIter { vec: self, pos: 0 }
-    }
-}
-
-impl<T> VecIter<T> {
-    pub fn next(mut self: VecIter<T>) -> Option<T> {
-        if self.pos >= self.vec.len {
-            None
-        } else {
-            match self.vec.get(self.pos) {
-                Some(val) => {
-                    self.pos = self.pos + 1;
-                    Some(val)
-                },
-                None => None,
-            }
-        }
     }
 }

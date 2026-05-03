@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use glyim_cli::commands::*;
 use std::path::PathBuf;
 use std::process;
+use glyim_macro_vfs::ContentStore;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
 #[command(
@@ -290,10 +291,35 @@ fn main() {
                 Ok(0)
             })()
             .unwrap_or_else(|code| code),
-            CacheCommand::Clean => {
-                eprintln!("error: cache clean not yet implemented");
-                1
-            }
+            CacheCommand::Clean => (|| -> Result<i32, i32> {
+                let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
+                let store = glyim_macro_vfs::LocalContentStore::new(&cas_dir).map_err(|e| {
+                    eprintln!("error opening CAS: {e}");
+                    1
+                })?;
+
+                // Collect all referenced hashes from names
+                let names = store.list_names();
+                let mut referenced = std::collections::HashSet::new();
+                for name in &names {
+                    if let Some(hash) = store.resolve_name(name) {
+                        referenced.insert(hash);
+                    }
+                }
+
+                let mut removed = 0usize;
+                for blob in store.list_blobs() {
+                    if !referenced.contains(&blob) {
+                        if let Err(e) = store.delete_blob(blob) {
+                            eprintln!("warning: could not delete blob {}: {}", blob, e);
+                        } else {
+                            removed += 1;
+                        }
+                    }
+                }
+                eprintln!("Removed {} unreferenced blobs.", removed);
+                Ok(0)
+            })().unwrap_or_else(|code| code)
         },
     };
 
