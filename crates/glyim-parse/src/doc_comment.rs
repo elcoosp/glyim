@@ -45,8 +45,7 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
         }
     }
 
-    for _t in tokens[start..end].iter() {
-    }
+    for _t in tokens[start..end].iter() {}
     let comments: Vec<&str> = tokens[start..end]
         .iter()
         .filter(|t| t.kind == SyntaxKind::LineComment)
@@ -142,14 +141,22 @@ mod tests {
     fn beautify_preserves_code_block() {
         let input = "// text\n// ```glyim\n// let x = 1;\n// ```\n// more text";
         let result = beautify_doc_string(input);
-        assert!(result.contains("```glyim"), "Should preserve fenced code block");
-        assert!(result.contains("let x = 1;"), "Should preserve code inside block");
+        assert!(
+            result.contains("```glyim"),
+            "Should preserve fenced code block"
+        );
+        assert!(
+            result.contains("let x = 1;"),
+            "Should preserve code inside block"
+        );
         assert!(result.contains("text"), "Should preserve text before block");
-        assert!(result.contains("more text"), "Should preserve text after block");
+        assert!(
+            result.contains("more text"),
+            "Should preserve text after block"
+        );
     }
 
     #[test]
-
     #[test]
     fn integration_style_doc_with_code_block() {
         let source = r#"// Adds two integers together.
@@ -163,22 +170,34 @@ mod tests {
 fn add(a: i64, b: i64) -> i64 { a + b }"#;
         let tokens = tokenize(source);
         // Find position of 'fn' keyword
-        let fn_pos = tokens.iter().position(|t| t.kind == SyntaxKind::KwFn).unwrap();
+        let fn_pos = tokens
+            .iter()
+            .position(|t| t.kind == SyntaxKind::KwFn)
+            .unwrap();
         for i in 0..fn_pos {
             let t = &tokens[i];
         }
         let doc = collect_doc_comments(&tokens, fn_pos);
         assert!(doc.is_some(), "Should collect doc comment");
         let doc = doc.unwrap();
-        assert!(doc.contains("Adds two integers together."), "Should contain paragraph text");
-        assert!(doc.contains("let result = add(1, 2)"), "Should contain code example but got:\n{doc}");
+        assert!(
+            doc.contains("Adds two integers together."),
+            "Should contain paragraph text"
+        );
+        assert!(
+            doc.contains("let result = add(1, 2)"),
+            "Should contain code example but got:\n{doc}"
+        );
     }
 
-        fn collect_doc_comments_basic() {
+    fn collect_doc_comments_basic() {
         let source = "// hello\nfn main() {}";
         let tokens = tokenize(source);
         // Find position of 'fn' keyword
-        let fn_pos = tokens.iter().position(|t| t.kind == SyntaxKind::KwFn).unwrap();
+        let fn_pos = tokens
+            .iter()
+            .position(|t| t.kind == SyntaxKind::KwFn)
+            .unwrap();
         let doc = collect_doc_comments(&tokens, fn_pos);
         assert_eq!(doc, Some("hello".to_string()));
     }

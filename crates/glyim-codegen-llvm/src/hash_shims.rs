@@ -1,7 +1,7 @@
-use inkwell::context::Context;
-use inkwell::module::Module;
 use inkwell::AddressSpace;
 use inkwell::IntPredicate;
+use inkwell::context::Context;
+use inkwell::module::Module;
 
 /// Emit runtime hash functions: glyim_hash_bytes (FNV‑1a) and glyim_hash_seed.
 pub fn emit_hash_shims<'ctx>(context: &'ctx Context, module: &Module<'ctx>, no_std: bool) {

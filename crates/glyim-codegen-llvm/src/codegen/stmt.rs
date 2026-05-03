@@ -1,9 +1,9 @@
-use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
+use crate::codegen::ctx::FunctionContext;
 use glyim_hir::{HirExpr, HirStmt, HirType};
+use inkwell::AddressSpace;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::IntValue;
-use inkwell::AddressSpace;
 
 pub(crate) fn codegen_block<'ctx>(
     cg: &Codegen<'ctx>,
@@ -61,9 +61,10 @@ pub(crate) fn codegen_stmt<'ctx>(
                 let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
                 let resolved_name = cg.interner.resolve(*name);
                 if let Ok(var) = di.create_local_variable(resolved_name, *sp, line)
-                    && let Ok(loc) = di.create_location(*sp, line, 0) {
-                        let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
-                    }
+                    && let Ok(loc) = di.create_location(*sp, line, 0)
+                {
+                    let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
+                }
             }
 
             fctx.vars.insert(*name, alloca);
@@ -88,9 +89,10 @@ pub(crate) fn codegen_stmt<'ctx>(
                     let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
                     let resolved_name = cg.interner.resolve(*name);
                     if let Ok(var) = di.create_local_variable(resolved_name, *sp, line)
-                        && let Ok(loc) = di.create_location(*sp, line, 0) {
-                            let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
-                        }
+                        && let Ok(loc) = di.create_location(*sp, line, 0)
+                    {
+                        let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
+                    }
                 }
                 fctx.vars.insert(*name, alloca);
                 None
@@ -277,31 +279,31 @@ fn codegen_pattern_bind<'ctx>(
                 )
                 .ok();
             if let Some(ptr) = ptr
-                && let Some(st) = cg.struct_types.borrow().get(name).copied() {
-                    for (field_sym, field_pat) in bindings {
-                        if let Some(field_idx) = cg
-                            .struct_field_indices
-                            .borrow()
-                            .get(&(*name, *field_sym))
-                            .copied()
-                        {
-                            let zero = cg.i32_type.const_int(0, false);
-                            let idx = cg.i32_type.const_int(field_idx as u64, false);
-                            let field_ptr = unsafe {
-                                cg.builder.build_gep(st, ptr, &[zero, idx], "field").ok()
-                            };
-                            if let Some(fp) = field_ptr {
-                                let field_val = cg
-                                    .builder
-                                    .build_load(cg.i64_type, fp, "field_val")
-                                    .ok()
-                                    .and_then(|v| v.into_int_value().into())
-                                    .unwrap_or(cg.i64_type.const_int(0, false));
-                                codegen_pattern_bind(cg, field_pat, field_val, fctx);
-                            }
+                && let Some(st) = cg.struct_types.borrow().get(name).copied()
+            {
+                for (field_sym, field_pat) in bindings {
+                    if let Some(field_idx) = cg
+                        .struct_field_indices
+                        .borrow()
+                        .get(&(*name, *field_sym))
+                        .copied()
+                    {
+                        let zero = cg.i32_type.const_int(0, false);
+                        let idx = cg.i32_type.const_int(field_idx as u64, false);
+                        let field_ptr =
+                            unsafe { cg.builder.build_gep(st, ptr, &[zero, idx], "field").ok() };
+                        if let Some(fp) = field_ptr {
+                            let field_val = cg
+                                .builder
+                                .build_load(cg.i64_type, fp, "field_val")
+                                .ok()
+                                .and_then(|v| v.into_int_value().into())
+                                .unwrap_or(cg.i64_type.const_int(0, false));
+                            codegen_pattern_bind(cg, field_pat, field_val, fctx);
                         }
                     }
                 }
+            }
         }
         glyim_hir::HirPattern::Wild | glyim_hir::HirPattern::Unit => {}
         _ => {}

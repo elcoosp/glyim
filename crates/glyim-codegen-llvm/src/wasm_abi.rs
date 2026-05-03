@@ -21,10 +21,8 @@ pub fn generate_wasm_export_wrapper<'ctx>(
     let i32_type = context.i32_type();
     let i64_type = context.i64_type();
 
-    let wrapper_type = i32_type.fn_type(
-        &[i32_type.into(), i32_type.into(), i32_type.into()],
-        false,
-    );
+    let wrapper_type =
+        i32_type.fn_type(&[i32_type.into(), i32_type.into(), i32_type.into()], false);
     let wrapper = module.add_function("expand", wrapper_type, None);
 
     let entry = context.append_basic_block(wrapper, "entry");

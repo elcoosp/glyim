@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::pipeline;
+use std::path::PathBuf;
 
 pub fn cmd_test(input: PathBuf, ignore: bool, filter: Option<String>) -> i32 {
     let include_ignored = ignore;
@@ -13,6 +13,9 @@ pub fn cmd_test(input: PathBuf, ignore: bool, filter: Option<String>) -> i32 {
             eprintln!("{}", summary.format_summary());
             summary.exit_code()
         }
-        Err(e) => { eprintln!("error: {e}"); 1 }
+        Err(e) => {
+            eprintln!("error: {e}");
+            1
+        }
     }
 }

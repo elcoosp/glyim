@@ -1,9 +1,9 @@
+use crate::TypeChecker;
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
-use crate::TypeChecker;
+use glyim_hir::HirBinOp;
 use glyim_hir::node::HirExpr;
 use glyim_hir::types::{ExprId, HirType};
-use glyim_hir::HirBinOp;
 use glyim_interner::Symbol;
 use std::collections::HashMap;
 impl TypeChecker {
@@ -188,43 +188,49 @@ impl TypeChecker {
                     let mangled_sym = self.interner.intern(&mangled);
                     eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
                     eprintln!("[typeck MethodCall] mangled name: {}", mangled);
-                    eprintln!("[typeck MethodCall] known impl_methods for {:?}: {:?}",
+                    eprintln!(
+                        "[typeck MethodCall] known impl_methods for {:?}: {:?}",
                         type_name,
-                        self.impl_methods.get(&type_name).map(|ms| ms.iter().map(|f| self.interner.resolve(f.name)).collect::<Vec<_>>()));
+                        self.impl_methods.get(&type_name).map(|ms| ms
+                            .iter()
+                            .map(|f| self.interner.resolve(f.name))
+                            .collect::<Vec<_>>())
+                    );
                     if let Some(methods) = self.impl_methods.get(&type_name)
-                        && let Some(fn_def) = methods.iter().find(|f| f.name == mangled_sym) {
-                            let mut sub = std::collections::HashMap::new();
-                            // Infer from receiver type args
-                            if let HirType::Generic(_, type_args) = &receiver_ty {
-                                for (tp, ct) in fn_def.type_params.iter().zip(type_args.iter()) {
-                                    sub.insert(*tp, ct.clone());
-                                }
+                        && let Some(fn_def) = methods.iter().find(|f| f.name == mangled_sym)
+                    {
+                        let mut sub = std::collections::HashMap::new();
+                        // Infer from receiver type args
+                        if let HirType::Generic(_, type_args) = &receiver_ty {
+                            for (tp, ct) in fn_def.type_params.iter().zip(type_args.iter()) {
+                                sub.insert(*tp, ct.clone());
                             }
-                            // Infer from argument types (params[0] is self, args[0] matches params[1])
-                            for (arg_ty, (_, param_ty)) in
-                                arg_types.iter().zip(fn_def.params.iter().skip(1))
-                            {
-                                if let HirType::Named(param_sym) = param_ty
-                                    && fn_def.type_params.contains(param_sym)
-                                        && *arg_ty != HirType::Never
-                                        && *arg_ty != HirType::Named(*param_sym)
-                                    {
-                                        sub.insert(*param_sym, arg_ty.clone());
-                                    }
-                            }
-                            // Record call_type_args for monomorphizer
-                            if !sub.is_empty() {
-                                let concrete_args: Vec<HirType> = fn_def
-                                    .type_params
-                                    .iter()
-                                    .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
-                                    .collect();
-                                self.call_type_args.insert(*id, concrete_args);
-                            }
-                            let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
-                            let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
-                            return concrete_ret;
                         }
+                        // Infer from argument types (params[0] is self, args[0] matches params[1])
+                        for (arg_ty, (_, param_ty)) in
+                            arg_types.iter().zip(fn_def.params.iter().skip(1))
+                        {
+                            if let HirType::Named(param_sym) = param_ty
+                                && fn_def.type_params.contains(param_sym)
+                                && *arg_ty != HirType::Never
+                                && *arg_ty != HirType::Named(*param_sym)
+                            {
+                                sub.insert(*param_sym, arg_ty.clone());
+                            }
+                        }
+                        // Record call_type_args for monomorphizer
+                        if !sub.is_empty() {
+                            let concrete_args: Vec<HirType> = fn_def
+                                .type_params
+                                .iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                .collect();
+                            self.call_type_args.insert(*id, concrete_args);
+                        }
+                        let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
+                        let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
+                        return concrete_ret;
+                    }
                 }
                 HirType::Int
             }
@@ -275,16 +281,16 @@ impl TypeChecker {
                     for (i, tp) in info.type_params.iter().enumerate() {
                         if let Some(field_ty) = info.fields.get(i).map(|f| &f.ty)
                             && let Some(val_ty) = field_value_types.get(i)
-                                && let HirType::Named(param_sym) = field_ty
-                                    && *param_sym == *tp {
-                                        match val_ty {
-                                            HirType::Named(v_sym)
-                                                if info.type_params.contains(v_sym) => {}
-                                            _ => {
-                                                sub.insert(*tp, val_ty.clone());
-                                            }
-                                        }
-                                    }
+                            && let HirType::Named(param_sym) = field_ty
+                            && *param_sym == *tp
+                        {
+                            match val_ty {
+                                HirType::Named(v_sym) if info.type_params.contains(v_sym) => {}
+                                _ => {
+                                    sub.insert(*tp, val_ty.clone());
+                                }
+                            }
+                        }
                     }
                     if sub.len() == info.type_params.len() {
                         let concrete_args: Vec<HirType> = info
@@ -301,22 +307,23 @@ impl TypeChecker {
     }
     fn check_field_access(&mut self, object: &HirExpr, field: Symbol) -> HirType {
         let obj_type = self.check_expr(object);
-        
+
         match &obj_type {
             Some(HirType::Tuple(elems)) => self.check_tuple_field_access(field, elems),
             Some(HirType::Named(name)) => self.check_struct_field_access(*name, field),
             Some(HirType::Generic(name, args)) => {
                 if let Some(info) = self.structs.get(name)
-                    && let Some(field_info) = info.fields.iter().find(|f| f.name == field) {
-                        let mut sub = HashMap::new();
-                        for (i, tp) in info.type_params.iter().enumerate() {
-                            if let Some(arg) = args.get(i) {
-                                sub.insert(*tp, arg.clone());
-                            }
+                    && let Some(field_info) = info.fields.iter().find(|f| f.name == field)
+                {
+                    let mut sub = HashMap::new();
+                    for (i, tp) in info.type_params.iter().enumerate() {
+                        if let Some(arg) = args.get(i) {
+                            sub.insert(*tp, arg.clone());
                         }
-                        let result = glyim_hir::types::substitute_type(&field_info.ty, &sub);
-                        return result;
                     }
+                    let result = glyim_hir::types::substitute_type(&field_info.ty, &sub);
+                    return result;
+                }
                 HirType::Int
             }
             _ => HirType::Int,
@@ -326,9 +333,10 @@ impl TypeChecker {
         let field_name = self.interner.resolve(field);
         if let Some(index_str) = field_name.strip_prefix('_')
             && let Ok(idx) = index_str.parse::<usize>()
-                && idx < elems.len() {
-                    return elems[idx].clone();
-                }
+            && idx < elems.len()
+        {
+            return elems[idx].clone();
+        }
         self.errors.push(TypeError::UnknownField {
             struct_name: self.dummy_symbol(),
             field,
@@ -337,10 +345,11 @@ impl TypeChecker {
     }
     fn check_struct_field_access(&mut self, struct_name: Symbol, field: Symbol) -> HirType {
         if let Some(info) = self.structs.get(&struct_name)
-            && !info.field_map.contains_key(&field) {
-                self.errors
-                    .push(TypeError::UnknownField { struct_name, field });
-            }
+            && !info.field_map.contains_key(&field)
+        {
+            self.errors
+                .push(TypeError::UnknownField { struct_name, field });
+        }
         HirType::Int
     }
     fn check_enum_variant(
@@ -350,12 +359,13 @@ impl TypeChecker {
         args: &[HirExpr],
     ) -> HirType {
         if let Some(info) = self.enums.get(&enum_name)
-            && !info.variant_map.contains_key(&variant_name) {
-                self.errors.push(TypeError::UnknownField {
-                    struct_name: enum_name,
-                    field: variant_name,
-                });
-            }
+            && !info.variant_map.contains_key(&variant_name)
+        {
+            self.errors.push(TypeError::UnknownField {
+                struct_name: enum_name,
+                field: variant_name,
+            });
+        }
         let mut arg_types = Vec::new();
         for arg in args {
             if let Some(ty) = self.check_expr(arg) {
@@ -398,13 +408,14 @@ impl TypeChecker {
             if fn_def.type_params.is_empty() {
                 for (i, arg_ty) in arg_types.iter().enumerate() {
                     if let Some((_, param_ty)) = fn_def.params.get(i)
-                        && param_ty != arg_ty {
-                            self.errors.push(TypeError::MismatchedTypes {
-                                expected: param_ty.clone(),
-                                found: arg_ty.clone(),
-                                expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
-                            });
-                        }
+                        && param_ty != arg_ty
+                    {
+                        self.errors.push(TypeError::MismatchedTypes {
+                            expected: param_ty.clone(),
+                            found: arg_ty.clone(),
+                            expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
+                        });
+                    }
                 }
             }
         }

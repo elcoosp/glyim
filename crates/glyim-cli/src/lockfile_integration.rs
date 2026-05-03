@@ -1,6 +1,6 @@
-use glyim_pkg::lockfile::{generate_lockfile, serialize_lockfile, LockSource};
+use glyim_pkg::lockfile::{LockSource, generate_lockfile, serialize_lockfile};
 use glyim_pkg::manifest::PackageManifest;
-use glyim_pkg::resolver::{resolve, Requirement};
+use glyim_pkg::resolver::{Requirement, resolve};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -142,7 +142,7 @@ fn walk_dir_for_hash(path: &std::path::Path, hasher: &mut sha2::Sha256) -> Resul
     Ok(())
 }
 
-use glyim_pkg::lockfile::{parse_lockfile, LockedPackage};
+use glyim_pkg::lockfile::{LockedPackage, parse_lockfile};
 
 /// Read packages from glyim.lock in the given directory.
 pub fn read_lockfile_packages(package_dir: &Path) -> Result<Vec<LockedPackage>, String> {

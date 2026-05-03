@@ -29,12 +29,17 @@ impl<'a> MonoContext<'a> {
         let name_str = self.interner.resolve(name).to_string();
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item
-                && f.name == name { return Some(f.clone()); }
+                && f.name == name
+            {
+                return Some(f.clone());
+            }
         }
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
-                    if m.name == name { return Some(m.clone()); }
+                    if m.name == name {
+                        return Some(m.clone());
+                    }
                 }
             }
         }
@@ -45,14 +50,17 @@ impl<'a> MonoContext<'a> {
             if self.find_struct(prefix_sym).is_some() {
                 for item in &self.hir.items {
                     if let HirItem::Impl(imp) = item
-                        && imp.target_name == prefix_sym {
-                            for m in &imp.methods {
-                                let m_name = self.interner.resolve(m.name).to_string();
-                                if m_name == base_method_name
-                                    || m_name.ends_with(&format!("_{}", base_method_name))
-                                { return Some(m.clone()); }
+                        && imp.target_name == prefix_sym
+                    {
+                        for m in &imp.methods {
+                            let m_name = self.interner.resolve(m.name).to_string();
+                            if m_name == base_method_name
+                                || m_name.ends_with(&format!("_{}", base_method_name))
+                            {
+                                return Some(m.clone());
                             }
                         }
+                    }
                 }
             }
         }
@@ -62,7 +70,10 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn find_struct(&self, name: Symbol) -> Option<StructDef> {
         for item in &self.hir.items {
             if let HirItem::Struct(s) = item
-                && s.name == name { return Some(s.clone()); }
+                && s.name == name
+            {
+                return Some(s.clone());
+            }
         }
         None
     }

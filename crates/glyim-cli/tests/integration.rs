@@ -1267,7 +1267,6 @@ main = () => {
     assert_eq!(pipeline::run(&input, None).unwrap(), 99);
 }
 
-
 // ── Forward‑reference resolution tests ────────────────────────────
 
 #[test]

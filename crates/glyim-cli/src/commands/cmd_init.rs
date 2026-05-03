@@ -6,6 +6,9 @@ pub fn cmd_init(name: String) -> i32 {
             eprintln!("Created {}/", path.display());
             0
         }
-        Err(e) => { eprintln!("error: {e}"); 1 }
+        Err(e) => {
+            eprintln!("error: {e}");
+            1
+        }
     }
 }

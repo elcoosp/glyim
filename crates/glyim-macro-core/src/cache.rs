@@ -1,6 +1,6 @@
-use sha2::{Sha256, Digest};
-use std::sync::Arc;
 use glyim_macro_vfs::{ContentHash, ContentStore, StoreError};
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
 
 /// Compute a deterministic cache key for macro expansion.
 pub fn compute_cache_key(
@@ -51,9 +51,9 @@ impl MacroExpansionCache {
 }
 
 // ─── In-memory ContentStore for tests ──────────────────────────
+use glyim_macro_vfs::ActionResult;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use glyim_macro_vfs::ActionResult;
 
 pub struct InMemoryStore {
     blobs: Mutex<HashMap<ContentHash, Vec<u8>>>,
@@ -90,9 +90,15 @@ impl ContentStore for InMemoryStore {
     fn resolve_name(&self, name: &str) -> Option<ContentHash> {
         self.names.lock().unwrap().get(name).copied()
     }
-    fn store_action_result(&self, _h: ContentHash, _r: ActionResult) -> Result<(), StoreError> { Ok(()) }
-    fn retrieve_action_result(&self, _h: ContentHash) -> Option<ActionResult> { None }
-    fn has_blobs(&self, _hashes: &[ContentHash]) -> Vec<ContentHash> { vec![] }
+    fn store_action_result(&self, _h: ContentHash, _r: ActionResult) -> Result<(), StoreError> {
+        Ok(())
+    }
+    fn retrieve_action_result(&self, _h: ContentHash) -> Option<ActionResult> {
+        None
+    }
+    fn has_blobs(&self, _hashes: &[ContentHash]) -> Vec<ContentHash> {
+        vec![]
+    }
 }
 
 #[cfg(test)]

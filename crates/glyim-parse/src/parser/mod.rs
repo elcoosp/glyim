@@ -122,8 +122,7 @@ impl<'a> Parser<'a> {
         while !self.tokens.is_eof() {
             match self.tokens.peek().map(|t| t.kind) {
                 Some(glyim_syntax::SyntaxKind::KwStruct)
-                | Some(glyim_syntax::SyntaxKind::KwEnum) =>
-                {
+                | Some(glyim_syntax::SyntaxKind::KwEnum) => {
                     if let Some(kind) = self.tokens.peek().map(|t| t.kind) {
                         if kind == glyim_syntax::SyntaxKind::KwStruct {
                             self.tokens.bump();
@@ -131,10 +130,11 @@ impl<'a> Parser<'a> {
                             self.tokens.bump();
                         }
                         if let Some(name_tok) = self.tokens.bump()
-                            && name_tok.kind == glyim_syntax::SyntaxKind::Ident {
-                                let sym = self.interner.intern(name_tok.text);
-                                type_names.insert(sym);
-                            }
+                            && name_tok.kind == glyim_syntax::SyntaxKind::Ident
+                        {
+                            let sym = self.interner.intern(name_tok.text);
+                            type_names.insert(sym);
+                        }
                         let mut depth = 0u32;
                         while let Some(tok) = self.tokens.peek() {
                             match tok.kind {

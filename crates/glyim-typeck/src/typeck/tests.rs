@@ -417,7 +417,9 @@ fn match_exhaustive_with_wildcard_ok() {
 
 #[test]
 fn match_exhaustive_all_variants_ok() {
-    let tc = typecheck("enum Color { Red, Green }\nmain = () => match Color::Red { Color::Red => 1, Color::Green => 2 }");
+    let tc = typecheck(
+        "enum Color { Red, Green }\nmain = () => match Color::Red { Color::Red => 1, Color::Green => 2 }",
+    );
     let exhaustive_errors: Vec<_> = tc
         .errors
         .iter()
@@ -586,7 +588,9 @@ fn infer_type_args_for_generic_call() {
 
 #[test]
 fn infer_type_args_for_generic_struct_lit() {
-    let tc = typecheck("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }");
+    let tc = typecheck(
+        "struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }",
+    );
     assert!(
         tc.errors.is_empty(),
         "generic struct lit should not error: {:?}",

@@ -1,5 +1,5 @@
-use proptest::prelude::*;
 use glyim_parse::parse;
+use proptest::prelude::*;
 
 proptest! {
     /// Any valid integer literal should parse without errors and produce a binding.

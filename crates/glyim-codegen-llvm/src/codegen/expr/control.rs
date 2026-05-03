@@ -1,7 +1,7 @@
+use crate::Codegen;
 use crate::codegen::ctx::FunctionContext;
 use crate::codegen::expr::codegen_expr;
 use crate::codegen::stmt::codegen_block;
-use crate::Codegen;
 use glyim_hir::{HirExpr, HirPattern};
 use inkwell::values::{BasicValue, IntValue};
 use inkwell::{AddressSpace, IntPredicate};
@@ -163,23 +163,24 @@ pub(crate) fn codegen_match<'ctx>(
                 // Some branch
                 cg.builder.position_at_end(some_bb);
                 if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pat0
-                    && let HirPattern::Var(name) = inner.as_ref() {
-                        let payload_ptr = cg
-                            .builder
-                            .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
-                            .ok()?;
-                        let payload_val = cg
-                            .builder
-                            .build_load(cg.i64_type, payload_ptr, "payload_val")
-                            .ok()?
-                            .into_int_value();
-                        let alloca = cg
-                            .builder
-                            .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                            .ok()?;
-                        cg.builder.build_store(alloca, payload_val).ok()?;
-                        fctx.vars.insert(*name, alloca);
-                    }
+                    && let HirPattern::Var(name) = inner.as_ref()
+                {
+                    let payload_ptr = cg
+                        .builder
+                        .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
+                        .ok()?;
+                    let payload_val = cg
+                        .builder
+                        .build_load(cg.i64_type, payload_ptr, "payload_val")
+                        .ok()?
+                        .into_int_value();
+                    let alloca = cg
+                        .builder
+                        .build_alloca(cg.i64_type, cg.interner.resolve(*name))
+                        .ok()?;
+                    cg.builder.build_store(alloca, payload_val).ok()?;
+                    fctx.vars.insert(*name, alloca);
+                }
                 let some_val = codegen_expr(cg, body0, fctx)?;
                 let some_end = cg.builder.get_insert_block().unwrap();
                 if cg

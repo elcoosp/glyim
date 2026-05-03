@@ -2,8 +2,8 @@ mod control;
 mod data;
 mod float_ops;
 
-use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
+use crate::codegen::ctx::FunctionContext;
 use glyim_hir::{HirBinOp, HirExpr, HirType, HirUnOp};
 use inkwell::types::BasicType;
 use inkwell::values::IntValue;
@@ -380,7 +380,10 @@ pub(crate) fn codegen_expr<'ctx>(
             args,
             ..
         } => {
-            eprintln!("[codegen MethodCall] method_name={}", cg.interner.resolve(*method_name));
+            eprintln!(
+                "[codegen MethodCall] method_name={}",
+                cg.interner.resolve(*method_name)
+            );
             // Also print receiver type id for debugging
             eprintln!("[codegen MethodCall] receiver_id={:?}", receiver.get_id());
             // Check if this method is backed by an extern function

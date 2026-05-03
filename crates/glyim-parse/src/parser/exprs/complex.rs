@@ -1,6 +1,6 @@
 use crate::ast::{BlockItem, ExprKind, ExprNode, MatchArm, StmtKind, StmtNode};
-use crate::parser::patterns::parse_pattern;
 use crate::parser::Parser;
+use crate::parser::patterns::parse_pattern;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
@@ -10,11 +10,12 @@ pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
     let mut items = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
         if parser.tokens.at(SyntaxKind::KwLet)
-            && let Some(stmt) = parser.parse_let_stmt() {
-                items.push(BlockItem::Stmt(stmt));
-                parser.tokens.eat(SyntaxKind::Semicolon);
-                continue;
-            }
+            && let Some(stmt) = parser.parse_let_stmt()
+        {
+            items.push(BlockItem::Stmt(stmt));
+            parser.tokens.eat(SyntaxKind::Semicolon);
+            continue;
+        }
         if let Some(expr) = parser.parse_expr(0) {
             if parser.tokens.eat(SyntaxKind::Eq).is_some() {
                 let value = parser.parse_expr(0)?;

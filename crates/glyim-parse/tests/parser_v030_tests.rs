@@ -1,4 +1,4 @@
-use glyim_parse::{parse, ExprKind, Item};
+use glyim_parse::{ExprKind, Item, parse};
 
 fn unwrap_main_expr(out: &glyim_parse::ParseOutput) -> &ExprKind {
     if let Item::Binding { value, .. } = &out.ast.items[0] {

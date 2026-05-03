@@ -1,5 +1,5 @@
-use proptest::prelude::*;
 use glyim_typeck::TypeChecker;
+use proptest::prelude::*;
 
 proptest! {
     /// A well‑typed program with a simple main should not produce type errors.

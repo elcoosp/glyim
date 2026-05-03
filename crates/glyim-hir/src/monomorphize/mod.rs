@@ -5,13 +5,13 @@ use glyim_interner::{Interner, Symbol};
 use std::collections::{HashMap, HashSet};
 
 pub mod mangling;
-pub use mangling::{type_to_short_string, mangle_type_name};
+pub use mangling::{mangle_type_name, type_to_short_string};
 
-mod context;
-mod collect;
-mod specialize;
-mod rewrite;
 mod build_result;
+mod collect;
+mod context;
+mod rewrite;
+mod specialize;
 #[cfg(test)]
 mod tests;
 

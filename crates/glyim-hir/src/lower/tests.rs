@@ -237,7 +237,9 @@ fn lower_match_basic() {
 
 #[test]
 fn lower_match_with_enum_patterns() {
-    let (hir, mut interner) = lower_source("enum Color { Red, Green }\nmain = () => { let c = Color::Red; match c { Color::Red => 1, Color::Green => 2 } }");
+    let (hir, mut interner) = lower_source(
+        "enum Color { Red, Green }\nmain = () => { let c = Color::Red; match c { Color::Red => 1, Color::Green => 2 } }",
+    );
     let red_sym = interner.intern("Red");
     let green_sym = interner.intern("Green");
     let body = get_main_body(&hir, &interner);
@@ -310,7 +312,9 @@ fn lower_enum_def() {
 
 #[test]
 fn lower_impl_block_mangles_methods() {
-    let (hir, interner) = lower_source("struct Point { x, y }\nimpl Point {\n    fn zero() -> Point { Point { x: 0, y: 0 } }\n}\nmain = () => 0");
+    let (hir, interner) = lower_source(
+        "struct Point { x, y }\nimpl Point {\n    fn zero() -> Point { Point { x: 0, y: 0 } }\n}\nmain = () => 0",
+    );
     let imp = hir.items.iter().find_map(|i| {
         if let HirItem::Impl(imp) = i {
             Some(imp)

@@ -167,9 +167,14 @@ fn cache_miss_with_local_store() {
     let in2 = b"bbb";
 
     let out1 = executor.execute(&wasm, in1).expect("first run");
-    let out2 = executor.execute(&wasm, in2).expect("second run, different input");
+    let out2 = executor
+        .execute(&wasm, in2)
+        .expect("second run, different input");
 
     assert_eq!(out1, in1);
     assert_eq!(out2, in2);
-    assert_ne!(out1, out2, "different inputs must produce different cached outputs");
+    assert_ne!(
+        out1, out2,
+        "different inputs must produce different cached outputs"
+    );
 }

@@ -1,6 +1,6 @@
+use glyim_macro_vfs::ContentStore;
 use std::collections::HashMap;
 use std::sync::Arc;
-use glyim_macro_vfs::ContentStore;
 
 /// A registry that maps macro names to their Wasm bytecode.
 pub struct MacroRegistry {
@@ -11,7 +11,10 @@ pub struct MacroRegistry {
 impl MacroRegistry {
     /// Create a new empty registry backed by the given content store.
     pub fn new(store: Arc<dyn ContentStore>) -> Self {
-        Self { macros: HashMap::new(), store }
+        Self {
+            macros: HashMap::new(),
+            store,
+        }
     }
 
     /// Register a macro with its Wasm blob.
@@ -30,10 +33,11 @@ impl MacroRegistry {
     /// the blob is retrieved. Returns `true` if successful.
     pub fn load_from_store(&mut self, name: &str) -> bool {
         if let Some(hash) = self.store.resolve_name(name)
-            && let Some(wasm) = self.store.retrieve(hash) {
-                self.macros.insert(name.to_string(), wasm);
-                return true;
-            }
+            && let Some(wasm) = self.store.retrieve(hash)
+        {
+            self.macros.insert(name.to_string(), wasm);
+            return true;
+        }
         false
     }
 }

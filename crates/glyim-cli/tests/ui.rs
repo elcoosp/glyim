@@ -30,12 +30,11 @@ fn compile_stderr(source: &str, file_path: &str) -> String {
     if let Err(type_errors) = tc.check(&hir) {
         for e in &type_errors {
             use std::fmt::Write;
-            let report = glyim_diag::Report::new(
-                glyim_parse::ParseError::Message {
-                    msg: e.to_string(),
-                    span: (0, 0),
-                }
-            ).with_source_code(miette::NamedSource::new(file_path, source.to_string()));
+            let report = glyim_diag::Report::new(glyim_parse::ParseError::Message {
+                msg: e.to_string(),
+                span: (0, 0),
+            })
+            .with_source_code(miette::NamedSource::new(file_path, source.to_string()));
             let _ = writeln!(errors, "{:?}", report);
         }
         return errors;
@@ -115,16 +114,30 @@ fn ui_type_mismatch() {
     run_ui_test("type_mismatch");
 }
 #[test]
-fn ui_assign_deref_non_ptr() { run_ui_test("assign_deref_non_ptr"); }
+fn ui_assign_deref_non_ptr() {
+    run_ui_test("assign_deref_non_ptr");
+}
 #[test]
-fn ui_deref_non_pointer() { run_ui_test("deref_non_pointer"); }
+fn ui_deref_non_pointer() {
+    run_ui_test("deref_non_pointer");
+}
 #[test]
-fn ui_non_exhaustive_match() { run_ui_test("non_exhaustive_match"); }
+fn ui_non_exhaustive_match() {
+    run_ui_test("non_exhaustive_match");
+}
 #[test]
-fn ui_invalid_question() { run_ui_test("invalid_question"); }
+fn ui_invalid_question() {
+    run_ui_test("invalid_question");
+}
 #[test]
-fn ui_invalid_cast() { run_ui_test("invalid_cast"); }
+fn ui_invalid_cast() {
+    run_ui_test("invalid_cast");
+}
 #[test]
-fn ui_struct_unknown_field() { run_ui_test("struct_unknown_field"); }
+fn ui_struct_unknown_field() {
+    run_ui_test("struct_unknown_field");
+}
 #[test]
-fn ui_struct_missing_field() { run_ui_test("struct_missing_field"); }
+fn ui_struct_missing_field() {
+    run_ui_test("struct_missing_field");
+}

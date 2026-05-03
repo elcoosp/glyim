@@ -42,11 +42,7 @@ impl TestRunSummary {
         self.results.len()
     }
     pub fn exit_code(&self) -> i32 {
-        if self.failed() > 0 {
-            1
-        } else {
-            0
-        }
+        if self.failed() > 0 { 1 } else { 0 }
     }
     pub fn format_summary(&self) -> String {
         let passed = self.passed();
@@ -81,9 +77,10 @@ pub fn collect_test_functions(
             }
             let resolved = interner.resolve(*name).to_string();
             if let Some(filter) = filter_name
-                && resolved != *filter {
-                    continue;
-                }
+                && resolved != *filter
+            {
+                continue;
+            }
             tests.push(TestFunction {
                 name: resolved,
                 ignored: is_ignored,

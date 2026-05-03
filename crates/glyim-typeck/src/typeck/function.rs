@@ -1,5 +1,5 @@
-use crate::typeck::error::TypeError;
 use crate::TypeChecker;
+use crate::typeck::error::TypeError;
 use glyim_hir::node::HirFn;
 use glyim_hir::types::HirType;
 
@@ -16,21 +16,22 @@ impl TypeChecker {
             }
             let body_type = tc.check_expr(&f.body);
             if let Some(expected) = &f.ret
-                && let Some(actual) = body_type {
-                    let is_match = *expected == actual
-                        || match (expected.clone(), actual.clone()) {
-                            (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
-                            (HirType::Named(s1), HirType::Generic(s2, _)) => s1 == s2,
-                            (HirType::Generic(s1, _), HirType::Generic(s2, _)) => s1 == s2,
-                            _ => false,
-                        };
-                    if !is_match {
-                        tc.errors.push(TypeError::InvalidReturnType {
-                            expected: expected.clone(),
-                            found: actual.clone(),
-                        });
-                    }
+                && let Some(actual) = body_type
+            {
+                let is_match = *expected == actual
+                    || match (expected.clone(), actual.clone()) {
+                        (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
+                        (HirType::Named(s1), HirType::Generic(s2, _)) => s1 == s2,
+                        (HirType::Generic(s1, _), HirType::Generic(s2, _)) => s1 == s2,
+                        _ => false,
+                    };
+                if !is_match {
+                    tc.errors.push(TypeError::InvalidReturnType {
+                        expected: expected.clone(),
+                        found: actual.clone(),
+                    });
                 }
+            }
         });
     }
 }

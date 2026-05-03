@@ -1,13 +1,13 @@
 use glyim_codegen_llvm::runtime_shims;
-use glyim_codegen_llvm::{compile_to_ir, Codegen};
-use glyim_hir::types::HirType;
+use glyim_codegen_llvm::{Codegen, compile_to_ir};
 use glyim_hir::ExprId;
+use glyim_hir::types::HirType;
 use glyim_interner::Interner;
 use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
-use inkwell::context::Context;
 use inkwell::OptimizationLevel;
+use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process::Command};
@@ -198,8 +198,12 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
+    let source = crate::macro_expand::expand_macros(
+        &source,
+        input.parent().unwrap_or(std::path::Path::new(".")),
+        &cas_dir,
+    )
+    .unwrap_or(source);
     let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
@@ -209,10 +213,8 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 
     // Phase 1: scan declarations to build symbol table
     let decl_output = glyim_parse::declarations::parse_declarations(&source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(
-        &decl_output.ast,
-        &mut interner,
-    );
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
@@ -285,7 +287,11 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     // Expand macros before parsing (simple source transformation)
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
-    if let Ok(expanded) = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(Path::new(".")), &cas_dir) {
+    if let Ok(expanded) = crate::macro_expand::expand_macros(
+        &source,
+        input.parent().unwrap_or(Path::new(".")),
+        &cas_dir,
+    ) {
         source = expanded;
     }
 
@@ -297,10 +303,8 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     // Phase 1: scan declarations to build symbol table
     let decl_output = glyim_parse::declarations::parse_declarations(&source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(
-        &decl_output.ast,
-        &mut interner,
-    );
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
@@ -346,8 +350,12 @@ pub fn run_with_mode(
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
+    let source = crate::macro_expand::expand_macros(
+        &source,
+        input.parent().unwrap_or(std::path::Path::new(".")),
+        &cas_dir,
+    )
+    .unwrap_or(source);
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
@@ -356,10 +364,8 @@ pub fn run_with_mode(
 
     // Phase 1: scan declarations to build symbol table
     let decl_output = glyim_parse::declarations::parse_declarations(&source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(
-        &decl_output.ast,
-        &mut interner,
-    );
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
@@ -426,8 +432,12 @@ pub fn build_with_mode(
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
+    let source = crate::macro_expand::expand_macros(
+        &source,
+        input.parent().unwrap_or(std::path::Path::new(".")),
+        &cas_dir,
+    )
+    .unwrap_or(source);
     let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -544,15 +554,16 @@ fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResul
     let mut results = Vec::new();
     for line in stdout.lines() {
         if let Some(rest) = line.trim().strip_prefix("test ")
-            && let Some(name_end) = rest.find(" ... ") {
-                let name = &rest[..name_end];
-                let status = &rest[name_end + 5..];
-                if status == "ok" {
-                    results.push((name.to_string(), crate::test_runner::TestResult::Passed));
-                } else if status == "FAILED" {
-                    results.push((name.to_string(), crate::test_runner::TestResult::Failed));
-                }
+            && let Some(name_end) = rest.find(" ... ")
+        {
+            let name = &rest[..name_end];
+            let status = &rest[name_end + 5..];
+            if status == "ok" {
+                results.push((name.to_string(), crate::test_runner::TestResult::Passed));
+            } else if status == "FAILED" {
+                results.push((name.to_string(), crate::test_runner::TestResult::Failed));
             }
+        }
     }
     results
 }
@@ -564,8 +575,12 @@ pub fn run_tests(
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
+    let source = crate::macro_expand::expand_macros(
+        &source,
+        input.parent().unwrap_or(std::path::Path::new(".")),
+        &cas_dir,
+    )
+    .unwrap_or(source);
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
@@ -625,10 +640,8 @@ pub fn run_tests(
 
     // Phase 1: scan declarations to build symbol table
     let decl_output = glyim_parse::declarations::parse_declarations(&source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(
-        &decl_output.ast,
-        &mut interner,
-    );
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
@@ -795,10 +808,7 @@ fn which(cmd: &str) -> bool {
 }
 /// Generate HTML documentation for the given source file.
 #[allow(dead_code)]
-pub fn generate_doc(
-    input: &Path,
-    output_dir: Option<&Path>,
-) -> Result<(), PipelineError> {
+pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
@@ -814,7 +824,6 @@ pub fn generate_doc(
     Ok(())
 }
 
-
 #[cfg(test)]
 mod no_std_tests;
 
@@ -827,10 +836,8 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     // Phase 1: scan declarations to build symbol table
     let decl_output = glyim_parse::declarations::parse_declarations(source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(
-        &decl_output.ast,
-        &mut interner,
-    );
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);

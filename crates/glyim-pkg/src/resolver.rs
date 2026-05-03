@@ -50,10 +50,11 @@ pub fn satisfies_constraint(version: &str, constraint: &str) -> bool {
         && let (Ok(ver), Ok(req)) = (
             semver::Version::parse(version),
             semver::Version::parse(rest),
-        ) {
-            // ^1.2.3 means >=1.2.3, <2.0.0
-            return ver >= req && ver.major == req.major;
-        }
+        )
+    {
+        // ^1.2.3 means >=1.2.3, <2.0.0
+        return ver >= req && ver.major == req.major;
+    }
     false
 }
 
@@ -88,28 +89,29 @@ pub fn resolve(
 
         // Check lockfile first
         if let Some(lock) = lockfile
-            && let Some(pkg) = lock.packages.iter().find(|p| p.name == name) {
-                resolved.insert(
-                    name.clone(),
-                    ResolvedPackage {
-                        version: pkg.version.clone(),
-                        is_macro: pkg.is_macro,
-                        deps: pkg.deps.clone(),
-                        source: pkg.source.clone(),
-                    },
-                );
-                // Queue transitive dependencies
-                for dep in &pkg.deps {
-                    if !resolved.contains_key(dep) {
-                        constraints
-                            .entry(dep.clone())
-                            .or_default()
-                            .push("*".to_string());
-                        queue.push(dep.clone());
-                    }
+            && let Some(pkg) = lock.packages.iter().find(|p| p.name == name)
+        {
+            resolved.insert(
+                name.clone(),
+                ResolvedPackage {
+                    version: pkg.version.clone(),
+                    is_macro: pkg.is_macro,
+                    deps: pkg.deps.clone(),
+                    source: pkg.source.clone(),
+                },
+            );
+            // Queue transitive dependencies
+            for dep in &pkg.deps {
+                if !resolved.contains_key(dep) {
+                    constraints
+                        .entry(dep.clone())
+                        .or_default()
+                        .push("*".to_string());
+                    queue.push(dep.clone());
                 }
-                continue;
             }
+            continue;
+        }
 
         let versions = available.get(&name).ok_or_else(|| {
             PkgError::Resolution(format!("package '{name}' not found in available packages"))

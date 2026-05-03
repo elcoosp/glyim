@@ -18,7 +18,10 @@ impl Default for DeterministicWasi {
 impl DeterministicWasi {
     pub fn new() -> Self {
         let ctx = WasiCtxBuilder::new().build();
-        Self { ctx, table: wasmtime::component::ResourceTable::new() }
+        Self {
+            ctx,
+            table: wasmtime::component::ResourceTable::new(),
+        }
     }
 }
 

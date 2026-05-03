@@ -7,8 +7,8 @@ pub mod types;
 pub use item::{
     EnumDef, ExternBlock, ExternFn, FnSig, HirImplDef, HirItem, HirVariant, StructDef, StructField,
 };
-pub use lower::lower;
 pub use lower::attach_doc_comments;
+pub use lower::lower;
 pub use lower::lower_with_declarations;
 pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
 pub use types::{ExprId, HirPattern, HirType};

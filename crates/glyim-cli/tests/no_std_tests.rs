@@ -22,4 +22,3 @@ main = () => {
     let result = pipeline::run_jit(src).unwrap();
     assert_eq!(result, 99);
 }
-

@@ -1,6 +1,6 @@
 use crate::ast::*;
-use crate::parser::types::parse_type_expr;
 use crate::parser::Parser;
+use crate::parser::types::parse_type_expr;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
@@ -91,7 +91,8 @@ fn parse_macro_def(parser: &mut Parser) -> Option<Item> {
         .ok()?;
     skip_return_type(parser);
     let body = crate::parser::exprs::complex::parse_block(parser)?;
-    Some(Item::MacroDef { doc: None,
+    Some(Item::MacroDef {
+        doc: None,
         name: fn_name,
         name_span: fn_name_span,
         params,
@@ -111,7 +112,8 @@ fn parse_binding_with_attrs(
         .expect(SyntaxKind::Eq, &mut parser.errors)
         .ok()?;
     let value = parser.parse_expr(0)?;
-    Some(Item::Binding { doc: None,
+    Some(Item::Binding {
+        doc: None,
         name,
         name_span,
         value,
@@ -191,7 +193,8 @@ fn parse_fn_def_with_attrs(
         None
     };
     let body = crate::parser::exprs::complex::parse_block(parser)?;
-    Some(Item::FnDef { doc: None,
+    Some(Item::FnDef {
+        doc: None,
         name,
         name_span,
         type_params,
@@ -236,7 +239,8 @@ fn parse_struct_def(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::StructDef { doc: None,
+    Some(Item::StructDef {
+        doc: None,
         name,
         name_span,
         type_params,
@@ -279,7 +283,8 @@ fn parse_enum_def(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::EnumDef { doc: None,
+    Some(Item::EnumDef {
+        doc: None,
         name,
         name_span,
         type_params,
@@ -327,7 +332,8 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::ImplBlock { doc: None,
+    Some(Item::ImplBlock {
+        doc: None,
         target,
         target_span: Span::new(target_tok.start, target_tok.end),
         type_params,
@@ -403,7 +409,8 @@ fn parse_extern_block(parser: &mut Parser) -> Option<Item> {
         .tokens
         .expect(SyntaxKind::RBrace, &mut parser.errors)
         .ok()?;
-    Some(Item::ExternBlock { doc: None,
+    Some(Item::ExternBlock {
+        doc: None,
         abi: "C".into(),
         span: Span::new(start, end_tok.end),
         functions,
@@ -545,19 +552,27 @@ fn skip_return_type(parser: &mut Parser) {
     }
 }
 
-
 fn parse_fn_def_with_attrs_skip_body(
     parser: &mut Parser,
     attrs: Vec<crate::ast::Attribute>,
     self_type: Option<TypeExpr>,
 ) -> Option<Item> {
     parser.tokens.eat(SyntaxKind::KwPub);
-    parser.tokens.expect(SyntaxKind::KwFn, &mut parser.errors).ok()?;
-    let name_tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
+    parser
+        .tokens
+        .expect(SyntaxKind::KwFn, &mut parser.errors)
+        .ok()?;
+    let name_tok = parser
+        .tokens
+        .expect(SyntaxKind::Ident, &mut parser.errors)
+        .ok()?;
     let name = parser.interner.intern(name_tok.text);
     let name_span = Span::new(name_tok.start, name_tok.end);
     let type_params = parse_type_params(parser);
-    parser.tokens.expect(SyntaxKind::LParen, &mut parser.errors).ok()?;
+    parser
+        .tokens
+        .expect(SyntaxKind::LParen, &mut parser.errors)
+        .ok()?;
     let mut params = vec![];
     while !parser.tokens.at(SyntaxKind::RParen) {
         let is_ref = parser.tokens.eat(SyntaxKind::Amp).is_some();
@@ -573,41 +588,67 @@ fn parse_fn_def_with_attrs_skip_body(
                 None
             };
             params.push((self_sym, self_span, ty, mutable));
-            if parser.tokens.eat(SyntaxKind::Comma).is_none() { break; }
+            if parser.tokens.eat(SyntaxKind::Comma).is_none() {
+                break;
+            }
             continue;
         }
-        let tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
+        let tok = parser
+            .tokens
+            .expect(SyntaxKind::Ident, &mut parser.errors)
+            .ok()?;
         let param_sym = parser.interner.intern(tok.text);
         let param_span = Span::new(tok.start, tok.end);
         let ty = if parser.tokens.eat(SyntaxKind::Colon).is_some() {
             parse_type_expr(&mut parser.tokens, &mut parser.interner)
-        } else { None };
+        } else {
+            None
+        };
         params.push((param_sym, param_span, ty, false));
-        if parser.tokens.eat(SyntaxKind::Comma).is_none() { break; }
+        if parser.tokens.eat(SyntaxKind::Comma).is_none() {
+            break;
+        }
     }
-    parser.tokens.expect(SyntaxKind::RParen, &mut parser.errors).ok()?;
+    parser
+        .tokens
+        .expect(SyntaxKind::RParen, &mut parser.errors)
+        .ok()?;
     let ret = if parser.tokens.eat(SyntaxKind::Arrow).is_some() {
         parse_type_expr(&mut parser.tokens, &mut parser.interner)
-    } else { None };
+    } else {
+        None
+    };
     // Skip the body: eat tokens until we hit a balanced closing brace or end of file.
     if parser.tokens.eat(SyntaxKind::LBrace).is_some() {
         let mut depth = 1u32;
         while depth > 0 {
             match parser.tokens.peek().map(|t| t.kind) {
-                Some(SyntaxKind::LBrace) => { parser.tokens.bump(); depth += 1; }
-                Some(SyntaxKind::RBrace) => { parser.tokens.bump(); depth -= 1; }
-                Some(_) => { parser.tokens.bump(); }
+                Some(SyntaxKind::LBrace) => {
+                    parser.tokens.bump();
+                    depth += 1;
+                }
+                Some(SyntaxKind::RBrace) => {
+                    parser.tokens.bump();
+                    depth -= 1;
+                }
+                Some(_) => {
+                    parser.tokens.bump();
+                }
                 None => break,
             }
         }
     }
-    Some(Item::FnDef { doc: None,
+    Some(Item::FnDef {
+        doc: None,
         name,
         name_span,
         type_params,
         params,
         ret,
-        body: ExprNode { kind: ExprKind::IntLit(0), span: Span::new(0,0) }, // placeholder
+        body: ExprNode {
+            kind: ExprKind::IntLit(0),
+            span: Span::new(0, 0),
+        }, // placeholder
         attrs,
     })
 }
@@ -617,24 +658,41 @@ fn parse_impl_block_declaration(parser: &mut Parser) -> Option<Item> {
     let start = start_tok.start;
     let is_pub = parser.tokens.eat(SyntaxKind::KwPub).is_some();
     let type_params = parse_type_params(parser);
-    let target_tok = parser.tokens.expect(SyntaxKind::Ident, &mut parser.errors).ok()?;
+    let target_tok = parser
+        .tokens
+        .expect(SyntaxKind::Ident, &mut parser.errors)
+        .ok()?;
     let target = parser.interner.intern(target_tok.text);
     if parser.tokens.eat(SyntaxKind::Lt).is_some() {
-        while !parser.tokens.at(SyntaxKind::Gt) && !parser.tokens.is_eof() { parser.tokens.bump(); }
+        while !parser.tokens.at(SyntaxKind::Gt) && !parser.tokens.is_eof() {
+            parser.tokens.bump();
+        }
         parser.tokens.eat(SyntaxKind::Gt);
     }
-    parser.tokens.expect(SyntaxKind::LBrace, &mut parser.errors).ok()?;
+    parser
+        .tokens
+        .expect(SyntaxKind::LBrace, &mut parser.errors)
+        .ok()?;
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
-        if let Some(fn_def) = parse_fn_def_with_attrs_skip_body(parser, vec![], Some(TypeExpr::Named(target))) {
+        if let Some(fn_def) =
+            parse_fn_def_with_attrs_skip_body(parser, vec![], Some(TypeExpr::Named(target)))
+        {
             methods.push(fn_def);
         } else {
-            parser.errors.push(crate::ParseError::Message { msg: "expected method".into(), span: parser.current_span() });
+            parser.errors.push(crate::ParseError::Message {
+                msg: "expected method".into(),
+                span: parser.current_span(),
+            });
             crate::parser::recovery::recover(&mut parser.tokens);
         }
     }
-    let end_tok = parser.tokens.expect(SyntaxKind::RBrace, &mut parser.errors).ok()?;
-    Some(Item::ImplBlock { doc: None,
+    let end_tok = parser
+        .tokens
+        .expect(SyntaxKind::RBrace, &mut parser.errors)
+        .ok()?;
+    Some(Item::ImplBlock {
+        doc: None,
         target,
         target_span: Span::new(target_tok.start, target_tok.end),
         type_params,

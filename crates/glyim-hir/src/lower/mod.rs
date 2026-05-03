@@ -24,7 +24,6 @@ pub fn lower(ast: &glyim_parse::Ast, interner: &mut Interner) -> Hir {
 #[cfg(test)]
 mod tests;
 
-
 /// Re‑export from glyim‑parse so downstream crates can build DeclTable.
 pub type DeclaredItems = glyim_parse::declarations::DeclaredItems;
 
@@ -44,13 +43,9 @@ pub fn lower_with_declarations(
     Hir { items }
 }
 
-
 /// After lowering, scan the original tokens and attach doc comments
 /// to items based on source position (Go‑style).
-pub fn attach_doc_comments(
-    hir: &mut Hir,
-    tokens: &[glyim_lex::Token],
-) {
+pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
     for item in &mut hir.items {
         let span = match item {
             crate::item::HirItem::Fn(f) => f.span,
@@ -61,7 +56,8 @@ pub fn attach_doc_comments(
         };
 
         // Find the token matching the HIR span.start (usually the item name)
-        let name_token_index = tokens.iter()
+        let name_token_index = tokens
+            .iter()
             .position(|t| t.start == span.start && !t.kind.is_trivia());
 
         // Walk backwards from the name token to find the keyword token
@@ -77,14 +73,15 @@ pub fn attach_doc_comments(
         let search_index = keyword_index.or(name_token_index);
 
         if let Some(idx) = search_index
-            && let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx) {
-                match item {
-                    crate::item::HirItem::Fn(f) => f.doc = Some(doc),
-                    crate::item::HirItem::Struct(s) => s.doc = Some(doc),
-                    crate::item::HirItem::Enum(e) => e.doc = Some(doc),
-                    crate::item::HirItem::Impl(i) => i.doc = Some(doc),
-                    crate::item::HirItem::Extern(e) => e.doc = Some(doc),
-                }
+            && let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx)
+        {
+            match item {
+                crate::item::HirItem::Fn(f) => f.doc = Some(doc),
+                crate::item::HirItem::Struct(s) => s.doc = Some(doc),
+                crate::item::HirItem::Enum(e) => e.doc = Some(doc),
+                crate::item::HirItem::Impl(i) => i.doc = Some(doc),
+                crate::item::HirItem::Extern(e) => e.doc = Some(doc),
             }
+        }
     }
 }

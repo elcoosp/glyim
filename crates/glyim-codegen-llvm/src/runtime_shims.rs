@@ -1,8 +1,8 @@
 #![allow(clippy::missing_safety_doc)]
+use inkwell::AddressSpace;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::values::{ArrayValue, IntValue, PointerValue};
-use inkwell::AddressSpace;
 
 unsafe extern "C" {
     fn printf(fmt: *const libc::c_char, ...) -> libc::c_int;
@@ -61,7 +61,11 @@ unsafe fn create_fmt_ptr<'ctx>(
     global.set_constant(true);
     global.set_linkage(inkwell::module::Linkage::Private);
     let zero = context.i32_type().const_int(0, false);
-    unsafe { global.as_pointer_value().const_in_bounds_gep(ty, &[zero, zero]) }
+    unsafe {
+        global
+            .as_pointer_value()
+            .const_in_bounds_gep(ty, &[zero, zero])
+    }
 }
 
 pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, jit: bool) {

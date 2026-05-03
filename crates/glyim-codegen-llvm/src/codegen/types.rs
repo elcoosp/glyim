@@ -1,8 +1,8 @@
 use crate::Codegen;
 use glyim_hir::HirType;
+use inkwell::AddressSpace;
 use inkwell::types::BasicType;
 use inkwell::types::BasicTypeEnum;
-use inkwell::AddressSpace;
 
 impl<'ctx> Codegen<'ctx> {
     /// Convert HirType to LLVM BasicTypeEnum for codegen.

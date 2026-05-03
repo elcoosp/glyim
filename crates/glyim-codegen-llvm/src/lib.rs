@@ -15,7 +15,9 @@ pub fn compile_to_wasm(source: &str, target_triple: &str) -> Result<Vec<u8>, Str
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     // Initialize all targets including WebAssembly
-    inkwell::targets::Target::initialize_webassembly(&inkwell::targets::InitializationConfig::default());
+    inkwell::targets::Target::initialize_webassembly(
+        &inkwell::targets::InitializationConfig::default(),
+    );
     let mut cg = Codegen::new(&ctx, interner, vec![]);
     cg.set_target(target_triple);
     cg.generate(&hir)?;

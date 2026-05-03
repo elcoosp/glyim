@@ -12,6 +12,6 @@ pub use ast::{
     MatchArm, Pattern, StmtKind, StmtNode, TypeExpr, UnOp, UseItem, VariantKind,
 };
 pub use error::ParseError;
-pub use parser::{parse, ParseOutput};
+pub use parser::{ParseOutput, parse};
 pub mod declarations;
 pub mod doc_comment;

@@ -63,7 +63,10 @@ pub fn generate_html(hir: &Hir, interner: &Interner) -> String {
                     html::push_html(&mut html, parser);
                     html.push_str("</div>\n");
                 }
-                html.push_str(&format!("<h2>impl {}</h2>\n", interner.resolve(i.target_name)));
+                html.push_str(&format!(
+                    "<h2>impl {}</h2>\n",
+                    interner.resolve(i.target_name)
+                ));
             }
             glyim_hir::item::HirItem::Extern(e) => {
                 if let Some(ref doc) = e.doc {

@@ -47,11 +47,7 @@ impl<'a> Tokens<'a> {
     }
 
     pub fn eat(&mut self, kind: SyntaxKind) -> Option<Token<'a>> {
-        if self.at(kind) {
-            self.bump()
-        } else {
-            None
-        }
+        if self.at(kind) { self.bump() } else { None }
     }
 
     pub fn expect(
@@ -88,7 +84,7 @@ impl<'a> Tokens<'a> {
     }
 
     /// Reset the token stream back to the beginning.
-    
+
     /// Return the index of the next non‑trivia token, or the length
     /// of the token slice if at EOF.
     pub fn pos_of_next_non_trivia(&self) -> usize {
@@ -102,7 +98,6 @@ impl<'a> Tokens<'a> {
     pub fn reset(&mut self) {
         self.pos = 0;
     }
-
 
     /// Return the underlying token slice.
     pub fn as_slice(&self) -> &[Token<'a>] {
@@ -141,7 +136,8 @@ impl<'a> Tokens<'a> {
         }
         if self
             .tokens
-            .get(p).is_none_or(|t| t.kind != SyntaxKind::Ident)
+            .get(p)
+            .is_none_or(|t| t.kind != SyntaxKind::Ident)
         {
             return false;
         }
@@ -158,7 +154,8 @@ impl<'a> Tokens<'a> {
                     }
                     if self
                         .tokens
-                        .get(p).is_none_or(|t| t.kind != SyntaxKind::Ident)
+                        .get(p)
+                        .is_none_or(|t| t.kind != SyntaxKind::Ident)
                     {
                         return false;
                     }

@@ -42,10 +42,7 @@ pub struct FnSigInfo {
 impl DeclTable {
     /// Build the declaration table from DeclaredItems, using the given
     /// mutable Interner to create mangled names.
-    pub fn from_declarations(
-        decls: &crate::lower::DeclaredItems,
-        interner: &mut Interner,
-    ) -> Self {
+    pub fn from_declarations(decls: &crate::lower::DeclaredItems, interner: &mut Interner) -> Self {
         let mut structs = HashMap::new();
         let mut enums = HashMap::new();
         let mut functions = HashMap::new();
@@ -133,7 +130,8 @@ impl DeclTable {
                     .iter()
                     .map(|(sym, _ty, _mut)| (*sym, HirType::Int))
                     .collect();
-                let hir_method = HirFn { doc: None,
+                let hir_method = HirFn {
+                    doc: None,
                     name: mangled_name,
                     type_params: imp
                         .type_params

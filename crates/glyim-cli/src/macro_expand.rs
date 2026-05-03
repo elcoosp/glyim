@@ -1,17 +1,12 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::registry::MacroRegistry;
-use glyim_macro_vfs::{ContentStore, LocalContentStore, ContentHash};
+use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Expand macros found in the source text.
-pub fn expand_macros(
-    source: &str,
-    pkg_dir: &Path,
-    cas_dir: &Path,
-) -> Result<String, String> {
-    let store = LocalContentStore::new(cas_dir)
-        .map_err(|e| format!("create store: {e}"))?;
+pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<String, String> {
+    let store = LocalContentStore::new(cas_dir).map_err(|e| format!("create store: {e}"))?;
     let store: Arc<dyn ContentStore> = Arc::new(store);
     let mut registry = MacroRegistry::new(store.clone());
     let executor = MacroExecutor::new_with_cache(store);
@@ -22,7 +17,8 @@ pub fn expand_macros(
     // Try to load any macros found in the package's lockfile/cache
     load_package_macros(pkg_dir, &mut registry);
 
-    let macro_wasm = registry.get("identity")
+    let macro_wasm = registry
+        .get("identity")
         .ok_or_else(|| "identity macro not registered".to_string())?;
 
     let marker = "@identity(";
@@ -96,8 +92,8 @@ fn load_builtin_identity(registry: &mut MacroRegistry) -> Result<(), String> {
     end)
 )
 "#;
-    let wasm = wat::parse_str(identity_wat)
-        .map_err(|e| format!("parse built-in identity wat: {e}"))?;
+    let wasm =
+        wat::parse_str(identity_wat).map_err(|e| format!("parse built-in identity wat: {e}"))?;
     registry.register("identity", wasm);
     Ok(())
 }

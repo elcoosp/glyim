@@ -1,6 +1,9 @@
 pub fn cmd_publish(dry_run: bool) -> i32 {
     let result: Result<i32, i32> = (|| {
-        let dir = std::env::current_dir().map_err(|e| { eprintln!("error: {e}"); 1 })?;
+        let dir = std::env::current_dir().map_err(|e| {
+            eprintln!("error: {e}");
+            1
+        })?;
         let manifest_path = dir.join("glyim.toml");
         if !manifest_path.exists() {
             eprintln!("error: glyim.toml not found; run 'glyim init' first");

@@ -370,12 +370,13 @@ impl<'a> MonoContext<'a> {
                     .copied()
                     .unwrap_or(*callee);
 
-                if new_callee == *callee && type_args_empty
+                if new_callee == *callee
+                    && type_args_empty
                     && let Some(((_, _), mono)) =
                         fn_map.iter().find(|((sym, _), _)| *sym == *callee)
-                    {
-                        new_callee = *mono;
-                    }
+                {
+                    new_callee = *mono;
+                }
 
                 HirExpr::Call {
                     id: *id,
