@@ -172,7 +172,6 @@ impl<'a> MonoContext<'a> {
         self.fn_work_queue.push(key);
     }
 
-    
     /// Walk two types in parallel and extract type-parameter → concrete-type
     /// substitutions. Recursively handle raw pointers, generic instantiations,
     /// and tuples so that `*mut T` → `*mut i64` infers `T = i64`.
@@ -183,15 +182,12 @@ impl<'a> MonoContext<'a> {
         sub: &mut HashMap<Symbol, HirType>,
     ) {
         match (param_ty, arg_ty) {
-            // Direct named match (e.g., T → i64)
             (HirType::Named(param_sym), at) if type_params.contains(param_sym) && *at != HirType::Never => {
                 sub.insert(*param_sym, at.clone());
             }
-            // Raw pointer: recurse into inner type
             (HirType::RawPtr(inner_param), HirType::RawPtr(inner_arg)) => {
                 Self::extract_type_substitutions(inner_param, inner_arg, type_params, sub);
             }
-            // Generic: recurse into each type argument
             (HirType::Generic(p_sym, p_args), HirType::Generic(a_sym, a_args))
                 if p_sym == a_sym && p_args.len() == a_args.len() =>
             {
@@ -199,7 +195,6 @@ impl<'a> MonoContext<'a> {
                     Self::extract_type_substitutions(p, a, type_params, sub);
                 }
             }
-            // Tuple: recurse element‑wise
             (HirType::Tuple(p_elems), HirType::Tuple(a_elems))
                 if p_elems.len() == a_elems.len() =>
             {
@@ -211,8 +206,7 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-
-#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn scan_expr_for_generic_calls(&mut self, expr: &HirExpr) {
         match expr {
             HirExpr::Call { id: call_id, callee, args, .. } => {
@@ -227,11 +221,9 @@ impl<'a> MonoContext<'a> {
                         let arg_types: Vec<HirType> = args.iter().map(|a| self.expr_types.get(a.get_id().as_usize()).cloned().unwrap_or(HirType::Never)).collect();
                         let mut sub = HashMap::new();
                         for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
-                            if let HirType::Named(param_sym) = param_ty {
-                                if fn_def.type_params.contains(param_sym) {
-                                    if let Some(at) = arg_types.get(param_idx) {
-                                        if *at != HirType::Never { sub.insert(*param_sym, at.clone()); }
-                                    }
+                            if let Some(at) = arg_types.get(param_idx) {
+                                if *at != HirType::Never {
+                                    Self::extract_type_substitutions(param_ty, at, &fn_def.type_params, &mut sub);
                                 }
                             }
                         }
