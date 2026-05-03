@@ -7,14 +7,20 @@ pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool) -> i32 {
         Ok(()) => {
             if open {
                 let index_html = out_dir.join("index.html");
-                let abs_path = std::fs::canonicalize(&index_html).unwrap_or_else(|_| {
-                    // If canonicalize fails (e.g., file doesn't exist), fall back to absolute path
-                    let mut abs = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                    abs.push(&index_html);
-                    abs
+                // Try to get the absolute path
+                let abs = std::fs::canonicalize(&index_html).unwrap_or_else(|_| {
+                    let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    cwd.push(&index_html);
+                    cwd
                 });
-                if let Err(e) = webbrowser::open(&abs_path.to_string_lossy()) {
-                    eprintln!("warning: could not open browser: {e}");
+                if abs.exists() {
+                    eprintln!("Opening {}", abs.display());
+                    if let Err(e) = webbrowser::open(&format!("file://{}", abs.display())) {
+                        eprintln!("warning: could not open browser: {e}");
+                    }
+                } else {
+                    eprintln!("error: generated file not found at {}", abs.display());
+                    return 1;
                 }
             }
             0
