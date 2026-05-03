@@ -136,14 +136,18 @@ fn lockfile_roundtrip_multiple_versions() {
     let serialized = serialize_lockfile(&lock);
     let parsed = parse_lockfile(&serialized).unwrap();
     assert_eq!(parsed.packages.len(), 2);
-    assert!(parsed
-        .packages
-        .iter()
-        .any(|p| p.name == "a" && p.version == "1.0.0"));
-    assert!(parsed
-        .packages
-        .iter()
-        .any(|p| p.name == "b" && p.version == "2.0.0" && p.is_macro));
+    assert!(
+        parsed
+            .packages
+            .iter()
+            .any(|p| p.name == "a" && p.version == "1.0.0")
+    );
+    assert!(
+        parsed
+            .packages
+            .iter()
+            .any(|p| p.name == "b" && p.version == "2.0.0" && p.is_macro)
+    );
 }
 
 #[test]

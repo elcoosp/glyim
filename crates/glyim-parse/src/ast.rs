@@ -226,12 +226,14 @@ pub struct Attribute {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Binding {
+        doc: Option<String>,
         name: Symbol,
         name_span: Span,
         value: ExprNode,
         attrs: Vec<Attribute>,
     },
     FnDef {
+        doc: Option<String>,
         name: Symbol,
         name_span: Span,
         type_params: Vec<Symbol>,
@@ -241,18 +243,21 @@ pub enum Item {
         attrs: Vec<Attribute>,
     },
     StructDef {
+        doc: Option<String>,
         name: Symbol,
         name_span: Span,
         type_params: Vec<Symbol>,
         fields: Vec<(Symbol, Span, Option<TypeExpr>)>,
     },
     EnumDef {
+        doc: Option<String>,
         name: Symbol,
         name_span: Span,
         type_params: Vec<Symbol>,
         variants: Vec<EnumVariantRepr>,
     },
     ImplBlock {
+        doc: Option<String>,
         target: Symbol,
         target_span: Span,
         type_params: Vec<Symbol>,
@@ -261,6 +266,7 @@ pub enum Item {
         span: Span,
     },
     MacroDef {
+        doc: Option<String>,
         name: Symbol,
         name_span: Span,
         params: Vec<(Symbol, Span)>,
@@ -269,6 +275,7 @@ pub enum Item {
     Stmt(StmtNode),
     Use(UseItem),
     ExternBlock {
+        doc: Option<String>,
         abi: String,
         span: Span,
         functions: Vec<ExternFn>,

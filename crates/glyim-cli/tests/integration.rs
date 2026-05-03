@@ -1267,7 +1267,6 @@ main = () => {
     assert_eq!(pipeline::run(&input, None).unwrap(), 99);
 }
 
-
 // ── Forward‑reference resolution tests ────────────────────────────
 
 #[test]
@@ -1313,4 +1312,34 @@ main = () => {
     let full_src = format!("{}\n{}\n{}", iter_src, vec_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 60);
+}
+
+#[test]
+fn e2e_doc_generator_func() {
+    let src = r#"
+// Adds two integers together.
+//
+// # Examples
+//
+// ```glyim
+// let result = add(1, 2)
+// assert(result == 3)
+// ```
+fn add(a: i64, b: i64) -> i64 { a + b }
+main = () => add(1, 2)
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let source_path = dir.path().join("test.g");
+    std::fs::write(&source_path, src).unwrap();
+
+    let doc_dir = dir.path().join("doc");
+    let result = pipeline::generate_doc(&source_path, Some(&doc_dir));
+    assert!(result.is_ok());
+
+    let index_html = doc_dir.join("index.html");
+    assert!(index_html.exists());
+    let html = std::fs::read_to_string(&index_html).unwrap();
+    assert!(html.contains("Adds two integers together."));
+    assert!(html.contains("let result = add(1, 2)"));
+    assert!(html.contains("assert(result == 3)"));
 }

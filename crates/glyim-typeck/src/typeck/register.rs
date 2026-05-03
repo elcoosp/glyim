@@ -1,5 +1,5 @@
-use crate::typeck::types::{EnumInfo, StructInfo};
 use crate::TypeChecker;
+use crate::typeck::types::{EnumInfo, StructInfo};
 use glyim_hir::item::{EnumDef, ExternBlock, FnSig, StructDef};
 use std::collections::HashMap;
 impl TypeChecker {

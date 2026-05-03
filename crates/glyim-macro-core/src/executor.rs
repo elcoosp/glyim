@@ -1,11 +1,11 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::sync::Arc;
-use wasmtime::*;
 use wasmtime::WasmBacktraceDetails;
+use wasmtime::*;
 
-use glyim_macro_vfs::{ContentStore, ContentHash};
+use glyim_macro_vfs::{ContentHash, ContentStore};
 
-use crate::cache::{compute_cache_key, MacroExpansionCache};
+use crate::cache::{MacroExpansionCache, compute_cache_key};
 
 /// The deterministic macro execution engine.
 ///
@@ -26,7 +26,10 @@ impl MacroExecutor {
         config.wasm_backtrace_max_frames(std::num::NonZero::new(64));
         config.wasm_backtrace_details(WasmBacktraceDetails::Enable);
         let engine = Engine::new(&config).expect("failed to create wasmtime engine");
-        Self { engine, cache: None }
+        Self {
+            engine,
+            cache: None,
+        }
     }
 
     /// Create a new executor with a caching layer.
@@ -36,7 +39,10 @@ impl MacroExecutor {
         config.wasm_backtrace_details(WasmBacktraceDetails::Enable);
         let engine = Engine::new(&config).expect("failed to create wasmtime engine");
         let cache = MacroExpansionCache::new(store);
-        Self { engine, cache: Some(cache) }
+        Self {
+            engine,
+            cache: Some(cache),
+        }
     }
 
     /// Execute a macro Wasm module with the given input AST bytes.
@@ -75,22 +81,24 @@ impl MacroExecutor {
             .ok_or_else(|| anyhow!("macro module must export a function named 'expand'"))?;
 
         if let Some(memory) = maybe_memory {
-            let required_pages = ((input.len() * 2) as u64 + 65536 - 1) / 65536 + 1;
+            let required_pages = ((input.len() * 2) as u64).div_ceil(65536) + 1;
             let current_pages = memory.size(&store);
             if current_pages < required_pages {
                 let pages_to_grow = required_pages - current_pages;
-                memory.grow(&mut store, pages_to_grow)
+                memory
+                    .grow(&mut store, pages_to_grow)
                     .map_err(|e| anyhow!("failed to grow memory: {:?}", e))?;
             }
-            memory.write(&mut store, 0, input)
+            memory
+                .write(&mut store, 0, input)
                 .map_err(|e| anyhow!("write input to memory: {e}"))?;
         }
 
         let output_offset = input.len() as i32;
-        if let Some(ref mem) = maybe_memory {
-            if mem.size(&store) * 65536 < (input.len() as u64 * 3) {
-                mem.grow(&mut store, 1)?;
-            }
+        if let Some(ref mem) = maybe_memory
+            && mem.size(&store) * 65536 < (input.len() as u64 * 3)
+        {
+            mem.grow(&mut store, 1)?;
         }
 
         let mut result = [Val::I32(0)];
@@ -128,10 +136,10 @@ impl MacroExecutor {
             _ => return Err(anyhow!("expand must return i32 output length")),
         };
 
-        if let Some(ref _mem) = maybe_memory {
-            if output_len > input.len() * 2 {
-                return Err(anyhow!("macro output too large"));
-            }
+        if let Some(ref _mem) = maybe_memory
+            && output_len > input.len() * 2
+        {
+            return Err(anyhow!("macro output too large"));
         }
 
         let out = if let Some(ref mem) = maybe_memory {
@@ -152,7 +160,11 @@ impl MacroExecutor {
                 &input_hash,
                 &[],
             );
-            eprintln!("[executor] storing result - key hex: {}, output len: {}", hex::encode(key), out.len());
+            eprintln!(
+                "[executor] storing result - key hex: {}, output len: {}",
+                hex::encode(key),
+                out.len()
+            );
             if let Err(e) = cache.store(&key, &out) {
                 eprintln!("[executor] cache store ERROR: {e}");
             }
@@ -161,3 +173,10 @@ impl MacroExecutor {
         Ok(out)
     }
 }
+
+impl Default for MacroExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

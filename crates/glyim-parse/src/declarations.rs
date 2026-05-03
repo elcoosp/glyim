@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::parser::{Parser, ParseOutput};
+use crate::parser::Parser;
 use glyim_interner::{Interner, Symbol};
 use glyim_lex::tokenize;
 
@@ -78,7 +78,12 @@ pub fn parse_declarations(source: &str) -> crate::parser::ParseOutput<DeclaredIt
 
     for item in &original_items.items {
         match item {
-            Item::StructDef { name, type_params, fields, .. } => {
+            Item::StructDef {
+                name,
+                type_params,
+                fields,
+                ..
+            } => {
                 decls.structs.push(StructDefDecl {
                     name: *name,
                     type_params: type_params.clone(),
@@ -86,7 +91,12 @@ pub fn parse_declarations(source: &str) -> crate::parser::ParseOutput<DeclaredIt
                     is_pub: false,
                 });
             }
-            Item::EnumDef { name, type_params, variants, .. } => {
+            Item::EnumDef {
+                name,
+                type_params,
+                variants,
+                ..
+            } => {
                 decls.enums.push(EnumDefDecl {
                     name: *name,
                     type_params: type_params.clone(),
@@ -94,29 +104,61 @@ pub fn parse_declarations(source: &str) -> crate::parser::ParseOutput<DeclaredIt
                     is_pub: false,
                 });
             }
-            Item::FnDef { name, type_params, params, ret, attrs, .. } => {
+            Item::FnDef {
+                name,
+                type_params,
+                params,
+                ret,
+                attrs,
+                ..
+            } => {
                 decls.fns.push(FnSigDecl {
                     name: *name,
                     type_params: type_params.clone(),
-                    params: params.iter().map(|(s, _, ty, m)| (*s, ty.clone(), *m)).collect(),
+                    params: params
+                        .iter()
+                        .map(|(s, _, ty, m)| (*s, ty.clone(), *m))
+                        .collect(),
                     ret: ret.clone(),
                     attrs: attrs.clone(),
                     is_pub: false,
                 });
             }
-            Item::ImplBlock { target, type_params, methods, is_pub, .. } => {
-                let fn_decls: Vec<FnSigDecl> = methods.iter().filter_map(|m| {
-                    if let Item::FnDef { name, type_params, params, ret, attrs, .. } = m {
-                        Some(FnSigDecl {
-                            name: *name,
-                            type_params: type_params.clone(),
-                            params: params.iter().map(|(s, _, ty, m)| (*s, ty.clone(), *m)).collect(),
-                            ret: ret.clone(),
-                            attrs: attrs.clone(),
-                            is_pub: false,
-                        })
-                    } else { None }
-                }).collect();
+            Item::ImplBlock {
+                target,
+                type_params,
+                methods,
+                is_pub,
+                ..
+            } => {
+                let fn_decls: Vec<FnSigDecl> = methods
+                    .iter()
+                    .filter_map(|m| {
+                        if let Item::FnDef {
+                            name,
+                            type_params,
+                            params,
+                            ret,
+                            attrs,
+                            ..
+                        } = m
+                        {
+                            Some(FnSigDecl {
+                                name: *name,
+                                type_params: type_params.clone(),
+                                params: params
+                                    .iter()
+                                    .map(|(s, _, ty, m)| (*s, ty.clone(), *m))
+                                    .collect(),
+                                ret: ret.clone(),
+                                attrs: attrs.clone(),
+                                is_pub: false,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 decls.impls.push(ImplDecl {
                     target_name: *target,
                     type_params: type_params.clone(),

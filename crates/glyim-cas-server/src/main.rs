@@ -1,11 +1,11 @@
 mod verify;
 
 use axum::{
+    Router,
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Json, Response},
     routing::{get, post},
-    Router,
 };
 use glyim_macro_vfs::{ActionResult, ContentHash, ContentStore, LocalContentStore};
 use serde::{Deserialize, Serialize};
@@ -18,11 +18,6 @@ pub struct AppState {
 }
 
 // ── Request/Response types ─────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct BlobHash {
-    hash: String,
-}
 
 #[derive(Serialize)]
 struct StoreResponse {
@@ -76,7 +71,12 @@ async fn retrieve_blob(
     match store.retrieve(hash) {
         Some(data) => {
             tracing::info!("Retrieved blob: {}", hash);
-            (StatusCode::OK, [(header::CONTENT_TYPE, "application/octet-stream")], data).into_response()
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/octet-stream")],
+                data,
+            )
+                .into_response()
         }
         None => {
             tracing::info!("Blob not found: {}", hash);
@@ -177,13 +177,12 @@ async fn main() -> std::io::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
-    let store = LocalContentStore::new("./cas_store")
-        .expect("failed to create local content store");
+    let store =
+        LocalContentStore::new("./cas_store").expect("failed to create local content store");
     let state = Arc::new(AppState {
         store: Mutex::new(store),
     });
@@ -192,7 +191,10 @@ async fn main() -> std::io::Result<()> {
         .route("/blob", post(store_blob))
         .route("/blob/{hash}", get(retrieve_blob))
         .route("/blob/missing", post(find_missing_blobs))
-        .route("/action/{hash}", post(store_action_result).get(retrieve_action_result))
+        .route(
+            "/action/{hash}",
+            post(store_action_result).get(retrieve_action_result),
+        )
         .route("/status", get(status))
         .route("/verify-wasm", post(verify::verify_wasm))
         .with_state(state);

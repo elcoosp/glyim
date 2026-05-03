@@ -16,7 +16,7 @@ pub(crate) fn recover(tokens: &mut Tokens) {
                         | SyntaxKind::Eof
                 ) =>
             {
-                break
+                break;
             }
             Some(tok) if tok.kind == SyntaxKind::RBrace => {
                 tokens.bump();

@@ -1,10 +1,10 @@
+use crate::Codegen;
 use crate::codegen::ctx::FunctionContext;
 use crate::codegen::expr::codegen_expr;
-use crate::Codegen;
 use glyim_hir::HirExpr;
 use glyim_interner::Symbol;
 use inkwell::values::{BasicValueEnum, IntValue, StructValue};
-use inkwell::{types::BasicTypeEnum, AddressSpace};
+use inkwell::{AddressSpace, types::BasicTypeEnum};
 
 pub(crate) fn codegen_string_literal<'ctx>(cg: &Codegen<'ctx>, s: &str) -> Option<IntValue<'ctx>> {
     let bytes = s.trim_matches('"').as_bytes();
@@ -205,15 +205,13 @@ pub(crate) fn codegen_call<'ctx>(
             .map(|(i, int_val)| {
                 let param_type = param_types.get(i);
                 // Truncate i64 to i32 if extern parameter expects i32
-                if let Some(inkwell::types::BasicMetadataTypeEnum::IntType(t)) = param_type {
-                    if t.get_bit_width() == 32 {
-                        if let Ok(trunc) =
-                            cg.builder
-                                .build_int_truncate(int_val, cg.i32_type, "i32_trunc")
-                        {
-                            return inkwell::values::BasicMetadataValueEnum::IntValue(trunc);
-                        }
-                    }
+                if let Some(inkwell::types::BasicMetadataTypeEnum::IntType(t)) = param_type
+                    && t.get_bit_width() == 32
+                    && let Ok(trunc) =
+                        cg.builder
+                            .build_int_truncate(int_val, cg.i32_type, "i32_trunc")
+                {
+                    return inkwell::values::BasicMetadataValueEnum::IntValue(trunc);
                 }
                 if param_type.is_some_and(|ty| ty.is_pointer_type()) {
                     // Convert i64 to pointer for extern functions expecting ptr

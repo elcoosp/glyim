@@ -47,11 +47,7 @@ impl<'a> Tokens<'a> {
     }
 
     pub fn eat(&mut self, kind: SyntaxKind) -> Option<Token<'a>> {
-        if self.at(kind) {
-            self.bump()
-        } else {
-            None
-        }
+        if self.at(kind) { self.bump() } else { None }
     }
 
     pub fn expect(
@@ -88,6 +84,8 @@ impl<'a> Tokens<'a> {
     }
 
     /// Reset the token stream back to the beginning.
+    /// Return the index of the next non‑trivia token, or the length
+    /// of the token slice if at EOF.
     pub fn reset(&mut self) {
         self.pos = 0;
     }
@@ -100,7 +98,7 @@ impl<'a> Tokens<'a> {
         if self
             .tokens
             .get(p)
-            .map_or(true, |t| t.kind != SyntaxKind::LParen)
+            .is_none_or(|t| t.kind != SyntaxKind::LParen)
         {
             return false;
         }
@@ -122,10 +120,10 @@ impl<'a> Tokens<'a> {
                 .get(p)
                 .is_some_and(|t| t.kind == SyntaxKind::FatArrow);
         }
-        if !self
+        if self
             .tokens
             .get(p)
-            .is_some_and(|t| t.kind == SyntaxKind::Ident)
+            .is_none_or(|t| t.kind != SyntaxKind::Ident)
         {
             return false;
         }
@@ -140,10 +138,10 @@ impl<'a> Tokens<'a> {
                     while p < self.tokens.len() && self.tokens[p].kind.is_trivia() {
                         p += 1;
                     }
-                    if !self
+                    if self
                         .tokens
                         .get(p)
-                        .is_some_and(|t| t.kind == SyntaxKind::Ident)
+                        .is_none_or(|t| t.kind != SyntaxKind::Ident)
                     {
                         return false;
                     }

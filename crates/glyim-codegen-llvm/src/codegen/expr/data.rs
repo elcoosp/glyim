@@ -1,9 +1,9 @@
+use crate::Codegen;
 use crate::codegen::ctx::FunctionContext;
 use crate::codegen::expr::codegen_expr;
-use crate::Codegen;
 use glyim_hir::{HirExpr, HirType};
-use inkwell::values::IntValue;
 use inkwell::AddressSpace;
+use inkwell::values::IntValue;
 
 pub(crate) fn codegen_struct_lit<'ctx>(
     cg: &Codegen<'ctx>,
@@ -184,29 +184,28 @@ pub(crate) fn codegen_field_access<'ctx>(
             if let Some(idx) = field_name
                 .strip_prefix('_')
                 .and_then(|s| s.parse::<usize>().ok())
+                && idx < elems.len()
             {
-                if idx < elems.len() {
-                    let field_types =
-                        vec![inkwell::types::BasicTypeEnum::IntType(cg.i64_type); elems.len()];
-                    let struct_ty = cg.context.struct_type(&field_types, false);
-                    let alloca = cg
-                        .builder
-                        .build_int_to_ptr(
-                            obj_val,
-                            cg.context.ptr_type(AddressSpace::from(0u16)),
-                            "tuple_ptr",
-                        )
-                        .ok()?;
-                    let field_ptr = cg
-                        .builder
-                        .build_struct_gep(struct_ty, alloca, idx as u32, "field")
-                        .ok()?;
-                    return cg
-                        .builder
-                        .build_load(cg.i64_type, field_ptr, "elem_val")
-                        .ok()
-                        .map(|v| v.into_int_value());
-                }
+                let field_types =
+                    vec![inkwell::types::BasicTypeEnum::IntType(cg.i64_type); elems.len()];
+                let struct_ty = cg.context.struct_type(&field_types, false);
+                let alloca = cg
+                    .builder
+                    .build_int_to_ptr(
+                        obj_val,
+                        cg.context.ptr_type(AddressSpace::from(0u16)),
+                        "tuple_ptr",
+                    )
+                    .ok()?;
+                let field_ptr = cg
+                    .builder
+                    .build_struct_gep(struct_ty, alloca, idx as u32, "field")
+                    .ok()?;
+                return cg
+                    .builder
+                    .build_load(cg.i64_type, field_ptr, "elem_val")
+                    .ok()
+                    .map(|v| v.into_int_value());
             }
         }
         let obj_ptr = cg

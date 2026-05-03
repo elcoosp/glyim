@@ -13,7 +13,6 @@ impl Symbol {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct Interner {
     strings: Vec<String>,

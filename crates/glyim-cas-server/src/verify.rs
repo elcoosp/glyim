@@ -15,7 +15,7 @@ use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct VerifyWasmRequest {
-    pub source: String,       // the macro source code
+    pub source: String,        // the macro source code
     pub expected_hash: String, // hex‑encoded hash of the published Wasm blob
 }
 

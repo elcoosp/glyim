@@ -1,8 +1,8 @@
-use crate::typeck::error::TypeError;
 use crate::TypeChecker;
+use crate::typeck::error::TypeError;
+use glyim_hir::HirPattern;
 use glyim_hir::node::HirExpr;
 use glyim_hir::types::HirType;
-use glyim_hir::HirPattern;
 use glyim_interner::Symbol;
 
 impl TypeChecker {

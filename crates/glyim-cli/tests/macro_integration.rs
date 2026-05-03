@@ -10,7 +10,10 @@ fn identity_macro_in_pipeline() {
     match result {
         Ok(code) => assert_eq!(code, 42, "expected exit code 42, got {code}"),
         Err(e) => {
-            eprintln!("EXPANDED SOURCE:\n{}\n", std::fs::read_to_string(&source_path).unwrap());
+            eprintln!(
+                "EXPANDED SOURCE:\n{}\n",
+                std::fs::read_to_string(&source_path).unwrap()
+            );
             panic!("pipeline failed: {e}");
         }
     }

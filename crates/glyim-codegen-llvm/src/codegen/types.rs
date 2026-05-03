@@ -1,8 +1,8 @@
 use crate::Codegen;
 use glyim_hir::HirType;
+use inkwell::AddressSpace;
 use inkwell::types::BasicType;
 use inkwell::types::BasicTypeEnum;
-use inkwell::AddressSpace;
 
 impl<'ctx> Codegen<'ctx> {
     /// Convert HirType to LLVM BasicTypeEnum for codegen.
@@ -161,7 +161,7 @@ pub(crate) fn get_or_create_enum_struct_type<'ctx>(
     } else {
         // user-defined: use the stored payload array size
         if let Some((_, arr_ty)) = cg.enum_types.borrow().get(&enum_name) {
-            arr_ty.len() as u32
+            arr_ty.len()
         } else {
             8
         }

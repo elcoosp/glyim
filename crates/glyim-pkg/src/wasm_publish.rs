@@ -10,8 +10,7 @@ pub fn compile_and_store_macro_wasm(
     target_triple: &str,
     store: &dyn ContentStore,
 ) -> Result<ContentHash, PkgError> {
-    let source = std::fs::read_to_string(source_path)
-        .map_err(|e| PkgError::Io(e))?;
+    let source = std::fs::read_to_string(source_path).map_err(PkgError::Io)?;
     let wasm_bytes = glyim_codegen_llvm::compile_to_wasm(&source, target_triple)
         .map_err(|e| PkgError::Registry(format!("Wasm compilation failed: {e}")))?;
     let hash = store.store(&wasm_bytes);
@@ -29,8 +28,7 @@ mod tests {
         let src = dir.path().join("test.g");
         std::fs::write(&src, "fn main() -> i64 { 42 }").unwrap();
         let store = LocalContentStore::new(dir.path()).unwrap();
-        let hash = compile_and_store_macro_wasm(&src, "wasm32-wasi", &store)
-            .expect("compile");
+        let hash = compile_and_store_macro_wasm(&src, "wasm32-wasi", &store).expect("compile");
         assert!(store.retrieve(hash).is_some(), "Wasm blob must be stored");
     }
 }

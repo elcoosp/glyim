@@ -1,5 +1,5 @@
-use crate::codegen::ctx::FunctionContext;
 use crate::Codegen;
+use crate::codegen::ctx::FunctionContext;
 use glyim_hir::HirFn;
 use glyim_interner::Symbol;
 use inkwell::values::PointerValue;

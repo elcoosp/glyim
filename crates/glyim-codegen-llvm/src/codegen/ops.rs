@@ -1,7 +1,7 @@
 use crate::Codegen;
 use glyim_hir::HirBinOp;
-use inkwell::values::IntValue;
 use inkwell::IntPredicate;
+use inkwell::values::IntValue;
 
 pub(crate) fn codegen_binop<'ctx>(
     cg: &Codegen<'ctx>,

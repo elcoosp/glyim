@@ -52,12 +52,12 @@ impl TypeChecker {
                     inferred
                 };
                 // Propagate type args to monomorphizer for MethodCall/Call expressions
-                if let HirPattern::Var(_) = pattern {
-                    if let HirType::Generic(_, type_args) = &ty {
-                        let value_id = value.get_id();
-                        if !type_args.is_empty() {
-                            self.call_type_args.insert(value_id, type_args.clone());
-                        }
+                if let HirPattern::Var(_) = pattern
+                    && let HirType::Generic(_, type_args) = &ty
+                {
+                    let value_id = value.get_id();
+                    if !type_args.is_empty() {
+                        self.call_type_args.insert(value_id, type_args.clone());
                     }
                 }
                 self.bind_pattern(pattern, &ty, *mutable);

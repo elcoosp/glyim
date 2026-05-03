@@ -1,16 +1,12 @@
-use std::process::{Command, Output};
 use std::path::PathBuf;
+use std::process::{Command, Output};
 
 /// Locate the `glyim` binary next to the test executable.
 fn glyim_bin() -> Option<PathBuf> {
     let exe = std::env::current_exe().unwrap();
     let dir = exe.parent().unwrap().parent().unwrap();
     let bin = dir.join("glyim");
-    if bin.exists() {
-        Some(bin)
-    } else {
-        None
-    }
+    if bin.exists() { Some(bin) } else { None }
 }
 
 /// Run `glyim` with given arguments on a temporary source file.
@@ -123,7 +119,9 @@ fn cli_test_filter() {
 
 #[test]
 fn cli_init_creates_project() {
-    let Some(bin) = glyim_bin() else { return; };
+    let Some(bin) = glyim_bin() else {
+        return;
+    };
     let dir = tempfile::tempdir().unwrap();
     let output = Command::new(bin)
         .arg("init")

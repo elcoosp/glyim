@@ -179,7 +179,10 @@ fn main() {
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),
         Command::Fetch => cmd_fetch(),
-        Command::Publish { dry_run, wasm: _wasm } => cmd_publish(dry_run),
+        Command::Publish {
+            dry_run,
+            wasm: _wasm,
+        } => cmd_publish(dry_run),
         Command::Outdated => cmd_outdated(),
         Command::Verify => cmd_verify(),
         Command::Doc { input, output } => cmd_doc(input, output),

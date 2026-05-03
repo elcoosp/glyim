@@ -1,4 +1,3 @@
-use crate::decl_table::DeclTable;
 use crate::types::ExprId;
 use glyim_interner::Interner;
 use glyim_interner::Symbol;

@@ -1,3 +1,4 @@
+use crate::HirFn;
 use crate::item::{
     EnumDef, ExternBlock, ExternFn, HirImplDef, HirItem, HirVariant, StructDef, StructField,
 };
@@ -5,18 +6,18 @@ use crate::lower::context::LoweringContext;
 use crate::lower::expr::lower_expr;
 use crate::lower::types::lower_type_expr;
 use crate::types::HirType;
-use crate::HirFn;
 use glyim_parse::Item;
 
+#[allow(dead_code)]
 /// Check the declaration table for a type name, returning true if it
 /// is known to be a struct (as opposed to an enum or unknown).
 fn is_known_struct(ctx: &LoweringContext, name: glyim_interner::Symbol) -> bool {
     ctx.struct_names.contains(&name)
-        || ctx.decl_table
+        || ctx
+            .decl_table
             .and_then(|dt| dt.structs.get(&name))
             .is_some()
 }
-
 
 pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
     match item {
@@ -29,6 +30,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
         } => {
             let start = attrs.first().map_or(name_span.start, |a| a.span.start);
             Some(HirItem::Fn(HirFn {
+                doc: None,
                 name: *name,
                 type_params: vec![],
                 params: vec![],
@@ -67,6 +69,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 })
                 .unzip();
             Some(HirItem::Fn(HirFn {
+                doc: None,
                 name: *name,
                 type_params: type_params.clone(),
                 params: hir_params,
@@ -80,6 +83,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             }))
         }
         Item::StructDef {
+            doc: _,
             name,
             name_span,
             type_params,
@@ -101,6 +105,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 })
                 .collect();
             Some(HirItem::Struct(StructDef {
+                doc: None,
                 name: *name,
                 type_params: type_params.clone(),
                 fields: hir_fields,
@@ -109,6 +114,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             }))
         }
         Item::EnumDef {
+            doc: _,
             name,
             name_span,
             type_params,
@@ -135,6 +141,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 })
                 .collect();
             Some(HirItem::Enum(EnumDef {
+                doc: None,
                 name: *name,
                 type_params: type_params.clone(),
                 variants: hir_variants,
@@ -181,6 +188,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             })
                             .unzip();
                         Some(HirFn {
+                            doc: None,
                             name: mangled_name,
                             type_params: all_tp,
                             params: hir_params,
@@ -198,6 +206,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 })
                 .collect();
             Some(HirItem::Impl(HirImplDef {
+                doc: None,
                 target_name: *target,
                 type_params: type_params.clone(),
                 methods: hir_methods,
@@ -211,6 +220,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             body,
             ..
         } => Some(HirItem::Fn(HirFn {
+            doc: None,
             name: *name,
             type_params: vec![],
             params: vec![],
@@ -223,7 +233,10 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             is_extern_backed: false,
         })),
         Item::ExternBlock {
-            span, functions, ..
+            doc: _,
+            span,
+            functions,
+            ..
         } => {
             let ex_fns: Vec<ExternFn> = functions
                 .iter()
@@ -246,6 +259,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 })
                 .collect();
             Some(HirItem::Extern(ExternBlock {
+                doc: None,
                 functions: ex_fns,
                 span: *span,
             }))

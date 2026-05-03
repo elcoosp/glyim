@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "High-level intermediate representation for Glyim"
 
 [dependencies]
+glyim-lex = { path = "../glyim-lex" }
 thiserror = "2"
 glyim-parse = { path = "../glyim-parse" }
 glyim-interner = { path = "../glyim-interner" }

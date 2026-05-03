@@ -491,21 +491,20 @@ fn lower_call(
         variant_name,
         args: enum_args,
     } = &callee.kind
+        && enum_args.is_empty()
     {
-        if enum_args.is_empty() {
-            let mangled = ctx.intern(&format!(
-                "{}_{}",
-                ctx.resolve(*enum_name),
-                ctx.resolve(*variant_name)
-            ));
-            let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
-            return HirExpr::Call {
-                id: ctx.fresh_id(),
-                callee: mangled,
-                args: call_args,
-                span: call_span,
-            };
-        }
+        let mangled = ctx.intern(&format!(
+            "{}_{}",
+            ctx.resolve(*enum_name),
+            ctx.resolve(*variant_name)
+        ));
+        let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
+        return HirExpr::Call {
+            id: ctx.fresh_id(),
+            callee: mangled,
+            args: call_args,
+            span: call_span,
+        };
     }
 
     let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
@@ -520,7 +519,7 @@ fn lower_call(
                         span: glyim_diag::Span::new(0, 0),
                     })),
                     span: call_span,
-                }
+                };
             }
             "assert" => {
                 let cond = if let Some(first) = args.first() {

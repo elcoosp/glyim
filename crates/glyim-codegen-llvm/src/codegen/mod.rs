@@ -198,11 +198,18 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!("[codegen generate] Fn: {} (type_params={:?})", self.interner.resolve(f.name), f.type_params);
+                    eprintln!(
+                        "[codegen generate] Fn: {} (type_params={:?})",
+                        self.interner.resolve(f.name),
+                        f.type_params
+                    );
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        eprintln!("[codegen generate] Impl method: {}", self.interner.resolve(m.name));
+                        eprintln!(
+                            "[codegen generate] Impl method: {}",
+                            self.interner.resolve(m.name)
+                        );
                     }
                 }
                 _ => {}
@@ -381,7 +388,7 @@ impl<'ctx> Codegen<'ctx> {
         };
         Target::initialize_native(&InitializationConfig::default()).map_err(|e| e.to_string())?;
         let triple_obj = if let Some(ref t) = self.target_triple {
-            TargetTriple::create(&t)
+            TargetTriple::create(t)
         } else {
             TargetMachine::get_default_triple()
         };

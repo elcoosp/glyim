@@ -9,10 +9,19 @@ pub struct DeterministicWasi {
     table: wasmtime::component::ResourceTable,
 }
 
+impl Default for DeterministicWasi {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeterministicWasi {
     pub fn new() -> Self {
         let ctx = WasiCtxBuilder::new().build();
-        Self { ctx, table: wasmtime::component::ResourceTable::new() }
+        Self {
+            ctx,
+            table: wasmtime::component::ResourceTable::new(),
+        }
     }
 }
 

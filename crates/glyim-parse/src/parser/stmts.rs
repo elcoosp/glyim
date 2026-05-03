@@ -1,7 +1,7 @@
 use crate::ast::{StmtKind, StmtNode};
+use crate::parser::Parser;
 use crate::parser::patterns::parse_pattern;
 use crate::parser::types::parse_type_expr;
-use crate::parser::Parser;
 use glyim_diag::Span;
 use glyim_syntax::SyntaxKind;
 
@@ -42,11 +42,7 @@ impl Parser<'_> {
         if name_tok.kind != SyntaxKind::Ident {
             return None;
         }
-        if !self
-            .tokens
-            .peek2()
-            .is_some_and(|t| t.kind == SyntaxKind::Eq)
-        {
+        if self.tokens.peek2().is_none_or(|t| t.kind != SyntaxKind::Eq) {
             return None;
         }
         let target_tok = self.tokens.bump()?;

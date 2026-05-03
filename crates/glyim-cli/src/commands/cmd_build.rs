@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::pipeline::{self, BuildMode};
+use std::path::PathBuf;
 
 pub fn cmd_build(
     input: PathBuf,

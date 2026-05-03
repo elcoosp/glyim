@@ -239,8 +239,6 @@ impl ContentStore for RemoteContentStore {
             Err(_) => missing,
         }
     }
-
-
 }
 
 #[cfg(test)]

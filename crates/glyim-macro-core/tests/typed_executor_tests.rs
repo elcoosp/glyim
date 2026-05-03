@@ -1,9 +1,9 @@
-use glyim_macro_core::executor::MacroExecutor;
-use glyim_macro_core::wasm_interface::{serialize_expr, deserialize_expr};
-use glyim_hir::HirExpr;
 use glyim_diag::Span;
+use glyim_hir::HirExpr;
 use glyim_hir::types::ExprId;
 use glyim_interner::Symbol;
+use glyim_macro_core::executor::MacroExecutor;
+use glyim_macro_core::wasm_interface::{deserialize_expr, serialize_expr};
 
 #[test]
 fn typed_executor_identity_roundtrip() {
@@ -48,7 +48,9 @@ fn typed_executor_identity_roundtrip() {
         span: Span::new(0, 2),
     };
     let bytes = serialize_expr(&expr);
-    let result_bytes = executor.execute(&wasm, &bytes).expect("execute typed macro");
+    let result_bytes = executor
+        .execute(&wasm, &bytes)
+        .expect("execute typed macro");
     let result_expr = deserialize_expr(&result_bytes).expect("deserialize result");
     match result_expr {
         HirExpr::IntLit { value, .. } => assert_eq!(value, 42),
