@@ -168,15 +168,15 @@ mod tests {
 
     #[test]
     fn host_target_is_valid() {
-        let host = cross::host_target();
-        assert!(cross::validate_target(&host).is_ok());
+        let host = super::host_target();
+        assert!(super::validate_target(&host).is_ok());
     }
 
     #[test]
     fn all_supported_targets_are_valid() {
-        for target in cross::SUPPORTED_TARGETS {
+        for target in super::SUPPORTED_TARGETS {
             assert!(
-                cross::validate_target(target).is_ok(),
+                super::validate_target(target).is_ok(),
                 "target {} should be valid",
                 target
             );
@@ -185,14 +185,14 @@ mod tests {
 
     #[test]
     fn invalid_target_fails_validation() {
-        assert!(cross::validate_target("mips-unknown-none").is_err());
-        assert!(cross::validate_target("bogus-triple").is_err());
+        assert!(super::validate_target("mips-unknown-none").is_err());
+        assert!(super::validate_target("bogus-triple").is_err());
     }
 
     #[test]
     fn missing_sysroot_returns_error() {
         // A bogus target won't have a toolchain package, so ensure_sysroot should fail
-        assert!(cross::ensure_sysroot("bogus-triple").is_err());
+        assert!(super::ensure_sysroot("bogus-triple").is_err());
     }
 
     #[test]
