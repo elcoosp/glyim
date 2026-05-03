@@ -24,11 +24,8 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
     let marker = "@identity(";
     let mut result = source.to_string();
 
-    loop {
-        let pos = match result.find(marker) {
-            Some(p) => p + marker.len(),
-            None => break,
-        };
+    while let Some(p) = result.find(marker) {
+        let pos = p + marker.len();
 
         let mut depth = 1;
         let end = result[pos..]

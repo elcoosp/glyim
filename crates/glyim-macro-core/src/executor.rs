@@ -173,3 +173,10 @@ impl MacroExecutor {
         Ok(out)
     }
 }
+
+impl Default for MacroExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

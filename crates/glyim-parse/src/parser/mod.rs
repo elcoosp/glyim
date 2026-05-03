@@ -28,12 +28,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Return the token index (in the original token slice) of the next
-    /// non‑trivia token. Used by doc comment collection to determine
-    /// which comments precede an item.
-    pub fn next_non_trivia_pos(&self) -> usize {
-        self.tokens.pos_of_next_non_trivia()
-    }
 
     #[tracing::instrument(skip_all)]
     fn parse_attributes(&mut self) -> Vec<crate::ast::Attribute> {
@@ -123,12 +117,8 @@ impl<'a> Parser<'a> {
             match self.tokens.peek().map(|t| t.kind) {
                 Some(glyim_syntax::SyntaxKind::KwStruct)
                 | Some(glyim_syntax::SyntaxKind::KwEnum) => {
-                    if let Some(kind) = self.tokens.peek().map(|t| t.kind) {
-                        if kind == glyim_syntax::SyntaxKind::KwStruct {
-                            self.tokens.bump();
-                        } else {
-                            self.tokens.bump();
-                        }
+                    if let Some(_kind) = self.tokens.peek().map(|t| t.kind) {
+                        self.tokens.bump(); // skip 'struct' or 'enum' keyword
                         if let Some(name_tok) = self.tokens.bump()
                             && name_tok.kind == glyim_syntax::SyntaxKind::Ident
                         {

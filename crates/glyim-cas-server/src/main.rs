@@ -19,11 +19,6 @@ pub struct AppState {
 
 // ── Request/Response types ─────────────────────────────────────────
 
-#[derive(Deserialize)]
-struct BlobHash {
-    hash: String,
-}
-
 #[derive(Serialize)]
 struct StoreResponse {
     hash: String,

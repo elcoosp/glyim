@@ -85,29 +85,29 @@ pub fn beautify_doc_string(raw: &str) -> String {
             if trimmed.starts_with("```") {
                 in_code_block = !in_code_block;
                 // For code block fences, only strip the "// " prefix, keep the backticks
-                if line.starts_with("// ") {
-                    return line[3..].to_string();
-                } else if line.starts_with("//") {
-                    return line[2..].to_string();
+                if let Some(stripped) = line.strip_prefix("// ") {
+                    return stripped.to_string();
+                } else if let Some(stripped) = line.strip_prefix("//") {
+                    return stripped.to_string();
                 }
                 return line.to_string();
             }
 
             if in_code_block {
                 // Inside a code block, preserve exact content after "//" prefix
-                if line.starts_with("// ") {
-                    return line[3..].to_string();
-                } else if line.starts_with("//") {
-                    return line[2..].to_string();
+                if let Some(stripped) = line.strip_prefix("// ") {
+                    return stripped.to_string();
+                } else if let Some(stripped) = line.strip_prefix("//") {
+                    return stripped.to_string();
                 }
                 return line.to_string();
             }
 
             // Normal line: strip "// " or "//" prefix
-            if line.starts_with("// ") {
-                line[3..].to_string()
-            } else if line.starts_with("//") {
-                line[2..].to_string()
+            if let Some(stripped) = line.strip_prefix("// ") {
+                stripped.to_string()
+            } else if let Some(stripped) = line.strip_prefix("//") {
+                stripped.to_string()
             } else {
                 line.to_string()
             }
