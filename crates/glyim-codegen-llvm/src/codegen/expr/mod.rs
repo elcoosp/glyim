@@ -407,7 +407,6 @@ pub(crate) fn codegen_expr<'ctx>(
                 other => other.clone(),
             };
 
-            // Helper function to mangle a HirType to a string
             fn mangle_type(cg: &Codegen, ty: &HirType) -> String {
                 match ty {
                     HirType::Int => "i64".to_string(),
@@ -458,15 +457,18 @@ pub(crate) fn codegen_expr<'ctx>(
                         .join("_"),
                 }
             }
+
+            // Helper to extract the type name from inner_ty
+            let type_name_sym = match &inner_ty {
+                HirType::Named(sym) | HirType::Generic(sym, _) => *sym,
+                _ => *method_name, // fallback to method name for non-struct types
+            };
+            let type_name = cg.interner.resolve(type_name_sym);
+
             // Generate the mangled function name with proper type suffix
             let mangled_name = match &inner_ty {
-                HirType::Named(type_name) | HirType::Generic(type_name, _) => {
-                    let base = format!(
-                        "{}_{}",
-                        cg.interner.resolve(*type_name),
-                        cg.interner.resolve(*method_name)
-                    );
-                    // Generate type suffix from generic type arguments
+                HirType::Named(_) | HirType::Generic(_, _) => {
+                    let base = format!("{}_{}", type_name, cg.interner.resolve(*method_name));
                     let suffix = match &inner_ty {
                         HirType::Generic(_, type_args) if !type_args.is_empty() => type_args
                             .iter()
@@ -489,6 +491,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 mangled_name
             );
 
+            // Try exact lookup first
             if let Some(fn_val) = cg.module.get_function(&mangled_name) {
                 let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
                 call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
@@ -503,19 +506,44 @@ pub(crate) fn codegen_expr<'ctx>(
                     .builder
                     .build_call(fn_val, &call_args, "method_call")
                     .ok()?;
-                match result.try_as_basic_value() {
-                    inkwell::values::ValueKind::Basic(basic_val) => {
-                        Some(basic_val.into_int_value())
-                    }
+                return match result.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(basic_val) => Some(basic_val.into_int_value()),
                     _ => Some(cg.i64_type.const_int(0, false)),
-                }
-            } else {
-                eprintln!(
-                    "[codegen MethodCall] WARNING: function '{}' not found",
-                    mangled_name
-                );
-                Some(cg.i64_type.const_int(0, false))
+                };
             }
+
+            // FALLBACK: Search for any function starting with the prefix when expr_types didn't have the type
+            let prefix = format!("{}_", type_name);
+            for func in cg.module.get_functions() {
+                let name = func.get_name().to_string_lossy().to_string();
+                // Match "Vec_push__..." but not "Vec_push" itself
+                if name.starts_with(&prefix) && name.len() > prefix.len() {
+                    eprintln!("[codegen MethodCall] fallback found: {}", name);
+                    let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
+                    call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
+                        receiver_val,
+                    ));
+                    for a in args {
+                        if let Some(v) = codegen_expr(cg, a, fctx) {
+                            call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));
+                        }
+                    }
+                    let result = cg
+                        .builder
+                        .build_call(func, &call_args, "method_call")
+                        .ok()?;
+                    return match result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(basic_val) => Some(basic_val.into_int_value()),
+                        _ => Some(cg.i64_type.const_int(0, false)),
+                    };
+                }
+            }
+
+            eprintln!(
+                "[codegen MethodCall] WARNING: no function found for prefix '{}'",
+                prefix
+            );
+            Some(cg.i64_type.const_int(0, false))
         }
     }
 }

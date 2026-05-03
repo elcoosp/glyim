@@ -71,8 +71,8 @@ pub fn generate_html(hir: &Hir, interner: &Interner) -> String {
                     html::push_html(&mut html, parser);
                     html.push_str("</div>\n");
                 }
-                html.push_str(&format!("<h2>fn {}</h2>\n", interner.resolve(f.name)));
-                html.push_str("<p>Function</p>\n");
+                let sig = format_fn_signature(f, interner);
+                html.push_str(&format!("<h2>{}</h2>\n", sig));
             }
             glyim_hir::item::HirItem::Struct(s) => {
                 if let Some(ref doc) = s.doc {
