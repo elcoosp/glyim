@@ -1097,7 +1097,7 @@ fn e2e_hashmap_insert_get() {
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
     let main_code = r#"
 main = () => {
-    let m = HashMap::new();
+    let m: HashMap<i64, i64> = HashMap::new();
     let m = m.insert(1, 100);
     let m = m.insert(2, 200);
     m.len()

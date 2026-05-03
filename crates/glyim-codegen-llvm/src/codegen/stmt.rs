@@ -124,18 +124,9 @@ pub(crate) fn codegen_stmt<'ctx>(
                 Some(HirType::RawPtr(inner)) => *inner,
                 other => other.unwrap_or(HirType::Int),
             };
-            // If the pointed type is a struct, deep copy from the value pointer
-            if let Some(st) = cg.resolve_struct_type(&pointed_ty) {
-                let val_ptr = cg
-                    .builder
-                    .build_int_to_ptr(
-                        new_val,
-                        cg.context.ptr_type(AddressSpace::from(0u16)),
-                        "val_ptr",
-                    )
-                    .ok()?;
-                let loaded = cg.builder.build_load(st, val_ptr, "struct_val").ok()?;
-                let target_typed = cg
+            // For structs, the value is already a pointer handle; store it directly.
+            if cg.resolve_struct_type(&pointed_ty).is_some() {
+                let target_addr = cg
                     .builder
                     .build_int_to_ptr(
                         ptr_val,
@@ -143,7 +134,7 @@ pub(crate) fn codegen_stmt<'ctx>(
                         "target_ptr",
                     )
                     .ok()?;
-                cg.builder.build_store(target_typed, loaded).ok()?;
+                cg.builder.build_store(target_addr, new_val).ok()?;
                 return Some(new_val);
             }
             // Non-struct: plain i64 store

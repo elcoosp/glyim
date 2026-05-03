@@ -1,5 +1,6 @@
 // crates/glyim-hir/src/monomorphize/context.rs
 use super::*;
+use crate::HirPattern;
 use crate::item::HirItem;
 use crate::node::{HirExpr, HirFn, HirStmt};
 use crate::types::HirType;
@@ -122,6 +123,115 @@ impl<'a> MonoContext<'a> {
             }
             HirType::Tuple(elems) => elems.iter().any(|e| self.has_unresolved_type_param(e)),
             _ => false,
+        }
+    }
+
+    /// Attempt to infer type args for a zero-argument generic call by looking
+    /// at later calls on the same variable within the enclosing block.
+    pub(crate) fn infer_from_same_var_in_block(
+        &self,
+        callee: &Symbol,
+        call_id: ExprId,
+        type_params: &[Symbol],
+    ) -> Option<Vec<HirType>> {
+        for item in &self.hir.items {
+            if let HirItem::Fn(fn_def) = item {
+                if let Some(result) = self.find_in_block(&fn_def.body, callee, call_id, type_params)
+                {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    }
+
+    fn find_in_block(
+        &self,
+        expr: &HirExpr,
+        callee: &Symbol,
+        target_call_id: ExprId,
+        type_params: &[Symbol],
+    ) -> Option<Vec<HirType>> {
+        match expr {
+            HirExpr::Block { stmts, .. } => {
+                let mut found = false;
+                let mut target_var: Option<Symbol> = None;
+                for stmt in stmts {
+                    match stmt {
+                        HirStmt::Let { name, value, .. } if value.get_id() == target_call_id => {
+                            found = true;
+                            target_var = Some(*name);
+                            continue;
+                        }
+                        HirStmt::LetPat {
+                            pattern: HirPattern::Var(name),
+                            value,
+                            ..
+                        } if value.get_id() == target_call_id => {
+                            found = true;
+                            target_var = Some(*name);
+                            continue;
+                        }
+                        _ => {
+                            if found && let Some(var_sym) = target_var {
+                                if let HirStmt::Expr(inner) = stmt {
+                                    if let Some(args) = self.extract_type_args_from_call_on_var(
+                                        inner,
+                                        *callee,
+                                        var_sym,
+                                        type_params,
+                                    ) {
+                                        return Some(args);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            HirExpr::If {
+                then_branch,
+                else_branch,
+                ..
+            } => self
+                .find_in_block(then_branch, callee, target_call_id, type_params)
+                .or_else(|| {
+                    else_branch
+                        .as_ref()
+                        .and_then(|e| self.find_in_block(e, callee, target_call_id, type_params))
+                }),
+            HirExpr::While { body, .. } | HirExpr::ForIn { body, .. } => {
+                self.find_in_block(body, callee, target_call_id, type_params)
+            }
+            _ => None,
+        }
+    }
+
+    fn extract_type_args_from_call_on_var(
+        &self,
+        expr: &HirExpr,
+        _callee: Symbol,
+        var_sym: Symbol,
+        _type_params: &[Symbol],
+    ) -> Option<Vec<HirType>> {
+        match expr {
+            HirExpr::Call { args, .. } => {
+                if !args.is_empty() && {
+                    match &args[0] {
+                        HirExpr::Ident { name, .. } => *name == var_sym,
+                        _ => false,
+                    }
+                } {
+                    if let Some(cached) = self.call_type_args.get(&expr.get_id()) {
+                        if !cached.is_empty() {
+                            return Some(cached.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
         }
     }
 

@@ -266,6 +266,13 @@ impl<'a> MonoContext<'a> {
                                 self.queue_fn_specialization(*callee, concrete);
                             }
                         }
+
+                        // FALLBACK: try to infer type args from later calls on the same variable
+                        if sub.is_empty() && args.is_empty() {
+                            if let Some(concrete) = self.infer_from_same_var_in_block(callee, expr.get_id(), &fn_def.type_params) {
+                                self.queue_fn_specialization(*callee, concrete);
+                            }
+                        }
                     }
                 }
                 for a in args {
@@ -608,6 +615,18 @@ impl<'a> MonoContext<'a> {
             HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
                 for a in args {
                     self.scan_expr_for_struct_instantiations(a, current_sub);
+                }
+            }
+            HirExpr::SizeOf { target_type, .. } => {
+                if let HirType::Generic(sym, args) = target_type {
+                    if let Some(s) = self.find_struct(*sym) {
+                        let concrete_args = self.substitute_type_args(args, current_sub);
+                        let key = (*sym, concrete_args.clone());
+                        if !self.struct_specs.contains_key(&key) {
+                            let specialized = self.specialize_struct(&s, &concrete_args);
+                            self.struct_specs.insert(key, specialized);
+                        }
+                    }
                 }
             }
             _ => {}

@@ -107,7 +107,9 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::UnitLit { .. } => Some(cg.i64_type.const_int(0, false)),
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
         HirExpr::SizeOf { target_type, .. } => {
-            if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
+            if cg.resolve_struct_type(target_type).is_some() {
+                Some(cg.i64_type.const_int(8, false))
+            } else if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
                 Some(
                     llvm_type
                         .size_of()
@@ -311,9 +313,11 @@ pub(crate) fn codegen_expr<'ctx>(
                 .cloned()
                 .unwrap_or(HirType::Int);
 
-            // If the pointed type is a struct (including generic instantiations), deep copy it.
-            if let Some(st) = cg.resolve_struct_type(&pointed_ty) {
-                let ptr = cg
+            // Struct (or generic struct) values are represented as pointers.
+            // The in‑memory form of a `*mut StructName` slot is an i64 handle.
+            // Load that handle and return it as the value – no deep copy needed.
+            if cg.resolve_struct_type(&pointed_ty).is_some() {
+                let slot_addr = cg
                     .builder
                     .build_int_to_ptr(
                         ptr_val,
@@ -321,26 +325,12 @@ pub(crate) fn codegen_expr<'ctx>(
                         "deref_ptr",
                     )
                     .ok()?;
-                let size = st.size_of().unwrap_or(cg.i64_type.const_int(8, false));
-                let alloc_fn = cg
-                    .module
-                    .get_function("__glyim_alloc")
-                    .or_else(|| cg.module.get_function("malloc"))?;
-                let call_result = cg
+                let handle = cg
                     .builder
-                    .build_call(alloc_fn, &[size.into()], "deref_alloc")
+                    .build_load(cg.i64_type, slot_addr, "struct_handle")
                     .ok()?
-                    .try_as_basic_value();
-                let new_ptr = match call_result {
-                    inkwell::values::ValueKind::Basic(bv) => bv.into_pointer_value(),
-                    _ => return Some(cg.i64_type.const_int(0, false)),
-                };
-                let loaded = cg.builder.build_load(st, ptr, "struct_val").ok()?;
-                cg.builder.build_store(new_ptr, loaded).ok()?;
-                return cg
-                    .builder
-                    .build_ptr_to_int(new_ptr, cg.i64_type, "struct_ptr")
-                    .ok();
+                    .into_int_value();
+                return Some(handle);
             }
 
             // Non-struct type: load the value directly
