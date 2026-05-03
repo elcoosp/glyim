@@ -8,3 +8,4 @@ pub mod workspace;
 
 pub use error::PkgError;
 pub use manifest::{CacheConfig, Dependency, Package, PackageManifest, TargetConfig, Workspace};
+pub mod wasm_publish;

@@ -1374,6 +1374,7 @@ dependencies = [
 name = "glyim-pkg"
 version = "0.5.0"
 dependencies = [
+ "glyim-codegen-llvm",
  "glyim-interner",
  "glyim-macro-vfs",
  "hex",
