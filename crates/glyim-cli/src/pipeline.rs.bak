@@ -196,10 +196,6 @@ extern {
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    // Expand macros (e.g. @identity) before parsing
-    let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
     let parse_out = glyim_parse::parse(&source);
     info!("parsed {} items", parse_out.ast.items.len());
     if !parse_out.errors.is_empty() {
@@ -328,10 +324,6 @@ pub fn run_with_mode(
     target: Option<&str>,
 ) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    // Expand macros (e.g. @identity) before parsing
-    let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
@@ -399,10 +391,6 @@ pub fn build_with_mode(
     target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    // Expand macros (e.g. @identity) before parsing
-    let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
     let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -538,10 +526,6 @@ pub fn run_tests(
     include_ignored: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    // Expand macros (e.g. @identity) before parsing
-    let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(&source, input.parent().unwrap_or(std::path::Path::new(".")), &cas_dir)
-        .unwrap_or(source);
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
