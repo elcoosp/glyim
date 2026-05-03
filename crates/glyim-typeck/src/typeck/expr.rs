@@ -2,11 +2,11 @@ use crate::TypeChecker;
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
 use glyim_hir::HirBinOp;
+use glyim_hir::monomorphize::type_to_short_string;
 use glyim_hir::node::HirExpr;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
 use std::collections::HashMap;
-use glyim_hir::monomorphize::type_to_short_string;
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_expr(&mut self, expr: &HirExpr) -> Option<HirType> {
@@ -123,11 +123,35 @@ impl TypeChecker {
             HirExpr::Call {
                 id, callee, args, ..
             } => {
-                let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args);
-                if let Some(type_args) = inferred_args {
-                    self.call_type_args.insert(*id, type_args);
+                // If call_type_args already contains this id (from a MethodCall
+                // that was desugared into this Call), use the stored type args
+                // instead of inferring from the argument types again.
+                if let Some(type_args) = self.call_type_args.get(id).cloned() {
+                    let fn_def = self.fns.iter().find(|f| f.name == *callee).or_else(|| {
+                        self.impl_methods
+                            .values()
+                            .find_map(|ms| ms.iter().find(|m| m.name == *callee))
+                    });
+                    if let Some(fn_def) = fn_def {
+                        let mut sub = std::collections::HashMap::new();
+                        for (i, tp) in fn_def.type_params.iter().enumerate() {
+                            if let Some(ct) = type_args.get(i) {
+                                sub.insert(*tp, ct.clone());
+                            }
+                        }
+                        let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
+                        let ret_ty = glyim_hir::types::substitute_type(&ret, &sub);
+                        ret_ty
+                    } else {
+                        HirType::Int
+                    }
+                } else {
+                    let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args);
+                    if let Some(type_args) = inferred_args {
+                        self.call_type_args.insert(*id, type_args);
+                    }
+                    ret_ty
                 }
-                ret_ty
             }
             HirExpr::As {
                 expr, target_type, ..
@@ -181,19 +205,24 @@ impl TypeChecker {
                     _ => None,
                 };
                 if let Some(type_name) = type_sym {
-let base = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
-let base_sym = self.interner.intern(&base);
-let mangled = match &receiver_ty {
-    HirType::Generic(_, type_args) if !type_args.is_empty() => {
-        let suffix = type_args.iter()
-            .map(|a| type_to_short_string(a, &self.interner))
-            .collect::<Vec<_>>()
-            .join("_");
-        format!("{}__{}", base, suffix)
-    }
-    _ => base.clone(),
-};
-let _mangled_sym = self.interner.intern(&mangled);
+                    let base = format!(
+                        "{}_{}",
+                        self.interner.resolve(type_name),
+                        self.interner.resolve(*method_name)
+                    );
+                    let base_sym = self.interner.intern(&base);
+                    let mangled = match &receiver_ty {
+                        HirType::Generic(_, type_args) if !type_args.is_empty() => {
+                            let suffix = type_args
+                                .iter()
+                                .map(|a| type_to_short_string(a, &self.interner))
+                                .collect::<Vec<_>>()
+                                .join("_");
+                            format!("{}__{}", base, suffix)
+                        }
+                        _ => base.clone(),
+                    };
+                    let _mangled_sym = self.interner.intern(&mangled);
 
                     // (method_resolved removed)
                     eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
@@ -239,7 +268,7 @@ let _mangled_sym = self.interner.intern(&mangled);
                         }
                         let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                         let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
-                    // (method_resolved removed)
+                        // (method_resolved removed)
                         return concrete_ret;
                     }
                 }

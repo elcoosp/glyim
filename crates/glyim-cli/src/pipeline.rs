@@ -120,8 +120,22 @@ fn merge_mono_types(
     }
     // Generic → Named fallback
     for ty in &mut merged {
-        if let HirType::Generic(sym, _args) = ty {
-            *ty = HirType::Named(*sym);
+        if let HirType::Generic(sym, args) = ty {
+            let all_concrete = args.iter().all(|a| {
+                match a {
+                    HirType::Named(s) => {
+                        let s = interner.resolve(*s);
+                        !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
+                    }
+                    _ => true,
+                }
+            });
+            if all_concrete && !args.is_empty() {
+                let mangled = glyim_hir::monomorphize::mangle_type_name(interner, *sym, args);
+                *ty = HirType::Named(mangled);
+            } else {
+                *ty = HirType::Named(*sym);
+            }
         }
     }
     (merged, mono_result.hir)
