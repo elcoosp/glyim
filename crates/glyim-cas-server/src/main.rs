@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 
 // ── Shared application state ───────────────────────────────────────
 pub struct AppState {
-    store: Mutex<LocalContentStore>,
+    store: Arc<Mutex<LocalContentStore>>,
 }
 
 // ── Request/Response types ─────────────────────────────────────────
@@ -175,20 +175,22 @@ async fn status(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
-    let store =
-        LocalContentStore::new("./cas_store").expect("failed to create local content store");
+    let raw_store = LocalContentStore::new("./cas_store")
+        .expect("failed to create local content store");
+    let shared_store = Arc::new(Mutex::new(raw_store));
+
     let state = Arc::new(AppState {
-        store: Mutex::new(store),
+        store: shared_store.clone(),
     });
 
-    let app = Router::new()
+    // ── REST server on port 9090 ──────────────────────────────────
+    let rest_app = Router::new()
         .route("/blob", post(store_blob))
         .route("/blob/{hash}", get(retrieve_blob))
         .route("/blob/missing", post(find_missing_blobs))
@@ -200,11 +202,38 @@ async fn main() -> std::io::Result<()> {
         .route("/verify-wasm", post(verify::verify_wasm))
         .with_state(state);
 
-    let addr = "127.0.0.1:9090";
-    tracing::info!("Starting glyim-cas-server on http://{}", addr);
+    let rest_addr = "127.0.0.1:9090";
+    tracing::info!("Starting REST server on http://{}", rest_addr);
+    let rest_listener = tokio::net::TcpListener::bind(rest_addr).await?;
+    let rest_handle = tokio::spawn(async move {
+        axum::serve(rest_listener, rest_app).await.unwrap();
+    });
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    // ── gRPC server on port 9091 ─────────────────────────────────
+    let cas_service = grpc::cas::CasService { store: shared_store.clone() };
+    let capabilities_service = grpc::capabilities::CapabilitiesService::default();
+
+    let grpc_addr = "127.0.0.1:9091".parse().unwrap();
+    tracing::info!("Starting gRPC server on {}", grpc_addr);
+
+    let grpc_handle = tokio::spawn(async move {
+        tonic::transport::Server::builder()
+            .add_service(
+                bazel_remote_apis::build::bazel::remote::execution::v2::capabilities_server::CapabilitiesServer::new(capabilities_service),
+            )
+            .add_service(
+                bazel_remote_apis::build::bazel::remote::execution::v2::content_addressable_storage_server::ContentAddressableStorageServer::new(cas_service),
+            )
+            .serve(grpc_addr)
+            .await
+            .unwrap();
+    });
+
+    // Wait for both servers
+    tokio::select! {
+        _ = rest_handle => {},
+        _ = grpc_handle => {},
+    }
 
     Ok(())
 }

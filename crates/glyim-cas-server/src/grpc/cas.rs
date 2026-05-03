@@ -14,7 +14,7 @@ use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
 use std::sync::Arc;
 
 pub struct CasService {
-    pub store: Arc<LocalContentStore>,
+    pub store: Arc<tokio::sync::Mutex<LocalContentStore>>,
 }
 
 impl CasService {
@@ -39,7 +39,7 @@ impl ContentAddressableStorage for CasService {
         for blob_digest in &req.blob_digests {
             let hash: Option<ContentHash> = blob_digest.hash.parse().ok();
             if let Some(h) = hash {
-                if self.store.retrieve(h).is_none() {
+                if self.store.lock().await.retrieve(h).is_none() {
                     missing.push(blob_digest.clone());
                 }
             } else {
@@ -61,7 +61,7 @@ impl ContentAddressableStorage for CasService {
 
         for upload in &req.requests {
             let digest = upload.digest.clone();
-            let stored_hash = self.store.store(&upload.data);
+            let stored_hash = self.store.lock().await.store(&upload.data);
             let expected_hash: Option<ContentHash> = digest.as_ref().and_then(|d| d.hash.parse().ok());
 
             let status = if let Some(expected) = expected_hash {
@@ -91,9 +91,12 @@ impl ContentAddressableStorage for CasService {
         let mut responses = Vec::new();
 
         for digest in &req.digests {
-            let data = digest.hash.parse::<ContentHash>().ok()
-                .and_then(|h| self.store.retrieve(h))
-                .unwrap_or_default();
+            let data = {
+                let store_guard = self.store.lock().await;
+                digest.hash.parse::<ContentHash>().ok()
+                    .and_then(|h| store_guard.retrieve(h))
+                    .unwrap_or_default()
+            };
 
             let status = if data.is_empty() {
                 Some(Self::grpc_status(tonic::Code::NotFound, "blob not found"))
@@ -148,9 +151,9 @@ mod tests {
     use super::*;
     use tonic::Request;
 
-    fn test_store() -> Arc<LocalContentStore> {
+    fn test_store() -> Arc<tokio::sync::Mutex<LocalContentStore>> {
         let dir = tempfile::tempdir().unwrap();
-        Arc::new(LocalContentStore::new(dir.path()).unwrap())
+        Arc::new(tokio::sync::Mutex::new(LocalContentStore::new(dir.path()).unwrap()))
     }
 
     #[tokio::test]
@@ -159,7 +162,7 @@ mod tests {
         let svc = CasService { store: store.clone() };
 
         let data = b"hello";
-        let hash = store.store(data);
+        let hash = store.lock().await.store(data);
 
         let req = FindMissingBlobsRequest {
             instance_name: String::new(),

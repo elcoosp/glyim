@@ -27,9 +27,15 @@ impl<'a> MonoContext<'a> {
 
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
+        // Strip concrete suffix to obtain base name (e.g. HashMap_insert__i64_i64 -> HashMap_insert)
+        let base_name = if let Some(pos) = name_str.rfind("__") {
+            self.interner.intern(&name_str[..pos])
+        } else {
+            name
+        };
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item
-                && f.name == name
+                && f.name == base_name
             {
                 return Some(f.clone());
             }
@@ -37,7 +43,7 @@ impl<'a> MonoContext<'a> {
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
-                    if m.name == name {
+                    if m.name == base_name {
                         return Some(m.clone());
                     }
                 }
