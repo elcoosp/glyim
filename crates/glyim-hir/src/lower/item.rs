@@ -8,6 +8,16 @@ use crate::types::HirType;
 use crate::HirFn;
 use glyim_parse::Item;
 
+/// Check the declaration table for a type name, returning true if it
+/// is known to be a struct (as opposed to an enum or unknown).
+fn is_known_struct(ctx: &LoweringContext, name: glyim_interner::Symbol) -> bool {
+    ctx.struct_names.contains(&name)
+        || ctx.decl_table
+            .and_then(|dt| dt.structs.get(&name))
+            .is_some()
+}
+
+
 pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
     match item {
         Item::Binding {

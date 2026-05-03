@@ -1,3 +1,4 @@
+use crate::decl_table::DeclTable;
 use crate::types::ExprId;
 use glyim_interner::Interner;
 use glyim_interner::Symbol;
@@ -9,6 +10,7 @@ pub struct LoweringContext<'a> {
     pub interner: &'a mut Interner,
     next_id: u32,
     pub struct_names: HashSet<Symbol>,
+    pub decl_table: Option<&'a crate::decl_table::DeclTable>,
 }
 
 impl<'a> LoweringContext<'a> {
@@ -17,7 +19,18 @@ impl<'a> LoweringContext<'a> {
             interner,
             next_id: 0,
             struct_names: HashSet::new(),
+            decl_table: None,
         }
+    }
+
+    /// Create a context that also holds a pre-built declaration table.
+    pub fn with_decl_table(
+        interner: &'a mut Interner,
+        decl_table: &'a crate::decl_table::DeclTable,
+    ) -> Self {
+        let mut ctx = Self::new(interner);
+        ctx.decl_table = Some(decl_table);
+        ctx
     }
 
     /// Generate a fresh expression ID
