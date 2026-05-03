@@ -18,8 +18,8 @@ impl<'a> MonoContext<'a> {
                         if !imp.type_params.is_empty() {
                             let mangled = format!(
                                 "_{}_{}",
-                                self.interner.resolve(interner.resolve(imp.target_name).unwrap_or(
-                                    Some(imp.target_name).unwrap_or(interner.intern(""))
+                                self.interner.resolve(imp.self_ty.get_name().unwrap_or(
+                                    imp.self_ty.as_named().unwrap_or(Symbol::intern(""))
                                 )),
                                 self.interner.resolve(m.name)
                             );
