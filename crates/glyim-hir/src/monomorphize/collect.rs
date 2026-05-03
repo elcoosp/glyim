@@ -353,8 +353,13 @@ impl<'a> MonoContext<'a> {
             HirExpr::Return { value: Some(v), .. } => {
                 self.scan_expr_for_generic_calls(v, current_sub)
             }
-            HirExpr::StructLit { fields, .. } => {
-                for (_, f) in fields {
+            HirExpr::StructLit { struct_name, fields, .. } => {
+                for (field_sym, f) in fields {
+                    if let HirExpr::Call { callee, args, .. } = f {
+                        if args.is_empty() {
+                            self.try_infer_call_from_struct_field(*callee, *struct_name, *field_sym, current_sub);
+                        }
+                    }
                     self.scan_expr_for_generic_calls(f, current_sub);
                 }
             }
@@ -399,6 +404,47 @@ impl<'a> MonoContext<'a> {
             _ => {}
         }
     }
+
+    /// Try to infer concrete type args for a zero‑argument generic call based on
+    /// the expected type of a struct field.
+    fn try_infer_call_from_struct_field(
+        &mut self,
+        callee: Symbol,
+        struct_name: Symbol,
+        field_sym: Symbol,
+        current_sub: &HashMap<Symbol, HirType>,
+    ) {
+        // Only attempt if the function has type parameters.
+        if let Some(fn_def) = self.find_fn(callee) {
+            if fn_def.type_params.is_empty() {
+                return;
+            }
+            // Get the struct definition.
+            if let Some(struct_def) = self.find_struct(struct_name) {
+                // Find the field and its type.
+                if let Some(field) = struct_def.fields.iter().find(|f| f.name == field_sym) {
+                    let field_ty = crate::types::substitute_type(&field.ty, current_sub);
+                    // The function's return type should match the field type.
+                    if let Some(ret_ty) = &fn_def.ret {
+                        let mut sub = HashMap::new();
+                        Self::extract_type_substitutions(
+                            ret_ty,
+                            &field_ty,
+                            &fn_def.type_params,
+                            &mut sub,
+                        );
+                        if sub.len() == fn_def.type_params.len() {
+                            let concrete: Vec<HirType> = fn_def.type_params.iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                .collect();
+                            self.queue_fn_specialization(callee, concrete);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     pub(crate) fn scan_expr_for_struct_instantiations(
         &mut self,
