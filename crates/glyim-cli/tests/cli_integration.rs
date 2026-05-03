@@ -141,3 +141,34 @@ fn cli_build_produces_message() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Built:"));
 }
+
+#[test]
+fn cli_publish_wasm_stores_blob() {
+    let Some(bin) = glyim_bin() else { return; };
+    let dir = tempfile::tempdir().unwrap();
+    let toml_content = "[package]\nname = \"testpkg\"\nversion = \"0.1.0\"\n";
+    std::fs::write(dir.path().join("glyim.toml"), toml_content).unwrap();
+    let src_dir = dir.path().join("src");
+    std::fs::create_dir(&src_dir).unwrap();
+    let source = "fn main() -> i64 { 42 }";
+    std::fs::write(src_dir.join("main.g"), source).unwrap();
+
+    let output = std::process::Command::new(bin)
+        .arg("publish")
+        .arg("--wasm")
+        .current_dir(dir.path())
+        .output()
+        .expect("failed to run glyim publish --wasm");
+    assert!(output.status.success(), "publish --wasm exited with: {}", output.status);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Macro Wasm content hash:"), "missing hash in output:\nstdout: {}\nstderr: {}", String::from_utf8_lossy(&output.stdout), stderr);
+}
+
+#[test]
+fn cli_macro_inspect_shows_expansion() {
+    let output = try_glyim!(&["macro-inspect"], "@identity(main = () => 42)");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Expanded:"), "missing Expanded section");
+    assert!(stdout.contains("main = () => 42"), "missing expanded content");
+}
+
