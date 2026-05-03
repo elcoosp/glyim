@@ -19,5 +19,6 @@ libc = "0.2"
 llvm-sys = "221"
 
 [dev-dependencies]
+wat = "1"
 insta = { version = "1", features = ["yaml"] }
 glyim-parse = { path = "../glyim-parse" }

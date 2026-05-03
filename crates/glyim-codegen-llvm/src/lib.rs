@@ -219,3 +219,4 @@ Got:
         );
     }
 }
+pub mod wasm_abi;
