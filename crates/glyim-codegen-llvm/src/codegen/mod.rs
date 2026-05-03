@@ -240,7 +240,19 @@ impl<'ctx> Codegen<'ctx> {
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
             match item {
-                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                glyim_hir::item::HirItem::Struct(s) => {
+                    types::codegen_struct_def(self, s);
+                    // Also register under base name for generic structs (all fields are i64)
+                    if !s.type_params.is_empty() {
+                        let base_name = s.name;
+                        if !self.struct_types.borrow().contains_key(&base_name) {
+                            let fields: Vec<inkwell::types::BasicTypeEnum> =
+                                s.fields.iter().map(|_| self.i64_type.into()).collect();
+                            let st = self.context.struct_type(&fields, false);
+                            self.struct_types.borrow_mut().insert(base_name, st);
+                        }
+                    }
+                },
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
@@ -475,7 +487,19 @@ impl<'ctx> Codegen<'ctx> {
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
             match item {
-                glyim_hir::item::HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                glyim_hir::item::HirItem::Struct(s) => {
+                    types::codegen_struct_def(self, s);
+                    // Also register under base name for generic structs (all fields are i64)
+                    if !s.type_params.is_empty() {
+                        let base_name = s.name;
+                        if !self.struct_types.borrow().contains_key(&base_name) {
+                            let fields: Vec<inkwell::types::BasicTypeEnum> =
+                                s.fields.iter().map(|_| self.i64_type.into()).collect();
+                            let st = self.context.struct_type(&fields, false);
+                            self.struct_types.borrow_mut().insert(base_name, st);
+                        }
+                    }
+                },
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {

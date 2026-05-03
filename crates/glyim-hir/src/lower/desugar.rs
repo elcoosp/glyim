@@ -74,16 +74,26 @@ fn desugar_expr(
             // Only append suffix if all type args are concrete (no unresolved type params).
             let mangled = match &receiver_ty {
                 HirType::Generic(_, type_args) if !type_args.is_empty() => {
-                    let all_concrete = type_args.iter().all(|a| {
-                        match a {
+                    fn is_concrete(ty: &HirType, interner: &Interner) -> bool {
+                        match ty {
                             HirType::Named(sym) => {
                                 let s = interner.resolve(*sym);
-                                // single uppercase letter = type param
-                                !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
+                                // single uppercase letter → type parameter
+                                if s.len() == 1 && s.chars().next().unwrap().is_uppercase() {
+                                    false
+                                } else {
+                                    true
+                                }
                             }
+                            HirType::Generic(_, args) => args.iter().all(|a| is_concrete(a, interner)),
+                            HirType::Tuple(elems) => elems.iter().all(|e| is_concrete(e, interner)),
+                            HirType::RawPtr(inner) => is_concrete(inner, interner),
+                            HirType::Option(inner) => is_concrete(inner, interner),
+                            HirType::Result(ok, err) => is_concrete(ok, interner) && is_concrete(err, interner),
                             _ => true,
                         }
-                    });
+                    }
+                    let all_concrete = type_args.iter().all(|a| is_concrete(a, interner));
                     if all_concrete {
                         let suffix = type_args.iter()
                             .map(|a| concrete_type_name(a, interner))

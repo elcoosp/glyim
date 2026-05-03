@@ -63,16 +63,13 @@ pub(crate) fn codegen_struct_lit<'ctx>(
                 };
                 for (i, (_fn, fe)) in fields.iter().enumerate() {
                     let fv = codegen_expr(cg, fe, fctx)?;
-                    let indices = &[
-                        cg.i32_type.const_int(0, false),
-                        cg.i32_type.const_int(i as u64, false),
-                    ];
-                    let i8_ptr = unsafe {
+                    let offset_val = cg.i64_type.const_int((i as u64) * 8, false);
+                    let field_ptr = unsafe {
                         cg.builder
-                            .build_gep(cg.context.i8_type(), ptr, indices, "field")
+                            .build_gep(cg.context.i8_type(), ptr, &[offset_val], "field")
                             .ok()?
                     };
-                    cg.builder.build_store(i8_ptr, fv).ok()?;
+                    cg.builder.build_store(field_ptr, fv).ok()?;
                 }
                 cg.builder
                     .build_ptr_to_int(ptr, cg.i64_type, "struct_ptr")

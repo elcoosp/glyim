@@ -129,9 +129,18 @@ impl<'a> MonoContext<'a> {
             // `HashMap_grow__K_V` and forces call rewriting to use the concrete one).
             let mangled = self.mangle_name(*orig_name, args);
             let mangled_str = self.interner.resolve(mangled);
+            // Skip specialisations where any type argument is still a type parameter
+            // (i.e. a single uppercase letter that is not a known concrete type).
+            let has_unresolved = args.iter().any(|a| {
+                matches!(a, HirType::Named(sym) if {
+                    let s = self.interner.resolve(*sym);
+                    s.len() == 1 && s.chars().next().unwrap().is_uppercase()
+                })
+            });
             if mangled_str.contains("_K_")
                 || mangled_str.contains("_V_")
                 || mangled_str.contains("_T_")
+                || has_unresolved
             {
                 continue;
             }

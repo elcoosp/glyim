@@ -26,6 +26,11 @@ impl<'a> MonoContext<'a> {
             *rt = crate::types::substitute_type(rt, &sub);
         }
         mono.body = self.substitute_expr_types(&mono.body, &sub);
+
+        // Transitive specialization: re‑scan the substituted body for newly concrete calls.
+        self.scan_expr_for_generic_calls(&mono.body);
+        self.scan_expr_for_struct_instantiations(&mono.body);
+
         mono
     }
 
