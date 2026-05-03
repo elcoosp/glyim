@@ -1363,3 +1363,35 @@ fn main() -> i64 { 0 }
     let input = temp_g(src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 0);
 }
+
+
+// ── Doc generator tests ──────────────────────────────────────────
+
+#[test]
+fn e2e_doc_generator_func() {
+    let src = r#"
+// Adds two integers together.
+//
+// # Examples
+//
+//     let result = add(1, 2)
+//     assert(result == 3)
+fn add(a: i64, b: i64) -> i64 { a + b }
+main = () => add(1, 2)
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let source_path = dir.path().join("test.g");
+    std::fs::write(&source_path, src).unwrap();
+
+    let doc_dir = dir.path().join("doc");
+    let result = pipeline::generate_doc(&source_path, Some(&doc_dir));
+    assert!(result.is_ok());
+
+    let index_html = doc_dir.join("index.html");
+    assert!(index_html.exists());
+    let html = std::fs::read_to_string(&index_html).unwrap();
+    assert!(html.contains("Adds two integers"));
+    assert!(html.contains("add"));
+    assert!(html.contains("Examples"));
+    assert!(html.contains("<code>"));
+}

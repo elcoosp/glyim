@@ -503,6 +503,33 @@ pub fn find_package_root(start: &Path) -> Option<PathBuf> {
         }
     }
 }
+use glyim_hir::attach_doc_comments;
+use glyim_lex::tokenize as lex_tokenize;
+
+/// Generate documentation for the given source file.
+#[allow(dead_code)]
+pub fn generate_doc(
+    input: &Path,
+    output_dir: Option<&Path>,
+) -> Result<(), PipelineError> {
+    let (source, _) = load_source_with_prelude(input)?;
+    let parse_out = glyim_parse::parse(&source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+    glyim_hir::attach_doc_comments(&mut hir, &lex_tokenize(&source));
+
+    let html = glyim_doc::generate_html(&hir, &interner);
+    let out_dir = output_dir.unwrap_or_else(|| Path::new("doc"));
+    std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;
+    let index_path = out_dir.join("index.html");
+    std::fs::write(&index_path, html).map_err(PipelineError::Io)?;
+    Ok(())
+}
+
+
 #[cfg(test)]
 mod root_tests;
 
@@ -808,6 +835,33 @@ fn which(cmd: &str) -> bool {
         .status()
         .is_ok_and(|s| s.success())
 }
+use glyim_hir::attach_doc_comments;
+use glyim_lex::tokenize as lex_tokenize;
+
+/// Generate documentation for the given source file.
+#[allow(dead_code)]
+pub fn generate_doc(
+    input: &Path,
+    output_dir: Option<&Path>,
+) -> Result<(), PipelineError> {
+    let (source, _) = load_source_with_prelude(input)?;
+    let parse_out = glyim_parse::parse(&source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+    glyim_hir::attach_doc_comments(&mut hir, &lex_tokenize(&source));
+
+    let html = glyim_doc::generate_html(&hir, &interner);
+    let out_dir = output_dir.unwrap_or_else(|| Path::new("doc"));
+    std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;
+    let index_path = out_dir.join("index.html");
+    std::fs::write(&index_path, html).map_err(PipelineError::Io)?;
+    Ok(())
+}
+
+
 #[cfg(test)]
 mod no_std_tests;
 
