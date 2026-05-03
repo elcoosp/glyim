@@ -34,7 +34,8 @@ impl<'a> MonoContext<'a> {
         let struct_mangle_map: HashMap<Symbol, Symbol> = struct_mangled_names.into_iter().collect();
         let original_items: Vec<crate::item::HirItem> = self.hir.items.iter().filter_map(|item| match item {
             HirItem::Fn(_) | HirItem::Struct(_) | HirItem::Enum(_) | HirItem::Extern(_) => Some(item.clone()),
-            HirItem::Impl(imp) if !imp.methods.is_empty() => Some(item.clone()),
+            // Only keep impl items if they have NO type_params (non-generic methods)
+            HirItem::Impl(imp) if !imp.methods.is_empty() && imp.type_params.is_empty() => Some(item.clone()),
             _ => None,
         }).collect();
         for item in &original_items {
@@ -43,7 +44,16 @@ impl<'a> MonoContext<'a> {
                 HirItem::Struct(s) => items.push(HirItem::Struct(s.clone())),
                 HirItem::Enum(e) => items.push(HirItem::Enum(e.clone())),
                 HirItem::Extern(e) => items.push(HirItem::Extern(e.clone())),
-                HirItem::Impl(imp) => { for m in &imp.methods { if m.type_params.is_empty() { let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map); items.push(HirItem::Fn(rewritten)); } } }
+                HirItem::Impl(imp) => {
+                    // Only keep non-generic methods from impl blocks.
+                    // Generic methods should have been specialized and added as separate Fn items.
+                    for m in &imp.methods {
+                        if m.type_params.is_empty() {
+                            let rewritten = self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map);
+                            items.push(HirItem::Fn(rewritten));
+                        }
+                    }
+                }
             }
         }
         let fn_specs_clone: Vec<_> = self.fn_specs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();

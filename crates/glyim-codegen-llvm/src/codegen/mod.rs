@@ -194,6 +194,22 @@ impl<'ctx> Codegen<'ctx> {
 
     #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
+        eprintln!("[codegen generate] =======================");
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    eprintln!("[codegen generate] Fn: {} (type_params={:?})", self.interner.resolve(f.name), f.type_params);
+                }
+                glyim_hir::item::HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        eprintln!("[codegen generate] Impl method: {}", self.interner.resolve(m.name));
+                    }
+                }
+                _ => {}
+            }
+        }
+        eprintln!("[codegen generate] =======================");
+
         eprintln!("[codegen] generate() received {} items:", hir.items.len());
         for item in &hir.items {
             match item {

@@ -9,8 +9,6 @@ fn temp_g(content: &str) -> PathBuf {
     path
 }
 
-
-
 // ─── longjmp-based assert/abort catching ──────────────────────────
 use std::sync::Mutex;
 
@@ -284,11 +282,13 @@ fn e2e_invalid_cast_fails() {
 }
 #[test]
 fn e2e_wrong_field_fails() {
-    assert!(pipeline::run(
-        &temp_g("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }"),
-        None
-    )
-    .is_err());
+    assert!(
+        pipeline::run(
+            &temp_g("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }"),
+            None
+        )
+        .is_err()
+    );
 }
 #[test]
 fn e2e_generic_edge() {
@@ -1112,7 +1112,47 @@ main = () => {
     assert_eq!(pipeline::run(&input, None).unwrap(), 2);
 }
 
+// ── for‑loop iteration tests ─────────────────────────────────
+
 #[test]
+fn e2e_for_loop_range() {
+    let range_src = include_str!("../../../stdlib/src/range.g");
+    let main_code = r#"
+main = () => {
+    let r = Range::new(0, 3);
+    let mut sum = 0;
+    for i in r {
+        sum = sum + i
+    };
+    sum
+}
+"#;
+    let full_src = format!("{}\n{}", range_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 3);
+}
+
+#[test]
+fn e2e_for_loop_vec() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let iter_src = include_str!("../../../stdlib/src/iter.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(10);
+    let v = v.push(20);
+    let v = v.push(30);
+    let mut sum = 0;
+    for x in v.iter() {
+        sum = sum + x
+    };
+    sum
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, iter_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 60);
+}
 fn e2e_hashmap_basic() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
@@ -1182,4 +1222,46 @@ fn e2e_conditional_param(#[case] source: &str, #[case] expected: i32) {
 #[case("fn id<T>(x: T) -> T { x }\nmain = () => id(true)", 1)]
 fn e2e_generic_param(#[case] source: &str, #[case] expected: i32) {
     assert_eq!(pipeline::run(&temp_g(source), None).unwrap(), expected);
+}
+
+#[test]
+fn e2e_for_loop_iter_simple() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let iter_src = include_str!("../../../stdlib/src/iter.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(10);
+    let it = v.iter();
+    let val = it.next();
+    match val {
+        Some(x) => x,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, iter_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 10);
+}
+
+#[test]
+fn e2e_iter_next_direct() {
+    let iter_src = include_str!("../../../stdlib/src/iter.g");
+    let main_code = r#"
+main = () => {
+    // Allocate a single i64 on the heap via the alloc shim
+    let ptr = __glyim_alloc(8) as *mut i64;
+    *ptr = 99;
+    let it: Iter<i64> = Iter::new(ptr, 1);
+    let val = it.next();
+    match val {
+        Some(x) => x,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}", iter_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 99);
 }

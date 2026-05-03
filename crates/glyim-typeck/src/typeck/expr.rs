@@ -186,6 +186,11 @@ impl TypeChecker {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
+                    eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
+                    eprintln!("[typeck MethodCall] mangled name: {}", mangled);
+                    eprintln!("[typeck MethodCall] known impl_methods for {:?}: {:?}",
+                        type_name,
+                        self.impl_methods.get(&type_name).map(|ms| ms.iter().map(|f| self.interner.resolve(f.name)).collect::<Vec<_>>()));
                     if let Some(methods) = self.impl_methods.get(&type_name) {
                         if let Some(fn_def) = methods.iter().find(|f| f.name == mangled_sym) {
                             let mut sub = std::collections::HashMap::new();

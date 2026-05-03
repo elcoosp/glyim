@@ -380,6 +380,7 @@ pub(crate) fn codegen_expr<'ctx>(
             args,
             ..
         } => {
+            eprintln!("[codegen MethodCall] method_name={}", cg.interner.resolve(*method_name));
             // Check if this method is backed by an extern function
             if let Some(extern_name) = cg.extern_methods.get(method_name).copied() {
                 let mut all_args = vec![receiver.as_ref().clone()];
