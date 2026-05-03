@@ -12,9 +12,11 @@ wasmtime-wasi = "44"
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 anyhow = "1"
 sha2 = "0.11"
+hex = "0.4"
 glyim-syntax = { path = "../glyim-syntax" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
 
 [dev-dependencies]
 wat = "1"
+tempfile = "3"
