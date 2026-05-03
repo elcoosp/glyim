@@ -38,6 +38,7 @@ glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
 glyim-doc = { path = "../glyim-doc" }
+webbrowser = "0.8"
 inkwell = { version = "0.9", features = ["llvm22-1"] }
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"

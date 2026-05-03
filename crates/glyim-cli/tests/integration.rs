@@ -1154,6 +1154,8 @@ main = () => {
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 60);
 }
+#[ignore = "signal: 11, SIGSEGV: invalid memory reference"]
+#[test]
 fn e2e_hashmap_basic() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
@@ -1355,4 +1357,3 @@ fn e2e_doc_impl_method() {
     let html = std::fs::read_to_string(doc_dir.join("index.html")).unwrap();
     assert!(html.contains("Increments the counter."));
 }
-

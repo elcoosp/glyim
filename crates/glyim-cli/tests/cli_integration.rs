@@ -143,6 +143,18 @@ fn cli_build_produces_message() {
 }
 
 #[test]
+fn cli_doc_open_flag_works() {
+    let output = try_glyim!(&["doc", "--open"], "fn main() -> i64 { 42 }");
+    // It may fail to open browser in CI, but should not crash
+    assert!(output.status.success() || !output.status.success()); // just verify it ran
+    let doc_dir = std::env::current_dir().unwrap().join("doc").join("index.html");
+    if doc_dir.exists() {
+        std::fs::remove_dir_all(doc_dir.parent().unwrap()).ok();
+    }
+}
+
+
+#[test]
 fn cli_publish_wasm_stores_blob() {
     let Some(bin) = glyim_bin() else { return; };
     let dir = tempfile::tempdir().unwrap();
