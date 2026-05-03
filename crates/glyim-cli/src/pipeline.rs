@@ -38,6 +38,7 @@ pub enum PipelineError {
     Link(String),
     Run(std::io::Error),
     Manifest(crate::manifest::ManifestError),
+    MissingSysroot(String),
 }
 impl std::fmt::Display for PipelineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,6 +62,7 @@ impl std::fmt::Display for PipelineError {
             Self::Link(msg) => write!(f, "linker error: {msg}"),
             Self::Run(e) => write!(f, "execution error: {e}"),
             Self::Manifest(e) => write!(f, "manifest error: {e}"),
+            Self::MissingSysroot(msg) => write!(f, "sysroot error: {msg}"),
         }
     }
 }
@@ -392,6 +394,7 @@ pub fn run_with_mode(
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
+            crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -474,6 +477,7 @@ pub fn build_with_mode(
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
+            crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {

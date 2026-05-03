@@ -44,3 +44,17 @@ pub fn sysroot_dir(triple: &str) -> PathBuf {
         .join("sysroots")
         .join(triple)
 }
+
+/// Check if the sysroot for the given target triple exists, printing a helpful message if not.
+pub fn ensure_sysroot(triple: &str) -> Result<(), String> {
+    let sysroot = sysroot_dir(triple);
+    if !sysroot.exists() {
+        return Err(format!(
+            "Sysroot for '{triple}' not found at {}.
+Please download it or run `glyim sysroot install {triple}`.",
+            sysroot.display()
+        ));
+    }
+    Ok(())
+}
+
