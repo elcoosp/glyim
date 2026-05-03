@@ -1134,8 +1134,8 @@ main = () => {
 
 #[test]
 fn e2e_for_loop_vec() {
-    let vec_src = include_str!("../../../stdlib/src/vec.g");
     let iter_src = include_str!("../../../stdlib/src/iter.g");
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
     let main_code = r#"
 main = () => {
     let v: Vec<i64> = Vec::new();
@@ -1149,7 +1149,7 @@ main = () => {
     sum
 }
 "#;
-    let full_src = format!("{}\n{}\n{}", vec_src, iter_src, main_code);
+    let full_src = format!("{}\n{}\n{}", iter_src, vec_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 60);
 }
@@ -1226,8 +1226,8 @@ fn e2e_generic_param(#[case] source: &str, #[case] expected: i32) {
 
 #[test]
 fn e2e_for_loop_iter_simple() {
-    let vec_src = include_str!("../../../stdlib/src/vec.g");
     let iter_src = include_str!("../../../stdlib/src/iter.g");
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
     let main_code = r#"
 main = () => {
     let v: Vec<i64> = Vec::new();
@@ -1240,7 +1240,7 @@ main = () => {
     }
 }
 "#;
-    let full_src = format!("{}\n{}\n{}", vec_src, iter_src, main_code);
+    let full_src = format!("{}\n{}\n{}", iter_src, vec_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 10);
 }

@@ -123,7 +123,21 @@ impl<'a> Parser<'a> {
 
     #[allow(dead_code)]
     #[tracing::instrument(skip_all)]
-    pub fn parse_source_file_recovery(&mut self) -> Ast {
+    
+    /// Parse only declarations, skipping function bodies.
+    pub fn parse_source_file_declarations_only(&mut self) -> Ast {
+        let mut items = vec![];
+        while !self.tokens.is_eof() {
+            if let Some(item) = items::parse_item_declaration(self) {
+                items.push(item);
+            } else {
+                self.tokens.bump();
+            }
+        }
+        Ast { items }
+    }
+
+pub fn parse_source_file_recovery(&mut self) -> Ast {
         let mut items = vec![];
         while !self.tokens.is_eof() {
             if let Some(item) = items::parse_item(self) {
@@ -163,8 +177,8 @@ pub fn parse(source: &str) -> ParseOutput {
 }
 
 #[derive(Debug)]
-pub struct ParseOutput {
-    pub ast: Ast,
+pub struct ParseOutput<T = Ast> {
+    pub ast: T,
     pub errors: Vec<ParseError>,
     pub interner: Interner,
 }

@@ -13,3 +13,4 @@ pub use ast::{
 };
 pub use error::ParseError;
 pub use parser::{parse, ParseOutput};
+pub mod declarations;
