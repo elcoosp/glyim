@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 impl<'a> MonoContext<'a> {
     /// Looks up the type parameters for a function from the original HIR.
-    fn get_fn_type_params(&self, name: Symbol) -> Vec<Symbol> {
+    fn get_fn_type_params(&mut self, name: Symbol) -> Vec<Symbol> {
         for item in &self.hir.items {
             match item {
                 HirItem::Fn(f) if f.name == name => {
