@@ -139,6 +139,12 @@ pub fn generate_html(hir: &Hir, interner: &Interner) -> String {
                 html.push_str(&format!("<h2>struct {}</h2>\n", interner.resolve(s.name)));
                 html.push_str("<ul>\n");
                 for field in &s.fields {
+                    if let Some(ref doc) = field.doc {
+                        html.push_str("<div class=\"doc-comment\">");
+                        let parser = Parser::new(doc);
+                        html::push_html(&mut html, parser);
+                        html.push_str("</div>\n");
+                    }
                     html.push_str(&format!("  <li>{}</li>\n", interner.resolve(field.name)));
                 }
                 html.push_str("</ul>\n");
@@ -153,6 +159,12 @@ pub fn generate_html(hir: &Hir, interner: &Interner) -> String {
                 html.push_str(&format!("<h2>enum {}</h2>\n", interner.resolve(e.name)));
                 html.push_str("<ul>\n");
                 for variant in &e.variants {
+                    if let Some(ref doc) = variant.doc {
+                        html.push_str("<div class=\"doc-comment\">");
+                        let parser = Parser::new(doc);
+                        html::push_html(&mut html, parser);
+                        html.push_str("</div>\n");
+                    }
                     html.push_str(&format!("  <li>{}</li>\n", interner.resolve(variant.name)));
                 }
                 html.push_str("</ul>\n");

@@ -193,9 +193,9 @@ let mangled = match &receiver_ty {
     }
     _ => base.clone(),
 };
-let mangled_sym = self.interner.intern(&mangled);
+let _mangled_sym = self.interner.intern(&mangled);
 
-                    self.method_resolved.insert(*id, mangled_sym);
+                    // (method_resolved removed)
                     eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
                     eprintln!("[typeck MethodCall] mangled name: {}", mangled);
                     eprintln!(
@@ -239,7 +239,7 @@ let mangled_sym = self.interner.intern(&mangled);
                         }
                         let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                         let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
-                        self.method_resolved.insert(*id, mangled_sym);
+                    // (method_resolved removed)
                         return concrete_ret;
                     }
                 }

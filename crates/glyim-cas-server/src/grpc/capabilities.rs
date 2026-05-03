@@ -7,6 +7,7 @@ use bazel_remote_apis::build::bazel::remote::execution::v2::{
 use bazel_remote_apis::build::bazel::semver::SemVer;
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct CapabilitiesService;
 
 #[tonic::async_trait]

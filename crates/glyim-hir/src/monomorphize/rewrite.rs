@@ -142,14 +142,39 @@ impl<'a> MonoContext<'a> {
                 struct_name,
                 fields,
                 span,
-            } => HirExpr::StructLit {
-                id: *id,
-                struct_name: *struct_name,
-                fields: fields
-                    .iter()
-                    .map(|(s, e)| (*s, self.substitute_expr_types(e, sub)))
-                    .collect(),
-                span: *span,
+            } => {
+                // Compute the substituted struct name using the current type substitution.
+                let new_name = if let Some(struct_def) = self.find_struct(*struct_name) {
+                    if !struct_def.type_params.is_empty() && !sub.is_empty() {
+                        // Determine the concrete type arguments from the substitution.
+                        let concrete: Vec<HirType> = struct_def.type_params.iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                            .collect();
+                        // Check if all args are concrete (no unresolved params).
+                        let all_concrete = concrete.iter().all(|a| match a {
+                            HirType::Named(sym) => {
+                                let s = self.interner.resolve(*sym);
+                                !(s.len() == 1 && s.chars().next().map_or(false, |c| c.is_uppercase()))
+                            }
+                            _ => true,
+                        });
+                        if all_concrete {
+                            self.mangle_name(*struct_name, &concrete)
+                        } else {
+                            *struct_name
+                        }
+                    } else {
+                        *struct_name
+                    }
+                } else {
+                    *struct_name
+                };
+                HirExpr::StructLit {
+                    id: *id,
+                    struct_name: new_name,
+                    fields: fields.iter().map(|(s, e)| (*s, self.substitute_expr_types(e, sub))).collect(),
+                    span: *span,
+                }
             },
             HirExpr::EnumVariant {
                 id,

@@ -1,6 +1,6 @@
+#[allow(unused_imports)]
 use bazel_remote_apis::build::bazel::remote::execution::v2::{
-    content_addressable_storage_server::ContentAddressableStorage,
-    Digest, FindMissingBlobsRequest, FindMissingBlobsResponse,
+    content_addressable_storage_server::ContentAddressableStorage, Digest, FindMissingBlobsRequest, FindMissingBlobsResponse,
     BatchUpdateBlobsRequest, BatchUpdateBlobsResponse,
     BatchReadBlobsRequest, BatchReadBlobsResponse,
     GetTreeRequest, GetTreeResponse,
@@ -8,17 +8,19 @@ use bazel_remote_apis::build::bazel::remote::execution::v2::{
     SpliceBlobRequest, SpliceBlobResponse,
 
     batch_update_blobs_response,
-    batch_update_blobs_request,
     batch_read_blobs_response,
+    batch_update_blobs_request,
 };
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub struct CasService {
     pub store: Arc<tokio::sync::Mutex<LocalContentStore>>,
 }
 
 impl CasService {
+    #[allow(dead_code)]
     fn grpc_status(code: tonic::Code, message: &str) -> bazel_remote_apis::google::rpc::Status {
         bazel_remote_apis::google::rpc::Status {
             code: code as i32,

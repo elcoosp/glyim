@@ -35,14 +35,24 @@ impl<'a> MonoContext<'a> {
                 match item {
                     HirItem::Fn(f) => {
                         if let Some(callee) = self.find_callee_by_id(&f.body, *expr_id) {
-                            self.queue_fn_specialization(callee, type_args.clone());
+                            let callee_name = self.interner.resolve(callee);
+                if !callee_name.contains("__") {
+                    self.queue_fn_specialization(callee, type_args.clone());
+                } else {
+                    eprintln!("[mono-collect] skipping already qualified callee: {}", callee_name);
+                }
                 eprintln!("[mono-collect] queue_fn_specialization: {} with {:?}", self.interner.resolve(callee), type_args);
                         }
                     }
                     HirItem::Impl(imp) => {
                         for m in &imp.methods {
                             if let Some(callee) = self.find_callee_by_id(&m.body, *expr_id) {
-                                self.queue_fn_specialization(callee, type_args.clone());
+                                let callee_name = self.interner.resolve(callee);
+                if !callee_name.contains("__") {
+                    self.queue_fn_specialization(callee, type_args.clone());
+                } else {
+                    eprintln!("[mono-collect] skipping already qualified callee: {}", callee_name);
+                }
                 eprintln!("[mono-collect] queue_fn_specialization: {} with {:?}", self.interner.resolve(callee), type_args);
                             }
                         }
@@ -426,7 +436,12 @@ impl<'a> MonoContext<'a> {
                         })
                         .collect();
                     if has_impl && !concrete_args.is_empty() {
-                        self.queue_fn_specialization(mangled_sym, concrete_args);
+                        let mc_name = self.interner.resolve(mangled_sym);
+                        if !mc_name.contains("__") {
+                            self.queue_fn_specialization(mangled_sym, concrete_args);
+                        } else {
+                            eprintln!("[mono-collect] skipping already qualified method: {}", mc_name);
+                        }
                     }
                 }
                 self.scan_expr_for_generic_calls(receiver);

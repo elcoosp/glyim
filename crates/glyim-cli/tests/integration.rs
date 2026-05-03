@@ -319,7 +319,7 @@ fn e2e_test_should_panic_fails_on_zero() {
 #[test]
 fn e2e_test_filter() {
     let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
-    let summary = pipeline::run_tests(&input, Some("b", false), false, None).unwrap();
+    let summary = pipeline::run_tests(&input, Some("b"), false, None, false).unwrap();
     assert_eq!(summary.total(), 1);
     assert_eq!(summary.failed(), 1);
 }
@@ -327,7 +327,7 @@ fn e2e_test_filter() {
 #[test]
 fn e2e_test_filter_no_match() {
     let input = temp_g("#[test]\nfn a() { 0 }");
-    let result = pipeline::run_tests(&input, Some("nonexistent", false), false, None);
+    let result = pipeline::run_tests(&input, Some("nonexistent"), false, None, false);
     assert!(result.is_err());
     let msg = format!("{:?}", result.unwrap_err());
     assert!(

@@ -71,10 +71,18 @@ pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
             }
             crate::item::HirItem::Struct(s) => {
                 s.doc = attach_doc_for_span(s.span, tokens);
+                for _field in &mut s.fields {
+                    // field span is at its name? We don't have a span for each field currently.
+                    // We'll use the field's name token position. We'll get it from tokens.
+                    // Actually we don't store individual field spans in StructField.
+                    // We'll skip for now and just leave doc as None.
+                }
             }
             crate::item::HirItem::Enum(e) => {
                 e.doc = attach_doc_for_span(e.span, tokens);
-                // TODO: attach doc comments to individual variants
+                for _variant in &mut e.variants {
+                    // variant span info is not stored; skip for now.
+                }
             }
             crate::item::HirItem::Impl(i) => {
                 i.doc = attach_doc_for_span(i.span, tokens);

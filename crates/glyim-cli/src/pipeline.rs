@@ -139,7 +139,7 @@ pub fn build(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -230,7 +230,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -384,7 +384,7 @@ pub fn run_with_mode(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -458,7 +458,7 @@ pub fn build_with_mode(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -677,7 +677,7 @@ pub fn run_tests(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -812,7 +812,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -944,7 +944,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
