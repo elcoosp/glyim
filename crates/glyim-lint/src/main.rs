@@ -28,24 +28,22 @@ fn main() {
     // Rule: check for functions without parameters that are never called
     let mut fn_counts: HashMap<glyim_interner::Symbol, usize> = HashMap::new();
     for item in &hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            if f.params.is_empty() {
+        if let glyim_hir::HirItem::Fn(f) = item
+            && f.params.is_empty() {
                 fn_counts.entry(f.name).or_insert(0);
             }
-        }
     }
 
     let mut found = 0;
     for item in &hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            if f.params.is_empty() && !fn_counts.contains_key(&f.name) {
+        if let glyim_hir::HirItem::Fn(f) = item
+            && f.params.is_empty() && !fn_counts.contains_key(&f.name) {
                 eprintln!(
                     "warning: function '{}' has no parameters and may be unused",
                     interner.resolve(f.name)
                 );
                 found += 1;
             }
-        }
     }
 
     if found == 0 {

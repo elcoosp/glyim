@@ -47,7 +47,7 @@ fn desugar_expr(expr: &mut HirExpr, method_resolved: &HashMap<crate::types::Expr
             span,
             ..
         } => {
-            if let Some(&callee) = method_resolved.get(&id) {
+            if let Some(&callee) = method_resolved.get(id) {
                 // Take ownership of receiver and args without cloning
                 let receiver_expr = *std::mem::replace(
                     receiver,

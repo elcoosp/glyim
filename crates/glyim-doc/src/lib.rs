@@ -3,7 +3,6 @@ use glyim_interner::Interner;
 use pulldown_cmark::{Parser, html};
 
 /// Generate HTML documentation from HIR, including doc comments rendered as GitHub Flavored Markdown.
-
 fn format_fn_signature(f: &glyim_hir::node::HirFn, interner: &Interner) -> String {
     let params: Vec<String> = f
         .params
@@ -94,7 +93,7 @@ pub fn extract_code_blocks(doc: &str) -> Vec<(Option<String>, String)> {
             } else {
                 // opening fence
                 in_fence = true;
-                lang = trimmed[3..].trim().to_string();
+                lang = trimmed.strip_prefix("```").unwrap_or("").trim().to_string();
                 block_title = None;
                 in_glyim_block = lang == "glyim";
             }
