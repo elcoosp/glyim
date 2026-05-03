@@ -181,8 +181,8 @@ fn main() {
         Command::Fetch => cmd_fetch(),
         Command::Publish {
             dry_run,
-            wasm: _wasm,
-        } => cmd_publish(dry_run),
+            wasm,
+        } => cmd_publish(dry_run, wasm),
         Command::Outdated => cmd_outdated(),
         Command::Verify => cmd_verify(),
         Command::Doc { input, output } => cmd_doc(input, output),

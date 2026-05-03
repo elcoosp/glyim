@@ -17,7 +17,7 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
     // Try to load any macros found in the package's lockfile/cache
     load_package_macros(pkg_dir, &mut registry);
 
-    let macro_wasm = registry
+    let _macro_wasm = registry
         .get("identity")
         .ok_or_else(|| "identity macro not registered".to_string())?;
 
