@@ -6,7 +6,7 @@ pub fn cmd_test(input: PathBuf, ignore: bool, filter: Option<String>) -> i32 {
     let result = if input.is_dir() {
         pipeline::run_tests_package(&input, filter.as_deref(), include_ignored)
     } else {
-        pipeline::run_tests(&input, filter.as_deref(), include_ignored)
+        pipeline::run_tests(&input, filter.as_deref(), include_ignored, None)
     };
     match result {
         Ok(summary) => {

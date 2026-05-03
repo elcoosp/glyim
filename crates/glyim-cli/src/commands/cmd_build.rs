@@ -16,7 +16,7 @@ pub fn cmd_build(
     let result = if input.is_dir() {
         pipeline::build_package(&input, output.as_deref(), mode, target.as_deref())
     } else {
-        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref())
+        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref(), None)
     };
     match result {
         Ok(path) => {

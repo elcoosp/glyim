@@ -71,8 +71,4 @@ impl<T> Vec<T> {
             Some(*ptr)
         }
     }
-
-    pub fn iter(self: Vec<T>) -> VecIter<T> {
-        VecIter { vec: self, pos: 0 }
-    }
 }

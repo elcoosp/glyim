@@ -346,6 +346,7 @@ pub fn run_with_mode(
     input: &Path,
     mode: BuildMode,
     target: Option<&str>,
+    _force_no_std: Option<bool>,
 ) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
@@ -428,6 +429,7 @@ pub fn build_with_mode(
     output: Option<&Path>,
     mode: BuildMode,
     target: Option<&str>,
+    _force_no_std: Option<bool>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
@@ -526,7 +528,7 @@ pub fn build_package(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-    build_with_mode(&main_path, output, mode, target)
+    build_with_mode(&main_path, output, mode, target, None)
 }
 pub fn run_package(
     package_dir: &Path,
@@ -548,7 +550,7 @@ pub fn run_package(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-    run_with_mode(&main_path, mode, target)
+    run_with_mode(&main_path, mode, target, None)
 }
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
@@ -571,6 +573,7 @@ pub fn run_tests(
     input: &Path,
     filter_name: Option<&str>,
     include_ignored: bool,
+    _force_no_std: Option<bool>,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     // Expand macros (e.g. @identity) before parsing
@@ -697,7 +700,7 @@ pub fn run_tests_package(
             format!("{} not found", main_path.display()),
         )));
     }
-    run_tests(&main_path, filter_name, include_ignored)
+    run_tests(&main_path, filter_name, include_ignored, None)
 }
 fn compile_to_hir_and_ir(
     source: &str,

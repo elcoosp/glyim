@@ -10,6 +10,8 @@ pub struct Package {
     #[serde(default)]
     pub version: String,
     #[serde(default)]
+    pub no_std: Option<bool>,
+    #[serde(default)]
     pub edition: String,
     #[serde(default)]
     pub authors: Vec<String>,
