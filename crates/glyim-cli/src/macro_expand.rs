@@ -9,8 +9,6 @@ pub fn expand_macros(
     _pkg_dir: &Path,
     cas_dir: &Path,
 ) -> Result<String, String> {
-    eprintln!("[expand_macros] called with source len: {}", source.len());
-    eprintln!("[expand_macros] source starts with: {:?}", &source[..std::cmp::min(60, source.len())]);
 
     let store = LocalContentStore::new(cas_dir)
         .map_err(|e| format!("create store: {e}"))?;
@@ -60,11 +58,9 @@ pub fn expand_macros(
     loop {
         let pos = match result.find(marker) {
             Some(p) => {
-                eprintln!("[expand_macros] found @identity at byte {}", p);
                 p + marker.len()
             }
             None => {
-                eprintln!("[expand_macros] no more @identity, breaking");
                 break;
             }
         };
@@ -84,13 +80,11 @@ pub fn expand_macros(
             .ok_or_else(|| "unmatched parenthesis".to_string())?;
 
         let inner = &result[pos..end];
-        eprintln!("[expand_macros] inner expression: '{}'", inner);
 
         let expanded = executor
             .execute(macro_wasm, inner.as_bytes())
             .unwrap_or_else(|_| inner.as_bytes().to_vec());
         let expanded_str = String::from_utf8_lossy(&expanded).into_owned();
-        eprintln!("[expand_macros] expanded to: '{}'", expanded_str);
 
         let call_start = pos - marker.len();
         let call_end = end + 1;
@@ -99,7 +93,5 @@ pub fn expand_macros(
         result = format!("{before}{expanded_str}{after}");
     }
 
-    eprintln!("[expand_macros] returning result len: {}", result.len());
-    eprintln!("[expand_macros] result starts with: {:?}", &result[..std::cmp::min(60, result.len())]);
     Ok(result)
 }
