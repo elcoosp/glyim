@@ -186,6 +186,7 @@ impl TypeChecker {
                         self.interner.resolve(*method_name)
                     );
                     let mangled_sym = self.interner.intern(&mangled);
+                    self.method_resolved.insert(*id, mangled_sym);
                     eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
                     eprintln!("[typeck MethodCall] mangled name: {}", mangled);
                     eprintln!(

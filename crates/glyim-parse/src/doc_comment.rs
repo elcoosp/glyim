@@ -174,7 +174,7 @@ fn add(a: i64, b: i64) -> i64 { a + b }"#;
             .position(|t| t.kind == SyntaxKind::KwFn)
             .unwrap();
         for i in 0..fn_pos {
-            let t = &tokens[i];
+            let _t = &tokens[i];
         }
         let doc = collect_doc_comments(&tokens, fn_pos);
         assert!(doc.is_some(), "Should collect doc comment");

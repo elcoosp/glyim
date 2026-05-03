@@ -48,6 +48,7 @@ fn desugar_expr(expr: &mut HirExpr, method_resolved: &HashMap<crate::types::Expr
             ..
         } => {
             if let Some(&callee) = method_resolved.get(id) {
+                eprintln!("[desugar] MethodCall -> Call");
                 // Take ownership of receiver and args without cloning
                 let receiver_expr = *std::mem::replace(
                     receiver,
@@ -167,18 +168,17 @@ fn desugar_expr(expr: &mut HirExpr, method_resolved: &HashMap<crate::types::Expr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{HirBinOp, HirExpr, HirFn};
-    use crate::types::{ExprId, HirType};
+    use crate::ExprId;
+    use crate::HirFn;
     use glyim_interner::Interner;
     use std::collections::HashMap;
-
     fn make_call_expr(
         callee: Symbol,
         recv: HirExpr,
         arg: HirExpr,
         callee_id: ExprId,
     ) -> (Hir, HashMap<ExprId, Symbol>) {
-        let mut hir = Hir {
+        let hir = Hir {
             items: vec![crate::item::HirItem::Fn(HirFn {
                 doc: None,
                 name: Interner::new().intern("test"),
