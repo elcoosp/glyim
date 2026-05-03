@@ -60,6 +60,11 @@ impl<T> Vec<T> {
 
     pub fn len(self: Vec<T>) -> i64 { self.len }
 
+
+    pub fn iter(self: Vec<T>) -> Iter<T> {
+        Iter::new(self.data, self.len)
+    }
+
     pub fn pop(mut self: Vec<T>) -> Option<T> {
         if self.len == 0 {
             None
