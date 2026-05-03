@@ -507,7 +507,9 @@ pub(crate) fn codegen_expr<'ctx>(
                     .build_call(fn_val, &call_args, "method_call")
                     .ok()?;
                 return match result.try_as_basic_value() {
-                    inkwell::values::ValueKind::Basic(basic_val) => Some(basic_val.into_int_value()),
+                    inkwell::values::ValueKind::Basic(basic_val) => {
+                        Some(basic_val.into_int_value())
+                    }
                     _ => Some(cg.i64_type.const_int(0, false)),
                 };
             }
@@ -533,7 +535,9 @@ pub(crate) fn codegen_expr<'ctx>(
                         .build_call(func, &call_args, "method_call")
                         .ok()?;
                     return match result.try_as_basic_value() {
-                        inkwell::values::ValueKind::Basic(basic_val) => Some(basic_val.into_int_value()),
+                        inkwell::values::ValueKind::Basic(basic_val) => {
+                            Some(basic_val.into_int_value())
+                        }
                         _ => Some(cg.i64_type.const_int(0, false)),
                     };
                 }

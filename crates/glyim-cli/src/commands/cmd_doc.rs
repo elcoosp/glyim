@@ -25,13 +25,15 @@ pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool, test: bool) 
                 if open {
                     let index_html = out_dir.join("index.html");
                     let abs_path = std::fs::canonicalize(&index_html).unwrap_or_else(|_| {
-                        let mut abs = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                        let mut abs =
+                            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                         abs.push(&index_html);
                         abs
                     });
                     if abs_path.exists() {
                         eprintln!("Opening {}", abs_path.display());
-                        if let Err(e) = webbrowser::open(&format!("file://{}", abs_path.display())) {
+                        if let Err(e) = webbrowser::open(&format!("file://{}", abs_path.display()))
+                        {
                             eprintln!("warning: could not open browser: {e}");
                         }
                     } else {

@@ -139,7 +139,7 @@ pub fn build(
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
-    glyim_hir::desugar_method_calls(&mut hir);
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.method_resolved);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =

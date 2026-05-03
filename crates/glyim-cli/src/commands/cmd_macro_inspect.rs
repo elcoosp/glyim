@@ -10,9 +10,7 @@ pub fn cmd_macro_inspect(input: PathBuf) -> i32 {
         }
     };
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
-    let pkg_dir = input
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
+    let pkg_dir = input.parent().unwrap_or_else(|| std::path::Path::new("."));
 
     match macro_expand::expand_macros(&source, pkg_dir, &cas_dir) {
         Ok(expanded) => {

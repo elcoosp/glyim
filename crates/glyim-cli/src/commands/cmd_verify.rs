@@ -35,19 +35,28 @@ pub fn cmd_verify() -> i32 {
             match pkg.hash.parse::<ContentHash>() {
                 Ok(hash) => {
                     if store.retrieve(hash).is_none() {
-                        eprintln!("error: package {} {} - blob not found in CAS", pkg.name, pkg.version);
+                        eprintln!(
+                            "error: package {} {} - blob not found in CAS",
+                            pkg.name, pkg.version
+                        );
                         all_ok = false;
                     }
                 }
                 Err(e) => {
-                    eprintln!("error: package {} {} - invalid hash: {e}", pkg.name, pkg.version);
+                    eprintln!(
+                        "error: package {} {} - invalid hash: {e}",
+                        pkg.name, pkg.version
+                    );
                     all_ok = false;
                 }
             }
         }
 
         if all_ok {
-            eprintln!("Lockfile verified: {} packages, all blobs present.", lockfile.packages.len());
+            eprintln!(
+                "Lockfile verified: {} packages, all blobs present.",
+                lockfile.packages.len()
+            );
             Ok(0)
         } else {
             eprintln!("Lockfile verification failed.");

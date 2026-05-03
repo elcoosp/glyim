@@ -107,12 +107,12 @@ impl<'a> MonoContext<'a> {
                 method_name,
                 args,
                 span,
-                resolved_callee,
+                ..
             } => HirExpr::MethodCall {
                 id: *id,
                 receiver: Box::new(self.substitute_expr_types(receiver, sub)),
                 method_name: *method_name,
-                resolved_callee: *resolved_callee,
+                resolved_callee: None,
                 args: args
                     .iter()
                     .map(|a| self.substitute_expr_types(a, sub))
@@ -413,9 +413,9 @@ impl<'a> MonoContext<'a> {
                 id,
                 receiver,
                 method_name,
-                resolved_callee,
                 args,
                 span,
+                ..
             } => {
                 let rewritten_receiver =
                     Box::new(self.rewrite_expr(receiver, fn_map, struct_map, type_sub));
@@ -486,7 +486,7 @@ impl<'a> MonoContext<'a> {
                     id: *id,
                     receiver: rewritten_receiver,
                     method_name: *method_name,
-                    resolved_callee: *resolved_callee,
+                    resolved_callee: None, // will be replaced by desugaring later
                     args: rewritten_args,
                     span: *span,
                 }

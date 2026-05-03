@@ -1,9 +1,9 @@
 extern crate glyim_cli;
 use clap::{Parser, Subcommand};
 use glyim_cli::commands::*;
+use glyim_macro_vfs::ContentStore;
 use std::path::PathBuf;
 use std::process;
-use glyim_macro_vfs::ContentStore;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
 #[command(
@@ -193,13 +193,15 @@ fn main() {
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),
         Command::Fetch => cmd_fetch(),
-        Command::Publish {
-            dry_run,
-            wasm,
-        } => cmd_publish(dry_run, wasm),
+        Command::Publish { dry_run, wasm } => cmd_publish(dry_run, wasm),
         Command::Outdated => cmd_outdated(),
         Command::Verify => cmd_verify(),
-        Command::Doc { input, output, open, test } => cmd_doc(input, output, open, test),
+        Command::Doc {
+            input,
+            output,
+            open,
+            test,
+        } => cmd_doc(input, output, open, test),
         Command::DumpTokens { input } => cmd_dump_tokens(input),
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),
@@ -327,7 +329,8 @@ fn main() {
                 }
                 eprintln!("Removed {} unreferenced blobs.", removed);
                 Ok(0)
-            })().unwrap_or_else(|code| code)
+            })()
+            .unwrap_or_else(|code| code),
         },
     };
 

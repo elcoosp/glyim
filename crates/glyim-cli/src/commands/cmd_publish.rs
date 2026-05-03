@@ -34,8 +34,8 @@ pub fn cmd_publish(dry_run: bool, wasm: bool) -> i32 {
                 eprintln!("error opening CAS store: {e}");
                 1
             })?;
-            let hash = compile_and_store_macro_wasm(&main_path, "wasm32-wasi", &store)
-                .map_err(|e| {
+            let hash =
+                compile_and_store_macro_wasm(&main_path, "wasm32-wasi", &store).map_err(|e| {
                     eprintln!("error compiling to Wasm: {e}");
                     1
                 })?;

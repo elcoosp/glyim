@@ -8,10 +8,25 @@ fn format_fn_signature(f: &glyim_hir::node::HirFn, interner: &Interner) -> Strin
     let params: Vec<String> = f
         .params
         .iter()
-        .map(|(sym, ty)| format!("{}: {}", interner.resolve(*sym), type_to_string(ty, interner)))
+        .map(|(sym, ty)| {
+            format!(
+                "{}: {}",
+                interner.resolve(*sym),
+                type_to_string(ty, interner)
+            )
+        })
         .collect();
-    let ret = f.ret.as_ref().map(|ty| format!(" -> {}", type_to_string(ty, interner))).unwrap_or_default();
-    format!("fn {}({}){}", interner.resolve(f.name), params.join(", "), ret)
+    let ret = f
+        .ret
+        .as_ref()
+        .map(|ty| format!(" -> {}", type_to_string(ty, interner)))
+        .unwrap_or_default();
+    format!(
+        "fn {}({}){}",
+        interner.resolve(f.name),
+        params.join(", "),
+        ret
+    )
 }
 
 fn type_name_to_string(sym: glyim_interner::Symbol, interner: &Interner) -> String {
@@ -40,7 +55,9 @@ fn type_to_string(ty: &glyim_hir::types::HirType, interner: &Interner) -> String
             let inner: Vec<String> = elems.iter().map(|e| type_to_string(e, interner)).collect();
             format!("({})", inner.join(", "))
         }
-        glyim_hir::types::HirType::RawPtr(inner) => format!("*mut {}", type_to_string(inner, interner)),
+        glyim_hir::types::HirType::RawPtr(inner) => {
+            format!("*mut {}", type_to_string(inner, interner))
+        }
         glyim_hir::types::HirType::Func(params, ret) => {
             let p: Vec<String> = params.iter().map(|t| type_to_string(t, interner)).collect();
             format!("fn({}) -> {}", p.join(", "), type_to_string(ret, interner))

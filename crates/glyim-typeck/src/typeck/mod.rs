@@ -26,6 +26,7 @@ pub struct TypeChecker {
     pub impl_methods: HashMap<Symbol, Vec<HirFn>>,
     pub expr_types: Vec<HirType>,
     pub call_type_args: HashMap<ExprId, Vec<HirType>>,
+    pub method_resolved: HashMap<ExprId, Symbol>, // NEW: maps MethodCall ExprId -> resolved callee
     pub return_type: Option<HirType>,
     pub errors: Vec<TypeError>,
     pub(crate) visibility: HashMap<Symbol, bool>, // true = pub, false = private
@@ -44,6 +45,7 @@ impl TypeChecker {
             impl_methods: HashMap::new(),
             expr_types: Vec::new(),
             call_type_args: HashMap::new(),
+            method_resolved: HashMap::new(),
             return_type: None,
             errors: Vec::new(),
             visibility: HashMap::new(),
@@ -94,6 +96,11 @@ impl TypeChecker {
 
     pub fn get_expr_type(&self, id: ExprId) -> Option<&HirType> {
         self.expr_types.get(id.as_usize())
+    }
+
+    /// Return the resolved callee for a MethodCall expression, if any.
+    pub fn resolved_callee_for(&self, id: ExprId) -> Option<glyim_interner::Symbol> {
+        self.method_resolved.get(&id).copied()
     }
 }
 

@@ -304,7 +304,10 @@ type = "local"
     // and print a warning to stderr.
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("warning: cannot contact registry") || stderr.contains("warning: could not check"));
+    assert!(
+        stderr.contains("warning: cannot contact registry")
+            || stderr.contains("warning: could not check")
+    );
 }
 
 #[test]

@@ -229,6 +229,7 @@ impl TypeChecker {
                         }
                         let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                         let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
+                        self.method_resolved.insert(*id, mangled_sym);
                         return concrete_ret;
                     }
                 }

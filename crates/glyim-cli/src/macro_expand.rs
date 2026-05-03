@@ -47,12 +47,16 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
         let mut depth = 1usize;
         let inner_end = match result[inner_start..]
             .char_indices()
-            .find(|(_, c)| {
-                match c {
-                    '(' => { depth += 1; false }
-                    ')' => { depth -= 1; depth == 0 }
-                    _ => false,
+            .find(|(_, c)| match c {
+                '(' => {
+                    depth += 1;
+                    false
                 }
+                ')' => {
+                    depth -= 1;
+                    depth == 0
+                }
+                _ => false,
             })
             .map(|(i, _)| inner_start + i)
         {
@@ -234,12 +238,16 @@ mod tests {
             let mut depth = 1usize;
             let inner_end = result[inner_start..]
                 .char_indices()
-                .find(|(_, c)| {
-                    match c {
-                        '(' => { depth += 1; false }
-                        ')' => { depth -= 1; depth == 0 }
-                        _ => false,
+                .find(|(_, c)| match c {
+                    '(' => {
+                        depth += 1;
+                        false
                     }
+                    ')' => {
+                        depth -= 1;
+                        depth == 0
+                    }
+                    _ => false,
                 })
                 .map(|(i, _)| inner_start + i)
                 .unwrap();

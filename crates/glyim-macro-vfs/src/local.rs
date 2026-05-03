@@ -30,15 +30,17 @@ impl LocalContentStore {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir()
-                    && let Ok(sub) = std::fs::read_dir(&path) {
-                        for sub_entry in sub.flatten() {
-                            let fname = sub_entry.file_name().to_string_lossy().to_string();
-                            let full_hex = format!("{}{}", path.file_name().unwrap().to_string_lossy(), fname);
-                            if let Ok(h) = ContentHash::from_hex(&full_hex) {
-                                hashes.push(h);
-                            }
+                    && let Ok(sub) = std::fs::read_dir(&path)
+                {
+                    for sub_entry in sub.flatten() {
+                        let fname = sub_entry.file_name().to_string_lossy().to_string();
+                        let full_hex =
+                            format!("{}{}", path.file_name().unwrap().to_string_lossy(), fname);
+                        if let Ok(h) = ContentHash::from_hex(&full_hex) {
+                            hashes.push(h);
                         }
                     }
+                }
             }
         }
         hashes

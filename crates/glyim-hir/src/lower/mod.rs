@@ -47,10 +47,7 @@ pub fn lower_with_declarations(
 /// After lowering, scan the original tokens and attach doc comments
 /// to items based on source position (Go‑style).
 pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
-    fn attach_doc_for_span(
-        span: glyim_diag::Span,
-        tokens: &[glyim_lex::Token],
-    ) -> Option<String> {
+    fn attach_doc_for_span(span: glyim_diag::Span, tokens: &[glyim_lex::Token]) -> Option<String> {
         let name_token_index = tokens
             .iter()
             .position(|t| t.start == span.start && !t.kind.is_trivia());
