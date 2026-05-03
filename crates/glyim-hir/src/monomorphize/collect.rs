@@ -218,7 +218,13 @@ impl<'a> MonoContext<'a> {
                             self.queue_fn_specialization(*callee, concrete);
                             return;
                         }
-                        let arg_types: Vec<HirType> = args.iter().map(|a| self.expr_types.get(a.get_id().as_usize()).cloned().unwrap_or(HirType::Never)).collect();
+                        let arg_types: Vec<HirType> = args.iter().map(|a| {
+                            let id = a.get_id();
+                            self.type_overrides.get(&id)
+                                .cloned()
+                                .or_else(|| self.expr_types.get(id.as_usize()).cloned())
+                                .unwrap_or(HirType::Never)
+                        }).collect();
                         let mut sub = HashMap::new();
                         for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
                             if let Some(at) = arg_types.get(param_idx) {
