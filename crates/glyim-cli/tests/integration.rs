@@ -802,6 +802,7 @@ main = () => {
 
 #[test]
 fn e2e_for_in_vec() {
+    let iter_src = include_str!("../../../stdlib/src/iter.g");
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let main_code = r#"
 main = () => {
@@ -816,7 +817,7 @@ main = () => {
     sum
 }
 "#;
-    let full_src = format!("{}\n{}", vec_src, main_code);
+    let full_src = format!("{}\n{}\n{}", iter_src, vec_src, main_code);
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 60); // 10+20+30
 }

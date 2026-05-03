@@ -61,6 +61,11 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn rewrite_expr(&mut self, expr: &HirExpr, fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>, struct_map: &HashMap<Symbol, Symbol>) -> HirExpr {
         match expr {
             HirExpr::Call { id, callee, args, span } => {
+                // Show the fn_map keys we're searching
+                for (k, v) in fn_map.iter() {
+                    let name = self.interner.resolve(k.0);
+                    let args: Vec<String> = k.1.iter().map(|t| format!("{:?}", t)).collect();
+                }
                 let type_args = self.call_type_args.get(id).cloned().or_else(|| self.inferred_call_args.get(id).cloned()).unwrap_or_default();
                 let type_args_empty = type_args.is_empty();
                 let mut new_callee = fn_map.get(&(*callee, type_args.clone())).copied().unwrap_or(*callee);
@@ -74,11 +79,9 @@ impl<'a> MonoContext<'a> {
                 HirExpr::StructLit { id: *id, struct_name: new_name, fields: fields.iter().map(|(s, e)| (*s, self.rewrite_expr(e, fn_map, struct_map))).collect(), span: *span }
             }
             HirExpr::MethodCall { id, receiver, method_name, args, span } => {
-                eprintln!("[mono rewrite] MethodCall method={:?} id={:?}", self.interner.resolve(*method_name), id);
                 let rewritten_receiver = Box::new(self.rewrite_expr(receiver, fn_map, struct_map));
                 let rewritten_args: Vec<HirExpr> = args.iter().map(|a| self.rewrite_expr(a, fn_map, struct_map)).collect();
                 let receiver_ty = self.expr_types.get(receiver.get_id().as_usize());
-                eprintln!("[mono rewrite] receiver_ty={:?}", receiver_ty);
                 let inner_ty = match receiver_ty { Some(HirType::RawPtr(inner)) => Some(inner.as_ref().clone()), other => other.cloned() };
                 if let Some(HirType::Named(type_name) | HirType::Generic(type_name, _)) = inner_ty {
                     let mangled = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
@@ -89,13 +92,11 @@ impl<'a> MonoContext<'a> {
                         if receiver_type_args.is_empty() { fn_map.iter().find(|((sym, _), _)| *sym == mangled_sym).map(|((_, args), mono_name)| (args.clone(), *mono_name)) } else { None }
                     });
                     if let Some(concrete_key) = concrete_key {
-                        eprintln!("[mono rewrite] resolved to Call callee={:?}", self.interner.resolve(concrete_key.1));
                         let mut all_args = vec![*rewritten_receiver.clone()];
                         all_args.extend(rewritten_args);
                         return HirExpr::Call { id: *id, callee: concrete_key.1, args: all_args, span: *span };
                     }
                 }
-                eprintln!("[mono rewrite] keeping as MethodCall (unresolved)");
                 HirExpr::MethodCall { id: *id, receiver: rewritten_receiver, method_name: *method_name, args: rewritten_args, span: *span }
             }
             HirExpr::Block { id, stmts, span } => HirExpr::Block { id: *id, stmts: stmts.iter().map(|s| self.rewrite_stmt(s, fn_map, struct_map)).collect(), span: *span },
