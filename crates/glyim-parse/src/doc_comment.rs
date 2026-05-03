@@ -157,7 +157,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn integration_style_doc_with_code_block() {
         let source = r#"// Adds two integers together.
 //
@@ -189,7 +188,7 @@ fn add(a: i64, b: i64) -> i64 { a + b }"#;
             "Should contain code example but got:\n{doc}"
         );
     }
-
+    #[test]
     fn collect_doc_comments_basic() {
         let source = "// hello\nfn main() {}";
         let tokens = tokenize(source);
