@@ -216,6 +216,8 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 
     // Phase 2: full lowering with pre-resolved symbols
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -307,6 +309,8 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     // Phase 2: full lowering with pre-resolved symbols
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner);
     if let Err(errs) = typeck.check(&hir) {
@@ -367,6 +371,8 @@ pub fn run_with_mode(
 
     // Phase 2: full lowering with pre-resolved symbols
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -638,6 +644,8 @@ pub fn run_tests(
 
     // Phase 2: full lowering with pre-resolved symbols
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -819,6 +827,8 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
 
     // Phase 2: full lowering with pre-resolved symbols
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {

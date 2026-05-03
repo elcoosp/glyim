@@ -1314,3 +1314,52 @@ main = () => {
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 60);
 }
+
+
+// ── Doc comment tests ────────────────────────────────────────────
+
+#[test]
+fn e2e_doc_comment_on_function() {
+    let src = r#"
+// Adds two numbers
+fn add(a: i64, b: i64) -> i64 { a + b }
+main = () => add(1, 2)
+"#;
+    let input = temp_g(src);
+    // Should compile and run correctly
+    assert_eq!(pipeline::run(&input, None).unwrap(), 3);
+}
+
+#[test]
+fn e2e_doc_comment_on_struct() {
+    let src = r#"
+// A point in 2D space
+struct Point { x: i64, y: i64 }
+main = () => { let p = Point { x: 1, y: 2 }; p.x }
+"#;
+    let input = temp_g(src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 1);
+}
+
+#[test]
+fn e2e_doc_comment_multi_line() {
+    let src = r#"
+// A function that does
+// something very useful.
+fn answer() -> i64 { 42 }
+main = () => answer()
+"#;
+    let input = temp_g(src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 42);
+}
+
+#[test]
+fn e2e_doc_comment_blank_line_terminates() {
+    let src = r#"
+// This comment should NOT be attached to main
+
+fn main() -> i64 { 0 }
+"#;
+    let input = temp_g(src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 0);
+}
