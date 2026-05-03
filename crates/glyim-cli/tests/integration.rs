@@ -1374,8 +1374,10 @@ fn e2e_doc_generator_func() {
 //
 // # Examples
 //
-//     let result = add(1, 2)
-//     assert(result == 3)
+// ```glyim
+// let result = add(1, 2)
+// assert(result == 3)
+// ```
 fn add(a: i64, b: i64) -> i64 { a + b }
 main = () => add(1, 2)
 "#;
@@ -1390,7 +1392,9 @@ main = () => add(1, 2)
     let index_html = doc_dir.join("index.html");
     assert!(index_html.exists());
     let html = std::fs::read_to_string(&index_html).unwrap();
-    assert!(html.contains("Adds two integers"));
+    eprintln!("DEBUG HTML:\n{}\n", html);
+    assert!(html.contains("Adds two integers together."));
+    assert!(html.contains("let result = add(1, 2)"), "HTML should contain the code example");
     assert!(html.contains("add"));
     assert!(html.contains("Examples"));
     assert!(html.contains("<code>"));

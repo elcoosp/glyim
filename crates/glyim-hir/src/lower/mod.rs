@@ -59,13 +59,20 @@ pub fn attach_doc_comments(
             crate::item::HirItem::Impl(i) => i.span,
             crate::item::HirItem::Extern(e) => e.span,
         };
-        if let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, span.start) {
-            match item {
-                crate::item::HirItem::Fn(f) => f.doc = Some(doc),
-                crate::item::HirItem::Struct(s) => s.doc = Some(doc),
-                crate::item::HirItem::Enum(e) => e.doc = Some(doc),
-                crate::item::HirItem::Impl(i) => i.doc = Some(doc),
-                crate::item::HirItem::Extern(e) => e.doc = Some(doc),
+
+        // Convert byte offset to token index
+        let token_index = tokens.iter()
+            .position(|t| t.start == span.start && !t.kind.is_trivia());
+
+        if let Some(idx) = token_index {
+            if let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx) {
+                match item {
+                    crate::item::HirItem::Fn(f) => f.doc = Some(doc),
+                    crate::item::HirItem::Struct(s) => s.doc = Some(doc),
+                    crate::item::HirItem::Enum(e) => e.doc = Some(doc),
+                    crate::item::HirItem::Impl(i) => i.doc = Some(doc),
+                    crate::item::HirItem::Extern(e) => e.doc = Some(doc),
+                }
             }
         }
     }

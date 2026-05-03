@@ -5,7 +5,6 @@ use glyim_syntax::SyntaxKind;
 /// an item (at `before_pos`). Returns None if there are no comments
 /// or if a blank line separates them from the item.
 pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<String> {
-    // Find the token immediately before `before_pos`, skipping whitespace
     let mut i = if before_pos > 0 && before_pos <= tokens.len() {
         before_pos - 1
     } else if before_pos > 0 {
@@ -20,11 +19,11 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
     }
 
     // Must end with a line comment
-    if tokens[i].kind != SyntaxKind::LineComment {
+    if i >= tokens.len() || tokens[i].kind != SyntaxKind::LineComment {
         return None;
     }
 
-    let end = i + 1; // exclusive
+    let end = i + 1;
     // Walk backwards collecting consecutive line comments
     let mut start = i;
     loop {
@@ -34,8 +33,6 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
         start -= 1;
         let tok = &tokens[start];
         if tok.kind == SyntaxKind::Whitespace {
-            // If the whitespace contains a newline and the next token is also whitespace
-            // or it's a blank line, break
             if tok.text.contains('\n') && tok.text.matches('\n').count() > 1 {
                 start += 1;
                 break;
@@ -48,6 +45,8 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
         }
     }
 
+    for (i, t) in tokens[start..end].iter().enumerate() {
+    }
     let comments: Vec<&str> = tokens[start..end]
         .iter()
         .filter(|t| t.kind == SyntaxKind::LineComment)
@@ -62,23 +61,47 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
 }
 
 /// Remove `//` prefixes and normalize whitespace from doc comments.
+/// Preserves the content of fenced code blocks (```...```) by keeping
+/// their internal whitespace intact.
 pub fn beautify_doc_string(raw: &str) -> String {
+    let mut in_code_block = false;
+
     raw.lines()
         .map(|line| {
-            if line.starts_with("//") {
-                let rest = &line[2..];
-                if rest.starts_with(' ') {
-                    rest[1..].to_string()
-                } else {
-                    rest.to_string()
+            // Track whether we're inside a fenced code block
+            let trimmed = line.trim();
+            if trimmed.starts_with("```") {
+                in_code_block = !in_code_block;
+                // For code block fences, only strip the "// " prefix, keep the backticks
+                if line.starts_with("// ") {
+                    return line[3..].to_string();
+                } else if line.starts_with("//") {
+                    return line[2..].to_string();
                 }
+                return line.to_string();
+            }
+
+            if in_code_block {
+                // Inside a code block, preserve exact content after "//" prefix
+                if line.starts_with("// ") {
+                    return line[3..].to_string();
+                } else if line.starts_with("//") {
+                    return line[2..].to_string();
+                }
+                return line.to_string();
+            }
+
+            // Normal line: strip "// " or "//" prefix
+            if line.starts_with("// ") {
+                line[3..].to_string()
+            } else if line.starts_with("//") {
+                line[2..].to_string()
             } else {
                 line.to_string()
             }
         })
         .collect::<Vec<_>>()
         .join("\n")
-        .trim()
         .to_string()
 }
 
@@ -100,5 +123,50 @@ mod tests {
     #[test]
     fn beautify_with_spaces() {
         assert_eq!(beautify_doc_string("//  indented"), " indented");
+    }
+
+    #[test]
+    fn beautify_preserves_code_block() {
+        let input = "// text\n// ```glyim\n// let x = 1;\n// ```\n// more text";
+        let result = beautify_doc_string(input);
+        assert!(result.contains("```glyim"), "Should preserve fenced code block");
+        assert!(result.contains("let x = 1;"), "Should preserve code inside block");
+        assert!(result.contains("text"), "Should preserve text before block");
+        assert!(result.contains("more text"), "Should preserve text after block");
+    }
+
+    #[test]
+
+    #[test]
+    fn integration_style_doc_with_code_block() {
+        let source = r#"// Adds two integers together.
+//
+// # Examples
+//
+// ```glyim
+// let result = add(1, 2)
+// assert(result == 3)
+// ```
+fn add(a: i64, b: i64) -> i64 { a + b }"#;
+        let tokens = tokenize(source);
+        // Find position of 'fn' keyword
+        let fn_pos = tokens.iter().position(|t| t.kind == SyntaxKind::KwFn).unwrap();
+        for i in 0..fn_pos {
+            let t = &tokens[i];
+        }
+        let doc = collect_doc_comments(&tokens, fn_pos);
+        assert!(doc.is_some(), "Should collect doc comment");
+        let doc = doc.unwrap();
+        assert!(doc.contains("Adds two integers together."), "Should contain paragraph text");
+        assert!(doc.contains("let result = add(1, 2)"), "Should contain code example but got:\n{doc}");
+    }
+
+        fn collect_doc_comments_basic() {
+        let source = "// hello\nfn main() {}";
+        let tokens = tokenize(source);
+        // Find position of 'fn' keyword
+        let fn_pos = tokens.iter().position(|t| t.kind == SyntaxKind::KwFn).unwrap();
+        let doc = collect_doc_comments(&tokens, fn_pos);
+        assert_eq!(doc, Some("hello".to_string()));
     }
 }
