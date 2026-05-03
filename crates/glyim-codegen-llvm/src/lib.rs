@@ -5,6 +5,26 @@ mod hash_shims;
 pub mod runtime_shims;
 pub use codegen::Codegen;
 
+/// Compile Glyim source to a WebAssembly binary (.wasm) for use as a macro.
+pub fn compile_to_wasm(source: &str, target_triple: &str) -> Result<Vec<u8>, String> {
+    let out = glyim_parse::parse(source);
+    if !out.errors.is_empty() {
+        return Err(format!("parse: {:?}", out.errors));
+    }
+    let mut interner = out.interner;
+    let hir = glyim_hir::lower(&out.ast, &mut interner);
+    let ctx = inkwell::context::Context::create();
+    // Initialize all targets including WebAssembly
+    inkwell::targets::Target::initialize_webassembly(&inkwell::targets::InitializationConfig::default());
+    let mut cg = Codegen::new(&ctx, interner, vec![]);
+    cg.set_target(target_triple);
+    cg.generate(&hir)?;
+    let tmp_dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let obj_path = tmp_dir.path().join("output.o");
+    cg.write_object_file(&obj_path)?;
+    std::fs::read(&obj_path).map_err(|e| e.to_string())
+}
+
 pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let out = glyim_parse::parse(source);
     if !out.errors.is_empty() {

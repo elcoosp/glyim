@@ -1276,6 +1276,7 @@ dependencies = [
  "insta",
  "libc",
  "llvm-sys",
+ "tempfile",
  "thiserror 2.0.18",
  "tracing",
 ]
