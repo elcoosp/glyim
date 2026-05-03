@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Content-addressable storage server for the Glyim package manager"
 
 [dependencies]
+glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 axum = { version = "0.8", features = ["json"] }
 tokio = { version = "1", features = ["full"] }

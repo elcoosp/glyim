@@ -1216,6 +1216,7 @@ name = "glyim-cas-server"
 version = "0.5.0"
 dependencies = [
  "axum",
+ "glyim-codegen-llvm",
  "glyim-macro-vfs",
  "serde",
  "serde_json",

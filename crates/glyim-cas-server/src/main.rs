@@ -1,3 +1,5 @@
+mod verify;
+
 use axum::{
     extract::{Path, State},
     http::{header, StatusCode},
@@ -11,7 +13,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 // ── Shared application state ───────────────────────────────────────
-struct AppState {
+pub struct AppState {
     store: Mutex<LocalContentStore>,
 }
 
@@ -192,6 +194,7 @@ async fn main() -> std::io::Result<()> {
         .route("/blob/missing", post(find_missing_blobs))
         .route("/action/{hash}", post(store_action_result).get(retrieve_action_result))
         .route("/status", get(status))
+        .route("/verify-wasm", post(verify::verify_wasm))
         .with_state(state);
 
     let addr = "127.0.0.1:9090";
