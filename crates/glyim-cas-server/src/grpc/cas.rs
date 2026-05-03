@@ -6,8 +6,9 @@ use bazel_remote_apis::build::bazel::remote::execution::v2::{
     GetTreeRequest, GetTreeResponse,
     SplitBlobRequest, SplitBlobResponse,
     SpliceBlobRequest, SpliceBlobResponse,
-    batch_update_blobs_request,
+
     batch_update_blobs_response,
+    batch_update_blobs_request,
     batch_read_blobs_response,
 };
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};

@@ -6,6 +6,7 @@ use glyim_hir::node::HirExpr;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
 use std::collections::HashMap;
+use glyim_hir::monomorphize::type_to_short_string;
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_expr(&mut self, expr: &HirExpr) -> Option<HirType> {
@@ -180,12 +181,19 @@ impl TypeChecker {
                     _ => None,
                 };
                 if let Some(type_name) = type_sym {
-                    let mangled = format!(
-                        "{}_{}",
-                        self.interner.resolve(type_name),
-                        self.interner.resolve(*method_name)
-                    );
-                    let mangled_sym = self.interner.intern(&mangled);
+let base = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
+let mangled = match &receiver_ty {
+    HirType::Generic(_, type_args) if !type_args.is_empty() => {
+        let suffix = type_args.iter()
+            .map(|a| type_to_short_string(a, &self.interner))
+            .collect::<Vec<_>>()
+            .join("_");
+        format!("{}__{}", base, suffix)
+    }
+    _ => base,
+};
+let mangled_sym = self.interner.intern(&mangled);
+
                     self.method_resolved.insert(*id, mangled_sym);
                     eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
                     eprintln!("[typeck MethodCall] mangled name: {}", mangled);
