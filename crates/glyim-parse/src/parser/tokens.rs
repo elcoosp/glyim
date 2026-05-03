@@ -84,14 +84,11 @@ impl<'a> Tokens<'a> {
     }
 
     /// Reset the token stream back to the beginning.
-
     /// Return the index of the next non‑trivia token, or the length
     /// of the token slice if at EOF.
-
     pub fn reset(&mut self) {
         self.pos = 0;
     }
-
 
     pub fn is_lambda_start(&self) -> bool {
         let mut p = self.pos;
