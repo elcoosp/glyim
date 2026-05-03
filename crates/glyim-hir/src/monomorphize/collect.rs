@@ -172,7 +172,47 @@ impl<'a> MonoContext<'a> {
         self.fn_work_queue.push(key);
     }
 
-    #[tracing::instrument(skip_all)]
+    
+    /// Walk two types in parallel and extract type-parameter → concrete-type
+    /// substitutions. Recursively handle raw pointers, generic instantiations,
+    /// and tuples so that `*mut T` → `*mut i64` infers `T = i64`.
+    fn extract_type_substitutions(
+        param_ty: &HirType,
+        arg_ty: &HirType,
+        type_params: &[Symbol],
+        sub: &mut HashMap<Symbol, HirType>,
+    ) {
+        match (param_ty, arg_ty) {
+            // Direct named match (e.g., T → i64)
+            (HirType::Named(param_sym), at) if type_params.contains(param_sym) && *at != HirType::Never => {
+                sub.insert(*param_sym, at.clone());
+            }
+            // Raw pointer: recurse into inner type
+            (HirType::RawPtr(inner_param), HirType::RawPtr(inner_arg)) => {
+                Self::extract_type_substitutions(inner_param, inner_arg, type_params, sub);
+            }
+            // Generic: recurse into each type argument
+            (HirType::Generic(p_sym, p_args), HirType::Generic(a_sym, a_args))
+                if p_sym == a_sym && p_args.len() == a_args.len() =>
+            {
+                for (p, a) in p_args.iter().zip(a_args.iter()) {
+                    Self::extract_type_substitutions(p, a, type_params, sub);
+                }
+            }
+            // Tuple: recurse element‑wise
+            (HirType::Tuple(p_elems), HirType::Tuple(a_elems))
+                if p_elems.len() == a_elems.len() =>
+            {
+                for (p, a) in p_elems.iter().zip(a_elems.iter()) {
+                    Self::extract_type_substitutions(p, a, type_params, sub);
+                }
+            }
+            _ => {}
+        }
+    }
+
+
+#[tracing::instrument(skip_all)]
     pub(crate) fn scan_expr_for_generic_calls(&mut self, expr: &HirExpr) {
         match expr {
             HirExpr::Call { id: call_id, callee, args, .. } => {
