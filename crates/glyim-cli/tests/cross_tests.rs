@@ -60,4 +60,3 @@ fn cross_compile_produces_correct_elf_magic() {
 fn missing_sysroot_returns_error() {
     assert!(glyim_cli::cross::ensure_sysroot("bogus-triple").is_err());
 }
-
