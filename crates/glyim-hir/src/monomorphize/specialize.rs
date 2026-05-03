@@ -1,7 +1,7 @@
+// crates/glyim-hir/src/monomorphize/specialize.rs
 use super::*;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
-use glyim_interner::Symbol;
 use std::collections::HashMap;
 
 impl<'a> MonoContext<'a> {
@@ -27,9 +27,8 @@ impl<'a> MonoContext<'a> {
         }
         mono.body = self.substitute_expr_types(&mono.body, &sub);
 
-        // Transitive specialization: re‑scan the substituted body for newly concrete calls.
-        self.scan_expr_for_generic_calls(&mono.body);
-        self.scan_expr_for_struct_instantiations(&mono.body);
+        self.scan_expr_for_generic_calls(&mono.body, &sub);
+        self.scan_expr_for_struct_instantiations(&mono.body, &sub);
 
         mono
     }
@@ -39,11 +38,11 @@ impl<'a> MonoContext<'a> {
             if self.find_struct(*sym).is_some() {
                 let concrete: Vec<HirType> = args.clone();
                 let key = (*sym, concrete.clone());
-                if !self.struct_specs.contains_key(&key)
-                    && let Some(s) = self.find_struct(*sym)
-                {
-                    let specialized = self.specialize_struct(&s, &concrete);
-                    self.struct_specs.insert(key, specialized);
+                if !self.struct_specs.contains_key(&key) {
+                    if let Some(s) = self.find_struct(*sym) {
+                        let specialized = self.specialize_struct(&s, &concrete);
+                        self.struct_specs.insert(key, specialized);
+                    }
                 }
             }
             for arg in args {

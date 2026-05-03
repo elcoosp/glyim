@@ -338,6 +338,12 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
+                    let fn_name = self.interner.resolve(f.name);
+                    // Skip specialisations that still contain unresolved type params (suffix __T, __K, __V)
+                    if fn_name.contains("__T") || fn_name.contains("__K") || fn_name.contains("__V") {
+                        eprintln!("[codegen] skipping unspecialized function: {}", fn_name);
+                        continue;
+                    }
                     if let Err(e) = function::codegen_fn(self, f) {
                         self.report_error(e);
                     }

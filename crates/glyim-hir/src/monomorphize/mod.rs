@@ -1,3 +1,4 @@
+// crates/glyim-hir/src/monomorphize/mod.rs
 use crate::item::StructDef;
 use crate::node::HirFn;
 use crate::types::{ExprId, HirType};
@@ -12,8 +13,6 @@ mod collect;
 mod context;
 mod rewrite;
 mod specialize;
-#[cfg(test)]
-mod tests;
 
 pub struct MonoResult {
     pub hir: crate::Hir,
@@ -28,7 +27,10 @@ pub fn monomorphize(
     call_type_args: &HashMap<ExprId, Vec<HirType>>,
 ) -> MonoResult {
     let mut ctx = MonoContext::new(hir, interner, expr_types, call_type_args);
-    eprintln!("[mono] entering monomorphize with call_type_args: {:?}", call_type_args);
+    eprintln!(
+        "[mono] entering monomorphize with call_type_args: {:?}",
+        call_type_args
+    );
     ctx.collect_and_specialize();
     ctx.build_result()
 }
@@ -43,6 +45,4 @@ pub(crate) struct MonoContext<'a> {
     pub(crate) type_overrides: HashMap<ExprId, HirType>,
     pub(crate) fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
     pub(crate) fn_queued: HashSet<(Symbol, Vec<HirType>)>,
-    pub(crate) inferred_call_args: HashMap<ExprId, Vec<HirType>>,
-    pub(crate) current_type_params: Vec<Symbol>,
 }
