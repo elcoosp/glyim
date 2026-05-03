@@ -224,7 +224,6 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-    eprintln!("[pipeline] mono_hir.items.len() = {}", mono_hir.items.len());
     for item in &mono_hir.items {
         if let glyim_hir::HirItem::Fn(f) = item {
             let name = interner.resolve(f.name);
@@ -263,7 +262,6 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
-    eprintln!("=== LLVM IR ===\n{}", codegen.ir_string());
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
@@ -802,17 +800,14 @@ pub fn generate_doc(
     input: &Path,
     output_dir: Option<&Path>,
 ) -> Result<(), PipelineError> {
-    // Read original source for tokenization (HIR spans are based on original file)
-    let original_source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
-    let (source, _) = load_source_with_prelude(input)?;
+    let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
     }
     let mut interner = parse_out.interner;
     let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    // Use original source tokens so byte offsets match HIR spans
-    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&original_source));
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let html = glyim_doc::generate_html(&hir, &interner);
     let out_dir = output_dir.unwrap_or_else(|| Path::new("doc"));
     std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;

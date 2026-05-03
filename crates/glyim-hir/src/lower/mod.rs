@@ -60,11 +60,23 @@ pub fn attach_doc_comments(
             crate::item::HirItem::Extern(e) => e.span,
         };
 
-        // Convert byte offset to token index
-        let token_index = tokens.iter()
+        // Find the token matching the HIR span.start (usually the item name)
+        let name_token_index = tokens.iter()
             .position(|t| t.start == span.start && !t.kind.is_trivia());
 
-        if let Some(idx) = token_index {
+        // Walk backwards from the name token to find the keyword token
+        // (fn, struct, enum, impl, extern) that starts the declaration.
+        // Doc comments precede the keyword, not just the name.
+        let keyword_index = name_token_index.and_then(|idx| {
+            (0..idx).rev().find(|&i| {
+                let t = &tokens[i];
+                !t.kind.is_trivia() && t.kind.is_keyword()
+            })
+        });
+
+        let search_index = keyword_index.or(name_token_index);
+
+        if let Some(idx) = search_index {
             if let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx) {
                 match item {
                     crate::item::HirItem::Fn(f) => f.doc = Some(doc),

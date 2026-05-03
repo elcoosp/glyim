@@ -56,8 +56,9 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
     if comments.is_empty() {
         return None;
     }
+    let result = beautify_doc_string(&comments.join("\n"));
 
-    Some(beautify_doc_string(&comments.join("\n")))
+    Some(result)
 }
 
 /// Remove `//` prefixes and normalize whitespace from doc comments.
@@ -65,6 +66,18 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
 /// their internal whitespace intact.
 pub fn beautify_doc_string(raw: &str) -> String {
     let mut in_code_block = false;
+
+    // Strip leading and trailing blank lines, but preserve internal ones.
+    let lines: Vec<&str> = raw.lines().collect();
+    let first_nonblank = lines.iter().position(|l| !l.trim().is_empty());
+    let last_nonblank = lines.iter().rposition(|l| !l.trim().is_empty());
+
+    let effective: &[&str] = match (first_nonblank, last_nonblank) {
+        (Some(f), Some(l)) => &lines[f..=l],
+        _ => &[],
+    };
+
+    let raw = effective.join("\n");
 
     raw.lines()
         .map(|line| {
