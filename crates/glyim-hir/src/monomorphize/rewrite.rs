@@ -358,6 +358,23 @@ impl<'a> MonoContext<'a> {
                     .or_else(|| self.inferred_call_args.get(id).cloned())
                     .unwrap_or_default();
 
+                // If we still have no concrete type arguments but we are inside a
+                // monomorphised function (type_sub is not empty), try to infer
+                // the arguments from the callee's signature.
+                if type_args.is_empty() && !type_sub.is_empty() {
+                    if let Some(callee_fn) = self.find_fn(*callee) {
+                        if !callee_fn.type_params.is_empty() {
+                            // Map the callee's type parameters through the current
+                            // substitution to obtain concrete types.
+                            type_args = callee_fn
+                                .type_params
+                                .iter()
+                                .map(|tp| type_sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                .collect();
+                        }
+                    }
+                }
+
                 // Substitute generic type params with concrete types
                 if !type_sub.is_empty() {
                     type_args = type_args

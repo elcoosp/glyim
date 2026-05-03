@@ -120,8 +120,19 @@ impl<'a> MonoContext<'a> {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         for ((orig_name, args), f) in &fn_specs_clone {
+            // Skip specialisations that still contain unresolved type-parameter
+            // symbols (avoids emitting dead generic specialisations like
+            // `HashMap_grow__K_V` and forces call rewriting to use the concrete one).
+            let mangled = self.mangle_name(*orig_name, args);
+            let mangled_str = self.interner.resolve(mangled);
+            if mangled_str.contains("_K_")
+                || mangled_str.contains("_V_")
+                || mangled_str.contains("_T_")
+            {
+                continue;
+            }
             let mut mono_f = f.clone();
-            mono_f.name = self.mangle_name(*orig_name, args);
+            mono_f.name = mangled;
 
             // Build the type substitution map for this monomorphized function
             let original_type_params = self.get_fn_type_params(*orig_name);
