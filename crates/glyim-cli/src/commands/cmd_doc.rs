@@ -6,6 +6,7 @@ pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool) -> i32 {
         Ok(()) => {
             let out_dir = output.unwrap_or_else(|| PathBuf::from("doc"));
             let index_html = out_dir.join("index.html");
+            let index_html = std::fs::canonicalize(&index_html).unwrap_or(index_html);
             if open {
                 if let Err(e) = webbrowser::open(&index_html.to_string_lossy()) {
                     eprintln!("warning: could not open browser: {}", e);
