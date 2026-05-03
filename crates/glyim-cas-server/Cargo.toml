@@ -8,7 +8,10 @@ description = "Content-addressable storage server for the Glyim package manager"
 
 [dependencies]
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
-actix-web = "4"
+axum = { version = "0.8", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
