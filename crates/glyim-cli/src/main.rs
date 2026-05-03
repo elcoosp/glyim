@@ -95,6 +95,9 @@ enum Command {
     DumpHir {
         input: PathBuf,
     },
+    MacroInspect {
+        input: PathBuf,
+    },
     #[command(subcommand)]
     Cache(CacheCommand),
 }
@@ -189,6 +192,7 @@ fn main() {
         Command::DumpTokens { input } => cmd_dump_tokens(input),
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),
+        Command::MacroInspect { input } => cmd_macro_inspect(input),
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
