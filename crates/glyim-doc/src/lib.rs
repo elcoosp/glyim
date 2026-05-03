@@ -67,6 +67,16 @@ pub fn generate_html(hir: &Hir, interner: &Interner) -> String {
                     "<h2>impl {}</h2>\n",
                     interner.resolve(i.target_name)
                 ));
+                for method in &i.methods {
+                    if let Some(ref doc) = method.doc {
+                        html.push_str("<div class=\"doc-comment\">");
+                        let parser = Parser::new(doc);
+                        html::push_html(&mut html, parser);
+                        html.push_str("</div>\n");
+                    }
+                    html.push_str(&format!("<h3>fn {}</h3>\n", interner.resolve(method.name)));
+                    html.push_str("<p>Method</p>\n");
+                }
             }
             glyim_hir::item::HirItem::Extern(e) => {
                 if let Some(ref doc) = e.doc {

@@ -46,23 +46,14 @@ pub fn lower_with_declarations(
 /// After lowering, scan the original tokens and attach doc comments
 /// to items based on source position (Go‑style).
 pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
-    for item in &mut hir.items {
-        let span = match item {
-            crate::item::HirItem::Fn(f) => f.span,
-            crate::item::HirItem::Struct(s) => s.span,
-            crate::item::HirItem::Enum(e) => e.span,
-            crate::item::HirItem::Impl(i) => i.span,
-            crate::item::HirItem::Extern(e) => e.span,
-        };
-
-        // Find the token matching the HIR span.start (usually the item name)
+    fn attach_doc_for_span(
+        span: glyim_diag::Span,
+        tokens: &[glyim_lex::Token],
+    ) -> Option<String> {
         let name_token_index = tokens
             .iter()
             .position(|t| t.start == span.start && !t.kind.is_trivia());
 
-        // Walk backwards from the name token to find the keyword token
-        // (fn, struct, enum, impl, extern) that starts the declaration.
-        // Doc comments precede the keyword, not just the name.
         let keyword_index = name_token_index.and_then(|idx| {
             (0..idx).rev().find(|&i| {
                 let t = &tokens[i];
@@ -72,15 +63,29 @@ pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
 
         let search_index = keyword_index.or(name_token_index);
 
-        if let Some(idx) = search_index
-            && let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx)
-        {
-            match item {
-                crate::item::HirItem::Fn(f) => f.doc = Some(doc),
-                crate::item::HirItem::Struct(s) => s.doc = Some(doc),
-                crate::item::HirItem::Enum(e) => e.doc = Some(doc),
-                crate::item::HirItem::Impl(i) => i.doc = Some(doc),
-                crate::item::HirItem::Extern(e) => e.doc = Some(doc),
+        search_index.and_then(|idx| glyim_parse::doc_comment::collect_doc_comments(tokens, idx))
+    }
+
+    for item in &mut hir.items {
+        match item {
+            crate::item::HirItem::Fn(f) => {
+                f.doc = attach_doc_for_span(f.span, tokens);
+            }
+            crate::item::HirItem::Struct(s) => {
+                s.doc = attach_doc_for_span(s.span, tokens);
+            }
+            crate::item::HirItem::Enum(e) => {
+                e.doc = attach_doc_for_span(e.span, tokens);
+                // TODO: attach doc comments to individual variants
+            }
+            crate::item::HirItem::Impl(i) => {
+                i.doc = attach_doc_for_span(i.span, tokens);
+                for method in &mut i.methods {
+                    method.doc = attach_doc_for_span(method.span, tokens);
+                }
+            }
+            crate::item::HirItem::Extern(e) => {
+                e.doc = attach_doc_for_span(e.span, tokens);
             }
         }
     }
