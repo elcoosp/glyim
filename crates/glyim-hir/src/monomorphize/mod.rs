@@ -32,6 +32,12 @@ pub fn monomorphize(
         call_type_args
     );
     ctx.collect_and_specialize();
+    eprintln!("[mono] Interner symbol map ({} entries):", ctx.interner.len());
+    for i in 0..ctx.interner.len() {
+        if let Some(sym) = ctx.interner.get_symbol(i as u32) {
+            eprintln!("  Symbol({}) = {:?}", i, ctx.interner.resolve(sym));
+        }
+    }
     ctx.build_result()
 }
 

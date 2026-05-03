@@ -229,11 +229,45 @@ impl<'a> MonoContext<'a> {
                 }
             }
             HirExpr::MethodCall {
+                id,
                 receiver,
                 method_name,
                 args,
                 ..
             } => {
+                // Check for explicit type arguments first (handles static method calls like Vec::new::<T>())
+                if let Some(type_args) = self.call_type_args.get(id) {
+                    let concrete_args = self.substitute_type_args(type_args, current_sub);
+                    if !concrete_args.is_empty()
+                        && !concrete_args
+                            .iter()
+                            .any(|a| self.has_unresolved_type_param(a))
+                    {
+                        let receiver_ty = self.get_expr_type(receiver.get_id());
+                        let base_type = match receiver_ty.as_ref() {
+                            Some(HirType::Named(name)) => *name,
+                            Some(HirType::Generic(name, _)) => *name,
+                            _ => {
+                                self.scan_expr_for_generic_calls(receiver, current_sub);
+                                for a in args {
+                                    self.scan_expr_for_generic_calls(a, current_sub);
+                                }
+                                return;
+                            }
+                        };
+                        let mangled = format!(
+                            "{}_{}",
+                            self.interner.resolve(base_type),
+                            self.interner.resolve(*method_name)
+                        );
+                        let mangled_sym = self.interner.intern(&mangled);
+                        if self.find_fn(mangled_sym).is_some() {
+                            self.queue_fn_specialization(mangled_sym, concrete_args);
+                        }
+                    }
+                }
+
+                // Try to infer from receiver type
                 let receiver_ty = self.get_expr_type(receiver.get_id());
                 if let Some(HirType::Generic(type_name, type_args)) = receiver_ty {
                     let mangled = format!(
@@ -249,10 +283,7 @@ impl<'a> MonoContext<'a> {
                             .iter()
                             .any(|a| self.has_unresolved_type_param(a))
                     {
-                        let mc_name = self.interner.resolve(mangled_sym);
-                        if !mc_name.contains("__") {
-                            self.queue_fn_specialization(mangled_sym, concrete_args);
-                        }
+                        self.queue_fn_specialization(mangled_sym, concrete_args);
                     }
                 }
                 self.scan_expr_for_generic_calls(receiver, current_sub);

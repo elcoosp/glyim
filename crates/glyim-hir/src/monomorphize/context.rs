@@ -38,28 +38,53 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
 
-        // If it's a mangled name (contains __), strip to get base name
-        let base_name = if let Some(pos) = name_str.find("__") {
-            self.interner.intern(&name_str[..pos])
-        } else {
-            name
-        };
+        // If it's a mangled monomorphized name (contains __), strip to get base name
+        if let Some(pos) = name_str.find("__") {
+            let base_name = self.interner.intern(&name_str[..pos]);
+            return self.find_fn(base_name);
+        }
 
         // Search top-level functions
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item
-                && f.name == base_name
+                && f.name == name
             {
                 return Some(f.clone());
             }
         }
 
-        // Search impl methods
+        // Search impl methods with exact name match
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
-                    if m.name == base_name {
+                    if m.name == name {
                         return Some(m.clone());
+                    }
+                }
+            }
+        }
+
+        // Try to parse as mangled method name (e.g., "Vec_new", "HashMap_hash", "HashMap_get")
+        // Use rfind to get the last underscore, so "HashMap_hash" splits to "HashMap" + "hash"
+        if let Some(underscore_pos) = name_str.rfind('_') {
+            let potential_type_name = &name_str[..underscore_pos];
+            let potential_method_name = &name_str[underscore_pos + 1..];
+
+            // Only interpret as method call if type name starts with uppercase
+            // to avoid false positives with snake_case function names
+            if potential_type_name.starts_with(|c: char| c.is_uppercase()) {
+                let type_sym = self.interner.intern(potential_type_name);
+                let method_sym = self.interner.intern(potential_method_name);
+
+                for item in &self.hir.items {
+                    if let HirItem::Impl(imp) = item {
+                        if imp.target_name == type_sym {
+                            for m in &imp.methods {
+                                if m.name == method_sym {
+                                    return Some(m.clone());
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -67,7 +92,6 @@ impl<'a> MonoContext<'a> {
 
         None
     }
-
     pub(crate) fn find_struct(&self, name: Symbol) -> Option<StructDef> {
         for item in &self.hir.items {
             if let HirItem::Struct(s) = item
