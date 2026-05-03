@@ -23,6 +23,53 @@ pub struct RemoteContentStore {
 }
 
 impl RemoteContentStore {
+    fn remote_store_action_result(
+        &self,
+        hash: ContentHash,
+        result: &ActionResult,
+    ) -> Result<(), StoreError> {
+        let url = format!("{}/action/{}", self.endpoint, hash);
+        let response = self
+            .client
+            .post(&url)
+            .headers(self.request_headers())
+            .json(result)
+            .send()
+            .map_err(|e| StoreError::Network(format!("remote store action: {e}")))?;
+        if !response.status().is_success() {
+            return Err(StoreError::Network(format!(
+                "remote store action returned {}",
+                response.status()
+            )));
+        }
+        Ok(())
+    }
+
+    fn remote_retrieve_action_result(
+        &self,
+        hash: ContentHash,
+    ) -> Result<Option<ActionResult>, StoreError> {
+        let url = format!("{}/action/{}", self.endpoint, hash);
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .map_err(|e| StoreError::Network(format!("remote retrieve action: {e}")))?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(StoreError::Network(format!(
+                "remote retrieve action returned {}",
+                response.status()
+            )));
+        }
+        let result: ActionResult = response
+            .json()
+            .map_err(|e| StoreError::Network(format!("deserialize action: {e}")))?;
+        Ok(Some(result))
+    }
+
     pub fn new(config: &RemoteStoreConfig) -> Result<Self, StoreError> {
         let local = LocalContentStore::new(&config.local_dir)?;
         let client = reqwest::blocking::Client::builder()
@@ -150,10 +197,8 @@ impl ContentStore for RemoteContentStore {
     ) -> Result<(), StoreError> {
         // Store locally always
         let _ = ContentStore::store_action_result(&self.local, action_hash, result.clone());
-        // Best-effort remote
-        let json =
-            serde_json::to_vec(&result).map_err(|e| StoreError::Io(format!("serialize: {e}")))?;
-        let _ = self.remote_store_blob(&json);
+        // Best-effort remote via action endpoint
+        let _ = self.remote_store_action_result(action_hash, &result);
         Ok(())
     }
 
@@ -162,8 +207,15 @@ impl ContentStore for RemoteContentStore {
         if let Some(result) = ContentStore::retrieve_action_result(&self.local, action_hash) {
             return Some(result);
         }
-        // Remote not implemented for action cache (would need action-cache endpoint)
-        None
+        // Check remote action cache
+        match self.remote_retrieve_action_result(action_hash) {
+            Ok(Some(result)) => {
+                // Cache locally
+                let _ = ContentStore::store_action_result(&self.local, action_hash, result.clone());
+                Some(result)
+            }
+            _ => None,
+        }
     }
 
     fn has_blobs(&self, hashes: &[ContentHash]) -> Vec<ContentHash> {
@@ -187,6 +239,8 @@ impl ContentStore for RemoteContentStore {
             Err(_) => missing,
         }
     }
+
+
 }
 
 #[cfg(test)]

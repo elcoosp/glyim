@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Package manager for Glyim - manifest parsing, dependency resolution, lockfile generation"
 
 [dependencies]
+glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 glyim-interner = { path = "../glyim-interner" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }

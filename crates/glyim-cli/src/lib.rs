@@ -6,3 +6,4 @@ pub mod pipeline;
 pub mod test_runner;
 
 pub mod cross;
+pub mod macro_expand;

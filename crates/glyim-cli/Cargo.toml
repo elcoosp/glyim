@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 glyim-lex = { path = "../glyim-lex" }
+wat = "1"
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-chrome = "0.7"
@@ -47,6 +48,7 @@ dirs-next = "2"
 
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }
+wat = "1"
 rstest = "0.24"
 trycmd = "0.15"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }

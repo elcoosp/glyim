@@ -695,6 +695,11 @@ impl<'ctx> Codegen<'ctx> {
         self
     }
 
+    /// Set the target triple without consuming self.
+    pub fn set_target(&mut self, triple: &str) {
+        self.target_triple = Some(triple.to_string());
+    }
+
     fn emit_macro_debug_section(&self) {
         let names = self.macro_fn_names.borrow();
         if names.is_empty() {
