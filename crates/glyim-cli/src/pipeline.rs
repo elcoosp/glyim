@@ -597,6 +597,7 @@ pub fn run_tests(
     filter_name: Option<&str>,
     include_ignored: bool,
     force_no_std: Option<bool>,
+    nocapture: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
     let is_no_std = force_no_std.unwrap_or(is_no_std);
@@ -696,7 +697,11 @@ pub fn run_tests(
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_test_out");
     link_object(&obj_path, &exe_path, false)?;
-    let output = Command::new(&exe_path)
+    let mut cmd = Command::new(&exe_path);
+    if nocapture {
+        cmd.arg("--nocapture");
+    }
+    let output = cmd
         .output()
         .map_err(PipelineError::Run)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -717,6 +722,7 @@ pub fn run_tests_package(
     package_dir: &Path,
     filter_name: Option<&str>,
     include_ignored: bool,
+    nocapture: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
@@ -725,7 +731,7 @@ pub fn run_tests_package(
             format!("{} not found", main_path.display()),
         )));
     }
-    run_tests(&main_path, filter_name, include_ignored, None)
+    run_tests(&main_path, filter_name, include_ignored, None, nocapture)
 }
 fn compile_to_hir_and_ir(
     source: &str,

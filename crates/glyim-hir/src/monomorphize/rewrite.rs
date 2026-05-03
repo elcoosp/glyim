@@ -414,7 +414,11 @@ impl<'a> MonoContext<'a> {
                 fields,
                 span,
             } => {
-                let new_name = struct_map.get(struct_name).copied().unwrap_or(*struct_name);
+                let new_name = if let Some(override_ty) = self.type_overrides.get(id) {
+                    if let HirType::Named(mangled) = override_ty { *mangled } else { *struct_name }
+                } else {
+                    struct_map.get(struct_name).copied().unwrap_or(*struct_name)
+                };
                 HirExpr::StructLit {
                     id: *id,
                     struct_name: new_name,

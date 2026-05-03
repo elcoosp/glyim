@@ -47,7 +47,11 @@ impl<'a> MonoContext<'a> {
         for ((_orig_name, args), s) in &struct_specs {
             let mut mono_s = s.clone();
             mono_s.name = self.mangle_name(s.name, args);
-            items.push(HirItem::Struct(mono_s));
+            // Emit only when all type parameters are concrete.
+            let mangled_str = self.interner.resolve(mono_s.name);
+            if !mangled_str.contains("_K_") && !mangled_str.contains("_V_") && !mangled_str.contains("_T_") {
+                items.push(HirItem::Struct(mono_s));
+            }
         }
         let fn_keys: Vec<(Symbol, Vec<HirType>)> = self.fn_specs.keys().cloned().collect();
         let fn_mangled_names: Vec<((Symbol, Vec<HirType>), Symbol)> = {

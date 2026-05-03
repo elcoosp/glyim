@@ -28,6 +28,7 @@ pub fn monomorphize(
     call_type_args: &HashMap<ExprId, Vec<HirType>>,
 ) -> MonoResult {
     let mut ctx = MonoContext::new(hir, interner, expr_types, call_type_args);
+    eprintln!("[mono] entering monomorphize with call_type_args: {:?}", call_type_args);
     ctx.collect_and_specialize();
     ctx.build_result()
 }

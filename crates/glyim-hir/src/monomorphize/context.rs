@@ -27,6 +27,7 @@ impl<'a> MonoContext<'a> {
 
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
+        eprintln!("[mono-find_fn] searching for {}", name_str);
         // Strip concrete suffix to obtain base name (e.g. HashMap_insert__i64_i64 -> HashMap_insert)
         let base_name = if let Some(pos) = name_str.rfind("__") {
             self.interner.intern(&name_str[..pos])
@@ -70,6 +71,7 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
+        eprintln!("[mono-find_fn] NOT found for {}", name_str);
         None
     }
 

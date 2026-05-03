@@ -7,9 +7,9 @@ pub fn cmd_test(input: PathBuf, ignore: bool, filter: Option<String>, nocapture:
         eprintln!("note: --nocapture flag is not yet fully implemented");
     }
     let result = if input.is_dir() {
-        pipeline::run_tests_package(&input, filter.as_deref(), include_ignored)
+        pipeline::run_tests_package(&input, filter.as_deref(), include_ignored, nocapture)
     } else {
-        pipeline::run_tests(&input, filter.as_deref(), include_ignored, None)
+        pipeline::run_tests(&input, filter.as_deref(), include_ignored, None, nocapture)
     };
     match result {
         Ok(summary) => {

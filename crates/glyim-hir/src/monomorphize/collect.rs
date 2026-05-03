@@ -36,12 +36,14 @@ impl<'a> MonoContext<'a> {
                     HirItem::Fn(f) => {
                         if let Some(callee) = self.find_callee_by_id(&f.body, *expr_id) {
                             self.queue_fn_specialization(callee, type_args.clone());
+                eprintln!("[mono-collect] queue_fn_specialization: {} with {:?}", self.interner.resolve(callee), type_args);
                         }
                     }
                     HirItem::Impl(imp) => {
                         for m in &imp.methods {
                             if let Some(callee) = self.find_callee_by_id(&m.body, *expr_id) {
                                 self.queue_fn_specialization(callee, type_args.clone());
+                eprintln!("[mono-collect] queue_fn_specialization: {} with {:?}", self.interner.resolve(callee), type_args);
                             }
                         }
                     }
@@ -67,6 +69,7 @@ impl<'a> MonoContext<'a> {
         self.current_type_params = vec![];
 
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
+            eprintln!("[mono-worker] popped: {} with {:?}", self.interner.resolve(fn_name), type_args);
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
                 continue;
