@@ -10,6 +10,7 @@ pub use item::{
 pub use lower::attach_doc_comments;
 pub use lower::lower;
 pub use lower::lower_with_declarations;
+pub use lower::desugar::desugar_method_calls;
 pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
 pub use types::{ExprId, HirPattern, HirType};
 pub mod decl_table;

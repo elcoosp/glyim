@@ -1,4 +1,5 @@
 mod context;
+pub mod desugar;
 mod expr;
 mod item;
 mod ops;

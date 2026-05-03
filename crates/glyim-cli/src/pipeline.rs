@@ -134,11 +134,12 @@ pub fn build(
     target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
+    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -400,7 +401,7 @@ pub fn run_with_mode(
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
-            crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
+        crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -484,7 +485,7 @@ pub fn build_with_mode(
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
-            crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
+        crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -532,8 +533,10 @@ pub fn build_package(
             PipelineError::Io(e)
         }
     })?;
-    let full_manifest = glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml")
-        .map_err(|e| PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string())))?;
+    let full_manifest =
+        glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml").map_err(|e| {
+            PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string()))
+        })?;
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
@@ -556,8 +559,10 @@ pub fn run_package(
             PipelineError::Io(e)
         }
     })?;
-    let full_manifest = glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml")
-        .map_err(|e| PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string())))?;
+    let full_manifest =
+        glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml").map_err(|e| {
+            PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string()))
+        })?;
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
