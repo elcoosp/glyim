@@ -124,6 +124,7 @@ pub enum HirExpr {
         id: ExprId,
         receiver: Box<HirExpr>,
         method_name: Symbol,
+        resolved_callee: Option<Symbol>,
         args: Vec<HirExpr>,
         span: Span,
     },

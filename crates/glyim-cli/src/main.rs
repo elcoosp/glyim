@@ -35,6 +35,8 @@ enum Command {
         debug: bool,
         #[arg(long, conflicts_with = "debug")]
         release: bool,
+        #[arg(long)]
+        bare: bool,
     },
     Run {
         input: PathBuf,
@@ -64,6 +66,8 @@ enum Command {
         ignore: bool,
         #[arg(long)]
         filter: Option<String>,
+        #[arg(long)]
+        nocapture: bool,
     },
     Add {
         package: String,
@@ -168,7 +172,8 @@ fn main() {
             target,
             debug,
             release,
-        } => cmd_build(input, output, target, debug, release),
+            bare,
+        } => cmd_build(input, output, target, debug, release, bare),
         Command::Run {
             input,
             target,
@@ -182,7 +187,8 @@ fn main() {
             input,
             ignore,
             filter,
-        } => cmd_test(input, ignore, filter),
+            nocapture,
+        } => cmd_test(input, ignore, filter, nocapture),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),

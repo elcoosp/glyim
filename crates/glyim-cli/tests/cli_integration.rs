@@ -144,6 +144,12 @@ fn cli_build_produces_message() {
 }
 
 #[test]
+fn cli_build_bare_flag_compiles_single_file() {
+    let output = try_glyim!(&["build", "--bare"], "main = () => 42");
+    assert!(output.status.success());
+}
+
+#[test]
 fn cli_doc_open_flag_works() {
     let Some(bin) = glyim_bin() else {
         return;
@@ -217,6 +223,7 @@ fn cli_macro_inspect_shows_expansion() {
         "missing expanded content"
     );
 }
+
 #[test]
 fn cli_verify_checks_lockfile() {
     let Some(bin) = glyim_bin() else {
@@ -290,13 +297,18 @@ type = "local"
 
 #[test]
 fn cli_cache_clean_removes_unused() {
-    let Some(bin) = glyim_bin() else {
-        return;
-    };
+    let Some(bin) = glyim_bin() else { return; };
     let dir = tempfile::tempdir().unwrap();
-    let cache_dir = dir.path().join(".glyim").join("cas");
+    let home = dir.path();
+    // Ensure dirs_next uses our temporary directory on all platforms
+    unsafe {
+        std::env::set_var("HOME", home);
+        std::env::set_var("XDG_DATA_HOME", home);
+    }
+    let data_dir = dirs_next::data_dir().unwrap();
+    let cache_dir = data_dir.join("cas");
     std::fs::create_dir_all(cache_dir.join("objects")).unwrap();
-    // store a blob not referenced by any name
+    std::fs::create_dir_all(cache_dir.join("names")).unwrap();
     let store = glyim_macro_vfs::LocalContentStore::new(&cache_dir).unwrap();
     let hash_unused = store.store(b"unused");
     let hash_used = store.store(b"used");
@@ -305,18 +317,12 @@ fn cli_cache_clean_removes_unused() {
     let output = std::process::Command::new(bin)
         .arg("cache")
         .arg("clean")
-        .env("HOME", dir.path())
+        .env("HOME", home)
+        .env("XDG_DATA_HOME", home)
         .current_dir(dir.path())
         .output()
         .expect("glyim cache clean");
-    assert!(output.status.success());
-    // The unused blob should be gone, the used one should remain
-    assert!(
-        store.retrieve(hash_used).is_some(),
-        "used blob should still exist"
-    );
-    assert!(
-        store.retrieve(hash_unused).is_none(),
-        "unused blob should be removed"
-    );
+    assert!(output.status.success(), "cache clean failed: {:?}", String::from_utf8_lossy(&output.stderr));
+    assert!(store.retrieve(hash_used).is_some(), "used blob should still exist");
+    assert!(store.retrieve(hash_unused).is_none(), "unused blob should be removed");
 }
