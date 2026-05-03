@@ -3,14 +3,13 @@
 //! The registry re‑compiles a macro from its source and checks that the
 //! resulting `.wasm` blob matches the hash declared by the publisher.
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use glyim_macro_vfs::{ContentHash, ContentStore};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::AppState;
 
