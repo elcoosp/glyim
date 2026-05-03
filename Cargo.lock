@@ -1314,6 +1314,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-fmt"
+version = "0.5.0"
+
+[[package]]
 name = "glyim-hir"
 version = "0.5.0"
 dependencies = [
@@ -1335,6 +1339,16 @@ version = "0.5.0"
 dependencies = [
  "glyim-diag",
  "glyim-syntax",
+]
+
+[[package]]
+name = "glyim-lint"
+version = "0.5.0"
+dependencies = [
+ "glyim-diag",
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-parse",
 ]
 
 [[package]]
