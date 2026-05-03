@@ -182,6 +182,7 @@ impl TypeChecker {
                 };
                 if let Some(type_name) = type_sym {
 let base = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
+let base_sym = self.interner.intern(&base);
 let mangled = match &receiver_ty {
     HirType::Generic(_, type_args) if !type_args.is_empty() => {
         let suffix = type_args.iter()
@@ -190,7 +191,7 @@ let mangled = match &receiver_ty {
             .join("_");
         format!("{}__{}", base, suffix)
     }
-    _ => base,
+    _ => base.clone(),
 };
 let mangled_sym = self.interner.intern(&mangled);
 
@@ -206,7 +207,7 @@ let mangled_sym = self.interner.intern(&mangled);
                             .collect::<Vec<_>>())
                     );
                     if let Some(methods) = self.impl_methods.get(&type_name)
-                        && let Some(fn_def) = methods.iter().find(|f| f.name == mangled_sym)
+                        && let Some(fn_def) = methods.iter().find(|f| f.name == base_sym)
                     {
                         let mut sub = std::collections::HashMap::new();
                         // Infer from receiver type args

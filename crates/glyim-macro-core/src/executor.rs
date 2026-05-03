@@ -7,6 +7,11 @@ use glyim_macro_vfs::{ContentHash, ContentStore};
 
 use crate::cache::{MacroExpansionCache, compute_cache_key};
 
+/// Fuel budget for macro execution — 1_000_000 instructions is generous
+/// but prevents infinite loops. Based on Wasmtime fuel metering where each
+/// "unit" corresponds roughly to one wasm instruction/basic-block.
+const MACRO_FUEL_BUDGET: u64 = 1_000_000;
+
 /// The deterministic macro execution engine.
 ///
 /// If a [`MacroExpansionCache`] is provided, the executor will:
@@ -25,6 +30,8 @@ impl MacroExecutor {
         let mut config = Config::default();
         config.wasm_backtrace_max_frames(std::num::NonZero::new(64));
         config.wasm_backtrace_details(WasmBacktraceDetails::Enable);
+        // Enable deterministic fuel metering to prevent infinite loops
+        config.consume_fuel(true);
         let engine = Engine::new(&config).expect("failed to create wasmtime engine");
         Self {
             engine,
@@ -37,6 +44,8 @@ impl MacroExecutor {
         let mut config = Config::default();
         config.wasm_backtrace_max_frames(std::num::NonZero::new(64));
         config.wasm_backtrace_details(WasmBacktraceDetails::Enable);
+        // Enable deterministic fuel metering to prevent infinite loops
+        config.consume_fuel(true);
         let engine = Engine::new(&config).expect("failed to create wasmtime engine");
         let cache = MacroExpansionCache::new(store);
         Self {
@@ -72,6 +81,11 @@ impl MacroExecutor {
         // ── Wasm execution ──────────────────────────────────────
         let module = Module::from_binary(&self.engine, wasm)?;
         let mut store = Store::new(&self.engine, ());
+
+        // Set the fuel budget — prevents infinite loops deterministically
+        store.set_fuel(MACRO_FUEL_BUDGET)
+            .map_err(|e| anyhow!("set_fuel: {e}"))?;
+
         let instance = Instance::new(&mut store, &module, &[])?;
 
         let maybe_memory = instance.get_memory(&mut store, "memory");
@@ -113,6 +127,16 @@ impl MacroExecutor {
                 &mut result,
             )
             .map_err(|e| {
+                // Detect fuel exhaustion and give a clear error
+                if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
+                    if *trap == wasmtime::Trap::OutOfFuel {
+                        return anyhow!(
+                            "macro execution exceeded fuel budget of {} instructions (infinite loop?)",
+                            MACRO_FUEL_BUDGET
+                        );
+                    }
+                    eprintln!("Trap cause: {:?}", trap);
+                }
                 if let Some(bt) = e.downcast_ref::<wasmtime::WasmBacktrace>() {
                     eprintln!("Wasm backtrace:");
                     for (i, frame) in bt.frames().iter().enumerate() {
@@ -124,9 +148,6 @@ impl MacroExecutor {
                             frame.module_offset()
                         );
                     }
-                }
-                if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
-                    eprintln!("Trap cause: {:?}", trap);
                 }
                 anyhow!("macro expand call: {e}")
             })?;
