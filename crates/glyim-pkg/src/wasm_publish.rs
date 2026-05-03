@@ -11,7 +11,7 @@ pub fn compile_and_store_macro_wasm(
     store: &dyn ContentStore,
 ) -> Result<ContentHash, PkgError> {
     let source = std::fs::read_to_string(source_path)
-        .map_err(|e| PkgError::Io(e))?;
+        .map_err(PkgError::Io)?;
     let wasm_bytes = glyim_codegen_llvm::compile_to_wasm(&source, target_triple)
         .map_err(|e| PkgError::Registry(format!("Wasm compilation failed: {e}")))?;
     let hash = store.store(&wasm_bytes);

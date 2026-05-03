@@ -46,15 +46,14 @@ pub fn satisfies_constraint(version: &str, constraint: &str) -> bool {
     if version == constraint {
         return true;
     }
-    if let Some(rest) = constraint.strip_prefix('^') {
-        if let (Ok(ver), Ok(req)) = (
+    if let Some(rest) = constraint.strip_prefix('^')
+        && let (Ok(ver), Ok(req)) = (
             semver::Version::parse(version),
             semver::Version::parse(rest),
         ) {
             // ^1.2.3 means >=1.2.3, <2.0.0
             return ver >= req && ver.major == req.major;
         }
-    }
     false
 }
 
@@ -88,8 +87,8 @@ pub fn resolve(
         }
 
         // Check lockfile first
-        if let Some(lock) = lockfile {
-            if let Some(pkg) = lock.packages.iter().find(|p| p.name == name) {
+        if let Some(lock) = lockfile
+            && let Some(pkg) = lock.packages.iter().find(|p| p.name == name) {
                 resolved.insert(
                     name.clone(),
                     ResolvedPackage {
@@ -111,7 +110,6 @@ pub fn resolve(
                 }
                 continue;
             }
-        }
 
         let versions = available.get(&name).ok_or_else(|| {
             PkgError::Resolution(format!("package '{name}' not found in available packages"))

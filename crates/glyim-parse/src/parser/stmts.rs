@@ -42,10 +42,9 @@ impl Parser<'_> {
         if name_tok.kind != SyntaxKind::Ident {
             return None;
         }
-        if !self
+        if self
             .tokens
-            .peek2()
-            .is_some_and(|t| t.kind == SyntaxKind::Eq)
+            .peek2().is_none_or(|t| t.kind != SyntaxKind::Eq)
         {
             return None;
         }

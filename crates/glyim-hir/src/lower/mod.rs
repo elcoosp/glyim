@@ -76,8 +76,8 @@ pub fn attach_doc_comments(
 
         let search_index = keyword_index.or(name_token_index);
 
-        if let Some(idx) = search_index {
-            if let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx) {
+        if let Some(idx) = search_index
+            && let Some(doc) = glyim_parse::doc_comment::collect_doc_comments(tokens, idx) {
                 match item {
                     crate::item::HirItem::Fn(f) => f.doc = Some(doc),
                     crate::item::HirItem::Struct(s) => s.doc = Some(doc),
@@ -86,6 +86,5 @@ pub fn attach_doc_comments(
                     crate::item::HirItem::Extern(e) => e.doc = Some(doc),
                 }
             }
-        }
     }
 }

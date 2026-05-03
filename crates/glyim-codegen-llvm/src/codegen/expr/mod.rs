@@ -262,7 +262,7 @@ pub(crate) fn codegen_expr<'ctx>(
                             };
                             // Zero the memory with stores
                             let zero = cg.i64_type.const_int(0, false);
-                            let num_fields = st.count_fields() as u32;
+                            let num_fields = st.count_fields();
                             for i in 0..num_fields {
                                 let indices = &[
                                     cg.i32_type.const_int(0, false),
@@ -404,7 +404,7 @@ pub(crate) fn codegen_expr<'ctx>(
             let mangled_name = match &inner_ty {
                 HirType::Named(type_name) | HirType::Generic(type_name, _) => format!(
                     "{}_{}",
-                    cg.interner.resolve(type_name.clone()),
+                    cg.interner.resolve(*type_name),
                     cg.interner.resolve(*method_name)
                 ),
                 _ => cg.interner.resolve(*method_name).to_string(),

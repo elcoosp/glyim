@@ -117,7 +117,7 @@ impl<'a> Tokens<'a> {
         if self
             .tokens
             .get(p)
-            .map_or(true, |t| t.kind != SyntaxKind::LParen)
+            .is_none_or(|t| t.kind != SyntaxKind::LParen)
         {
             return false;
         }
@@ -139,10 +139,9 @@ impl<'a> Tokens<'a> {
                 .get(p)
                 .is_some_and(|t| t.kind == SyntaxKind::FatArrow);
         }
-        if !self
+        if self
             .tokens
-            .get(p)
-            .is_some_and(|t| t.kind == SyntaxKind::Ident)
+            .get(p).is_none_or(|t| t.kind != SyntaxKind::Ident)
         {
             return false;
         }
@@ -157,10 +156,9 @@ impl<'a> Tokens<'a> {
                     while p < self.tokens.len() && self.tokens[p].kind.is_trivia() {
                         p += 1;
                     }
-                    if !self
+                    if self
                         .tokens
-                        .get(p)
-                        .is_some_and(|t| t.kind == SyntaxKind::Ident)
+                        .get(p).is_none_or(|t| t.kind != SyntaxKind::Ident)
                     {
                         return false;
                     }

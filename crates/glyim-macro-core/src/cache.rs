@@ -60,6 +60,12 @@ pub struct InMemoryStore {
     names: Mutex<HashMap<String, ContentHash>>,
 }
 
+impl Default for InMemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryStore {
     pub fn new() -> Self {
         Self {

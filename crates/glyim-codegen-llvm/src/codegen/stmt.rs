@@ -60,11 +60,10 @@ pub(crate) fn codegen_stmt<'ctx>(
             {
                 let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
                 let resolved_name = cg.interner.resolve(*name);
-                if let Ok(var) = di.create_local_variable(resolved_name, *sp, line) {
-                    if let Ok(loc) = di.create_location(*sp, line, 0) {
+                if let Ok(var) = di.create_local_variable(resolved_name, *sp, line)
+                    && let Ok(loc) = di.create_location(*sp, line, 0) {
                         let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
                     }
-                }
             }
 
             fctx.vars.insert(*name, alloca);
@@ -88,11 +87,10 @@ pub(crate) fn codegen_stmt<'ctx>(
                 {
                     let line = crate::debug::DebugInfoGen::byte_offset_to_line(src, span.start);
                     let resolved_name = cg.interner.resolve(*name);
-                    if let Ok(var) = di.create_local_variable(resolved_name, *sp, line) {
-                        if let Ok(loc) = di.create_location(*sp, line, 0) {
+                    if let Ok(var) = di.create_local_variable(resolved_name, *sp, line)
+                        && let Ok(loc) = di.create_location(*sp, line, 0) {
                             let _ = di.insert_declare(&cg.builder, &cg.module, var, alloca, loc);
                         }
-                    }
                 }
                 fctx.vars.insert(*name, alloca);
                 None
@@ -278,8 +276,8 @@ fn codegen_pattern_bind<'ctx>(
                     "struct_ptr",
                 )
                 .ok();
-            if let Some(ptr) = ptr {
-                if let Some(st) = cg.struct_types.borrow().get(name).copied() {
+            if let Some(ptr) = ptr
+                && let Some(st) = cg.struct_types.borrow().get(name).copied() {
                     for (field_sym, field_pat) in bindings {
                         if let Some(field_idx) = cg
                             .struct_field_indices
@@ -304,7 +302,6 @@ fn codegen_pattern_bind<'ctx>(
                         }
                     }
                 }
-            }
         }
         glyim_hir::HirPattern::Wild | glyim_hir::HirPattern::Unit => {}
         _ => {}

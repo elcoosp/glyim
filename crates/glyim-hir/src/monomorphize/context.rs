@@ -28,9 +28,8 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
         for item in &self.hir.items {
-            if let HirItem::Fn(f) = item {
-                if f.name == name { return Some(f.clone()); }
-            }
+            if let HirItem::Fn(f) = item
+                && f.name == name { return Some(f.clone()); }
         }
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
@@ -45,8 +44,8 @@ impl<'a> MonoContext<'a> {
             let prefix_sym = self.interner.intern(&prefix);
             if self.find_struct(prefix_sym).is_some() {
                 for item in &self.hir.items {
-                    if let HirItem::Impl(imp) = item {
-                        if imp.target_name == prefix_sym {
+                    if let HirItem::Impl(imp) = item
+                        && imp.target_name == prefix_sym {
                             for m in &imp.methods {
                                 let m_name = self.interner.resolve(m.name).to_string();
                                 if m_name == base_method_name
@@ -54,7 +53,6 @@ impl<'a> MonoContext<'a> {
                                 { return Some(m.clone()); }
                             }
                         }
-                    }
                 }
             }
         }
@@ -63,14 +61,13 @@ impl<'a> MonoContext<'a> {
 
     pub(crate) fn find_struct(&self, name: Symbol) -> Option<StructDef> {
         for item in &self.hir.items {
-            if let HirItem::Struct(s) = item {
-                if s.name == name { return Some(s.clone()); }
-            }
+            if let HirItem::Struct(s) = item
+                && s.name == name { return Some(s.clone()); }
         }
         None
     }
 
     pub(crate) fn mangle_name(&mut self, base: Symbol, type_args: &[HirType]) -> Symbol {
-        mangle_type_name(&mut self.interner, base, type_args)
+        mangle_type_name(self.interner, base, type_args)
     }
 }

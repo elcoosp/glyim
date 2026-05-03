@@ -543,8 +543,8 @@ pub fn run_package(
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
     for line in stdout.lines() {
-        if let Some(rest) = line.trim().strip_prefix("test ") {
-            if let Some(name_end) = rest.find(" ... ") {
+        if let Some(rest) = line.trim().strip_prefix("test ")
+            && let Some(name_end) = rest.find(" ... ") {
                 let name = &rest[..name_end];
                 let status = &rest[name_end + 5..];
                 if status == "ok" {
@@ -553,7 +553,6 @@ fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResul
                     results.push((name.to_string(), crate::test_runner::TestResult::Failed));
                 }
             }
-        }
     }
     results
 }
@@ -827,7 +826,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut interner = parse_out.interner;
 
     // Phase 1: scan declarations to build symbol table
-    let decl_output = glyim_parse::declarations::parse_declarations(&source);
+    let decl_output = glyim_parse::declarations::parse_declarations(source);
     let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(
         &decl_output.ast,
         &mut interner,

@@ -9,13 +9,12 @@ pub(crate) fn parse_block(parser: &mut Parser) -> Option<ExprNode> {
     let start = start_tok.start;
     let mut items = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
-        if parser.tokens.at(SyntaxKind::KwLet) {
-            if let Some(stmt) = parser.parse_let_stmt() {
+        if parser.tokens.at(SyntaxKind::KwLet)
+            && let Some(stmt) = parser.parse_let_stmt() {
                 items.push(BlockItem::Stmt(stmt));
                 parser.tokens.eat(SyntaxKind::Semicolon);
                 continue;
             }
-        }
         if let Some(expr) = parser.parse_expr(0) {
             if parser.tokens.eat(SyntaxKind::Eq).is_some() {
                 let value = parser.parse_expr(0)?;

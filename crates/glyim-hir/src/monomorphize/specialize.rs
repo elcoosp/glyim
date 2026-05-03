@@ -26,12 +26,11 @@ impl<'a> MonoContext<'a> {
             if self.find_struct(*sym).is_some() {
                 let concrete: Vec<HirType> = args.clone();
                 let key = (*sym, concrete.clone());
-                if !self.struct_specs.contains_key(&key) {
-                    if let Some(s) = self.find_struct(*sym) {
+                if !self.struct_specs.contains_key(&key)
+                    && let Some(s) = self.find_struct(*sym) {
                         let specialized = self.specialize_struct(&s, &concrete);
                         self.struct_specs.insert(key, specialized);
                     }
-                }
             }
             for arg in args { self.ensure_struct_specialized(arg); }
         }

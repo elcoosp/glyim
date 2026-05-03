@@ -162,8 +162,8 @@ pub(crate) fn codegen_match<'ctx>(
 
                 // Some branch
                 cg.builder.position_at_end(some_bb);
-                if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pat0 {
-                    if let HirPattern::Var(name) = inner.as_ref() {
+                if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pat0
+                    && let HirPattern::Var(name) = inner.as_ref() {
                         let payload_ptr = cg
                             .builder
                             .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
@@ -180,7 +180,6 @@ pub(crate) fn codegen_match<'ctx>(
                         cg.builder.build_store(alloca, payload_val).ok()?;
                         fctx.vars.insert(*name, alloca);
                     }
-                }
                 let some_val = codegen_expr(cg, body0, fctx)?;
                 let some_end = cg.builder.get_insert_block().unwrap();
                 if cg

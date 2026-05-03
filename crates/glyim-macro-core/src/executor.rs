@@ -75,7 +75,7 @@ impl MacroExecutor {
             .ok_or_else(|| anyhow!("macro module must export a function named 'expand'"))?;
 
         if let Some(memory) = maybe_memory {
-            let required_pages = ((input.len() * 2) as u64 + 65536 - 1) / 65536 + 1;
+            let required_pages = ((input.len() * 2) as u64).div_ceil(65536) + 1;
             let current_pages = memory.size(&store);
             if current_pages < required_pages {
                 let pages_to_grow = required_pages - current_pages;
@@ -87,11 +87,10 @@ impl MacroExecutor {
         }
 
         let output_offset = input.len() as i32;
-        if let Some(ref mem) = maybe_memory {
-            if mem.size(&store) * 65536 < (input.len() as u64 * 3) {
+        if let Some(ref mem) = maybe_memory
+            && mem.size(&store) * 65536 < (input.len() as u64 * 3) {
                 mem.grow(&mut store, 1)?;
             }
-        }
 
         let mut result = [Val::I32(0)];
         expand_fn
@@ -128,11 +127,10 @@ impl MacroExecutor {
             _ => return Err(anyhow!("expand must return i32 output length")),
         };
 
-        if let Some(ref _mem) = maybe_memory {
-            if output_len > input.len() * 2 {
+        if let Some(ref _mem) = maybe_memory
+            && output_len > input.len() * 2 {
                 return Err(anyhow!("macro output too large"));
             }
-        }
 
         let out = if let Some(ref mem) = maybe_memory {
             let mut buf = vec![0u8; output_len];

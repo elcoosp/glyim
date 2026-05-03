@@ -80,11 +80,10 @@ pub fn collect_test_functions(
                 continue;
             }
             let resolved = interner.resolve(*name).to_string();
-            if let Some(filter) = filter_name {
-                if resolved != *filter {
+            if let Some(filter) = filter_name
+                && resolved != *filter {
                     continue;
                 }
-            }
             tests.push(TestFunction {
                 name: resolved,
                 ignored: is_ignored,

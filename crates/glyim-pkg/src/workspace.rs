@@ -17,9 +17,9 @@ pub fn detect_workspace(start: &Path) -> Option<Workspace> {
     };
     loop {
         let manifest_path = current.join("glyim.toml");
-        if manifest_path.exists() {
-            if let Ok(manifest) = load_manifest(&manifest_path) {
-                if let Some(ws) = &manifest.workspace {
+        if manifest_path.exists()
+            && let Ok(manifest) = load_manifest(&manifest_path)
+                && let Some(ws) = &manifest.workspace {
                     let members = resolve_member_globs(&current, &ws.members)?;
                     return Some(Workspace {
                         root: current,
@@ -27,8 +27,6 @@ pub fn detect_workspace(start: &Path) -> Option<Workspace> {
                         manifest,
                     });
                 }
-            }
-        }
         if !current.pop() {
             return None;
         }

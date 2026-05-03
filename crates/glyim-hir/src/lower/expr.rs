@@ -491,8 +491,7 @@ fn lower_call(
         variant_name,
         args: enum_args,
     } = &callee.kind
-    {
-        if enum_args.is_empty() {
+        && enum_args.is_empty() {
             let mangled = ctx.intern(&format!(
                 "{}_{}",
                 ctx.resolve(*enum_name),
@@ -506,7 +505,6 @@ fn lower_call(
                 span: call_span,
             };
         }
-    }
 
     let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
     if let ExprKind::Ident(sym) = &callee.kind {

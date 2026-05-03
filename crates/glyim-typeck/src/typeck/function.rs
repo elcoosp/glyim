@@ -15,8 +15,8 @@ impl TypeChecker {
                 tc.insert_binding(*sym, ty.clone(), mutable);
             }
             let body_type = tc.check_expr(&f.body);
-            if let Some(expected) = &f.ret {
-                if let Some(actual) = body_type {
+            if let Some(expected) = &f.ret
+                && let Some(actual) = body_type {
                     let is_match = *expected == actual
                         || match (expected.clone(), actual.clone()) {
                             (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
@@ -31,7 +31,6 @@ impl TypeChecker {
                         });
                     }
                 }
-            }
         });
     }
 }

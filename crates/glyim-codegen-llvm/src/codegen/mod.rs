@@ -381,7 +381,7 @@ impl<'ctx> Codegen<'ctx> {
         };
         Target::initialize_native(&InitializationConfig::default()).map_err(|e| e.to_string())?;
         let triple_obj = if let Some(ref t) = self.target_triple {
-            TargetTriple::create(&t)
+            TargetTriple::create(t)
         } else {
             TargetMachine::get_default_triple()
         };

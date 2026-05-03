@@ -109,18 +109,15 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn scan_expr_for_struct_instantiations(&mut self, expr: &HirExpr) {
         match expr {
             HirExpr::StructLit { id, struct_name, fields, .. } => {
-                if let Some(struct_def) = self.find_struct(*struct_name) {
-                    if !struct_def.type_params.is_empty() {
+                if let Some(struct_def) = self.find_struct(*struct_name)
+                    && !struct_def.type_params.is_empty() {
                         let field_types: Vec<HirType> = fields.iter().map(|(_, f)| self.expr_types.get(f.get_id().as_usize()).cloned().unwrap_or(HirType::Never)).collect();
                         let mut sub = HashMap::new();
                         for (i, tp) in struct_def.type_params.iter().enumerate() {
-                            if let Some(ft) = struct_def.fields.get(i) {
-                                if let HirType::Named(param_sym) = &ft.ty {
-                                    if let Some(val_ty) = field_types.get(i) {
-                                        if *param_sym == *tp && *val_ty != HirType::Never { sub.insert(*tp, val_ty.clone()); }
-                                    }
-                                }
-                            }
+                            if let Some(ft) = struct_def.fields.get(i)
+                                && let HirType::Named(param_sym) = &ft.ty
+                                    && let Some(val_ty) = field_types.get(i)
+                                        && *param_sym == *tp && *val_ty != HirType::Never { sub.insert(*tp, val_ty.clone()); }
                         }
                         if sub.len() == struct_def.type_params.len() && !sub.is_empty() {
                             let concrete: Vec<HirType> = struct_def.type_params.iter().map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int)).collect();
@@ -133,7 +130,6 @@ impl<'a> MonoContext<'a> {
                             self.type_overrides.insert(*id, HirType::Named(mangled));
                         }
                     }
-                }
                 for (_, f) in fields { self.scan_expr_for_struct_instantiations(f); }
             }
             HirExpr::Block { stmts, .. } => for s in stmts { match s {
@@ -210,8 +206,8 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn scan_expr_for_generic_calls(&mut self, expr: &HirExpr) {
         match expr {
             HirExpr::Call { id: call_id, callee, args, .. } => {
-                if let Some(fn_def) = self.find_fn(*callee) {
-                    if !fn_def.type_params.is_empty() {
+                if let Some(fn_def) = self.find_fn(*callee)
+                    && !fn_def.type_params.is_empty() {
                         if args.is_empty() {
                             let concrete: Vec<HirType> = fn_def.type_params.iter().map(|_| HirType::Int).collect();
                             self.inferred_call_args.insert(*call_id, concrete.clone());
@@ -227,18 +223,16 @@ impl<'a> MonoContext<'a> {
                         }).collect();
                         let mut sub = HashMap::new();
                         for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
-                            if let Some(at) = arg_types.get(param_idx) {
-                                if *at != HirType::Never {
+                            if let Some(at) = arg_types.get(param_idx)
+                                && *at != HirType::Never {
                                     Self::extract_type_substitutions(param_ty, at, &fn_def.type_params, &mut sub);
                                 }
-                            }
                         }
                         if sub.len() == fn_def.type_params.len() {
                             let concrete: Vec<HirType> = fn_def.type_params.iter().map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int)).collect();
                             self.queue_fn_specialization(*callee, concrete);
                         }
                     }
-                }
                 for a in args { self.scan_expr_for_generic_calls(a); }
             }
             HirExpr::MethodCall { receiver, method_name, args, .. } => {
@@ -281,11 +275,11 @@ impl<'a> MonoContext<'a> {
             HirExpr::StructLit { struct_name, fields, .. } => {
                 if let Some(struct_def) = self.find_struct(*struct_name) {
                     for (field_sym, field_expr) in fields {
-                        if let Some(field_def) = struct_def.fields.iter().find(|f| f.name == *field_sym) {
-                            if let HirExpr::Call { id: call_id, callee, args, .. } = field_expr {
-                                if args.is_empty() {
-                                    if let Some(fn_def) = self.find_fn(*callee) {
-                                        if !fn_def.type_params.is_empty() {
+                        if let Some(field_def) = struct_def.fields.iter().find(|f| f.name == *field_sym)
+                            && let HirExpr::Call { id: call_id, callee, args, .. } = field_expr
+                                && args.is_empty()
+                                    && let Some(fn_def) = self.find_fn(*callee)
+                                        && !fn_def.type_params.is_empty() {
                                             let concrete: Vec<HirType> = match &field_def.ty {
                                                 HirType::Generic(_, type_args) => type_args.clone(),
                                                 _ => fn_def.type_params.iter().map(|_| HirType::Int).collect(),
@@ -295,10 +289,6 @@ impl<'a> MonoContext<'a> {
                                                 self.queue_fn_specialization(*callee, concrete);
                                             }
                                         }
-                                    }
-                                }
-                            }
-                        }
                         self.scan_expr_for_generic_calls(field_expr);
                     }
                 } else {

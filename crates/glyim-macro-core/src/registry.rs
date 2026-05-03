@@ -29,12 +29,11 @@ impl MacroRegistry {
     /// The name is resolved through the store's `resolve_name` and then
     /// the blob is retrieved. Returns `true` if successful.
     pub fn load_from_store(&mut self, name: &str) -> bool {
-        if let Some(hash) = self.store.resolve_name(name) {
-            if let Some(wasm) = self.store.retrieve(hash) {
+        if let Some(hash) = self.store.resolve_name(name)
+            && let Some(wasm) = self.store.retrieve(hash) {
                 self.macros.insert(name.to_string(), wasm);
                 return true;
             }
-        }
         false
     }
 }

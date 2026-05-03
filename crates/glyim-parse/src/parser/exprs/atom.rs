@@ -175,7 +175,7 @@ fn parse_ident_expr(parser: &mut Parser) -> Option<ExprNode> {
     } else if parser.tokens.at(SyntaxKind::LParen) && matches!(name, "Some" | "Ok" | "Err") {
         parse_option_result_ctor(parser, name.to_string(), start)
     } else if name == "None"
-        && parser.tokens.peek2().map_or(true, |t| {
+        && parser.tokens.peek2().is_none_or(|t| {
             t.kind != SyntaxKind::LParen && t.kind != SyntaxKind::LBrace
         })
     {
