@@ -49,6 +49,45 @@ fn type_to_string(ty: &glyim_hir::types::HirType, interner: &Interner) -> String
     }
 }
 
+/// Extract Glyim code blocks from a Markdown doc string.
+/// Returns a list of (optional title, code) extracted from ```glyim fences.
+pub fn extract_code_blocks(doc: &str) -> Vec<(Option<String>, String)> {
+    let mut blocks = Vec::new();
+    let mut in_glyim_block = false;
+    let mut block_title = None;
+    let mut block_lines = Vec::new();
+    let mut in_fence = false;
+    let mut lang = String::new();
+
+    for line in doc.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            if in_fence {
+                // closing fence
+                if in_glyim_block {
+                    let code = block_lines.join("\n");
+                    if !code.trim().is_empty() {
+                        blocks.push((block_title.take(), code));
+                    }
+                    in_glyim_block = false;
+                    block_lines.clear();
+                }
+                in_fence = false;
+                lang.clear();
+            } else {
+                // opening fence
+                in_fence = true;
+                lang = trimmed[3..].trim().to_string();
+                block_title = None;
+                in_glyim_block = lang == "glyim";
+            }
+        } else if in_fence && in_glyim_block {
+            block_lines.push(line.to_string());
+        }
+    }
+    blocks
+}
+
 pub fn generate_html(hir: &Hir, interner: &Interner) -> String {
     let mut html = String::from(
         "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Glyim Docs</title>\
@@ -160,5 +199,29 @@ mod tests {
         let parser = Parser::new(doc);
         html::push_html(&mut buf, parser);
         buf
+    }
+
+    #[test]
+    fn extract_simple_block() {
+        let doc = "```glyim\nlet x = 1;\n```\n";
+        let blocks = extract_code_blocks(doc);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].1, "let x = 1;");
+    }
+
+    #[test]
+    fn extract_multiple_blocks() {
+        let doc = "```glyim\n1 + 1\n```\nbar\n```glyim\n2 + 2\n```\n";
+        let blocks = extract_code_blocks(doc);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[1].1, "2 + 2");
+    }
+
+    #[test]
+    fn ignore_non_glyim_blocks() {
+        let doc = "```\nnot glyim\n```\n```glyim\n42\n```\n";
+        let blocks = extract_code_blocks(doc);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].1, "42");
     }
 }

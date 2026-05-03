@@ -88,6 +88,8 @@ enum Command {
         output: Option<PathBuf>,
         #[arg(long)]
         open: bool,
+        #[arg(long)]
+        test: bool,
     },
     DumpTokens {
         input: PathBuf,
@@ -191,7 +193,7 @@ fn main() {
         } => cmd_publish(dry_run, wasm),
         Command::Outdated => cmd_outdated(),
         Command::Verify => cmd_verify(),
-        Command::Doc { input, output, open } => cmd_doc(input, output, open),
+        Command::Doc { input, output, open, test } => cmd_doc(input, output, open, test),
         Command::DumpTokens { input } => cmd_dump_tokens(input),
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),

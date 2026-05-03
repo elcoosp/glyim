@@ -827,6 +827,70 @@ fn which(cmd: &str) -> bool {
 }
 /// Generate HTML documentation for the given source file.
 #[allow(dead_code)]
+pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
+    let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
+    let parse_out = glyim_parse::parse(&source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
+
+    let mut blocks: Vec<String> = Vec::new();
+    for item in &hir.items {
+        let doc = match item {
+            glyim_hir::HirItem::Fn(f) => &f.doc,
+            glyim_hir::HirItem::Struct(s) => &s.doc,
+            glyim_hir::HirItem::Enum(e) => &e.doc,
+            glyim_hir::HirItem::Impl(i) => {
+                for method in &i.methods {
+                    if let Some(ref doc) = method.doc {
+                        for (_, code) in glyim_doc::extract_code_blocks(doc) {
+                            blocks.push(code);
+                        }
+                    }
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        if let Some(doc) = doc.as_ref() {
+            for (_, code) in glyim_doc::extract_code_blocks(doc) {
+                blocks.push(code);
+            }
+        }
+    }
+
+    if blocks.is_empty() {
+        eprintln!("No doc-test blocks found.");
+        return Ok(0);
+    }
+
+    let mut failed = 0;
+    for (i, block) in blocks.iter().enumerate() {
+        eprintln!("running {} doc-test(s)", blocks.len());
+        eprintln!("doc-test block {} ... ", i + 1);
+        // Run as a simple expression via JIT (wrap in main = () => { ... })
+        let wrapped = format!("main = () => {{ {} }}", block);
+        match run_jit(&wrapped) {
+            Ok(exit_code) => {
+                if exit_code == 0 {
+                    eprintln!("ok");
+                } else {
+                    eprintln!("FAILED (exit code {})", exit_code);
+                    failed += 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("FAILED: {}", e);
+                failed += 1;
+            }
+        }
+    }
+    Ok(failed)
+}
+
 pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
