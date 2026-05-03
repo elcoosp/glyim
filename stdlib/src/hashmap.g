@@ -20,10 +20,8 @@ impl<K, V> HashMap<K, V> {
         if h < 0 { 0 - h } else { h }
     }
 
-    pub fn insert(mut self: HashMap<K, V>, key: K, value: V) -> HashMap<K, V> {
-        if self.len * 10 >= self.cap * 7 || self.cap == 0 {
-            self = self.grow()
-        };
+    // Helper that inserts an entry without checking load factor again.
+    fn raw_insert(mut self: HashMap<K, V>, key: K, value: V) -> HashMap<K, V> {
         let hash = self.hash(key);
         let mut idx = hash - (hash / self.cap) * self.cap;
         let mut done = 0;
@@ -50,6 +48,13 @@ impl<K, V> HashMap<K, V> {
             }
         };
         self
+    }
+
+    pub fn insert(self: HashMap<K, V>, key: K, value: V) -> HashMap<K, V> {
+        if self.len * 10 >= self.cap * 7 || self.cap == 0 {
+            return self.grow().raw_insert(key, value)
+        };
+        self.raw_insert(key, value)
     }
 
     pub fn get(self: HashMap<K, V>, key: K) -> Option<V> {
@@ -92,18 +97,20 @@ impl<K, V> HashMap<K, V> {
         self.buckets = Vec::new();
         self.cap = new_cap;
         self.len = 0;
+        // Fill with empty entries
         let mut i = 0;
         while i < new_cap {
             let empty = Entry { key: 0 as K, value: 0 as V, occupied: 0 };
             self.buckets = self.buckets.push(empty);
             i = i + 1
         };
-        let mut i = 0;
+        i = 0;
         while i < old_buckets.len() {
             match old_buckets.get(i) {
                 Some(entry) => {
                     if entry.occupied != 0 {
-                        self = self.insert(entry.key, entry.value)
+                        // Use raw_insert to avoid triggering another grow
+                        self = self.raw_insert(entry.key, entry.value)
                     }
                 },
                 None => {}
