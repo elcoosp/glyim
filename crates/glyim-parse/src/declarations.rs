@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::parser::{Parser, ParseOutput};
+use crate::parser::Parser;
 use glyim_interner::{Interner, Symbol};
 use glyim_lex::tokenize;
 

@@ -1,4 +1,4 @@
-use crate::item::{ExternFn, HirVariant, StructField};
+use crate::item::{HirVariant, StructField};
 use crate::node::HirFn;
 use crate::types::HirType;
 use glyim_diag::Span;

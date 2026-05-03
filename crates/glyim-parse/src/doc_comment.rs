@@ -45,7 +45,7 @@ pub fn collect_doc_comments(tokens: &[Token], before_pos: usize) -> Option<Strin
         }
     }
 
-    for (i, t) in tokens[start..end].iter().enumerate() {
+    for (_i, _t) in tokens[start..end].iter().enumerate() {
     }
     let comments: Vec<&str> = tokens[start..end]
         .iter()
