@@ -178,6 +178,7 @@ pub fn build(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
@@ -273,6 +274,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
@@ -419,6 +421,7 @@ pub fn run_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
@@ -498,6 +501,7 @@ pub fn build_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
@@ -825,6 +829,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
@@ -921,6 +926,13 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
     std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;
     std::fs::write(out_dir.join("index.html"), html).map_err(PipelineError::Io)?;
     Ok(())
+}
+
+/// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
+fn debug_ir(codegen: &glyim_codegen_llvm::Codegen) {
+    if std::env::var("GLYIM_DEBUG_IR").is_ok() {
+        eprintln!("Generated IR:\n{}", codegen.ir_string());
+    }
 }
 
 #[cfg(test)]
