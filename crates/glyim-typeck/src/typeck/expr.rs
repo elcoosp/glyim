@@ -268,7 +268,11 @@ impl TypeChecker {
                         }
                         let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                         let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
-                        // (method_resolved removed)
+                        // Store inferred type args for monomorphizer
+                        let type_args: Vec<HirType> = fn_def.type_params.iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                            .collect();
+                        self.call_type_args.insert(*id, type_args);
                         return concrete_ret;
                     }
                 }

@@ -163,7 +163,51 @@ impl<'a> MonoContext<'a> {
         }
     }
 
+    pub(crate) fn concretize_type_args(&mut self, args: &[HirType]) -> Vec<HirType> {
+        args.iter().map(|ty| self.concretize_type(ty)).collect()
+    }
+
+    fn concretize_type(&mut self, ty: &HirType) -> HirType {
+        match ty {
+            HirType::Generic(sym, inner_args) => {
+                let concrete_inner: Vec<HirType> = inner_args.iter()
+                    .map(|a| self.concretize_type(a))
+                    .collect();
+                let all_concrete = concrete_inner.iter().all(|a| !self.has_unresolved_type_param(a));
+                if all_concrete {
+                    let key = (*sym, concrete_inner.clone());
+                    if self.struct_specs.contains_key(&key) {
+                        let mangled = self.interner.intern(
+                            &format!("{}__{}", self.interner.resolve(*sym),
+                                concrete_inner.iter()
+                                    .map(|t| super::mangling::type_to_short_string(t, self.interner))
+                                    .collect::<Vec<_>>()
+                                    .join("_")
+                            )
+                        );
+                        return HirType::Named(mangled);
+                    }
+                }
+                HirType::Generic(*sym, concrete_inner)
+            }
+            HirType::Named(_) | HirType::Int | HirType::Bool | HirType::Float | HirType::Str |
+            HirType::Unit | HirType::Never | HirType::Opaque(_) => ty.clone(),
+            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
+            HirType::Option(inner) => HirType::Option(Box::new(self.concretize_type(inner))),
+            HirType::Result(ok, err) => HirType::Result(
+                Box::new(self.concretize_type(ok)),
+                Box::new(self.concretize_type(err)),
+            ),
+            HirType::Tuple(elems) => HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect()),
+            HirType::Func(params, ret) => HirType::Func(
+                params.iter().map(|p| self.concretize_type(p)).collect(),
+                Box::new(self.concretize_type(ret)),
+            ),
+        }
+    }
+
     pub(crate) fn queue_fn_specialization(&mut self, name: Symbol, args: Vec<HirType>) {
+        let args = self.concretize_type_args(&args);
         if args.iter().any(|a| self.has_unresolved_type_param(a)) {
             return;
         }
