@@ -66,14 +66,29 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        // Try to parse as mangled method name (e.g., "Vec_new", "HashMap_hash", "HashMap_get")
-        // Use rfind to get the last underscore, so "HashMap_hash" splits to "HashMap" + "hash"
+        // Search impl methods by demangled name (e.g., Vec_new -> Vec::new)
+        // The HIR stores impl methods with their original short names (new, inc_len),
+        // but call sites use mangled names (Vec_new, Vec_inc_len).
+        for item in &self.hir.items {
+            if let HirItem::Impl(imp) = item {
+                let type_name = self.interner.resolve(imp.target_name);
+                for m in &imp.methods {
+                    let method_name = self.interner.resolve(m.name);
+                    let mangled_form = format!("{}_{}", type_name, method_name);
+                    if mangled_form == name_str {
+                        return Some(m.clone());
+                    }
+                }
+            }
+        }
+
+        // Try to parse as impl method name (e.g., "Vec_new", "HashMap_hash")
+        // Use rfind to get the last underscore
         if let Some(underscore_pos) = name_str.rfind('_') {
             let potential_type_name = &name_str[..underscore_pos];
             let potential_method_name = &name_str[underscore_pos + 1..];
 
-            // Only interpret as method call if type name starts with uppercase
-            // to avoid false positives with snake_case function names
+            // Try looking up in impl methods for the type
             if potential_type_name.starts_with(|c: char| c.is_uppercase()) {
                 let type_sym = self.interner.intern(potential_type_name);
                 let method_sym = self.interner.intern(potential_method_name);

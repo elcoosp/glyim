@@ -107,6 +107,7 @@ entry:
   %p = alloca i64, align 8
   store i64 %tuple_ptr, ptr %p, align 4
   %p2 = load i64, ptr %p, align 4
+  %to_ptr = inttoptr i64 %p2 to ptr
   store i64 0, ptr %ret_val, align 4
   br label %ret
 

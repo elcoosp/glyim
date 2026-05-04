@@ -34,7 +34,23 @@ impl<'a> MonoContext<'a> {
                     fn_map.get(&(*callee, vec![])).copied()
                 };
 
-                let new_callee = new_callee.unwrap_or(*callee);
+                // Fallback 1: check call_type_args_overrides
+                let new_callee = new_callee.or_else(|| {
+                    self.call_type_args_overrides.get(id)
+                        .and_then(|concrete| fn_map.get(&(*callee, concrete.clone())).copied())
+                });
+
+                // Fallback 2: if exactly one specialization exists for this callee, use it
+                let new_callee = new_callee.unwrap_or_else(|| {
+                    let matches: Vec<_> = fn_map.iter()
+                        .filter(|((sym, _), _)| sym == callee)
+                        .collect();
+                    if matches.len() == 1 {
+                        *matches[0].1
+                    } else {
+                        *callee
+                    }
+                });
 
                 HirExpr::Call {
                     id: *id,
