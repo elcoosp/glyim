@@ -6,6 +6,10 @@ use glyim_hir::types::{ExprId, HirType};
 use glyim_hir::{HirBinOp, HirExpr, HirStmt, HirUnOp};
 use glyim_interner::Interner;
 
+// Import internals via crate paths
+use crate::unify;
+use crate::typeck::resolver;
+
 fn typecheck(source: &str) -> TypeChecker {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
@@ -324,11 +328,7 @@ fn struct_lit_unknown_field_pushes_error() {
             false
         }
     });
-    assert!(
-        has_unknown_z,
-        "expected UnknownField error for 'z', got: {:?}",
-        tc.errors
-    );
+    assert!(has_unknown_z, "expected UnknownField error for 'z', got: {:?}", tc.errors);
 }
 
 #[test]
@@ -341,11 +341,7 @@ fn struct_lit_missing_field_pushes_error() {
             false
         }
     });
-    assert!(
-        has_missing,
-        "expected MissingField error for 'y', got: {:?}",
-        tc.errors
-    );
+    assert!(has_missing, "expected MissingField error for 'y', got: {:?}", tc.errors);
 }
 
 #[test]
@@ -358,295 +354,149 @@ fn field_access_unknown_field_pushes_error() {
             false
         }
     });
-    assert!(
-        has_unknown,
-        "expected UnknownField error for 'z', got: {:?}",
-        tc.errors
-    );
+    assert!(has_unknown, "expected UnknownField error for 'z', got: {:?}", tc.errors);
 }
 
 #[test]
 fn field_access_valid_field_no_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.x }");
-    let field_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::UnknownField { .. }))
-        .collect();
-    assert!(
-        field_errors.is_empty(),
-        "unexpected field errors: {:?}",
-        field_errors
-    );
+    let field_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::UnknownField { .. })).collect();
+    assert!(field_errors.is_empty(), "unexpected field errors: {:?}", field_errors);
 }
 
 #[test]
 fn struct_lit_all_fields_present_no_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1, y: 2 }");
-    let struct_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| {
-            matches!(
-                e,
-                TypeError::UnknownField { .. }
-                    | TypeError::MissingField { .. }
-                    | TypeError::ExtraField { .. }
-            )
-        })
-        .collect();
-    assert!(
-        struct_errors.is_empty(),
-        "unexpected struct errors: {:?}",
-        struct_errors
-    );
+    let struct_errors: Vec<_> = tc.errors.iter().filter(|e| {
+        matches!(e, TypeError::UnknownField { .. } | TypeError::MissingField { .. } | TypeError::ExtraField { .. })
+    }).collect();
+    assert!(struct_errors.is_empty(), "unexpected struct errors: {:?}", struct_errors);
 }
 
 #[test]
 fn match_exhaustive_with_wildcard_ok() {
     let tc = typecheck("enum Color { Red, Green }\nmain = () => match Color::Red { _ => 1 }");
-    let exhaustive_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
-        .collect();
-    assert!(
-        exhaustive_errors.is_empty(),
-        "unexpected non-exhaustive error: {:?}",
-        exhaustive_errors
-    );
+    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
+    assert!(exhaustive_errors.is_empty(), "unexpected non-exhaustive error: {:?}", exhaustive_errors);
 }
 
 #[test]
 fn match_exhaustive_all_variants_ok() {
-    let tc = typecheck(
-        "enum Color { Red, Green }\nmain = () => match Color::Red { Color::Red => 1, Color::Green => 2 }",
-    );
-    let exhaustive_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
-        .collect();
-    assert!(
-        exhaustive_errors.is_empty(),
-        "unexpected non-exhaustive error: {:?}",
-        exhaustive_errors
-    );
+    let tc = typecheck("enum Color { Red, Green }\nmain = () => match Color::Red { Color::Red => 1, Color::Green => 2 }");
+    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
+    assert!(exhaustive_errors.is_empty(), "unexpected non-exhaustive error: {:?}", exhaustive_errors);
 }
 
 #[test]
 fn match_non_exhaustive_pushes_error() {
-    let tc = typecheck(
-        "enum Color { Red, Green, Blue }\nmain = () => match Color::Red { Color::Red => 1 }",
-    );
-    let exhaustive_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
-        .collect();
-    assert_eq!(
-        exhaustive_errors.len(),
-        1,
-        "expected exactly 1 NonExhaustiveMatch error, got: {:?}",
-        tc.errors
-    );
+    let tc = typecheck("enum Color { Red, Green, Blue }\nmain = () => match Color::Red { Color::Red => 1 }");
+    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
+    assert_eq!(exhaustive_errors.len(), 1, "expected exactly 1 NonExhaustiveMatch error, got: {:?}", tc.errors);
 }
 
 #[test]
 fn match_on_non_enum_no_exhaustive_error() {
     let tc = typecheck("main = () => match 42 { 1 => 10, _ => 20 }");
-    let exhaustive_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
-        .collect();
-    assert!(
-        exhaustive_errors.is_empty(),
-        "matching on non-enum should not produce exhaustive error"
-    );
+    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
+    assert!(exhaustive_errors.is_empty(), "matching on non-enum should not produce exhaustive error");
 }
 
 #[test]
 fn match_option_some_none_exhaustive() {
     let src = "enum Option<T> { Some(T), None }\nmain = () => { let m = Option::Some(42); match m { Option::Some(v) => v, Option::None => 0 } }";
     let tc = typecheck(src);
-    let exhaustive_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
-        .collect();
-    assert!(
-        exhaustive_errors.is_empty(),
-        "Some/None should be exhaustive"
-    );
+    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
+    assert!(exhaustive_errors.is_empty(), "Some/None should be exhaustive");
 }
 
 #[test]
 fn match_option_non_exhaustive_pushes_error() {
     let src = "enum Option<T> { Some(T), None }\nmain = () => { let m = Option::Some(42); match m { Option::Some(v) => v } }";
     let tc = typecheck(src);
-    let exhaustive_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. }))
-        .collect();
-    assert_eq!(
-        exhaustive_errors.len(),
-        1,
-        "missing None variant should be non-exhaustive"
-    );
+    let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
+    assert_eq!(exhaustive_errors.len(), 1, "missing None variant should be non-exhaustive");
 }
 
 #[test]
 fn cast_int_to_float_valid() {
     let tc = typecheck("main = () => 42 as f64");
-    let cast_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
-        .collect();
-    assert!(
-        cast_errors.is_empty(),
-        "int→float cast should be valid, got: {:?}",
-        cast_errors
-    );
+    let cast_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::MismatchedTypes { .. })).collect();
+    assert!(cast_errors.is_empty(), "int→float cast should be valid, got: {:?}", cast_errors);
 }
 
 #[test]
 fn cast_int_to_str_invalid() {
     let tc = typecheck("main = () => 42 as Str");
-    let cast_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
-        .collect();
+    let cast_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::MismatchedTypes { .. })).collect();
     assert_eq!(cast_errors.len(), 1, "int→Str cast should be invalid");
 }
 
 #[test]
 fn multiple_errors_accumulate() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1, z: 3, w: 4 }");
-    let field_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::UnknownField { .. }))
-        .collect();
-    assert!(
-        field_errors.len() >= 2,
-        "expected ≥2 UnknownField errors, got {}: {:?}",
-        field_errors.len(),
-        tc.errors
-    );
+    let field_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::UnknownField { .. })).collect();
+    assert!(field_errors.len() >= 2, "expected ≥2 UnknownField errors, got {}: {:?}", field_errors.len(), tc.errors);
 }
 
 #[test]
 fn check_returns_ok_when_no_errors() {
     let tc = typecheck("main = () => 42");
-    assert!(
-        tc.errors.is_empty(),
-        "valid program should have no type errors"
-    );
+    assert!(tc.errors.is_empty(), "valid program should have no type errors");
 }
 
 #[test]
 fn check_fn_return_mismatch_pushes_error() {
     let tc = typecheck("fn foo() -> bool { 42 }\nmain = () => foo()");
-    let ret_errors: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::InvalidReturnType { .. }))
-        .collect();
-    assert_eq!(
-        ret_errors.len(),
-        1,
-        "return type mismatch should produce InvalidReturnType error"
-    );
+    let ret_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::InvalidReturnType { .. })).collect();
+    assert_eq!(ret_errors.len(), 1, "return type mismatch should produce InvalidReturnType error");
 }
 
 #[test]
 fn check_fn_params_bound_in_body() {
     let tc = typecheck("fn add(a, b) { a + b }\nmain = () => add(1, 2)");
-    assert!(
-        tc.errors.is_empty(),
-        "param usage should typecheck: {:?}",
-        tc.errors
-    );
+    assert!(tc.errors.is_empty(), "param usage should typecheck: {:?}", tc.errors);
 }
 
 #[test]
 fn infer_type_args_for_generic_call() {
     let tc = typecheck("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
-    assert!(
-        !tc.call_type_args.is_empty(),
-        "should have inferred type args for id(42)"
-    );
+    assert!(!tc.call_type_args.is_empty(), "should have inferred type args for id(42)");
     let args = tc.call_type_args.values().next().unwrap();
     assert_eq!(args.len(), 1, "id should have 1 type param");
-    assert_eq!(
-        args[0],
-        HirType::Int,
-        "T should be inferred as Int from arg 42"
-    );
+    assert_eq!(args[0], HirType::Int, "T should be inferred as Int from arg 42");
 }
 
 #[test]
 fn infer_type_args_for_generic_struct_lit() {
-    let tc = typecheck(
-        "struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }",
-    );
-    assert!(
-        tc.errors.is_empty(),
-        "generic struct lit should not error: {:?}",
-        tc.errors
-    );
+    let tc = typecheck("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }");
+    assert!(tc.errors.is_empty(), "generic struct lit should not error: {:?}", tc.errors);
 }
 
 #[test]
 fn call_with_wrong_argument_type_reports_error() {
     let tc = typecheck("fn take_bool(b: bool) -> i64 { 0 }\nmain = () => take_bool(42)");
-    assert!(
-        !tc.errors.is_empty(),
-        "should report type error for passing i64 to bool parameter"
-    );
-    let mismatches: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
-        .collect();
-    assert_eq!(
-        mismatches.len(),
-        1,
-        "expected exactly one MismatchedTypes error"
-    );
+    assert!(!tc.errors.is_empty(), "should report type error for passing i64 to bool parameter");
+    let mismatches: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::MismatchedTypes { .. })).collect();
+    assert_eq!(mismatches.len(), 1, "expected exactly one MismatchedTypes error");
 }
 
 #[test]
 fn let_annotation_mismatch_reports_error() {
     let tc = typecheck("fn main() -> i64 { let x: f64 = 42; x }");
-    let mismatches: Vec<_> = tc
-        .errors
-        .iter()
-        .filter(|e| matches!(e, TypeError::MismatchedTypes { .. }))
-        .collect();
-    assert_eq!(
-        mismatches.len(),
-        1,
-        "expected one MismatchedTypes for annotation vs value"
-    );
+    let mismatches: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::MismatchedTypes { .. })).collect();
+    assert_eq!(mismatches.len(), 1, "expected one MismatchedTypes for annotation vs value");
 }
 
 #[test]
 fn generic_equality_compiles() {
-    let tc = typecheck(
-        "fn eq<K>(a: K, b: K) -> bool { a == b }\nmain = () => { if eq(42, 42) { 1 } else { 0 } }",
-    );
+    let tc = typecheck("fn eq<K>(a: K, b: K) -> bool { a == b }\nmain = () => { if eq(42, 42) { 1 } else { 0 } }");
     if !tc.errors.is_empty() {
         eprintln!("Generic equality errors: {:?}", tc.errors);
     }
     assert!(tc.errors.is_empty(), "generic equality should compile");
 }
 
-// ---- NEW TESTS ----
+// ---- NEW TESTS (added once) ----
 #[test]
 fn extract_option_inner_some() {
     let tc = TypeChecker::new(Interner::new());
@@ -701,9 +551,7 @@ fn check_fn_generic_return_matches_inferred() {
         span: Span::new(0,0), is_pub: false, is_macro_generated: false, is_extern_backed: false,
     };
     tc.fns.push(f);
-    let idx = tc.fns.len() - 1;
-    // avoid borrowing issues: clone the function out
-    let f_clone = tc.fns[idx].clone();
+    let f_clone = tc.fns.last().unwrap().clone();
     tc.check_fn(&f_clone);
     assert!(tc.errors.is_empty(), "Expected no errors, got {:?}", tc.errors);
 }
@@ -763,4 +611,187 @@ fn bind_match_result_err_pattern() {
     let scrutinee_ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
     tc.bind_match_pattern(&pattern, &scrutinee_ty);
     assert_eq!(tc.lookup_binding(&e_sym), Some(HirType::Str));
+}
+
+#[test]
+fn unify_int_with_type_param() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let result = unify::unify(&HirType::Int, &HirType::Named(t), &[t]);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_int_with_bool_fails() {
+    let result = unify::unify(&HirType::Int, &HirType::Bool, &[]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_rawptr_success() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let result = unify::unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_option_success() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let result = unify::unify(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_result_success() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let e = i.intern("E");
+    let result = unify::unify(
+        &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str)),
+        &HirType::Result(Box::new(HirType::Named(t)), Box::new(HirType::Named(e))),
+        &[t, e],
+    );
+    assert!(result.is_ok());
+    let sub = result.unwrap();
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+
+#[test]
+fn unify_tuple_mismatched_length_fails() {
+    let result = unify::unify(
+        &HirType::Tuple(vec![HirType::Int]),
+        &HirType::Tuple(vec![HirType::Int, HirType::Bool]),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn is_valid_cast_float_to_int_valid() {
+    assert!(resolver::is_valid_cast(&HirType::Float, &HirType::Int));
+}
+
+#[test]
+fn is_valid_cast_str_to_float_invalid() {
+    assert!(!resolver::is_valid_cast(&HirType::Str, &HirType::Float));
+}
+
+#[test]
+fn is_valid_cast_any_to_named_valid() {
+    let mut i = Interner::new();
+    let sym = i.intern("SomeStruct");
+    assert!(resolver::is_valid_cast(&HirType::Int, &HirType::Named(sym)));
+}
+
+#[test]
+fn unify_types_rawptr_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_nested_generics() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let u = tc.interner.intern("U");
+    let type_params = vec![t, u];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::Generic(tc.interner.intern("Pair"), vec![HirType::Int, HirType::Bool]),
+        &HirType::Generic(tc.interner.intern("Pair"), vec![HirType::Named(t), HirType::Named(u)]),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&u], HirType::Bool);
+}
+
+#[test]
+fn infer_deref_rawptr_type() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let ptr_sym = tc.interner.intern("p");
+    tc.push_scope();
+    tc.insert_binding(ptr_sym, HirType::RawPtr(Box::new(HirType::Int)), false);
+    let deref_expr = HirExpr::Deref {
+        id: ExprId::new(0),
+        expr: Box::new(HirExpr::Ident { id: ExprId::new(1), name: ptr_sym, span: Span::new(0,0) }),
+        span: Span::new(0,0),
+    };
+    assert_eq!(tc.check_expr(&deref_expr), Some(HirType::Int));
+}
+
+#[test]
+fn infer_generic_call_sets_type_args() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("id");
+    let t_sym = tc.interner.intern("T");
+    tc.fns.push(HirFn {
+        doc: None, name: fn_sym, type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(t_sym)),
+        body: HirExpr::IntLit { id: ExprId::new(99), value: 0, span: Span::new(0,0) },
+        span: Span::new(0,0), is_pub: false, is_macro_generated: false, is_extern_backed: false,
+    });
+    let call = HirExpr::Call {
+        id: ExprId::new(2),
+        callee: fn_sym,
+        args: vec![HirExpr::IntLit { id: ExprId::new(3), value: 42, span: Span::new(0,0) }],
+        span: Span::new(0,0),
+    };
+    assert_eq!(tc.check_expr(&call), Some(HirType::Int));
+    assert!(tc.call_type_args.contains_key(&ExprId::new(2)));
+    assert_eq!(tc.call_type_args[&ExprId::new(2)], vec![HirType::Int]);
+}
+
+#[test]
+fn infer_struct_lit_missing_field_error() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let point_sym = tc.interner.intern("Point");
+    let x_sym = tc.interner.intern("x");
+    let y_sym = tc.interner.intern("y");
+    tc.structs.insert(point_sym, crate::typeck::StructInfo {
+        fields: vec![
+            glyim_hir::item::StructField { name: x_sym, ty: HirType::Int, doc: None },
+            glyim_hir::item::StructField { name: y_sym, ty: HirType::Int, doc: None },
+        ],
+        field_map: {
+            let mut m = std::collections::HashMap::new();
+            m.insert(x_sym, 0);
+            m.insert(y_sym, 1);
+            m
+        },
+        type_params: vec![],
+    });
+    let lit = HirExpr::StructLit {
+        id: ExprId::new(0),
+        struct_name: point_sym,
+        fields: vec![(x_sym, HirExpr::IntLit { id: ExprId::new(1), value: 1, span: Span::new(0,0) })],
+        span: Span::new(0,0),
+    };
+    tc.check_expr(&lit);
+    assert!(tc.errors.iter().any(|e| matches!(e, TypeError::MissingField { .. })), "Expected MissingField error, got {:?}", tc.errors);
 }
