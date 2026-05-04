@@ -96,7 +96,7 @@ fn two_pass_separation_no_rewrite_during_discovery() {
     let (expr_types, call_type_args) = build_call_type_args(&hir, &mut test_interner);
 
     let specs = discover_instantiations(&hir, &mut interner, &expr_types, &call_type_args);
-    let mono = apply_specializations(&hir, &mut interner, &specs, &expr_types);
+    let mono = apply_specializations(&hir, &mut interner, &specs, &expr_types, &call_type_args);
 
     // After specialization, no items should contain unresolved type parameters
     for item in &mono.hir.items {

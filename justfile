@@ -266,4 +266,4 @@ default:
     just --list
 
 wr:
-    watchexec -w ./wr2.sh --clear -r "sh ./wr2.sh"
+    watchexec -w ./wr.sh --clear -r "sh ./wr.sh"

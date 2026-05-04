@@ -1,3 +1,4 @@
+use crate::monomorphize::mangle_table::MangleTable;
 // crates/glyim-hir/src/monomorphize/context.rs
 use super::*;
 use crate::HirPattern;
@@ -25,6 +26,7 @@ impl<'a> MonoContext<'a> {
             fn_work_queue: Vec::new(),
             fn_queued: HashSet::new(),
             call_type_args_overrides: HashMap::new(),
+            mangle_table: MangleTable::new(),
         }
     }
 
@@ -145,7 +147,7 @@ impl<'a> MonoContext<'a> {
     }
 
     pub(crate) fn mangle_name(&mut self, base: Symbol, type_args: &[HirType]) -> Symbol {
-        mangle_type_name(self.interner, base, type_args)
+        self.mangle_table.mangle(base, type_args, self.interner)
     }
 
     /// Check if a type contains any unresolved type parameters (single uppercase letters)

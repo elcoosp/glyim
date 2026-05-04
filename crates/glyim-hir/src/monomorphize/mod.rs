@@ -5,6 +5,7 @@ use crate::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
 use std::collections::{HashMap, HashSet};
 
+pub mod mangle_table;
 pub mod mangling;
 pub use mangling::{mangle_type_name, type_to_short_string};
 
@@ -50,9 +51,9 @@ pub fn apply_specializations(
     interner: &mut Interner,
     fn_specs: &HashMap<(Symbol, Vec<HirType>), crate::node::HirFn>,
     expr_types: &[HirType],
+    call_type_args: &HashMap<ExprId, Vec<HirType>>,
 ) -> MonoResult {
-    let call_type_args = HashMap::new();
-    let mut ctx = MonoContext::new(hir, interner, expr_types, &call_type_args);
+    let mut ctx = MonoContext::new(hir, interner, expr_types, call_type_args);
     // Load the pre-computed specializations
     ctx.fn_specs = fn_specs.clone();
     ctx.build_result()
@@ -66,7 +67,7 @@ pub fn monomorphize(
     call_type_args: &HashMap<ExprId, Vec<HirType>>,
 ) -> MonoResult {
     let fn_specs = discover_instantiations(hir, interner, expr_types, call_type_args);
-    apply_specializations(hir, interner, &fn_specs, expr_types)
+    apply_specializations(hir, interner, &fn_specs, expr_types, call_type_args)
 }
 
 pub(crate) struct MonoContext<'a> {
@@ -80,4 +81,5 @@ pub(crate) struct MonoContext<'a> {
     pub(crate) fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
     pub(crate) fn_queued: HashSet<(Symbol, Vec<HirType>)>,
     pub(crate) call_type_args_overrides: HashMap<ExprId, Vec<HirType>>,
+    pub(crate) mangle_table: mangle_table::MangleTable,
 }
