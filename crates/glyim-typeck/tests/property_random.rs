@@ -18,7 +18,7 @@ fn typecheck_source(source: &str) -> Vec<glyim_typeck::TypeError> {
 /// Strategy that generates a valid Glyim integer expression.
 fn arb_int_expr() -> impl Strategy<Value = String> {
     let leaf = prop_oneof![
-        5 => (any::<i64>().prop_map(|n| n.to_string())),
+        5 => any::<i64>().prop_map(|n| n.to_string()),
         1 => Just("(__size_of::<i64>())".to_string()),
         1 => Just("(42)".to_string()),
     ];
