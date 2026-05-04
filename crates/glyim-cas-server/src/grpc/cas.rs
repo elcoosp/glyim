@@ -1,15 +1,10 @@
 #[allow(unused_imports)]
 use bazel_remote_apis::build::bazel::remote::execution::v2::{
-    content_addressable_storage_server::ContentAddressableStorage, Digest, FindMissingBlobsRequest, FindMissingBlobsResponse,
-    BatchUpdateBlobsRequest, BatchUpdateBlobsResponse,
-    BatchReadBlobsRequest, BatchReadBlobsResponse,
-    GetTreeRequest, GetTreeResponse,
-    SplitBlobRequest, SplitBlobResponse,
-    SpliceBlobRequest, SpliceBlobResponse,
-
-    batch_update_blobs_response,
-    batch_read_blobs_response,
-    batch_update_blobs_request,
+    BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
+    BatchUpdateBlobsResponse, Digest, FindMissingBlobsRequest, FindMissingBlobsResponse,
+    GetTreeRequest, GetTreeResponse, SpliceBlobRequest, SpliceBlobResponse, SplitBlobRequest,
+    SplitBlobResponse, batch_read_blobs_response, batch_update_blobs_request,
+    batch_update_blobs_response, content_addressable_storage_server::ContentAddressableStorage,
 };
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
 use std::sync::Arc;
@@ -65,22 +60,26 @@ impl ContentAddressableStorage for CasService {
         for upload in &req.requests {
             let digest = upload.digest.clone();
             let stored_hash = self.store.lock().await.store(&upload.data);
-            let expected_hash: Option<ContentHash> = digest.as_ref().and_then(|d| d.hash.parse().ok());
+            let expected_hash: Option<ContentHash> =
+                digest.as_ref().and_then(|d| d.hash.parse().ok());
 
             let status = if let Some(expected) = expected_hash {
                 if stored_hash == expected {
                     None
                 } else {
-                    Some(Self::grpc_status(tonic::Code::InvalidArgument, "hash mismatch"))
+                    Some(Self::grpc_status(
+                        tonic::Code::InvalidArgument,
+                        "hash mismatch",
+                    ))
                 }
             } else {
-                Some(Self::grpc_status(tonic::Code::InvalidArgument, "invalid digest"))
+                Some(Self::grpc_status(
+                    tonic::Code::InvalidArgument,
+                    "invalid digest",
+                ))
             };
 
-            responses.push(batch_update_blobs_response::Response {
-                digest,
-                status,
-            });
+            responses.push(batch_update_blobs_response::Response { digest, status });
         }
 
         Ok(tonic::Response::new(BatchUpdateBlobsResponse { responses }))
@@ -96,7 +95,10 @@ impl ContentAddressableStorage for CasService {
         for digest in &req.digests {
             let data = {
                 let store_guard = self.store.lock().await;
-                digest.hash.parse::<ContentHash>().ok()
+                digest
+                    .hash
+                    .parse::<ContentHash>()
+                    .ok()
                     .and_then(|h| store_guard.retrieve(h))
                     .unwrap_or_default()
             };
@@ -156,13 +158,17 @@ mod tests {
 
     fn test_store() -> Arc<tokio::sync::Mutex<LocalContentStore>> {
         let dir = tempfile::tempdir().unwrap();
-        Arc::new(tokio::sync::Mutex::new(LocalContentStore::new(dir.path()).unwrap()))
+        Arc::new(tokio::sync::Mutex::new(
+            LocalContentStore::new(dir.path()).unwrap(),
+        ))
     }
 
     #[tokio::test]
     async fn find_missing_returns_empty_after_store() {
         let store = test_store();
-        let svc = CasService { store: store.clone() };
+        let svc = CasService {
+            store: store.clone(),
+        };
 
         let data = b"hello";
         let hash = store.lock().await.store(data);
@@ -183,7 +189,9 @@ mod tests {
     #[tokio::test]
     async fn batch_update_and_read_roundtrip() {
         let store = test_store();
-        let svc = CasService { store: store.clone() };
+        let svc = CasService {
+            store: store.clone(),
+        };
 
         let data = b"roundtrip test";
         let hash = glyim_macro_vfs::ContentHash::of(data);
@@ -200,7 +208,10 @@ mod tests {
             }],
             digest_function: 1,
         };
-        let update_resp = svc.batch_update_blobs(Request::new(update_req)).await.unwrap();
+        let update_resp = svc
+            .batch_update_blobs(Request::new(update_req))
+            .await
+            .unwrap();
         assert!(update_resp.into_inner().responses[0].status.is_none());
 
         let read_req = BatchReadBlobsRequest {

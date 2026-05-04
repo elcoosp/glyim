@@ -95,8 +95,6 @@ impl TypeChecker {
     pub fn get_expr_type(&self, id: ExprId) -> Option<&HirType> {
         self.expr_types.get(id.as_usize())
     }
-
-
 }
 
 impl Default for TypeChecker {

@@ -1,8 +1,6 @@
 use bazel_remote_apis::build::bazel::remote::execution::v2::{
-    capabilities_server::Capabilities,
-    GetCapabilitiesRequest, ServerCapabilities,
-    CacheCapabilities, ExecutionCapabilities,
-    digest_function::Value as DigestFunction,
+    CacheCapabilities, ExecutionCapabilities, GetCapabilitiesRequest, ServerCapabilities,
+    capabilities_server::Capabilities, digest_function::Value as DigestFunction,
 };
 use bazel_remote_apis::build::bazel::semver::SemVer;
 
@@ -58,20 +56,31 @@ mod tests {
     #[tokio::test]
     async fn capabilities_reports_sha256() {
         let svc = CapabilitiesService::default();
-        let resp = svc.get_capabilities(Request::new(GetCapabilitiesRequest {
-            instance_name: String::new(),
-        })).await.unwrap();
+        let resp = svc
+            .get_capabilities(Request::new(GetCapabilitiesRequest {
+                instance_name: String::new(),
+            }))
+            .await
+            .unwrap();
         let caps = resp.into_inner();
         let cache_caps = caps.cache_capabilities.unwrap();
-        assert!(cache_caps.digest_functions.iter().any(|f| *f == DigestFunction::Sha256 as i32));
+        assert!(
+            cache_caps
+                .digest_functions
+                .iter()
+                .any(|f| *f == DigestFunction::Sha256 as i32)
+        );
     }
 
     #[tokio::test]
     async fn capabilities_reports_api_version_2() {
         let svc = CapabilitiesService::default();
-        let resp = svc.get_capabilities(Request::new(GetCapabilitiesRequest {
-            instance_name: String::new(),
-        })).await.unwrap();
+        let resp = svc
+            .get_capabilities(Request::new(GetCapabilitiesRequest {
+                instance_name: String::new(),
+            }))
+            .await
+            .unwrap();
         let caps = resp.into_inner();
         let api = caps.deprecated_api_version.unwrap();
         assert_eq!(api.major, 2);

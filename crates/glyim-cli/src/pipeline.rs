@@ -121,14 +121,12 @@ fn merge_mono_types(
     // Generic → Named fallback
     for ty in &mut merged {
         if let HirType::Generic(sym, args) = ty {
-            let all_concrete = args.iter().all(|a| {
-                match a {
-                    HirType::Named(s) => {
-                        let s = interner.resolve(*s);
-                        !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
-                    }
-                    _ => true,
+            let all_concrete = args.iter().all(|a| match a {
+                HirType::Named(s) => {
+                    let s = interner.resolve(*s);
+                    !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
                 }
+                _ => true,
             });
             if all_concrete && !args.is_empty() {
                 let mangled = glyim_hir::monomorphize::mangle_type_name(interner, *sym, args);
@@ -719,9 +717,7 @@ pub fn run_tests(
     if nocapture {
         cmd.arg("--nocapture");
     }
-    let output = cmd
-        .output()
-        .map_err(PipelineError::Run)?;
+    let output = cmd.output().map_err(PipelineError::Run)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results = parse_test_output(&stdout);
     for name in &ignored_names {

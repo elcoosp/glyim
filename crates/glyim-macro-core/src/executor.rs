@@ -83,7 +83,8 @@ impl MacroExecutor {
         let mut store = Store::new(&self.engine, ());
 
         // Set the fuel budget — prevents infinite loops deterministically
-        store.set_fuel(MACRO_FUEL_BUDGET)
+        store
+            .set_fuel(MACRO_FUEL_BUDGET)
             .map_err(|e| anyhow!("set_fuel: {e}"))?;
 
         let instance = Instance::new(&mut store, &module, &[])?;

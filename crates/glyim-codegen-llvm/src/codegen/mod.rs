@@ -252,7 +252,7 @@ impl<'ctx> Codegen<'ctx> {
                             self.struct_types.borrow_mut().insert(base_name, st);
                         }
                     }
-                },
+                }
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {
@@ -340,7 +340,8 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Fn(f) => {
                     let fn_name = self.interner.resolve(f.name);
                     // Skip specialisations that still contain unresolved type params (suffix __T, __K, __V)
-                    if fn_name.contains("__T") || fn_name.contains("__K") || fn_name.contains("__V") {
+                    if fn_name.contains("__T") || fn_name.contains("__K") || fn_name.contains("__V")
+                    {
                         eprintln!("[codegen] skipping unspecialized function: {}", fn_name);
                         continue;
                     }
@@ -505,7 +506,7 @@ impl<'ctx> Codegen<'ctx> {
                             self.struct_types.borrow_mut().insert(base_name, st);
                         }
                     }
-                },
+                }
                 glyim_hir::item::HirItem::Enum(e) => types::codegen_enum_def(self, e),
                 glyim_hir::item::HirItem::Extern(ext) => {
                     for f in &ext.functions {

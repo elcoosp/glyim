@@ -34,7 +34,7 @@ impl TypeChecker {
         }
         None
     }
-/// Unify a concrete type with a generic type, extracting type parameter bindings.
+    /// Unify a concrete type with a generic type, extracting type parameter bindings.
     pub(crate) fn unify_types(
         concrete: &HirType,
         generic: &HirType,

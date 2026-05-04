@@ -170,35 +170,45 @@ impl<'a> MonoContext<'a> {
     fn concretize_type(&mut self, ty: &HirType) -> HirType {
         match ty {
             HirType::Generic(sym, inner_args) => {
-                let concrete_inner: Vec<HirType> = inner_args.iter()
-                    .map(|a| self.concretize_type(a))
-                    .collect();
-                let all_concrete = concrete_inner.iter().all(|a| !self.has_unresolved_type_param(a));
+                let concrete_inner: Vec<HirType> =
+                    inner_args.iter().map(|a| self.concretize_type(a)).collect();
+                let all_concrete = concrete_inner
+                    .iter()
+                    .all(|a| !self.has_unresolved_type_param(a));
                 if all_concrete {
                     let key = (*sym, concrete_inner.clone());
                     if self.struct_specs.contains_key(&key) {
-                        let mangled = self.interner.intern(
-                            &format!("{}__{}", self.interner.resolve(*sym),
-                                concrete_inner.iter()
-                                    .map(|t| super::mangling::type_to_short_string(t, self.interner))
-                                    .collect::<Vec<_>>()
-                                    .join("_")
-                            )
-                        );
+                        let mangled = self.interner.intern(&format!(
+                            "{}__{}",
+                            self.interner.resolve(*sym),
+                            concrete_inner
+                                .iter()
+                                .map(|t| super::mangling::type_to_short_string(t, self.interner))
+                                .collect::<Vec<_>>()
+                                .join("_")
+                        ));
                         return HirType::Named(mangled);
                     }
                 }
                 HirType::Generic(*sym, concrete_inner)
             }
-            HirType::Named(_) | HirType::Int | HirType::Bool | HirType::Float | HirType::Str |
-            HirType::Unit | HirType::Never | HirType::Opaque(_) => ty.clone(),
+            HirType::Named(_)
+            | HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Opaque(_) => ty.clone(),
             HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
             HirType::Option(inner) => HirType::Option(Box::new(self.concretize_type(inner))),
             HirType::Result(ok, err) => HirType::Result(
                 Box::new(self.concretize_type(ok)),
                 Box::new(self.concretize_type(err)),
             ),
-            HirType::Tuple(elems) => HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect()),
+            HirType::Tuple(elems) => {
+                HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect())
+            }
             HirType::Func(params, ret) => HirType::Func(
                 params.iter().map(|p| self.concretize_type(p)).collect(),
                 Box::new(self.concretize_type(ret)),
@@ -269,7 +279,11 @@ impl<'a> MonoContext<'a> {
 
                         // FALLBACK: try to infer type args from later calls on the same variable
                         if sub.is_empty() && args.is_empty() {
-                            if let Some(concrete) = self.infer_from_same_var_in_block(callee, expr.get_id(), &fn_def.type_params) {
+                            if let Some(concrete) = self.infer_from_same_var_in_block(
+                                callee,
+                                expr.get_id(),
+                                &fn_def.type_params,
+                            ) {
                                 self.queue_fn_specialization(*callee, concrete);
                             }
                         }
@@ -404,11 +418,20 @@ impl<'a> MonoContext<'a> {
             HirExpr::Return { value: Some(v), .. } => {
                 self.scan_expr_for_generic_calls(v, current_sub)
             }
-            HirExpr::StructLit { struct_name, fields, .. } => {
+            HirExpr::StructLit {
+                struct_name,
+                fields,
+                ..
+            } => {
                 for (field_sym, f) in fields {
                     if let HirExpr::Call { callee, args, .. } = f {
                         if args.is_empty() {
-                            self.try_infer_call_from_struct_field(*callee, *struct_name, *field_sym, current_sub);
+                            self.try_infer_call_from_struct_field(
+                                *callee,
+                                *struct_name,
+                                *field_sym,
+                                current_sub,
+                            );
                         }
                     }
                     self.scan_expr_for_generic_calls(f, current_sub);
@@ -485,7 +508,9 @@ impl<'a> MonoContext<'a> {
                             &mut sub,
                         );
                         if sub.len() == fn_def.type_params.len() {
-                            let concrete: Vec<HirType> = fn_def.type_params.iter()
+                            let concrete: Vec<HirType> = fn_def
+                                .type_params
+                                .iter()
                                 .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                                 .collect();
                             self.queue_fn_specialization(callee, concrete);
@@ -495,7 +520,6 @@ impl<'a> MonoContext<'a> {
             }
         }
     }
-
 
     pub(crate) fn scan_expr_for_struct_instantiations(
         &mut self,

@@ -62,9 +62,15 @@ impl<'a> MonoContext<'a> {
         // that matches a type parameter with its concrete type.
         if !sub.is_empty() {
             eprintln!("[specialize_fn] force sub map: {:?}", sub);
-        eprintln!("[specialize_fn] body before As substitution: {:#?}", mono.body);
-        mono.body = Self::force_substitute_as_targets(mono.body, &sub);
-        eprintln!("[specialize_fn] body after As substitution: {:#?}", mono.body);
+            eprintln!(
+                "[specialize_fn] body before As substitution: {:#?}",
+                mono.body
+            );
+            mono.body = Self::force_substitute_as_targets(mono.body, &sub);
+            eprintln!(
+                "[specialize_fn] body after As substitution: {:#?}",
+                mono.body
+            );
         }
 
         self.scan_expr_for_generic_calls(&mono.body, &sub);
@@ -73,14 +79,19 @@ impl<'a> MonoContext<'a> {
         mono
     }
 
-    fn force_substitute_as_targets(
-        expr: HirExpr,
-        sub: &HashMap<Symbol, HirType>,
-    ) -> HirExpr {
+    fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
         match expr {
-            HirExpr::As { id, expr: inner, target_type, span } => {
+            HirExpr::As {
+                id,
+                expr: inner,
+                target_type,
+                span,
+            } => {
                 let new_target = crate::types::substitute_type(&target_type, sub);
-                eprintln!("[force_sub] As id={:?} old_target={:?} new_target={:?}", id, target_type, new_target);
+                eprintln!(
+                    "[force_sub] As id={:?} old_target={:?} new_target={:?}",
+                    id, target_type, new_target
+                );
                 HirExpr::As {
                     id,
                     expr: Box::new(Self::force_substitute_as_targets(*inner, sub)),
@@ -88,161 +99,258 @@ impl<'a> MonoContext<'a> {
                     span,
                 }
             }
-            HirExpr::Block { id, stmts, span } => {
-                HirExpr::Block {
-                    id,
-                    stmts: stmts.into_iter().map(|s| Self::force_substitute_stmt_as(s, sub)).collect(),
-                    span,
-                }
-            }
-            HirExpr::If { id, condition, then_branch, else_branch, span } => {
-                HirExpr::If {
-                    id,
-                    condition: Box::new(Self::force_substitute_as_targets(*condition, sub)),
-                    then_branch: Box::new(Self::force_substitute_as_targets(*then_branch, sub)),
-                    else_branch: else_branch.map(|e| Box::new(Self::force_substitute_as_targets(*e, sub))),
-                    span,
-                }
-            }
-            HirExpr::Match { id, scrutinee, arms, span } => {
-                HirExpr::Match {
-                    id,
-                    scrutinee: Box::new(Self::force_substitute_as_targets(*scrutinee, sub)),
-                    arms: arms.into_iter().map(|(p, g, b)| {
-                        (p, g.map(|g| Self::force_substitute_as_targets(g, sub)),
-                         Self::force_substitute_as_targets(b, sub))
-                    }).collect(),
-                    span,
-                }
-            }
-            HirExpr::Binary { id, op, lhs, rhs, span } => {
-                HirExpr::Binary {
-                    id, op,
-                    lhs: Box::new(Self::force_substitute_as_targets(*lhs, sub)),
-                    rhs: Box::new(Self::force_substitute_as_targets(*rhs, sub)),
-                    span,
-                }
-            }
-            HirExpr::Unary { id, op, operand, span } => {
-                HirExpr::Unary {
-                    id, op,
-                    operand: Box::new(Self::force_substitute_as_targets(*operand, sub)),
-                    span,
-                }
-            }
-            HirExpr::Return { id, value, span } => {
-                HirExpr::Return {
-                    id,
-                    value: value.map(|v| Box::new(Self::force_substitute_as_targets(*v, sub))),
-                    span,
-                }
-            }
-            HirExpr::While { id, condition, body, span } => {
-                HirExpr::While {
-                    id,
-                    condition: Box::new(Self::force_substitute_as_targets(*condition, sub)),
-                    body: Box::new(Self::force_substitute_as_targets(*body, sub)),
-                    span,
-                }
-            }
-            HirExpr::ForIn { id, pattern, iter, body, span } => {
-                HirExpr::ForIn {
-                    id, pattern,
-                    iter: Box::new(Self::force_substitute_as_targets(*iter, sub)),
-                    body: Box::new(Self::force_substitute_as_targets(*body, sub)),
-                    span,
-                }
-            }
-            HirExpr::Deref { id, expr: e, span } => {
-                HirExpr::Deref { id, expr: Box::new(Self::force_substitute_as_targets(*e, sub)), span }
-            }
-            HirExpr::FieldAccess { id, object, field, span } => {
-                HirExpr::FieldAccess {
-                    id,
-                    object: Box::new(Self::force_substitute_as_targets(*object, sub)),
-                    field,
-                    span,
-                }
-            }
-            HirExpr::StructLit { id, struct_name, fields, span } => {
-                HirExpr::StructLit {
-                    id, struct_name,
-                    fields: fields.into_iter().map(|(s, e)| (s, Self::force_substitute_as_targets(e, sub))).collect(),
-                    span,
-                }
-            }
-            HirExpr::EnumVariant { id, enum_name, variant_name, args, span } => {
-                HirExpr::EnumVariant {
-                    id, enum_name, variant_name,
-                    args: args.into_iter().map(|a| Self::force_substitute_as_targets(a, sub)).collect(),
-                    span,
-                }
-            }
-            HirExpr::TupleLit { id, elements, span } => {
-                HirExpr::TupleLit {
-                    id,
-                    elements: elements.into_iter().map(|a| Self::force_substitute_as_targets(a, sub)).collect(),
-                    span,
-                }
-            }
-            HirExpr::Call { id, callee, args, span } => {
-                HirExpr::Call {
-                    id, callee,
-                    args: args.into_iter().map(|a| Self::force_substitute_as_targets(a, sub)).collect(),
-                    span,
-                }
-            }
-            HirExpr::MethodCall { id, receiver, method_name, resolved_callee, args, span } => {
-                HirExpr::MethodCall {
-                    id,
-                    receiver: Box::new(Self::force_substitute_as_targets(*receiver, sub)),
-                    method_name, resolved_callee,
-                    args: args.into_iter().map(|a| Self::force_substitute_as_targets(a, sub)).collect(),
-                    span,
-                }
-            }
-            HirExpr::Println { id, arg, span } => {
-                HirExpr::Println { id, arg: Box::new(Self::force_substitute_as_targets(*arg, sub)), span }
-            }
-            HirExpr::Assert { id, condition, message, span } => {
-                HirExpr::Assert {
-                    id,
-                    condition: Box::new(Self::force_substitute_as_targets(*condition, sub)),
-                    message: message.map(|m| Box::new(Self::force_substitute_as_targets(*m, sub))),
-                    span,
-                }
-            }
+            HirExpr::Block { id, stmts, span } => HirExpr::Block {
+                id,
+                stmts: stmts
+                    .into_iter()
+                    .map(|s| Self::force_substitute_stmt_as(s, sub))
+                    .collect(),
+                span,
+            },
+            HirExpr::If {
+                id,
+                condition,
+                then_branch,
+                else_branch,
+                span,
+            } => HirExpr::If {
+                id,
+                condition: Box::new(Self::force_substitute_as_targets(*condition, sub)),
+                then_branch: Box::new(Self::force_substitute_as_targets(*then_branch, sub)),
+                else_branch: else_branch
+                    .map(|e| Box::new(Self::force_substitute_as_targets(*e, sub))),
+                span,
+            },
+            HirExpr::Match {
+                id,
+                scrutinee,
+                arms,
+                span,
+            } => HirExpr::Match {
+                id,
+                scrutinee: Box::new(Self::force_substitute_as_targets(*scrutinee, sub)),
+                arms: arms
+                    .into_iter()
+                    .map(|(p, g, b)| {
+                        (
+                            p,
+                            g.map(|g| Self::force_substitute_as_targets(g, sub)),
+                            Self::force_substitute_as_targets(b, sub),
+                        )
+                    })
+                    .collect(),
+                span,
+            },
+            HirExpr::Binary {
+                id,
+                op,
+                lhs,
+                rhs,
+                span,
+            } => HirExpr::Binary {
+                id,
+                op,
+                lhs: Box::new(Self::force_substitute_as_targets(*lhs, sub)),
+                rhs: Box::new(Self::force_substitute_as_targets(*rhs, sub)),
+                span,
+            },
+            HirExpr::Unary {
+                id,
+                op,
+                operand,
+                span,
+            } => HirExpr::Unary {
+                id,
+                op,
+                operand: Box::new(Self::force_substitute_as_targets(*operand, sub)),
+                span,
+            },
+            HirExpr::Return { id, value, span } => HirExpr::Return {
+                id,
+                value: value.map(|v| Box::new(Self::force_substitute_as_targets(*v, sub))),
+                span,
+            },
+            HirExpr::While {
+                id,
+                condition,
+                body,
+                span,
+            } => HirExpr::While {
+                id,
+                condition: Box::new(Self::force_substitute_as_targets(*condition, sub)),
+                body: Box::new(Self::force_substitute_as_targets(*body, sub)),
+                span,
+            },
+            HirExpr::ForIn {
+                id,
+                pattern,
+                iter,
+                body,
+                span,
+            } => HirExpr::ForIn {
+                id,
+                pattern,
+                iter: Box::new(Self::force_substitute_as_targets(*iter, sub)),
+                body: Box::new(Self::force_substitute_as_targets(*body, sub)),
+                span,
+            },
+            HirExpr::Deref { id, expr: e, span } => HirExpr::Deref {
+                id,
+                expr: Box::new(Self::force_substitute_as_targets(*e, sub)),
+                span,
+            },
+            HirExpr::FieldAccess {
+                id,
+                object,
+                field,
+                span,
+            } => HirExpr::FieldAccess {
+                id,
+                object: Box::new(Self::force_substitute_as_targets(*object, sub)),
+                field,
+                span,
+            },
+            HirExpr::StructLit {
+                id,
+                struct_name,
+                fields,
+                span,
+            } => HirExpr::StructLit {
+                id,
+                struct_name,
+                fields: fields
+                    .into_iter()
+                    .map(|(s, e)| (s, Self::force_substitute_as_targets(e, sub)))
+                    .collect(),
+                span,
+            },
+            HirExpr::EnumVariant {
+                id,
+                enum_name,
+                variant_name,
+                args,
+                span,
+            } => HirExpr::EnumVariant {
+                id,
+                enum_name,
+                variant_name,
+                args: args
+                    .into_iter()
+                    .map(|a| Self::force_substitute_as_targets(a, sub))
+                    .collect(),
+                span,
+            },
+            HirExpr::TupleLit { id, elements, span } => HirExpr::TupleLit {
+                id,
+                elements: elements
+                    .into_iter()
+                    .map(|a| Self::force_substitute_as_targets(a, sub))
+                    .collect(),
+                span,
+            },
+            HirExpr::Call {
+                id,
+                callee,
+                args,
+                span,
+            } => HirExpr::Call {
+                id,
+                callee,
+                args: args
+                    .into_iter()
+                    .map(|a| Self::force_substitute_as_targets(a, sub))
+                    .collect(),
+                span,
+            },
+            HirExpr::MethodCall {
+                id,
+                receiver,
+                method_name,
+                resolved_callee,
+                args,
+                span,
+            } => HirExpr::MethodCall {
+                id,
+                receiver: Box::new(Self::force_substitute_as_targets(*receiver, sub)),
+                method_name,
+                resolved_callee,
+                args: args
+                    .into_iter()
+                    .map(|a| Self::force_substitute_as_targets(a, sub))
+                    .collect(),
+                span,
+            },
+            HirExpr::Println { id, arg, span } => HirExpr::Println {
+                id,
+                arg: Box::new(Self::force_substitute_as_targets(*arg, sub)),
+                span,
+            },
+            HirExpr::Assert {
+                id,
+                condition,
+                message,
+                span,
+            } => HirExpr::Assert {
+                id,
+                condition: Box::new(Self::force_substitute_as_targets(*condition, sub)),
+                message: message.map(|m| Box::new(Self::force_substitute_as_targets(*m, sub))),
+                span,
+            },
             other => other,
         }
     }
 
-    fn force_substitute_stmt_as(
-        stmt: HirStmt,
-        sub: &HashMap<Symbol, HirType>,
-    ) -> HirStmt {
+    fn force_substitute_stmt_as(stmt: HirStmt, sub: &HashMap<Symbol, HirType>) -> HirStmt {
         match stmt {
-            HirStmt::Let { name, mutable, value, span } => HirStmt::Let {
-                name, mutable,
+            HirStmt::Let {
+                name,
+                mutable,
+                value,
+                span,
+            } => HirStmt::Let {
+                name,
+                mutable,
                 value: Self::force_substitute_as_targets(value, sub),
                 span,
             },
-            HirStmt::LetPat { pattern, mutable, value, ty, span } => HirStmt::LetPat {
-                pattern, mutable,
+            HirStmt::LetPat {
+                pattern,
+                mutable,
+                value,
+                ty,
+                span,
+            } => HirStmt::LetPat {
+                pattern,
+                mutable,
                 value: Self::force_substitute_as_targets(value, sub),
-                ty, span,
+                ty,
+                span,
             },
-            HirStmt::Assign { target, value, span } => HirStmt::Assign {
+            HirStmt::Assign {
+                target,
+                value,
+                span,
+            } => HirStmt::Assign {
                 target,
                 value: Self::force_substitute_as_targets(value, sub),
                 span,
             },
-            HirStmt::AssignField { object, field, value, span } => HirStmt::AssignField {
+            HirStmt::AssignField {
+                object,
+                field,
+                value,
+                span,
+            } => HirStmt::AssignField {
                 object: Box::new(Self::force_substitute_as_targets(*object, sub)),
                 field,
                 value: Self::force_substitute_as_targets(value, sub),
                 span,
             },
-            HirStmt::AssignDeref { target, value, span } => HirStmt::AssignDeref {
+            HirStmt::AssignDeref {
+                target,
+                value,
+                span,
+            } => HirStmt::AssignDeref {
                 target: Box::new(Self::force_substitute_as_targets(*target, sub)),
                 value: Self::force_substitute_as_targets(value, sub),
                 span,

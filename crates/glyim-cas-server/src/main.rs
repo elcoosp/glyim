@@ -1,5 +1,5 @@
-mod verify;
 mod grpc;
+mod verify;
 
 use axum::{
     Router,
@@ -181,8 +181,8 @@ async fn main() -> std::io::Result<()> {
         )
         .init();
 
-    let raw_store = LocalContentStore::new("./cas_store")
-        .expect("failed to create local content store");
+    let raw_store =
+        LocalContentStore::new("./cas_store").expect("failed to create local content store");
     let shared_store = Arc::new(Mutex::new(raw_store));
 
     let state = Arc::new(AppState {
@@ -210,7 +210,9 @@ async fn main() -> std::io::Result<()> {
     });
 
     // ── gRPC server on port 9091 ─────────────────────────────────
-    let cas_service = grpc::cas::CasService { store: shared_store.clone() };
+    let cas_service = grpc::cas::CasService {
+        store: shared_store.clone(),
+    };
     let capabilities_service = grpc::capabilities::CapabilitiesService::default();
 
     let grpc_addr = "127.0.0.1:9091".parse().unwrap();

@@ -40,10 +40,7 @@ impl<'ctx> Codegen<'ctx> {
                     Some(st.into())
                 } else {
                     // Fallback: try the base symbol directly (may work for non-monomorphised generics)
-                    self.struct_types
-                        .borrow()
-                        .get(sym)
-                        .map(|st| (*st).into())
+                    self.struct_types.borrow().get(sym).map(|st| (*st).into())
                 }
             }
             HirType::Tuple(elems) => {
