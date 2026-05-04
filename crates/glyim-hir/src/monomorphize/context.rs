@@ -2,7 +2,7 @@ use crate::monomorphize::mangle_table::MangleTable;
 // crates/glyim-hir/src/monomorphize/context.rs
 use super::*;
 use crate::HirPattern;
-use crate::item::HirItem;
+use crate::item::{EnumDef, HirItem};
 use crate::node::{HirExpr, HirFn, HirStmt};
 use crate::types::HirType;
 use glyim_interner::Symbol;
@@ -27,6 +27,9 @@ impl<'a> MonoContext<'a> {
             fn_queued: HashSet::new(),
             call_type_args_overrides: HashMap::new(),
             mangle_table: MangleTable::new(),
+            enum_specs: HashMap::new(),
+            type_work_queue: Vec::new(),
+            type_queued: HashSet::new(),
         }
     }
 
@@ -141,6 +144,17 @@ impl<'a> MonoContext<'a> {
                 && s.name == name
             {
                 return Some(s.clone());
+            }
+        }
+        None
+    }
+
+    pub(crate) fn find_enum(&self, name: Symbol) -> Option<EnumDef> {
+        for item in &self.hir.items {
+            if let HirItem::Enum(e) = item
+                && e.name == name
+            {
+                return Some(e.clone());
             }
         }
         None
@@ -435,6 +449,23 @@ impl<'a> MonoContext<'a> {
                 .map(|ty| crate::types::substitute_type(ty, sub))
                 .collect()
         }
+    }
+
+    pub(crate) fn specialize_enum(&mut self, e: &EnumDef, concrete: &[HirType]) -> EnumDef {
+        let mut sub = HashMap::new();
+        for (i, tp) in e.type_params.iter().enumerate() {
+            if let Some(ct) = concrete.get(i) {
+                sub.insert(*tp, ct.clone());
+            }
+        }
+        let mut mono = e.clone();
+        mono.type_params.clear();
+        for variant in &mut mono.variants {
+            for field in &mut variant.fields {
+                field.ty = crate::types::substitute_type(&field.ty, &sub);
+            }
+        }
+        mono
     }
 
     pub(crate) fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {

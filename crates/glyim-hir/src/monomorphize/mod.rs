@@ -1,4 +1,4 @@
-use crate::item::StructDef;
+use crate::item::{EnumDef, StructDef};
 use crate::node::HirFn;
 use crate::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
@@ -93,4 +93,7 @@ pub(crate) struct MonoContext<'a> {
     pub(crate) fn_queued: HashSet<(Symbol, Vec<HirType>)>,
     pub(crate) call_type_args_overrides: HashMap<ExprId, Vec<HirType>>,
     pub(crate) mangle_table: mangle_table::MangleTable,
+    pub(crate) enum_specs: HashMap<(Symbol, Vec<HirType>), EnumDef>,
+    pub(crate) type_work_queue: Vec<(Symbol, Vec<HirType>)>,
+    pub(crate) type_queued: HashSet<(Symbol, Vec<HirType>)>,
 }

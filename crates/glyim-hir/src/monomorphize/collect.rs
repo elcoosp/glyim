@@ -43,6 +43,10 @@ impl<'a> MonoContext<'a> {
             }
         }
 
+        // Enqueue type specializations based on call_type_args and HIR types
+        self.scan_hir_for_type_instantiations();
+        self.process_type_specializations();
+
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
@@ -768,4 +772,154 @@ impl<'a> MonoContext<'a> {
             _ => {}
         }
     }
+    /// Enqueue a concrete type for specialization if it contains generic components.
+    /// Recursively processes nested Generic types.
+    pub(crate) fn enqueue_type_if_generic(&mut self, ty: &HirType) {
+        match ty {
+            HirType::Generic(sym, args) => {
+                let concrete_args = self.concretize_type_args(args);
+                if !concrete_args.iter().any(|a| self.has_unresolved_type_param(a)) {
+                    let key = (*sym, concrete_args.clone());
+                    if !self.type_queued.contains(&key) {
+                        self.type_queued.insert(key.clone());
+                        self.type_work_queue.push(key);
+                    }
+                }
+                // Recurse into args
+                for a in args {
+                    self.enqueue_type_if_generic(a);
+                }
+            }
+            HirType::Named(_) | HirType::Int | HirType::Bool | HirType::Float | HirType::Str
+            | HirType::Unit | HirType::Never | HirType::Opaque(_) | HirType::RawPtr(_)
+            | HirType::Option(_) | HirType::Result(_, _) | HirType::Func(_, _) => {
+                // Sub-components: Option, Result, RawPtr
+                match ty {
+                    HirType::Option(inner) => self.enqueue_type_if_generic(inner),
+                    HirType::Result(ok, err) => {
+                        self.enqueue_type_if_generic(ok);
+                        self.enqueue_type_if_generic(err);
+                    }
+                    HirType::RawPtr(inner) => self.enqueue_type_if_generic(inner),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Walk all HIR expressions to find type instantiations and enqueue them.
+    pub(crate) fn scan_hir_for_type_instantiations(&mut self) {
+        for item in &self.hir.items {
+            match item {
+                HirItem::Fn(f) => { self.scan_expr_for_type_instantiations(&f.body); }
+                HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        self.scan_expr_for_type_instantiations(&m.body);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Also process types from call_type_args
+        for type_args in self.call_type_args.values() {
+            for ty in type_args {
+                self.enqueue_type_if_generic(ty);
+            }
+        }
+        // And type_overrides (collect first to avoid borrow issues)
+        let override_types: Vec<HirType> = self.type_overrides.values().cloned().collect();
+        for ty in override_types {
+            self.enqueue_type_if_generic(&ty);
+        }
+    }
+
+    fn scan_expr_for_type_instantiations(&mut self, expr: &HirExpr) {
+        match expr {
+            HirExpr::EnumVariant { id, args, .. } => {
+                let expr_type = self.get_expr_type(*id);
+                if let Some(ty) = expr_type {
+                    self.enqueue_type_if_generic(&ty);
+                }
+                for a in args { self.scan_expr_for_type_instantiations(a); }
+            }
+            HirExpr::StructLit { id, fields, .. } => {
+                let expr_type = self.get_expr_type(*id);
+                if let Some(ty) = expr_type {
+                    self.enqueue_type_if_generic(&ty);
+                }
+                for (_, val) in fields { self.scan_expr_for_type_instantiations(val); }
+            }
+            HirExpr::Call { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args { self.scan_expr_for_type_instantiations(a); }
+            }
+            HirExpr::Block { stmts, .. } => {
+                for stmt in stmts {
+                    match stmt {
+                        HirStmt::Expr(e) | HirStmt::Let { value: e, .. } | HirStmt::LetPat { value: e, .. }
+                        | HirStmt::Assign { value: e, .. } | HirStmt::AssignField { value: e, .. } => {
+                            self.scan_expr_for_type_instantiations(e);
+                        }
+                        HirStmt::AssignDeref { target, value, .. } => {
+                            self.scan_expr_for_type_instantiations(target);
+                            self.scan_expr_for_type_instantiations(value);
+                        }
+                    }
+                }
+            }
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
+                self.scan_expr_for_type_instantiations(condition);
+                self.scan_expr_for_type_instantiations(then_branch);
+                if let Some(e) = else_branch { self.scan_expr_for_type_instantiations(e); }
+            }
+            HirExpr::Match { scrutinee, arms, .. } => {
+                self.scan_expr_for_type_instantiations(scrutinee);
+                for (_, guard, body) in arms {
+                    if let Some(g) = guard { self.scan_expr_for_type_instantiations(g); }
+                    self.scan_expr_for_type_instantiations(body);
+                }
+            }
+            HirExpr::While { condition, body, .. } | HirExpr::ForIn { iter: condition, body, .. } => {
+                self.scan_expr_for_type_instantiations(condition);
+                self.scan_expr_for_type_instantiations(body);
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.scan_expr_for_type_instantiations(lhs);
+                self.scan_expr_for_type_instantiations(rhs);
+            }
+            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
+                self.scan_expr_for_type_instantiations(operand);
+            }
+            HirExpr::Return { value: Some(v), .. } => { self.scan_expr_for_type_instantiations(v); }
+            _ => {}
+        }
+    }
+
+    /// Process the type specialization queue recursively.
+    pub(crate) fn process_type_specializations(&mut self) {
+        while let Some((name, args)) = self.type_work_queue.pop() {
+            let key = (name, args.clone());
+            if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
+                continue;
+            }
+            if let Some(struct_def) = self.find_struct(name) {
+                let specialized = self.specialize_struct(&struct_def, &args);
+                // Scan field types for nested generics
+                for field in &specialized.fields {
+                    self.enqueue_type_if_generic(&field.ty);
+                }
+                self.struct_specs.insert(key, specialized);
+            } else if let Some(enum_def) = self.find_enum(name) {
+                let specialized = self.specialize_enum(&enum_def, &args);
+                // Scan variant types for nested generics
+                for variant in &specialized.variants {
+                    for field in &variant.fields {
+                        self.enqueue_type_if_generic(&field.ty);
+                    }
+                }
+                self.enum_specs.insert(key, specialized);
+            }
+        }
+    }
+
 }
