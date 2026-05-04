@@ -114,6 +114,22 @@ impl<'a> MonoContext<'a> {
             items.push(HirItem::Fn(mono_f));
         }
 
+        // Assert no unresolved type parameters before returning
+        for item in &items {
+            match item {
+                crate::item::HirItem::Fn(f) => {
+                    crate::passes::no_type_params::assert_no_type_params(&f.body, self.interner);
+                }
+                crate::item::HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        crate::passes::no_type_params::assert_no_type_params(&m.body, self.interner);
+                    }
+                }
+                crate::item::HirItem::Struct(_) => {}
+                crate::item::HirItem::Enum(_) => {}
+                crate::item::HirItem::Extern(_) => {}
+            }
+        }
         MonoResult {
             hir: crate::Hir { items },
             type_overrides: self.type_overrides,

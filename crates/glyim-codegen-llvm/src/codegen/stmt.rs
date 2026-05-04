@@ -49,10 +49,7 @@ pub(crate) fn codegen_stmt<'ctx>(
         } => {
             let val = super::expr::codegen_expr(cg, value, fctx)?;
             eprintln!("LET {} = {}", cg.interner.resolve(*name), val);
-            let alloca = cg
-                .builder
-                .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                .ok()?;
+            let alloca = cg.build_zeroed_alloca(cg.interner.resolve(*name)).ok()?;
             cg.builder.build_store(alloca, val).ok()?;
 
             if let (Some(di), Some(src), Some(sp)) =

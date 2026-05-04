@@ -2,6 +2,7 @@ pub mod item;
 mod lower;
 pub mod monomorphize;
 pub mod node;
+pub mod passes;
 pub mod types;
 
 pub use item::{

@@ -2,6 +2,7 @@ mod alloc;
 pub mod codegen;
 mod debug;
 mod hash_shims;
+pub mod helpers;
 pub mod runtime_shims;
 pub use codegen::Codegen;
 
