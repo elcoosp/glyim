@@ -3,7 +3,6 @@ use glyim_codegen_llvm::{Codegen, compile_to_ir};
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
 use glyim_interner::Interner;
-use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
 use inkwell::OptimizationLevel;
@@ -11,7 +10,6 @@ use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process::Command};
-use tracing::info_span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
     #[default]
@@ -30,7 +28,6 @@ impl BuildMode {
     }
 }
 #[derive(Debug)]
-#[must_use]
 #[must_use]
 pub enum PipelineError {
     Io(std::io::Error),

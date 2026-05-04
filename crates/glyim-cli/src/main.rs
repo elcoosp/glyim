@@ -177,7 +177,7 @@ fn main() {
         Command::Run {
             input,
             target,
-            debug,
+            debug: _,
             release,
         } => cmd_run(input, target, release),
         Command::Ir { input } => cmd_ir(input),
