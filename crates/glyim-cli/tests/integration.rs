@@ -1435,7 +1435,6 @@ main = () => {
 }
 
 #[test]
-#[ignore = "nested generics codegen function skip issue not yet fixed"]
 #[ignore = "nested generics struct‑field 0 as T rewriting incomplete"]
 fn stress_nest_vec() {
     let src = include_str!("../../../tests/stress/nest_vec.g");
@@ -1443,8 +1442,6 @@ fn stress_nest_vec() {
 }
 
 #[test]
-#[ignore = "nested generics enum variant rewriting not yet integrated"]
-#[ignore = "nested generics enum variant rewriting not yet implemented"]
 fn stress_nest_option() {
     let src = include_str!("../../../tests/stress/nest_option.g");
     assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 42);
