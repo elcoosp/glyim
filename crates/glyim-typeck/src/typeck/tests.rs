@@ -1,3 +1,5 @@
+use glyim_hir::node::HirFn;
+use glyim_hir::types::HirPattern;
 use super::{TypeChecker, TypeError};
 use glyim_diag::Span;
 use glyim_hir::types::{ExprId, HirType};
@@ -35,7 +37,7 @@ fn let_binding_visible_in_same_scope() {
 #[test]
 fn binding_not_visible_in_parent_scope() {
     let mut tc = TypeChecker::new(Interner::new());
-    let _x = tc.interner.intern("x"); // unused, but harmless
+    let _x = tc.interner.intern("x");
     tc.push_scope();
     tc.push_scope();
     let y = tc.interner.intern("y");
@@ -69,7 +71,7 @@ fn with_scope_restores_after_pop() {
         tc.lookup_binding(&y)
     });
     assert_eq!(inner_result, Some(HirType::Str));
-    let y_later = tc.interner.intern("y"); // borrow mutable once
+    let y_later = tc.interner.intern("y");
     assert_eq!(tc.lookup_binding(&y_later), None);
     assert_eq!(tc.lookup_binding(&x), Some(HirType::Int));
 }
@@ -570,6 +572,7 @@ fn check_fn_params_bound_in_body() {
         tc.errors
     );
 }
+
 #[test]
 fn infer_type_args_for_generic_call() {
     let tc = typecheck("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
@@ -641,4 +644,123 @@ fn generic_equality_compiles() {
         eprintln!("Generic equality errors: {:?}", tc.errors);
     }
     assert!(tc.errors.is_empty(), "generic equality should compile");
+}
+
+// ---- NEW TESTS ----
+#[test]
+fn extract_option_inner_some() {
+    let tc = TypeChecker::new(Interner::new());
+    let ty = HirType::Option(Box::new(HirType::Int));
+    let inner = tc.extract_option_inner(&ty);
+    assert_eq!(inner, Some(HirType::Int));
+}
+
+#[test]
+fn extract_option_inner_none_for_non_option() {
+    let tc = TypeChecker::new(Interner::new());
+    assert_eq!(tc.extract_option_inner(&HirType::Int), None);
+}
+
+#[test]
+fn extract_result_inner_ok() {
+    let tc = TypeChecker::new(Interner::new());
+    let ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
+    let (ok, err) = tc.extract_result_inner(&ty).unwrap();
+    assert_eq!(ok, HirType::Int);
+    assert_eq!(err, HirType::Str);
+}
+
+#[test]
+fn extract_result_inner_none() {
+    let tc = TypeChecker::new(Interner::new());
+    assert_eq!(tc.extract_result_inner(&HirType::Int), None);
+}
+
+#[test]
+fn register_visibility_separate_pub_priv() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let pub_sym = tc.interner.intern("pub_fn");
+    let priv_sym = tc.interner.intern("priv_fn");
+    tc.register_visibility(pub_sym, true);
+    tc.register_visibility(priv_sym, false);
+    assert_eq!(tc.visibility.get(&pub_sym), Some(&true));
+    assert_eq!(tc.visibility.get(&priv_sym), Some(&false));
+}
+
+#[test]
+fn check_fn_generic_return_matches_inferred() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("id");
+    let t_sym = tc.interner.intern("T");
+    let f = HirFn {
+        doc: None, name: fn_sym, type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(t_sym)),
+        body: HirExpr::Ident { id: ExprId::new(0), name: tc.interner.intern("x"), span: Span::new(0,0) },
+        span: Span::new(0,0), is_pub: false, is_macro_generated: false, is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let idx = tc.fns.len() - 1;
+    // avoid borrowing issues: clone the function out
+    let f_clone = tc.fns[idx].clone();
+    tc.check_fn(&f_clone);
+    assert!(tc.errors.is_empty(), "Expected no errors, got {:?}", tc.errors);
+}
+
+#[test]
+fn check_fn_return_mismatch_error() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let f = HirFn {
+        doc: None, name: tc.interner.intern("bad"), type_params: vec![], params: vec![],
+        param_mutability: vec![], ret: Some(HirType::Bool),
+        body: HirExpr::IntLit { id: ExprId::new(0), value: 42, span: Span::new(0,0) },
+        span: Span::new(0,0), is_pub: false, is_macro_generated: false, is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let f_clone = tc.fns.last().unwrap().clone();
+    tc.check_fn(&f_clone);
+    assert!(tc.errors.iter().any(|e| matches!(e, TypeError::InvalidReturnType { .. })));
+}
+
+#[test]
+fn bind_match_option_some_pattern() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let v_sym = tc.interner.intern("v");
+    let pattern = HirPattern::OptionSome(Box::new(HirPattern::Var(v_sym)));
+    let scrutinee_ty = HirType::Option(Box::new(HirType::Int));
+    tc.bind_match_pattern(&pattern, &scrutinee_ty);
+    assert_eq!(tc.lookup_binding(&v_sym), Some(HirType::Int));
+}
+
+#[test]
+fn bind_match_option_none_no_binding() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    tc.bind_match_pattern(&HirPattern::OptionNone, &HirType::Option(Box::new(HirType::Int)));
+    let v_sym = tc.interner.intern("v");
+    assert!(tc.lookup_binding(&v_sym).is_none());
+}
+
+#[test]
+fn bind_match_result_ok_pattern() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let v_sym = tc.interner.intern("v");
+    let pattern = HirPattern::ResultOk(Box::new(HirPattern::Var(v_sym)));
+    let scrutinee_ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
+    tc.bind_match_pattern(&pattern, &scrutinee_ty);
+    assert_eq!(tc.lookup_binding(&v_sym), Some(HirType::Int));
+}
+
+#[test]
+fn bind_match_result_err_pattern() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let e_sym = tc.interner.intern("e");
+    let pattern = HirPattern::ResultErr(Box::new(HirPattern::Var(e_sym)));
+    let scrutinee_ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
+    tc.bind_match_pattern(&pattern, &scrutinee_ty);
+    assert_eq!(tc.lookup_binding(&e_sym), Some(HirType::Str));
 }
