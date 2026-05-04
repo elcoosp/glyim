@@ -123,3 +123,204 @@ fn unify_conflict_detected() {
     let sub = result.unwrap();
     assert_eq!(sub[&t], HirType::Bool);
 }
+#[test]
+fn unify_rawptr_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let result = unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_rawptr_mismatch_fails() {
+    let result = unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Bool)),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_option_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let result = unify(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_result_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let e = sym(&mut i, "E");
+    let result = unify(
+        &HirType::Result(
+            Box::new(HirType::Int),
+            Box::new(HirType::Str),
+        ),
+        &HirType::Result(
+            Box::new(HirType::Named(t)),
+            Box::new(HirType::Named(e)),
+        ),
+        &[t, e],
+    );
+    assert!(result.is_ok());
+    let sub = result.unwrap();
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+
+#[test]
+fn unify_tuple_mismatched_length_fails() {
+    let result = unify(
+        &HirType::Tuple(vec![HirType::Int]),
+        &HirType::Tuple(vec![HirType::Int, HirType::Bool]),
+        &[],
+    );
+    assert!(result.is_err());
+}
+#[test]
+fn unify_rawptr_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let result = unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_rawptr_mismatch_fails() {
+    let result = unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Bool)),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_option_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let result = unify(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_result_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let e = sym(&mut i, "E");
+    let result = unify(
+        &HirType::Result(
+            Box::new(HirType::Int),
+            Box::new(HirType::Str),
+        ),
+        &HirType::Result(
+            Box::new(HirType::Named(t)),
+            Box::new(HirType::Named(e)),
+        ),
+        &[t, e],
+    );
+    assert!(result.is_ok());
+    let sub = result.unwrap();
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+
+#[test]
+fn unify_tuple_mismatched_length_fails() {
+    let result = unify(
+        &HirType::Tuple(vec![HirType::Int]),
+        &HirType::Tuple(vec![HirType::Int, HirType::Bool]),
+        &[],
+    );
+    assert!(result.is_err());
+}
+#[test]
+fn unify_rawptr_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let result = unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_rawptr_mismatch_fails() {
+    let result = unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Bool)),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_option_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let result = unify(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_result_success() {
+    let mut i = Interner::new();
+    let t = sym(&mut i, "T");
+    let e = sym(&mut i, "E");
+    let result = unify(
+        &HirType::Result(
+            Box::new(HirType::Int),
+            Box::new(HirType::Str),
+        ),
+        &HirType::Result(
+            Box::new(HirType::Named(t)),
+            Box::new(HirType::Named(e)),
+        ),
+        &[t, e],
+    );
+    assert!(result.is_ok());
+    let sub = result.unwrap();
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+
+#[test]
+fn unify_tuple_mismatched_length_fails() {
+    let result = unify(
+        &HirType::Tuple(vec![HirType::Int]),
+        &HirType::Tuple(vec![HirType::Int, HirType::Bool]),
+        &[],
+    );
+    assert!(result.is_err());
+}

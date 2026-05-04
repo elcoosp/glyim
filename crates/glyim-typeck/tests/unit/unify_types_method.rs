@@ -79,3 +79,159 @@ fn unify_types_named_concrete_to_generic() {
         HirType::Named(tc.interner.intern("Vec"))
     );
 }
+#[test]
+fn unify_types_rawptr_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_option_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_result_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let e = tc.interner.intern("E");
+    let type_params = vec![t, e];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::Result(
+            Box::new(HirType::Int),
+            Box::new(HirType::Str),
+        ),
+        &HirType::Result(
+            Box::new(HirType::Named(t)),
+            Box::new(HirType::Named(e)),
+        ),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+#[test]
+fn unify_types_rawptr_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_option_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_result_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let e = tc.interner.intern("E");
+    let type_params = vec![t, e];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::Result(
+            Box::new(HirType::Int),
+            Box::new(HirType::Str),
+        ),
+        &HirType::Result(
+            Box::new(HirType::Named(t)),
+            Box::new(HirType::Named(e)),
+        ),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+#[test]
+fn unify_types_rawptr_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_option_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_result_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let e = tc.interner.intern("E");
+    let type_params = vec![t, e];
+    let mut sub = HashMap::new();
+    tc.unify_types(
+        &HirType::Result(
+            Box::new(HirType::Int),
+            Box::new(HirType::Str),
+        ),
+        &HirType::Result(
+            Box::new(HirType::Named(t)),
+            Box::new(HirType::Named(e)),
+        ),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
