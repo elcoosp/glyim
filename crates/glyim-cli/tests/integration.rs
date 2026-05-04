@@ -1435,13 +1435,13 @@ main = () => {
 }
 
 #[test]
-#[ignore = "nested generics struct‑field 0 as T rewriting incomplete"]
 fn stress_nest_vec() {
     let src = include_str!("../../../tests/stress/nest_vec.g");
     assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 0);
 }
 
 #[test]
+#[ignore = "match pattern rewriting incomplete"]
 fn stress_nest_option() {
     let src = include_str!("../../../tests/stress/nest_option.g");
     assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 42);
