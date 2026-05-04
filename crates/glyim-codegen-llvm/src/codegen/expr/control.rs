@@ -160,26 +160,57 @@ pub(crate) fn codegen_match<'ctx>(
                     .build_conditional_branch(is_some, some_bb, none_bb)
                     .ok()?;
 
-                // Some branch
+                // Some/Ok branch - handle patterns and extract bindings
                 cg.builder.position_at_end(some_bb);
-                if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pat0
-                    && let HirPattern::Var(name) = inner.as_ref()
-                {
-                    let payload_ptr = cg
-                        .builder
-                        .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
-                        .ok()?;
-                    let payload_val = cg
-                        .builder
-                        .build_load(cg.i64_type, payload_ptr, "payload_val")
-                        .ok()?
-                        .into_int_value();
-                    let alloca = cg
-                        .builder
-                        .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                        .ok()?;
-                    cg.builder.build_store(alloca, payload_val).ok()?;
-                    fctx.vars.insert(*name, alloca);
+                match pat0 {
+                    HirPattern::EnumVariant { bindings, .. } => {
+                        // Extract fields from the payload
+                        for (i, (field_sym, _)) in bindings.iter().enumerate() {
+                            let idx = cg.i32_type.const_int((i + 1) as u64, false);
+                            let zero = cg.i32_type.const_int(0, false);
+                            let field_ptr = unsafe {
+                                cg.builder
+                                    .build_gep(st, enum_ptr, &[zero, idx], "field_ptr")
+                                    .ok()?
+                            };
+                            let field_val = cg
+                                .builder
+                                .build_load(cg.i64_type, field_ptr, "field_val")
+                                .ok()?
+                                .into_int_value();
+                            let alloca = cg
+                                .builder
+                                .build_alloca(cg.i64_type, cg.interner.resolve(*field_sym))
+                                .ok()?;
+                            cg.builder.build_store(alloca, field_val).ok()?;
+                            fctx.vars.insert(*field_sym, alloca);
+                        }
+                    }
+                    _ if matches!(pat0, HirPattern::OptionSome(_) | HirPattern::ResultOk(_)) => {
+                        if let Some(inner) = match pat0 {
+                            HirPattern::OptionSome(i) | HirPattern::ResultOk(i) => Some(i),
+                            _ => None,
+                        } {
+                            if let HirPattern::Var(name) = inner.as_ref() {
+                                let payload_ptr = cg
+                                    .builder
+                                    .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
+                                    .ok()?;
+                                let payload_val = cg
+                                    .builder
+                                    .build_load(cg.i64_type, payload_ptr, "payload_val")
+                                    .ok()?
+                                    .into_int_value();
+                                let alloca = cg
+                                    .builder
+                                    .build_alloca(cg.i64_type, cg.interner.resolve(*name))
+                                    .ok()?;
+                                cg.builder.build_store(alloca, payload_val).ok()?;
+                                fctx.vars.insert(*name, alloca);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 let some_val = codegen_expr(cg, body0, fctx)?;
                 let some_end = cg.builder.get_insert_block().expect("codegen: internal error");

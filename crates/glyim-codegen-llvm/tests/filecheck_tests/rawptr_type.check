@@ -1,0 +1,3 @@
+; CHECK: i64* {{.*}} = alloca i8*, align 8
+; CHECK: store i8* null, i8** %
+; CHECK: %ptr = load i8*, i8** %

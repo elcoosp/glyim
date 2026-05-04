@@ -71,3 +71,7 @@ fn ir_generic_fn() {
 fn ir_tuple_lit() {
     run_snapshot("tuple_lit");
 }
+#[test]
+fn ir_enum_payload() {
+    run_snapshot("enum_payload");
+}

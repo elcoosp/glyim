@@ -11,7 +11,7 @@ use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process::Command};
-use tracing::{info, info_span};
+use tracing::info_span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
     #[default]
@@ -145,18 +145,13 @@ pub fn build(
     output: Option<&Path>,
     target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
-    let (source, is_no_std) = load_source_with_prelude(input)?;
-    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
-    let mut typeck = TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mono_hir) =
-        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-    let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+    let (source, _) = load_source_with_prelude(input)?;
+    let config = PipelineConfig {
+        target: target.map(|s| s.to_string()),
+        ..Default::default()
+    };
+    let compiled = compile_source_to_hir(source, input, &config)?;
+    let output_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
             .unwrap_or_default()
@@ -166,37 +161,31 @@ pub fn build(
     });
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    info!("starting codegen");
     let mut codegen = Codegen::with_line_tables(
         &context,
-        interner,
-        merged_types,
-        source,
+        compiled.interner.clone(),
+        compiled.merged_types.clone(),
+        compiled.source.clone(),
         &input.to_string_lossy(),
     )
     .map_err(PipelineError::Codegen)?;
-    if let Some(t) = target {
-        if let Err(e) = crate::cross::validate_target(t) {
-            return Err(PipelineError::Codegen(e));
-        }
+    if let Some(t) = &config.target {
+        crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         codegen = codegen.with_target(t);
     }
-    if is_no_std {
+    if compiled.is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_jit_mode();
     codegen
-        .generate(&mono_hir)
+        .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
     debug_ir(&codegen);
-    info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
-    link_object(&obj_path, &output, false)?;
-    Ok(output)
+    link_object(&obj_path, &output_path, false)?;
+    Ok(output_path)
 }
 const PRELUDE: &str = "\
 pub enum Option<T> {
@@ -345,95 +334,10 @@ fn execute_jit(
         Ok(main_fn.call())
     }
 }
+
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
-    let (source, is_no_std) = load_source_with_prelude(input)?;
-    // Expand macros (e.g. @identity) before parsing
-    let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(
-        &source,
-        input.parent().unwrap_or(std::path::Path::new(".")),
-        &cas_dir,
-    )
-    .unwrap_or(source);
-    let parse_out = glyim_parse::parse(&source);
-    info!("parsed {} items", parse_out.ast.items.len());
-    if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
-    }
-    let mut interner = parse_out.interner;
-
-    // Phase 1: scan declarations to build symbol table
-    let decl_output = glyim_parse::declarations::parse_declarations(&source);
-    let decl_table =
-        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
-
-    // Phase 2: full lowering with pre-resolved symbols
-    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
-    let mut typeck = TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mono_hir) =
-        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-    for item in &mono_hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            let name = interner.resolve(f.name);
-            if name.contains("Vec")
-                || name.contains("push")
-                || name.contains("len")
-                || name.contains("pop")
-                || name.contains("get")
-            {
-                tracing::debug!(
-                    "[pipeline]   mono fn: {} (type_params={:?})",
-                    name, f.type_params
-                );
-            }
-        }
-    }
-    let context = Context::create();
-    let mut codegen = Codegen::with_line_tables(
-        &context,
-        interner,
-        merged_types,
-        source,
-        &input.to_string_lossy(),
-    )
-    .map_err(PipelineError::Codegen)?;
-    if let Some(t) = target {
-        if let Err(e) = crate::cross::validate_target(t) {
-            return Err(PipelineError::Codegen(e));
-        }
-        codegen = codegen.with_target(t);
-    }
-    if is_no_std {
-        codegen = codegen.with_no_std();
-    }
-    codegen = codegen.with_jit_mode();
-    codegen
-        .generate(&mono_hir)
-        .map_err(PipelineError::Codegen)?;
-    debug_ir(&codegen);
-    let engine = codegen
-        .get_module()
-        .create_jit_execution_engine(OptimizationLevel::None)
-        .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    runtime_shims::map_runtime_shims_for_jit(
-        &engine,
-        codegen.get_module(),
-        *CUSTOM_ASSERT_FN.lock().unwrap(),
-        *CUSTOM_ABORT_FN.lock().unwrap(),
-    );
-    unsafe {
-        let main_fn = engine
-            .get_function::<unsafe extern "C" fn() -> i32>("main")
-            .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
-        Ok(main_fn.call())
-    }
+    run_with_mode(input, BuildMode::Debug, target, None)
 }
 #[tracing::instrument(name = "check", skip_all)]
 pub fn check(input: &Path) -> Result<(), PipelineError> {
@@ -520,27 +424,15 @@ pub fn build_with_mode(
     target: Option<&str>,
     force_no_std: Option<bool>,
 ) -> Result<PathBuf, PipelineError> {
-    let (source, is_no_std) = load_source_with_prelude(input)?;
-    let is_no_std = force_no_std.unwrap_or(is_no_std);
-    // Expand macros (e.g. @identity) before parsing
-    let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
-    let source = crate::macro_expand::expand_macros(
-        &source,
-        input.parent().unwrap_or(std::path::Path::new(".")),
-        &cas_dir,
-    )
-    .unwrap_or(source);
-    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
-    let mut typeck = TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mono_hir) =
-        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-    let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+    let (source, _) = load_source_with_prelude(input)?;
+    let config = PipelineConfig {
+        mode,
+        target: target.map(|s| s.to_string()),
+        force_no_std,
+        ..Default::default()
+    };
+    let compiled = compile_source_to_hir(source, input, &config)?;
+    let output_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
             .file_stem()
             .unwrap_or_default()
@@ -550,37 +442,39 @@ pub fn build_with_mode(
     });
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
     let mut codegen = match mode {
         BuildMode::Debug => Codegen::with_debug(
             &context,
-            interner,
-            merged_types,
-            source.clone(),
+            compiled.interner.clone(),
+            compiled.merged_types.clone(),
+            compiled.source.clone(),
             &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => Codegen::new(&context, interner, merged_types),
+        BuildMode::Release => Codegen::new(
+            &context,
+            compiled.interner.clone(),
+            compiled.merged_types.clone(),
+        ),
     };
-    if let Some(t) = target {
+    if let Some(t) = &config.target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
-    if is_no_std {
+    if compiled.is_no_std {
         codegen = codegen.with_no_std();
     }
-    codegen = codegen.with_jit_mode();
     codegen
-        .generate(&mono_hir)
+        .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
     debug_ir(&codegen);
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
-    link_object(&obj_path, &output, mode == BuildMode::Release)?;
-    Ok(output)
+    link_object(&obj_path, &output_path, mode == BuildMode::Release)?;
+    Ok(output_path)
 }
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     let mut current = if start.is_file() {
@@ -809,17 +703,6 @@ pub fn run_tests_package(
     }
     run_tests(&main_path, filter_name, include_ignored, None, nocapture)
 }
-fn compile_to_hir_and_ir(
-    source: &str,
-) -> Result<(glyim_hir::Hir, String, Interner), PipelineError> {
-    let mut parse_out = glyim_parse::parse(source);
-    if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
-    }
-    let hir = glyim_hir::lower(&parse_out.ast, &mut parse_out.interner);
-    let ir = compile_to_ir(source).map_err(PipelineError::Codegen)?;
-    Ok((hir, ir, parse_out.interner))
-}
 fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(), PipelineError> {
     let linker = if which("cc") {
         "cc"
@@ -858,59 +741,6 @@ fn compute_source_hash(source: &str) -> String {
     hasher.update(source.as_bytes());
     hasher.update(env!("CARGO_PKG_VERSION"));
     hex::encode(hasher.finalize())
-}
-#[allow(dead_code)]
-fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
-    let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
-    let hash = compute_source_hash(&source);
-    let cache_dir = dirs_next::cache_dir()
-        .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
-        .join("glyim-objects");
-    let cas = CasClient::new(&cache_dir).map_err(PipelineError::Io)?;
-    let output = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
-        let stem = input
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        PathBuf::from(stem)
-    });
-    let hash_content = hash
-    .parse::<glyim_macro_vfs::ContentHash>()
-    .map_err(|e| PipelineError::Codegen(format!("hash parse: {e}")))?;
-    if let Some(cached_obj) = cas.retrieve(hash_content) {
-        let tmp_dir = tempfile::tempdir()?;
-        let obj_path = tmp_dir.path().join("cached.o");
-        fs::write(&obj_path, &cached_obj)?;
-        link_object(&obj_path, &output, false)?;
-        return Ok(output);
-    }
-    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
-    let mut typeck = TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mono_hir) =
-        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-    let tmp_dir = tempfile::tempdir()?;
-    let obj_path = tmp_dir.path().join("output.o");
-    let _codegen_span = info_span!("phase", name = "codegen").entered();
-    let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner, merged_types);
-    codegen
-        .generate(&mono_hir)
-        .map_err(PipelineError::Codegen)?;
-    debug_ir(&codegen);
-    codegen
-        .write_object_file(&obj_path)
-        .map_err(PipelineError::Codegen)?;
-    let obj_bytes = fs::read(&obj_path)?;
-    cas.store(&obj_bytes);
-    link_object(&obj_path, &output, false)?;
-    Ok(output)
 }
 fn which(cmd: &str) -> bool {
     Command::new(cmd)
