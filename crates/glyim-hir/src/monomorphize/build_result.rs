@@ -42,6 +42,21 @@ impl<'a> MonoContext<'a> {
             items.push(HirItem::Struct(mono_s));
         }
 
+        // Emit specialized enums (with mangled names)
+        let enum_specs: Vec<_> = self
+            .enum_specs
+            .iter()
+            .filter(|((_, args), _)| !args.iter().any(|a| self.has_unresolved_type_param(a)))
+            .map(|((orig_name, args), e)| (*orig_name, args.clone(), e.clone()))
+            .collect();
+
+        for (_, args, e) in enum_specs {
+            let mangled = self.mangle_name(e.name, &args);
+            let mut mono_e = e;
+            mono_e.name = mangled;
+            items.push(HirItem::Enum(mono_e));
+        }
+
         // Build fn_mangle_map from specialized functions
         let fn_specs: Vec<_> = self
             .fn_specs
