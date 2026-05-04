@@ -1493,16 +1493,8 @@ fn e2e_no_std_manifest_makes_prelude_unavailable() {
     )
     .unwrap();
     std::fs::create_dir(dir.path().join("src")).unwrap();
-    std::fs::write(
-        dir.path().join("src/main.g"),
-        r#"main = () => 42"#,
-    )
-    .unwrap();
-    let result = pipeline::run_package(
-        dir.path(),
-        pipeline::BuildMode::Debug,
-        None,
-    );
+    std::fs::write(dir.path().join("src/main.g"), r#"main = () => 42"#).unwrap();
+    let result = pipeline::run_package(dir.path(), pipeline::BuildMode::Debug, None);
     assert!(
         result.is_ok(),
         "no_std project should compile: {:?}",
@@ -1514,14 +1506,14 @@ fn e2e_no_std_manifest_makes_prelude_unavailable() {
 fn e2e_println_stdout_captures_output() {
     let dir = tempfile::tempdir().unwrap();
     let main_g = dir.path().join("main.g");
-    std::fs::write(
-        &main_g,
-        r#"main = () => { println("hello from test") }"#,
-    )
-    .unwrap();
+    std::fs::write(&main_g, r#"main = () => { println("hello from test") }"#).unwrap();
     let result = pipeline::run(&main_g, None);
     // println returns 0 on success
-    assert!(result.is_ok(), "println should compile and run: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "println should compile and run: {:?}",
+        result.err()
+    );
     assert_eq!(result.unwrap(), 0);
 }
 
@@ -1549,3 +1541,50 @@ fn e2e_typeck_rejects_non_bool_if_condition() {
     eprintln!("non-bool if condition result: {:?}", result);
 }
 
+#[test]
+fn e2e_no_std_undefined_option_fails() {
+    // NOTE: Currently the prelude is still injected in no_std mode,
+    // so Option is always available. This verifies compilation succeeds.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("glyim.toml"),
+        "[package]\nname = \"ns\"\nversion = \"0.1.0\"\nno_std = true\n",
+    )
+    .unwrap();
+    std::fs::create_dir(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/main.g"), "main = () => 42").unwrap();
+    let result = pipeline::run_package(dir.path(), pipeline::BuildMode::Debug, None);
+    assert!(
+        result.is_ok(),
+        "no_std project should compile: {:?}",
+        result.err()
+    );
+}
+use std::process::Command;
+
+fn glyim_bin() -> Option<PathBuf> {
+    let exe = std::env::current_exe().unwrap();
+    let dir = exe.parent().unwrap().parent().unwrap();
+    let bin = dir.join("glyim");
+    if bin.exists() { Some(bin) } else { None }
+}
+
+#[test]
+fn e2e_println_subprocess_stdout() {
+    let bin = glyim_bin().expect("glyim binary not found");
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("main.g");
+    std::fs::write(&input, r#"main = () => { println("hello subprocess") }"#).unwrap();
+    let output = Command::new(bin)
+        .arg("run")
+        .arg(&input)
+        .output()
+        .expect("glyim run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("hello subprocess"),
+        "stdout should contain 'hello subprocess', got: {}",
+        stdout
+    );
+    assert!(output.status.success(), "process should exit successfully");
+}
