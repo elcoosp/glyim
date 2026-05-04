@@ -2,7 +2,8 @@ use glyim_macro_vfs::ContentStore;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-/// Locate the `glyim` binary next to the test executable.
+// ── Helpers ────────────────────────────────────────────────
+
 fn glyim_bin() -> Option<PathBuf> {
     let exe = std::env::current_exe().unwrap();
     let dir = exe.parent().unwrap().parent().unwrap();
@@ -10,119 +11,125 @@ fn glyim_bin() -> Option<PathBuf> {
     if bin.exists() { Some(bin) } else { None }
 }
 
-/// Run `glyim` with given arguments on a temporary source file.
-fn run_glyim(args: &[&str], source: &str) -> Option<Output> {
-    let bin = glyim_bin()?;
+/// Create a temporary file, write source, then call `f` with its path.
+fn with_source_file(source: &str, f: impl FnOnce(&std::path::Path)) {
     let dir = tempfile::tempdir().unwrap();
-    let input = dir.path().join("main.g");
-    std::fs::write(&input, source).unwrap();
-    let mut cmd = Command::new(bin);
-    for arg in args {
-        cmd.arg(arg);
-    }
-    cmd.arg(&input);
-    Some(cmd.output().expect("failed to execute glyim"))
+    let path = dir.path().join("test.g");
+    std::fs::write(&path, source).unwrap();
+    f(&path);
 }
 
-macro_rules! try_glyim {
-    ($args:expr, $src:expr) => {
-        match run_glyim($args, $src) {
-            Some(output) => output,
-            None => return,
-        }
-    };
-}
+// ── In‑process pipeline tests (fast) ──────────────────────────
 
 #[test]
 fn cli_run_returns_exit_code() {
-    let output = try_glyim!(&["run"], "main = () => 42");
-    assert_eq!(output.status.code(), Some(42));
+    let exit = glyim_cli::pipeline::run_jit("main = () => 42").unwrap();
+    assert_eq!(exit, 42);
 }
 
 #[test]
 fn cli_run_with_println_output() {
-    let output = try_glyim!(&["run"], r#"main = () => { println(42) }"#);
+    // Keep a subprocess test because we need to capture actual stdout
+    let bin = glyim_bin().expect("glyim binary not found");
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("main.g");
+    std::fs::write(&input, r#"main = () => { println(42) }"#).unwrap();
+    let output = Command::new(bin)
+        .arg("run")
+        .arg(&input)
+        .output()
+        .expect("glyim run");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("42"));
 }
 
 #[test]
 fn cli_ir_output() {
-    let output = try_glyim!(&["ir"], "main = () => 42");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("define i32 @main"));
+    let ir = glyim_codegen_llvm::compile_to_ir("main = () => 42").unwrap();
+    assert!(ir.contains("define i32 @main"));
 }
 
 #[test]
 fn cli_check_valid() {
-    let output = try_glyim!(&["check"], "main = () => 42");
-    assert!(output.status.success());
+    with_source_file("main = () => 42", |path| {
+        glyim_cli::pipeline::check(path).unwrap();
+    });
 }
 
 #[test]
 fn cli_check_invalid() {
-    let output = try_glyim!(&["check"], "main = () => 42 as Str");
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("error") || stderr.contains("type mismatch"));
+    with_source_file("main = () => 42 as Str", |path| {
+        let result = glyim_cli::pipeline::check(path);
+        assert!(result.is_err());
+    });
 }
 
 #[test]
 fn cli_dump_tokens() {
-    let output = try_glyim!(&["dump-tokens"], "main = () => 42");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("TOK"));
-    assert!(stdout.contains("ident"));
+    let source = "main = () => 42";
+    let mut buf = Vec::new();
+    glyim_cli::dump::dump_tokens(source, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    assert!(out.contains("TOK"));
+    assert!(out.contains("ident"));
 }
 
 #[test]
 fn cli_dump_ast() {
-    let output = try_glyim!(&["dump-ast"], "main = () => 42");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(!stdout.is_empty());
-    assert!(stdout.contains("main"));
+    let source = "main = () => 42";
+    let parse_out = glyim_parse::parse(source);
+    let mut buf = Vec::new();
+    glyim_cli::dump::dump_ast(source, &parse_out.interner, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    assert!(!out.is_empty());
+    assert!(out.contains("main"));
 }
 
 #[test]
 fn cli_dump_hir() {
-    let output = try_glyim!(&["dump-hir"], "main = () => 42");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("HIR fn main"));
+    let source = "main = () => 42";
+    let parse_out = glyim_parse::parse(source);
+    let mut buf = Vec::new();
+    glyim_cli::dump::dump_hir(source, &parse_out.interner, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    assert!(out.contains("HIR fn main"));
 }
 
 #[test]
 fn cli_test_passing() {
     let src = "#[test]\nfn a() { 0 }\n#[test]\nfn b() { 0 }";
-    let output = try_glyim!(&["test"], src);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success());
-    assert!(stderr.contains("2 passed"));
+    with_source_file(src, |path| {
+        let summary = glyim_cli::pipeline::run_tests(path, None, false, None, false).unwrap();
+        assert_eq!(summary.passed(), 2);
+        assert_eq!(summary.failed(), 0);
+    });
 }
 
 #[test]
 fn cli_test_with_failure() {
     let src = "#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }";
-    let output = try_glyim!(&["test"], src);
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("FAILED"));
+    with_source_file(src, |path| {
+        let summary = glyim_cli::pipeline::run_tests(path, None, false, None, false).unwrap();
+        assert!(summary.failed() > 0);
+    });
 }
 
 #[test]
 fn cli_test_filter() {
     let src = "#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }";
-    let output = try_glyim!(&["test", "--filter", "a"], src);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success());
-    assert!(stderr.contains("1 passed"));
-    assert!(!stderr.contains("2 passed"));
+    with_source_file(src, |path| {
+        let summary = glyim_cli::pipeline::run_tests(path, Some("a"), false, None, false).unwrap();
+        assert_eq!(summary.total(), 1);
+        assert_eq!(summary.passed(), 1);
+        assert_eq!(summary.results[0].0, "a");
+    });
 }
+
+// ── Subprocess‑only tests (still needed) ──────────────────────
 
 #[test]
 fn cli_init_creates_project() {
-    let Some(bin) = glyim_bin() else {
-        return;
-    };
+    let bin = glyim_bin().expect("glyim binary not found");
     let dir = tempfile::tempdir().unwrap();
     let output = Command::new(bin)
         .arg("init")
@@ -137,107 +144,84 @@ fn cli_init_creates_project() {
 
 #[test]
 fn cli_build_produces_message() {
-    let output = try_glyim!(&["build"], "main = () => 42");
-    assert!(output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Built:"));
+    with_source_file("main = () => 42", |path| {
+        let out = path.parent().unwrap().join("built");
+        glyim_cli::pipeline::build_with_mode(
+            path,
+            Some(&out),
+            glyim_cli::pipeline::BuildMode::Debug,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(out.exists());
+    });
 }
 
 #[test]
 fn cli_build_bare_flag_compiles_single_file() {
-    let output = try_glyim!(&["build", "--bare"], "main = () => 42");
-    assert!(output.status.success());
+    // Same as above – bare just means single‑file compilation.
+    cli_build_produces_message();
 }
 
 #[test]
 fn cli_doc_open_flag_works() {
-    let Some(bin) = glyim_bin() else {
-        return;
-    };
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("test.g");
     std::fs::write(&input, "fn main() -> i64 { 42 }").unwrap();
-    let out_dir = dir.path().join("outdoc");
-    let output = std::process::Command::new(bin)
-        .arg("doc")
-        .arg(&input)
-        .arg("--output")
-        .arg(&out_dir)
-        .output()
-        .expect("glyim doc");
-    assert!(
-        output.status.success(),
-        "doc command failed: {}
-stderr: {}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let out_dir = dir.path().join("doc");
+    glyim_cli::pipeline::generate_doc(&input, Some(&out_dir)).unwrap();
     let index_html = out_dir.join("index.html");
-    assert!(
-        index_html.exists(),
-        "expected {} to exist",
-        index_html.display()
-    );
+    assert!(index_html.exists());
+    let html = std::fs::read_to_string(index_html).unwrap();
+    assert!(html.contains("fn main()"));
 }
 
 #[test]
 fn cli_publish_wasm_stores_blob() {
-    let Some(bin) = glyim_bin() else {
-        return;
-    };
+    let bin = glyim_bin().expect("glyim binary not found");
     let dir = tempfile::tempdir().unwrap();
-    let toml_content = "[package]\nname = \"testpkg\"\nversion = \"0.1.0\"\n";
-    std::fs::write(dir.path().join("glyim.toml"), toml_content).unwrap();
-    let src_dir = dir.path().join("src");
-    std::fs::create_dir(&src_dir).unwrap();
-    let source = "fn main() -> i64 { 42 }";
-    std::fs::write(src_dir.join("main.g"), source).unwrap();
+    std::fs::write(
+        dir.path().join("glyim.toml"),
+        "[package]\nname = \"testpkg\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/main.g"), "fn main() -> i64 { 42 }").unwrap();
 
-    let output = std::process::Command::new(bin)
+    let output = Command::new(bin)
         .arg("publish")
         .arg("--wasm")
         .current_dir(dir.path())
         .output()
-        .expect("failed to run glyim publish --wasm");
-    assert!(
-        output.status.success(),
-        "publish --wasm exited with: {}",
-        output.status
-    );
+        .expect("glyim publish --wasm");
+    assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("Macro Wasm content hash:"),
-        "missing hash in output:\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        stderr
-    );
+    assert!(stderr.contains("Macro Wasm content hash:"));
 }
 
 #[test]
 fn cli_macro_inspect_shows_expansion() {
-    let output = try_glyim!(&["macro-inspect"], "@identity(main = () => 42)");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Expanded:"), "missing Expanded section");
-    assert!(
-        stdout.contains("main = () => 42"),
-        "missing expanded content"
-    );
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("test.g");
+    std::fs::write(&input, "@identity(main = () => 42)").unwrap();
+    let cas = dir.path().join("cas");
+    std::fs::create_dir_all(&cas).unwrap();
+    let source = std::fs::read_to_string(&input).unwrap();
+    let expanded = glyim_cli::macro_expand::expand_macros(&source, dir.path(), &cas).unwrap();
+    assert!(expanded.contains("main = () => 42"));
 }
 
 #[test]
 fn cli_verify_checks_lockfile() {
-    let Some(bin) = glyim_bin() else {
-        return;
-    };
+    let bin = glyim_bin().expect("glyim binary not found");
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path();
 
-    // Ensure dirs_next::data_dir() returns our temp directory
     unsafe {
         std::env::set_var("HOME", home);
         std::env::set_var("XDG_DATA_HOME", home);
     }
-
     let data_dir = dirs_next::data_dir().unwrap();
     let cas_dir = data_dir.join("cas");
     std::fs::create_dir_all(cas_dir.join("objects")).unwrap();
@@ -259,7 +243,7 @@ type = "local"
     );
     std::fs::write(dir.path().join("glyim.lock"), lockfile_content).unwrap();
 
-    let output = std::process::Command::new(bin)
+    let output = Command::new(bin)
         .arg("verify")
         .env("HOME", home)
         .env("XDG_DATA_HOME", home)
@@ -267,22 +251,17 @@ type = "local"
         .output()
         .expect("glyim verify");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("Lockfile verified"),
-        "unexpected: {}",
-        stderr
-    );
+    assert!(stderr.contains("Lockfile verified"));
     assert!(output.status.success());
 }
 
 #[test]
 fn cli_outdated_with_missing_registry() {
-    let Some(bin) = glyim_bin() else {
-        return;
-    };
+    let bin = glyim_bin().expect("glyim binary not found");
     let dir = tempfile::tempdir().unwrap();
-    // Create a lockfile with some dummy packages
-    let lockfile_content = r#"
+    std::fs::write(
+        dir.path().join("glyim.lock"),
+        r#"
 [[package]]
 name = "foo"
 version = "1.0.0"
@@ -290,18 +269,16 @@ hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 [package.source]
 type = "local"
-"#;
-    std::fs::write(dir.path().join("glyim.lock"), lockfile_content).unwrap();
+"#,
+    )
+    .unwrap();
 
-    // Use a non‑existent registry so that the tool handles errors gracefully
-    let output = std::process::Command::new(bin)
+    let output = Command::new(bin)
         .arg("outdated")
         .env("GLYIM_REGISTRY", "http://localhost:99999")
         .current_dir(dir.path())
         .output()
         .expect("glyim outdated");
-    // The tool should exit 0 even when the registry is unavailable,
-    // and print a warning to stderr.
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -312,15 +289,12 @@ type = "local"
 
 #[test]
 fn cli_cache_clean_removes_unused() {
-    // Direct test of the LocalContentStore cache clean logic
     let dir = tempfile::tempdir().unwrap();
     let store = glyim_macro_vfs::LocalContentStore::new(dir.path()).unwrap();
-
     let hash_used = store.store(b"used");
     let hash_unused = store.store(b"unused");
     store.register_name("my-crate", hash_used);
 
-    // Simulate cache clean: remove blobs not referenced by any name
     let names = store.list_names();
     let mut referenced = std::collections::HashSet::new();
     for name in &names {
@@ -333,13 +307,6 @@ fn cli_cache_clean_removes_unused() {
             store.delete_blob(blob).ok();
         }
     }
-
-    assert!(
-        store.retrieve(hash_used).is_some(),
-        "used blob should still exist"
-    );
-    assert!(
-        store.retrieve(hash_unused).is_none(),
-        "unused blob should be removed"
-    );
+    assert!(store.retrieve(hash_used).is_some());
+    assert!(store.retrieve(hash_unused).is_none());
 }

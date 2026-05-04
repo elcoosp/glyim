@@ -346,39 +346,39 @@ impl TypeChecker {
         HirType::Named(struct_name)
     }
     fn check_field_access(&mut self, object: &HirExpr, field: Symbol) -> HirType {
-        let obj_type = self.check_expr(object);
+        let obj_type = self.check_expr(object).unwrap_or(HirType::Never);
 
         match &obj_type {
-            Some(HirType::Tuple(elems)) => self.check_tuple_field_access(field, elems),
-            Some(HirType::Named(name)) => {
-                if let Some(info) = self.structs.get(name)
-                    && let Some(field_info) = info.fields.iter().find(|f| f.name == field)
-                {
-                    let mut sub = HashMap::new();
-                    for tp in &info.type_params {
-                        sub.insert(*tp, HirType::Int); // fallback substitution
-                    }
-                    let result = glyim_hir::types::substitute_type(&field_info.ty, &sub);
-                    return result;
+            HirType::Tuple(elems) => self.check_tuple_field_access(field, elems),
+            HirType::Named(name) => {
+                if self.structs.contains_key(name) {
+                    self.check_struct_field_access(*name, field)
+                } else {
+                    self.errors.push(TypeError::UnknownField {
+                        struct_name: *name,
+                        field,
+                    });
+                    HirType::Never
                 }
-                HirType::Int
             }
-            Some(HirType::Generic(name, args)) => {
-                if let Some(info) = self.structs.get(name)
-                    && let Some(field_info) = info.fields.iter().find(|f| f.name == field)
-                {
-                    let mut sub = HashMap::new();
-                    for (i, tp) in info.type_params.iter().enumerate() {
-                        if let Some(arg) = args.get(i) {
-                            sub.insert(*tp, arg.clone());
-                        }
-                    }
-                    let result = glyim_hir::types::substitute_type(&field_info.ty, &sub);
-                    return result;
+            HirType::Generic(name, _args) => {
+                if self.structs.contains_key(name) {
+                    self.check_struct_field_access(*name, field)
+                } else {
+                    self.errors.push(TypeError::UnknownField {
+                        struct_name: *name,
+                        field,
+                    });
+                    HirType::Never
                 }
-                HirType::Int
             }
-            _ => HirType::Int,
+            _ => {
+                self.errors.push(TypeError::UnknownField {
+                    struct_name: self.dummy_symbol(),
+                    field,
+                });
+                HirType::Never
+            }
         }
     }
     fn check_tuple_field_access(&mut self, field: Symbol, elems: &[HirType]) -> HirType {
@@ -440,13 +440,16 @@ impl TypeChecker {
         let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
         self.check_match_exhaustiveness(&scrutinee_ty, arms);
         let mut arm_types = vec![];
-        for (_, guard, body) in arms {
+        for (pattern, guard, body) in arms {
+            self.push_scope();
+            self.bind_match_pattern(pattern, &scrutinee_ty);
             if let Some(g) = guard {
                 self.check_expr(g);
             }
             if let Some(t) = self.check_expr(body) {
                 arm_types.push(t);
             }
+            self.pop_scope();
         }
         arm_types.first().cloned().unwrap_or(HirType::Unit)
     }
