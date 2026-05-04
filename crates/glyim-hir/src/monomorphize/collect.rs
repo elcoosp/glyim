@@ -920,6 +920,7 @@ impl<'a> MonoContext<'a> {
                 self.struct_specs.insert(key, specialized);
             } else if let Some(enum_def) = self.find_enum(name) {
                 let specialized = self.specialize_enum(&enum_def, &args);
+                eprintln!("[process_type_spec] specialized enum {} with args {:?}", self.interner.resolve(name), args);
                 // Scan variant types for nested generics
                 for variant in &specialized.variants {
                     for field in &variant.fields {
@@ -927,6 +928,7 @@ impl<'a> MonoContext<'a> {
                     }
                 }
                 self.enum_specs.insert(key, specialized);
+                eprintln!("[process_type_spec] inserted into enum_specs, count={}", self.enum_specs.len());
             }
         }
     }
