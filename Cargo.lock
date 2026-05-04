@@ -1448,6 +1448,7 @@ dependencies = [
  "glyim-hir",
  "glyim-interner",
  "glyim-parse",
+ "insta",
  "miette",
  "miette-derive",
  "proptest",
