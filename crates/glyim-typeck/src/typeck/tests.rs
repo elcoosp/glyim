@@ -404,7 +404,7 @@ fn match_on_non_enum_no_exhaustive_error() {
 #[test]
 fn match_option_some_none_exhaustive() {
     let src = "enum Option<T> { Some(T), None }\nmain = () => { let m = Option::Some(42); match m { Option::Some(v) => v, Option::None => 0 } }";
-    let tc = typecheck(src);
+    let mut tc = typecheck(src);
     let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
     assert!(exhaustive_errors.is_empty(), "Some/None should be exhaustive");
 }
@@ -412,7 +412,7 @@ fn match_option_some_none_exhaustive() {
 #[test]
 fn match_option_non_exhaustive_pushes_error() {
     let src = "enum Option<T> { Some(T), None }\nmain = () => { let m = Option::Some(42); match m { Option::Some(v) => v } }";
-    let tc = typecheck(src);
+    let mut tc = typecheck(src);
     let exhaustive_errors: Vec<_> = tc.errors.iter().filter(|e| matches!(e, TypeError::NonExhaustiveMatch { .. })).collect();
     assert_eq!(exhaustive_errors.len(), 1, "missing None variant should be non-exhaustive");
 }

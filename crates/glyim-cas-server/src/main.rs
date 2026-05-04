@@ -206,7 +206,7 @@ async fn main() -> std::io::Result<()> {
     tracing::info!("Starting REST server on http://{}", rest_addr);
     let rest_listener = tokio::net::TcpListener::bind(rest_addr).await?;
     let rest_handle = tokio::spawn(async move {
-        axum::serve(rest_listener, rest_app).await.unwrap();
+        axum::serve(rest_listener, rest_app).await.expect("internal error");
     });
 
     // ── gRPC server on port 9091 ─────────────────────────────────
@@ -215,7 +215,7 @@ async fn main() -> std::io::Result<()> {
     };
     let capabilities_service = grpc::capabilities::CapabilitiesService::default();
 
-    let grpc_addr = "127.0.0.1:9091".parse().unwrap();
+    let grpc_addr = "127.0.0.1:9091".parse().expect("internal error");
     tracing::info!("Starting gRPC server on {}", grpc_addr);
 
     let grpc_handle = tokio::spawn(async move {
@@ -228,7 +228,7 @@ async fn main() -> std::io::Result<()> {
             )
             .serve(grpc_addr)
             .await
-            .unwrap();
+            .expect("internal error");
     });
 
     // Wait for both servers

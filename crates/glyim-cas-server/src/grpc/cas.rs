@@ -157,9 +157,9 @@ mod tests {
     use tonic::Request;
 
     fn test_store() -> Arc<tokio::sync::Mutex<LocalContentStore>> {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("internal error");
         Arc::new(tokio::sync::Mutex::new(
-            LocalContentStore::new(dir.path()).unwrap(),
+            LocalContentStore::new(dir.path()).expect("internal error"),
         ))
     }
 
@@ -182,7 +182,7 @@ mod tests {
             digest_function: 1,
         };
 
-        let resp = svc.find_missing_blobs(Request::new(req)).await.unwrap();
+        let resp = svc.find_missing_blobs(Request::new(req)).await.expect("internal error");
         assert!(resp.into_inner().missing_blob_digests.is_empty());
     }
 
@@ -211,7 +211,7 @@ mod tests {
         let update_resp = svc
             .batch_update_blobs(Request::new(update_req))
             .await
-            .unwrap();
+            .expect("internal error");
         assert!(update_resp.into_inner().responses[0].status.is_none());
 
         let read_req = BatchReadBlobsRequest {
@@ -223,7 +223,7 @@ mod tests {
             acceptable_compressors: vec![],
             digest_function: 1,
         };
-        let read_resp = svc.batch_read_blobs(Request::new(read_req)).await.unwrap();
+        let read_resp = svc.batch_read_blobs(Request::new(read_req)).await.expect("internal error");
         assert_eq!(read_resp.into_inner().responses[0].data, data);
     }
 }

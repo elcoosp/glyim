@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn lockfile_written_to_disk() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("internal error");
         let lockfile_path = dir.path().join("glyim.lock");
         let mut resolved = HashMap::new();
         resolved.insert(
@@ -177,15 +177,15 @@ mod tests {
         );
         let lock = generate_lockfile(&resolved);
         let serialized = serialize_lockfile(&lock);
-        std::fs::write(&lockfile_path, &serialized).unwrap();
-        let content = std::fs::read_to_string(&lockfile_path).unwrap();
+        std::fs::write(&lockfile_path, &serialized).expect("internal error");
+        let content = std::fs::read_to_string(&lockfile_path).expect("internal error");
         assert!(content.contains("test-pkg"));
         assert!(content.contains("@generated"));
     }
 
     #[test]
     fn resolve_empty_deps_writes_empty_lockfile() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("internal error");
         let manifest = PackageManifest {
             package: glyim_pkg::manifest::Package::default(),
             dependencies: HashMap::new(),
@@ -196,8 +196,8 @@ mod tests {
             features: glyim_pkg::manifest::FeaturesConfig::default(),
             workspace: None,
         };
-        resolve_and_write_lockfile(dir.path(), &manifest).unwrap();
-        let content = std::fs::read_to_string(dir.path().join("glyim.lock")).unwrap();
+        resolve_and_write_lockfile(dir.path(), &manifest).expect("internal error");
+        let content = std::fs::read_to_string(dir.path().join("glyim.lock")).expect("internal error");
         assert!(content.contains("@generated"));
     }
 }

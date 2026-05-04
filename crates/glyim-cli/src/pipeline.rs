@@ -214,6 +214,38 @@ extern {
     fn __glyim_hash_seed() -> i64;
 }
 ";
+
+/// Configuration for the compilation pipeline.
+#[derive(Debug, Clone)]
+pub struct PipelineConfig {
+    pub mode: BuildMode,
+    pub target: Option<String>,
+    pub force_no_std: Option<bool>,
+    pub jit_mode: bool,
+    pub cas_dir: std::path::PathBuf,
+}
+
+impl Default for PipelineConfig {
+    fn default() -> Self {
+        Self {
+            mode: BuildMode::Debug,
+            target: None,
+            force_no_std: None,
+            jit_mode: false,
+            cas_dir: dirs_next::data_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas")),
+        }
+    }
+}
+
+struct CompiledHir {
+    hir: glyim_hir::Hir,
+    mono_hir: glyim_hir::Hir,
+    merged_types: Vec<glyim_hir::types::HirType>,
+    interner: glyim_interner::Interner,
+    source: String,
+    is_no_std: bool,
+}
 #[tracing::instrument(name = "run", skip_all)]
 pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
