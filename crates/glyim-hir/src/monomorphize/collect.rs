@@ -778,6 +778,7 @@ impl<'a> MonoContext<'a> {
     /// Enqueue a concrete type for specialization if it contains generic components.
     /// Recursively processes nested Generic types.
     pub(crate) fn enqueue_type_if_generic(&mut self, ty: &HirType) {
+        eprintln!("[enqueue] ty={:?}", ty);
         match ty {
             HirType::Generic(sym, args) => {
                 let concrete_args = self.concretize_type_args(args);
@@ -824,16 +825,17 @@ impl<'a> MonoContext<'a> {
                 _ => {}
             }
         }
-        // Also process types from call_type_args (collect to avoid borrow issues)
+        // Enqueue types from expression types (call_type_args and type_overrides)
         let call_type_args_vals: Vec<Vec<HirType>> = self.call_type_args.values().cloned().collect();
         for type_args in &call_type_args_vals {
             for ty in type_args {
+                eprintln!("[scan_hir] enqueue from call_type_args: {:?}", ty);
                 self.enqueue_type_if_generic(ty);
             }
         }
-        // And type_overrides (collect first to avoid borrow issues)
         let override_types: Vec<HirType> = self.type_overrides.values().cloned().collect();
         for ty in override_types {
+            eprintln!("[scan_hir] enqueue from type_overrides: {:?}", ty);
             self.enqueue_type_if_generic(&ty);
         }
     }
@@ -842,6 +844,7 @@ impl<'a> MonoContext<'a> {
         match expr {
             HirExpr::EnumVariant { id, args, .. } => {
                 let expr_type = self.get_expr_type(*id);
+                eprintln!("[scan_expr_type] EnumVariant id={:?} type={:?}", id, expr_type);
                 if let Some(ty) = expr_type {
                     self.enqueue_type_if_generic(&ty);
                 }
@@ -901,7 +904,9 @@ impl<'a> MonoContext<'a> {
 
     /// Process the type specialization queue recursively.
     pub(crate) fn process_type_specializations(&mut self) {
+        eprintln!("[process_type_spec] queue length: {}", self.type_work_queue.len());
         while let Some((name, args)) = self.type_work_queue.pop() {
+            eprintln!("[process_type_spec] processing {:?} with args {:?}", self.interner.resolve(name), args);
             let key = (name, args.clone());
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;
