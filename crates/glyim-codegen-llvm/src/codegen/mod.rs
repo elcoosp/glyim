@@ -244,6 +244,15 @@ impl<'ctx> Codegen<'ctx> {
                 glyim_hir::item::HirItem::Struct(s) => {
                     eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
                 }
+                glyim_hir::item::HirItem::Enum(e) => {
+                    eprintln!("[codegen]   Enum: {} (variants: {})", self.interner.resolve(e.name), e.variants.len());
+                    for v in &e.variants {
+                        eprintln!("[codegen]     variant: {} fields: {} tag: {}", self.interner.resolve(v.name), v.fields.len(), v.tag);
+                        for f in &v.fields {
+                            eprintln!("[codegen]       field: {} type: {:?}", self.interner.resolve(f.name), f.ty);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
