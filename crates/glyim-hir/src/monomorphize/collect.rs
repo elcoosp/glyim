@@ -117,8 +117,10 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        // Run type specialization again to catch any new types discovered
-        self.process_type_specializations();
+        // Run type specialization to fixpoint – new specialisations may produce further types
+        while !self.type_work_queue.is_empty() {
+            self.process_type_specializations();
+        }
     }
 
     fn find_callee_by_id_from_hir(&mut self, search_id: ExprId) -> Option<Symbol> {
@@ -234,7 +236,7 @@ impl<'a> MonoContext<'a> {
         args.iter().map(|ty| self.concretize_type(ty)).collect()
     }
 
-    fn concretize_type(&mut self, ty: &HirType) -> HirType {
+    pub(crate) fn concretize_type(&mut self, ty: &HirType) -> HirType {
         match ty {
             HirType::Generic(sym, inner_args) => {
                 let concrete_inner: Vec<HirType> =
@@ -244,16 +246,8 @@ impl<'a> MonoContext<'a> {
                     .all(|a| !self.has_unresolved_type_param(a));
                 if all_concrete {
                     let key = (*sym, concrete_inner.clone());
-                    if self.struct_specs.contains_key(&key) {
-                        let mangled = self.interner.intern(&format!(
-                            "{}__{}",
-                            self.interner.resolve(*sym),
-                            concrete_inner
-                                .iter()
-                                .map(|t| super::mangling::type_to_short_string(t, self.interner))
-                                .collect::<Vec<_>>()
-                                .join("_")
-                        ));
+                    if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
+                        let mangled = self.mangle_name(*sym, &concrete_inner);
                         return HirType::Named(mangled);
                     }
                 }
@@ -266,20 +260,36 @@ impl<'a> MonoContext<'a> {
             | HirType::Str
             | HirType::Unit
             | HirType::Never
-            | HirType::Opaque(_) => ty.clone(),
-            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
-            HirType::Option(inner) => HirType::Option(Box::new(self.concretize_type(inner))),
-            HirType::Result(ok, err) => HirType::Result(
-                Box::new(self.concretize_type(ok)),
-                Box::new(self.concretize_type(err)),
-            ),
+            | HirType::Opaque(_) => {
+                eprintln!("[concretize_type] leaf type {:?}", ty);
+                ty.clone()
+            }
+            HirType::RawPtr(inner) => {
+                eprintln!("[concretize_type] RawPtr");
+                HirType::RawPtr(Box::new(self.concretize_type(inner)))
+            }
+            HirType::Option(inner) => {
+                eprintln!("[concretize_type] Option");
+                HirType::Option(Box::new(self.concretize_type(inner)))
+            }
+            HirType::Result(ok, err) => {
+                eprintln!("[concretize_type] Result");
+                HirType::Result(
+                    Box::new(self.concretize_type(ok)),
+                    Box::new(self.concretize_type(err)),
+                )
+            }
             HirType::Tuple(elems) => {
+                eprintln!("[concretize_type] Tuple");
                 HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect())
             }
-            HirType::Func(params, ret) => HirType::Func(
-                params.iter().map(|p| self.concretize_type(p)).collect(),
-                Box::new(self.concretize_type(ret)),
-            ),
+            HirType::Func(params, ret) => {
+                eprintln!("[concretize_type] Func");
+                HirType::Func(
+                    params.iter().map(|p| self.concretize_type(p)).collect(),
+                    Box::new(self.concretize_type(ret)),
+                )
+            }
         }
     }
 

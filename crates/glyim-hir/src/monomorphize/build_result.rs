@@ -57,7 +57,7 @@ impl<'a> MonoContext<'a> {
             items.push(HirItem::Enum(mono_e));
         }
 
-        // Build enum_map from specialized enums
+        // Build enum_spec_map from specialized enums
         let enum_specs_for_map: Vec<_> = self
             .enum_specs
             .iter()
@@ -65,10 +65,10 @@ impl<'a> MonoContext<'a> {
             .map(|((orig_name, args), _)| (*orig_name, args.clone()))
             .collect();
 
-        let mut enum_map: HashMap<Symbol, Symbol> = HashMap::new();
+        let mut enum_spec_map: HashMap<(Symbol, Vec<HirType>), Symbol> = HashMap::new();
         for (orig_name, args) in enum_specs_for_map {
             let mangled = self.mangle_name(orig_name, &args);
-            enum_map.insert(orig_name, mangled);
+            enum_spec_map.insert((orig_name, args.clone()), mangled);
         }
 
         // Build fn_mangle_map from specialized functions
@@ -108,7 +108,7 @@ impl<'a> MonoContext<'a> {
                         f,
                         &fn_mangle_map,
                         &struct_mangle_map,
-                        &enum_map,
+                        &enum_spec_map,
                         &empty_sub,
                     );
                     items.push(HirItem::Fn(rewritten));
@@ -125,7 +125,7 @@ impl<'a> MonoContext<'a> {
                                 m,
                                 &fn_mangle_map,
                                 &struct_mangle_map,
-                                &enum_map,
+                                &enum_spec_map,
                                 &empty_sub,
                             );
                             items.push(HirItem::Fn(rewritten));
@@ -153,10 +153,49 @@ impl<'a> MonoContext<'a> {
                 &mono_f,
                 &fn_mangle_map,
                 &struct_mangle_map,
-                &enum_map,
+                &enum_spec_map,
                 &type_sub,
             );
             items.push(HirItem::Fn(mono_f));
+        }
+
+        // Concretize all remaining Generic types to Named(mangled)
+
+        // Concretize all remaining Generic types to Named(mangled) in the output items
+        for item in &mut items {
+            match item {
+                crate::item::HirItem::Fn(f) => {
+                    for (_, ty) in &mut f.params {
+                        *ty = self.concretize_type(ty);
+                    }
+                    if let Some(ret) = &mut f.ret {
+                        *ret = self.concretize_type(ret);
+                    }
+                }
+                crate::item::HirItem::Struct(s) => {
+                    for field in &mut s.fields {
+                        field.ty = self.concretize_type(&field.ty);
+                    }
+                }
+                crate::item::HirItem::Enum(e) => {
+                    for variant in &mut e.variants {
+                        for field in &mut variant.fields {
+                            field.ty = self.concretize_type(&field.ty);
+                        }
+                    }
+                }
+                crate::item::HirItem::Impl(imp) => {
+                    for m in &mut imp.methods {
+                        for (_, ty) in &mut m.params {
+                            *ty = self.concretize_type(ty);
+                        }
+                        if let Some(ret) = &mut m.ret {
+                            *ret = self.concretize_type(ret);
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
 
         // Assert no unresolved type parameters before returning
