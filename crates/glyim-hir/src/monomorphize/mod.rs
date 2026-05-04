@@ -20,15 +20,15 @@ pub struct MonoResult {
 }
 
 #[tracing::instrument(skip_all)]
-pub fn monomorphize(
+pub fn discover_instantiations(
     hir: &crate::Hir,
     interner: &mut Interner,
     expr_types: &[HirType],
     call_type_args: &HashMap<ExprId, Vec<HirType>>,
-) -> MonoResult {
+) -> HashMap<(Symbol, Vec<HirType>), crate::node::HirFn> {
     let mut ctx = MonoContext::new(hir, interner, expr_types, call_type_args);
     eprintln!(
-        "[mono] entering monomorphize with call_type_args: {:?}",
+        "[mono] entering discover_instantiations with call_type_args: {:?}",
         call_type_args
     );
     ctx.collect_and_specialize();
@@ -41,7 +41,32 @@ pub fn monomorphize(
             eprintln!("  Symbol({}) = {:?}", i, ctx.interner.resolve(sym));
         }
     }
+    ctx.fn_specs.clone()
+}
+
+#[tracing::instrument(skip_all)]
+pub fn apply_specializations(
+    hir: &crate::Hir,
+    interner: &mut Interner,
+    fn_specs: &HashMap<(Symbol, Vec<HirType>), crate::node::HirFn>,
+    expr_types: &[HirType],
+) -> MonoResult {
+    let call_type_args = HashMap::new();
+    let mut ctx = MonoContext::new(hir, interner, expr_types, &call_type_args);
+    // Load the pre-computed specializations
+    ctx.fn_specs = fn_specs.clone();
     ctx.build_result()
+}
+
+#[tracing::instrument(skip_all)]
+pub fn monomorphize(
+    hir: &crate::Hir,
+    interner: &mut Interner,
+    expr_types: &[HirType],
+    call_type_args: &HashMap<ExprId, Vec<HirType>>,
+) -> MonoResult {
+    let fn_specs = discover_instantiations(hir, interner, expr_types, call_type_args);
+    apply_specializations(hir, interner, &fn_specs, expr_types)
 }
 
 pub(crate) struct MonoContext<'a> {
