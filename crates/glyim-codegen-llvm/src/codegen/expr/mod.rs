@@ -314,7 +314,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 .unwrap_or(HirType::Int);
 
             // Struct (or generic struct) values are represented as pointers.
-            // The in‑memory form of a `*mut StructName` slot is an i64 handle.
+            // The in‑memory form of a `*mut Struct` slot is an i64 handle.
             // Load that handle and return it as the value – no deep copy needed.
             if cg.resolve_struct_type(&pointed_ty).is_some() {
                 let slot_addr = cg

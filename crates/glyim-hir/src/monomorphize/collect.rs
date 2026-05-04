@@ -287,6 +287,34 @@ impl<'a> MonoContext<'a> {
                                 self.queue_fn_specialization(*callee, concrete);
                             }
                         }
+
+                        // ULTIMATE FALLBACK: if all type params are still unresolved
+                        // (single uppercase letters) and we couldn't infer them, specialize with Int.
+                        if sub.is_empty()
+                            && fn_def.type_params.iter().all(|tp| {
+                                let s = self.interner.resolve(*tp);
+                                s.len() == 1 && s.chars().next().unwrap().is_uppercase()
+                            })
+                        {
+                            let concrete: Vec<HirType> = fn_def.type_params.iter()
+                                .map(|_| HirType::Int)
+                                .collect();
+                            self.queue_fn_specialization(*callee, concrete);
+                        }
+
+                        // ULTIMATE FALLBACK: if all type params are still unresolved type parameters
+                        // (single uppercase letters) and we couldn't infer them, specialize with Int.
+                        if sub.is_empty()
+                            && fn_def.type_params.iter().all(|tp| {
+                                let s = self.interner.resolve(*tp);
+                                s.len() == 1 && s.chars().next().unwrap().is_uppercase()
+                            })
+                        {
+                            let concrete: Vec<HirType> = fn_def.type_params.iter()
+                                .map(|_| HirType::Int)
+                                .collect();
+                            self.queue_fn_specialization(*callee, concrete);
+                        }
                     }
                 }
                 for a in args {
