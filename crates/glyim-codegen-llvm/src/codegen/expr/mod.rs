@@ -240,13 +240,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 // This handles out-of-bounds generic returns like `0 as T` in Vec::get(),
                 // ensuring field access on the returned struct is always valid memory.
                 (Int, Named(_)) | (Int, Generic(_, _)) => {
-                    let struct_sym = match target_type {
-                        HirType::Named(s) => Some(*s),
-                        HirType::Generic(s, _) => Some(*s),
-                        _ => None,
-                    };
-                    if let Some(sym) = struct_sym {
-                        if let Some(st) = cg.struct_types.borrow().get(&sym).copied() {
+                    if let Some(st) = cg.resolve_struct_type(target_type) {
                             let size = st
                                 .size_of()
                                 .unwrap_or_else(|| cg.i64_type.const_int(0, false));
@@ -278,9 +272,6 @@ pub(crate) fn codegen_expr<'ctx>(
                             cg.builder
                                 .build_ptr_to_int(ptr, cg.i64_type, "zero_struct_ptr")
                                 .ok()
-                        } else {
-                            Some(cg.i64_type.const_int(0, false))
-                        }
                     } else {
                         Some(cg.i64_type.const_int(0, false))
                     }

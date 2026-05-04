@@ -835,7 +835,7 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let obj_path = tmp_dir.path().join("output.o");
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner.clone(), merged_types);
+    let mut codegen = Codegen::new(&context, interner, merged_types);
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;

@@ -736,6 +736,12 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Vec<_>>()
                     .join("_");
                 let mangled_str = format!("{}__{}", base_str, args_str);
+                eprintln!("[resolve_struct_type] Generic: base_str={} args_str={} mangled={}", base_str, args_str, mangled_str);
+                if let Some(_found) = self.interner.resolve_symbol(&mangled_str) {
+                    eprintln!("[resolve_struct_type] FOUND in interner");
+                } else {
+                    eprintln!("[resolve_struct_type] NOT FOUND in interner ({} entries)", self.interner.len());
+                }
                 self.interner.resolve_symbol(&mangled_str)?
             }
             HirType::RawPtr(inner) => return self.resolve_struct_type(inner),
