@@ -4,6 +4,7 @@ use glyim_interner::Interner;
 
 #[test]
 fn has_unresolved_param_detects_generic() {
+    #[allow(unused_mut)]
     let mut interner = Interner::new();
     let t = HirType::Named(interner.intern("T")); // single uppercase letter
     assert!(has_unresolved_param(&t, &interner));
@@ -11,6 +12,7 @@ fn has_unresolved_param_detects_generic() {
 
 #[test]
 fn has_unresolved_param_ignores_concrete() {
+    #[allow(unused_mut)]
     let mut interner = Interner::new();
     let t = HirType::Named(interner.intern("Vec"));
     assert!(!has_unresolved_param(&t, &interner));
@@ -18,6 +20,7 @@ fn has_unresolved_param_ignores_concrete() {
 
 #[test]
 fn assert_no_type_params_panics_on_unresolved() {
+    #[allow(unused_mut)]
     let mut interner = Interner::new();
     let expr = glyim_hir::node::HirExpr::SizeOf {
         id: glyim_hir::types::ExprId::new(0),
@@ -30,7 +33,8 @@ fn assert_no_type_params_panics_on_unresolved() {
 
 #[test]
 fn assert_no_type_params_ok_for_concrete() {
-    let interner = Interner::new();
+    #[allow(unused_mut)]
+    let mut interner = Interner::new();
     let expr = glyim_hir::node::HirExpr::SizeOf {
         id: glyim_hir::types::ExprId::new(0),
         target_type: HirType::Int,

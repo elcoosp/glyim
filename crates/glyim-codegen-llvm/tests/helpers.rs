@@ -1,7 +1,6 @@
 use glyim_codegen_llvm::Codegen;
 use glyim_interner::Interner;
 use inkwell::context::Context;
-use inkwell::types::BasicType;
 
 #[test]
 fn struct_field_ptr_returns_correct_address() {
@@ -30,7 +29,7 @@ fn struct_field_ptr_returns_correct_address() {
         .unwrap();
 
     let interner = Interner::new();
-    let cg = Codegen::new(&ctx, interner, vec![]);
+    let _cg = Codegen::new(&ctx, interner, vec![]);
     // We can't easily invoke struct_field_ptr with this minimal setup,
     // so just verify the struct field access works.
     let loaded = builder
