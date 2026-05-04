@@ -1,9 +1,8 @@
-enum Shape { Circle(f64), Rect { w: i64, h: i64 } }
+enum Shape { Circle(f64), Square(i64) }
 main = () => {
     let c = Shape::Circle(3.14);
-    let r = Shape::Rect { w: 10, h: 20 };
     match c {
-        Shape::Circle(rad) => 1,
-        Shape::Rect { w, h } => w + h,
+        Shape::Circle(_) => 1,
+        Shape::Square(_) => 2
     }
 }
