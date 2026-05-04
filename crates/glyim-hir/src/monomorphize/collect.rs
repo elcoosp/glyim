@@ -285,6 +285,8 @@ impl<'a> MonoContext<'a> {
                                 expr.get_id(),
                                 &fn_def.type_params,
                             ) {
+                                self.call_type_args_overrides
+                                    .insert(expr.get_id(), concrete.clone());
                                 self.queue_fn_specialization(*callee, concrete);
                             }
                         }
@@ -294,18 +296,8 @@ impl<'a> MonoContext<'a> {
                         if sub.is_empty()
                             && !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
                         {
-                            let concrete: Vec<HirType> = fn_def.type_params.iter()
-                                .map(|_| HirType::Int)
-                                .collect();
-                            self.queue_fn_specialization(*callee, concrete);
-                        }
-
-
-
-                        {
-                            let concrete: Vec<HirType> = fn_def.type_params.iter()
-                                .map(|_| HirType::Int)
-                                .collect();
+                            let concrete: Vec<HirType> =
+                                fn_def.type_params.iter().map(|_| HirType::Int).collect();
                             self.queue_fn_specialization(*callee, concrete);
                         }
                     }
@@ -382,9 +374,26 @@ impl<'a> MonoContext<'a> {
                     match s {
                         HirStmt::Expr(e) => self.scan_expr_for_generic_calls(e, current_sub),
                         HirStmt::Let { value, .. }
-                        | HirStmt::LetPat { value, .. }
                         | HirStmt::Assign { value, .. }
                         | HirStmt::AssignField { value, .. } => {
+                            self.scan_expr_for_generic_calls(value, current_sub)
+                        }
+                        HirStmt::LetPat {
+                            pattern: _,
+                            mutable: _,
+                            value,
+                            ty,
+                            ..
+                        } => {
+                            if let Some(HirType::Generic(_, type_args)) = ty {
+                                if let HirExpr::Call { id, .. } = value {
+                                    let concrete =
+                                        self.substitute_type_args(type_args, current_sub);
+                                    if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
+                                        self.call_type_args_overrides.insert(*id, concrete);
+                                    }
+                                }
+                            }
                             self.scan_expr_for_generic_calls(value, current_sub)
                         }
                         HirStmt::AssignDeref { target, value, .. } => {

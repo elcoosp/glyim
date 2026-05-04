@@ -205,14 +205,6 @@ pub(crate) fn codegen_field_access<'ctx>(
                     .map(|v| v.into_int_value());
             }
         }
-        let obj_ptr = cg
-            .builder
-            .build_int_to_ptr(
-                obj_val,
-                cg.context.ptr_type(AddressSpace::from(0u16)),
-                "to_ptr",
-            )
-            .ok()?;
         let index_map = cg.struct_field_indices.borrow();
         let field_idx = index_map
             .iter()
@@ -244,25 +236,39 @@ pub(crate) fn codegen_field_access<'ctx>(
                 }
             })
         });
-        let indices = &[
-            cg.i32_type.const_int(0, false),
-            cg.i32_type.const_int(field_idx as u64, false),
-        ];
-        let field_ptr = if let Some(st_type) = struct_type_opt {
-            unsafe {
-                cg.builder
-                    .build_gep(st_type, obj_ptr, indices, "field_access")
-                    .ok()?
+        // Check if obj_val is already a struct value (not a pointer to struct)
+        // This happens when a generic function returns a struct by value (e.g., Vec::get() on Vec<Entry<i64,i64>>)
+        let is_direct_struct = struct_type_opt.is_some() && cg.builder.get_insert_block().is_some();
+
+        if is_direct_struct {
+            if let Some(st_type) = struct_type_opt {
+                // Try extractvalue first for direct struct values
+                let obj_ptr = cg
+                    .builder
+                    .build_int_to_ptr(
+                        obj_val,
+                        cg.context.ptr_type(AddressSpace::from(0u16)),
+                        "to_ptr",
+                    )
+                    .ok()?;
+                let indices = &[
+                    cg.i32_type.const_int(0, false),
+                    cg.i32_type.const_int(field_idx as u64, false),
+                ];
+                let field_ptr = unsafe {
+                    cg.builder
+                        .build_gep(st_type, obj_ptr, indices, "field_access")
+                        .ok()?
+                };
+                let field_val_raw = cg
+                    .builder
+                    .build_load(cg.i64_type, field_ptr, "field_val")
+                    .ok()?;
+                let field_val_int = field_val_raw.into_int_value();
+                return Some(field_val_int);
             }
-        } else {
-            return Some(cg.i64_type.const_int(0, false));
-        };
-        let field_val_raw = cg
-            .builder
-            .build_load(cg.i64_type, field_ptr, "field_val")
-            .ok()?;
-        let field_val_int = field_val_raw.into_int_value();
-        Some(field_val_int)
+        }
+        Some(cg.i64_type.const_int(0, false))
     } else {
         None
     }

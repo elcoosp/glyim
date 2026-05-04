@@ -24,6 +24,7 @@ impl<'a> MonoContext<'a> {
             type_overrides: HashMap::new(),
             fn_work_queue: Vec::new(),
             fn_queued: HashSet::new(),
+            call_type_args_overrides: HashMap::new(),
         }
     }
 
@@ -117,7 +118,11 @@ impl<'a> MonoContext<'a> {
         type_params: &[glyim_interner::Symbol],
     ) -> bool {
         use crate::node::{HirExpr, HirStmt};
-        fn expr_depends(expr: &HirExpr, type_params: &[glyim_interner::Symbol], interner: &glyim_interner::Interner) -> bool {
+        fn expr_depends(
+            expr: &HirExpr,
+            type_params: &[glyim_interner::Symbol],
+            interner: &glyim_interner::Interner,
+        ) -> bool {
             match expr {
                 HirExpr::SizeOf { target_type, .. } => {
                     MonoContext::type_refers_to_params(target_type, type_params, interner)
@@ -125,56 +130,94 @@ impl<'a> MonoContext<'a> {
                 HirExpr::As { target_type, .. } => {
                     MonoContext::type_refers_to_params(target_type, type_params, interner)
                 }
-                HirExpr::Block { stmts, .. } => stmts.iter().any(|s| stmt_depends(s, type_params, interner)),
-                HirExpr::If { condition, then_branch, else_branch, .. } => {
+                HirExpr::Block { stmts, .. } => {
+                    stmts.iter().any(|s| stmt_depends(s, type_params, interner))
+                }
+                HirExpr::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                    ..
+                } => {
                     expr_depends(condition, type_params, interner)
                         || expr_depends(then_branch, type_params, interner)
-                        || else_branch.as_ref().map_or(false, |e| expr_depends(e, type_params, interner))
+                        || else_branch
+                            .as_ref()
+                            .map_or(false, |e| expr_depends(e, type_params, interner))
                 }
-                HirExpr::While { condition, body, .. } => {
+                HirExpr::While {
+                    condition, body, ..
+                } => {
                     expr_depends(condition, type_params, interner)
                         || expr_depends(body, type_params, interner)
                 }
-                HirExpr::Match { scrutinee, arms, .. } => {
+                HirExpr::Match {
+                    scrutinee, arms, ..
+                } => {
                     expr_depends(scrutinee, type_params, interner)
                         || arms.iter().any(|(_, guard, body)| {
-                            guard.as_ref().map_or(false, |g| expr_depends(g, type_params, interner))
+                            guard
+                                .as_ref()
+                                .map_or(false, |g| expr_depends(g, type_params, interner))
                                 || expr_depends(body, type_params, interner)
                         })
                 }
-                HirExpr::FieldAccess { object, field: _, .. } => {
-                    expr_depends(object, type_params, interner)
-                }
-                HirExpr::Call { callee: _, args, .. } => {
-                    args.iter().any(|a| expr_depends(a, type_params, interner))
-                }
-                HirExpr::MethodCall { receiver, method_name: _, args, .. } => {
+                HirExpr::FieldAccess {
+                    object, field: _, ..
+                } => expr_depends(object, type_params, interner),
+                HirExpr::Call {
+                    callee: _, args, ..
+                } => args.iter().any(|a| expr_depends(a, type_params, interner)),
+                HirExpr::MethodCall {
+                    receiver,
+                    method_name: _,
+                    args,
+                    ..
+                } => {
                     expr_depends(receiver, type_params, interner)
                         || args.iter().any(|a| expr_depends(a, type_params, interner))
                 }
                 HirExpr::Binary { lhs, rhs, .. } => {
-                    expr_depends(lhs, type_params, interner) || expr_depends(rhs, type_params, interner)
+                    expr_depends(lhs, type_params, interner)
+                        || expr_depends(rhs, type_params, interner)
                 }
                 HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
                     expr_depends(operand, type_params, interner)
                 }
-                HirExpr::Return { value, .. } => value.as_ref().map_or(false, |v| expr_depends(v, type_params, interner)),
-                HirExpr::StructLit { fields, .. } => fields.iter().any(|(_, e)| expr_depends(e, type_params, interner)),
+                HirExpr::Return { value, .. } => value
+                    .as_ref()
+                    .map_or(false, |v| expr_depends(v, type_params, interner)),
+                HirExpr::StructLit { fields, .. } => fields
+                    .iter()
+                    .any(|(_, e)| expr_depends(e, type_params, interner)),
                 HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
                     args.iter().any(|a| expr_depends(a, type_params, interner))
                 }
                 HirExpr::ForIn { iter, body, .. } => {
-                    expr_depends(iter, type_params, interner) || expr_depends(body, type_params, interner)
+                    expr_depends(iter, type_params, interner)
+                        || expr_depends(body, type_params, interner)
                 }
                 _ => false,
             }
         }
-        fn stmt_depends(stmt: &HirStmt, type_params: &[glyim_interner::Symbol], interner: &glyim_interner::Interner) -> bool {
+        fn stmt_depends(
+            stmt: &HirStmt,
+            type_params: &[glyim_interner::Symbol],
+            interner: &glyim_interner::Interner,
+        ) -> bool {
             match stmt {
-                HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. } => expr_depends(value, type_params, interner),
+                HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. } => {
+                    expr_depends(value, type_params, interner)
+                }
                 HirStmt::Assign { value, .. } => expr_depends(value, type_params, interner),
-                HirStmt::AssignField { object, value, .. } => expr_depends(object, type_params, interner) || expr_depends(value, type_params, interner),
-                HirStmt::AssignDeref { target, value, .. } => expr_depends(target, type_params, interner) || expr_depends(value, type_params, interner),
+                HirStmt::AssignField { object, value, .. } => {
+                    expr_depends(object, type_params, interner)
+                        || expr_depends(value, type_params, interner)
+                }
+                HirStmt::AssignDeref { target, value, .. } => {
+                    expr_depends(target, type_params, interner)
+                        || expr_depends(value, type_params, interner)
+                }
                 HirStmt::Expr(e) => expr_depends(e, type_params, interner),
             }
         }
@@ -182,17 +225,31 @@ impl<'a> MonoContext<'a> {
     }
 
     /// Check if a type references any of the given type parameter symbols.
-    pub(crate) fn type_refers_to_params(ty: &HirType, type_params: &[glyim_interner::Symbol], interner: &glyim_interner::Interner) -> bool {
+    pub(crate) fn type_refers_to_params(
+        ty: &HirType,
+        type_params: &[glyim_interner::Symbol],
+        interner: &glyim_interner::Interner,
+    ) -> bool {
         match ty {
             HirType::Named(sym) => type_params.contains(sym),
             HirType::Generic(sym, args) => {
-                type_params.contains(sym) || args.iter().any(|a| MonoContext::type_refers_to_params(a, type_params, interner))
+                type_params.contains(sym)
+                    || args
+                        .iter()
+                        .any(|a| MonoContext::type_refers_to_params(a, type_params, interner))
             }
-            HirType::Tuple(elems) => elems.iter().any(|e| MonoContext::type_refers_to_params(e, type_params, interner)),
-            HirType::RawPtr(inner) => MonoContext::type_refers_to_params(inner, type_params, interner),
-            HirType::Option(inner) => MonoContext::type_refers_to_params(inner, type_params, interner),
+            HirType::Tuple(elems) => elems
+                .iter()
+                .any(|e| MonoContext::type_refers_to_params(e, type_params, interner)),
+            HirType::RawPtr(inner) => {
+                MonoContext::type_refers_to_params(inner, type_params, interner)
+            }
+            HirType::Option(inner) => {
+                MonoContext::type_refers_to_params(inner, type_params, interner)
+            }
             HirType::Result(ok, err) => {
-                MonoContext::type_refers_to_params(ok, type_params, interner) || MonoContext::type_refers_to_params(err, type_params, interner)
+                MonoContext::type_refers_to_params(ok, type_params, interner)
+                    || MonoContext::type_refers_to_params(err, type_params, interner)
             }
             _ => false,
         }

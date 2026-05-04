@@ -54,4 +54,5 @@ pub(crate) struct MonoContext<'a> {
     pub(crate) type_overrides: HashMap<ExprId, HirType>,
     pub(crate) fn_work_queue: Vec<(Symbol, Vec<HirType>)>,
     pub(crate) fn_queued: HashSet<(Symbol, Vec<HirType>)>,
+    pub(crate) call_type_args_overrides: HashMap<ExprId, Vec<HirType>>,
 }

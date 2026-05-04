@@ -19,7 +19,7 @@ impl<'a> MonoContext<'a> {
         // If no type params are on the function itself (e.g., struct methods),
         // derive the substitution from the self parameter's generic type.
         if sub.is_empty() && !f.params.is_empty() {
-            if let (first_sym, HirType::Generic(_, param_type_args)) = &f.params[0] {
+            if let (_first_sym, HirType::Generic(_, param_type_args)) = &f.params[0] {
                 for (i, formal) in param_type_args.iter().enumerate() {
                     if let HirType::Named(formal_name) = formal {
                         if let Some(ct) = concrete.get(i) {

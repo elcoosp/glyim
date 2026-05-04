@@ -11,10 +11,10 @@ mod types;
 pub use error::TypeError;
 pub use types::{EnumInfo, StructInfo};
 
+use glyim_hir::HirPattern;
 use glyim_hir::item::FnSig;
 use glyim_hir::node::{Hir, HirFn};
 use glyim_hir::types::{ExprId, HirType};
-use glyim_hir::HirPattern;
 use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
 
@@ -102,7 +102,11 @@ impl TypeChecker {
             HirType::Option(inner) => Some(inner.as_ref().clone()),
             HirType::Generic(name, args) if args.len() == 1 => {
                 let name_str = self.interner.resolve(*name);
-                if name_str == "Option" { Some(args[0].clone()) } else { None }
+                if name_str == "Option" {
+                    Some(args[0].clone())
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -113,7 +117,11 @@ impl TypeChecker {
             HirType::Result(ok, err) => Some((ok.as_ref().clone(), err.as_ref().clone())),
             HirType::Generic(name, args) if args.len() == 2 => {
                 let name_str = self.interner.resolve(*name);
-                if name_str == "Result" { Some((args[0].clone(), args[1].clone())) } else { None }
+                if name_str == "Result" {
+                    Some((args[0].clone(), args[1].clone()))
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -124,34 +132,54 @@ impl TypeChecker {
             HirPattern::Var(sym) => {
                 self.insert_binding(*sym, scrutinee_ty.clone(), false);
             }
-            HirPattern::Wild | HirPattern::BoolLit(_) | HirPattern::IntLit(_) | HirPattern::FloatLit(_) | HirPattern::StrLit(_) | HirPattern::Unit => {}
+            HirPattern::Wild
+            | HirPattern::BoolLit(_)
+            | HirPattern::IntLit(_)
+            | HirPattern::FloatLit(_)
+            | HirPattern::StrLit(_)
+            | HirPattern::Unit => {}
             HirPattern::Struct { bindings, .. } => {
                 // Collect field types first to avoid borrow conflicts
-                let field_tys: Vec<(HirPattern, HirType)> = if let HirType::Named(struct_name) = scrutinee_ty {
-                    if let Some(info) = self.structs.get(struct_name) {
-                        bindings.iter().filter_map(|(field_sym, field_pat)| {
-                            info.fields.iter().find(|f| f.name == *field_sym)
-                                .map(|field_info| (field_pat.clone(), field_info.ty.clone()))
-                        }).collect()
+                let field_tys: Vec<(HirPattern, HirType)> =
+                    if let HirType::Named(struct_name) = scrutinee_ty {
+                        if let Some(info) = self.structs.get(struct_name) {
+                            bindings
+                                .iter()
+                                .filter_map(|(field_sym, field_pat)| {
+                                    info.fields.iter().find(|f| f.name == *field_sym).map(
+                                        |field_info| (field_pat.clone(), field_info.ty.clone()),
+                                    )
+                                })
+                                .collect()
+                        } else {
+                            vec![]
+                        }
                     } else {
                         vec![]
-                    }
-                } else {
-                    vec![]
-                };
+                    };
                 for (field_pat, field_ty) in field_tys {
                     self.bind_match_pattern(&field_pat, &field_ty);
                 }
             }
-            HirPattern::EnumVariant { variant_name, bindings, .. } => {
+            HirPattern::EnumVariant {
+                variant_name,
+                bindings,
+                ..
+            } => {
                 // Collect binding types first to avoid borrow conflicts
                 let binding_tys: Vec<(HirPattern, HirType)> = match scrutinee_ty {
                     HirType::Named(enum_name) | HirType::Generic(enum_name, _) => {
                         if let Some(info) = self.enums.get(enum_name) {
-                            if let Some(variant) = info.variants.iter().find(|v| v.name == *variant_name) {
-                                bindings.iter().zip(variant.fields.iter()).map(|((_, binding_pat), field)| {
-                                    (binding_pat.clone(), field.ty.clone())
-                                }).collect()
+                            if let Some(variant) =
+                                info.variants.iter().find(|v| v.name == *variant_name)
+                            {
+                                bindings
+                                    .iter()
+                                    .zip(variant.fields.iter())
+                                    .map(|((_, binding_pat), field)| {
+                                        (binding_pat.clone(), field.ty.clone())
+                                    })
+                                    .collect()
                             } else {
                                 vec![]
                             }
@@ -183,8 +211,11 @@ impl TypeChecker {
             }
             HirPattern::Tuple { elements, .. } => {
                 if let HirType::Tuple(elem_tys) = scrutinee_ty {
-                    let pats_and_tys: Vec<(HirPattern, HirType)> = elements.iter().zip(elem_tys.iter())
-                        .map(|(p, t)| (p.clone(), t.clone())).collect();
+                    let pats_and_tys: Vec<(HirPattern, HirType)> = elements
+                        .iter()
+                        .zip(elem_tys.iter())
+                        .map(|(p, t)| (p.clone(), t.clone()))
+                        .collect();
                     for (p, t) in pats_and_tys {
                         self.bind_match_pattern(&p, &t);
                     }

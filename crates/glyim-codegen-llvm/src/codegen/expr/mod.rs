@@ -236,55 +236,9 @@ pub(crate) fn codegen_expr<'ctx>(
                         .build_ptr_to_int(ptr, cg.i64_type, "ptr2i64")
                         .ok()
                 }
-                // Int 0 → concrete struct: allocate zero-initialized memory
-                (Int, Named(_)) | (Int, Generic(_, _)) => {
-                    // Look up the struct type
-                    let struct_sym = match target_type {
-                        HirType::Named(s) => Some(*s),
-                        HirType::Generic(s, _) => Some(*s),
-                        _ => None,
-                    };
-                    if let Some(sym) = struct_sym {
-                        if let Some(st) = cg.struct_types.borrow().get(&sym).copied() {
-                            let size = st
-                                .size_of()
-                                .unwrap_or_else(|| cg.i64_type.const_int(0, false));
-                            let alloc_fn = cg
-                                .module
-                                .get_function("__glyim_alloc")
-                                .or_else(|| cg.module.get_function("malloc"))?;
-                            let call_result = cg
-                                .builder
-                                .build_call(alloc_fn, &[size.into()], "zero_struct_alloc")
-                                .ok()?
-                                .try_as_basic_value();
-                            let ptr = match call_result {
-                                inkwell::values::ValueKind::Basic(bv) => bv.into_pointer_value(),
-                                _ => return Some(cg.i64_type.const_int(0, false)),
-                            };
-                            // Zero the memory with stores
-                            let zero = cg.i64_type.const_int(0, false);
-                            let num_fields = st.count_fields();
-                            for i in 0..num_fields {
-                                let indices = &[
-                                    cg.i32_type.const_int(0, false),
-                                    cg.i32_type.const_int(i as u64, false),
-                                ];
-                                let fp = unsafe {
-                                    cg.builder.build_gep(st, ptr, indices, "zero_field").ok()?
-                                };
-                                cg.builder.build_store(fp, zero).ok()?;
-                            }
-                            cg.builder
-                                .build_ptr_to_int(ptr, cg.i64_type, "zero_struct_ptr")
-                                .ok()
-                        } else {
-                            Some(cg.i64_type.const_int(0, false))
-                        }
-                    } else {
-                        Some(cg.i64_type.const_int(0, false))
-                    }
-                }
+                // Int 0 → concrete struct: return null sentinel (0_i64)
+                // This handles out-of-bounds generic returns like `0 as T` in Vec::get()
+                (Int, Named(_)) | (Int, Generic(_, _)) => Some(cg.i64_type.const_int(0, false)),
                 // RawPtr and everything else (identity or bitcast)
                 _ => Some(src_val),
             }

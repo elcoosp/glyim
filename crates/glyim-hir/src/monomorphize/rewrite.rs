@@ -25,6 +25,7 @@ impl<'a> MonoContext<'a> {
                     .call_type_args
                     .get(id)
                     .map(|args| self.substitute_type_args(args, type_sub))
+                    .or_else(|| self.call_type_args_overrides.get(id).cloned())
                     .unwrap_or_default();
 
                 let new_callee = if !type_args.is_empty() {
@@ -74,7 +75,7 @@ impl<'a> MonoContext<'a> {
                     None => None,
                 };
 
-                let mangled_sym = match &inner_ty {
+                let _mangled_sym = match &inner_ty {
                     Some(HirType::Named(type_name)) => {
                         let mangled = format!(
                             "{}_{}",
