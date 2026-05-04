@@ -241,7 +241,8 @@ impl<'a> MonoContext<'a> {
                     && !fn_def.type_params.is_empty()
                 {
                     if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
-                        let concrete_args = self.substitute_type_args(type_args, current_sub);
+                        let substituted = self.substitute_type_args(type_args, current_sub);
+                        let concrete_args = self.concretize_type_args(&substituted);
                         if !concrete_args.is_empty()
                             && !concrete_args
                                 .iter()
@@ -288,13 +289,10 @@ impl<'a> MonoContext<'a> {
                             }
                         }
 
-                        // ULTIMATE FALLBACK: if all type params are still unresolved
-                        // (single uppercase letters) and we couldn't infer them, specialize with Int.
+                        // SAFE FALLBACK: if type params cannot be inferred and the function body
+                        // does not depend on them for memory layout, specialize with Int.
                         if sub.is_empty()
-                            && fn_def.type_params.iter().all(|tp| {
-                                let s = self.interner.resolve(*tp);
-                                s.len() == 1 && s.chars().next().unwrap().is_uppercase()
-                            })
+                            && !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
                         {
                             let concrete: Vec<HirType> = fn_def.type_params.iter()
                                 .map(|_| HirType::Int)
@@ -302,13 +300,8 @@ impl<'a> MonoContext<'a> {
                             self.queue_fn_specialization(*callee, concrete);
                         }
 
-                        // ULTIMATE FALLBACK: if all type params are still unresolved type parameters
-                        // (single uppercase letters) and we couldn't infer them, specialize with Int.
-                        if sub.is_empty()
-                            && fn_def.type_params.iter().all(|tp| {
-                                let s = self.interner.resolve(*tp);
-                                s.len() == 1 && s.chars().next().unwrap().is_uppercase()
-                            })
+
+
                         {
                             let concrete: Vec<HirType> = fn_def.type_params.iter()
                                 .map(|_| HirType::Int)
