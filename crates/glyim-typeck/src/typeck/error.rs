@@ -46,16 +46,7 @@ impl Diagnostic for TypeError {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        match self {
-            TypeError::MismatchedTypes { expected, found, expr_id } => {
-                let id = expr_id.as_usize();
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some(format!("expected {:?}, found {:?}", expected, found)),
-                    id, 1,
-                ))))
-            }
-            _ => None,
-        }
+        None
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {

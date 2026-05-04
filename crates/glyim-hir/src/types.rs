@@ -48,8 +48,6 @@ pub enum HirType {
     Result(Box<HirType>, Box<HirType>),
     /// Uninhabited type (for diverging expressions)
     Never,
-    /// Error type (used during recovery to suppress cascading errors)
-    Error,
 }
 
 /// Patterns used in match arms and destructuring.
@@ -119,9 +117,6 @@ pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType 
             Box::new(substitute_type(ok, sub)),
             Box::new(substitute_type(err, sub)),
         ),
-        HirType::Error => HirType::Error,
-        HirType::Error => HirType::Error,
-        HirType::Error => HirType::Error,
         HirType::Func(params, ret) => HirType::Func(
             params.iter().map(|p| substitute_type(p, sub)).collect(),
             Box::new(substitute_type(ret, sub)),

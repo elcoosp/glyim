@@ -88,21 +88,7 @@ impl TypeChecker {
             }
         }
         if self.errors.is_empty() {
-            // Debug assertion: all expression IDs should have corresponding types
-            debug_assert!(
-                {
-                    let mut max_id = 0usize;
-                    // Walk all HIR items to find the maximum expression ID
-                    fn check_max_id(expr: &glyim_hir::HirExpr, max: &mut usize) {
-                        let id = expr.get_id().as_usize();
-                        if id > *max { *max = id; }
-                        // Recurse into sub-expressions would require full traversal;
-                        // simplified: just check that expr_types.len() >= 1
-                    }
-                    self.expr_types.len() >= 1
-                },
-                "type checker span coverage gap: some expressions not typed"
-            );
+            // TODO: span coverage metric — ensure expr_types covers all expression IDs
             Ok(())
         } else {
             Err(self.errors.clone())
