@@ -9,10 +9,20 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn collect_and_specialize(&mut self) {
         for (expr_id, type_args) in self.call_type_args.iter() {
+            eprintln!("[mono DEBUG] first loop: expr_id={} type_args=[{}]",
+                      expr_id.as_usize(),
+                      type_args.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join(", "));
             if type_args.iter().any(|a| self.has_unresolved_type_param(a)) {
                 continue;
             }
             if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
+                let callee_name = self.interner.resolve(callee);
+                eprintln!("[mono DEBUG] first loop: callee={} resolved_name={}", callee_name, callee_name);
+                // Skip mangled callees — their concrete types are already encoded in the name
+                if callee_name.contains("__") {
+                    eprintln!("[mono DEBUG] first loop: SKIPPING mangled callee {}", callee_name);
+                    continue;
+                }
                 self.queue_fn_specialization(callee, type_args.clone());
             }
         }
@@ -39,6 +49,38 @@ impl<'a> MonoContext<'a> {
                 continue;
             }
             if let Some(generic_fn) = self.find_fn(fn_name) {
+                // For mangled function names (e.g., Vec_get__Entry_i64_i64),
+                // the override map may have better type args from the receiver's concrete type.
+                // Try to use those instead of the type-checker's call_type_args.
+                let fn_name_str = self.interner.resolve(fn_name).to_string();
+                if fn_name_str.contains("__") {
+                    // Search call_type_args_overrides for an entry whose callee matches
+                    let overrides: Vec<_> = self.call_type_args_overrides.iter()
+                        .map(|(k, v)| (*k, v.clone()))
+                        .collect();
+                    let mut found_override = false;
+                    for (expr_id, concrete_args) in &overrides {
+                        if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
+                            if callee == fn_name {
+                                eprintln!("[mono queue] using override for {}: {:?}", fn_name_str, concrete_args);
+                                let specialized = self.specialize_fn(&generic_fn, concrete_args);
+                                let sub: HashMap<Symbol, HirType> = generic_fn
+                                    .type_params.iter()
+                                    .zip(concrete_args.iter())
+                                    .map(|(tp, ct)| (*tp, ct.clone()))
+                                    .collect();
+                                self.scan_expr_for_generic_calls(&specialized.body, &sub);
+                                self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
+                                self.fn_specs.insert((fn_name, concrete_args.clone()), specialized);
+                                found_override = true;
+                                break;
+                            }
+                        }
+                    }
+                    if found_override {
+                        continue;
+                    }
+                }
                 let specialized = self.specialize_fn(&generic_fn, &type_args);
                 let sub: HashMap<Symbol, HirType> = generic_fn
                     .type_params
@@ -237,6 +279,32 @@ impl<'a> MonoContext<'a> {
         match expr {
             HirExpr::Call { id, callee, args, .. } => {
                 let callee_name = self.interner.resolve(*callee).to_string();
+                eprintln!("[mono scan DEBUG] Call callee={} id={}", callee_name, id.as_usize());
+                // For mangled callees (e.g., Vec_get__Entry_i64_i64), extract the base
+                // function name and specialize it with the receiver's concrete type args.
+                if callee_name.contains("__") {
+                    eprintln!("[mono scan DEBUG] mangled callee {}", callee_name);
+                    if let Some(base_pos) = callee_name.find("__") {
+                        let base_name = &callee_name[..base_pos];
+                        // The first arg is the receiver. Get its type.
+                        if let Some(receiver_arg) = args.first() {
+                            let receiver_ty = self.get_expr_type(receiver_arg.get_id());
+                            if let Some(HirType::Generic(_, type_args)) = receiver_ty {
+                                let concrete = self.substitute_type_args(&type_args, current_sub);
+                                if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
+                                    let base_sym = self.interner.intern(base_name);
+                                    eprintln!("[mono scan DEBUG] specializing base fn={} with {:?}", base_name, concrete);
+                                    self.call_type_args_overrides.insert(*id, concrete.clone());
+                                    self.queue_fn_specialization(base_sym, concrete);
+                                }
+                            }
+                        }
+                    }
+                    for a in args {
+                        self.scan_expr_for_generic_calls(a, current_sub);
+                    }
+                    return;
+                }
                 let fn_def_opt = self.find_fn(*callee);
                 if let Some(ref fn_def) = fn_def_opt {
                     if !fn_def.type_params.is_empty() {

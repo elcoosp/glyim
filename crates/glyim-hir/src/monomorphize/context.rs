@@ -40,9 +40,33 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
 
-        // If it's a mangled monomorphized name (contains __), strip to get base name
+        // First check if there's already a specialization with no type params
+        // (e.g., Vec_new__i64 for Vec_new called with [Int])
         if let Some(pos) = name_str.find("__") {
             let base_name = self.interner.intern(&name_str[..pos]);
+            // Check if the fully-specialized function exists in any impl
+            let base_str = self.interner.resolve(base_name).to_string();
+            if let Some(us_pos) = base_str.rfind('_') {
+                let type_name = &base_str[..us_pos];
+                let method_name = &base_str[us_pos+1..];
+                if type_name.starts_with(|c: char| c.is_uppercase()) {
+                    let type_sym = self.interner.intern(type_name);
+                    let method_sym = self.interner.intern(method_name);
+                    for item in &self.hir.items {
+                        if let HirItem::Impl(imp) = item {
+                            if imp.target_name == type_sym {
+                                for m in &imp.methods {
+                                    if m.name == method_sym && m.type_params.is_empty() {
+                                        // The method is already fully specialized
+                                        return Some(m.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Fall back to the generic version
             return self.find_fn(base_name);
         }
 

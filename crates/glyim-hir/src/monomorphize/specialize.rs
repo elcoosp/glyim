@@ -9,6 +9,11 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
 
+        eprintln!("[specialize_fn] ENTER fn={} type_params=[{}] concrete={:?}",
+                  self.interner.resolve(f.name),
+                  f.type_params.iter().map(|s| self.interner.resolve(*s)).collect::<Vec<_>>().join(", "),
+                  concrete.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>());
+
         // Use explicit type parameters of the function if present
         for (i, tp) in f.type_params.iter().enumerate() {
             if let Some(ct) = concrete.get(i) {
@@ -38,6 +43,12 @@ impl<'a> MonoContext<'a> {
                     sub.insert(*tp, ct.clone());
                 }
             }
+        }
+
+        // If the function is already fully specialized and sub is empty,
+        // return it unchanged to avoid incorrect substitutions.
+        if f.type_params.is_empty() && sub.is_empty() {
+            return f.clone();
         }
 
         for ct in concrete {

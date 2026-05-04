@@ -459,6 +459,21 @@ impl TypeChecker {
         args: &[HirExpr],
     ) -> (HirType, Option<Vec<HirType>>) {
         let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
+        // If the callee name already contains __ (e.g., Vec_get__Entry_i64_i64),
+        // the function is already specialized — don't infer new type args.
+        let callee_name = self.interner.resolve(callee);
+        if callee_name.contains("__") {
+            // Already specialized — return the function's return type without type args
+            if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
+                return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
+            }
+            // Look up in impl_methods by mangled name
+            for methods in self.impl_methods.values() {
+                if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
+                    return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
+                }
+            }
+        }
         // Check argument types against parameter types (only for non-generic fns)
         if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
             // Only check arg types for fully concrete functions
@@ -497,6 +512,9 @@ impl TypeChecker {
                         .iter()
                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                         .collect();
+                    eprintln!("[typeck DEBUG] check_call_with_type_args fn={} type_args=[{}]",
+                              self.interner.resolve(callee),
+                              type_args.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join(", "));
                     let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                     return (
                         glyim_hir::types::substitute_type(&ret, &sub),
