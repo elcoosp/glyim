@@ -194,6 +194,20 @@ impl<'ctx> Codegen<'ctx> {
 
     #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
+        // Guard: no unresolved type params should reach codegen
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    glyim_hir::passes::no_type_params::assert_no_type_params(&f.body, &self.interner);
+                }
+                glyim_hir::item::HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        glyim_hir::passes::no_type_params::assert_no_type_params(&m.body, &self.interner);
+                    }
+                }
+                _ => {}
+            }
+        }
         eprintln!("[codegen generate] =======================");
         for item in &hir.items {
             match item {
