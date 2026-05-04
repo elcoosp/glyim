@@ -1342,6 +1342,7 @@ dependencies = [
  "glyim-interner",
  "glyim-lex",
  "glyim-parse",
+ "glyim-typeck",
  "thiserror 2.0.18",
  "tracing",
 ]
