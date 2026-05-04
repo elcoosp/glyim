@@ -1,6 +1,7 @@
 // crates/glyim-hir/src/monomorphize/rewrite.rs
 use super::*;
 use crate::HirPattern;
+use crate::MatchArm;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
 use glyim_interner::Symbol;
@@ -160,7 +161,10 @@ impl<'a> MonoContext<'a> {
                 )),
                 arms: arms
                     .iter()
-                    .map(|(pat, guard, body)| {
+                    .map(|arm| {
+                        let pat = &arm.pattern;
+                        let guard = &arm.guard;
+                        let body = &arm.body;
                         let rewritten_guard = guard.as_ref().map(|g| {
                             self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub)
                         });
@@ -194,11 +198,17 @@ impl<'a> MonoContext<'a> {
                         } else {
                             pat.clone()
                         };
-                        (
-                            rewritten_pat,
-                            rewritten_guard,
-                            self.rewrite_expr(body, fn_map, struct_map, enum_spec_map, type_sub),
-                        )
+                        MatchArm {
+                            pattern: rewritten_pat,
+                            guard: rewritten_guard,
+                            body: self.rewrite_expr(
+                                body,
+                                fn_map,
+                                struct_map,
+                                enum_spec_map,
+                                type_sub,
+                            ),
+                        }
                     })
                     .collect(),
                 span: *span,

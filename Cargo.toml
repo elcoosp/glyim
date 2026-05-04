@@ -26,46 +26,4 @@ license = "MIT"
 rust-version = "1.97.0"
 
 # ── Faster development builds ──────────────────────────────────
-[profile.dev]
-opt-level = 0
-debug = 1
-split-debuginfo = "unpacked"
 
-[profile.dev.package.inkwell]
-opt-level = 2
-
-[profile.dev.package.llvm-sys]
-opt-level = 2
-
-[profile.test]
-opt-level = 1
-
-# ── Faster development builds ──────────────────────────────────
-[profile.dev]
-opt-level = 0
-debug = 1
-split-debuginfo = "unpacked"
-
-[profile.dev.package.inkwell]
-opt-level = 2
-
-[profile.dev.package.llvm-sys]
-opt-level = 2
-
-[profile.test]
-opt-level = 1
-
-# ── Faster development builds ──────────────────────────────────
-[profile.dev]
-opt-level = 0
-debug = 1
-split-debuginfo = "unpacked"
-
-[profile.dev.package.inkwell]
-opt-level = 2
-
-[profile.dev.package.llvm-sys]
-opt-level = 2
-
-[profile.test]
-opt-level = 1

@@ -146,11 +146,11 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
             scrutinee, arms, ..
         } => {
             desugar_expr(scrutinee, expr_types, interner);
-            for (_, guard, body) in arms {
-                if let Some(g) = guard {
+            for arm in arms.iter_mut() {
+                if let Some(ref mut g) = arm.guard {
                     desugar_expr(g, expr_types, interner);
                 }
-                desugar_expr(body, expr_types, interner);
+                desugar_expr(&mut arm.body, expr_types, interner);
             }
         }
         HirExpr::While {

@@ -5,7 +5,6 @@ pub fn cmd_build(
     input: PathBuf,
     output: Option<PathBuf>,
     target: Option<String>,
-    _debug: bool,
     release: bool,
     bare: bool,
 ) -> i32 {

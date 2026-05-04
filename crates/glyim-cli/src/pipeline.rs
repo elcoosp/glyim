@@ -30,6 +30,8 @@ impl BuildMode {
     }
 }
 #[derive(Debug)]
+#[must_use]
+#[must_use]
 pub enum PipelineError {
     Io(std::io::Error),
     Parse(Vec<glyim_parse::ParseError>),

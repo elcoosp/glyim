@@ -82,7 +82,12 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
             let before = &result[..at_pos];
             let after_str = &result[call_end..];
             result = format!("{before}{expanded_str}{after_str}");
-            scan_from = 0;
+            let has_nested_macro = expanded_str.contains('@');
+            if has_nested_macro {
+                scan_from = at_pos;
+            } else {
+                scan_from = at_pos + expanded_str.len();
+            }
         } else {
             scan_from = call_end;
         }

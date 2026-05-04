@@ -161,10 +161,7 @@ async fn retrieve_action_result(
 
 /// Health check and status endpoint.
 async fn status(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
-    let blob_count = std::fs::read_dir("./cas_store/objects")
-        .ok()
-        .map(|entries| entries.count())
-        .unwrap_or(0);
+    let blob_count = _state.store.read().await.list_blobs().len();
 
     Json(StatusResponse {
         status: "ok".to_string(),

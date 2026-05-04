@@ -1613,8 +1613,6 @@ fn e2e_println_str_var() {
     assert!(result.is_ok(), "println str var: {:?}", result.err());
 }
 
-
-
 #[test]
 fn e2e_ptr_offset_builtin() {
     let src = "main = () => { let x = 1; let y = __ptr_offset(0 as *mut u8, x); 0 }";
@@ -1712,20 +1710,19 @@ main = () => { let p = Point { x: 10, y: 20 }; let Point { x, y } = p; x }";
     assert_eq!(result.unwrap(), 10);
 }
 
-
 #[test]
-#[ignore = "codegen bug: enum tuple variant field binding returns 0"]
-#[ignore = "codegen bug: enum tuple variant field binding returns 0"]
-#[ignore = "codegen bug: enum tuple variant field binding returns 0"]
 #[ignore = "codegen bug: enum tuple variant field binding returns 0"]
 fn e2e_match_tuple_variant_bind() {
     let src = "enum Color { RGB(i64, i64, i64) }
 main = () => { let c = Color::RGB(1,2,3); match c { Color::RGB(r,g,b) => r+g+b } }";
     let result = pipeline::run_jit(src);
-    assert!(result.is_ok(), "match tuple variant bind: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "match tuple variant bind: {:?}",
+        result.err()
+    );
     assert_eq!(result.unwrap(), 6);
 }
-
 
 #[test]
 fn e2e_match_guard() {
@@ -1735,3 +1732,17 @@ fn e2e_match_guard() {
     assert_eq!(result.unwrap(), 1);
 }
 
+#[test]
+fn e2e_float_add() {
+    let src = "main = () => { let a = 2.5; let b = 3.5; a + b }";
+    let result = pipeline::run_jit(src);
+    assert!(result.is_ok(), "float add compilation: {:?}", result.err());
+}
+
+#[test]
+fn e2e_float_cmp() {
+    let src = "main = () => { let a = 1.0; let b = 1.0; if a == b { 1 } else { 0 } }";
+    let result = pipeline::run_jit(src);
+    assert!(result.is_ok(), "float cmp: {:?}", result.err());
+    assert_eq!(result.unwrap(), 1);
+}

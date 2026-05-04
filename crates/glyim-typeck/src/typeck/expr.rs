@@ -119,7 +119,7 @@ impl TypeChecker {
             } => self.check_enum_variant(*enum_name, *variant_name, args),
             HirExpr::Match {
                 scrutinee, arms, ..
-            } => self.check_match(scrutinee, arms),
+            } => self.check_match(scrutinee, &arms.iter().map(|arm| (arm.pattern.clone(), arm.guard.clone(), arm.body.clone())).collect::<Vec<_>>()),
             HirExpr::Call {
                 id, callee, args, ..
             } => {
@@ -440,13 +440,13 @@ impl TypeChecker {
         let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
         self.check_match_exhaustiveness(&scrutinee_ty, arms);
         let mut arm_types = vec![];
-        for (pattern, guard, body) in arms {
+        for arm in arms {
             self.push_scope();
-            self.bind_match_pattern(pattern, &scrutinee_ty);
-            if let Some(g) = guard {
+            self.bind_match_pattern(&arm.0, &scrutinee_ty);
+            if let Some(ref g) = arm.1 {
                 self.check_expr(g);
             }
-            if let Some(t) = self.check_expr(body) {
+            if let Some(t) = self.check_expr(&arm.2) {
                 arm_types.push(t);
             }
             self.pop_scope();

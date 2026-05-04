@@ -55,8 +55,8 @@ main = () => {
                 scrutinee, arms, ..
             } => {
                 check_expr(scrutinee, interner);
-                for (_, _, body) in arms {
-                    check_expr(body, interner);
+                for arm in arms {
+                    check_expr(&arm.body, interner);
                 }
             }
             glyim_hir::HirExpr::Block { stmts, .. } => {

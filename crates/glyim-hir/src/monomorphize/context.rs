@@ -3,6 +3,7 @@ use crate::monomorphize::mangle_table::MangleTable;
 use super::*;
 use crate::HirPattern;
 use crate::item::{EnumDef, HirItem};
+use crate::node::MatchArm;
 use crate::node::{HirExpr, HirFn, HirStmt};
 use crate::types::HirType;
 use glyim_interner::Symbol;
@@ -210,11 +211,11 @@ impl<'a> MonoContext<'a> {
                     scrutinee, arms, ..
                 } => {
                     expr_depends(scrutinee, type_params, interner)
-                        || arms.iter().any(|(_, guard, body)| {
-                            guard
+                        || arms.iter().any(|arm| {
+                            arm.guard
                                 .as_ref()
                                 .map_or(false, |g| expr_depends(g, type_params, interner))
-                                || expr_depends(body, type_params, interner)
+                                || expr_depends(&arm.body, type_params, interner)
                         })
                 }
                 HirExpr::FieldAccess {
@@ -555,12 +556,15 @@ impl<'a> MonoContext<'a> {
                 scrutinee: Box::new(self.substitute_expr_types(scrutinee, sub)),
                 arms: arms
                     .iter()
-                    .map(|(pat, guard, body)| {
-                        (
-                            pat.clone(),
-                            guard.as_ref().map(|g| self.substitute_expr_types(g, sub)),
-                            self.substitute_expr_types(body, sub),
-                        )
+                    .map(|arm| {
+                        let pat = &arm.pattern;
+                        let guard = &arm.guard;
+                        let body = &arm.body;
+                        MatchArm {
+                            pattern: pat.clone(),
+                            guard: guard.as_ref().map(|g| self.substitute_expr_types(g, sub)),
+                            body: self.substitute_expr_types(body, sub),
+                        }
                     })
                     .collect(),
                 span: *span,

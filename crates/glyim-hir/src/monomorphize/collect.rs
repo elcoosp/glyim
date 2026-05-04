@@ -210,11 +210,11 @@ impl<'a> MonoContext<'a> {
             HirExpr::Match {
                 scrutinee, arms, ..
             } => Self::find_callee_in_expr(scrutinee, search_id, ctx).or_else(|| {
-                arms.iter().find_map(|(_, guard, body)| {
-                    guard
+                arms.iter().find_map(|arm| {
+                    arm.guard
                         .as_ref()
                         .and_then(|g| Self::find_callee_in_expr(g, search_id, ctx))
-                        .or_else(|| Self::find_callee_in_expr(body, search_id, ctx))
+                        .or_else(|| Self::find_callee_in_expr(&arm.body, search_id, ctx))
                 })
             }),
             HirExpr::Binary { lhs, rhs, .. } => Self::find_callee_in_expr(lhs, search_id, ctx)
@@ -563,11 +563,11 @@ impl<'a> MonoContext<'a> {
                 scrutinee, arms, ..
             } => {
                 self.scan_expr_for_generic_calls(scrutinee, current_sub);
-                for (_, guard, body) in arms {
-                    if let Some(g) = guard {
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
                         self.scan_expr_for_generic_calls(g, current_sub);
                     }
-                    self.scan_expr_for_generic_calls(body, current_sub);
+                    self.scan_expr_for_generic_calls(&arm.body, current_sub);
                 }
             }
             HirExpr::While {
@@ -766,11 +766,11 @@ impl<'a> MonoContext<'a> {
                 scrutinee, arms, ..
             } => {
                 self.scan_expr_for_struct_instantiations(scrutinee, current_sub);
-                for (_, guard, body) in arms {
-                    if let Some(g) = guard {
+                for arm in arms {
+                    if let Some(ref g) = arm.guard {
                         self.scan_expr_for_struct_instantiations(g, current_sub);
                     }
-                    self.scan_expr_for_struct_instantiations(body, current_sub);
+                    self.scan_expr_for_struct_instantiations(&arm.body, current_sub);
                 }
             }
             HirExpr::While {
@@ -968,11 +968,11 @@ impl<'a> MonoContext<'a> {
                 scrutinee, arms, ..
             } => {
                 self.scan_expr_for_type_instantiations(scrutinee);
-                for (_, guard, body) in arms {
-                    if let Some(g) = guard {
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
                         self.scan_expr_for_type_instantiations(g);
                     }
-                    self.scan_expr_for_type_instantiations(body);
+                    self.scan_expr_for_type_instantiations(&arm.body);
                 }
             }
             HirExpr::While {

@@ -1,5 +1,6 @@
 // crates/glyim-hir/src/monomorphize/specialize.rs
 use super::*;
+use crate::MatchArm;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
 use std::collections::HashMap;
@@ -153,12 +154,10 @@ impl<'a> MonoContext<'a> {
                 scrutinee: Box::new(Self::force_substitute_as_targets(*scrutinee, sub)),
                 arms: arms
                     .into_iter()
-                    .map(|(p, g, b)| {
-                        (
-                            p,
-                            g.map(|g| Self::force_substitute_as_targets(g, sub)),
-                            Self::force_substitute_as_targets(b, sub),
-                        )
+                    .map(|arm| MatchArm {
+                        pattern: arm.pattern,
+                        guard: arm.guard.map(|g| Self::force_substitute_as_targets(g, sub)),
+                        body: Self::force_substitute_as_targets(arm.body, sub),
                     })
                     .collect(),
                 span,
@@ -433,11 +432,11 @@ impl<'a> MonoContext<'a> {
                 scrutinee, arms, ..
             } => {
                 self.collect_type_overrides_for_expr(scrutinee, sub);
-                for (_, guard, body) in arms {
-                    if let Some(g) = guard {
+                for arm in arms {
+                    if let Some(ref g) = arm.guard {
                         self.collect_type_overrides_for_expr(g, sub);
                     }
-                    self.collect_type_overrides_for_expr(body, sub);
+                    self.collect_type_overrides_for_expr(&arm.body, sub);
                 }
             }
             HirExpr::Binary { lhs, rhs, .. } => {

@@ -74,11 +74,11 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
             scrutinee, arms, ..
         } => {
             assert_no_type_params(scrutinee, interner);
-            for (_, guard, body) in arms {
-                if let Some(g) = guard {
+            for arm in arms {
+                if let Some(ref g) = arm.guard {
                     assert_no_type_params(g, interner);
                 }
-                assert_no_type_params(body, interner);
+                assert_no_type_params(&arm.body, interner);
             }
         }
         HirExpr::While {

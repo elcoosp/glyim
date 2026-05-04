@@ -1,7 +1,7 @@
 use crate::pipeline::{self, BuildMode};
 use std::path::PathBuf;
 
-pub fn cmd_run(input: PathBuf, target: Option<String>, _debug: bool, release: bool) -> i32 {
+pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool) -> i32 {
     let mode = if release {
         BuildMode::Release
     } else {

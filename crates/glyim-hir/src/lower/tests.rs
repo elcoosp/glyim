@@ -246,8 +246,8 @@ fn lower_match_with_enum_patterns() {
     let val = expr_value(body);
     if let HirExpr::Match { arms, .. } = val {
         assert_eq!(arms.len(), 2);
-        let has_red = arms.iter().any(|(pat, _, _)| matches!(pat, crate::HirPattern::EnumVariant { variant_name, .. } if *variant_name == red_sym));
-        let has_green = arms.iter().any(|(pat, _, _)| matches!(pat, crate::HirPattern::EnumVariant { variant_name, .. } if *variant_name == green_sym));
+        let has_red = arms.iter().any(|arm| matches!(arm.pattern, crate::HirPattern::EnumVariant { variant_name, .. } if variant_name == red_sym));
+        let has_green = arms.iter().any(|arm| matches!(arm.pattern, crate::HirPattern::EnumVariant { variant_name, .. } if variant_name == green_sym));
         assert!(has_red && has_green, "arms missing expected variants");
     } else {
         panic!("expected Match, got {:?}", val);
