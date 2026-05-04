@@ -94,6 +94,31 @@ impl TypeChecker {
     }
 
     /// Bind variables from a match arm pattern given the scrutinee type.
+    /// Extract the inner type from a monomorphized Option or Result type,
+    /// handling both the internal HirType::Option/Result and user-defined
+    /// Generic(Option/Result, [T]).
+    fn extract_option_inner(&self, scrutinee_ty: &HirType) -> Option<HirType> {
+        match scrutinee_ty {
+            HirType::Option(inner) => Some(inner.as_ref().clone()),
+            HirType::Generic(name, args) if args.len() == 1 => {
+                let name_str = self.interner.resolve(*name);
+                if name_str == "Option" { Some(args[0].clone()) } else { None }
+            }
+            _ => None,
+        }
+    }
+
+    fn extract_result_inner(&self, scrutinee_ty: &HirType) -> Option<(HirType, HirType)> {
+        match scrutinee_ty {
+            HirType::Result(ok, err) => Some((ok.as_ref().clone(), err.as_ref().clone())),
+            HirType::Generic(name, args) if args.len() == 2 => {
+                let name_str = self.interner.resolve(*name);
+                if name_str == "Result" { Some((args[0].clone(), args[1].clone())) } else { None }
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) fn bind_match_pattern(&mut self, pattern: &HirPattern, scrutinee_ty: &HirType) {
         match pattern {
             HirPattern::Var(sym) => {
@@ -141,19 +166,19 @@ impl TypeChecker {
                 }
             }
             HirPattern::OptionSome(inner) => {
-                if let HirType::Option(inner_ty) = scrutinee_ty {
-                    self.bind_match_pattern(inner, inner_ty);
+                if let Some(inner_ty) = self.extract_option_inner(scrutinee_ty) {
+                    self.bind_match_pattern(inner, &inner_ty);
                 }
             }
             HirPattern::OptionNone => {}
             HirPattern::ResultOk(inner) => {
-                if let HirType::Result(ok_ty, _) = scrutinee_ty {
-                    self.bind_match_pattern(inner, ok_ty);
+                if let Some((ok_ty, _)) = self.extract_result_inner(scrutinee_ty) {
+                    self.bind_match_pattern(inner, &ok_ty);
                 }
             }
             HirPattern::ResultErr(inner) => {
-                if let HirType::Result(_, err_ty) = scrutinee_ty {
-                    self.bind_match_pattern(inner, err_ty);
+                if let Some((_, err_ty)) = self.extract_result_inner(scrutinee_ty) {
+                    self.bind_match_pattern(inner, &err_ty);
                 }
             }
             HirPattern::Tuple { elements, .. } => {
