@@ -257,7 +257,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
                 || name.contains("pop")
                 || name.contains("get")
             {
-                eprintln!(
+                tracing::debug!(
                     "[pipeline]   mono fn: {} (type_params={:?})",
                     name, f.type_params
                 );
@@ -894,27 +894,27 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
     }
 
     if blocks.is_empty() {
-        eprintln!("No doc-test blocks found.");
+        tracing::debug!("No doc-test blocks found.");
         return Ok(0);
     }
 
     let mut failed = 0;
     for (i, block) in blocks.iter().enumerate() {
-        eprintln!("running {} doc-test(s)", blocks.len());
-        eprintln!("doc-test block {} ... ", i + 1);
+        tracing::debug!("running {} doc-test(s)", blocks.len());
+        tracing::debug!("doc-test block {} ... ", i + 1);
         // Run as a simple expression via JIT (wrap in main = () => { ... })
         let wrapped = format!("main = () => {{ {} }}", block);
         match run_jit(&wrapped) {
             Ok(exit_code) => {
                 if exit_code == 0 {
-                    eprintln!("ok");
+                    tracing::debug!("ok");
                 } else {
-                    eprintln!("FAILED (exit code {})", exit_code);
+                    tracing::debug!("FAILED (exit code {})", exit_code);
                     failed += 1;
                 }
             }
             Err(e) => {
-                eprintln!("FAILED: {}", e);
+                tracing::debug!("FAILED: {}", e);
                 failed += 1;
             }
         }
@@ -941,7 +941,7 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
 fn debug_ir(codegen: &glyim_codegen_llvm::Codegen) {
     if std::env::var("GLYIM_DEBUG_IR").is_ok() {
-        eprintln!("Generated IR:\n{}", codegen.ir_string());
+        tracing::debug!("Generated IR:\n{}", codegen.ir_string());
     }
 }
 

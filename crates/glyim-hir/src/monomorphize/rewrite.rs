@@ -435,9 +435,10 @@ impl<'a> MonoContext<'a> {
                     let mut prev = concretized.clone();
                     loop {
                         concretized = self.concretize_type(&prev);
-                        eprintln!(
+                        tracing::debug!(
                             "[rewrite_stmt LetPat] repeat concretize: {:?} -> {:?}",
-                            prev, concretized
+                            prev,
+                            concretized
                         );
                         if concretized == prev {
                             break;

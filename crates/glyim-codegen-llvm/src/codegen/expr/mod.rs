@@ -9,6 +9,7 @@ use inkwell::types::BasicType;
 use inkwell::values::IntValue;
 
 #[tracing::instrument(skip_all)]
+
 pub(crate) fn codegen_expr<'ctx>(
     cg: &Codegen<'ctx>,
     expr: &HirExpr,
@@ -329,11 +330,11 @@ pub(crate) fn codegen_expr<'ctx>(
             args,
             ..
         } => {
-            eprintln!(
+            tracing::debug!(
                 "[codegen MethodCall] method_name={}",
                 cg.interner.resolve(*method_name)
             );
-            eprintln!("[codegen MethodCall] receiver_id={:?}", receiver.get_id());
+            tracing::debug!("[codegen MethodCall] receiver_id={:?}", receiver.get_id());
 
             // Check if this method is backed by an extern function
             if let Some(extern_name) = cg.extern_methods.get(method_name).copied() {
@@ -435,7 +436,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 _ => cg.interner.resolve(*method_name).to_string(),
             };
 
-            eprintln!(
+            tracing::debug!(
                 "[codegen MethodCall] looking for function: {}",
                 mangled_name
             );
@@ -469,7 +470,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 let name = func.get_name().to_string_lossy().to_string();
                 // Match "Vec_push__..." but not "Vec_push" itself
                 if name.starts_with(&prefix) && name.len() > prefix.len() {
-                    eprintln!("[codegen MethodCall] fallback found: {}", name);
+                    tracing::debug!("[codegen MethodCall] fallback found: {}", name);
                     let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
                     call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
                         receiver_val,
@@ -492,7 +493,7 @@ pub(crate) fn codegen_expr<'ctx>(
                 }
             }
 
-            eprintln!(
+            tracing::debug!(
                 "[codegen MethodCall] WARNING: no function found for prefix '{}'",
                 prefix
             );

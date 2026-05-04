@@ -185,7 +185,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
         } => {
             // AST args include the receiver as first element; strip it
             let method_args: Vec<_> = args.iter().skip(1).map(|a| lower_expr(a, ctx)).collect();
-            eprintln!(
+            tracing::debug!(
                 "LOWER MethodCall: receiver={:?} method={:?}",
                 receiver.kind,
                 ctx.resolve(*method)
@@ -371,7 +371,7 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
             ty,
         } => {
             let val = lower_expr(value, ctx);
-            eprintln!("LOWER LetPat: value={:?}", val);
+            tracing::debug!("LOWER LetPat: value={:?}", val);
             let pat = lower_pattern(pattern, ctx);
             HirStmt::LetPat {
                 pattern: pat,

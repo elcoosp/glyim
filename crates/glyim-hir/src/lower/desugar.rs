@@ -1,5 +1,7 @@
 use crate::{Hir, HirExpr, HirItem, HirStmt, HirType};
 use glyim_interner::Interner;
+use tracing::debug;
+
 
 /// Desugar all MethodCall expressions to Call expressions.
 /// Uses concrete type information from the type checker (`expr_types`) to
@@ -101,7 +103,7 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                 _ => base,
             };
             let callee = interner.intern(&mangled);
-            eprintln!("[desugar] MethodCall {} → Call {}", method, mangled);
+            tracing::debug!("[desugar] MethodCall {} → Call {}", method, mangled);
 
             let span = *span;
             let id = *id;

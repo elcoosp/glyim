@@ -214,11 +214,11 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        eprintln!("[codegen generate] =======================");
+        tracing::debug!("[codegen generate] =======================");
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[codegen generate] Fn: {} (type_params={:?})",
                         self.interner.resolve(f.name),
                         f.type_params
@@ -226,7 +226,7 @@ impl<'ctx> Codegen<'ctx> {
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        eprintln!(
+                        tracing::debug!(
                             "[codegen generate] Impl method: {}",
                             self.interner.resolve(m.name)
                         );
@@ -235,36 +235,36 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        eprintln!("[codegen generate] =======================");
+        tracing::debug!("[codegen generate] =======================");
 
-        eprintln!("[codegen] generate() received {} items:", hir.items.len());
+        tracing::debug!("[codegen] generate() received {} items:", hir.items.len());
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[codegen]   Fn: {} (type_params={:?})",
                         self.interner.resolve(f.name),
                         f.type_params
                     );
                 }
                 glyim_hir::item::HirItem::Struct(s) => {
-                    eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
+                    tracing::debug!("[codegen]   Struct: {}", self.interner.resolve(s.name));
                 }
                 glyim_hir::item::HirItem::Enum(e) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[codegen]   Enum: {} (variants: {})",
                         self.interner.resolve(e.name),
                         e.variants.len()
                     );
                     for v in &e.variants {
-                        eprintln!(
+                        tracing::debug!(
                             "[codegen]     variant: {} fields: {} tag: {}",
                             self.interner.resolve(v.name),
                             v.fields.len(),
                             v.tag
                         );
                         for f in &v.fields {
-                            eprintln!(
+                            tracing::debug!(
                                 "[codegen]       field: {} type: {:?}",
                                 self.interner.resolve(f.name),
                                 f.ty
@@ -365,13 +365,13 @@ impl<'ctx> Codegen<'ctx> {
         }
 
         // Pass 2b debug: list all functions in module
-        eprintln!("[codegen] Functions in module before Pass 3:");
+        tracing::debug!("[codegen] Functions in module before Pass 3:");
         if let Some(func) = self.module.get_first_function() {
             let mut f = Some(func);
             while let Some(func) = f {
                 let name = func.get_name().to_string_lossy();
                 if true {
-                    eprintln!("[codegen]   {}", name);
+                    tracing::debug!("[codegen]   {}", name);
                 }
                 f = func.get_next_function();
             }
@@ -772,14 +772,16 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Vec<_>>()
                     .join("_");
                 let mangled_str = format!("{}__{}", base_str, args_str);
-                eprintln!(
+                tracing::debug!(
                     "[resolve_struct_type] Generic: base_str={} args_str={} mangled={}",
-                    base_str, args_str, mangled_str
+                    base_str,
+                    args_str,
+                    mangled_str
                 );
                 if let Some(_found) = self.interner.resolve_symbol(&mangled_str) {
-                    eprintln!("[resolve_struct_type] FOUND in interner");
+                    tracing::debug!("[resolve_struct_type] FOUND in interner");
                 } else {
-                    eprintln!(
+                    tracing::debug!(
                         "[resolve_struct_type] NOT FOUND in interner ({} entries)",
                         self.interner.len()
                     );

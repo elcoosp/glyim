@@ -3,13 +3,14 @@ use super::*;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
 use std::collections::HashMap;
+use tracing::debug;
 
 impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
 
-        eprintln!(
+        tracing::debug!(
             "[specialize_fn] ENTER fn={} type_params=[{}] concrete={:?}",
             self.interner.resolve(f.name),
             f.type_params
@@ -81,13 +82,13 @@ impl<'a> MonoContext<'a> {
         // Brute-force pass: walk the body and replace any As target type
         // that matches a type parameter with its concrete type.
         if !sub.is_empty() {
-            eprintln!("[specialize_fn] force sub map: {:?}", sub);
-            eprintln!(
+            tracing::debug!("[specialize_fn] force sub map: {:?}", sub);
+            tracing::debug!(
                 "[specialize_fn] body before As substitution: {:#?}",
                 mono.body
             );
             mono.body = Self::force_substitute_as_targets(mono.body, &sub);
-            eprintln!(
+            tracing::debug!(
                 "[specialize_fn] body after As substitution: {:#?}",
                 mono.body
             );
@@ -108,9 +109,11 @@ impl<'a> MonoContext<'a> {
                 span,
             } => {
                 let new_target = crate::types::substitute_type(&target_type, sub);
-                eprintln!(
+                tracing::debug!(
                     "[force_sub] As id={:?} old_target={:?} new_target={:?}",
-                    id, target_type, new_target
+                    id,
+                    target_type,
+                    new_target
                 );
                 HirExpr::As {
                     id,
