@@ -813,7 +813,9 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
             .to_string();
         PathBuf::from(stem)
     });
-    let hash_content = hash.parse::<glyim_macro_vfs::ContentHash>().unwrap();
+    let hash_content = hash
+    .parse::<glyim_macro_vfs::ContentHash>()
+    .map_err(|e| PipelineError::Codegen(format!("hash parse: {e}")))?;
     if let Some(cached_obj) = cas.retrieve(hash_content) {
         let tmp_dir = tempfile::tempdir()?;
         let obj_path = tmp_dir.path().join("cached.o");

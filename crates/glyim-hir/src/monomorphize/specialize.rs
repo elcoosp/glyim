@@ -3,7 +3,6 @@ use super::*;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
 use std::collections::HashMap;
-use tracing::debug;
 
 impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]

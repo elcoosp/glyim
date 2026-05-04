@@ -1,7 +1,5 @@
 use crate::{Hir, HirExpr, HirItem, HirStmt, HirType};
 use glyim_interner::Interner;
-use tracing::debug;
-
 
 /// Desugar all MethodCall expressions to Call expressions.
 /// Uses concrete type information from the type checker (`expr_types`) to

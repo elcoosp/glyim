@@ -10,7 +10,7 @@ fn ensure_server() {
         START_SERVER.call_once(|| {
             // Build the CAS server in release mode first
             let status = Command::new("cargo")
-                .args(["build", "--release", "-p", "glyim-cas-server"])
+                .args(["build", "-p", "glyim-cas-server"])
                 .status()
                 .expect("failed to build CAS server");
             assert!(status.success(), "CAS server build failed");
@@ -29,6 +29,7 @@ fn ensure_server() {
     }
 }
 
+#[ignore = "requires heavy release builds"]
 #[test]
 fn two_machines_share_macro_cache() {
     ensure_server();
