@@ -27,7 +27,7 @@ struct MonoDiscovery {
     type_overrides: HashMap<ExprId, HirType>,
     call_type_args_overrides: HashMap<ExprId, Vec<HirType>>,
     mangle_table: mangle_table::MangleTable,
-    interner: Interner,             // updated interner with mangled symbols
+    interner: Interner, // updated interner with mangled symbols
 }
 
 /// Phase 1: scan and specialize (mutable internment happens here)
@@ -54,7 +54,7 @@ fn discover_instantiations(
 /// Phase 2: rewrite the HIR using the captured discovery data.
 fn apply_specializations(
     hir: &crate::Hir,
-    interner: &mut Interner,        // must be the updated interner
+    interner: &mut Interner, // must be the updated interner
     discovery: MonoDiscovery,
     expr_types: &[HirType],
     call_type_args: &HashMap<ExprId, Vec<HirType>>,

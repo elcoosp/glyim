@@ -106,7 +106,11 @@ pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
             max_payload_bytes = variant_bytes;
         }
     }
-    let payload_bytes = if max_payload_bytes == 0 { 8 } else { max_payload_bytes };
+    let payload_bytes = if max_payload_bytes == 0 {
+        8
+    } else {
+        max_payload_bytes
+    };
     let tag_type = cg.i32_type;
     let payload_type = cg.context.i8_type().array_type(payload_bytes);
     let enum_struct_type = cg.context.struct_type(

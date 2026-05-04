@@ -57,6 +57,20 @@ impl<'a> MonoContext<'a> {
             items.push(HirItem::Enum(mono_e));
         }
 
+        // Build enum_map from specialized enums
+        let enum_specs_for_map: Vec<_> = self
+            .enum_specs
+            .iter()
+            .filter(|((_, args), _)| !args.iter().any(|a| self.has_unresolved_type_param(a)))
+            .map(|((orig_name, args), _)| (*orig_name, args.clone()))
+            .collect();
+
+        let mut enum_map: HashMap<Symbol, Symbol> = HashMap::new();
+        for (orig_name, args) in enum_specs_for_map {
+            let mangled = self.mangle_name(orig_name, &args);
+            enum_map.insert(orig_name, mangled);
+        }
+
         // Build fn_mangle_map from specialized functions
         let fn_specs: Vec<_> = self
             .fn_specs
@@ -90,8 +104,13 @@ impl<'a> MonoContext<'a> {
         for item in &self.hir.items {
             match item {
                 HirItem::Fn(f) if f.type_params.is_empty() => {
-                    let rewritten =
-                        self.rewrite_fn(f, &fn_mangle_map, &struct_mangle_map, &empty_sub);
+                    let rewritten = self.rewrite_fn(
+                        f,
+                        &fn_mangle_map,
+                        &struct_mangle_map,
+                        &enum_map,
+                        &empty_sub,
+                    );
                     items.push(HirItem::Fn(rewritten));
                 }
                 HirItem::Struct(s) if s.type_params.is_empty() => {
@@ -102,8 +121,13 @@ impl<'a> MonoContext<'a> {
                 HirItem::Impl(imp) if imp.type_params.is_empty() => {
                     for m in &imp.methods {
                         if m.type_params.is_empty() {
-                            let rewritten =
-                                self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map, &empty_sub);
+                            let rewritten = self.rewrite_fn(
+                                m,
+                                &fn_mangle_map,
+                                &struct_mangle_map,
+                                &enum_map,
+                                &empty_sub,
+                            );
                             items.push(HirItem::Fn(rewritten));
                         }
                     }
@@ -125,7 +149,13 @@ impl<'a> MonoContext<'a> {
                 .map(|(tp, ct)| (*tp, ct.clone()))
                 .collect();
 
-            let mono_f = self.rewrite_fn(&mono_f, &fn_mangle_map, &struct_mangle_map, &type_sub);
+            let mono_f = self.rewrite_fn(
+                &mono_f,
+                &fn_mangle_map,
+                &struct_mangle_map,
+                &enum_map,
+                &type_sub,
+            );
             items.push(HirItem::Fn(mono_f));
         }
 
@@ -137,7 +167,10 @@ impl<'a> MonoContext<'a> {
                 }
                 crate::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        crate::passes::no_type_params::assert_no_type_params(&m.body, self.interner);
+                        crate::passes::no_type_params::assert_no_type_params(
+                            &m.body,
+                            self.interner,
+                        );
                     }
                 }
                 crate::item::HirItem::Struct(_) => {}

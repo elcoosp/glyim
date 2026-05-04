@@ -1,9 +1,9 @@
 //! Safe wrappers for common LLVM codegen operations.
 //! Reduces risk of segfaults from manual GEP, uninitialized memory, etc.
 
+use crate::Codegen;
 use inkwell::types::StructType;
 use inkwell::values::{IntValue, PointerValue};
-use crate::Codegen;
 
 impl<'ctx> Codegen<'ctx> {
     /// Returns a pointer to the nth field of a struct (0-based).
@@ -17,7 +17,8 @@ impl<'ctx> Codegen<'ctx> {
         assert!(
             field_idx < field_count,
             "field index {} out of bounds for struct with {} fields",
-            field_idx, field_count
+            field_idx,
+            field_count
         );
         let indices = &[
             self.i32_type.const_int(0, false),

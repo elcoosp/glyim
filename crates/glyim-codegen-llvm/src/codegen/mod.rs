@@ -198,11 +198,17 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    glyim_hir::passes::no_type_params::assert_no_type_params(&f.body, &self.interner);
+                    glyim_hir::passes::no_type_params::assert_no_type_params(
+                        &f.body,
+                        &self.interner,
+                    );
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        glyim_hir::passes::no_type_params::assert_no_type_params(&m.body, &self.interner);
+                        glyim_hir::passes::no_type_params::assert_no_type_params(
+                            &m.body,
+                            &self.interner,
+                        );
                     }
                 }
                 _ => {}
@@ -245,11 +251,24 @@ impl<'ctx> Codegen<'ctx> {
                     eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
                 }
                 glyim_hir::item::HirItem::Enum(e) => {
-                    eprintln!("[codegen]   Enum: {} (variants: {})", self.interner.resolve(e.name), e.variants.len());
+                    eprintln!(
+                        "[codegen]   Enum: {} (variants: {})",
+                        self.interner.resolve(e.name),
+                        e.variants.len()
+                    );
                     for v in &e.variants {
-                        eprintln!("[codegen]     variant: {} fields: {} tag: {}", self.interner.resolve(v.name), v.fields.len(), v.tag);
+                        eprintln!(
+                            "[codegen]     variant: {} fields: {} tag: {}",
+                            self.interner.resolve(v.name),
+                            v.fields.len(),
+                            v.tag
+                        );
                         for f in &v.fields {
-                            eprintln!("[codegen]       field: {} type: {:?}", self.interner.resolve(f.name), f.ty);
+                            eprintln!(
+                                "[codegen]       field: {} type: {:?}",
+                                self.interner.resolve(f.name),
+                                f.ty
+                            );
                         }
                     }
                 }
@@ -753,11 +772,17 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Vec<_>>()
                     .join("_");
                 let mangled_str = format!("{}__{}", base_str, args_str);
-                eprintln!("[resolve_struct_type] Generic: base_str={} args_str={} mangled={}", base_str, args_str, mangled_str);
+                eprintln!(
+                    "[resolve_struct_type] Generic: base_str={} args_str={} mangled={}",
+                    base_str, args_str, mangled_str
+                );
                 if let Some(_found) = self.interner.resolve_symbol(&mangled_str) {
                     eprintln!("[resolve_struct_type] FOUND in interner");
                 } else {
-                    eprintln!("[resolve_struct_type] NOT FOUND in interner ({} entries)", self.interner.len());
+                    eprintln!(
+                        "[resolve_struct_type] NOT FOUND in interner ({} entries)",
+                        self.interner.len()
+                    );
                 }
                 self.interner.resolve_symbol(&mangled_str)?
             }

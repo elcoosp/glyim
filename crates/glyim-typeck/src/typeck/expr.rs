@@ -512,9 +512,15 @@ impl TypeChecker {
                         .iter()
                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                         .collect();
-                    eprintln!("[typeck DEBUG] check_call_with_type_args fn={} type_args=[{}]",
-                              self.interner.resolve(callee),
-                              type_args.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join(", "));
+                    eprintln!(
+                        "[typeck DEBUG] check_call_with_type_args fn={} type_args=[{}]",
+                        self.interner.resolve(callee),
+                        type_args
+                            .iter()
+                            .map(|t| format!("{:?}", t))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
                     let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                     return (
                         glyim_hir::types::substitute_type(&ret, &sub),

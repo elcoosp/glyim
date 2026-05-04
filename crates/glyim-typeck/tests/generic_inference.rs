@@ -1,7 +1,7 @@
-use glyim_typeck::TypeChecker;
-use glyim_parse::parse;
 use glyim_hir::lower;
 use glyim_hir::types::HirType;
+use glyim_parse::parse;
+use glyim_typeck::TypeChecker;
 
 fn typecheck_and_get_tc(source: &str) -> TypeChecker {
     let parse_out = parse(source);
@@ -21,10 +21,17 @@ fn typecheck_and_get_tc(source: &str) -> TypeChecker {
 fn generic_call_id_infers_int() {
     let source = "fn id<T>(x: T) -> T { x }\nfn main() -> i64 { id(42) }";
     let tc = typecheck_and_get_tc(source);
-    assert!(!tc.call_type_args.is_empty(), "call_type_args should not be empty");
+    assert!(
+        !tc.call_type_args.is_empty(),
+        "call_type_args should not be empty"
+    );
     let type_args = tc.call_type_args.values().next().unwrap();
     assert_eq!(type_args.len(), 1, "id should have one type param");
-    assert_eq!(type_args[0], HirType::Int, "T should be inferred as Int from arg 42");
+    assert_eq!(
+        type_args[0],
+        HirType::Int,
+        "T should be inferred as Int from arg 42"
+    );
 }
 
 #[test]
@@ -37,8 +44,15 @@ main = () => {
 }
 "#;
     let tc = typecheck_and_get_tc(source);
-    let found = tc.call_type_args.values().any(|args| args == &vec![HirType::Int]);
-    assert!(found, "expected type args [Int] for Container, got {:?}", tc.call_type_args);
+    let found = tc
+        .call_type_args
+        .values()
+        .any(|args| args == &vec![HirType::Int]);
+    assert!(
+        found,
+        "expected type args [Int] for Container, got {:?}",
+        tc.call_type_args
+    );
 }
 
 #[test]
@@ -59,8 +73,15 @@ fn main() -> i64 {
 "#;
     let tc = typecheck_and_get_tc(source);
     // We should have at least one call_type_args entry with [Int] (for push)
-    let has_i64 = tc.call_type_args.values().any(|args| args == &vec![HirType::Int]);
-    assert!(has_i64, "expected type args [Int] for Vec::push, got {:?}", tc.call_type_args);
+    let has_i64 = tc
+        .call_type_args
+        .values()
+        .any(|args| args == &vec![HirType::Int]);
+    assert!(
+        has_i64,
+        "expected type args [Int] for Vec::push, got {:?}",
+        tc.call_type_args
+    );
 }
 
 #[test]
@@ -70,8 +91,15 @@ fn pair<A, B>(a: A, b: B) -> B { b }
 fn main() -> i64 { pair(1, 42) }
 "#;
     let tc = typecheck_and_get_tc(source);
-    let has_pair = tc.call_type_args.values().any(|args| args == &vec![HirType::Int, HirType::Int]);
-    assert!(has_pair, "expected type args [Int, Int] for pair, got {:?}", tc.call_type_args);
+    let has_pair = tc
+        .call_type_args
+        .values()
+        .any(|args| args == &vec![HirType::Int, HirType::Int]);
+    assert!(
+        has_pair,
+        "expected type args [Int, Int] for pair, got {:?}",
+        tc.call_type_args
+    );
 }
 
 #[test]
@@ -88,6 +116,13 @@ fn main() -> i64 {
 }
 "#;
     let tc = typecheck_and_get_tc(source);
-    let has_i64 = tc.call_type_args.values().any(|args| args == &vec![HirType::Int]);
-    assert!(has_i64, "expected type args [Int] for Vec::new(), got {:?}", tc.call_type_args);
+    let has_i64 = tc
+        .call_type_args
+        .values()
+        .any(|args| args == &vec![HirType::Int]);
+    assert!(
+        has_i64,
+        "expected type args [Int] for Vec::new(), got {:?}",
+        tc.call_type_args
+    );
 }

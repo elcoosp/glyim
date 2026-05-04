@@ -28,19 +28,44 @@ fn unify_recursive(
         // Type parameter
         (c, HirType::Named(n)) if type_params.contains(n) => {
             if let Some(existing) = sub.get(n) {
-                if existing != c { return Err(crate::TypeError::MismatchedTypes { expected: existing.clone(), found: c.clone(), expr_id: glyim_hir::types::ExprId::new(0) }); }
-            } else { sub.insert(*n, c.clone()); }
+                if existing != c {
+                    return Err(crate::TypeError::MismatchedTypes {
+                        expected: existing.clone(),
+                        found: c.clone(),
+                        expr_id: glyim_hir::types::ExprId::new(0),
+                    });
+                }
+            } else {
+                sub.insert(*n, c.clone());
+            }
             Ok(())
         }
         // Same concrete types
-        (HirType::Int, HirType::Int)|(HirType::Bool, HirType::Bool)|(HirType::Float, HirType::Float)|(HirType::Str, HirType::Str)|(HirType::Unit, HirType::Unit)|(HirType::Never, HirType::Never) => Ok(()),
+        (HirType::Int, HirType::Int)
+        | (HirType::Bool, HirType::Bool)
+        | (HirType::Float, HirType::Float)
+        | (HirType::Str, HirType::Str)
+        | (HirType::Unit, HirType::Unit)
+        | (HirType::Never, HirType::Never) => Ok(()),
         // Named types (non-param) must match exactly
         (HirType::Named(cn), HirType::Named(gn)) if !type_params.contains(gn) => {
-            if cn == gn { Ok(()) } else { Err(crate::TypeError::MismatchedTypes { expected: generic.clone(), found: concrete.clone(), expr_id: glyim_hir::types::ExprId::new(0) }) }
+            if cn == gn {
+                Ok(())
+            } else {
+                Err(crate::TypeError::MismatchedTypes {
+                    expected: generic.clone(),
+                    found: concrete.clone(),
+                    expr_id: glyim_hir::types::ExprId::new(0),
+                })
+            }
         }
         // Generic (instantiated) types
-        (HirType::Generic(cn, c_args), HirType::Generic(gn, g_args)) if cn == gn && c_args.len() == g_args.len() => {
-            for (ca, ga) in c_args.iter().zip(g_args.iter()) { unify_recursive(ca, ga, type_params, sub)?; }
+        (HirType::Generic(cn, c_args), HirType::Generic(gn, g_args))
+            if cn == gn && c_args.len() == g_args.len() =>
+        {
+            for (ca, ga) in c_args.iter().zip(g_args.iter()) {
+                unify_recursive(ca, ga, type_params, sub)?;
+            }
             Ok(())
         }
         // RawPtr
@@ -48,23 +73,43 @@ fn unify_recursive(
         // Option
         (HirType::Option(ci), HirType::Option(gi)) => unify_recursive(ci, gi, type_params, sub),
         // Result
-        (HirType::Result(co, ce), HirType::Result(go, ge)) => { unify_recursive(co, go, type_params, sub)?; unify_recursive(ce, ge, type_params, sub) }
+        (HirType::Result(co, ce), HirType::Result(go, ge)) => {
+            unify_recursive(co, go, type_params, sub)?;
+            unify_recursive(ce, ge, type_params, sub)
+        }
         // Tuple
         (HirType::Tuple(c_e), HirType::Tuple(g_e)) if c_e.len() == g_e.len() => {
-            for (ca, ga) in c_e.iter().zip(g_e.iter()) { unify_recursive(ca, ga, type_params, sub)?; }
+            for (ca, ga) in c_e.iter().zip(g_e.iter()) {
+                unify_recursive(ca, ga, type_params, sub)?;
+            }
             Ok(())
         }
         // RawPtr (concrete) vs type param
-        (HirType::RawPtr(_), HirType::Named(n)) if type_params.contains(n) => { sub.insert(*n, concrete.clone()); Ok(()) }
+        (HirType::RawPtr(_), HirType::Named(n)) if type_params.contains(n) => {
+            sub.insert(*n, concrete.clone());
+            Ok(())
+        }
         // Fallback: allow any concrete to match a type param
         (_, HirType::Named(n)) if type_params.contains(n) => {
             if let Some(existing) = sub.get(n) {
-                if existing != concrete { return Err(crate::TypeError::MismatchedTypes { expected: existing.clone(), found: concrete.clone(), expr_id: glyim_hir::types::ExprId::new(0) }); }
-            } else { sub.insert(*n, concrete.clone()); }
+                if existing != concrete {
+                    return Err(crate::TypeError::MismatchedTypes {
+                        expected: existing.clone(),
+                        found: concrete.clone(),
+                        expr_id: glyim_hir::types::ExprId::new(0),
+                    });
+                }
+            } else {
+                sub.insert(*n, concrete.clone());
+            }
             Ok(())
         }
         // Anything else is a mismatch
-        _ => Err(crate::TypeError::MismatchedTypes { expected: generic.clone(), found: concrete.clone(), expr_id: glyim_hir::types::ExprId::new(0) }),
+        _ => Err(crate::TypeError::MismatchedTypes {
+            expected: generic.clone(),
+            found: concrete.clone(),
+            expr_id: glyim_hir::types::ExprId::new(0),
+        }),
     }
 }
 
@@ -73,7 +118,9 @@ mod tests {
     use super::*;
     use glyim_interner::Interner;
 
-    fn sym(interner: &mut Interner, s: &str) -> Symbol { interner.intern(s) }
+    fn sym(interner: &mut Interner, s: &str) -> Symbol {
+        interner.intern(s)
+    }
 
     #[test]
     fn unify_int_with_type_param() {
@@ -97,7 +144,8 @@ mod tests {
             &HirType::Generic(sym(&mut interner, "Vec"), vec![HirType::Int]),
             &HirType::Generic(sym(&mut interner, "Vec"), vec![HirType::Named(t)]),
             &[t],
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(result.get(&t), Some(&HirType::Int));
     }
 }

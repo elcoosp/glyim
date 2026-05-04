@@ -1,7 +1,7 @@
+use glyim_hir::lower;
+use glyim_parse::parse;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
-use glyim_parse::parse;
-use glyim_hir::lower;
 use rstest::rstest;
 
 fn typecheck_source(source: &str) -> Vec<TypeError> {
@@ -19,7 +19,7 @@ fn typecheck_source(source: &str) -> Vec<TypeError> {
 }
 
 #[rstest]
-#[case("fn main() { let mut x = 42; x }", &[])]  // no errors expected
+#[case("fn main() { let mut x = 42; x }", &[])] // no errors expected
 #[case("fn main() { let x = 5; x = 10; x }", &["AssignToImmutable"])]
 #[case("fn main() { let x = 42; *x }", &["DerefNonPointer"])]
 #[case("fn main() { let x = 42; *x = 10; }", &["AssignThroughNonPointer"])]
@@ -48,31 +48,20 @@ fn typecheck_source(source: &str) -> Vec<TypeError> {
     &["UnknownField"]  // ExtraField not yet emitted; unknown field is reported instead
 )]
 // InvalidQuestion and IfConditionMustBeBool are not yet implemented in the type checker; tests deferred
-fn detects_error_variant(
-    #[case] source: &str,
-    #[case] expected_patterns: &[&str],
-) {
+fn detects_error_variant(#[case] source: &str, #[case] expected_patterns: &[&str]) {
     let errors = typecheck_source(source);
 
     if expected_patterns.is_empty() {
-        assert!(
-            errors.is_empty(),
-            "expected no errors but got {:?}",
-            errors
-        );
+        assert!(errors.is_empty(), "expected no errors but got {:?}", errors);
         return;
     }
 
     for expected in expected_patterns {
-        let found = errors
-            .iter()
-            .any(|e| format!("{:?}", e).contains(expected));
+        let found = errors.iter().any(|e| format!("{:?}", e).contains(expected));
         assert!(
             found,
             "Expected error containing '{}' but got {:?}\nSource:\n{}",
-            expected,
-            errors,
-            source
+            expected, errors, source
         );
     }
 }

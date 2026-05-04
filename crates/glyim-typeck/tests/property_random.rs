@@ -1,6 +1,6 @@
-use glyim_typeck::TypeChecker;
-use glyim_parse::parse;
 use glyim_hir::lower;
+use glyim_parse::parse;
+use glyim_typeck::TypeChecker;
 use proptest::prelude::*;
 
 fn typecheck_source(source: &str) -> Vec<glyim_typeck::TypeError> {
@@ -44,9 +44,8 @@ proptest! {
 /// Strategy that generates a valid block with let bindings and arithmetic.
 fn arb_block() -> impl Strategy<Value = String> {
     let int = any::<i64>().prop_map(|n| n.to_string());
-    (int.clone(), int.clone(), int.clone()).prop_map(|(x, y, z)| {
-        format!("let a = {x}\nlet b = {y}\nlet c = {z}\na + b * c")
-    })
+    (int.clone(), int.clone(), int.clone())
+        .prop_map(|(x, y, z)| format!("let a = {x}\nlet b = {y}\nlet c = {z}\na + b * c"))
 }
 
 proptest! {

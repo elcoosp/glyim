@@ -1,13 +1,11 @@
-use glyim_parse::parse;
+use glyim_hir::item::HirItem;
 use glyim_hir::lower;
 use glyim_hir::monomorphize::monomorphize;
-use glyim_hir::item::HirItem;
-use glyim_typeck::TypeChecker;
 use glyim_interner::Interner;
+use glyim_parse::parse;
+use glyim_typeck::TypeChecker;
 
-fn typecheck_and_monomorphize(
-    source: &str,
-) -> (glyim_hir::monomorphize::MonoResult, Interner) {
+fn typecheck_and_monomorphize(source: &str) -> (glyim_hir::monomorphize::MonoResult, Interner) {
     let parse_out = parse(source);
     assert!(parse_out.errors.is_empty());
     let mut interner = parse_out.interner;
@@ -22,9 +20,8 @@ fn typecheck_and_monomorphize(
 
 #[test]
 fn mono_specializes_id_to_concrete() {
-    let (result, interner) = typecheck_and_monomorphize(
-        "fn id<T>(x: T) -> T { x }\nmain = () => id(42)",
-    );
+    let (result, interner) =
+        typecheck_and_monomorphize("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
     let has_id_i64 = result.hir.items.iter().any(|item| {
         if let HirItem::Fn(f) = item {
             interner.resolve(f.name) == "id__i64"
@@ -47,7 +44,10 @@ fn mono_specializes_generic_struct_literal() {
             false
         }
     });
-    assert!(has_container_i64, "monomorphized HIR should contain 'Container__i64' struct");
+    assert!(
+        has_container_i64,
+        "monomorphized HIR should contain 'Container__i64' struct"
+    );
 }
 
 #[test]

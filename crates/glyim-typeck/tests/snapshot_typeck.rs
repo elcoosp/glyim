@@ -1,10 +1,14 @@
-use glyim_typeck::TypeChecker;
-use glyim_parse::parse;
 use glyim_hir::lower;
+use glyim_parse::parse;
+use glyim_typeck::TypeChecker;
 
 fn typecheck_and_format(source: &str) -> (String, String) {
     let parse_out = parse(source);
-    assert!(parse_out.errors.is_empty(), "parse errors: {:?}", parse_out.errors);
+    assert!(
+        parse_out.errors.is_empty(),
+        "parse errors: {:?}",
+        parse_out.errors
+    );
     let mut interner = parse_out.interner;
     let hir = lower(&parse_out.ast, &mut interner);
     let mut tc = TypeChecker::new(interner.clone());
@@ -24,9 +28,8 @@ fn snapshot_simple_main() {
 
 #[test]
 fn snapshot_generic_call() {
-    let (expr_types, call_type_args) = typecheck_and_format(
-        "fn id<T>(x: T) -> T { x }\nmain = () => id(42)"
-    );
+    let (expr_types, call_type_args) =
+        typecheck_and_format("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
     insta::assert_snapshot!("generic_call__expr_types", expr_types);
     insta::assert_snapshot!("generic_call__call_type_args", call_type_args);
 }
@@ -34,7 +37,7 @@ fn snapshot_generic_call() {
 #[test]
 fn snapshot_generic_struct() {
     let (expr_types, call_type_args) = typecheck_and_format(
-        "struct Container<T> { value: T }\nmain = () => { let c: Container<i64> = Container { value: 42 }; c.value }"
+        "struct Container<T> { value: T }\nmain = () => { let c: Container<i64> = Container { value: 42 }; c.value }",
     );
     insta::assert_snapshot!("generic_struct__expr_types", expr_types);
     insta::assert_snapshot!("generic_struct__call_type_args", call_type_args);

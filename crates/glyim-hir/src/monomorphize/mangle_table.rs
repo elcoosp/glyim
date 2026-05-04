@@ -23,12 +23,7 @@ impl MangleTable {
 
     /// Return the mangled symbol for `base` with the given concrete type arguments.
     /// Creates a new entry on first use using `glyim_hir::monomorphize::mangling`.
-    pub fn mangle(
-        &mut self,
-        base: Symbol,
-        args: &[HirType],
-        interner: &mut Interner,
-    ) -> Symbol {
+    pub fn mangle(&mut self, base: Symbol, args: &[HirType], interner: &mut Interner) -> Symbol {
         let key = (base, args.to_vec());
         if let Some(&mangled) = self.map.get(&key) {
             return mangled;

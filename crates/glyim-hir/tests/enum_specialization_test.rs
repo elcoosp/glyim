@@ -1,6 +1,6 @@
+use glyim_hir::Hir;
 use glyim_hir::monomorphize::monomorphize;
 use glyim_hir::types::{ExprId, HirType};
-use glyim_hir::Hir;
 use glyim_interner::Interner;
 use std::collections::HashMap;
 
@@ -36,7 +36,9 @@ main = () => {
     let has_option_i64 = result.hir.items.iter().any(|item| {
         if let glyim_hir::HirItem::Enum(e) = item {
             interner.resolve(e.name) == "Option__i64"
-        } else { false }
+        } else {
+            false
+        }
     });
     assert!(has_option_i64, "Expected Option__i64 specialization");
 }
@@ -61,13 +63,20 @@ main = () => {
     let has_option_i64 = result.hir.items.iter().any(|item| {
         if let glyim_hir::HirItem::Enum(e) = item {
             interner.resolve(e.name) == "Option__i64"
-        } else { false }
+        } else {
+            false
+        }
     });
     let has_option_option_i64 = result.hir.items.iter().any(|item| {
         if let glyim_hir::HirItem::Enum(e) = item {
             interner.resolve(e.name) == "Option__Option_i64"
-        } else { false }
+        } else {
+            false
+        }
     });
     assert!(has_option_i64, "Expected Option__i64 specialization");
-    assert!(has_option_option_i64, "Expected Option__Option_i64 specialization");
+    assert!(
+        has_option_option_i64,
+        "Expected Option__Option_i64 specialization"
+    );
 }

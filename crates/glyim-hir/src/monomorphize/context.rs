@@ -53,7 +53,7 @@ impl<'a> MonoContext<'a> {
             let base_str = self.interner.resolve(base_name).to_string();
             if let Some(us_pos) = base_str.rfind('_') {
                 let type_name = &base_str[..us_pos];
-                let method_name = &base_str[us_pos+1..];
+                let method_name = &base_str[us_pos + 1..];
                 if type_name.starts_with(|c: char| c.is_uppercase()) {
                     let type_sym = self.interner.intern(type_name);
                     let method_sym = self.interner.intern(method_name);

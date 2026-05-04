@@ -38,8 +38,7 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
             assert_no_type_params(lhs, interner);
             assert_no_type_params(rhs, interner);
         }
-        HirExpr::Unary { operand, .. }
-        | HirExpr::Deref { expr: operand, .. } => {
+        HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
             assert_no_type_params(operand, interner);
         }
         HirExpr::Block { stmts, .. } => {
@@ -98,9 +97,7 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
                 assert_no_type_params(a, interner);
             }
         }
-        HirExpr::MethodCall {
-            receiver, args, ..
-        } => {
+        HirExpr::MethodCall { receiver, args, .. } => {
             assert_no_type_params(receiver, interner);
             for a in args {
                 assert_no_type_params(a, interner);
@@ -111,8 +108,7 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
                 assert_no_type_params(val, interner);
             }
         }
-        HirExpr::EnumVariant { args, .. }
-        | HirExpr::TupleLit { elements: args, .. } => {
+        HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
             for a in args {
                 assert_no_type_params(a, interner);
             }
@@ -131,10 +127,7 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
                 assert_no_type_params(v, interner);
             }
         }
-        HirExpr::SizeOf { target_type, .. }
-        | HirExpr::As {
-            target_type, ..
-        } => {
+        HirExpr::SizeOf { target_type, .. } | HirExpr::As { target_type, .. } => {
             assert!(
                 !has_unresolved_param(target_type, interner),
                 "Unresolved type parameter in type: {:?}",
