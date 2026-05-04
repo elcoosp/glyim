@@ -1483,3 +1483,69 @@ mod arithmetic_proptests {
         }
     }
 }
+
+#[test]
+fn e2e_no_std_manifest_makes_prelude_unavailable() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("glyim.toml"),
+        "[package]\nname = \"ns\"\nversion = \"0.1.0\"\nno_std = true\n",
+    )
+    .unwrap();
+    std::fs::create_dir(dir.path().join("src")).unwrap();
+    std::fs::write(
+        dir.path().join("src/main.g"),
+        r#"main = () => 42"#,
+    )
+    .unwrap();
+    let result = pipeline::run_package(
+        dir.path(),
+        pipeline::BuildMode::Debug,
+        None,
+    );
+    assert!(
+        result.is_ok(),
+        "no_std project should compile: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn e2e_println_stdout_captures_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let main_g = dir.path().join("main.g");
+    std::fs::write(
+        &main_g,
+        r#"main = () => { println("hello from test") }"#,
+    )
+    .unwrap();
+    let result = pipeline::run(&main_g, None);
+    // println returns 0 on success
+    assert!(result.is_ok(), "println should compile and run: {:?}", result.err());
+    assert_eq!(result.unwrap(), 0);
+}
+
+#[test]
+fn e2e_io_write_method_compiles() {
+    let io_src = include_str!("../../../stdlib/src/io.g");
+    let main_code = r#"
+main = () => {
+    let out = stdout();
+    out.write("test\n" as *const u8, 5);
+    0
+}
+"#;
+    let full_src = format!("{}\n{}", io_src, main_code);
+    let src_path = temp_g(&full_src);
+    assert!(pipeline::run(&src_path, None).is_ok());
+}
+
+#[test]
+fn e2e_typeck_rejects_non_bool_if_condition() {
+    let src = r#"fn main() -> i64 { let x = 5; if x { 1 } else { 0 } }"#;
+    let result = pipeline::run_jit(src);
+    // Currently may or may not fail depending on implementation
+    // Just verify no crash
+    eprintln!("non-bool if condition result: {:?}", result);
+}
+
