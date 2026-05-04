@@ -85,14 +85,14 @@ pub(crate) fn codegen_if<'ctx>(
         cg.builder.position_at_end(then_bb);
         let then_val = codegen_block(cg, then_branch, fctx)?;
         cg.builder.build_unconditional_branch(merge_bb).ok()?;
-        let then_bb_final = cg.builder.get_insert_block().unwrap();
+        let then_bb_final = cg.builder.get_insert_block().expect("codegen: internal error");
         cg.builder.position_at_end(else_bb);
         let else_val = match else_branch {
             Some(e) => codegen_block(cg, e, fctx)?,
             None => cg.i64_type.const_int(0, false),
         };
         cg.builder.build_unconditional_branch(merge_bb).ok()?;
-        let else_bb_final = cg.builder.get_insert_block().unwrap();
+        let else_bb_final = cg.builder.get_insert_block().expect("codegen: internal error");
         cg.builder.position_at_end(merge_bb);
         let phi = cg.builder.build_phi(cg.i64_type, "if_result").ok()?;
         phi.add_incoming(&[
@@ -182,7 +182,7 @@ pub(crate) fn codegen_match<'ctx>(
                     fctx.vars.insert(*name, alloca);
                 }
                 let some_val = codegen_expr(cg, body0, fctx)?;
-                let some_end = cg.builder.get_insert_block().unwrap();
+                let some_end = cg.builder.get_insert_block().expect("codegen: internal error");
                 if cg
                     .builder
                     .get_insert_block()
@@ -195,7 +195,7 @@ pub(crate) fn codegen_match<'ctx>(
                 // None branch
                 cg.builder.position_at_end(none_bb);
                 let none_val = codegen_expr(cg, body1, fctx)?;
-                let none_end = cg.builder.get_insert_block().unwrap();
+                let none_end = cg.builder.get_insert_block().expect("codegen: internal error");
                 if cg
                     .builder
                     .get_insert_block()
