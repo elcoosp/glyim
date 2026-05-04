@@ -1433,3 +1433,53 @@ main = () => {
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 10);
 }
+
+#[test]
+#[ignore = "nested generics (Vec<Vec<i64>>) not fully supported yet"]
+fn stress_nest_vec() {
+    let src = include_str!("../../../tests/stress/nest_vec.g");
+    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 0);
+}
+
+#[test]
+#[ignore = "nested generics (Option<Option<i64>>) not fully supported yet"]
+fn stress_nest_option() {
+    let src = include_str!("../../../tests/stress/nest_option.g");
+    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 42);
+}
+
+#[cfg(test)]
+mod arithmetic_proptests {
+    use glyim_cli::pipeline;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn add(a in 0i64..100, b in 0i64..100) {
+            let src = format!("main = () => {} + {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a + b);
+        }
+
+        #[test]
+        fn sub(a in 0i64..100, b in 0i64..100) {
+            let src = format!("main = () => {} - {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a - b);
+        }
+
+        #[test]
+        fn mul(a in 0i64..20, b in 0i64..20) {
+            let src = format!("main = () => {} * {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a * b);
+        }
+
+        #[test]
+        fn div(a in 1i64..100, b in 1i64..100) {
+            let src = format!("main = () => {} / {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a / b);
+        }
+    }
+}

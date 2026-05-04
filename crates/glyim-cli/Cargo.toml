@@ -55,3 +55,4 @@ trycmd = "0.15"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
+proptest = "1"

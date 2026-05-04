@@ -1274,6 +1274,7 @@ dependencies = [
  "libc",
  "owo-colors",
  "pretty",
+ "proptest",
  "rstest",
  "serde",
  "serde_json",

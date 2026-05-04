@@ -267,3 +267,11 @@ default:
 
 wr:
     watchexec -w ./wr.sh --clear -r "sh ./wr.sh"
+
+# Run stress tests
+stress-tests:
+    cargo test -p glyim-cli --test integration -- stress_
+
+# Run stress tests
+stress-tests:
+    cargo test -p glyim-cli --test integration -- stress_

@@ -7,6 +7,7 @@ mod resolver;
 mod scope;
 mod stmt;
 mod types;
+pub mod unify;
 
 pub use error::TypeError;
 pub use types::{EnumInfo, StructInfo};

@@ -1,7 +1,7 @@
-use inkwell::context::Context;
-use inkwell::types::BasicType;
 use glyim_codegen_llvm::Codegen;
 use glyim_interner::Interner;
+use inkwell::context::Context;
+use inkwell::types::BasicType;
 
 #[test]
 fn struct_field_ptr_returns_correct_address() {
@@ -16,16 +16,27 @@ fn struct_field_ptr_returns_correct_address() {
     builder.position_at_end(entry);
     let alloca = builder.build_alloca(struct_type, "s").unwrap();
     // Store values
-    let f0 = builder.build_struct_gep(struct_type, alloca, 0, "f0").unwrap();
-    let f1 = builder.build_struct_gep(struct_type, alloca, 1, "f1").unwrap();
-    builder.build_store(f0, i64_type.const_int(10, false)).unwrap();
-    builder.build_store(f1, i64_type.const_int(20, false)).unwrap();
+    let f0 = builder
+        .build_struct_gep(struct_type, alloca, 0, "f0")
+        .unwrap();
+    let f1 = builder
+        .build_struct_gep(struct_type, alloca, 1, "f1")
+        .unwrap();
+    builder
+        .build_store(f0, i64_type.const_int(10, false))
+        .unwrap();
+    builder
+        .build_store(f1, i64_type.const_int(20, false))
+        .unwrap();
 
-    let mut interner = Interner::new();
+    let interner = Interner::new();
     let cg = Codegen::new(&ctx, interner, vec![]);
     // We can't easily invoke struct_field_ptr with this minimal setup,
     // so just verify the struct field access works.
-    let loaded = builder.build_load(i64_type, f1, "loaded").unwrap().into_int_value();
+    let loaded = builder
+        .build_load(i64_type, f1, "loaded")
+        .unwrap()
+        .into_int_value();
     builder.build_return(Some(&loaded)).unwrap();
     assert!(func.verify(true));
 }
@@ -41,8 +52,13 @@ fn zeroed_alloca_contains_zero() {
     let entry = ctx.append_basic_block(func, "entry");
     builder.position_at_end(entry);
     let alloca = builder.build_alloca(i64_type, "var").unwrap();
-    builder.build_store(alloca, i64_type.const_int(0, false)).unwrap();
-    let loaded = builder.build_load(i64_type, alloca, "loaded").unwrap().into_int_value();
+    builder
+        .build_store(alloca, i64_type.const_int(0, false))
+        .unwrap();
+    let loaded = builder
+        .build_load(i64_type, alloca, "loaded")
+        .unwrap()
+        .into_int_value();
     builder.build_return(Some(&loaded)).unwrap();
     assert!(func.verify(true));
 }

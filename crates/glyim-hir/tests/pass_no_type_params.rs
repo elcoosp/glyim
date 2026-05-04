@@ -30,7 +30,7 @@ fn assert_no_type_params_panics_on_unresolved() {
 
 #[test]
 fn assert_no_type_params_ok_for_concrete() {
-    let mut interner = Interner::new();
+    let interner = Interner::new();
     let expr = glyim_hir::node::HirExpr::SizeOf {
         id: glyim_hir::types::ExprId::new(0),
         target_type: HirType::Int,
