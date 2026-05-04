@@ -49,10 +49,7 @@ pub(crate) fn codegen_stmt<'ctx>(
         } => {
             let val = super::expr::codegen_expr(cg, value, fctx)?;
             eprintln!("LET {} = {}", cg.interner.resolve(*name), val);
-            let alloca = cg
-                .builder
-                .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                .ok()?;
+            let alloca = cg.build_zeroed_alloca(cg.interner.resolve(*name)).ok()?;
             cg.builder.build_store(alloca, val).ok()?;
 
             if let (Some(di), Some(src), Some(sp)) =
@@ -191,15 +188,7 @@ pub(crate) fn codegen_stmt<'ctx>(
                 })
             });
             let field_ptr = if let Some(st) = struct_type_opt {
-                let indices = &[
-                    cg.i32_type.const_int(0, false),
-                    cg.i32_type.const_int(field_idx as u64, false),
-                ];
-                unsafe {
-                    cg.builder
-                        .build_gep(st, obj_ptr, indices, "assign_field")
-                        .ok()?
-                }
+                cg.struct_field_ptr(obj_ptr, st, field_idx as u32).ok()?
             } else {
                 return Some(cg.i64_type.const_int(0, false));
             };

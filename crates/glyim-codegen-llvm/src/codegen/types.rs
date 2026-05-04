@@ -82,14 +82,35 @@ pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef)
 }
 
 pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
-    // Compute max payload size as max over variants of (fields.len() * 8) because all fields are i64
-    let max_fields = def
-        .variants
-        .iter()
-        .map(|v| v.fields.len())
-        .max()
-        .unwrap_or(0);
-    let payload_bytes = (max_fields as u32) * 8;
+    // Compute payload size from actual field types (respects specialized generics)
+    let mut max_payload_bytes: u32 = 0;
+    for variant in &def.variants {
+        let mut variant_bytes: u32 = 0;
+        for field in &variant.fields {
+            if let Some(llvm_ty) = cg.hir_type_to_llvm(&field.ty) {
+                if let Some(size) = llvm_ty.size_of() {
+                    // Extract constant size value if possible
+                    if let Some(const_val) = size.get_zero_extended_constant() {
+                        variant_bytes += const_val as u32;
+                    } else {
+                        variant_bytes += 8; // fallback for non-constant sizes
+                    }
+                } else {
+                    variant_bytes += 8;
+                }
+            } else {
+                variant_bytes += 8;
+            }
+        }
+        if variant_bytes > max_payload_bytes {
+            max_payload_bytes = variant_bytes;
+        }
+    }
+    let payload_bytes = if max_payload_bytes == 0 {
+        8
+    } else {
+        max_payload_bytes
+    };
     let tag_type = cg.i32_type;
     let payload_type = cg.context.i8_type().array_type(payload_bytes);
     let enum_struct_type = cg.context.struct_type(

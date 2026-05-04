@@ -194,6 +194,26 @@ impl<'ctx> Codegen<'ctx> {
 
     #[tracing::instrument(skip_all)]
     pub fn generate(&mut self, hir: &Hir) -> Result<(), String> {
+        // Guard: no unresolved type params should reach codegen
+        for item in &hir.items {
+            match item {
+                glyim_hir::item::HirItem::Fn(f) => {
+                    glyim_hir::passes::no_type_params::assert_no_type_params(
+                        &f.body,
+                        &self.interner,
+                    );
+                }
+                glyim_hir::item::HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        glyim_hir::passes::no_type_params::assert_no_type_params(
+                            &m.body,
+                            &self.interner,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
         eprintln!("[codegen generate] =======================");
         for item in &hir.items {
             match item {
@@ -229,6 +249,28 @@ impl<'ctx> Codegen<'ctx> {
                 }
                 glyim_hir::item::HirItem::Struct(s) => {
                     eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
+                }
+                glyim_hir::item::HirItem::Enum(e) => {
+                    eprintln!(
+                        "[codegen]   Enum: {} (variants: {})",
+                        self.interner.resolve(e.name),
+                        e.variants.len()
+                    );
+                    for v in &e.variants {
+                        eprintln!(
+                            "[codegen]     variant: {} fields: {} tag: {}",
+                            self.interner.resolve(v.name),
+                            v.fields.len(),
+                            v.tag
+                        );
+                        for f in &v.fields {
+                            eprintln!(
+                                "[codegen]       field: {} type: {:?}",
+                                self.interner.resolve(f.name),
+                                f.ty
+                            );
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -338,13 +380,7 @@ impl<'ctx> Codegen<'ctx> {
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    let fn_name = self.interner.resolve(f.name);
-                    // Skip specialisations that still contain unresolved type params (suffix __T, __K, __V)
-                    if fn_name.contains("__T") || fn_name.contains("__K") || fn_name.contains("__V")
-                    {
-                        eprintln!("[codegen] skipping unspecialized function: {}", fn_name);
-                        continue;
-                    }
+                    // Monomorphizer now guarantees full concretization – no skip needed.
                     if let Err(e) = function::codegen_fn(self, f) {
                         self.report_error(e);
                     }
@@ -736,11 +772,17 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Vec<_>>()
                     .join("_");
                 let mangled_str = format!("{}__{}", base_str, args_str);
-                eprintln!("[resolve_struct_type] Generic: base_str={} args_str={} mangled={}", base_str, args_str, mangled_str);
+                eprintln!(
+                    "[resolve_struct_type] Generic: base_str={} args_str={} mangled={}",
+                    base_str, args_str, mangled_str
+                );
                 if let Some(_found) = self.interner.resolve_symbol(&mangled_str) {
                     eprintln!("[resolve_struct_type] FOUND in interner");
                 } else {
-                    eprintln!("[resolve_struct_type] NOT FOUND in interner ({} entries)", self.interner.len());
+                    eprintln!(
+                        "[resolve_struct_type] NOT FOUND in interner ({} entries)",
+                        self.interner.len()
+                    );
                 }
                 self.interner.resolve_symbol(&mangled_str)?
             }

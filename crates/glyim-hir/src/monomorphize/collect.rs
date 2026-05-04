@@ -9,18 +9,30 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn collect_and_specialize(&mut self) {
         for (expr_id, type_args) in self.call_type_args.iter() {
-            eprintln!("[mono DEBUG] first loop: expr_id={} type_args=[{}]",
-                      expr_id.as_usize(),
-                      type_args.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join(", "));
+            eprintln!(
+                "[mono DEBUG] first loop: expr_id={} type_args=[{}]",
+                expr_id.as_usize(),
+                type_args
+                    .iter()
+                    .map(|t| format!("{:?}", t))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             if type_args.iter().any(|a| self.has_unresolved_type_param(a)) {
                 continue;
             }
             if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
                 let callee_name = self.interner.resolve(callee);
-                eprintln!("[mono DEBUG] first loop: callee={} resolved_name={}", callee_name, callee_name);
+                eprintln!(
+                    "[mono DEBUG] first loop: callee={} resolved_name={}",
+                    callee_name, callee_name
+                );
                 // Skip mangled callees — their concrete types are already encoded in the name
                 if callee_name.contains("__") {
-                    eprintln!("[mono DEBUG] first loop: SKIPPING mangled callee {}", callee_name);
+                    eprintln!(
+                        "[mono DEBUG] first loop: SKIPPING mangled callee {}",
+                        callee_name
+                    );
                     continue;
                 }
                 self.queue_fn_specialization(callee, type_args.clone());
@@ -43,6 +55,10 @@ impl<'a> MonoContext<'a> {
             }
         }
 
+        // Enqueue type specializations based on call_type_args and HIR types
+        self.scan_hir_for_type_instantiations();
+        self.process_type_specializations();
+
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
@@ -55,23 +71,30 @@ impl<'a> MonoContext<'a> {
                 let fn_name_str = self.interner.resolve(fn_name).to_string();
                 if fn_name_str.contains("__") {
                     // Search call_type_args_overrides for an entry whose callee matches
-                    let overrides: Vec<_> = self.call_type_args_overrides.iter()
+                    let overrides: Vec<_> = self
+                        .call_type_args_overrides
+                        .iter()
                         .map(|(k, v)| (*k, v.clone()))
                         .collect();
                     let mut found_override = false;
                     for (expr_id, concrete_args) in &overrides {
                         if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
                             if callee == fn_name {
-                                eprintln!("[mono queue] using override for {}: {:?}", fn_name_str, concrete_args);
+                                eprintln!(
+                                    "[mono queue] using override for {}: {:?}",
+                                    fn_name_str, concrete_args
+                                );
                                 let specialized = self.specialize_fn(&generic_fn, concrete_args);
                                 let sub: HashMap<Symbol, HirType> = generic_fn
-                                    .type_params.iter()
+                                    .type_params
+                                    .iter()
                                     .zip(concrete_args.iter())
                                     .map(|(tp, ct)| (*tp, ct.clone()))
                                     .collect();
                                 self.scan_expr_for_generic_calls(&specialized.body, &sub);
                                 self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
-                                self.fn_specs.insert((fn_name, concrete_args.clone()), specialized);
+                                self.fn_specs
+                                    .insert((fn_name, concrete_args.clone()), specialized);
                                 found_override = true;
                                 break;
                             }
@@ -92,6 +115,11 @@ impl<'a> MonoContext<'a> {
                 self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
                 self.fn_specs.insert(key, specialized);
             }
+        }
+
+        // Run type specialization to fixpoint – new specialisations may produce further types
+        while !self.type_work_queue.is_empty() {
+            self.process_type_specializations();
         }
     }
 
@@ -208,7 +236,7 @@ impl<'a> MonoContext<'a> {
         args.iter().map(|ty| self.concretize_type(ty)).collect()
     }
 
-    fn concretize_type(&mut self, ty: &HirType) -> HirType {
+    pub(crate) fn concretize_type(&mut self, ty: &HirType) -> HirType {
         match ty {
             HirType::Generic(sym, inner_args) => {
                 let concrete_inner: Vec<HirType> =
@@ -218,16 +246,8 @@ impl<'a> MonoContext<'a> {
                     .all(|a| !self.has_unresolved_type_param(a));
                 if all_concrete {
                     let key = (*sym, concrete_inner.clone());
-                    if self.struct_specs.contains_key(&key) {
-                        let mangled = self.interner.intern(&format!(
-                            "{}__{}",
-                            self.interner.resolve(*sym),
-                            concrete_inner
-                                .iter()
-                                .map(|t| super::mangling::type_to_short_string(t, self.interner))
-                                .collect::<Vec<_>>()
-                                .join("_")
-                        ));
+                    if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
+                        let mangled = self.mangle_name(*sym, &concrete_inner);
                         return HirType::Named(mangled);
                     }
                 }
@@ -240,20 +260,36 @@ impl<'a> MonoContext<'a> {
             | HirType::Str
             | HirType::Unit
             | HirType::Never
-            | HirType::Opaque(_) => ty.clone(),
-            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
-            HirType::Option(inner) => HirType::Option(Box::new(self.concretize_type(inner))),
-            HirType::Result(ok, err) => HirType::Result(
-                Box::new(self.concretize_type(ok)),
-                Box::new(self.concretize_type(err)),
-            ),
+            | HirType::Opaque(_) => {
+                eprintln!("[concretize_type] leaf type {:?}", ty);
+                ty.clone()
+            }
+            HirType::RawPtr(inner) => {
+                eprintln!("[concretize_type] RawPtr");
+                HirType::RawPtr(Box::new(self.concretize_type(inner)))
+            }
+            HirType::Option(inner) => {
+                eprintln!("[concretize_type] Option");
+                HirType::Option(Box::new(self.concretize_type(inner)))
+            }
+            HirType::Result(ok, err) => {
+                eprintln!("[concretize_type] Result");
+                HirType::Result(
+                    Box::new(self.concretize_type(ok)),
+                    Box::new(self.concretize_type(err)),
+                )
+            }
             HirType::Tuple(elems) => {
+                eprintln!("[concretize_type] Tuple");
                 HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect())
             }
-            HirType::Func(params, ret) => HirType::Func(
-                params.iter().map(|p| self.concretize_type(p)).collect(),
-                Box::new(self.concretize_type(ret)),
-            ),
+            HirType::Func(params, ret) => {
+                eprintln!("[concretize_type] Func");
+                HirType::Func(
+                    params.iter().map(|p| self.concretize_type(p)).collect(),
+                    Box::new(self.concretize_type(ret)),
+                )
+            }
         }
     }
 
@@ -277,9 +313,15 @@ impl<'a> MonoContext<'a> {
         current_sub: &HashMap<Symbol, HirType>,
     ) {
         match expr {
-            HirExpr::Call { id, callee, args, .. } => {
+            HirExpr::Call {
+                id, callee, args, ..
+            } => {
                 let callee_name = self.interner.resolve(*callee).to_string();
-                eprintln!("[mono scan DEBUG] Call callee={} id={}", callee_name, id.as_usize());
+                eprintln!(
+                    "[mono scan DEBUG] Call callee={} id={}",
+                    callee_name,
+                    id.as_usize()
+                );
                 // For mangled callees (e.g., Vec_get__Entry_i64_i64), extract the base
                 // function name and specialize it with the receiver's concrete type args.
                 if callee_name.contains("__") {
@@ -293,7 +335,10 @@ impl<'a> MonoContext<'a> {
                                 let concrete = self.substitute_type_args(&type_args, current_sub);
                                 if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
                                     let base_sym = self.interner.intern(base_name);
-                                    eprintln!("[mono scan DEBUG] specializing base fn={} with {:?}", base_name, concrete);
+                                    eprintln!(
+                                        "[mono scan DEBUG] specializing base fn={} with {:?}",
+                                        base_name, concrete
+                                    );
                                     self.call_type_args_overrides.insert(*id, concrete.clone());
                                     self.queue_fn_specialization(base_sym, concrete);
                                 }
@@ -308,7 +353,11 @@ impl<'a> MonoContext<'a> {
                 let fn_def_opt = self.find_fn(*callee);
                 if let Some(ref fn_def) = fn_def_opt {
                     if !fn_def.type_params.is_empty() {
-                        eprintln!("[mono scan] Call callee={} found fn_def with {} type_params", callee_name, fn_def.type_params.len());
+                        eprintln!(
+                            "[mono scan] Call callee={} found fn_def with {} type_params",
+                            callee_name,
+                            fn_def.type_params.len()
+                        );
                         if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
                             let substituted = self.substitute_type_args(type_args, current_sub);
                             let concrete_args = self.concretize_type_args(&substituted);
@@ -362,12 +411,17 @@ impl<'a> MonoContext<'a> {
 
                             // SAFE FALLBACK (inner): inside else block for no call_type_args
                             if sub.is_empty()
-                                && !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
+                                && !self
+                                    .body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
                             {
                                 let concrete: Vec<HirType> =
                                     fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                                eprintln!("[mono scan] SAFE FALLBACK (inner): queueing {} with [Int]", callee_name);
-                                self.call_type_args_overrides.insert(expr.get_id(), concrete.clone());
+                                eprintln!(
+                                    "[mono scan] SAFE FALLBACK (inner): queueing {} with [Int]",
+                                    callee_name
+                                );
+                                self.call_type_args_overrides
+                                    .insert(expr.get_id(), concrete.clone());
                                 self.queue_fn_specialization(*callee, concrete);
                             }
                         }
@@ -382,8 +436,12 @@ impl<'a> MonoContext<'a> {
                         if !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params) {
                             let concrete: Vec<HirType> =
                                 fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                            eprintln!("[mono scan] SAFE FALLBACK (outer): queueing {} with [Int]", callee_name);
-                            self.call_type_args_overrides.insert(expr.get_id(), concrete.clone());
+                            eprintln!(
+                                "[mono scan] SAFE FALLBACK (outer): queueing {} with [Int]",
+                                callee_name
+                            );
+                            self.call_type_args_overrides
+                                .insert(expr.get_id(), concrete.clone());
                             self.queue_fn_specialization(*callee, concrete);
                         }
                     }
@@ -766,6 +824,224 @@ impl<'a> MonoContext<'a> {
                 }
             }
             _ => {}
+        }
+    }
+    /// Enqueue a concrete type for specialization if it contains generic components.
+    /// Recursively processes nested Generic types.
+    pub(crate) fn enqueue_type_if_generic(&mut self, ty: &HirType) {
+        eprintln!("[enqueue] ty={:?}", ty);
+        match ty {
+            HirType::Generic(sym, args) => {
+                let concrete_args = self.concretize_type_args(args);
+                if !concrete_args
+                    .iter()
+                    .any(|a| self.has_unresolved_type_param(a))
+                {
+                    let key = (*sym, concrete_args.clone());
+                    if !self.type_queued.contains(&key) {
+                        self.type_queued.insert(key.clone());
+                        self.type_work_queue.push(key);
+                    }
+                }
+                // Recurse into args
+                for a in args {
+                    self.enqueue_type_if_generic(a);
+                }
+            }
+            HirType::Named(_)
+            | HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Opaque(_)
+            | HirType::RawPtr(_)
+            | HirType::Option(_)
+            | HirType::Result(_, _)
+            | HirType::Func(_, _) => {
+                // Sub-components: Option, Result, RawPtr
+                match ty {
+                    HirType::Option(inner) => self.enqueue_type_if_generic(inner),
+                    HirType::Result(ok, err) => {
+                        self.enqueue_type_if_generic(ok);
+                        self.enqueue_type_if_generic(err);
+                    }
+                    HirType::RawPtr(inner) => self.enqueue_type_if_generic(inner),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Walk all HIR expressions to find type instantiations and enqueue them.
+    pub(crate) fn scan_hir_for_type_instantiations(&mut self) {
+        for item in &self.hir.items {
+            match item {
+                HirItem::Fn(f) => {
+                    self.scan_expr_for_type_instantiations(&f.body);
+                }
+                HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        self.scan_expr_for_type_instantiations(&m.body);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Enqueue types from expression types (call_type_args and type_overrides)
+        let call_type_args_vals: Vec<Vec<HirType>> =
+            self.call_type_args.values().cloned().collect();
+        for type_args in &call_type_args_vals {
+            for ty in type_args {
+                eprintln!("[scan_hir] enqueue from call_type_args: {:?}", ty);
+                self.enqueue_type_if_generic(ty);
+            }
+        }
+        let override_types: Vec<HirType> = self.type_overrides.values().cloned().collect();
+        for ty in override_types {
+            eprintln!("[scan_hir] enqueue from type_overrides: {:?}", ty);
+            self.enqueue_type_if_generic(&ty);
+        }
+    }
+
+    fn scan_expr_for_type_instantiations(&mut self, expr: &HirExpr) {
+        match expr {
+            HirExpr::EnumVariant { id, args, .. } => {
+                let expr_type = self.get_expr_type(*id);
+                eprintln!(
+                    "[scan_expr_type] EnumVariant id={:?} type={:?}",
+                    id, expr_type
+                );
+                if let Some(ty) = expr_type {
+                    self.enqueue_type_if_generic(&ty);
+                }
+                for a in args {
+                    self.scan_expr_for_type_instantiations(a);
+                }
+            }
+            HirExpr::StructLit { id, fields, .. } => {
+                let expr_type = self.get_expr_type(*id);
+                if let Some(ty) = expr_type {
+                    self.enqueue_type_if_generic(&ty);
+                }
+                for (_, val) in fields {
+                    self.scan_expr_for_type_instantiations(val);
+                }
+            }
+            HirExpr::Call { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    self.scan_expr_for_type_instantiations(a);
+                }
+            }
+            HirExpr::Block { stmts, .. } => {
+                for stmt in stmts {
+                    match stmt {
+                        HirStmt::Expr(e)
+                        | HirStmt::Let { value: e, .. }
+                        | HirStmt::LetPat { value: e, .. }
+                        | HirStmt::Assign { value: e, .. }
+                        | HirStmt::AssignField { value: e, .. } => {
+                            self.scan_expr_for_type_instantiations(e);
+                        }
+                        HirStmt::AssignDeref { target, value, .. } => {
+                            self.scan_expr_for_type_instantiations(target);
+                            self.scan_expr_for_type_instantiations(value);
+                        }
+                    }
+                }
+            }
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.scan_expr_for_type_instantiations(condition);
+                self.scan_expr_for_type_instantiations(then_branch);
+                if let Some(e) = else_branch {
+                    self.scan_expr_for_type_instantiations(e);
+                }
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                self.scan_expr_for_type_instantiations(scrutinee);
+                for (_, guard, body) in arms {
+                    if let Some(g) = guard {
+                        self.scan_expr_for_type_instantiations(g);
+                    }
+                    self.scan_expr_for_type_instantiations(body);
+                }
+            }
+            HirExpr::While {
+                condition, body, ..
+            }
+            | HirExpr::ForIn {
+                iter: condition,
+                body,
+                ..
+            } => {
+                self.scan_expr_for_type_instantiations(condition);
+                self.scan_expr_for_type_instantiations(body);
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.scan_expr_for_type_instantiations(lhs);
+                self.scan_expr_for_type_instantiations(rhs);
+            }
+            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
+                self.scan_expr_for_type_instantiations(operand);
+            }
+            HirExpr::Return { value: Some(v), .. } => {
+                self.scan_expr_for_type_instantiations(v);
+            }
+            _ => {}
+        }
+    }
+
+    /// Process the type specialization queue recursively.
+    pub(crate) fn process_type_specializations(&mut self) {
+        eprintln!(
+            "[process_type_spec] queue length: {}",
+            self.type_work_queue.len()
+        );
+        while let Some((name, args)) = self.type_work_queue.pop() {
+            eprintln!(
+                "[process_type_spec] processing {:?} with args {:?}",
+                self.interner.resolve(name),
+                args
+            );
+            let key = (name, args.clone());
+            if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
+                continue;
+            }
+            if let Some(struct_def) = self.find_struct(name) {
+                let specialized = self.specialize_struct(&struct_def, &args);
+                // Scan field types for nested generics
+                for field in &specialized.fields {
+                    self.enqueue_type_if_generic(&field.ty);
+                }
+                self.struct_specs.insert(key, specialized);
+            } else if let Some(enum_def) = self.find_enum(name) {
+                let specialized = self.specialize_enum(&enum_def, &args);
+                eprintln!(
+                    "[process_type_spec] specialized enum {} with args {:?}",
+                    self.interner.resolve(name),
+                    args
+                );
+                // Scan variant types for nested generics
+                for variant in &specialized.variants {
+                    for field in &variant.fields {
+                        self.enqueue_type_if_generic(&field.ty);
+                    }
+                }
+                self.enum_specs.insert(key, specialized);
+                eprintln!(
+                    "[process_type_spec] inserted into enum_specs, count={}",
+                    self.enum_specs.len()
+                );
+            }
         }
     }
 }

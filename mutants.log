@@ -1,0 +1,130 @@
+Found 234 mutants to test
+ok       Unmutated baseline in 7s build + 2s test
+ INFO Auto-set test timeout to 20s
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:69:9: replace TypeChecker::register_visibility with () in 6s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:81:17: delete match arm glyim_hir::item::HirItem::Impl(imp) in TypeChecker::check in 2s build + 3s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:101:9: replace TypeChecker::extract_option_inner -> Option<HirType> with None in 1s build + 2s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:102:13: delete match arm HirType::Option(inner) in TypeChecker::extract_option_inner in 2s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:103:45: replace match guard args.len() == 1 with true in TypeChecker::extract_option_inner in 2s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:103:45: replace match guard args.len() == 1 with false in TypeChecker::extract_option_inner in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:103:56: replace == with != in TypeChecker::extract_option_inner in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:105:29: replace == with != in TypeChecker::extract_option_inner in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:116:9: replace TypeChecker::extract_result_inner -> Option<(HirType, HirType)> with None in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:117:13: delete match arm HirType::Result(ok, err) in TypeChecker::extract_result_inner in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:118:45: replace match guard args.len() == 2 with true in TypeChecker::extract_result_inner in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:118:45: replace match guard args.len() == 2 with false in TypeChecker::extract_result_inner in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:118:56: replace == with != in TypeChecker::extract_result_inner in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:120:29: replace == with != in TypeChecker::extract_result_inner in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:131:9: replace TypeChecker::bind_match_pattern with () in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:149:72: replace == with != in TypeChecker::bind_match_pattern in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:171:21: delete match arm HirType::Named(enum_name) | HirType::Generic(enum_name, _) in TypeChecker::bind_match_pattern in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:174:70: replace == with != in TypeChecker::bind_match_pattern in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/mod.rs:228:9: replace TypeChecker::get_expr_type -> Option<&HirType> with None in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/error.rs:45:9: replace <impl Diagnostic for TypeError>::severity -> Option<miette::Severity> with None in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/error.rs:45:9: replace <impl Diagnostic for TypeError>::severity -> Option<miette::Severity> with Some(Default::default()) in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/error.rs:49:9: replace <impl Diagnostic for TypeError>::help -> Option<Box<dyn std::fmt::Display +'a>> with None in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/error.rs:70:16: delete ! in <impl Diagnostic for TypeError>::help in 1s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:130:66: replace == with != in TypeChecker::infer_expr in 1s build + 3s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:182:21: delete match arm HirType::RawPtr(inner) in TypeChecker::infer_expr in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:133:70: replace == with != in TypeChecker::infer_expr in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:215:59: replace match guard !type_args.is_empty() with true in TypeChecker::infer_expr in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:215:59: replace match guard !type_args.is_empty() with false in TypeChecker::infer_expr in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:215:59: delete ! in TypeChecker::infer_expr in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:240:72: replace == with != in TypeChecker::infer_expr in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:254:48: replace != with == in TypeChecker::infer_expr in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:255:48: replace != with == in TypeChecker::infer_expr in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:266:32: delete ! in TypeChecker::infer_expr in 1s build + 4s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:309:21: replace && with || in TypeChecker::check_struct_lit in 2s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:308:20: delete ! in TypeChecker::check_struct_lit in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:309:41: replace == with != in TypeChecker::check_struct_lit in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:328:58: replace match guard info.type_params.contains(v_sym) with true in TypeChecker::check_struct_lit in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:328:58: replace match guard info.type_params.contains(v_sym) with false in TypeChecker::check_struct_lit in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:352:13: delete match arm HirType::Tuple(elems) in TypeChecker::check_field_access in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:388:20: replace < with == in TypeChecker::check_tuple_field_access in 2s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:388:20: replace < with > in TypeChecker::check_tuple_field_access in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:388:20: replace < with <= in TypeChecker::check_tuple_field_access in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:429:28: replace == with != in TypeChecker::check_enum_variant in 1s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:416:16: delete ! in TypeChecker::check_enum_variant in 2s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:467:67: replace == with != in TypeChecker::check_call_with_type_args in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:472:70: replace == with != in TypeChecker::check_call_with_type_args in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:529:66: replace == with != in TypeChecker::check_call_with_type_args in 2s build + 3s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:530:51: replace && with || in TypeChecker::check_call_with_type_args in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:530:20: delete ! in TypeChecker::check_call_with_type_args in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:530:54: delete ! in TypeChecker::check_call_with_type_args in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:536:35: replace == with != in TypeChecker::check_call_with_type_args in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/expr.rs:543:34: replace == with != in TypeChecker::check_call_with_type_args in 1s build + 4s test
+MISSED   crates/glyim-typeck/src/typeck/function.rs:24:25: delete match arm (HirType::Named(s1), HirType::Generic(s2, _)) in TypeChecker::check_fn in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/function.rs:23:25: delete match arm (HirType::Generic(s1, _), HirType::Named(s2)) in TypeChecker::check_fn in 3s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/function.rs:23:77: replace == with != in TypeChecker::check_fn in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/function.rs:25:25: delete match arm (HirType::Generic(s1, _), HirType::Generic(s2, _)) in TypeChecker::check_fn in 2s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/function.rs:24:77: replace == with != in TypeChecker::check_fn in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/function.rs:25:82: replace == with != in TypeChecker::check_fn in 1s build + 4s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:43:13: delete match arm HirType::Option(_) in TypeChecker::get_enum_variants in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:46:13: delete match arm HirType::Result(_, _) in TypeChecker::get_enum_variants in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:60:9: replace TypeChecker::get_builtin_enum_variants -> Vec<Symbol> with vec![] in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:81:17: delete match arm HirPattern::OptionSome(_) in TypeChecker::collect_covered_variants in 1s build + 4s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:82:17: delete match arm HirPattern::OptionNone in TypeChecker::collect_covered_variants in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:83:17: delete match arm HirPattern::ResultOk(_) in TypeChecker::collect_covered_variants in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/match_check.rs:84:17: delete match arm HirPattern::ResultErr(_) in TypeChecker::collect_covered_variants in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/register.rs:65:16: delete ! in TypeChecker::register_impl in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/register.rs:72:56: replace + with * in TypeChecker::register_impl in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/register.rs:72:56: replace + with - in TypeChecker::register_impl in 3s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/register.rs:84:9: replace TypeChecker::register_extern with () in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:7:9: delete match arm HirType::Named(sym) in resolve_named_type in 1s build + 4s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:8:13: delete match arm "f64" | "Float" in resolve_named_type in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:9:13: delete match arm "i64" | "Int" in resolve_named_type in 2s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:10:13: delete match arm "bool" | "Bool" in resolve_named_type in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:11:13: delete match arm "Str" | "str" in resolve_named_type in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:22:13: delete match arm HirType::Named(sym) in is_valid_cast in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:24:41: replace || with && in is_valid_cast in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:26:48: replace || with && in is_valid_cast in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:28:49: replace || with && in is_valid_cast in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:30:48: replace || with && in is_valid_cast in 1s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:45:9: delete match arm (HirType::Int, HirType::Int) |(HirType::Float, HirType::Float) in is_valid_cast in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:47:9: delete match arm (HirType::RawPtr{..}, _) in is_valid_cast in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:49:9: delete match arm (HirType::Named(_), HirType::Int) |(HirType::Generic(_, _), HirType::Int) in is_valid_cast in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:50:9: delete match arm (_, HirType::Named(_)) in is_valid_cast in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/resolver.rs:51:19: replace match guard a == b with false in is_valid_cast in 1s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:44:9: replace TypeChecker::unify_types with () in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:89:13: delete match arm (HirType::RawPtr(conc_inner), HirType::RawPtr(gen_inner)) in TypeChecker::unify_types in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:46:46: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 3s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:46:46: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 2s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:50:57: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:50:57: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:53:59: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:53:59: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:56:58: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:56:58: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:59:57: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:59:57: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:64:20: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:64:20: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:70:20: replace match guard conc_name == gen_name && conc_args.len() == gen_args.len() with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:70:20: replace match guard conc_name == gen_name && conc_args.len() == gen_args.len() with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:78:20: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:78:20: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:84:20: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:84:20: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:94:20: replace match guard conc_elems.len() == gen_elems.len() with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:94:20: replace match guard conc_elems.len() == gen_elems.len() with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:101:46: replace match guard type_params.contains(gen_name) with true in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:101:46: replace match guard type_params.contains(gen_name) with false in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:70:42: replace && with || in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:70:30: replace == with != in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:70:61: replace == with != in TypeChecker::unify_types in 1s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/scope.rs:94:37: replace == with != in TypeChecker::unify_types in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:37:29: delete match arm (HirType::Generic(a, _), HirType::Named(b)) in TypeChecker::check_stmt in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:38:29: delete match arm (HirType::Named(a), HirType::Generic(b, _)) in TypeChecker::check_stmt in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:37:78: replace == with != in TypeChecker::check_stmt in 2s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:38:78: replace == with != in TypeChecker::check_stmt in 1s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:56:28: delete ! in TypeChecker::check_stmt in 1s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:58:65: replace == with != in TypeChecker::check_stmt in 2s build + 7s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:61:82: replace == with != in TypeChecker::check_stmt in 3s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:64:36: delete ! in TypeChecker::check_stmt in 3s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:73:50: replace == with != in TypeChecker::check_stmt in 1s build + 9s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:124:21: delete match arm HirType::RawPtr(inner) in TypeChecker::check_stmt in 1s build + 5s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:125:35: replace != with == in TypeChecker::check_stmt in 2s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:160:13: delete match arm HirPattern::Wild in TypeChecker::bind_pattern in 1s build + 6s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:161:13: delete match arm HirPattern::Tuple{elements, ..} in TypeChecker::bind_pattern in 2s build + 8s test
+MISSED   crates/glyim-typeck/src/typeck/stmt.rs:168:13: delete match arm HirPattern::Struct{name, bindings, ..} in TypeChecker::bind_pattern in 2s build + 8s test
+234 mutants tested in 6m: 126 missed, 67 caught, 41 unviable

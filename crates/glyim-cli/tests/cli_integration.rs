@@ -1,6 +1,6 @@
 use glyim_macro_vfs::ContentStore;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::Command;
 
 // ── Helpers ────────────────────────────────────────────────
 

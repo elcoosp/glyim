@@ -9,10 +9,19 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
 
-        eprintln!("[specialize_fn] ENTER fn={} type_params=[{}] concrete={:?}",
-                  self.interner.resolve(f.name),
-                  f.type_params.iter().map(|s| self.interner.resolve(*s)).collect::<Vec<_>>().join(", "),
-                  concrete.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>());
+        eprintln!(
+            "[specialize_fn] ENTER fn={} type_params=[{}] concrete={:?}",
+            self.interner.resolve(f.name),
+            f.type_params
+                .iter()
+                .map(|s| self.interner.resolve(*s))
+                .collect::<Vec<_>>()
+                .join(", "),
+            concrete
+                .iter()
+                .map(|t| format!("{:?}", t))
+                .collect::<Vec<_>>()
+        );
 
         // Use explicit type parameters of the function if present
         for (i, tp) in f.type_params.iter().enumerate() {

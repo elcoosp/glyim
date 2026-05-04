@@ -18,13 +18,17 @@ impl TypeChecker {
             if let Some(expected) = &f.ret
                 && let Some(actual) = body_type
             {
-                let is_match = *expected == actual
-                    || match (expected.clone(), actual.clone()) {
-                        (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
-                        (HirType::Named(s1), HirType::Generic(s2, _)) => s1 == s2,
-                        (HirType::Generic(s1, _), HirType::Generic(s2, _)) => s1 == s2,
-                        _ => false,
-                    };
+                // Use unify if type params present
+                let is_match = if !f.type_params.is_empty() {
+                    crate::typeck::unify::unify(&actual, expected, &f.type_params).is_ok()
+                } else {
+                    *expected == actual
+                } || match (expected.clone(), actual.clone()) {
+                    (HirType::Generic(s1, _), HirType::Named(s2)) => s1 == s2,
+                    (HirType::Named(s1), HirType::Generic(s2, _)) => s1 == s2,
+                    (HirType::Generic(s1, _), HirType::Generic(s2, _)) => s1 == s2,
+                    _ => false,
+                };
                 if !is_match {
                     tc.errors.push(TypeError::InvalidReturnType {
                         expected: expected.clone(),

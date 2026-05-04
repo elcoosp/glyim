@@ -1397,3 +1397,89 @@ fn e2e_no_std_manifest_disables_prelude() {
         result.err()
     );
 }
+#[test]
+fn e2e_hashmap_insert_and_get() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m: HashMap<i64, i64> = HashMap::new();
+    let m = m.insert(1, 100);
+    let m = m.insert(2, 200);
+    match m.get(2) {
+        Some(v) => v,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 200);
+}
+
+#[test]
+fn e2e_range_for_loop_sum() {
+    let range_src = include_str!("../../../stdlib/src/range.g");
+    let main_code = r#"
+main = () => {
+    let mut sum = 0;
+    for i in Range::new(1, 5) {
+        sum = sum + i
+    };
+    sum
+}
+"#;
+    let full_src = format!("{}\n{}", range_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 10);
+}
+
+#[test]
+#[ignore = "nested generics: 0 as T in struct literals needs rewriting"]
+fn stress_nest_vec() {
+    let src = include_str!("../../../tests/stress/nest_vec.g");
+    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 0);
+}
+
+#[test]
+#[ignore = "nested generics: type annotations need full concretization pass"]
+fn stress_nest_option() {
+    let src = include_str!("../../../tests/stress/nest_option.g");
+    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 42);
+}
+
+#[cfg(test)]
+mod arithmetic_proptests {
+    use glyim_cli::pipeline;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn add(a in 0i64..100, b in 0i64..100) {
+            let src = format!("main = () => {} + {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a + b);
+        }
+
+        #[test]
+        fn sub(a in 0i64..100, b in 0i64..100) {
+            let src = format!("main = () => {} - {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a - b);
+        }
+
+        #[test]
+        fn mul(a in 0i64..20, b in 0i64..20) {
+            let src = format!("main = () => {} * {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a * b);
+        }
+
+        #[test]
+        fn div(a in 1i64..100, b in 1i64..100) {
+            let src = format!("main = () => {} / {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a / b);
+        }
+    }
+}

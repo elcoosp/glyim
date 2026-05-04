@@ -1,7 +1,8 @@
+use crate::monomorphize::mangle_table::MangleTable;
 // crates/glyim-hir/src/monomorphize/context.rs
 use super::*;
 use crate::HirPattern;
-use crate::item::HirItem;
+use crate::item::{EnumDef, HirItem};
 use crate::node::{HirExpr, HirFn, HirStmt};
 use crate::types::HirType;
 use glyim_interner::Symbol;
@@ -25,6 +26,10 @@ impl<'a> MonoContext<'a> {
             fn_work_queue: Vec::new(),
             fn_queued: HashSet::new(),
             call_type_args_overrides: HashMap::new(),
+            mangle_table: MangleTable::new(),
+            enum_specs: HashMap::new(),
+            type_work_queue: Vec::new(),
+            type_queued: HashSet::new(),
         }
     }
 
@@ -48,7 +53,7 @@ impl<'a> MonoContext<'a> {
             let base_str = self.interner.resolve(base_name).to_string();
             if let Some(us_pos) = base_str.rfind('_') {
                 let type_name = &base_str[..us_pos];
-                let method_name = &base_str[us_pos+1..];
+                let method_name = &base_str[us_pos + 1..];
                 if type_name.starts_with(|c: char| c.is_uppercase()) {
                     let type_sym = self.interner.intern(type_name);
                     let method_sym = self.interner.intern(method_name);
@@ -144,8 +149,19 @@ impl<'a> MonoContext<'a> {
         None
     }
 
+    pub(crate) fn find_enum(&self, name: Symbol) -> Option<EnumDef> {
+        for item in &self.hir.items {
+            if let HirItem::Enum(e) = item
+                && e.name == name
+            {
+                return Some(e.clone());
+            }
+        }
+        None
+    }
+
     pub(crate) fn mangle_name(&mut self, base: Symbol, type_args: &[HirType]) -> Symbol {
-        mangle_type_name(self.interner, base, type_args)
+        self.mangle_table.mangle(base, type_args, self.interner)
     }
 
     /// Check if a type contains any unresolved type parameters (single uppercase letters)
@@ -433,6 +449,23 @@ impl<'a> MonoContext<'a> {
                 .map(|ty| crate::types::substitute_type(ty, sub))
                 .collect()
         }
+    }
+
+    pub(crate) fn specialize_enum(&mut self, e: &EnumDef, concrete: &[HirType]) -> EnumDef {
+        let mut sub = HashMap::new();
+        for (i, tp) in e.type_params.iter().enumerate() {
+            if let Some(ct) = concrete.get(i) {
+                sub.insert(*tp, ct.clone());
+            }
+        }
+        let mut mono = e.clone();
+        mono.type_params.clear();
+        for variant in &mut mono.variants {
+            for field in &mut variant.fields {
+                field.ty = crate::types::substitute_type(&field.ty, &sub);
+            }
+        }
+        mono
     }
 
     pub(crate) fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {

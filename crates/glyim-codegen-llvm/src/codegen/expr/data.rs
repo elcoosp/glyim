@@ -3,7 +3,7 @@ use crate::codegen::ctx::FunctionContext;
 use crate::codegen::expr::codegen_expr;
 use glyim_hir::{HirExpr, HirType};
 use inkwell::AddressSpace;
-use inkwell::values::{BasicValue, IntValue};
+use inkwell::values::IntValue;
 
 pub(crate) fn codegen_struct_lit<'ctx>(
     cg: &Codegen<'ctx>,

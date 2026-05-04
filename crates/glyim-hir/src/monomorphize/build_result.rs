@@ -42,6 +42,35 @@ impl<'a> MonoContext<'a> {
             items.push(HirItem::Struct(mono_s));
         }
 
+        // Emit specialized enums (with mangled names)
+        let enum_specs: Vec<_> = self
+            .enum_specs
+            .iter()
+            .filter(|((_, args), _)| !args.iter().any(|a| self.has_unresolved_type_param(a)))
+            .map(|((orig_name, args), e)| (*orig_name, args.clone(), e.clone()))
+            .collect();
+
+        for (_, args, e) in enum_specs {
+            let mangled = self.mangle_name(e.name, &args);
+            let mut mono_e = e;
+            mono_e.name = mangled;
+            items.push(HirItem::Enum(mono_e));
+        }
+
+        // Build enum_spec_map from specialized enums
+        let enum_specs_for_map: Vec<_> = self
+            .enum_specs
+            .iter()
+            .filter(|((_, args), _)| !args.iter().any(|a| self.has_unresolved_type_param(a)))
+            .map(|((orig_name, args), _)| (*orig_name, args.clone()))
+            .collect();
+
+        let mut enum_spec_map: HashMap<(Symbol, Vec<HirType>), Symbol> = HashMap::new();
+        for (orig_name, args) in enum_specs_for_map {
+            let mangled = self.mangle_name(orig_name, &args);
+            enum_spec_map.insert((orig_name, args.clone()), mangled);
+        }
+
         // Build fn_mangle_map from specialized functions
         let fn_specs: Vec<_> = self
             .fn_specs
@@ -75,8 +104,13 @@ impl<'a> MonoContext<'a> {
         for item in &self.hir.items {
             match item {
                 HirItem::Fn(f) if f.type_params.is_empty() => {
-                    let rewritten =
-                        self.rewrite_fn(f, &fn_mangle_map, &struct_mangle_map, &empty_sub);
+                    let rewritten = self.rewrite_fn(
+                        f,
+                        &fn_mangle_map,
+                        &struct_mangle_map,
+                        &enum_spec_map,
+                        &empty_sub,
+                    );
                     items.push(HirItem::Fn(rewritten));
                 }
                 HirItem::Struct(s) if s.type_params.is_empty() => {
@@ -87,8 +121,13 @@ impl<'a> MonoContext<'a> {
                 HirItem::Impl(imp) if imp.type_params.is_empty() => {
                     for m in &imp.methods {
                         if m.type_params.is_empty() {
-                            let rewritten =
-                                self.rewrite_fn(m, &fn_mangle_map, &struct_mangle_map, &empty_sub);
+                            let rewritten = self.rewrite_fn(
+                                m,
+                                &fn_mangle_map,
+                                &struct_mangle_map,
+                                &enum_spec_map,
+                                &empty_sub,
+                            );
                             items.push(HirItem::Fn(rewritten));
                         }
                     }
@@ -110,10 +149,74 @@ impl<'a> MonoContext<'a> {
                 .map(|(tp, ct)| (*tp, ct.clone()))
                 .collect();
 
-            let mono_f = self.rewrite_fn(&mono_f, &fn_mangle_map, &struct_mangle_map, &type_sub);
+            let mono_f = self.rewrite_fn(
+                &mono_f,
+                &fn_mangle_map,
+                &struct_mangle_map,
+                &enum_spec_map,
+                &type_sub,
+            );
             items.push(HirItem::Fn(mono_f));
         }
 
+        // Concretize all remaining Generic types to Named(mangled)
+
+        // Concretize all remaining Generic types to Named(mangled) in the output items
+        for item in &mut items {
+            match item {
+                crate::item::HirItem::Fn(f) => {
+                    for (_, ty) in &mut f.params {
+                        *ty = self.concretize_type(ty);
+                    }
+                    if let Some(ret) = &mut f.ret {
+                        *ret = self.concretize_type(ret);
+                    }
+                }
+                crate::item::HirItem::Struct(s) => {
+                    for field in &mut s.fields {
+                        field.ty = self.concretize_type(&field.ty);
+                    }
+                }
+                crate::item::HirItem::Enum(e) => {
+                    for variant in &mut e.variants {
+                        for field in &mut variant.fields {
+                            field.ty = self.concretize_type(&field.ty);
+                        }
+                    }
+                }
+                crate::item::HirItem::Impl(imp) => {
+                    for m in &mut imp.methods {
+                        for (_, ty) in &mut m.params {
+                            *ty = self.concretize_type(ty);
+                        }
+                        if let Some(ret) = &mut m.ret {
+                            *ret = self.concretize_type(ret);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Assert no unresolved type parameters before returning
+        for item in &items {
+            match item {
+                crate::item::HirItem::Fn(f) => {
+                    crate::passes::no_type_params::assert_no_type_params(&f.body, self.interner);
+                }
+                crate::item::HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        crate::passes::no_type_params::assert_no_type_params(
+                            &m.body,
+                            self.interner,
+                        );
+                    }
+                }
+                crate::item::HirItem::Struct(_) => {}
+                crate::item::HirItem::Enum(_) => {}
+                crate::item::HirItem::Extern(_) => {}
+            }
+        }
         MonoResult {
             hir: crate::Hir { items },
             type_overrides: self.type_overrides,
