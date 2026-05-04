@@ -1,0 +1,14 @@
+---
+source: crates/glyim-typeck/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    UnknownField {
+        struct_name: Symbol(
+            0,
+        ),
+        field: Symbol(
+            5,
+        ),
+    },
+]

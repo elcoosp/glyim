@@ -1,0 +1,22 @@
+---
+source: crates/glyim-typeck/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    MissingField {
+        struct_name: Symbol(
+            0,
+        ),
+        field: Symbol(
+            2,
+        ),
+    },
+    InvalidReturnType {
+        expected: Int,
+        found: Named(
+            Symbol(
+                0,
+            ),
+        ),
+    },
+]
