@@ -23,6 +23,7 @@ pub struct MonoResult {
 struct MonoDiscovery {
     fn_specs: HashMap<(Symbol, Vec<HirType>), HirFn>,
     struct_specs: HashMap<(Symbol, Vec<HirType>), StructDef>,
+    enum_specs: HashMap<(Symbol, Vec<HirType>), EnumDef>,
     type_overrides: HashMap<ExprId, HirType>,
     call_type_args_overrides: HashMap<ExprId, Vec<HirType>>,
     mangle_table: mangle_table::MangleTable,
@@ -42,6 +43,7 @@ fn discover_instantiations(
     MonoDiscovery {
         fn_specs: ctx.fn_specs,
         struct_specs: ctx.struct_specs,
+        enum_specs: ctx.enum_specs,
         type_overrides: ctx.type_overrides,
         call_type_args_overrides: ctx.call_type_args_overrides,
         mangle_table: ctx.mangle_table,
@@ -63,6 +65,7 @@ fn apply_specializations(
     let mut ctx = MonoContext::new(hir, interner, expr_types, call_type_args);
     ctx.fn_specs = discovery.fn_specs;
     ctx.struct_specs = discovery.struct_specs;
+    ctx.enum_specs = discovery.enum_specs;
     ctx.type_overrides = discovery.type_overrides;
     ctx.call_type_args_overrides = discovery.call_type_args_overrides;
     ctx.mangle_table = discovery.mangle_table;
