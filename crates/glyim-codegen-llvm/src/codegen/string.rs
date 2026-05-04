@@ -157,6 +157,26 @@ pub(crate) fn codegen_call<'ctx>(
 
     let mut fn_val = cg.module.get_function(fn_name);
     if fn_val.is_none() {
+        // Fallback: try to find a matching function by prefix (handles mangled impl method names
+        // like Vec_new when only Vec_new__i64 is registered, or Vec_get__Entry_i64_i64 when
+        // only Vec_get__Entry_i64_i64__i64_i64 exists)
+        if let Some(first) = cg.module.get_first_function() {
+            let mut cur = Some(first);
+            while let Some(f) = cur {
+                let name = f.get_name().to_string_lossy();
+                // Check for both Vec_new__ (double underscore) and Vec_new_ (single underscore)
+                if name.starts_with(fn_name) {
+                    let rest = &name[fn_name.len()..];
+                    if rest.is_empty() || rest.starts_with('_') {
+                        fn_val = Some(f);
+                        break;
+                    }
+                }
+                cur = f.get_next_function();
+            }
+        }
+    }
+    if fn_val.is_none() {
         // Fallback: try `fn_name__i64` for zero-arg generic calls
         let guess = format!("{}__i64", fn_name);
         fn_val = cg.module.get_function(&guess);

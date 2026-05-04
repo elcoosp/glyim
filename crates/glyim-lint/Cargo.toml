@@ -1,0 +1,17 @@
+[package]
+name = "glyim-lint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Linter for Glyim"
+
+[[bin]]
+name = "glyim-lint"
+path = "src/main.rs"
+
+[dependencies]
+glyim-parse = { path = "../glyim-parse" }
+glyim-hir = { path = "../glyim-hir" }
+glyim-interner = { path = "../glyim-interner" }
+glyim-diag = { path = "../glyim-diag" }

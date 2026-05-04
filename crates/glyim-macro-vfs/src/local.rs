@@ -23,6 +23,49 @@ impl LocalContentStore {
             names_dir,
         })
     }
+
+    pub fn list_blobs(&self) -> Vec<ContentHash> {
+        let mut hashes = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&self.objects_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir()
+                    && let Ok(sub) = std::fs::read_dir(&path)
+                {
+                    for sub_entry in sub.flatten() {
+                        let fname = sub_entry.file_name().to_string_lossy().to_string();
+                        let full_hex =
+                            format!("{}{}", path.file_name().unwrap().to_string_lossy(), fname);
+                        if let Ok(h) = ContentHash::from_hex(&full_hex) {
+                            hashes.push(h);
+                        }
+                    }
+                }
+            }
+        }
+        hashes
+    }
+
+    pub fn list_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&self.names_dir) {
+            for entry in entries.flatten() {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                names.push(fname);
+            }
+        }
+        names
+    }
+
+    pub fn delete_blob(&self, hash: ContentHash) -> std::io::Result<()> {
+        let path = self.object_path(hash);
+        if path.exists() {
+            std::fs::remove_file(path)
+        } else {
+            Ok(())
+        }
+    }
+
     fn object_path(&self, hash: ContentHash) -> PathBuf {
         let hex = hash.to_hex();
         self.objects_dir.join(&hex[0..2]).join(&hex[2..])
@@ -41,13 +84,16 @@ impl ContentStore for LocalContentStore {
         }
         hash
     }
+
     fn retrieve(&self, hash: ContentHash) -> Option<Vec<u8>> {
         fs::read(self.object_path(hash)).ok()
     }
+
     fn register_name(&self, name: &str, hash: ContentHash) {
         let safe = name.replace(['/', '\\'], "_");
         let _ = fs::write(self.names_dir.join(&safe), hash.to_hex());
     }
+
     fn resolve_name(&self, name: &str) -> Option<ContentHash> {
         let safe = name.replace(['/', '\\'], "_");
         let hex = fs::read_to_string(self.names_dir.join(&safe)).ok()?;

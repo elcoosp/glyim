@@ -28,7 +28,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-
     #[tracing::instrument(skip_all)]
     fn parse_attributes(&mut self) -> Vec<crate::ast::Attribute> {
         let mut attrs = vec![];

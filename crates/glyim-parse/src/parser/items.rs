@@ -311,14 +311,21 @@ fn parse_impl_block(parser: &mut Parser) -> Option<Item> {
         }
         parser.tokens.eat(SyntaxKind::Gt);
     }
+    let self_type = if type_params.is_empty() {
+        TypeExpr::Named(target)
+    } else {
+        TypeExpr::Generic(
+            target,
+            type_params.iter().map(|tp| TypeExpr::Named(*tp)).collect(),
+        )
+    };
     parser
         .tokens
         .expect(SyntaxKind::LBrace, &mut parser.errors)
         .ok()?;
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
-        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![], Some(TypeExpr::Named(target)))
-        {
+        if let Some(fn_def) = parse_fn_def_with_attrs(parser, vec![], Some(self_type.clone())) {
             methods.push(fn_def);
         } else {
             parser.errors.push(crate::ParseError::Message {
@@ -669,6 +676,14 @@ fn parse_impl_block_declaration(parser: &mut Parser) -> Option<Item> {
         }
         parser.tokens.eat(SyntaxKind::Gt);
     }
+    let self_type = if type_params.is_empty() {
+        TypeExpr::Named(target)
+    } else {
+        TypeExpr::Generic(
+            target,
+            type_params.iter().map(|tp| TypeExpr::Named(*tp)).collect(),
+        )
+    };
     parser
         .tokens
         .expect(SyntaxKind::LBrace, &mut parser.errors)
@@ -676,7 +691,7 @@ fn parse_impl_block_declaration(parser: &mut Parser) -> Option<Item> {
     let mut methods = vec![];
     while !parser.tokens.at(SyntaxKind::RBrace) && parser.tokens.peek().is_some() {
         if let Some(fn_def) =
-            parse_fn_def_with_attrs_skip_body(parser, vec![], Some(TypeExpr::Named(target)))
+            parse_fn_def_with_attrs_skip_body(parser, vec![], Some(self_type.clone()))
         {
             methods.push(fn_def);
         } else {

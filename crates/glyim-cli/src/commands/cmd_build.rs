@@ -7,16 +7,18 @@ pub fn cmd_build(
     target: Option<String>,
     _debug: bool,
     release: bool,
+    bare: bool,
 ) -> i32 {
     let mode = if release {
         BuildMode::Release
     } else {
         BuildMode::Debug
     };
-    let result = if input.is_dir() {
-        pipeline::build_package(&input, output.as_deref(), mode, target.as_deref())
+    let result = if bare || input.is_file() {
+        // Single file compilation (--bare or direct file input)
+        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref(), None)
     } else {
-        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref())
+        pipeline::build_package(&input, output.as_deref(), mode, target.as_deref())
     };
     match result {
         Ok(path) => {

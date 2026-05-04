@@ -157,7 +157,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn integration_style_doc_with_code_block() {
         let source = r#"// Adds two integers together.
 //
@@ -175,7 +174,7 @@ fn add(a: i64, b: i64) -> i64 { a + b }"#;
             .position(|t| t.kind == SyntaxKind::KwFn)
             .unwrap();
         for i in 0..fn_pos {
-            let t = &tokens[i];
+            let _t = &tokens[i];
         }
         let doc = collect_doc_comments(&tokens, fn_pos);
         assert!(doc.is_some(), "Should collect doc comment");
@@ -189,7 +188,7 @@ fn add(a: i64, b: i64) -> i64 { a + b }"#;
             "Should contain code example but got:\n{doc}"
         );
     }
-
+    #[test]
     fn collect_doc_comments_basic() {
         let source = "// hello\nfn main() {}";
         let tokens = tokenize(source);

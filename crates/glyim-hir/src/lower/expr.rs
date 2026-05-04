@@ -194,6 +194,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 id,
                 receiver: Box::new(lower_expr(receiver, ctx)),
                 method_name: *method,
+                resolved_callee: None,
                 args: method_args,
                 span,
             }
@@ -262,6 +263,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                         span,
                     }),
                     method_name: next_sym,
+                    resolved_callee: None,
                     args: vec![],
                     span,
                 }),

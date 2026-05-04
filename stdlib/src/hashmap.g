@@ -98,12 +98,33 @@ impl<K, V> HashMap<K, V> {
             self.buckets = self.buckets.push(empty);
             i = i + 1
         };
-        let mut i = 0;
+        i = 0;
         while i < old_buckets.len() {
             match old_buckets.get(i) {
                 Some(entry) => {
                     if entry.occupied != 0 {
-                        self = self.insert(entry.key, entry.value)
+                        // Inline insertion to avoid recursive grow check
+                        let key = entry.key;
+                        let value = entry.value;
+                        let hash = self.hash(key);
+                        let mut idx = hash - (hash / self.cap) * self.cap;
+                        let mut done = 0;
+                        while done == 0 {
+                            match self.buckets.get(idx) {
+                                Some(inner) => {
+                                    if inner.occupied == 0 {
+                                        let new_entry = Entry { key, value, occupied: 1 };
+                                        self.buckets = self.buckets.set(idx, new_entry);
+                                        self.len = self.len + 1;
+                                        done = 1
+                                    } else {
+                                        idx = idx + 1;
+                                        if idx >= self.cap { idx = 0 }
+                                    }
+                                },
+                                None => { done = 1 }
+                            }
+                        }
                     }
                 },
                 None => {}

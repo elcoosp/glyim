@@ -63,16 +63,13 @@ pub(crate) fn codegen_struct_lit<'ctx>(
                 };
                 for (i, (_fn, fe)) in fields.iter().enumerate() {
                     let fv = codegen_expr(cg, fe, fctx)?;
-                    let indices = &[
-                        cg.i32_type.const_int(0, false),
-                        cg.i32_type.const_int(i as u64, false),
-                    ];
-                    let i8_ptr = unsafe {
+                    let offset_val = cg.i64_type.const_int((i as u64) * 8, false);
+                    let field_ptr = unsafe {
                         cg.builder
-                            .build_gep(cg.context.i8_type(), ptr, indices, "field")
+                            .build_gep(cg.context.i8_type(), ptr, &[offset_val], "field")
                             .ok()?
                     };
-                    cg.builder.build_store(i8_ptr, fv).ok()?;
+                    cg.builder.build_store(field_ptr, fv).ok()?;
                 }
                 cg.builder
                     .build_ptr_to_int(ptr, cg.i64_type, "struct_ptr")
@@ -104,7 +101,6 @@ pub(crate) fn codegen_enum_variant<'ctx>(
         drop(tag_map);
 
         if args.is_empty() {
-            // None / unit variant – heap-allocate { i32 }
             let st = cg.context.struct_type(&[cg.i32_type.into()], false);
             let size = st.size_of().unwrap_or(cg.i64_type.const_int(4, false));
             let alloc_fn = cg
@@ -132,7 +128,6 @@ pub(crate) fn codegen_enum_variant<'ctx>(
 
         let arg_val = codegen_expr(cg, &args[0], fctx).unwrap_or(cg.i64_type.const_int(0, false));
 
-        // Uniform representation: { i32, i64 } – tag + payload pointer/value
         let st = cg
             .context
             .struct_type(&[cg.i32_type.into(), cg.i64_type.into()], false);
@@ -179,6 +174,7 @@ pub(crate) fn codegen_field_access<'ctx>(
         let obj_val = codegen_expr(cg, object, fctx)?;
         let obj_id = object.get_id();
         let obj_ty = cg.expr_types.get(obj_id.as_usize()).cloned();
+
         if let Some(HirType::Tuple(elems)) = obj_ty {
             let field_name = cg.interner.resolve(*field);
             if let Some(idx) = field_name
@@ -208,6 +204,7 @@ pub(crate) fn codegen_field_access<'ctx>(
                     .map(|v| v.into_int_value());
             }
         }
+
         let obj_ptr = cg
             .builder
             .build_int_to_ptr(

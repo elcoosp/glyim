@@ -102,6 +102,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                         .as_ref()
                         .map(|t| lower_type_expr(t, ctx))
                         .unwrap_or(HirType::Int),
+                    doc: None,
                 })
                 .collect();
             Some(HirItem::Struct(StructDef {
@@ -134,10 +135,12 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             .map(|(sym, _, _)| StructField {
                                 name: *sym,
                                 ty: HirType::Int,
+                                doc: None,
                             })
                             .collect(),
                     },
                     tag: i as u32,
+                    doc: None,
                 })
                 .collect();
             Some(HirItem::Enum(EnumDef {

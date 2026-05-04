@@ -1,6 +1,7 @@
 extern crate glyim_cli;
 use clap::{Parser, Subcommand};
 use glyim_cli::commands::*;
+use glyim_macro_vfs::ContentStore;
 use std::path::PathBuf;
 use std::process;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -34,6 +35,8 @@ enum Command {
         debug: bool,
         #[arg(long, conflicts_with = "debug")]
         release: bool,
+        #[arg(long)]
+        bare: bool,
     },
     Run {
         input: PathBuf,
@@ -63,6 +66,8 @@ enum Command {
         ignore: bool,
         #[arg(long)]
         filter: Option<String>,
+        #[arg(long)]
+        nocapture: bool,
     },
     Add {
         package: String,
@@ -85,6 +90,10 @@ enum Command {
         input: PathBuf,
         #[arg(short, long)]
         output: Option<PathBuf>,
+        #[arg(long)]
+        open: bool,
+        #[arg(long)]
+        test: bool,
     },
     DumpTokens {
         input: PathBuf,
@@ -93,6 +102,9 @@ enum Command {
         input: PathBuf,
     },
     DumpHir {
+        input: PathBuf,
+    },
+    MacroInspect {
         input: PathBuf,
     },
     #[command(subcommand)]
@@ -160,7 +172,8 @@ fn main() {
             target,
             debug,
             release,
-        } => cmd_build(input, output, target, debug, release),
+            bare,
+        } => cmd_build(input, output, target, debug, release, bare),
         Command::Run {
             input,
             target,
@@ -174,21 +187,25 @@ fn main() {
             input,
             ignore,
             filter,
-        } => cmd_test(input, ignore, filter),
+            nocapture,
+        } => cmd_test(input, ignore, filter, nocapture),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),
         Command::Fetch => cmd_fetch(),
-        Command::Publish {
-            dry_run,
-            wasm: _wasm,
-        } => cmd_publish(dry_run),
+        Command::Publish { dry_run, wasm } => cmd_publish(dry_run, wasm),
         Command::Outdated => cmd_outdated(),
         Command::Verify => cmd_verify(),
-        Command::Doc { input, output } => cmd_doc(input, output),
+        Command::Doc {
+            input,
+            output,
+            open,
+            test,
+        } => cmd_doc(input, output, open, test),
         Command::DumpTokens { input } => cmd_dump_tokens(input),
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),
+        Command::MacroInspect { input } => cmd_macro_inspect(input),
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
@@ -284,10 +301,36 @@ fn main() {
                 Ok(0)
             })()
             .unwrap_or_else(|code| code),
-            CacheCommand::Clean => {
-                eprintln!("error: cache clean not yet implemented");
-                1
-            }
+            CacheCommand::Clean => (|| -> Result<i32, i32> {
+                let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
+                let store = glyim_macro_vfs::LocalContentStore::new(&cas_dir).map_err(|e| {
+                    eprintln!("error opening CAS: {e}");
+                    1
+                })?;
+
+                // Collect all referenced hashes from names
+                let names = store.list_names();
+                let mut referenced = std::collections::HashSet::new();
+                for name in &names {
+                    if let Some(hash) = store.resolve_name(name) {
+                        referenced.insert(hash);
+                    }
+                }
+
+                let mut removed = 0usize;
+                for blob in store.list_blobs() {
+                    if !referenced.contains(&blob) {
+                        if let Err(e) = store.delete_blob(blob) {
+                            eprintln!("warning: could not delete blob {}: {}", blob, e);
+                        } else {
+                            removed += 1;
+                        }
+                    }
+                }
+                eprintln!("Removed {} unreferenced blobs.", removed);
+                Ok(0)
+            })()
+            .unwrap_or_else(|code| code),
         },
     };
 

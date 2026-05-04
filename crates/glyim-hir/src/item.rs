@@ -13,6 +13,7 @@ pub struct FnSig {
 pub struct StructField {
     pub name: Symbol,
     pub ty: HirType,
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +40,7 @@ pub struct HirVariant {
     pub name: Symbol,
     pub fields: Vec<StructField>,
     pub tag: u32,
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

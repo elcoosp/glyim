@@ -34,6 +34,77 @@ impl TypeChecker {
         }
         None
     }
+    /// Unify a concrete type with a generic type, extracting type parameter bindings.
+    pub(crate) fn unify_types(
+        concrete: &HirType,
+        generic: &HirType,
+        type_params: &[Symbol],
+        sub: &mut std::collections::HashMap<Symbol, HirType>,
+    ) {
+        match (concrete, generic) {
+            // Any concrete type matching a type parameter
+            (_, HirType::Named(gen_name)) if type_params.contains(gen_name) => {
+                sub.insert(*gen_name, concrete.clone());
+            }
+            // Primitive type -> named type param
+            (HirType::Int, HirType::Named(gen_name)) if type_params.contains(gen_name) => {
+                sub.insert(*gen_name, HirType::Int);
+            }
+            (HirType::Float, HirType::Named(gen_name)) if type_params.contains(gen_name) => {
+                sub.insert(*gen_name, HirType::Float);
+            }
+            (HirType::Bool, HirType::Named(gen_name)) if type_params.contains(gen_name) => {
+                sub.insert(*gen_name, HirType::Bool);
+            }
+            (HirType::Str, HirType::Named(gen_name)) if type_params.contains(gen_name) => {
+                sub.insert(*gen_name, HirType::Str);
+            }
+            // Named -> Named (could be type param)
+            (HirType::Named(conc_name), HirType::Named(gen_name))
+                if type_params.contains(gen_name) =>
+            {
+                sub.insert(*gen_name, HirType::Named(*conc_name));
+            }
+            // Generic with same name and arity
+            (HirType::Generic(conc_name, conc_args), HirType::Generic(gen_name, gen_args))
+                if conc_name == gen_name && conc_args.len() == gen_args.len() =>
+            {
+                for (ca, ga) in conc_args.iter().zip(gen_args.iter()) {
+                    Self::unify_types(ca, ga, type_params, sub);
+                }
+            }
+            // Named concrete matching a generic param
+            (HirType::Named(conc_name), HirType::Generic(gen_name, _))
+                if type_params.contains(gen_name) =>
+            {
+                sub.insert(*gen_name, HirType::Named(*conc_name));
+            }
+            // Generic concrete matching a named param
+            (HirType::Generic(conc_name, conc_args), HirType::Named(gen_name))
+                if type_params.contains(gen_name) =>
+            {
+                sub.insert(*gen_name, HirType::Generic(*conc_name, conc_args.clone()));
+            }
+            // RawPtr recursion
+            (HirType::RawPtr(conc_inner), HirType::RawPtr(gen_inner)) => {
+                Self::unify_types(conc_inner, gen_inner, type_params, sub);
+            }
+            // Tuple recursion
+            (HirType::Tuple(conc_elems), HirType::Tuple(gen_elems))
+                if conc_elems.len() == gen_elems.len() =>
+            {
+                for (ca, ga) in conc_elems.iter().zip(gen_elems.iter()) {
+                    Self::unify_types(ca, ga, type_params, sub);
+                }
+            }
+            // Fallback: any concrete type matches a type param directly
+            (_, HirType::Named(gen_name)) if type_params.contains(gen_name) => {
+                sub.insert(*gen_name, concrete.clone());
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn with_scope<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,

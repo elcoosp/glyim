@@ -59,6 +59,7 @@ impl DeclTable {
                     StructField {
                         name: *sym,
                         ty: HirType::Int,
+                        doc: None,
                     }
                 })
                 .collect();
@@ -85,6 +86,7 @@ impl DeclTable {
                         name: v.name,
                         fields: vec![],
                         tag: i as u32,
+                        doc: None,
                     }
                 })
                 .collect();

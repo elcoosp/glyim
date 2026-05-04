@@ -34,34 +34,14 @@ impl<'ctx> Codegen<'ctx> {
                         .get(sym)
                         .map(|st| (*st).into())
                 }),
-            HirType::Generic(sym, _args) => {
-                // Try the base struct type first; if it’s a concrete monomorphised version,
-                // it will have been registered under the mangled name.
-                let mangled_sym = *sym;
-                self.struct_types
-                    .borrow()
-                    .get(&mangled_sym)
-                    .map(|st| (*st).into())
-                    .or_else(|| {
-                        self.enum_struct_types
-                            .borrow()
-                            .get(&mangled_sym)
-                            .map(|st| (*st).into())
-                    })
-                    .or_else(|| {
-                        // Fallback: try the original (non-mangled) name in case it's a generic
-                        // that was not monomorphised yet, but still has a struct definition.
-                        self.struct_types
-                            .borrow()
-                            .get(sym)
-                            .map(|st| (*st).into())
-                            .or_else(|| {
-                                self.enum_struct_types
-                                    .borrow()
-                                    .get(sym)
-                                    .map(|st| (*st).into())
-                            })
-                    })
+            HirType::Generic(sym, args) => {
+                // Use resolve_struct_type which properly mangles the name.
+                if let Some(st) = self.resolve_struct_type(&HirType::Generic(*sym, args.clone())) {
+                    Some(st.into())
+                } else {
+                    // Fallback: try the base symbol directly (may work for non-monomorphised generics)
+                    self.struct_types.borrow().get(sym).map(|st| (*st).into())
+                }
             }
             HirType::Tuple(elems) => {
                 let field_types: Vec<_> = elems
@@ -102,14 +82,35 @@ pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef)
 }
 
 pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
-    // Compute max payload size as max over variants of (fields.len() * 8) because all fields are i64
-    let max_fields = def
-        .variants
-        .iter()
-        .map(|v| v.fields.len())
-        .max()
-        .unwrap_or(0);
-    let payload_bytes = (max_fields as u32) * 8;
+    // Compute payload size from actual field types (respects specialized generics)
+    let mut max_payload_bytes: u32 = 0;
+    for variant in &def.variants {
+        let mut variant_bytes: u32 = 0;
+        for field in &variant.fields {
+            if let Some(llvm_ty) = cg.hir_type_to_llvm(&field.ty) {
+                if let Some(size) = llvm_ty.size_of() {
+                    // Extract constant size value if possible
+                    if let Some(const_val) = size.get_zero_extended_constant() {
+                        variant_bytes += const_val as u32;
+                    } else {
+                        variant_bytes += 8; // fallback for non-constant sizes
+                    }
+                } else {
+                    variant_bytes += 8;
+                }
+            } else {
+                variant_bytes += 8;
+            }
+        }
+        if variant_bytes > max_payload_bytes {
+            max_payload_bytes = variant_bytes;
+        }
+    }
+    let payload_bytes = if max_payload_bytes == 0 {
+        8
+    } else {
+        max_payload_bytes
+    };
     let tag_type = cg.i32_type;
     let payload_type = cg.context.i8_type().array_type(payload_bytes);
     let enum_struct_type = cg.context.struct_type(

@@ -107,7 +107,9 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::UnitLit { .. } => Some(cg.i64_type.const_int(0, false)),
         HirExpr::StrLit { value: s, .. } => super::string::codegen_string_literal(cg, s),
         HirExpr::SizeOf { target_type, .. } => {
-            if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
+            if cg.resolve_struct_type(target_type).is_some() {
+                Some(cg.i64_type.const_int(8, false))
+            } else if let Some(llvm_type) = cg.hir_type_to_llvm(target_type) {
                 Some(
                     llvm_type
                         .size_of()
@@ -234,51 +236,10 @@ pub(crate) fn codegen_expr<'ctx>(
                         .build_ptr_to_int(ptr, cg.i64_type, "ptr2i64")
                         .ok()
                 }
-                // Int 0 → concrete struct: allocate zero-initialized memory
+                // Int 0 → concrete struct: use safe helper for zero-initialized heap allocation.
                 (Int, Named(_)) | (Int, Generic(_, _)) => {
-                    // Look up the struct type
-                    let struct_sym = match target_type {
-                        HirType::Named(s) => Some(*s),
-                        HirType::Generic(s, _) => Some(*s),
-                        _ => None,
-                    };
-                    if let Some(sym) = struct_sym {
-                        if let Some(st) = cg.struct_types.borrow().get(&sym).copied() {
-                            let size = st
-                                .size_of()
-                                .unwrap_or_else(|| cg.i64_type.const_int(0, false));
-                            let alloc_fn = cg
-                                .module
-                                .get_function("__glyim_alloc")
-                                .or_else(|| cg.module.get_function("malloc"))?;
-                            let call_result = cg
-                                .builder
-                                .build_call(alloc_fn, &[size.into()], "zero_struct_alloc")
-                                .ok()?
-                                .try_as_basic_value();
-                            let ptr = match call_result {
-                                inkwell::values::ValueKind::Basic(bv) => bv.into_pointer_value(),
-                                _ => return Some(cg.i64_type.const_int(0, false)),
-                            };
-                            // Zero the memory with stores
-                            let zero = cg.i64_type.const_int(0, false);
-                            let num_fields = st.count_fields();
-                            for i in 0..num_fields {
-                                let indices = &[
-                                    cg.i32_type.const_int(0, false),
-                                    cg.i32_type.const_int(i as u64, false),
-                                ];
-                                let fp = unsafe {
-                                    cg.builder.build_gep(st, ptr, indices, "zero_field").ok()?
-                                };
-                                cg.builder.build_store(fp, zero).ok()?;
-                            }
-                            cg.builder
-                                .build_ptr_to_int(ptr, cg.i64_type, "zero_struct_ptr")
-                                .ok()
-                        } else {
-                            Some(cg.i64_type.const_int(0, false))
-                        }
+                    if let Some(st) = cg.resolve_struct_type(target_type) {
+                        cg.zero_init_struct_on_heap(st).ok()
                     } else {
                         Some(cg.i64_type.const_int(0, false))
                     }
@@ -311,9 +272,11 @@ pub(crate) fn codegen_expr<'ctx>(
                 .cloned()
                 .unwrap_or(HirType::Int);
 
-            // If the pointed type is a struct (including generic instantiations), deep copy it.
-            if let Some(st) = cg.resolve_struct_type(&pointed_ty) {
-                let ptr = cg
+            // Struct (or generic struct) values are represented as pointers.
+            // The in‑memory form of a `*mut Struct` slot is an i64 handle.
+            // Load that handle and return it as the value – no deep copy needed.
+            if cg.resolve_struct_type(&pointed_ty).is_some() {
+                let slot_addr = cg
                     .builder
                     .build_int_to_ptr(
                         ptr_val,
@@ -321,26 +284,12 @@ pub(crate) fn codegen_expr<'ctx>(
                         "deref_ptr",
                     )
                     .ok()?;
-                let size = st.size_of().unwrap_or(cg.i64_type.const_int(8, false));
-                let alloc_fn = cg
-                    .module
-                    .get_function("__glyim_alloc")
-                    .or_else(|| cg.module.get_function("malloc"))?;
-                let call_result = cg
+                let handle = cg
                     .builder
-                    .build_call(alloc_fn, &[size.into()], "deref_alloc")
+                    .build_load(cg.i64_type, slot_addr, "struct_handle")
                     .ok()?
-                    .try_as_basic_value();
-                let new_ptr = match call_result {
-                    inkwell::values::ValueKind::Basic(bv) => bv.into_pointer_value(),
-                    _ => return Some(cg.i64_type.const_int(0, false)),
-                };
-                let loaded = cg.builder.build_load(st, ptr, "struct_val").ok()?;
-                cg.builder.build_store(new_ptr, loaded).ok()?;
-                return cg
-                    .builder
-                    .build_ptr_to_int(new_ptr, cg.i64_type, "struct_ptr")
-                    .ok();
+                    .into_int_value();
+                return Some(handle);
             }
 
             // Non-struct type: load the value directly
@@ -384,14 +333,15 @@ pub(crate) fn codegen_expr<'ctx>(
                 "[codegen MethodCall] method_name={}",
                 cg.interner.resolve(*method_name)
             );
-            // Also print receiver type id for debugging
             eprintln!("[codegen MethodCall] receiver_id={:?}", receiver.get_id());
+
             // Check if this method is backed by an extern function
             if let Some(extern_name) = cg.extern_methods.get(method_name).copied() {
                 let mut all_args = vec![receiver.as_ref().clone()];
                 all_args.extend(args.clone());
                 return super::string::codegen_call(cg, &extern_name, &all_args, fctx);
             }
+
             let receiver_val = codegen_expr(cg, receiver, fctx)?;
             let receiver_id = receiver.get_id();
             let receiver_ty = cg
@@ -399,30 +349,99 @@ pub(crate) fn codegen_expr<'ctx>(
                 .get(receiver_id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
+
             // Unwrap RawPtr to get the real struct type
             let inner_ty = match &receiver_ty {
                 HirType::RawPtr(inner) => inner.as_ref().clone(),
                 other => other.clone(),
             };
-            let mangled_name = match &inner_ty {
-                HirType::Named(type_name) | HirType::Generic(type_name, _) => format!(
-                    "{}_{}",
-                    cg.interner.resolve(*type_name),
-                    cg.interner.resolve(*method_name)
-                ),
-                _ => cg.interner.resolve(*method_name).to_string(),
-            };
-            let mut fn_val = cg.module.get_function(&mangled_name);
-            // Fallback: try __i64 or __i64_i64 suffixed versions
-            if fn_val.is_none() {
-                let guess = format!("{}__i64", mangled_name);
-                fn_val = cg.module.get_function(&guess);
-                if fn_val.is_none() {
-                    let guess2 = format!("{}__i64_i64", mangled_name);
-                    fn_val = cg.module.get_function(&guess2);
+
+            fn mangle_type(cg: &Codegen, ty: &HirType) -> String {
+                match ty {
+                    HirType::Int => "i64".to_string(),
+                    HirType::Bool => "i64".to_string(),
+                    HirType::Float => "f64".to_string(),
+                    HirType::Str => "Str".to_string(),
+                    HirType::Unit => "()".to_string(),
+                    HirType::Never => "Never".to_string(),
+                    HirType::Named(sym) => {
+                        let name = cg.interner.resolve(*sym);
+                        match name {
+                            "i64" | "Int" => "i64".to_string(),
+                            "f64" | "Float" => "f64".to_string(),
+                            "bool" | "Bool" => "i64".to_string(),
+                            other => other.to_string(),
+                        }
+                    }
+                    HirType::Generic(_, type_args) if !type_args.is_empty() => {
+                        let base = match ty {
+                            HirType::Generic(sym, _) => cg.interner.resolve(*sym),
+                            _ => unreachable!(),
+                        };
+                        let args_str = type_args
+                            .iter()
+                            .map(|arg| mangle_type(cg, arg))
+                            .collect::<Vec<_>>()
+                            .join("_");
+                        format!("{}_{}", base, args_str)
+                    }
+                    HirType::Generic(sym, _) => {
+                        let name = cg.interner.resolve(*sym);
+                        match name {
+                            "i64" | "Int" => "i64".to_string(),
+                            other => other.to_string(),
+                        }
+                    }
+                    HirType::RawPtr(inner) => mangle_type(cg, inner),
+                    HirType::Opaque(sym) => cg.interner.resolve(*sym).to_string(),
+                    HirType::Func(_, _) => "fn".to_string(),
+                    HirType::Option(inner) => format!("Option_{}", mangle_type(cg, inner)),
+                    HirType::Result(ok, err) => {
+                        format!("Result_{}_{}", mangle_type(cg, ok), mangle_type(cg, err))
+                    }
+                    HirType::Tuple(elems) => elems
+                        .iter()
+                        .map(|e| mangle_type(cg, e))
+                        .collect::<Vec<_>>()
+                        .join("_"),
                 }
             }
-            if let Some(fn_val) = fn_val {
+
+            // Helper to extract the type name from inner_ty
+            let type_name_sym = match &inner_ty {
+                HirType::Named(sym) | HirType::Generic(sym, _) => *sym,
+                _ => *method_name, // fallback to method name for non-struct types
+            };
+            let type_name = cg.interner.resolve(type_name_sym);
+
+            // Generate the mangled function name with proper type suffix
+            let mangled_name = match &inner_ty {
+                HirType::Named(_) | HirType::Generic(_, _) => {
+                    let base = format!("{}_{}", type_name, cg.interner.resolve(*method_name));
+                    let suffix = match &inner_ty {
+                        HirType::Generic(_, type_args) if !type_args.is_empty() => type_args
+                            .iter()
+                            .map(|arg| mangle_type(cg, arg))
+                            .collect::<Vec<_>>()
+                            .join("_"),
+                        _ => String::new(),
+                    };
+                    if suffix.is_empty() {
+                        base
+                    } else {
+                        format!("{}__{}", base, suffix)
+                    }
+                }
+                _ => cg.interner.resolve(*method_name).to_string(),
+            };
+
+            eprintln!(
+                "[codegen MethodCall] looking for function: {}",
+                mangled_name
+            );
+
+            // Try exact lookup first
+            if let Some(fn_val) = cg.module.get_function(&mangled_name) {
                 let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
                 call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
                     receiver_val,
@@ -436,15 +455,48 @@ pub(crate) fn codegen_expr<'ctx>(
                     .builder
                     .build_call(fn_val, &call_args, "method_call")
                     .ok()?;
-                match result.try_as_basic_value() {
+                return match result.try_as_basic_value() {
                     inkwell::values::ValueKind::Basic(basic_val) => {
                         Some(basic_val.into_int_value())
                     }
                     _ => Some(cg.i64_type.const_int(0, false)),
-                }
-            } else {
-                Some(cg.i64_type.const_int(0, false))
+                };
             }
+
+            // FALLBACK: Search for any function starting with the prefix when expr_types didn't have the type
+            let prefix = format!("{}_", type_name);
+            for func in cg.module.get_functions() {
+                let name = func.get_name().to_string_lossy().to_string();
+                // Match "Vec_push__..." but not "Vec_push" itself
+                if name.starts_with(&prefix) && name.len() > prefix.len() {
+                    eprintln!("[codegen MethodCall] fallback found: {}", name);
+                    let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
+                    call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
+                        receiver_val,
+                    ));
+                    for a in args {
+                        if let Some(v) = codegen_expr(cg, a, fctx) {
+                            call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));
+                        }
+                    }
+                    let result = cg
+                        .builder
+                        .build_call(func, &call_args, "method_call")
+                        .ok()?;
+                    return match result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(basic_val) => {
+                            Some(basic_val.into_int_value())
+                        }
+                        _ => Some(cg.i64_type.const_int(0, false)),
+                    };
+                }
+            }
+
+            eprintln!(
+                "[codegen MethodCall] WARNING: no function found for prefix '{}'",
+                prefix
+            );
+            Some(cg.i64_type.const_int(0, false))
         }
     }
 }

@@ -1,7 +1,6 @@
 use glyim_diag::Span;
 use glyim_hir::HirExpr;
 use glyim_hir::types::ExprId;
-use glyim_interner::Symbol;
 use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::wasm_interface::{deserialize_expr, serialize_expr};
 

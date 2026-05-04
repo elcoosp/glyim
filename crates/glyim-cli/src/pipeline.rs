@@ -38,6 +38,7 @@ pub enum PipelineError {
     Link(String),
     Run(std::io::Error),
     Manifest(crate::manifest::ManifestError),
+    MissingSysroot(String),
 }
 impl std::fmt::Display for PipelineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,6 +62,7 @@ impl std::fmt::Display for PipelineError {
             Self::Link(msg) => write!(f, "linker error: {msg}"),
             Self::Run(e) => write!(f, "execution error: {e}"),
             Self::Manifest(e) => write!(f, "manifest error: {e}"),
+            Self::MissingSysroot(msg) => write!(f, "sysroot error: {msg}"),
         }
     }
 }
@@ -87,6 +89,11 @@ fn detect_no_std(source: &str) -> bool {
     }
     false
 }
+
+fn is_manifest_no_std(manifest: &glyim_pkg::manifest::PackageManifest) -> bool {
+    manifest.package.no_std == Some(true)
+}
+
 fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineError> {
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let is_no_std = detect_no_std(&source);
@@ -113,8 +120,20 @@ fn merge_mono_types(
     }
     // Generic → Named fallback
     for ty in &mut merged {
-        if let HirType::Generic(sym, _args) = ty {
-            *ty = HirType::Named(*sym);
+        if let HirType::Generic(sym, args) = ty {
+            let all_concrete = args.iter().all(|a| match a {
+                HirType::Named(s) => {
+                    let s = interner.resolve(*s);
+                    !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
+                }
+                _ => true,
+            });
+            if all_concrete && !args.is_empty() {
+                let mangled = glyim_hir::monomorphize::mangle_type_name(interner, *sym, args);
+                *ty = HirType::Named(mangled);
+            } else {
+                *ty = HirType::Named(*sym);
+            }
         }
     }
     (merged, mono_result.hir)
@@ -127,11 +146,12 @@ pub fn build(
     target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
-    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
+    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -170,6 +190,7 @@ pub fn build(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     info!("codegen complete");
     codegen
         .write_object_file(&obj_path)
@@ -217,11 +238,12 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
-    let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -264,6 +286,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
@@ -346,8 +369,10 @@ pub fn run_with_mode(
     input: &Path,
     mode: BuildMode,
     target: Option<&str>,
+    force_no_std: Option<bool>,
 ) -> Result<i32, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let is_no_std = force_no_std.unwrap_or(is_no_std);
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
     let source = crate::macro_expand::expand_macros(
@@ -368,11 +393,12 @@ pub fn run_with_mode(
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
-    let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -391,6 +417,7 @@ pub fn run_with_mode(
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
+        crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -406,6 +433,7 @@ pub fn run_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     let engine = codegen
         .get_module()
         .create_jit_execution_engine(mode.opt_level())
@@ -428,8 +456,10 @@ pub fn build_with_mode(
     output: Option<&Path>,
     mode: BuildMode,
     target: Option<&str>,
+    force_no_std: Option<bool>,
 ) -> Result<PathBuf, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let is_no_std = force_no_std.unwrap_or(is_no_std);
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
     let source = crate::macro_expand::expand_macros(
@@ -438,11 +468,12 @@ pub fn build_with_mode(
         &cas_dir,
     )
     .unwrap_or(source);
-    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
+    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -472,6 +503,7 @@ pub fn build_with_mode(
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
+        crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
         codegen = codegen.with_target(t);
     }
     if is_no_std {
@@ -481,6 +513,7 @@ pub fn build_with_mode(
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
@@ -519,14 +552,18 @@ pub fn build_package(
             PipelineError::Io(e)
         }
     })?;
-    let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+    let full_manifest =
+        glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml").map_err(|e| {
+            PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string()))
+        })?;
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-    build_with_mode(&main_path, output, mode, target)
+    let force_no_std = Some(is_manifest_no_std(&full_manifest));
+    build_with_mode(&main_path, output, mode, target, force_no_std)
 }
 pub fn run_package(
     package_dir: &Path,
@@ -541,14 +578,18 @@ pub fn run_package(
             PipelineError::Io(e)
         }
     })?;
-    let _manifest = crate::manifest::parse_manifest(&toml_str).map_err(PipelineError::Manifest)?;
+    let full_manifest =
+        glyim_pkg::manifest::parse_manifest(&toml_str, "glyim.toml").map_err(|e| {
+            PipelineError::Manifest(crate::manifest::ManifestError::Parse(e.to_string()))
+        })?;
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
         return Err(PipelineError::Manifest(
             crate::manifest::ManifestError::MissingField("src/main.g"),
         ));
     }
-    run_with_mode(&main_path, mode, target)
+    let force_no_std = Some(is_manifest_no_std(&full_manifest));
+    run_with_mode(&main_path, mode, target, force_no_std)
 }
 fn parse_test_output(stdout: &str) -> Vec<(String, crate::test_runner::TestResult)> {
     let mut results = Vec::new();
@@ -571,8 +612,11 @@ pub fn run_tests(
     input: &Path,
     filter_name: Option<&str>,
     include_ignored: bool,
+    force_no_std: Option<bool>,
+    nocapture: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let (source, is_no_std) = load_source_with_prelude(input)?;
+    let is_no_std = force_no_std.unwrap_or(is_no_std);
     // Expand macros (e.g. @identity) before parsing
     let cas_dir = dirs_next::data_dir().unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas"));
     let source = crate::macro_expand::expand_macros(
@@ -644,11 +688,12 @@ pub fn run_tests(
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
-    let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -668,9 +713,11 @@ pub fn run_tests(
         .map_err(PipelineError::Codegen)?;
     let exe_path = tmp_dir.path().join("glyim_test_out");
     link_object(&obj_path, &exe_path, false)?;
-    let output = Command::new(&exe_path)
-        .output()
-        .map_err(PipelineError::Run)?;
+    let mut cmd = Command::new(&exe_path);
+    if nocapture {
+        cmd.arg("--nocapture");
+    }
+    let output = cmd.output().map_err(PipelineError::Run)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results = parse_test_output(&stdout);
     for name in &ignored_names {
@@ -689,6 +736,7 @@ pub fn run_tests_package(
     package_dir: &Path,
     filter_name: Option<&str>,
     include_ignored: bool,
+    nocapture: bool,
 ) -> Result<crate::test_runner::TestRunSummary, PipelineError> {
     let main_path = package_dir.join("src").join("main.g");
     if !main_path.exists() {
@@ -697,7 +745,7 @@ pub fn run_tests_package(
             format!("{} not found", main_path.display()),
         )));
     }
-    run_tests(&main_path, filter_name, include_ignored)
+    run_tests(&main_path, filter_name, include_ignored, None, nocapture)
 }
 fn compile_to_hir_and_ir(
     source: &str,
@@ -773,11 +821,12 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
         link_object(&obj_path, &output, false)?;
         return Ok(output);
     }
-    let (hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
+    let (mut hir, _ir, mut interner) = compile_to_hir_and_ir(&source)?;
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
@@ -786,10 +835,11 @@ fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, Pipe
     let obj_path = tmp_dir.path().join("output.o");
     let _codegen_span = info_span!("phase", name = "codegen").entered();
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner.clone(), merged_types);
+    let mut codegen = Codegen::new(&context, interner, merged_types);
     codegen
         .generate(&mono_hir)
         .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
     codegen
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
@@ -808,6 +858,70 @@ fn which(cmd: &str) -> bool {
 }
 /// Generate HTML documentation for the given source file.
 #[allow(dead_code)]
+pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
+    let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
+    let parse_out = glyim_parse::parse(&source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
+
+    let mut blocks: Vec<String> = Vec::new();
+    for item in &hir.items {
+        let doc = match item {
+            glyim_hir::HirItem::Fn(f) => &f.doc,
+            glyim_hir::HirItem::Struct(s) => &s.doc,
+            glyim_hir::HirItem::Enum(e) => &e.doc,
+            glyim_hir::HirItem::Impl(i) => {
+                for method in &i.methods {
+                    if let Some(ref doc) = method.doc {
+                        for (_, code) in glyim_doc::extract_code_blocks(doc) {
+                            blocks.push(code);
+                        }
+                    }
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        if let Some(doc) = doc.as_ref() {
+            for (_, code) in glyim_doc::extract_code_blocks(doc) {
+                blocks.push(code);
+            }
+        }
+    }
+
+    if blocks.is_empty() {
+        eprintln!("No doc-test blocks found.");
+        return Ok(0);
+    }
+
+    let mut failed = 0;
+    for (i, block) in blocks.iter().enumerate() {
+        eprintln!("running {} doc-test(s)", blocks.len());
+        eprintln!("doc-test block {} ... ", i + 1);
+        // Run as a simple expression via JIT (wrap in main = () => { ... })
+        let wrapped = format!("main = () => {{ {} }}", block);
+        match run_jit(&wrapped) {
+            Ok(exit_code) => {
+                if exit_code == 0 {
+                    eprintln!("ok");
+                } else {
+                    eprintln!("FAILED (exit code {})", exit_code);
+                    failed += 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("FAILED: {}", e);
+                failed += 1;
+            }
+        }
+    }
+    Ok(failed)
+}
+
 pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
@@ -822,6 +936,13 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
     std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;
     std::fs::write(out_dir.join("index.html"), html).map_err(PipelineError::Io)?;
     Ok(())
+}
+
+/// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
+fn debug_ir(codegen: &glyim_codegen_llvm::Codegen) {
+    if std::env::var("GLYIM_DEBUG_IR").is_ok() {
+        eprintln!("Generated IR:\n{}", codegen.ir_string());
+    }
 }
 
 #[cfg(test)]
@@ -840,11 +961,12 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     // Phase 2: full lowering with pre-resolved symbols
-    let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));
     }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =

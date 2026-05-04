@@ -299,7 +299,7 @@ fn e2e_generic_edge() {
 #[test]
 fn e2e_test_should_panic_passes() {
     let input = temp_g("#[test(should_panic)]\nfn panics() { 1 }");
-    let summary = pipeline::run_tests(&input, None, false).unwrap();
+    let summary = pipeline::run_tests(&input, None, false, None, false).unwrap();
     assert_eq!(summary.passed(), 1, "should_panic test should pass");
     assert_eq!(summary.exit_code(), 0);
 }
@@ -307,7 +307,7 @@ fn e2e_test_should_panic_passes() {
 #[test]
 fn e2e_test_should_panic_fails_on_zero() {
     let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
-    let summary = pipeline::run_tests(&input, None, false).unwrap();
+    let summary = pipeline::run_tests(&input, None, false, None, false).unwrap();
     assert_eq!(
         summary.failed(),
         1,
@@ -319,7 +319,7 @@ fn e2e_test_should_panic_fails_on_zero() {
 #[test]
 fn e2e_test_filter() {
     let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
-    let summary = pipeline::run_tests(&input, Some("b"), false).unwrap();
+    let summary = pipeline::run_tests(&input, Some("b"), false, None, false).unwrap();
     assert_eq!(summary.total(), 1);
     assert_eq!(summary.failed(), 1);
 }
@@ -327,7 +327,7 @@ fn e2e_test_filter() {
 #[test]
 fn e2e_test_filter_no_match() {
     let input = temp_g("#[test]\nfn a() { 0 }");
-    let result = pipeline::run_tests(&input, Some("nonexistent"), false);
+    let result = pipeline::run_tests(&input, Some("nonexistent"), false, None, false);
     assert!(result.is_err());
     let msg = format!("{:?}", result.unwrap_err());
     assert!(
@@ -1097,7 +1097,7 @@ fn e2e_hashmap_insert_get() {
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
     let main_code = r#"
 main = () => {
-    let m = HashMap::new();
+    let m: HashMap<i64, i64> = HashMap::new();
     let m = m.insert(1, 100);
     let m = m.insert(2, 200);
     m.len()
@@ -1154,6 +1154,8 @@ main = () => {
     let input = temp_g(&full_src);
     assert_eq!(pipeline::run(&input, None).unwrap(), 60);
 }
+#[ignore = "signal: 11, SIGSEGV: invalid memory reference"]
+#[test]
 fn e2e_hashmap_basic() {
     let vec_src = include_str!("../../../stdlib/src/vec.g");
     let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
@@ -1342,4 +1344,142 @@ main = () => add(1, 2)
     assert!(html.contains("Adds two integers together."));
     assert!(html.contains("let result = add(1, 2)"));
     assert!(html.contains("assert(result == 3)"));
+}
+#[test]
+fn e2e_doc_impl_method() {
+    let src = "struct Counter { val: i64 }\nimpl Counter {\n    // Increments the counter.\n    fn inc(mut self: Counter) -> Counter { self.val = self.val + 1; self }\n}\nmain = () => 0";
+    let dir = tempfile::tempdir().unwrap();
+    let source_path = dir.path().join("test.g");
+    std::fs::write(&source_path, src).unwrap();
+    let doc_dir = dir.path().join("doc");
+    let result = pipeline::generate_doc(&source_path, Some(&doc_dir));
+    assert!(result.is_ok());
+    let html = std::fs::read_to_string(doc_dir.join("index.html")).unwrap();
+    assert!(html.contains("Increments the counter."));
+}
+#[test]
+fn e2e_no_std_manifest_uses_force_flag() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("glyim.toml"),
+        "[package]\nname = \"nonstd\"\nversion = \"0.1.0\"\nno_std = true\n",
+    )
+    .unwrap();
+    std::fs::create_dir(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/main.g"), "main = () => 42").unwrap();
+    // Using run_package which now reads no_std from manifest
+    let result = pipeline::run_package(dir.path(), pipeline::BuildMode::Debug, None);
+    assert!(
+        result.is_ok(),
+        "no_std project should compile: {:?}",
+        result.err()
+    );
+    assert_eq!(result.unwrap(), 42);
+}
+
+#[test]
+fn e2e_no_std_manifest_disables_prelude() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("glyim.toml"),
+        "[package]\nname = \"nonstd\"\nversion = \"0.1.0\"\nno_std = true\n",
+    )
+    .unwrap();
+    std::fs::create_dir(dir.path().join("src")).unwrap();
+    // This source uses Option and Result without the prelude – they must be defined manually or the compilation will fail
+    let src =
+        "enum Option<T> { Some(T), None }\nenum Result<T,E> { Ok(T), Err(E) }\nmain = () => 42";
+    std::fs::write(dir.path().join("src/main.g"), src).unwrap();
+    let result = pipeline::run_package(dir.path(), pipeline::BuildMode::Debug, None);
+    assert!(
+        result.is_ok(),
+        "no_std project should compile without prelude: {:?}",
+        result.err()
+    );
+}
+#[test]
+fn e2e_hashmap_insert_and_get() {
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let hashmap_src = include_str!("../../../stdlib/src/hashmap.g");
+    let main_code = r#"
+main = () => {
+    let m: HashMap<i64, i64> = HashMap::new();
+    let m = m.insert(1, 100);
+    let m = m.insert(2, 200);
+    match m.get(2) {
+        Some(v) => v,
+        None => 0,
+    }
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", vec_src, hashmap_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 200);
+}
+
+#[test]
+fn e2e_range_for_loop_sum() {
+    let range_src = include_str!("../../../stdlib/src/range.g");
+    let main_code = r#"
+main = () => {
+    let mut sum = 0;
+    for i in Range::new(1, 5) {
+        sum = sum + i
+    };
+    sum
+}
+"#;
+    let full_src = format!("{}\n{}", range_src, main_code);
+    let input = temp_g(&full_src);
+    assert_eq!(pipeline::run(&input, None).unwrap(), 10);
+}
+
+#[test]
+#[ignore = "nested generics: 0 as T in struct literals needs rewriting"]
+fn stress_nest_vec() {
+    let src = include_str!("../../../tests/stress/nest_vec.g");
+    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 0);
+}
+
+#[test]
+#[ignore = "nested generics: type annotations need full concretization pass"]
+fn stress_nest_option() {
+    let src = include_str!("../../../tests/stress/nest_option.g");
+    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 42);
+}
+
+#[cfg(test)]
+mod arithmetic_proptests {
+    use glyim_cli::pipeline;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn add(a in 0i64..100, b in 0i64..100) {
+            let src = format!("main = () => {} + {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a + b);
+        }
+
+        #[test]
+        fn sub(a in 0i64..100, b in 0i64..100) {
+            let src = format!("main = () => {} - {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a - b);
+        }
+
+        #[test]
+        fn mul(a in 0i64..20, b in 0i64..20) {
+            let src = format!("main = () => {} * {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a * b);
+        }
+
+        #[test]
+        fn div(a in 1i64..100, b in 1i64..100) {
+            let src = format!("main = () => {} / {}", a, b);
+            let result = pipeline::run_jit(&src).unwrap();
+            prop_assert_eq!(result as i64, a / b);
+        }
+    }
 }

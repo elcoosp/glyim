@@ -1,0 +1,13 @@
+[package]
+name = "glyim-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Formatter for Glyim"
+
+[[bin]]
+name = "glyim-fmt"
+path = "src/main.rs"
+
+[dependencies]

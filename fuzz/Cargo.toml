@@ -16,6 +16,8 @@ arbitrary = { version = "1", features = ["derive"] }
 glyim-lex = { path = "../crates/glyim-lex" }
 glyim-syntax = { path = "../crates/glyim-syntax" }
 glyim-parse = { path = "../crates/glyim-parse" }
+glyim-hir = { path = "../crates/glyim-hir" }
+glyim-typeck = { path = "../crates/glyim-typeck" }
 
 [[bin]]
 name = "fuzz_lexer"
@@ -26,5 +28,11 @@ doc = false
 [[bin]]
 name = "fuzz_parser"
 path = "fuzz_targets/fuzz_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_typeck"
+path = "fuzz_targets/fuzz_typeck.rs"
 test = false
 doc = false

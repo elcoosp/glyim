@@ -46,6 +46,42 @@ impl TypeChecker {
                             expr_id: value.get_id(),
                         });
                     }
+                    // Backward inference: extract type args from annotation for generic calls
+                    if let HirExpr::Call {
+                        id: call_id,
+                        callee,
+                        ..
+                    } = value
+                    {
+                        if !self.call_type_args.contains_key(call_id) {
+                            if let Some(fn_def) =
+                                self.fns.iter().find(|f| f.name == *callee).or_else(|| {
+                                    self.impl_methods
+                                        .values()
+                                        .find_map(|ms| ms.iter().find(|m| m.name == *callee))
+                                })
+                            {
+                                if !fn_def.type_params.is_empty() {
+                                    let ret_ty = fn_def.ret.clone().unwrap_or(HirType::Int);
+                                    let mut sub = std::collections::HashMap::new();
+                                    Self::unify_types(
+                                        &annotated,
+                                        &ret_ty,
+                                        &fn_def.type_params,
+                                        &mut sub,
+                                    );
+                                    if sub.len() == fn_def.type_params.len() {
+                                        let type_args: Vec<HirType> = fn_def
+                                            .type_params
+                                            .iter()
+                                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                            .collect();
+                                        self.call_type_args.insert(*call_id, type_args);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // CRITICAL: use the annotation type, not inferred, for the binding
                     annotated.clone()
                 } else {
