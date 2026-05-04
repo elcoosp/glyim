@@ -10,7 +10,7 @@ pub fn has_unresolved_param(ty: &HirType, interner: &Interner) -> bool {
     match ty {
         HirType::Named(sym) => {
             let s = interner.resolve(*sym);
-            s.len() == 1 && s.chars().next().map_or(false, |c| c.is_uppercase())
+            s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
         }
         HirType::Generic(_, args) => args.iter().any(|a| has_unresolved_param(a, interner)),
         HirType::RawPtr(inner) => has_unresolved_param(inner, interner),

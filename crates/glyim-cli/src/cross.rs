@@ -139,7 +139,7 @@ pub fn ensure_sysroot(triple: &str) -> Result<(), String> {
     // For Linux targets, check if the cross‑compiler is available
     if let Some(pkg) = toolchain_package_name(triple) {
         // Try the common cross‑compiler patterns
-        let patterns = [format!("{triple}-gcc"), format!("{pkg}")];
+        let patterns = [format!("{triple}-gcc"), pkg.to_string()];
         for pat in &patterns {
             let status = Command::new("which").arg(pat).status();
             if status.is_ok_and(|s| s.success()) {

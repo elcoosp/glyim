@@ -33,17 +33,15 @@ impl<'a> MonoContext<'a> {
 
         // If no type params are on the function itself (e.g., struct methods),
         // derive the substitution from the self parameter's generic type.
-        if sub.is_empty() && !f.params.is_empty() {
-            if let (_first_sym, HirType::Generic(_, param_type_args)) = &f.params[0] {
+        if sub.is_empty() && !f.params.is_empty()
+            && let (_first_sym, HirType::Generic(_, param_type_args)) = &f.params[0] {
                 for (i, formal) in param_type_args.iter().enumerate() {
-                    if let HirType::Named(formal_name) = formal {
-                        if let Some(ct) = concrete.get(i) {
+                    if let HirType::Named(formal_name) = formal
+                        && let Some(ct) = concrete.get(i) {
                             sub.insert(*formal_name, ct.clone());
                         }
-                    }
                 }
             }
-        }
 
         // Fallback: if sub is still empty but we have concrete args and
         // function type params, map them directly.
@@ -385,12 +383,11 @@ impl<'a> MonoContext<'a> {
             if self.find_struct(*sym).is_some() {
                 let concrete: Vec<HirType> = args.clone();
                 let key = (*sym, concrete.clone());
-                if !self.struct_specs.contains_key(&key) {
-                    if let Some(s) = self.find_struct(*sym) {
+                if !self.struct_specs.contains_key(&key)
+                    && let Some(s) = self.find_struct(*sym) {
                         let specialized = self.specialize_struct(&s, &concrete);
                         self.struct_specs.insert(key, specialized);
                     }
-                }
             }
             for arg in args {
                 self.ensure_struct_specialized(arg);

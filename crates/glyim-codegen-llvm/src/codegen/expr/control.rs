@@ -203,8 +203,8 @@ pub(crate) fn codegen_match<'ctx>(
                         if let Some(inner) = match &arm0.pattern {
                             HirPattern::OptionSome(i) | HirPattern::ResultOk(i) => Some(i),
                             _ => None,
-                        } {
-                            if let HirPattern::Var(name) = &**inner {
+                        }
+                            && let HirPattern::Var(name) = &**inner {
                                 let payload_ptr = cg
                                     .builder
                                     .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
@@ -221,7 +221,6 @@ pub(crate) fn codegen_match<'ctx>(
                                 cg.builder.build_store(alloca, payload_val).ok()?;
                                 fctx.vars.insert(*name, alloca);
                             }
-                        }
                     }
                     _ => {}
                 }

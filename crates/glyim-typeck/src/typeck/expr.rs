@@ -140,8 +140,8 @@ impl TypeChecker {
                             }
                         }
                         let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
-                        let ret_ty = glyim_hir::types::substitute_type(&ret, &sub);
-                        ret_ty
+                        
+                        glyim_hir::types::substitute_type(&ret, &sub)
                     } else {
                         HirType::Int
                     }
@@ -237,7 +237,7 @@ impl TypeChecker {
                     );
                     if let Some(methods) = self.impl_methods.get(&type_name) {
                         // Try both the base name and the mangled name with type suffix
-                        for fn_def in methods.iter().filter(|f| f.name == base_sym) {
+                        if let Some(fn_def) = methods.iter().filter(|f| f.name == base_sym).next() {
                             let mut sub = std::collections::HashMap::new();
                             // Infer from receiver type args
                             if let HirType::Generic(_, type_args) = &receiver_ty {

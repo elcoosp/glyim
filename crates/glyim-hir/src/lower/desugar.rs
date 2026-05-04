@@ -68,11 +68,7 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                             HirType::Named(sym) => {
                                 let s = interner.resolve(*sym);
                                 // single uppercase letter → type parameter
-                                if s.len() == 1 && s.chars().next().unwrap().is_uppercase() {
-                                    false
-                                } else {
-                                    true
-                                }
+                                !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
                             }
                             HirType::Generic(_, args) => {
                                 args.iter().all(|a| is_concrete(a, interner))

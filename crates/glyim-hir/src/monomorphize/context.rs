@@ -59,8 +59,8 @@ impl<'a> MonoContext<'a> {
                     let type_sym = self.interner.intern(type_name);
                     let method_sym = self.interner.intern(method_name);
                     for item in &self.hir.items {
-                        if let HirItem::Impl(imp) = item {
-                            if imp.target_name == type_sym {
+                        if let HirItem::Impl(imp) = item
+                            && imp.target_name == type_sym {
                                 for m in &imp.methods {
                                     if m.name == method_sym && m.type_params.is_empty() {
                                         // The method is already fully specialized
@@ -68,7 +68,6 @@ impl<'a> MonoContext<'a> {
                                     }
                                 }
                             }
-                        }
                     }
                 }
             }
@@ -124,15 +123,14 @@ impl<'a> MonoContext<'a> {
                 let method_sym = self.interner.intern(potential_method_name);
 
                 for item in &self.hir.items {
-                    if let HirItem::Impl(imp) = item {
-                        if imp.target_name == type_sym {
+                    if let HirItem::Impl(imp) = item
+                        && imp.target_name == type_sym {
                             for m in &imp.methods {
                                 if m.name == method_sym {
                                     return Some(m.clone());
                                 }
                             }
                         }
-                    }
                 }
             }
         }
@@ -199,7 +197,7 @@ impl<'a> MonoContext<'a> {
                         || expr_depends(then_branch, type_params, interner)
                         || else_branch
                             .as_ref()
-                            .map_or(false, |e| expr_depends(e, type_params, interner))
+                            .is_some_and(|e| expr_depends(e, type_params, interner))
                 }
                 HirExpr::While {
                     condition, body, ..
@@ -214,7 +212,7 @@ impl<'a> MonoContext<'a> {
                         || arms.iter().any(|arm| {
                             arm.guard
                                 .as_ref()
-                                .map_or(false, |g| expr_depends(g, type_params, interner))
+                                .is_some_and(|g| expr_depends(g, type_params, interner))
                                 || expr_depends(&arm.body, type_params, interner)
                         })
                 }
@@ -242,7 +240,7 @@ impl<'a> MonoContext<'a> {
                 }
                 HirExpr::Return { value, .. } => value
                     .as_ref()
-                    .map_or(false, |v| expr_depends(v, type_params, interner)),
+                    .is_some_and(|v| expr_depends(v, type_params, interner)),
                 HirExpr::StructLit { fields, .. } => fields
                     .iter()
                     .any(|(_, e)| expr_depends(e, type_params, interner)),
@@ -315,7 +313,7 @@ impl<'a> MonoContext<'a> {
         match ty {
             HirType::Named(sym) => {
                 let s = self.interner.resolve(*sym);
-                s.len() == 1 && s.chars().next().map_or(false, |c| c.is_uppercase())
+                s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
             }
             HirType::Generic(_, args) => args.iter().any(|a| self.has_unresolved_type_param(a)),
             HirType::RawPtr(inner) => self.has_unresolved_type_param(inner.as_ref()),
@@ -337,12 +335,11 @@ impl<'a> MonoContext<'a> {
         type_params: &[Symbol],
     ) -> Option<Vec<HirType>> {
         for item in &self.hir.items {
-            if let HirItem::Fn(fn_def) = item {
-                if let Some(result) = self.find_in_block(&fn_def.body, callee, call_id, type_params)
+            if let HirItem::Fn(fn_def) = item
+                && let Some(result) = self.find_in_block(&fn_def.body, callee, call_id, type_params)
                 {
                     return Some(result);
                 }
-            }
         }
         None
     }
@@ -375,9 +372,9 @@ impl<'a> MonoContext<'a> {
                             continue;
                         }
                         _ => {
-                            if found && let Some(var_sym) = target_var {
-                                if let HirStmt::Expr(inner) = stmt {
-                                    if let Some(args) = self.extract_type_args_from_call_on_var(
+                            if found && let Some(var_sym) = target_var
+                                && let HirStmt::Expr(inner) = stmt
+                                    && let Some(args) = self.extract_type_args_from_call_on_var(
                                         inner,
                                         *callee,
                                         var_sym,
@@ -385,8 +382,6 @@ impl<'a> MonoContext<'a> {
                                     ) {
                                         return Some(args);
                                     }
-                                }
-                            }
                         }
                     }
                 }
@@ -424,13 +419,11 @@ impl<'a> MonoContext<'a> {
                         HirExpr::Ident { name, .. } => *name == var_sym,
                         _ => false,
                     }
-                } {
-                    if let Some(cached) = self.call_type_args.get(&expr.get_id()) {
-                        if !cached.is_empty() {
+                }
+                    && let Some(cached) = self.call_type_args.get(&expr.get_id())
+                        && !cached.is_empty() {
                             return Some(cached.clone());
                         }
-                    }
-                }
                 None
             }
             _ => None,

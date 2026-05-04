@@ -210,7 +210,7 @@ async fn main() -> std::io::Result<()> {
     let cas_service = grpc::cas::CasService {
         store: shared_store.clone(),
     };
-    let capabilities_service = grpc::capabilities::CapabilitiesService::default();
+    let capabilities_service = grpc::capabilities::CapabilitiesService;
 
     let grpc_addr = "127.0.0.1:9091".parse().expect("internal error");
     tracing::info!("Starting gRPC server on {}", grpc_addr);
