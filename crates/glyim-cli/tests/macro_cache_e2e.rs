@@ -8,6 +8,13 @@ static mut SERVER_PID: Option<u32> = None;
 fn ensure_server() {
     unsafe {
         START_SERVER.call_once(|| {
+            // Build the CAS server in release mode first
+            let status = Command::new("cargo")
+                .args(["build", "--release", "-p", "glyim-cas-server"])
+                .status()
+                .expect("failed to build CAS server");
+            assert!(status.success(), "CAS server build failed");
+
             let server_path = format!(
                 "{}/../../target/release/glyim-cas-server",
                 env!("CARGO_MANIFEST_DIR")
@@ -15,7 +22,7 @@ fn ensure_server() {
             let child = Command::new(&server_path)
                 .spawn()
                 .expect("failed to start CAS server");
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_secs(2));
             SERVER_PID = Some(child.id());
             std::mem::forget(child);
         });
@@ -36,6 +43,13 @@ fn two_machines_share_macro_cache() {
     std::fs::write(&main_g_b, source).unwrap();
 
     let glyim = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/release/glyim");
+
+    // Build glyim in release mode too
+    let build_status = Command::new("cargo")
+        .args(["build", "--release", "-p", "glyim-cli"])
+        .status()
+        .expect("failed to build glyim");
+    assert!(build_status.success(), "glyim build failed");
 
     let status_a = Command::new(glyim)
         .arg("run")
