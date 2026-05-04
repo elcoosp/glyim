@@ -1,4 +1,4 @@
 target
 wr*.sh
 corpus
-mutants.out
+mutants.out*
