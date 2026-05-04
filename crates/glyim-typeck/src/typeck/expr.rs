@@ -52,10 +52,13 @@ impl TypeChecker {
             HirExpr::BoolLit { .. } => HirType::Bool,
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
-            HirExpr::Ident { name, .. } => self.lookup_binding(name).unwrap_or(HirType::Int),
+            HirExpr::Ident { name, .. } => self.lookup_binding(name).unwrap_or(HirType::Error),
             HirExpr::Binary { op, lhs, rhs, .. } => {
-                self.check_expr(lhs);
-                self.check_expr(rhs);
+                let lt = self.check_expr(lhs).unwrap_or(HirType::Error);
+                let rt = self.check_expr(rhs).unwrap_or(HirType::Error);
+                if lt == HirType::Error || rt == HirType::Error {
+                    return HirType::Error;
+                }
                 match op {
                     HirBinOp::Eq
                     | HirBinOp::Neq

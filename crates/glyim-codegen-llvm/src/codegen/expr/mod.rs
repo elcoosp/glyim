@@ -405,6 +405,7 @@ pub(crate) fn codegen_expr<'ctx>(
                         .map(|e| mangle_type(cg, e))
                         .collect::<Vec<_>>()
                         .join("_"),
+                    HirType::Error => "error".to_string(),
                 }
             }
 

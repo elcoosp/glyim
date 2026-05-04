@@ -1,3 +1,4 @@
+use glyim_pkg::cas_client::CasClient;
 use glyim_codegen_llvm::runtime_shims;
 use glyim_codegen_llvm::{Codegen, compile_to_ir};
 use glyim_hir::ExprId;
@@ -740,6 +741,57 @@ fn compute_source_hash(source: &str) -> String {
     hasher.update(source.as_bytes());
     hasher.update(env!("CARGO_PKG_VERSION"));
     hex::encode(hasher.finalize())
+}
+
+pub fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
+    let (source, _) = load_source_with_prelude(input)?;
+    let hash = compute_source_hash(&source);
+    let cache_dir = dirs_next::cache_dir()
+        .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
+        .join("glyim-objects");
+    let cas = CasClient::new(&cache_dir).map_err(PipelineError::Io)?;
+    let output_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+        let stem = input
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        PathBuf::from(stem)
+    });
+    let hash_content = hash
+        .parse::<glyim_macro_vfs::ContentHash>()
+        .map_err(|e| PipelineError::Codegen(format!("hash parse: {e}")))?;
+    if let Some(cached_obj) = cas.retrieve(hash_content) {
+        let tmp_dir = tempfile::tempdir()?;
+        let obj_path = tmp_dir.path().join("cached.o");
+        fs::write(&obj_path, &cached_obj)?;
+        link_object(&obj_path, &output_path, false)?;
+        return Ok(output_path);
+    }
+    let config = PipelineConfig::default();
+    let compiled = compile_source_to_hir(source, input, &config)?;
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    let context = Context::create();
+    let mut codegen = Codegen::new(
+        &context,
+        compiled.interner.clone(),
+        compiled.merged_types.clone(),
+    );
+    if compiled.is_no_std {
+        codegen = codegen.with_no_std();
+    }
+    codegen
+        .generate(&compiled.mono_hir)
+        .map_err(PipelineError::Codegen)?;
+    debug_ir(&codegen);
+    codegen
+        .write_object_file(&obj_path)
+        .map_err(PipelineError::Codegen)?;
+    let obj_bytes = fs::read(&obj_path)?;
+    cas.store(&obj_bytes);
+    link_object(&obj_path, &output_path, false)?;
+    Ok(output_path)
 }
 fn which(cmd: &str) -> bool {
     Command::new(cmd)

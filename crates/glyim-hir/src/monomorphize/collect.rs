@@ -259,8 +259,9 @@ impl<'a> MonoContext<'a> {
             | HirType::Str
             | HirType::Unit
             | HirType::Never
+            | HirType::Error
             | HirType::Opaque(_) => {
-                eprintln!("[concretize_type] leaf type {:?}", ty);
+                if !matches!(ty, HirType::Error) { if !matches!(ty, HirType::Error) { if !matches!(ty, HirType::Error) { eprintln!("[concretize_type] leaf type {:?}", ty); } } }
                 ty.clone()
             }
             HirType::RawPtr(inner) => {
@@ -845,6 +846,7 @@ impl<'a> MonoContext<'a> {
             | HirType::Str
             | HirType::Unit
             | HirType::Never
+            | HirType::Error
             | HirType::Opaque(_)
             | HirType::RawPtr(_)
             | HirType::Option(_)
