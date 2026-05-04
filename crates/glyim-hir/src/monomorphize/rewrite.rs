@@ -75,8 +75,13 @@ impl<'a> MonoContext<'a> {
                 span,
                 ..
             } => {
-                let rewritten_receiver =
-                    Box::new(self.rewrite_expr(receiver, fn_map, struct_map, enum_spec_map, type_sub));
+                let rewritten_receiver = Box::new(self.rewrite_expr(
+                    receiver,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                ));
                 let rewritten_args: Vec<HirExpr> = args
                     .iter()
                     .map(|a| self.rewrite_expr(a, fn_map, struct_map, enum_spec_map, type_sub))
@@ -146,16 +151,26 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::Match {
                 id: *id,
-                scrutinee: Box::new(
-                    self.rewrite_expr(scrutinee, fn_map, struct_map, enum_spec_map, type_sub),
-                ),
+                scrutinee: Box::new(self.rewrite_expr(
+                    scrutinee,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 arms: arms
                     .iter()
                     .map(|(pat, guard, body)| {
-                        let rewritten_guard = guard
-                            .as_ref()
-                            .map(|g| self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub));
-                        let rewritten_pat = if let HirPattern::EnumVariant { enum_name, variant_name, bindings, span } = pat {
+                        let rewritten_guard = guard.as_ref().map(|g| {
+                            self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub)
+                        });
+                        let rewritten_pat = if let HirPattern::EnumVariant {
+                            enum_name,
+                            variant_name,
+                            bindings,
+                            span,
+                        } = pat
+                        {
                             // For patterns, we can't easily get the concrete args because patterns don't carry type info.
                             // We'll try to find the specialized enum from the scrutinee's type (which is available as the match scrutinee expr_type).
                             // But we don't have access to scrutinee type here. For now, try exact match and fallback to base.
@@ -165,7 +180,8 @@ impl<'a> MonoContext<'a> {
                             // Since we already rewrote the scrutinee EnumVariant, the value has the correct tag layout.
                             // The pattern just needs to match the tag index of the concrete enum.
                             // We'll search enum_spec_map for any entry where the base matches.
-                            let new_enum_name = enum_spec_map.iter()
+                            let new_enum_name = enum_spec_map
+                                .iter()
                                 .find(|((base, _), _)| base == enum_name)
                                 .map(|(_, mangled)| *mangled)
                                 .unwrap_or(*enum_name);
@@ -204,9 +220,13 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::If {
                 id: *id,
-                condition: Box::new(
-                    self.rewrite_expr(condition, fn_map, struct_map, enum_spec_map, type_sub),
-                ),
+                condition: Box::new(self.rewrite_expr(
+                    condition,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 then_branch: Box::new(self.rewrite_expr(
                     then_branch,
                     fn_map,
@@ -240,9 +260,13 @@ impl<'a> MonoContext<'a> {
             } => HirExpr::Unary {
                 id: *id,
                 op: op.clone(),
-                operand: Box::new(
-                    self.rewrite_expr(operand, fn_map, struct_map, enum_spec_map, type_sub),
-                ),
+                operand: Box::new(self.rewrite_expr(
+                    operand,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 span: *span,
             },
             HirExpr::Return { id, value, span } => HirExpr::Return {
@@ -254,7 +278,13 @@ impl<'a> MonoContext<'a> {
             },
             HirExpr::Deref { id, expr, span } => HirExpr::Deref {
                 id: *id,
-                expr: Box::new(self.rewrite_expr(expr, fn_map, struct_map, enum_spec_map, type_sub)),
+                expr: Box::new(self.rewrite_expr(
+                    expr,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 span: *span,
             },
             HirExpr::ForIn {
@@ -266,8 +296,20 @@ impl<'a> MonoContext<'a> {
             } => HirExpr::ForIn {
                 id: *id,
                 pattern: pattern.clone(),
-                iter: Box::new(self.rewrite_expr(iter, fn_map, struct_map, enum_spec_map, type_sub)),
-                body: Box::new(self.rewrite_expr(body, fn_map, struct_map, enum_spec_map, type_sub)),
+                iter: Box::new(self.rewrite_expr(
+                    iter,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
+                body: Box::new(self.rewrite_expr(
+                    body,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 span: *span,
             },
             HirExpr::FieldAccess {
@@ -277,7 +319,13 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::FieldAccess {
                 id: *id,
-                object: Box::new(self.rewrite_expr(object, fn_map, struct_map, enum_spec_map, type_sub)),
+                object: Box::new(self.rewrite_expr(
+                    object,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 field: *field,
                 span: *span,
             },
@@ -341,9 +389,7 @@ impl<'a> MonoContext<'a> {
                     variant_name: *variant_name,
                     args: args
                         .iter()
-                        .map(|a| {
-                            self.rewrite_expr(a, fn_map, struct_map, enum_spec_map, type_sub)
-                        })
+                        .map(|a| self.rewrite_expr(a, fn_map, struct_map, enum_spec_map, type_sub))
                         .collect(),
                     span: *span,
                 }
@@ -389,7 +435,10 @@ impl<'a> MonoContext<'a> {
                     let mut prev = concretized.clone();
                     loop {
                         concretized = self.concretize_type(&prev);
-                        eprintln!("[rewrite_stmt LetPat] repeat concretize: {:?} -> {:?}", prev, concretized);
+                        eprintln!(
+                            "[rewrite_stmt LetPat] repeat concretize: {:?} -> {:?}",
+                            prev, concretized
+                        );
                         if concretized == prev {
                             break;
                         }
@@ -414,7 +463,13 @@ impl<'a> MonoContext<'a> {
                 value,
                 span,
             } => HirStmt::AssignField {
-                object: Box::new(self.rewrite_expr(object, fn_map, struct_map, enum_spec_map, type_sub)),
+                object: Box::new(self.rewrite_expr(
+                    object,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 field: *field,
                 value: self.rewrite_expr(value, fn_map, struct_map, enum_spec_map, type_sub),
                 span: *span,
@@ -424,7 +479,13 @@ impl<'a> MonoContext<'a> {
                 value,
                 span,
             } => HirStmt::AssignDeref {
-                target: Box::new(self.rewrite_expr(target, fn_map, struct_map, enum_spec_map, type_sub)),
+                target: Box::new(self.rewrite_expr(
+                    target,
+                    fn_map,
+                    struct_map,
+                    enum_spec_map,
+                    type_sub,
+                )),
                 value: self.rewrite_expr(value, fn_map, struct_map, enum_spec_map, type_sub),
                 span: *span,
             },
@@ -434,7 +495,7 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-        pub(crate) fn rewrite_fn(
+    pub(crate) fn rewrite_fn(
         &mut self,
         f: &HirFn,
         fn_map: &HashMap<(Symbol, Vec<HirType>), Symbol>,
