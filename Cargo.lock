@@ -1451,6 +1451,7 @@ dependencies = [
  "miette",
  "miette-derive",
  "proptest",
+ "rstest",
  "similar 2.7.0",
  "thiserror 2.0.18",
  "tracing",
