@@ -97,6 +97,9 @@ impl<'a> MonoContext<'a> {
                 self.fn_specs.insert(key, specialized);
             }
         }
+
+        // Run type specialization again to catch any new types discovered
+        self.process_type_specializations();
     }
 
     fn find_callee_by_id_from_hir(&mut self, search_id: ExprId) -> Option<Symbol> {
@@ -821,8 +824,9 @@ impl<'a> MonoContext<'a> {
                 _ => {}
             }
         }
-        // Also process types from call_type_args
-        for type_args in self.call_type_args.values() {
+        // Also process types from call_type_args (collect to avoid borrow issues)
+        let call_type_args_vals: Vec<Vec<HirType>> = self.call_type_args.values().cloned().collect();
+        for type_args in &call_type_args_vals {
             for ty in type_args {
                 self.enqueue_type_if_generic(ty);
             }
