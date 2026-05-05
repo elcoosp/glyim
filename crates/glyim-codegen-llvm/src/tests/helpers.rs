@@ -1,4 +1,4 @@
-use crate::{Codegen, CodegenBuilder};
+use crate::CodegenBuilder;
 use glyim_interner::Interner;
 use inkwell::context::Context;
 
