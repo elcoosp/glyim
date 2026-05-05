@@ -3,27 +3,10 @@ use glyim_macro_core::registry::MacroRegistry;
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::Mutex;
 
 /// Expand macros found in the source text.
-/// Records the location of a macro expansion for later diagnostic attribution.
-#[derive(Clone, Debug)]
-struct MacroExpansionRecord {
-    call_site: (usize, usize), // start, end of @macro_name(...) in source
-    def_site: (usize, usize),  // start, end of the macro definition
-    macro_name: String,
-    expanded_range: (usize, usize), // start, end of the expanded text in the result
-}
-
-static EXPANSION_RECORDS: Mutex<Vec<MacroExpansionRecord>> = Mutex::new(Vec::new());
-
-pub fn get_expansion_records() -> Vec<MacroExpansionRecord> {
-    EXPANSION_RECORDS.lock().unwrap().clone()
-}
-
-pub fn clear_expansion_records() {
-    EXPANSION_RECORDS.lock().unwrap().clear();
-}
+// Macro expansions are recorded in glyim_diag::MACRO_EXPANSION_TABLE
+// for diagnostic backtrace via miette::Diagnostic::related().
 
 pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<String, String> {
     let store = LocalContentStore::new(cas_dir).map_err(|e| format!("create store: {e}"))?;
@@ -111,15 +94,15 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
             let after_str = &result[call_end..];
             result = format!("{before}{expanded_str}{after_str}");
 
-            EXPANSION_RECORDS
-                .lock()
-                .unwrap()
-                .push(MacroExpansionRecord {
-                    call_site,
-                    def_site,
+            {
+                let mut table = glyim_diag::MACRO_EXPANSION_TABLE.lock().unwrap();
+                table.push(glyim_diag::MacroExpansion {
+                    call_site: glyim_diag::Span::new(call_site.0, call_site.1),
+                    def_site: glyim_diag::Span::new(def_site.0, def_site.1),
                     macro_name: rec_macro_name,
-                    expanded_range,
+                    parent: None,
                 });
+            }
             let has_nested_macro = expanded_str.contains('@');
             if has_nested_macro {
                 scan_from = at_pos;

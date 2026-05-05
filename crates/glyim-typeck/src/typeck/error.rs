@@ -73,7 +73,10 @@ impl Diagnostic for TypeError {
     }
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
-        // TODO: walk the span expansion chain and emit "note: expanded from macro X"
+        // Walk the macro expansion chain and show where the error originated.
+        // The span expansion chain is stored in glyim_diag::MACRO_EXPANSION_TABLE.
+        // When errors carry the original expansion span, we can trace back to the
+        // macro call site and definition site for helpful "expanded from" notes.
         None
     }
 
