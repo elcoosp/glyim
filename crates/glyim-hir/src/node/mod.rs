@@ -149,7 +149,7 @@ pub enum HirExpr {
     Match {
         id: ExprId,
         scrutinee: Box<HirExpr>,
-        arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)>,
+        arms: Vec<MatchArm>,
         span: Span,
     },
     FieldAccess {

@@ -20,6 +20,7 @@ impl ContentHash {
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
+    #[must_use]
     pub fn to_hex(self) -> String {
         self.0.iter().map(|b| format!("{:02x}", b)).collect()
     }

@@ -1,0 +1,12 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × expected expression but found error
+   ╭─[tests/ui/nested_error.g:2:3]
+ 1 │ fn f() {
+ 2 │   $
+   ·   ┬
+   ·   ╰── unexpected error
+ 3 │ }
+   ╰────

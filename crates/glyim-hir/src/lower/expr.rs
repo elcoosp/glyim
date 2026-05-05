@@ -2,6 +2,7 @@ use crate::lower::context::LoweringContext;
 use crate::lower::ops::{lower_binop, lower_unop};
 use crate::lower::pattern::lower_pattern;
 use crate::lower::types::lower_type_expr;
+use crate::node::MatchArm;
 use crate::types::{ExprId, HirType};
 use crate::{HirExpr, HirPattern, HirStmt};
 use glyim_parse::{BlockItem, ExprKind, StmtKind};
@@ -185,7 +186,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
         } => {
             // AST args include the receiver as first element; strip it
             let method_args: Vec<_> = args.iter().skip(1).map(|a| lower_expr(a, ctx)).collect();
-            eprintln!(
+            tracing::debug!(
                 "LOWER MethodCall: receiver={:?} method={:?}",
                 receiver.kind,
                 ctx.resolve(*method)
@@ -268,15 +269,15 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                     span,
                 }),
                 arms: vec![
-                    (
-                        HirPattern::OptionSome(Box::new(lower_pattern(pattern, ctx))),
-                        None,
-                        body_expr,
-                    ),
-                    (
-                        HirPattern::OptionNone,
-                        None,
-                        HirExpr::Block {
+                    MatchArm {
+                        pattern: HirPattern::OptionSome(Box::new(lower_pattern(pattern, ctx))),
+                        guard: None,
+                        body: body_expr,
+                    },
+                    MatchArm {
+                        pattern: HirPattern::OptionNone,
+                        guard: None,
+                        body: HirExpr::Block {
                             id: ctx.fresh_id(),
                             stmts: vec![HirStmt::Assign {
                                 target: done_sym,
@@ -289,7 +290,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                             }],
                             span,
                         },
-                    ),
+                    },
                 ],
                 span,
             };
@@ -371,7 +372,7 @@ fn lower_stmt(stmt: &glyim_parse::StmtNode, ctx: &mut LoweringContext) -> HirStm
             ty,
         } => {
             let val = lower_expr(value, ctx);
-            eprintln!("LOWER LetPat: value={:?}", val);
+            tracing::debug!("LOWER LetPat: value={:?}", val);
             let pat = lower_pattern(pattern, ctx);
             HirStmt::LetPat {
                 pattern: pat,
@@ -413,13 +414,17 @@ fn lower_match(
     match_span: glyim_diag::Span,
     ctx: &mut LoweringContext,
 ) -> HirExpr {
-    let hir_arms: Vec<(HirPattern, Option<HirExpr>, HirExpr)> = arms
+    let hir_arms: Vec<MatchArm> = arms
         .iter()
         .map(|arm| {
             let pattern = lower_pattern(&arm.pattern, ctx);
             let guard = arm.guard.as_ref().map(|e| lower_expr(e, ctx));
             let body = lower_expr(&arm.body, ctx);
-            (pattern, guard, body)
+            MatchArm {
+                pattern,
+                guard,
+                body,
+            }
         })
         .collect();
     HirExpr::Match {
@@ -458,20 +463,20 @@ fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringCo
         id,
         scrutinee: Box::new(lower_expr(expr, ctx)),
         arms: vec![
-            (
-                HirPattern::ResultOk(Box::new(HirPattern::Var(ctx.intern("v")))),
-                None,
-                HirExpr::Ident {
+            MatchArm {
+                pattern: HirPattern::ResultOk(Box::new(HirPattern::Var(ctx.intern("v")))),
+                guard: None,
+                body: HirExpr::Ident {
                     id: ctx.fresh_id(),
                     name: ctx.intern("v"),
                     span,
                 },
-            ),
-            (
-                HirPattern::ResultErr(Box::new(HirPattern::Wild)),
-                None,
-                fail_block,
-            ),
+            },
+            MatchArm {
+                pattern: HirPattern::ResultErr(Box::new(HirPattern::Wild)),
+                guard: None,
+                body: fail_block,
+            },
         ],
         span,
     }

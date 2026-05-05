@@ -1,0 +1,10 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × expected ) but found identifier
+   ╭─[tests/ui/missing_comma_in_params.g:1:8]
+ 1 │ fn f(a b) { a }
+   ·        ┬
+   ·        ╰── unexpected identifier
+   ╰────

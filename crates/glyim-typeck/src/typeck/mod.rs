@@ -62,6 +62,9 @@ impl TypeChecker {
         self.expr_types[idx] = ty;
     }
 
+    #[allow(dead_code)]
+
+
     fn dummy_symbol(&self) -> Symbol {
         glyim_interner::Interner::new().intern("__dummy")
     }
@@ -167,18 +170,31 @@ impl TypeChecker {
                 bindings,
                 ..
             } => {
-                // Collect binding types first to avoid borrow conflicts
+                // Collect binding types with concrete type arg substitution
                 let binding_tys: Vec<(HirPattern, HirType)> = match scrutinee_ty {
                     HirType::Named(enum_name) | HirType::Generic(enum_name, _) => {
                         if let Some(info) = self.enums.get(enum_name) {
                             if let Some(variant) =
                                 info.variants.iter().find(|v| v.name == *variant_name)
                             {
+                                let sub: std::collections::HashMap<_, _> =
+                                    if let HirType::Generic(_, type_args) = scrutinee_ty {
+                                        info.type_params
+                                            .iter()
+                                            .zip(type_args.iter())
+                                            .map(|(tp, ct)| (*tp, ct.clone()))
+                                            .collect()
+                                    } else {
+                                        std::collections::HashMap::new()
+                                    };
                                 bindings
                                     .iter()
                                     .zip(variant.fields.iter())
                                     .map(|((_, binding_pat), field)| {
-                                        (binding_pat.clone(), field.ty.clone())
+                                        (
+                                            binding_pat.clone(),
+                                            glyim_hir::types::substitute_type(&field.ty, &sub),
+                                        )
                                     })
                                     .collect()
                             } else {
@@ -234,6 +250,113 @@ impl Default for TypeChecker {
     fn default() -> Self {
         Self::new(Interner::new())
     }
+}
+
+/// Walk all HIR items and return the maximum expression ID found.
+#[allow(dead_code)]
+
+fn max_expr_id(hir: &glyim_hir::Hir) -> usize {
+    use glyim_hir::node::{HirExpr, HirStmt};
+    fn expr_max(expr: &HirExpr, max_id: &mut usize) {
+        let id = expr.get_id().as_usize();
+        if id > *max_id {
+            *max_id = id;
+        }
+        match expr {
+            HirExpr::Block { stmts, .. } => {
+                for stmt in stmts {
+                    stmt_max(stmt, max_id);
+                }
+            }
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                expr_max(condition, max_id);
+                expr_max(then_branch, max_id);
+                if let Some(e) = else_branch {
+                    expr_max(e, max_id);
+                }
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                expr_max(scrutinee, max_id);
+                for arm in arms {
+                    expr_max(&arm.body, max_id);
+                }
+            }
+            HirExpr::While {
+                condition, body, ..
+            } => {
+                expr_max(condition, max_id);
+                expr_max(body, max_id);
+            }
+            HirExpr::ForIn { iter, body, .. } => {
+                expr_max(iter, max_id);
+                expr_max(body, max_id);
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                expr_max(lhs, max_id);
+                expr_max(rhs, max_id);
+            }
+            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
+                expr_max(operand, max_id);
+            }
+            HirExpr::Call { args, .. } | HirExpr::MethodCall { args, .. } => {
+                for a in args {
+                    expr_max(a, max_id);
+                }
+            }
+            HirExpr::StructLit { fields, .. } => {
+                for (_, val) in fields {
+                    expr_max(val, max_id);
+                }
+            }
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    expr_max(a, max_id);
+                }
+            }
+            HirExpr::Return { value, .. } => {
+                if let Some(v) = value {
+                    expr_max(v, max_id);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn stmt_max(stmt: &HirStmt, max_id: &mut usize) {
+        match stmt {
+            HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. } => expr_max(value, max_id),
+            HirStmt::Assign { value, .. } => expr_max(value, max_id),
+            HirStmt::AssignDeref { target, value, .. } => {
+                expr_max(target, max_id);
+                expr_max(value, max_id);
+            }
+            HirStmt::AssignField { object, value, .. } => {
+                expr_max(object, max_id);
+                expr_max(value, max_id);
+            }
+            HirStmt::Expr(e) => expr_max(e, max_id),
+        }
+    }
+
+    let mut max_id = 0usize;
+    for item in &hir.items {
+        match item {
+            glyim_hir::item::HirItem::Fn(f) => expr_max(&f.body, &mut max_id),
+            glyim_hir::item::HirItem::Impl(imp) => {
+                for m in &imp.methods {
+                    expr_max(&m.body, &mut max_id);
+                }
+            }
+            _ => {}
+        }
+    }
+    max_id
 }
 
 #[cfg(test)]

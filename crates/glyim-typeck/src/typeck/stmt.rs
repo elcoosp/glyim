@@ -44,6 +44,7 @@ impl TypeChecker {
                             expected: annotated.clone(),
                             found: inferred,
                             expr_id: value.get_id(),
+                            span: (0, 0),
                         });
                     }
                     // Backward inference: extract type args from annotation for generic calls
@@ -52,34 +53,25 @@ impl TypeChecker {
                         callee,
                         ..
                     } = value
+                        && !self.call_type_args.contains_key(call_id)
+                        && let Some(fn_def) =
+                            self.fns.iter().find(|f| f.name == *callee).or_else(|| {
+                                self.impl_methods
+                                    .values()
+                                    .find_map(|ms| ms.iter().find(|m| m.name == *callee))
+                            })
+                        && !fn_def.type_params.is_empty()
                     {
-                        if !self.call_type_args.contains_key(call_id) {
-                            if let Some(fn_def) =
-                                self.fns.iter().find(|f| f.name == *callee).or_else(|| {
-                                    self.impl_methods
-                                        .values()
-                                        .find_map(|ms| ms.iter().find(|m| m.name == *callee))
-                                })
-                            {
-                                if !fn_def.type_params.is_empty() {
-                                    let ret_ty = fn_def.ret.clone().unwrap_or(HirType::Int);
-                                    let mut sub = std::collections::HashMap::new();
-                                    Self::unify_types(
-                                        &annotated,
-                                        &ret_ty,
-                                        &fn_def.type_params,
-                                        &mut sub,
-                                    );
-                                    if sub.len() == fn_def.type_params.len() {
-                                        let type_args: Vec<HirType> = fn_def
-                                            .type_params
-                                            .iter()
-                                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
-                                            .collect();
-                                        self.call_type_args.insert(*call_id, type_args);
-                                    }
-                                }
-                            }
+                        let ret_ty = fn_def.ret.clone().unwrap_or(HirType::Int);
+                        let mut sub = std::collections::HashMap::new();
+                        Self::unify_types(annotated, &ret_ty, &fn_def.type_params, &mut sub);
+                        if sub.len() == fn_def.type_params.len() {
+                            let type_args: Vec<HirType> = fn_def
+                                .type_params
+                                .iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                .collect();
+                            self.call_type_args.insert(*call_id, type_args);
                         }
                     }
                     // CRITICAL: use the annotation type, not inferred, for the binding
@@ -104,7 +96,8 @@ impl TypeChecker {
                 let immutable = binding.map(|b| !b.mutable).unwrap_or(false);
                 if immutable {
                     self.errors.push(TypeError::AssignToImmutable {
-                        name: *target,
+                        span: (0, 0),
+                        name: self.interner.resolve(*target).to_string(),
                         expr_id: ExprId::new(0),
                     });
                 }
@@ -127,11 +120,13 @@ impl TypeChecker {
                                 expected: *inner,
                                 found: value_ty,
                                 expr_id: ExprId::new(0),
+                                span: (0, 0),
                             });
                         }
                     }
                     _ => {
                         self.errors.push(TypeError::AssignThroughNonPointer {
+                            span: (0, 0),
                             found: ptr_ty,
                             expr_id: ExprId::new(0),
                         });

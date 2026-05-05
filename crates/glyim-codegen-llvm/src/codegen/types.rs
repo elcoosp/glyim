@@ -58,6 +58,7 @@ impl<'ctx> Codegen<'ctx> {
                 // All raw pointers are represented as i8* at the LLVM level.
                 Some(self.context.ptr_type(AddressSpace::from(0u16)).into())
             }
+            HirType::Error => Some(self.i64_type.into()),
             HirType::Never | HirType::Opaque(_) => {
                 // Uninhabited types have zero size; we return i8* to allow sizeof.
                 Some(self.context.i8_type().into())
@@ -82,6 +83,7 @@ pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef)
 }
 
 pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
+    eprintln!("[codegen_enum_def] registering enum {}", cg.interner.resolve(def.name));
     // Compute payload size from actual field types (respects specialized generics)
     let mut max_payload_bytes: u32 = 0;
     for variant in &def.variants {

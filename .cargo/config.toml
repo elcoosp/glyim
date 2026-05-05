@@ -1,5 +1,2 @@
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "prefer-dynamic"]
-
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "prefer-dynamic"]
+linker = "zld"

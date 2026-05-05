@@ -1,0 +1,5 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_typeck.rs
+expression: call_type_args
+---
+{ExprId(3): [Int]}

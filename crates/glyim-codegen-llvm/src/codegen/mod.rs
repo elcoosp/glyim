@@ -18,6 +18,87 @@ use inkwell::types::IntType;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+/// Controls the level of debug information emitted during codegen.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DebugMode {
+    /// No debug info (release builds)
+    None,
+    /// DWARF line tables only (fast builds with source locations)
+    LineTablesOnly,
+    /// Full DWARF debug info (debug builds)
+    Full,
+}
+
+pub struct CodegenBuilder<'ctx> {
+    context: &'ctx Context,
+    interner: Interner,
+    expr_types: Vec<HirType>,
+    debug_mode: DebugMode,
+    source: Option<String>,
+    file_name: Option<String>,
+}
+
+impl<'ctx> CodegenBuilder<'ctx> {
+    pub fn new(context: &'ctx Context, interner: Interner, expr_types: Vec<HirType>) -> Self {
+        Self {
+            context,
+            interner,
+            expr_types,
+            debug_mode: DebugMode::None,
+            source: None,
+            file_name: None,
+        }
+    }
+
+    pub fn build(mut self) -> Result<Codegen<'ctx>, String> {
+        let module = self.context.create_module("glyim_out");
+        let builder = self.context.create_builder();
+        let option_sym = self.interner.intern("Option");
+        let result_sym = self.interner.intern("Result");
+
+        let debug_info = match self.debug_mode {
+            DebugMode::Full => {
+                let file_name = self.file_name.as_deref().unwrap_or("jit");
+                DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full).ok()
+            }
+            DebugMode::LineTablesOnly => {
+                let file_name = self.file_name.as_deref().unwrap_or("jit");
+                DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok()
+            }
+            DebugMode::None => None,
+        };
+
+        Ok(Codegen {
+            context: self.context,
+            module,
+            builder,
+            i64_type: self.context.i64_type(),
+            i32_type: self.context.i32_type(),
+            f64_type: self.context.f64_type(),
+            interner: self.interner,
+            string_counter: RefCell::new(0),
+            expr_types: self.expr_types,
+            mono_cache: RefCell::new(HashMap::new()),
+            struct_types: RefCell::new(HashMap::new()),
+            struct_field_indices: RefCell::new(HashMap::new()),
+            enum_types: RefCell::new(HashMap::new()),
+            enum_struct_types: RefCell::new(HashMap::new()),
+            enum_variant_tags: RefCell::new(HashMap::new()),
+            option_sym,
+            result_sym,
+            debug_info,
+            source_str: self.source,
+            current_subprogram: None,
+            no_std: false,
+            extern_methods: std::collections::HashMap::new(),
+            jit_mode: false,
+            target_triple: None,
+            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
+            errors: RefCell::new(Vec::new()),
+        })
+    }
+}
+
 pub struct Codegen<'ctx> {
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
@@ -55,40 +136,7 @@ pub struct Codegen<'ctx> {
 }
 
 impl<'ctx> Codegen<'ctx> {
-    pub fn new(context: &'ctx Context, mut interner: Interner, expr_types: Vec<HirType>) -> Self {
-        let module = context.create_module("glyim_out");
-        let builder = context.create_builder();
-        let option_sym = interner.intern("Option");
-        let result_sym = interner.intern("Result");
-        Self {
-            context,
-            module,
-            builder,
-            i64_type: context.i64_type(),
-            i32_type: context.i32_type(),
-            f64_type: context.f64_type(),
-            interner,
-            string_counter: RefCell::new(0),
-            expr_types,
-            mono_cache: RefCell::new(HashMap::new()),
-            struct_types: RefCell::new(HashMap::new()),
-            struct_field_indices: RefCell::new(HashMap::new()),
-            enum_types: RefCell::new(HashMap::new()),
-            enum_struct_types: RefCell::new(HashMap::new()),
-            enum_variant_tags: RefCell::new(HashMap::new()),
-            option_sym,
-            result_sym,
-            debug_info: None,
-            source_str: None,
-            current_subprogram: None,
-            no_std: false,
-            extern_methods: std::collections::HashMap::new(),
-            jit_mode: false,
-            target_triple: None,
-            macro_fn_names: RefCell::new(std::collections::HashSet::new()),
-            errors: RefCell::new(Vec::new()),
-        }
-    }
+    // Use CodegenBuilder::new(...).build() instead
 
     pub fn with_debug(
         context: &'ctx Context,
@@ -214,11 +262,11 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        eprintln!("[codegen generate] =======================");
+        tracing::debug!("[codegen generate] =======================");
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[codegen generate] Fn: {} (type_params={:?})",
                         self.interner.resolve(f.name),
                         f.type_params
@@ -226,7 +274,7 @@ impl<'ctx> Codegen<'ctx> {
                 }
                 glyim_hir::item::HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        eprintln!(
+                        tracing::debug!(
                             "[codegen generate] Impl method: {}",
                             self.interner.resolve(m.name)
                         );
@@ -235,36 +283,36 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        eprintln!("[codegen generate] =======================");
+        tracing::debug!("[codegen generate] =======================");
 
-        eprintln!("[codegen] generate() received {} items:", hir.items.len());
+        tracing::debug!("[codegen] generate() received {} items:", hir.items.len());
         for item in &hir.items {
             match item {
                 glyim_hir::item::HirItem::Fn(f) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[codegen]   Fn: {} (type_params={:?})",
                         self.interner.resolve(f.name),
                         f.type_params
                     );
                 }
                 glyim_hir::item::HirItem::Struct(s) => {
-                    eprintln!("[codegen]   Struct: {}", self.interner.resolve(s.name));
+                    tracing::debug!("[codegen]   Struct: {}", self.interner.resolve(s.name));
                 }
                 glyim_hir::item::HirItem::Enum(e) => {
-                    eprintln!(
+                    tracing::debug!(
                         "[codegen]   Enum: {} (variants: {})",
                         self.interner.resolve(e.name),
                         e.variants.len()
                     );
                     for v in &e.variants {
-                        eprintln!(
+                        tracing::debug!(
                             "[codegen]     variant: {} fields: {} tag: {}",
                             self.interner.resolve(v.name),
                             v.fields.len(),
                             v.tag
                         );
                         for f in &v.fields {
-                            eprintln!(
+                            tracing::debug!(
                                 "[codegen]       field: {} type: {:?}",
                                 self.interner.resolve(f.name),
                                 f.ty
@@ -365,13 +413,13 @@ impl<'ctx> Codegen<'ctx> {
         }
 
         // Pass 2b debug: list all functions in module
-        eprintln!("[codegen] Functions in module before Pass 3:");
+        tracing::debug!("[codegen] Functions in module before Pass 3:");
         if let Some(func) = self.module.get_first_function() {
             let mut f = Some(func);
             while let Some(func) = f {
                 let name = func.get_name().to_string_lossy();
                 if true {
-                    eprintln!("[codegen]   {}", name);
+                    tracing::debug!("[codegen]   {}", name);
                 }
                 f = func.get_next_function();
             }
@@ -772,14 +820,16 @@ impl<'ctx> Codegen<'ctx> {
                     .collect::<Vec<_>>()
                     .join("_");
                 let mangled_str = format!("{}__{}", base_str, args_str);
-                eprintln!(
+                tracing::debug!(
                     "[resolve_struct_type] Generic: base_str={} args_str={} mangled={}",
-                    base_str, args_str, mangled_str
+                    base_str,
+                    args_str,
+                    mangled_str
                 );
                 if let Some(_found) = self.interner.resolve_symbol(&mangled_str) {
-                    eprintln!("[resolve_struct_type] FOUND in interner");
+                    tracing::debug!("[resolve_struct_type] FOUND in interner");
                 } else {
-                    eprintln!(
+                    tracing::debug!(
                         "[resolve_struct_type] NOT FOUND in interner ({} entries)",
                         self.interner.len()
                     );

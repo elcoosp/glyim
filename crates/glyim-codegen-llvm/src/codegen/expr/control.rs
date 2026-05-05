@@ -85,14 +85,20 @@ pub(crate) fn codegen_if<'ctx>(
         cg.builder.position_at_end(then_bb);
         let then_val = codegen_block(cg, then_branch, fctx)?;
         cg.builder.build_unconditional_branch(merge_bb).ok()?;
-        let then_bb_final = cg.builder.get_insert_block().unwrap();
+        let then_bb_final = cg
+            .builder
+            .get_insert_block()
+            .expect("codegen: internal error");
         cg.builder.position_at_end(else_bb);
         let else_val = match else_branch {
             Some(e) => codegen_block(cg, e, fctx)?,
             None => cg.i64_type.const_int(0, false),
         };
         cg.builder.build_unconditional_branch(merge_bb).ok()?;
-        let else_bb_final = cg.builder.get_insert_block().unwrap();
+        let else_bb_final = cg
+            .builder
+            .get_insert_block()
+            .expect("codegen: internal error");
         cg.builder.position_at_end(merge_bb);
         let phi = cg.builder.build_phi(cg.i64_type, "if_result").ok()?;
         phi.add_incoming(&[
@@ -118,9 +124,12 @@ pub(crate) fn codegen_match<'ctx>(
         // If we have exactly two arms: OptionSome/ResultOk and OptionNone/ResultErr,
         // perform a proper tagged dispatch.
         if arms.len() == 2 {
-            let (pat0, _guard0, body0) = &arms[0];
-            let (_pat1, _guard1, body1) = &arms[1];
-            let is_some_like = matches!(pat0, HirPattern::OptionSome(_) | HirPattern::ResultOk(_));
+            let arm0 = &arms[0];
+            let arm1 = &arms[1];
+            let is_some_like = matches!(
+                arm0.pattern,
+                HirPattern::OptionSome(_) | HirPattern::ResultOk(_)
+            );
 
             if is_some_like {
                 let enum_ptr = cg
@@ -160,29 +169,66 @@ pub(crate) fn codegen_match<'ctx>(
                     .build_conditional_branch(is_some, some_bb, none_bb)
                     .ok()?;
 
-                // Some branch
+                // Some/Ok branch - handle patterns and extract bindings
                 cg.builder.position_at_end(some_bb);
-                if let HirPattern::OptionSome(inner) | HirPattern::ResultOk(inner) = pat0
-                    && let HirPattern::Var(name) = inner.as_ref()
-                {
-                    let payload_ptr = cg
-                        .builder
-                        .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
-                        .ok()?;
-                    let payload_val = cg
-                        .builder
-                        .build_load(cg.i64_type, payload_ptr, "payload_val")
-                        .ok()?
-                        .into_int_value();
-                    let alloca = cg
-                        .builder
-                        .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                        .ok()?;
-                    cg.builder.build_store(alloca, payload_val).ok()?;
-                    fctx.vars.insert(*name, alloca);
+                match &arm0.pattern {
+                    HirPattern::EnumVariant { bindings, .. } => {
+                        // Extract fields from the payload
+                        for (i, (field_sym, _)) in bindings.iter().enumerate() {
+                            let idx = cg.i32_type.const_int((i + 1) as u64, false);
+                            let zero = cg.i32_type.const_int(0, false);
+                            let field_ptr = unsafe {
+                                cg.builder
+                                    .build_gep(st, enum_ptr, &[zero, idx], "field_ptr")
+                                    .ok()?
+                            };
+                            let field_val = cg
+                                .builder
+                                .build_load(cg.i64_type, field_ptr, "field_val")
+                                .ok()?
+                                .into_int_value();
+                            let alloca = cg
+                                .builder
+                                .build_alloca(cg.i64_type, cg.interner.resolve(*field_sym))
+                                .ok()?;
+                            cg.builder.build_store(alloca, field_val).ok()?;
+                            fctx.vars.insert(*field_sym, alloca);
+                        }
+                    }
+                    _ if matches!(
+                        &arm0.pattern,
+                        HirPattern::OptionSome(_) | HirPattern::ResultOk(_)
+                    ) =>
+                    {
+                        if let Some(inner) = match &arm0.pattern {
+                            HirPattern::OptionSome(i) | HirPattern::ResultOk(i) => Some(i),
+                            _ => None,
+                        } && let HirPattern::Var(name) = &**inner
+                        {
+                            let payload_ptr = cg
+                                .builder
+                                .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
+                                .ok()?;
+                            let payload_val = cg
+                                .builder
+                                .build_load(cg.i64_type, payload_ptr, "payload_val")
+                                .ok()?
+                                .into_int_value();
+                            let alloca = cg
+                                .builder
+                                .build_alloca(cg.i64_type, cg.interner.resolve(*name))
+                                .ok()?;
+                            cg.builder.build_store(alloca, payload_val).ok()?;
+                            fctx.vars.insert(*name, alloca);
+                        }
+                    }
+                    _ => {}
                 }
-                let some_val = codegen_expr(cg, body0, fctx)?;
-                let some_end = cg.builder.get_insert_block().unwrap();
+                let some_val = codegen_expr(cg, &arm0.body, fctx)?;
+                let some_end = cg
+                    .builder
+                    .get_insert_block()
+                    .expect("codegen: internal error");
                 if cg
                     .builder
                     .get_insert_block()
@@ -194,8 +240,11 @@ pub(crate) fn codegen_match<'ctx>(
 
                 // None branch
                 cg.builder.position_at_end(none_bb);
-                let none_val = codegen_expr(cg, body1, fctx)?;
-                let none_end = cg.builder.get_insert_block().unwrap();
+                let none_val = codegen_expr(cg, &arm1.body, fctx)?;
+                let none_end = cg
+                    .builder
+                    .get_insert_block()
+                    .expect("codegen: internal error");
                 if cg
                     .builder
                     .get_insert_block()
@@ -216,8 +265,8 @@ pub(crate) fn codegen_match<'ctx>(
             }
         }
         // Fallback for single-arm or other matches
-        if let Some((_pattern, _, body)) = arms.first() {
-            codegen_expr(cg, body, fctx)
+        if let Some(arm) = arms.first() {
+            codegen_expr(cg, &arm.body, fctx)
         } else {
             Some(cg.i64_type.const_int(0, false))
         }

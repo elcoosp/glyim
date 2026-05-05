@@ -68,11 +68,7 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                             HirType::Named(sym) => {
                                 let s = interner.resolve(*sym);
                                 // single uppercase letter → type parameter
-                                if s.len() == 1 && s.chars().next().unwrap().is_uppercase() {
-                                    false
-                                } else {
-                                    true
-                                }
+                                !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
                             }
                             HirType::Generic(_, args) => {
                                 args.iter().all(|a| is_concrete(a, interner))
@@ -101,7 +97,7 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                 _ => base,
             };
             let callee = interner.intern(&mangled);
-            eprintln!("[desugar] MethodCall {} → Call {}", method, mangled);
+            tracing::debug!("[desugar] MethodCall {} → Call {}", method, mangled);
 
             let span = *span;
             let id = *id;
@@ -146,11 +142,11 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
             scrutinee, arms, ..
         } => {
             desugar_expr(scrutinee, expr_types, interner);
-            for (_, guard, body) in arms {
-                if let Some(g) = guard {
+            for arm in arms.iter_mut() {
+                if let Some(ref mut g) = arm.guard {
                     desugar_expr(g, expr_types, interner);
                 }
-                desugar_expr(body, expr_types, interner);
+                desugar_expr(&mut arm.body, expr_types, interner);
             }
         }
         HirExpr::While {

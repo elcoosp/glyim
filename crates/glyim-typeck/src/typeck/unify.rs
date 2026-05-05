@@ -33,6 +33,7 @@ fn unify_recursive(
                         expected: existing.clone(),
                         found: c.clone(),
                         expr_id: glyim_hir::types::ExprId::new(0),
+                        span: (0, 0),
                     });
                 }
             } else {
@@ -46,7 +47,9 @@ fn unify_recursive(
         | (HirType::Float, HirType::Float)
         | (HirType::Str, HirType::Str)
         | (HirType::Unit, HirType::Unit)
-        | (HirType::Never, HirType::Never) => Ok(()),
+        | (HirType::Never, HirType::Never)
+        | (HirType::Error, _)
+        | (_, HirType::Error) => Ok(()),
         // Named types (non-param) must match exactly
         (HirType::Named(cn), HirType::Named(gn)) if !type_params.contains(gn) => {
             if cn == gn {
@@ -56,6 +59,7 @@ fn unify_recursive(
                     expected: generic.clone(),
                     found: concrete.clone(),
                     expr_id: glyim_hir::types::ExprId::new(0),
+                    span: (0, 0),
                 })
             }
         }
@@ -97,6 +101,7 @@ fn unify_recursive(
                         expected: existing.clone(),
                         found: concrete.clone(),
                         expr_id: glyim_hir::types::ExprId::new(0),
+                        span: (0, 0),
                     });
                 }
             } else {
@@ -109,6 +114,7 @@ fn unify_recursive(
             expected: generic.clone(),
             found: concrete.clone(),
             expr_id: glyim_hir::types::ExprId::new(0),
+            span: (0, 0),
         }),
     }
 }

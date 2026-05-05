@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Expand macros found in the source text.
+/// Macro expansions are recorded in glyim_diag::MACRO_EXPANSION_TABLE
+/// for diagnostic backtrace via miette::Diagnostic::related().
 pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<String, String> {
     let store = LocalContentStore::new(cas_dir).map_err(|e| format!("create store: {e}"))?;
     let store: Arc<dyn ContentStore> = Arc::new(store);
@@ -79,10 +81,31 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
                 .unwrap_or_else(|_| inner.as_bytes().to_vec());
             let expanded_str = String::from_utf8_lossy(&expanded).into_owned();
 
+            // Record expansion metadata with real source spans
+            let call_site = (at_pos, call_end);
+            let (_def_start, _def_end) = registry.get_def_span(macro_name).unwrap_or((0, 0));
+            let macro_name = macro_name.to_string();
+            let mut table = glyim_diag::MACRO_EXPANSION_TABLE.lock().unwrap();
+            let _expansion_id = table.len() as u32;
+            table.push(glyim_diag::MacroExpansion {
+                call_site: glyim_diag::Span::new(call_site.0, call_site.1),
+                def_site: glyim_diag::Span::new(_def_start, _def_end),
+                macro_name: macro_name.clone(),
+                parent: None, // will be wired for nested expansions in a follow‑up
+            });
+            drop(table);
+
             let before = &result[..at_pos];
             let after_str = &result[call_end..];
             result = format!("{before}{expanded_str}{after_str}");
-            scan_from = 0;
+
+            // The expanded span is known; we could record it, but for now the call site suffices
+            let has_nested_macro = expanded_str.contains('@');
+            if has_nested_macro {
+                scan_from = at_pos;
+            } else {
+                scan_from = at_pos + expanded_str.len();
+            }
         } else {
             scan_from = call_end;
         }
@@ -125,7 +148,7 @@ fn load_builtin_identity(registry: &mut MacroRegistry) -> Result<(), String> {
 "#;
     let wasm =
         wat::parse_str(identity_wat).map_err(|e| format!("parse built-in identity wat: {e}"))?;
-    registry.register("identity", wasm);
+    registry.register("identity", wasm, None);
     Ok(())
 }
 
@@ -160,7 +183,7 @@ fn load_package_macros(pkg_dir: &Path, registry: &mut MacroRegistry) {
             Err(_) => continue,
         };
         if let Some(wasm) = store.retrieve(hash) {
-            registry.register(&pkg.name, wasm);
+            registry.register(&pkg.name, wasm, None);
         }
     }
 }
@@ -212,7 +235,7 @@ mod tests {
         let store: Arc<dyn ContentStore> = Arc::new(store);
         let mut registry = MacroRegistry::new(store.clone());
         let wasm = wat::parse_str(identity_wat()).expect("parse identity wat");
-        registry.register("my_custom", wasm);
+        registry.register("my_custom", wasm, None);
         let executor = MacroExecutor::new_with_cache(store.clone());
 
         let source = r#"@my_custom(hello world)"#;

@@ -54,6 +54,7 @@ impl<'a> MonoContext<'a> {
             let mangled = self.mangle_name(e.name, &args);
             let mut mono_e = e;
             mono_e.name = mangled;
+            eprintln!("[build_result] emitting enum {}", self.interner.resolve(mangled));
             items.push(HirItem::Enum(mono_e));
         }
 
@@ -158,8 +159,6 @@ impl<'a> MonoContext<'a> {
             );
             items.push(HirItem::Fn(mono_f));
         }
-
-        // Concretize all remaining Generic types to Named(mangled)
 
         // Concretize all remaining Generic types to Named(mangled) in the output items
         for item in &mut items {

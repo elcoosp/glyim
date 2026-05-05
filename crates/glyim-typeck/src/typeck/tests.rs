@@ -1,8 +1,13 @@
 use super::{TypeChecker, TypeError};
 use glyim_diag::Span;
+use glyim_hir::node::HirFn;
+use glyim_hir::types::HirPattern;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_hir::{HirBinOp, HirExpr, HirStmt, HirUnOp};
 use glyim_interner::Interner;
+
+use crate::typeck::resolver;
+use crate::unify;
 
 fn typecheck(source: &str) -> TypeChecker {
     let parse_out = glyim_parse::parse(source);
@@ -16,6 +21,7 @@ fn typecheck(source: &str) -> TypeChecker {
     tc
 }
 
+// ── Scope / binding tests ────────────────────────────────────
 #[test]
 fn lookup_unbound_returns_none() {
     let mut tc = TypeChecker::new(Interner::new());
@@ -35,7 +41,6 @@ fn let_binding_visible_in_same_scope() {
 #[test]
 fn binding_not_visible_in_parent_scope() {
     let mut tc = TypeChecker::new(Interner::new());
-    let _x = tc.interner.intern("x"); // unused, but harmless
     tc.push_scope();
     tc.push_scope();
     let y = tc.interner.intern("y");
@@ -69,11 +74,12 @@ fn with_scope_restores_after_pop() {
         tc.lookup_binding(&y)
     });
     assert_eq!(inner_result, Some(HirType::Str));
-    let y_later = tc.interner.intern("y"); // borrow mutable once
+    let y_later = tc.interner.intern("y");
     assert_eq!(tc.lookup_binding(&y_later), None);
     assert_eq!(tc.lookup_binding(&x), Some(HirType::Int));
 }
 
+// ── Registration tests ───────────────────────────────────────
 #[test]
 fn register_struct_creates_entry() {
     let mut tc = typecheck("struct Point { x, y }\nmain = () => 0");
@@ -116,6 +122,7 @@ fn register_enum_variant_map_lookup() {
     assert_eq!(info.variant_map[&green], 1);
 }
 
+// ── Inference tests ──────────────────────────────────────────
 #[test]
 fn infer_int_lit() {
     let mut tc = TypeChecker::new(Interner::new());
@@ -171,7 +178,7 @@ fn infer_unit_lit() {
 }
 
 #[test]
-fn infer_ident_unbound_falls_back_to_int() {
+fn infer_ident_unbound_falls_back_to_error() {
     let mut tc = TypeChecker::new(Interner::new());
     let name = tc.interner.intern("x");
     let expr = HirExpr::Ident {
@@ -179,7 +186,8 @@ fn infer_ident_unbound_falls_back_to_int() {
         name,
         span: Span::new(0, 1),
     };
-    assert_eq!(tc.check_expr(&expr), Some(HirType::Int));
+    assert_eq!(tc.check_expr(&expr), Some(HirType::Error));
+    assert!(!tc.errors.is_empty());
 }
 
 #[test]
@@ -312,12 +320,13 @@ fn infer_if_else_branches() {
     assert_eq!(tc.check_expr(&expr), Some(HirType::Int));
 }
 
+// ── Error detection tests ────────────────────────────────────
 #[test]
 fn struct_lit_unknown_field_pushes_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1, z: 3 }");
     let has_unknown_z = tc.errors.iter().any(|e| {
         if let TypeError::UnknownField { field, .. } = e {
-            tc.interner.resolve(*field) == "z"
+            *field == "z"
         } else {
             false
         }
@@ -334,7 +343,7 @@ fn struct_lit_missing_field_pushes_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1 }");
     let has_missing = tc.errors.iter().any(|e| {
         if let TypeError::MissingField { field, .. } = e {
-            tc.interner.resolve(*field) == "y"
+            *field == "y"
         } else {
             false
         }
@@ -351,7 +360,7 @@ fn field_access_unknown_field_pushes_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }");
     let has_unknown = tc.errors.iter().any(|e| {
         if let TypeError::UnknownField { field, .. } = e {
-            tc.interner.resolve(*field) == "z"
+            *field == "z"
         } else {
             false
         }
@@ -400,6 +409,7 @@ fn struct_lit_all_fields_present_no_error() {
     );
 }
 
+// ── Match exhaustiveness tests ───────────────────────────────
 #[test]
 fn match_exhaustive_with_wildcard_ok() {
     let tc = typecheck("enum Color { Red, Green }\nmain = () => match Color::Red { _ => 1 }");
@@ -495,6 +505,7 @@ fn match_option_non_exhaustive_pushes_error() {
     );
 }
 
+// ── Cast tests ───────────────────────────────────────────────
 #[test]
 fn cast_int_to_float_valid() {
     let tc = typecheck("main = () => 42 as f64");
@@ -570,6 +581,8 @@ fn check_fn_params_bound_in_body() {
         tc.errors
     );
 }
+
+// ── Generic inference tests ──────────────────────────────────
 #[test]
 fn infer_type_args_for_generic_call() {
     let tc = typecheck("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
@@ -641,4 +654,1023 @@ fn generic_equality_compiles() {
         eprintln!("Generic equality errors: {:?}", tc.errors);
     }
     assert!(tc.errors.is_empty(), "generic equality should compile");
+}
+
+// ── New tests – extract inner / visibility / check_fn / bind ──
+#[test]
+fn extract_option_inner_some() {
+    let tc = TypeChecker::new(Interner::new());
+    let ty = HirType::Option(Box::new(HirType::Int));
+    let inner = tc.extract_option_inner(&ty);
+    assert_eq!(inner, Some(HirType::Int));
+}
+
+#[test]
+fn extract_option_inner_none_for_non_option() {
+    let tc = TypeChecker::new(Interner::new());
+    assert_eq!(tc.extract_option_inner(&HirType::Int), None);
+}
+
+#[test]
+fn extract_result_inner_ok() {
+    let tc = TypeChecker::new(Interner::new());
+    let ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
+    let (ok, err) = tc.extract_result_inner(&ty).unwrap();
+    assert_eq!(ok, HirType::Int);
+    assert_eq!(err, HirType::Str);
+}
+
+#[test]
+fn extract_result_inner_none() {
+    let tc = TypeChecker::new(Interner::new());
+    assert_eq!(tc.extract_result_inner(&HirType::Int), None);
+}
+
+#[test]
+fn register_visibility_separate_pub_priv() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let pub_sym = tc.interner.intern("pub_fn");
+    let priv_sym = tc.interner.intern("priv_fn");
+    tc.register_visibility(pub_sym, true);
+    tc.register_visibility(priv_sym, false);
+    assert_eq!(tc.visibility.get(&pub_sym), Some(&true));
+    assert_eq!(tc.visibility.get(&priv_sym), Some(&false));
+}
+
+#[test]
+fn check_fn_generic_return_matches_inferred() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("id");
+    let t_sym = tc.interner.intern("T");
+    let f = HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(t_sym)),
+        body: HirExpr::Ident {
+            id: ExprId::new(0),
+            name: tc.interner.intern("x"),
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let f_clone = tc.fns.last().unwrap().clone();
+    tc.check_fn(&f_clone);
+    assert!(
+        tc.errors.is_empty(),
+        "Expected no errors, got {:?}",
+        tc.errors
+    );
+}
+
+#[test]
+fn check_fn_return_mismatch_error() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let f = HirFn {
+        doc: None,
+        name: tc.interner.intern("bad"),
+        type_params: vec![],
+        params: vec![],
+        param_mutability: vec![],
+        ret: Some(HirType::Bool),
+        body: HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 42,
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let f_clone = tc.fns.last().unwrap().clone();
+    tc.check_fn(&f_clone);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::InvalidReturnType { .. }))
+    );
+}
+
+#[test]
+fn bind_match_option_some_pattern() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let v_sym = tc.interner.intern("v");
+    let pattern = HirPattern::OptionSome(Box::new(HirPattern::Var(v_sym)));
+    let scrutinee_ty = HirType::Option(Box::new(HirType::Int));
+    tc.bind_match_pattern(&pattern, &scrutinee_ty);
+    assert_eq!(tc.lookup_binding(&v_sym), Some(HirType::Int));
+}
+
+#[test]
+fn bind_match_option_none_no_binding() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    tc.bind_match_pattern(
+        &HirPattern::OptionNone,
+        &HirType::Option(Box::new(HirType::Int)),
+    );
+    let v_sym = tc.interner.intern("v");
+    assert!(tc.lookup_binding(&v_sym).is_none());
+}
+
+#[test]
+fn bind_match_result_ok_pattern() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let v_sym = tc.interner.intern("v");
+    let pattern = HirPattern::ResultOk(Box::new(HirPattern::Var(v_sym)));
+    let scrutinee_ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
+    tc.bind_match_pattern(&pattern, &scrutinee_ty);
+    assert_eq!(tc.lookup_binding(&v_sym), Some(HirType::Int));
+}
+
+#[test]
+fn bind_match_result_err_pattern() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let e_sym = tc.interner.intern("e");
+    let pattern = HirPattern::ResultErr(Box::new(HirPattern::Var(e_sym)));
+    let scrutinee_ty = HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str));
+    tc.bind_match_pattern(&pattern, &scrutinee_ty);
+    assert_eq!(tc.lookup_binding(&e_sym), Some(HirType::Str));
+}
+
+// ── unify module tests ───────────────────────────────────────
+#[test]
+fn unify_int_with_type_param() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let result = unify::unify(&HirType::Int, &HirType::Named(t), &[t]);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_int_with_bool_fails() {
+    let result = unify::unify(&HirType::Int, &HirType::Bool, &[]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_rawptr_success() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let result = unify::unify(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_option_success() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let result = unify::unify(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Named(t))),
+        &[t],
+    );
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap()[&t], HirType::Int);
+}
+
+#[test]
+fn unify_result_success() {
+    let mut i = Interner::new();
+    let t = i.intern("T");
+    let e = i.intern("E");
+    let result = unify::unify(
+        &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str)),
+        &HirType::Result(Box::new(HirType::Named(t)), Box::new(HirType::Named(e))),
+        &[t, e],
+    );
+    assert!(result.is_ok());
+    let sub = result.unwrap();
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&e], HirType::Str);
+}
+
+#[test]
+fn unify_tuple_mismatched_length_fails() {
+    let result = unify::unify(
+        &HirType::Tuple(vec![HirType::Int]),
+        &HirType::Tuple(vec![HirType::Int, HirType::Bool]),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_recursive_option_mismatch() {
+    let result = unify::unify(
+        &HirType::Option(Box::new(HirType::Int)),
+        &HirType::Option(Box::new(HirType::Bool)),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_recursive_result_mismatch() {
+    let result = unify::unify(
+        &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str)),
+        &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Bool)),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+// ── is_valid_cast tests ──────────────────────────────────────
+#[test]
+fn is_valid_cast_float_to_int_valid() {
+    assert!(resolver::is_valid_cast(&HirType::Float, &HirType::Int));
+}
+
+#[test]
+fn is_valid_cast_str_to_float_invalid() {
+    assert!(!resolver::is_valid_cast(&HirType::Str, &HirType::Float));
+}
+
+#[test]
+fn is_valid_cast_any_to_named_valid() {
+    let mut i = Interner::new();
+    let sym = i.intern("SomeStruct");
+    assert!(resolver::is_valid_cast(&HirType::Int, &HirType::Named(sym)));
+}
+
+// ── unify_types tests ────────────────────────────────────────
+#[test]
+fn unify_types_rawptr_success() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(t))),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+}
+
+#[test]
+fn unify_types_nested_generics() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let u = tc.interner.intern("U");
+    let type_params = vec![t, u];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::Generic(
+            tc.interner.intern("Pair"),
+            vec![HirType::Int, HirType::Bool],
+        ),
+        &HirType::Generic(
+            tc.interner.intern("Pair"),
+            vec![HirType::Named(t), HirType::Named(u)],
+        ),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub[&t], HirType::Int);
+    assert_eq!(sub[&u], HirType::Bool);
+}
+
+#[test]
+fn unify_types_all_primitive_variants() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let type_params = vec![t];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(&HirType::Int, &HirType::Named(t), &type_params, &mut sub);
+    assert_eq!(sub[&t], HirType::Int);
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(&HirType::Float, &HirType::Named(t), &type_params, &mut sub);
+    assert_eq!(sub[&t], HirType::Float);
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(&HirType::Bool, &HirType::Named(t), &type_params, &mut sub);
+    assert_eq!(sub[&t], HirType::Bool);
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(&HirType::Str, &HirType::Named(t), &type_params, &mut sub);
+    assert_eq!(sub[&t], HirType::Str);
+}
+
+// ── Additional infer / stmt / bind tests ─────────────────────
+#[test]
+fn infer_deref_rawptr_type() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let ptr_sym = tc.interner.intern("p");
+    tc.push_scope();
+    tc.insert_binding(ptr_sym, HirType::RawPtr(Box::new(HirType::Int)), false);
+    let deref_expr = HirExpr::Deref {
+        id: ExprId::new(0),
+        expr: Box::new(HirExpr::Ident {
+            id: ExprId::new(1),
+            name: ptr_sym,
+            span: Span::new(0, 0),
+        }),
+        span: Span::new(0, 0),
+    };
+    assert_eq!(tc.check_expr(&deref_expr), Some(HirType::Int));
+}
+
+#[test]
+fn infer_generic_call_sets_type_args() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("id");
+    let t_sym = tc.interner.intern("T");
+    tc.fns.push(HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(t_sym)),
+        body: HirExpr::IntLit {
+            id: ExprId::new(99),
+            value: 0,
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    });
+    let call = HirExpr::Call {
+        id: ExprId::new(2),
+        callee: fn_sym,
+        args: vec![HirExpr::IntLit {
+            id: ExprId::new(3),
+            value: 42,
+            span: Span::new(0, 0),
+        }],
+        span: Span::new(0, 0),
+    };
+    assert_eq!(tc.check_expr(&call), Some(HirType::Int));
+    assert!(tc.call_type_args.contains_key(&ExprId::new(2)));
+    assert_eq!(tc.call_type_args[&ExprId::new(2)], vec![HirType::Int]);
+}
+
+#[test]
+fn infer_struct_lit_missing_field_error() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let point_sym = tc.interner.intern("Point");
+    let x_sym = tc.interner.intern("x");
+    let y_sym = tc.interner.intern("y");
+    tc.structs.insert(
+        point_sym,
+        crate::typeck::StructInfo {
+            fields: vec![
+                glyim_hir::item::StructField {
+                    name: x_sym,
+                    ty: HirType::Int,
+                    doc: None,
+                },
+                glyim_hir::item::StructField {
+                    name: y_sym,
+                    ty: HirType::Int,
+                    doc: None,
+                },
+            ],
+            field_map: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(x_sym, 0);
+                m.insert(y_sym, 1);
+                m
+            },
+            type_params: vec![],
+        },
+    );
+    let lit = HirExpr::StructLit {
+        id: ExprId::new(0),
+        struct_name: point_sym,
+        fields: vec![(
+            x_sym,
+            HirExpr::IntLit {
+                id: ExprId::new(1),
+                value: 1,
+                span: Span::new(0, 0),
+            },
+        )],
+        span: Span::new(0, 0),
+    };
+    tc.check_expr(&lit);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::MissingField { .. })),
+        "Expected MissingField error, got {:?}",
+        tc.errors
+    );
+}
+
+#[test]
+fn check_fn_return_generic_to_named_mismatch() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("f");
+    let t_sym = tc.interner.intern("T");
+    let f = HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(tc.interner.intern("Point"))),
+        body: HirExpr::Ident {
+            id: ExprId::new(0),
+            name: tc.interner.intern("x"),
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let f_clone = tc.fns.last().unwrap().clone();
+    tc.check_fn(&f_clone);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::InvalidReturnType { .. }))
+    );
+}
+
+#[test]
+fn check_stmt_annotation_generic_named_matches() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let x = tc.interner.intern("x");
+    let stmt = HirStmt::LetPat {
+        pattern: HirPattern::Var(x),
+        mutable: false,
+        value: HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 42,
+            span: Span::new(0, 0),
+        },
+        ty: Some(HirType::Generic(
+            tc.interner.intern("Vec"),
+            vec![HirType::Int],
+        )),
+        span: Span::new(0, 0),
+    };
+    tc.check_stmt(&stmt);
+    assert_eq!(
+        tc.lookup_binding(&x),
+        Some(HirType::Generic(
+            tc.interner.intern("Vec"),
+            vec![HirType::Int]
+        ))
+    );
+}
+
+#[test]
+fn infer_expr_deref_on_non_pointer_type_error() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let x = tc.interner.intern("x");
+    tc.insert_binding(x, HirType::Int, false);
+    let deref = HirExpr::Deref {
+        id: ExprId::new(0),
+        expr: Box::new(HirExpr::Ident {
+            id: ExprId::new(1),
+            name: x,
+            span: Span::new(0, 0),
+        }),
+        span: Span::new(0, 0),
+    };
+    tc.check_expr(&deref);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::DerefNonPointer { .. }))
+    );
+}
+
+#[test]
+fn bind_pattern_wild_and_ignore() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    tc.bind_pattern(&HirPattern::Wild, &HirType::Int, false);
+    let anything = tc.interner.intern("anything");
+    assert!(tc.lookup_binding(&anything).is_none());
+}
+
+#[test]
+fn bind_pattern_tuple_single_element() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let a = tc.interner.intern("a");
+    let pattern = HirPattern::Tuple {
+        elements: vec![HirPattern::Var(a)],
+        span: Span::new(0, 0),
+    };
+    tc.bind_pattern(&pattern, &HirType::Tuple(vec![HirType::Int]), false);
+    assert_eq!(tc.lookup_binding(&a), Some(HirType::Int));
+}
+
+#[test]
+fn bind_pattern_struct_shorthand() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let point_sym = tc.interner.intern("Point");
+    let x_sym = tc.interner.intern("x");
+    let y_sym = tc.interner.intern("y");
+    tc.structs.insert(
+        point_sym,
+        crate::typeck::StructInfo {
+            fields: vec![
+                glyim_hir::item::StructField {
+                    name: x_sym,
+                    ty: HirType::Int,
+                    doc: None,
+                },
+                glyim_hir::item::StructField {
+                    name: y_sym,
+                    ty: HirType::Bool,
+                    doc: None,
+                },
+            ],
+            field_map: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(x_sym, 0);
+                m.insert(y_sym, 1);
+                m
+            },
+            type_params: vec![],
+        },
+    );
+    tc.push_scope();
+    let pattern = HirPattern::Struct {
+        name: point_sym,
+        bindings: vec![
+            (x_sym, HirPattern::Var(x_sym)),
+            (y_sym, HirPattern::Var(y_sym)),
+        ],
+        span: Span::new(0, 0),
+    };
+    tc.bind_pattern(&pattern, &HirType::Named(point_sym), false);
+    assert_eq!(tc.lookup_binding(&x_sym), Some(HirType::Int));
+    assert_eq!(tc.lookup_binding(&y_sym), Some(HirType::Bool));
+}
+
+#[test]
+fn unify_different_named_types_fails() {
+    let mut i = Interner::new();
+    let s1 = i.intern("Point");
+    let s2 = i.intern("Color");
+    let result = unify::unify(&HirType::Named(s1), &HirType::Named(s2), &[]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn unify_generic_same_name_different_args_fails() {
+    let mut i = Interner::new();
+    let vec_sym = i.intern("Vec");
+    let result = unify::unify(
+        &HirType::Generic(vec_sym, vec![HirType::Int, HirType::Bool]),
+        &HirType::Generic(vec_sym, vec![HirType::Int]),
+        &[],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn extract_option_inner_wrong_arg_count() {
+    let mut i = Interner::new();
+    let opt_sym = i.intern("Option");
+    let tc = TypeChecker::new(i);
+    assert_eq!(
+        tc.extract_option_inner(&HirType::Generic(opt_sym, vec![])),
+        None
+    );
+    assert_eq!(
+        tc.extract_option_inner(&HirType::Generic(opt_sym, vec![HirType::Int, HirType::Int])),
+        None
+    );
+}
+
+#[test]
+fn extract_result_inner_wrong_arg_count() {
+    let mut i = Interner::new();
+    let res_sym = i.intern("Result");
+    let tc = TypeChecker::new(i);
+    assert_eq!(
+        tc.extract_result_inner(&HirType::Generic(res_sym, vec![])),
+        None
+    );
+    assert_eq!(
+        tc.extract_result_inner(&HirType::Generic(res_sym, vec![HirType::Int])),
+        None
+    );
+    assert_eq!(
+        tc.extract_result_inner(&HirType::Generic(
+            res_sym,
+            vec![HirType::Int, HirType::Int, HirType::Int]
+        )),
+        None
+    );
+}
+
+#[test]
+fn check_fn_return_generic_named_named_mismatch() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("f");
+    let t_sym = tc.interner.intern("T");
+    let u_sym = tc.interner.intern("U");
+    let f = HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym, u_sym],
+        params: vec![
+            (tc.interner.intern("x"), HirType::Named(t_sym)),
+            (tc.interner.intern("y"), HirType::Named(u_sym)),
+        ],
+        param_mutability: vec![false, false],
+        ret: Some(HirType::Named(tc.interner.intern("Point"))),
+        body: HirExpr::Ident {
+            id: ExprId::new(0),
+            name: tc.interner.intern("x"),
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let f_clone = tc.fns.last().unwrap().clone();
+    tc.check_fn(&f_clone);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::InvalidReturnType { .. }))
+    );
+}
+
+#[test]
+fn check_fn_return_generic_named_samesym() {
+    // T vs Named(T) where T is a type param → should be ok.
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("g");
+    let t_sym = tc.interner.intern("T");
+    let f = HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(t_sym)),
+        body: HirExpr::Ident {
+            id: ExprId::new(0),
+            name: tc.interner.intern("x"),
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    };
+    tc.fns.push(f);
+    let f_clone = tc.fns.last().unwrap().clone();
+    tc.check_fn(&f_clone);
+    assert!(tc.errors.is_empty());
+}
+
+#[test]
+fn infer_generic_call_empty_type_args() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("id");
+    let t_sym = tc.interner.intern("T");
+    tc.fns.push(HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(t_sym)),
+        body: HirExpr::IntLit {
+            id: ExprId::new(99),
+            value: 0,
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    });
+    tc.call_type_args.insert(ExprId::new(2), vec![]);
+    let call = HirExpr::Call {
+        id: ExprId::new(2),
+        callee: fn_sym,
+        args: vec![HirExpr::IntLit {
+            id: ExprId::new(3),
+            value: 42,
+            span: Span::new(0, 0),
+        }],
+        span: Span::new(0, 0),
+    };
+    let ty = tc.check_expr(&call);
+    // Return type is Named(T) because T is not substituted with empty type_args
+    assert_eq!(ty, Some(HirType::Named(t_sym)));
+}
+
+#[test]
+fn check_stmt_annotation_generic_generic_mismatch() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let x = tc.interner.intern("x");
+    let stmt = HirStmt::LetPat {
+        pattern: HirPattern::Var(x),
+        mutable: false,
+        value: HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 42,
+            span: Span::new(0, 0),
+        },
+        ty: Some(HirType::Generic(
+            tc.interner.intern("Vec"),
+            vec![HirType::Int],
+        )),
+        span: Span::new(0, 0),
+    };
+    tc.check_stmt(&stmt);
+    // Should bind to the generic type, not the inferred Int
+    assert_eq!(
+        tc.lookup_binding(&x),
+        Some(HirType::Generic(
+            tc.interner.intern("Vec"),
+            vec![HirType::Int]
+        ))
+    );
+}
+
+#[test]
+fn bind_pattern_generic_struct() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let vec_sym = tc.interner.intern("Vec");
+    let t_sym = tc.interner.intern("T");
+    tc.structs.insert(
+        vec_sym,
+        crate::typeck::StructInfo {
+            fields: vec![
+                glyim_hir::item::StructField {
+                    name: tc.interner.intern("data"),
+                    ty: HirType::RawPtr(Box::new(HirType::Named(t_sym))),
+                    doc: None,
+                },
+                glyim_hir::item::StructField {
+                    name: tc.interner.intern("len"),
+                    ty: HirType::Int,
+                    doc: None,
+                },
+            ],
+            field_map: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(tc.interner.intern("data"), 0);
+                m.insert(tc.interner.intern("len"), 1);
+                m
+            },
+            type_params: vec![t_sym],
+        },
+    );
+    tc.push_scope();
+    let data_sym = tc.interner.intern("data");
+    let len_sym = tc.interner.intern("len");
+    let pattern = HirPattern::Struct {
+        name: vec_sym,
+        bindings: vec![
+            (data_sym, HirPattern::Var(data_sym)),
+            (len_sym, HirPattern::Var(len_sym)),
+        ],
+        span: Span::new(0, 0),
+    };
+    tc.bind_pattern(
+        &pattern,
+        &HirType::Generic(vec_sym, vec![HirType::Int]),
+        false,
+    );
+    // The fields retain the original types from the struct definition (Named, not substituted yet)
+    assert_eq!(
+        tc.lookup_binding(&data_sym),
+        Some(HirType::RawPtr(Box::new(HirType::Named(t_sym))))
+    );
+    assert_eq!(tc.lookup_binding(&len_sym), Some(HirType::Int));
+}
+
+#[test]
+fn check_fn_generic_return_mismatched_named() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("f");
+    let t_sym = tc.interner.intern("T");
+    let point_sym = tc.interner.intern("Point");
+    tc.fns.push(HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![t_sym],
+        params: vec![(tc.interner.intern("x"), HirType::Named(t_sym))],
+        param_mutability: vec![false],
+        ret: Some(HirType::Named(point_sym)),
+        body: HirExpr::Ident {
+            id: ExprId::new(0),
+            name: tc.interner.intern("x"),
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    });
+    tc.fns.push(tc.fns[0].clone());
+    let f_clone = tc.fns[1].clone();
+    tc.check_fn(&f_clone);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::InvalidReturnType { .. }))
+    );
+}
+
+#[test]
+fn call_with_wrong_param_type() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let fn_sym = tc.interner.intern("take_int");
+    tc.fns.push(HirFn {
+        doc: None,
+        name: fn_sym,
+        type_params: vec![],
+        params: vec![(tc.interner.intern("x"), HirType::Int)],
+        param_mutability: vec![false],
+        ret: Some(HirType::Int),
+        body: HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 0,
+            span: Span::new(0, 0),
+        },
+        span: Span::new(0, 0),
+        is_pub: false,
+        is_macro_generated: false,
+        is_extern_backed: false,
+    });
+    let call = HirExpr::Call {
+        id: ExprId::new(1),
+        callee: fn_sym,
+        args: vec![HirExpr::BoolLit {
+            id: ExprId::new(2),
+            value: true,
+            span: Span::new(0, 0),
+        }],
+        span: Span::new(0, 0),
+    };
+    tc.check_expr(&call);
+    assert!(
+        tc.errors
+            .iter()
+            .any(|e| matches!(e, TypeError::MismatchedTypes { .. }))
+    );
+}
+
+#[test]
+fn struct_lit_type_param_not_in_struct() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let container_sym = tc.interner.intern("Container");
+    let t_sym = tc.interner.intern("T");
+    tc.structs.insert(
+        container_sym,
+        crate::typeck::StructInfo {
+            fields: vec![glyim_hir::item::StructField {
+                name: tc.interner.intern("value"),
+                ty: HirType::Int,
+                doc: None,
+            }],
+            field_map: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(tc.interner.intern("value"), 0);
+                m
+            },
+            type_params: vec![],
+        },
+    );
+    tc.push_scope();
+    tc.insert_binding(t_sym, HirType::Int, false);
+    let lit = HirExpr::StructLit {
+        id: ExprId::new(0),
+        struct_name: container_sym,
+        fields: vec![(
+            tc.interner.intern("value"),
+            HirExpr::Ident {
+                id: ExprId::new(1),
+                name: t_sym,
+                span: Span::new(0, 0),
+            },
+        )],
+        span: Span::new(0, 0),
+    };
+    let ty = tc.check_expr(&lit);
+    assert_eq!(ty, Some(HirType::Named(container_sym)));
+}
+
+#[test]
+fn get_expr_type_out_of_range() {
+    let tc = TypeChecker::new(Interner::new());
+    assert!(tc.get_expr_type(ExprId::new(1000)).is_none());
+}
+
+#[test]
+fn unify_types_param_not_in_list() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let u = tc.interner.intern("U");
+    let type_params = vec![t];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::Named(u),
+        &HirType::Named(t),
+        &type_params,
+        &mut sub,
+    );
+    assert_eq!(sub.get(&t), Some(&HirType::Named(u)));
+}
+
+#[test]
+fn unify_types_generic_vs_param_not_in_list() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let u = tc.interner.intern("U");
+    let type_params = vec![t];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::Generic(tc.interner.intern("Vec"), vec![HirType::Int]),
+        &HirType::Named(u),
+        &type_params,
+        &mut sub,
+    );
+    assert!(sub.is_empty());
+}
+
+#[test]
+fn unify_types_rawptr_param_not_present() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let t = tc.interner.intern("T");
+    let u = tc.interner.intern("U");
+    let type_params = vec![t];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::RawPtr(Box::new(HirType::Int)),
+        &HirType::RawPtr(Box::new(HirType::Named(u))),
+        &type_params,
+        &mut sub,
+    );
+    assert!(sub.is_empty());
+}
+
+#[test]
+fn unify_types_generic_mismatched_arg_count() {
+    let mut tc = TypeChecker::new(Interner::new());
+    let vec_sym = tc.interner.intern("Vec");
+    let type_params = vec![];
+    let mut sub = std::collections::HashMap::new();
+    TypeChecker::unify_types(
+        &HirType::Generic(vec_sym, vec![HirType::Int, HirType::Int]),
+        &HirType::Generic(vec_sym, vec![HirType::Int]),
+        &type_params,
+        &mut sub,
+    );
+    assert!(sub.is_empty());
+}
+
+#[test]
+fn check_stmt_annotation_generic_empty_args() {
+    let mut tc = TypeChecker::new(Interner::new());
+    tc.push_scope();
+    let x = tc.interner.intern("x");
+    let stmt = HirStmt::LetPat {
+        pattern: HirPattern::Var(x),
+        mutable: false,
+        value: HirExpr::IntLit {
+            id: ExprId::new(0),
+            value: 42,
+            span: Span::new(0, 0),
+        },
+        ty: Some(HirType::Generic(tc.interner.intern("Vec"), vec![])),
+        span: Span::new(0, 0),
+    };
+    tc.check_stmt(&stmt);
+    assert_eq!(
+        tc.lookup_binding(&x),
+        Some(HirType::Generic(tc.interner.intern("Vec"), vec![]))
+    );
 }

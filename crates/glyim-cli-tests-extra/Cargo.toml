@@ -1,0 +1,13 @@
+[package]
+name = "glyim-cli-tests-extra"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Heavy test dependencies for CLI (trycmd, rstest, proptest)"
+
+[dependencies]
+glyim-cli = { path = "../glyim-cli" }
+trycmd = "0.15"
+rstest = "0.24"
+proptest = "1"

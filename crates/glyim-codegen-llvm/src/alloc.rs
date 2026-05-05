@@ -42,10 +42,10 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
 
     // entry: call malloc, compare result to null
     builder.position_at_end(entry);
-    let size_param = alloc_fn.get_first_param().unwrap();
+    let size_param = alloc_fn.get_first_param().expect("codegen: internal error");
     let raw_ptr = builder
         .build_call(malloc_fn, &[size_param.into()], "raw_ptr")
-        .unwrap()
+        .expect("codegen: internal error")
         .try_as_basic_value();
 
     let raw_ptr = match raw_ptr {
@@ -56,19 +56,23 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     let null_ptr = ptr_type.const_null();
     let is_null = builder
         .build_int_compare(inkwell::IntPredicate::EQ, raw_ptr, null_ptr, "is_null")
-        .unwrap();
+        .expect("codegen: internal error");
 
     builder
         .build_conditional_branch(is_null, oom_block, ok_block)
-        .unwrap();
+        .expect("codegen: internal error");
 
     // oom: unreachable immediately (compiler may add trap later)
     builder.position_at_end(oom_block);
-    builder.build_unreachable().unwrap();
+    builder
+        .build_unreachable()
+        .expect("codegen: internal error");
 
     // ok: return the pointer
     builder.position_at_end(ok_block);
-    builder.build_return(Some(&raw_ptr)).unwrap();
+    builder
+        .build_return(Some(&raw_ptr))
+        .expect("codegen: return failure");
 
     // ── glyim_free(ptr: *i8) -> void ─────────────────────────────
 
@@ -77,11 +81,13 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     let free_entry = ctx.append_basic_block(free_wrapper, "entry");
 
     builder.position_at_end(free_entry);
-    let ptr_param = free_wrapper.get_first_param().unwrap();
+    let ptr_param = free_wrapper
+        .get_first_param()
+        .expect("codegen: internal error");
     builder
         .build_call(free_fn, &[ptr_param.into()], "")
-        .unwrap();
-    builder.build_return(None).unwrap();
+        .expect("codegen: internal error");
+    builder.build_return(None).expect("codegen: internal error");
 }
 
 #[cfg(test)]

@@ -11,17 +11,29 @@ pub enum TypeError {
         expected: HirType,
         found: HirType,
         expr_id: ExprId,
+        span: (usize, usize),
     },
     #[error("unknown type: {name:?}")]
     UnknownType { name: Symbol },
-    #[error("unknown field {field:?} on struct {struct_name:?}")]
-    UnknownField { struct_name: Symbol, field: Symbol },
-    #[error("missing field {field:?} in struct {struct_name:?}")]
-    MissingField { struct_name: Symbol, field: Symbol },
-    #[error("extra field {field:?} in struct {struct_name:?}")]
-    ExtraField { struct_name: Symbol, field: Symbol },
+    #[error("unknown field `{field}` on struct `{struct_name}`")]
+    UnknownField {
+        struct_name: String,
+        field: String,
+        span: (usize, usize),
+    },
+    #[error("missing field `{field}` in struct `{struct_name}`")]
+    MissingField {
+        struct_name: String,
+        field: String,
+        span: (usize, usize),
+    },
+    #[error("extra field `{field}` in struct `{struct_name}`")]
+    ExtraField { struct_name: String, field: String },
     #[error("non-exhaustive match, missing variants: {missing:?}")]
-    NonExhaustiveMatch { missing: Vec<String> },
+    NonExhaustiveMatch {
+        missing: Vec<String>,
+        span: (usize, usize),
+    },
     #[error("? operator used outside of Result-returning function")]
     InvalidQuestion { expr_id: ExprId },
     #[error("expected function call")]
@@ -30,19 +42,53 @@ pub enum TypeError {
     InvalidReturnType { expected: HirType, found: HirType },
     #[error("if condition must be `bool`, found `{found:?}`")]
     IfConditionMustBeBool { found: HirType, expr_id: ExprId },
-    #[error("cannot assign to immutable binding")]
-    AssignToImmutable { name: Symbol, expr_id: ExprId },
+    #[error("cannot assign to immutable `{name}`")]
+    AssignToImmutable {
+        name: String,
+        expr_id: ExprId,
+        span: (usize, usize),
+    },
     #[error("cannot assign through non-pointer type `{found:?}`")]
-    AssignThroughNonPointer { found: HirType, expr_id: ExprId },
+    AssignThroughNonPointer {
+        found: HirType,
+        expr_id: ExprId,
+        span: (usize, usize),
+    },
     #[error("cannot dereference non-pointer type `{found:?}`")]
-    DerefNonPointer { found: HirType, expr_id: ExprId },
-    #[error("unresolved name: {name:?}")]
-    UnresolvedName { name: Symbol },
+    DerefNonPointer {
+        found: HirType,
+        expr_id: ExprId,
+        span: (usize, usize),
+    },
+    #[error("unresolved name `{name}`")]
+    UnresolvedName { name: String, span: (usize, usize) },
 }
 
 impl Diagnostic for TypeError {
     fn severity(&self) -> Option<miette::Severity> {
         Some(miette::Severity::Error)
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        match self {
+            TypeError::MismatchedTypes {
+                span,
+                expected,
+                found,
+                ..
+            } => Some(Box::new(std::iter::once(miette::LabeledSpan::new(
+                Some(format!("expected {:?}, found {:?}", expected, found)),
+                span.0,
+                span.1 - span.0,
+            )))),
+            _ => None,
+        }
+    }
+
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
+        // Macro expansion chain diagnostics are prepared but not yet wired due to
+        // lifetime constraints in the Diagnostic trait – will be completed in a follow-up.
+        None
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
@@ -71,10 +117,6 @@ impl Diagnostic for TypeError {
                 return Some(Box::new(format!("Type diff:\n{result}")));
             }
         }
-        None
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan>>> {
         None
     }
 }

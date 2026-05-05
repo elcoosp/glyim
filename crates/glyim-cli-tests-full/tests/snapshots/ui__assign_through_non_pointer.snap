@@ -1,0 +1,11 @@
+---
+source: crates/glyim-cli/tests/ui.rs
+assertion_line: 57
+expression: actual
+---
+  × cannot assign through non-pointer type `Int`
+   ╭─[tests/ui/assign_through_non_pointer.g:1:1]
+ 1 │ fn main() { let x = 42; *x = 10; x }
+   · ▲
+   · ╰── cannot assign through non-pointer type `Int`
+   ╰────

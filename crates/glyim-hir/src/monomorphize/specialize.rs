@@ -1,5 +1,6 @@
 // crates/glyim-hir/src/monomorphize/specialize.rs
 use super::*;
+use crate::MatchArm;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
 use std::collections::HashMap;
@@ -8,20 +9,6 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
-
-        eprintln!(
-            "[specialize_fn] ENTER fn={} type_params=[{}] concrete={:?}",
-            self.interner.resolve(f.name),
-            f.type_params
-                .iter()
-                .map(|s| self.interner.resolve(*s))
-                .collect::<Vec<_>>()
-                .join(", "),
-            concrete
-                .iter()
-                .map(|t| format!("{:?}", t))
-                .collect::<Vec<_>>()
-        );
 
         // Use explicit type parameters of the function if present
         for (i, tp) in f.type_params.iter().enumerate() {
@@ -32,14 +19,15 @@ impl<'a> MonoContext<'a> {
 
         // If no type params are on the function itself (e.g., struct methods),
         // derive the substitution from the self parameter's generic type.
-        if sub.is_empty() && !f.params.is_empty() {
-            if let (_first_sym, HirType::Generic(_, param_type_args)) = &f.params[0] {
-                for (i, formal) in param_type_args.iter().enumerate() {
-                    if let HirType::Named(formal_name) = formal {
-                        if let Some(ct) = concrete.get(i) {
-                            sub.insert(*formal_name, ct.clone());
-                        }
-                    }
+        if sub.is_empty()
+            && !f.params.is_empty()
+            && let (_first_sym, HirType::Generic(_, param_type_args)) = &f.params[0]
+        {
+            for (i, formal) in param_type_args.iter().enumerate() {
+                if let HirType::Named(formal_name) = formal
+                    && let Some(ct) = concrete.get(i)
+                {
+                    sub.insert(*formal_name, ct.clone());
                 }
             }
         }
@@ -78,25 +66,150 @@ impl<'a> MonoContext<'a> {
         }
         mono.body = self.substitute_expr_types(&mono.body, &sub);
 
+        // Concretize enum variant names using the type substitution.
+        self.concretize_enum_variant_names(&mut mono.body, &sub);
+
         // Brute-force pass: walk the body and replace any As target type
         // that matches a type parameter with its concrete type.
         if !sub.is_empty() {
-            eprintln!("[specialize_fn] force sub map: {:?}", sub);
-            eprintln!(
-                "[specialize_fn] body before As substitution: {:#?}",
-                mono.body
-            );
             mono.body = Self::force_substitute_as_targets(mono.body, &sub);
-            eprintln!(
-                "[specialize_fn] body after As substitution: {:#?}",
-                mono.body
-            );
         }
 
         self.scan_expr_for_generic_calls(&mono.body, &sub);
         self.scan_expr_for_struct_instantiations(&mono.body, &sub);
 
         mono
+    }
+
+    /// Walk the expression tree and replace any `EnumVariant` node whose enum name
+    /// is still a generic base (e.g., `Option`) with the mangled concrete name
+    /// (e.g., `Option__i64`) according to the given type substitution.
+    fn concretize_enum_variant_names(
+        &mut self,
+        expr: &mut HirExpr,
+        sub: &HashMap<Symbol, HirType>,
+    ) {
+        match expr {
+            HirExpr::EnumVariant { enum_name, args, .. } => {
+                // If the enum has a definition, use it to compute concrete type args.
+                if let Some(edef) = self.find_enum(*enum_name) {
+                    let concrete_args: Vec<HirType> = edef
+                        .type_params
+                        .iter()
+                        .map(|tp| {
+                            sub.get(tp).cloned().unwrap_or_else(|| {
+                                if edef.type_params.len() == 1 && !sub.is_empty() {
+                                    sub.values().next().unwrap().clone()
+                                } else {
+                                    HirType::Named(*tp)
+                                }
+                            })
+                        })
+                        .collect();
+                    if !concrete_args.is_empty()
+                        && concrete_args.iter().all(|a| !self.has_unresolved_type_param(a))
+                    {
+                        *enum_name = self.mangle_name(*enum_name, &concrete_args);
+                    }
+                } else {
+                    // The enum definition wasn't found (e.g. built-in prelude enums).
+                    // Attempt to specialize it using the base definition from the HIR.
+                    let name = self.interner.resolve(*enum_name).to_string();
+                    if name == "Option" || name == "Result" {
+                        // Find the base enum in the original HIR.
+                        if let Some(base_def) = self.find_enum(*enum_name) {
+                            let args: Vec<HirType> = if name == "Option" && !sub.is_empty() {
+                                vec![sub.values().next().unwrap().clone()]
+                            } else if name == "Result" && sub.len() >= 2 {
+                                let mut iter = sub.values();
+                                vec![iter.next().unwrap().clone(), iter.next().unwrap().clone()]
+                            } else {
+                                vec![]
+                            };
+                            if !args.is_empty() {
+                                let specialized = self.specialize_enum(&base_def, &args);
+                                self.enum_specs.insert((*enum_name, args.clone()), specialized);
+                                *enum_name = self.mangle_name(*enum_name, &args);
+                            }
+                        }
+                    }
+                }
+                for a in args {
+                    self.concretize_enum_variant_names(a, sub);
+                }
+            }
+            HirExpr::Block { stmts, .. } => {
+                for stmt in stmts {
+                    match stmt {
+                        HirStmt::Expr(e)
+                        | HirStmt::Let { value: e, .. }
+                        | HirStmt::LetPat { value: e, .. }
+                        | HirStmt::Assign { value: e, .. } => {
+                            self.concretize_enum_variant_names(e, sub);
+                        }
+                        HirStmt::AssignField { object, value, .. } => {
+                            self.concretize_enum_variant_names(object, sub);
+                            self.concretize_enum_variant_names(value, sub);
+                        }
+                        HirStmt::AssignDeref { target, value, .. } => {
+                            self.concretize_enum_variant_names(target, sub);
+                            self.concretize_enum_variant_names(value, sub);
+                        }
+                    }
+                }
+            }
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
+                self.concretize_enum_variant_names(condition, sub);
+                self.concretize_enum_variant_names(then_branch, sub);
+                if let Some(eb) = else_branch {
+                    self.concretize_enum_variant_names(eb, sub);
+                }
+            }
+            HirExpr::Match { scrutinee, arms, .. } => {
+                self.concretize_enum_variant_names(scrutinee, sub);
+                for arm in arms {
+                    if let Some(g) = &mut arm.guard {
+                        self.concretize_enum_variant_names(g, sub);
+                    }
+                    self.concretize_enum_variant_names(&mut arm.body, sub);
+                }
+            }
+            HirExpr::While { condition, body, .. }
+            | HirExpr::ForIn { iter: condition, body, .. } => {
+                self.concretize_enum_variant_names(condition, sub);
+                self.concretize_enum_variant_names(body, sub);
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.concretize_enum_variant_names(lhs, sub);
+                self.concretize_enum_variant_names(rhs, sub);
+            }
+            HirExpr::Unary { operand, .. }
+            | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::As { expr: operand, .. }
+            | HirExpr::Return { value: Some(operand), .. }
+            | HirExpr::Println { arg: operand, .. } => {
+                self.concretize_enum_variant_names(operand, sub);
+            }
+            HirExpr::Assert { condition, message, .. } => {
+                self.concretize_enum_variant_names(condition, sub);
+                if let Some(m) = message {
+                    self.concretize_enum_variant_names(m, sub);
+                }
+            }
+            HirExpr::Call { args, .. }
+            | HirExpr::MethodCall { args, .. }
+            | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    self.concretize_enum_variant_names(a, sub);
+                }
+            }
+            HirExpr::StructLit { fields, .. } => {
+                for (_, val) in fields {
+                    self.concretize_enum_variant_names(val, sub);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
@@ -108,10 +221,6 @@ impl<'a> MonoContext<'a> {
                 span,
             } => {
                 let new_target = crate::types::substitute_type(&target_type, sub);
-                eprintln!(
-                    "[force_sub] As id={:?} old_target={:?} new_target={:?}",
-                    id, target_type, new_target
-                );
                 HirExpr::As {
                     id,
                     expr: Box::new(Self::force_substitute_as_targets(*inner, sub)),
@@ -151,12 +260,10 @@ impl<'a> MonoContext<'a> {
                 scrutinee: Box::new(Self::force_substitute_as_targets(*scrutinee, sub)),
                 arms: arms
                     .into_iter()
-                    .map(|(p, g, b)| {
-                        (
-                            p,
-                            g.map(|g| Self::force_substitute_as_targets(g, sub)),
-                            Self::force_substitute_as_targets(b, sub),
-                        )
+                    .map(|arm| MatchArm {
+                        pattern: arm.pattern,
+                        guard: arm.guard.map(|g| Self::force_substitute_as_targets(g, sub)),
+                        body: Self::force_substitute_as_targets(arm.body, sub),
                     })
                     .collect(),
                 span,
@@ -384,11 +491,11 @@ impl<'a> MonoContext<'a> {
             if self.find_struct(*sym).is_some() {
                 let concrete: Vec<HirType> = args.clone();
                 let key = (*sym, concrete.clone());
-                if !self.struct_specs.contains_key(&key) {
-                    if let Some(s) = self.find_struct(*sym) {
-                        let specialized = self.specialize_struct(&s, &concrete);
-                        self.struct_specs.insert(key, specialized);
-                    }
+                if !self.struct_specs.contains_key(&key)
+                    && let Some(s) = self.find_struct(*sym)
+                {
+                    let specialized = self.specialize_struct(&s, &concrete);
+                    self.struct_specs.insert(key, specialized);
                 }
             }
             for arg in args {
@@ -431,11 +538,11 @@ impl<'a> MonoContext<'a> {
                 scrutinee, arms, ..
             } => {
                 self.collect_type_overrides_for_expr(scrutinee, sub);
-                for (_, guard, body) in arms {
-                    if let Some(g) = guard {
+                for arm in arms {
+                    if let Some(ref g) = arm.guard {
                         self.collect_type_overrides_for_expr(g, sub);
                     }
-                    self.collect_type_overrides_for_expr(body, sub);
+                    self.collect_type_overrides_for_expr(&arm.body, sub);
                 }
             }
             HirExpr::Binary { lhs, rhs, .. } => {

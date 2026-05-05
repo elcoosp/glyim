@@ -11,11 +11,11 @@ use axum::{
 use glyim_macro_vfs::{ActionResult, ContentHash, ContentStore, LocalContentStore};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 // ── Shared application state ───────────────────────────────────────
 pub struct AppState {
-    store: Arc<Mutex<LocalContentStore>>,
+    store: Arc<RwLock<LocalContentStore>>,
 }
 
 // ── Request/Response types ─────────────────────────────────────────
@@ -49,7 +49,7 @@ async fn store_blob(
     State(state): State<Arc<AppState>>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let store = state.store.lock().await;
+    let store = state.store.read().await;
     let hash = store.store(&body);
     tracing::info!("Stored blob: {}", hash);
     Json(StoreResponse {
@@ -68,7 +68,7 @@ async fn retrieve_blob(
             return (StatusCode::BAD_REQUEST, "invalid hash").into_response();
         }
     };
-    let store = state.store.lock().await;
+    let store = state.store.read().await;
     match store.retrieve(hash) {
         Some(data) => {
             tracing::info!("Retrieved blob: {}", hash);
@@ -91,7 +91,7 @@ async fn find_missing_blobs(
     State(state): State<Arc<AppState>>,
     Json(req): Json<FindMissingRequest>,
 ) -> impl IntoResponse {
-    let store = state.store.lock().await;
+    let store = state.store.read().await;
     let mut missing = Vec::new();
     for hash_str in &req.blobs {
         if let Ok(hash) = hash_str.parse::<ContentHash>() {
@@ -120,7 +120,7 @@ async fn store_action_result(
         Ok(h) => h,
         Err(_) => return (StatusCode::BAD_REQUEST, "invalid hash").into_response(),
     };
-    let store = state.store.lock().await;
+    let store = state.store.read().await;
     match store.store_action_result(hash, result) {
         Ok(()) => {
             tracing::info!("Stored action result: {}", hash);
@@ -146,7 +146,7 @@ async fn retrieve_action_result(
         Ok(h) => h,
         Err(_) => return (StatusCode::BAD_REQUEST, "invalid hash").into_response(),
     };
-    let store = state.store.lock().await;
+    let store = state.store.read().await;
     match store.retrieve_action_result(hash) {
         Some(result) => {
             tracing::info!("Retrieved action result: {}", hash);
@@ -161,10 +161,7 @@ async fn retrieve_action_result(
 
 /// Health check and status endpoint.
 async fn status(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
-    let blob_count = std::fs::read_dir("./cas_store/objects")
-        .ok()
-        .map(|entries| entries.count())
-        .unwrap_or(0);
+    let blob_count = _state.store.read().await.list_blobs().len();
 
     Json(StatusResponse {
         status: "ok".to_string(),
@@ -183,7 +180,7 @@ async fn main() -> std::io::Result<()> {
 
     let raw_store =
         LocalContentStore::new("./cas_store").expect("failed to create local content store");
-    let shared_store = Arc::new(Mutex::new(raw_store));
+    let shared_store = Arc::new(RwLock::new(raw_store));
 
     let state = Arc::new(AppState {
         store: shared_store.clone(),
@@ -206,16 +203,18 @@ async fn main() -> std::io::Result<()> {
     tracing::info!("Starting REST server on http://{}", rest_addr);
     let rest_listener = tokio::net::TcpListener::bind(rest_addr).await?;
     let rest_handle = tokio::spawn(async move {
-        axum::serve(rest_listener, rest_app).await.unwrap();
+        axum::serve(rest_listener, rest_app)
+            .await
+            .expect("internal error");
     });
 
     // ── gRPC server on port 9091 ─────────────────────────────────
     let cas_service = grpc::cas::CasService {
         store: shared_store.clone(),
     };
-    let capabilities_service = grpc::capabilities::CapabilitiesService::default();
+    let capabilities_service = grpc::capabilities::CapabilitiesService;
 
-    let grpc_addr = "127.0.0.1:9091".parse().unwrap();
+    let grpc_addr = "127.0.0.1:9091".parse().expect("internal error");
     tracing::info!("Starting gRPC server on {}", grpc_addr);
 
     let grpc_handle = tokio::spawn(async move {
@@ -228,7 +227,7 @@ async fn main() -> std::io::Result<()> {
             )
             .serve(grpc_addr)
             .await
-            .unwrap();
+            .expect("internal error");
     });
 
     // Wait for both servers

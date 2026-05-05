@@ -1,0 +1,11 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × type mismatch: expected Bool, found Int
+   ╭─[tests/ui/type_mismatch.g:1:1]
+ 1 │ fn take_bool(b: bool) -> i64 { 0 }
+   · ▲
+   · ╰── type mismatch: expected Bool, found Int
+ 2 │ main = () => take_bool(42)
+   ╰────

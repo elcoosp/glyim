@@ -1,6 +1,7 @@
 // crates/glyim-hir/src/monomorphize/rewrite.rs
 use super::*;
 use crate::HirPattern;
+use crate::MatchArm;
 use crate::node::{HirExpr, HirStmt};
 use crate::types::HirType;
 use glyim_interner::Symbol;
@@ -149,60 +150,73 @@ impl<'a> MonoContext<'a> {
                 scrutinee,
                 arms,
                 span,
-            } => HirExpr::Match {
-                id: *id,
-                scrutinee: Box::new(self.rewrite_expr(
+            } => {
+                let rewritten_scrutinee = Box::new(self.rewrite_expr(
                     scrutinee,
                     fn_map,
                     struct_map,
                     enum_spec_map,
                     type_sub,
-                )),
-                arms: arms
-                    .iter()
-                    .map(|(pat, guard, body)| {
-                        let rewritten_guard = guard.as_ref().map(|g| {
-                            self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub)
-                        });
-                        let rewritten_pat = if let HirPattern::EnumVariant {
-                            enum_name,
-                            variant_name,
-                            bindings,
-                            span,
-                        } = pat
-                        {
-                            // For patterns, we can't easily get the concrete args because patterns don't carry type info.
-                            // We'll try to find the specialized enum from the scrutinee's type (which is available as the match scrutinee expr_type).
-                            // But we don't have access to scrutinee type here. For now, try exact match and fallback to base.
-                            // Better: the pattern rewriting is cosmetic; the codegen match logic already uses the rewritten EnumVariant expression.
-                            // So just keep the original pattern name? Actually the codegen match looks at the pattern to determine tag.
-                            // We need the pattern to match the concrete enum name.
-                            // Since we already rewrote the scrutinee EnumVariant, the value has the correct tag layout.
-                            // The pattern just needs to match the tag index of the concrete enum.
-                            // We'll search enum_spec_map for any entry where the base matches.
-                            let new_enum_name = enum_spec_map
-                                .iter()
-                                .find(|((base, _), _)| base == enum_name)
-                                .map(|(_, mangled)| *mangled)
-                                .unwrap_or(*enum_name);
-                            HirPattern::EnumVariant {
-                                enum_name: new_enum_name,
-                                variant_name: *variant_name,
-                                bindings: bindings.clone(),
-                                span: *span,
+                ));
+                let scrutinee_ty = self
+                    .get_expr_type(scrutinee.get_id())
+                    .as_ref()
+                    .map(|t| crate::types::substitute_type(t, type_sub))
+                    .map(|t| self.concretize_type(&t));
+                HirExpr::Match {
+                    id: *id,
+                    scrutinee: rewritten_scrutinee,
+                    arms: arms
+                        .iter()
+                        .map(|arm| {
+                            let pat = &arm.pattern;
+                            let guard = &arm.guard;
+                            let body = &arm.body;
+                            let rewritten_guard = guard.as_ref().map(|g| {
+                                self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub)
+                            });
+                            let rewritten_pat = if let HirPattern::EnumVariant {
+                                enum_name: original_enum_name,
+                                variant_name,
+                                bindings,
+                                span,
+                            } = pat
+                            {
+                                let new_enum_name = scrutinee_ty
+                                    .as_ref()
+                                    .and_then(|t| match t {
+                                        HirType::Generic(base, args) => {
+                                            enum_spec_map.get(&(*base, args.clone())).copied()
+                                        }
+                                        HirType::Named(name) => Some(*name),
+                                        _ => None,
+                                    })
+                                    .unwrap_or(*original_enum_name);
+                                HirPattern::EnumVariant {
+                                    enum_name: new_enum_name,
+                                    variant_name: *variant_name,
+                                    bindings: bindings.clone(),
+                                    span: *span,
+                                }
+                            } else {
+                                pat.clone()
+                            };
+                            MatchArm {
+                                pattern: rewritten_pat,
+                                guard: rewritten_guard,
+                                body: self.rewrite_expr(
+                                    body,
+                                    fn_map,
+                                    struct_map,
+                                    enum_spec_map,
+                                    type_sub,
+                                ),
                             }
-                        } else {
-                            pat.clone()
-                        };
-                        (
-                            rewritten_pat,
-                            rewritten_guard,
-                            self.rewrite_expr(body, fn_map, struct_map, enum_spec_map, type_sub),
-                        )
-                    })
-                    .collect(),
-                span: *span,
-            },
+                        })
+                        .collect(),
+                    span: *span,
+                }
+            }
 
             HirExpr::Block { id, stmts, span } => HirExpr::Block {
                 id: *id,
@@ -369,19 +383,22 @@ impl<'a> MonoContext<'a> {
                 args,
                 span,
             } => {
-                // Use the expression's concrete type to find the correct specialized enum name.
-                let expr_type = self.get_expr_type(*id);
-                let new_enum_name = match &expr_type {
-                    Some(HirType::Generic(base_sym, concrete_args)) => {
-                        let key = (*base_sym, concrete_args.clone());
-                        enum_spec_map.get(&key).copied().unwrap_or(*enum_name)
+                // Use the type substitution to compute the concrete enum name
+                // when the enum has type parameters that map to concrete types.
+                let new_enum_name = if let Some(enum_def) = self.find_enum(*enum_name) {
+                    let concrete_args: Vec<HirType> = enum_def.type_params
+                        .iter()
+                        .map(|tp| type_sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                        .collect();
+                    if !concrete_args.is_empty()
+                        && !concrete_args.iter().any(|a| self.has_unresolved_type_param(a))
+                    {
+                        self.mangle_name(*enum_name, &concrete_args)
+                    } else {
+                        *enum_name
                     }
-                    Some(HirType::Named(base_sym)) => {
-                        // Try to find specialization with empty args
-                        let key = (*base_sym, vec![]);
-                        enum_spec_map.get(&key).copied().unwrap_or(*base_sym)
-                    }
-                    _ => *enum_name,
+                } else {
+                    *enum_name
                 };
                 HirExpr::EnumVariant {
                     id: *id,
@@ -435,9 +452,10 @@ impl<'a> MonoContext<'a> {
                     let mut prev = concretized.clone();
                     loop {
                         concretized = self.concretize_type(&prev);
-                        eprintln!(
+                        tracing::debug!(
                             "[rewrite_stmt LetPat] repeat concretize: {:?} -> {:?}",
-                            prev, concretized
+                            prev,
+                            concretized
                         );
                         if concretized == prev {
                             break;

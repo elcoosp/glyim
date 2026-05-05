@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 #[allow(dead_code)]
 pub struct CasService {
-    pub store: Arc<tokio::sync::Mutex<LocalContentStore>>,
+    pub store: Arc<tokio::sync::RwLock<LocalContentStore>>,
 }
 
 impl CasService {
@@ -37,7 +37,7 @@ impl ContentAddressableStorage for CasService {
         for blob_digest in &req.blob_digests {
             let hash: Option<ContentHash> = blob_digest.hash.parse().ok();
             if let Some(h) = hash {
-                if self.store.lock().await.retrieve(h).is_none() {
+                if self.store.read().await.retrieve(h).is_none() {
                     missing.push(blob_digest.clone());
                 }
             } else {
@@ -59,7 +59,7 @@ impl ContentAddressableStorage for CasService {
 
         for upload in &req.requests {
             let digest = upload.digest.clone();
-            let stored_hash = self.store.lock().await.store(&upload.data);
+            let stored_hash = self.store.write().await.store(&upload.data);
             let expected_hash: Option<ContentHash> =
                 digest.as_ref().and_then(|d| d.hash.parse().ok());
 
@@ -93,20 +93,20 @@ impl ContentAddressableStorage for CasService {
         let mut responses = Vec::new();
 
         for digest in &req.digests {
-            let data = {
-                let store_guard = self.store.lock().await;
-                digest
+            let (data, status) = {
+                let store_guard = self.store.read().await;
+                match digest
                     .hash
                     .parse::<ContentHash>()
                     .ok()
                     .and_then(|h| store_guard.retrieve(h))
-                    .unwrap_or_default()
-            };
-
-            let status = if data.is_empty() {
-                Some(Self::grpc_status(tonic::Code::NotFound, "blob not found"))
-            } else {
-                None
+                {
+                    Some(bytes) => (bytes, None),
+                    None => (
+                        vec![],
+                        Some(Self::grpc_status(tonic::Code::NotFound, "blob not found")),
+                    ),
+                }
             };
 
             responses.push(batch_read_blobs_response::Response {
@@ -156,10 +156,10 @@ mod tests {
     use super::*;
     use tonic::Request;
 
-    fn test_store() -> Arc<tokio::sync::Mutex<LocalContentStore>> {
-        let dir = tempfile::tempdir().unwrap();
-        Arc::new(tokio::sync::Mutex::new(
-            LocalContentStore::new(dir.path()).unwrap(),
+    fn test_store() -> Arc<tokio::sync::RwLock<LocalContentStore>> {
+        let dir = tempfile::tempdir().expect("internal error");
+        Arc::new(tokio::sync::RwLock::new(
+            LocalContentStore::new(dir.path()).expect("internal error"),
         ))
     }
 
@@ -171,7 +171,7 @@ mod tests {
         };
 
         let data = b"hello";
-        let hash = store.lock().await.store(data);
+        let hash = store.write().await.store(data);
 
         let req = FindMissingBlobsRequest {
             instance_name: String::new(),
@@ -182,7 +182,10 @@ mod tests {
             digest_function: 1,
         };
 
-        let resp = svc.find_missing_blobs(Request::new(req)).await.unwrap();
+        let resp = svc
+            .find_missing_blobs(Request::new(req))
+            .await
+            .expect("internal error");
         assert!(resp.into_inner().missing_blob_digests.is_empty());
     }
 
@@ -211,7 +214,7 @@ mod tests {
         let update_resp = svc
             .batch_update_blobs(Request::new(update_req))
             .await
-            .unwrap();
+            .expect("internal error");
         assert!(update_resp.into_inner().responses[0].status.is_none());
 
         let read_req = BatchReadBlobsRequest {
@@ -223,7 +226,10 @@ mod tests {
             acceptable_compressors: vec![],
             digest_function: 1,
         };
-        let read_resp = svc.batch_read_blobs(Request::new(read_req)).await.unwrap();
+        let read_resp = svc
+            .batch_read_blobs(Request::new(read_req))
+            .await
+            .expect("internal error");
         assert_eq!(read_resp.into_inner().responses[0].data, data);
     }
 }

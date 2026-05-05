@@ -1,21 +1,85 @@
 pub use miette::{self, Diagnostic, LabeledSpan, Report, Severity, SourceSpan};
+use std::sync::{LazyLock, Mutex};
+
+/// Metadata for a macro expansion that produced a span.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MacroExpansion {
+    /// Where the macro was invoked (user code)
+    pub call_site: Span,
+    /// Where the macro was defined (macro author's code)
+    pub def_site: Span,
+    /// Name of the macro
+    pub macro_name: String,
+    /// For nested expansions, the parent expansion ID
+    pub parent: Option<u32>,
+}
+
+/// Table of macro expansion records, indexed by Span.expansion_id.
+pub static MACRO_EXPANSION_TABLE: LazyLock<Mutex<Vec<MacroExpansion>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+    /// Index into MACRO_EXPANSION_TABLE, or None if not from a macro
+    pub expansion_id: Option<u32>,
 }
 
 impl Span {
     pub fn new(start: usize, end: usize) -> Self {
         assert!(start <= end);
-        Self { start, end }
+        Self {
+            start,
+            end,
+            expansion_id: None,
+        }
     }
+
+    pub fn with_expansion(
+        start: usize,
+        end: usize,
+        call_site: Span,
+        def_site: Span,
+        macro_name: String,
+        parent: Option<u32>,
+    ) -> Self {
+        assert!(start <= end);
+        let mut table = MACRO_EXPANSION_TABLE.lock().unwrap();
+        let id = table.len() as u32;
+        table.push(MacroExpansion {
+            call_site,
+            def_site,
+            macro_name,
+            parent,
+        });
+        Self {
+            start,
+            end,
+            expansion_id: Some(id),
+        }
+    }
+
+    pub fn expansion(&self) -> Option<MacroExpansion> {
+        self.expansion_id
+            .map(|id| MACRO_EXPANSION_TABLE.lock().unwrap()[id as usize].clone())
+    }
+
     pub fn len(&self) -> usize {
         self.end - self.start
     }
+
     pub fn is_empty(&self) -> bool {
         self.start == self.end
+    }
+
+    /// Walk the expansion chain and return the original (non‑macro) source span.
+    pub fn original_source(&self) -> Span {
+        if let Some(exp) = self.expansion() {
+            exp.call_site.original_source()
+        } else {
+            *self
+        }
     }
 }
 

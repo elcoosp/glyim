@@ -11,3 +11,4 @@ name = "glyim-fmt"
 path = "src/main.rs"
 
 [dependencies]
+glyim-lex = { path = "../glyim-lex" }

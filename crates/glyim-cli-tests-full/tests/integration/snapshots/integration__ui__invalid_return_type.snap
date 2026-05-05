@@ -1,0 +1,19 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × invalid return type: expected Bool, found Int
+   ╭─[tests/ui/invalid_return_type.g:1:1]
+ 1 │ fn foo() -> bool { 42 }
+   · ▲
+   · ╰── invalid return type: expected Bool, found Int
+ 2 │ fn main() -> i64 { foo() }
+   ╰────
+
+  × invalid return type: expected Int, found Bool
+   ╭─[tests/ui/invalid_return_type.g:1:1]
+ 1 │ fn foo() -> bool { 42 }
+   · ▲
+   · ╰── invalid return type: expected Int, found Bool
+ 2 │ fn main() -> i64 { foo() }
+   ╰────

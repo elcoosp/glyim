@@ -1,0 +1,119 @@
+---
+source: crates/glyim-codegen-llvm/tests/snapshot_tests.rs
+expression: ir
+---
+; ModuleID = 'glyim_out'
+source_filename = "glyim_out"
+
+@newline_fmt = private constant [6 x i8] c"%lld\0A\00"
+@str_fmt = private constant [4 x i8] c"%s\0A\00"
+
+declare i64 @write(i32, ptr, i64)
+
+declare i64 @open(ptr, i32)
+
+declare i32 @close(i32)
+
+declare void @abort()
+
+declare i32 @printf(ptr, ...)
+
+define void @__glyim_println_int(i64 %0) {
+entry:
+  %c = call i32 (ptr, ...) @printf(ptr @newline_fmt, i64 %0)
+  ret void
+}
+
+define void @__glyim_println_str(ptr %0, i64 %1) {
+entry:
+  %c = call i32 (ptr, ...) @printf(ptr @str_fmt, ptr %0)
+  ret void
+}
+
+define void @__glyim_assert_fail(ptr %0, i64 %1) {
+entry:
+  %w = call i64 @write(i32 2, ptr %0, i64 %1)
+  call void @abort()
+  unreachable
+}
+
+declare ptr @malloc(i64)
+
+declare void @free(ptr)
+
+define ptr @__glyim_alloc(i64 %0) {
+entry:
+  %raw_ptr = call ptr @malloc(i64 %0)
+  %is_null = icmp eq ptr %raw_ptr, null
+  br i1 %is_null, label %oom, label %ok
+
+oom:                                              ; preds = %entry
+  unreachable
+
+ok:                                               ; preds = %entry
+  ret ptr %raw_ptr
+}
+
+define void @__glyim_free(ptr %0) {
+entry:
+  call void @free(ptr %0)
+  ret void
+}
+
+define i64 @__glyim_hash_seed() {
+entry:
+  ret i64 0
+}
+
+define i64 @__glyim_hash_bytes(ptr %0, i64 %1) {
+entry:
+  %hash = alloca i64, align 8
+  store i64 -3750763034362895579, ptr %hash, align 4
+  %i = alloca i64, align 8
+  store i64 0, ptr %i, align 4
+  br label %loop.cond
+
+loop.cond:                                        ; preds = %loop.body, %entry
+  %i.ld = load i64, ptr %i, align 4
+  %cmp = icmp slt i64 %i.ld, %1
+  br i1 %cmp, label %loop.body, label %exit
+
+loop.body:                                        ; preds = %loop.cond
+  %byte_ptr = getelementptr ptr, ptr %0, i64 %i.ld
+  %byte = load i8, ptr %byte_ptr, align 1
+  %byte64 = zext i8 %byte to i64
+  %cur = load i64, ptr %hash, align 4
+  %xored = xor i64 %cur, %byte64
+  %mul = mul i64 %xored, 1099511628211
+  store i64 %mul, ptr %hash, align 4
+  %inc = add i64 %i.ld, 1
+  store i64 %inc, ptr %i, align 4
+  br label %loop.cond
+
+exit:                                             ; preds = %loop.cond
+  %final = load i64, ptr %hash, align 4
+  ret i64 %final
+}
+
+define i32 @main() {
+entry:
+  %ret_val = alloca i32, align 4
+  %float_tmp = alloca double, align 8
+  store double 3.140000e+00, ptr %float_tmp, align 8
+  %f2i64 = ptrtoint ptr %float_tmp to i64
+  %enum_alloc = call ptr @__glyim_alloc(i64 ptrtoint (ptr getelementptr ({ i32, i64 }, ptr null, i32 1) to i64))
+  %tag_ptr = getelementptr inbounds nuw { i32, i64 }, ptr %enum_alloc, i32 0, i32 0
+  store i32 0, ptr %tag_ptr, align 4
+  %payload_ptr = getelementptr inbounds nuw { i32, i64 }, ptr %enum_alloc, i32 0, i32 1
+  store i64 %f2i64, ptr %payload_ptr, align 4
+  %enum_ptr = ptrtoint ptr %enum_alloc to i64
+  %c = alloca i64, align 8
+  store i64 %enum_ptr, ptr %c, align 4
+  %c1 = load i64, ptr %c, align 4
+  store i64 1, ptr %ret_val, align 4
+  br label %ret
+
+ret:                                              ; preds = %entry
+  %ret_load = load i32, ptr %ret_val, align 4
+  ret i32 %ret_load
+}

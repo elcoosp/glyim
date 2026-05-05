@@ -5,6 +5,7 @@ mod hash_shims;
 pub mod helpers;
 pub mod runtime_shims;
 pub use codegen::Codegen;
+pub use codegen::CodegenBuilder;
 
 /// Compile Glyim source to a WebAssembly binary (.wasm) for use as a macro.
 pub fn compile_to_wasm(source: &str, target_triple: &str) -> Result<Vec<u8>, String> {
@@ -19,7 +20,7 @@ pub fn compile_to_wasm(source: &str, target_triple: &str) -> Result<Vec<u8>, Str
     inkwell::targets::Target::initialize_webassembly(
         &inkwell::targets::InitializationConfig::default(),
     );
-    let mut cg = Codegen::new(&ctx, interner, vec![]);
+    let mut cg = CodegenBuilder::new(&ctx, interner, vec![]).build()?;
     cg.set_target(target_triple);
     cg.generate(&hir)?;
     let tmp_dir = tempfile::tempdir().map_err(|e| e.to_string())?;
@@ -36,7 +37,7 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let mut interner = out.interner;
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
-    let mut cg = Codegen::new(&ctx, interner, vec![]);
+    let mut cg = CodegenBuilder::new(&ctx, interner, vec![]).build()?;
     eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
@@ -51,7 +52,7 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
     let mut interner = out.interner;
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
-    let mut cg = Codegen::new(&ctx, interner, vec![]);
+    let mut cg = CodegenBuilder::new(&ctx, interner, vec![]).build()?;
     cg.generate_for_tests(&hir, test_names, &std::collections::HashSet::new())?;
     Ok(cg.ir_string())
 }
@@ -72,7 +73,7 @@ pub fn compile_to_ir_debug(
     let mut cg = if enable_debug {
         Codegen::with_debug(&ctx, interner, vec![], source.to_string(), file_name)?
     } else {
-        Codegen::new(&ctx, interner, vec![])
+        CodegenBuilder::new(&ctx, interner, vec![]).build()?
     };
     eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
@@ -223,3 +224,6 @@ Got:
     }
 }
 pub mod wasm_abi;
+
+#[cfg(test)]
+mod tests;

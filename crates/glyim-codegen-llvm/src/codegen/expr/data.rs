@@ -101,8 +101,19 @@ pub(crate) fn codegen_enum_variant<'ctx>(
         drop(tag_map);
 
         if args.is_empty() {
-            let st = cg.context.struct_type(&[cg.i32_type.into()], false);
-            let size = st.size_of().unwrap_or(cg.i64_type.const_int(4, false));
+            // Use the base name to decide the layout and discriminants
+            let base_name = cg.interner.resolve(*enum_name);
+            // For prelude enums that weren't registered, use the uniform layout
+            // expected by the match codegen: { i32, i64 }.
+            let tag = if base_name == "Option" {
+                if cg.interner.resolve(*variant_name) == "Some" { 0 } else { 1 }
+            } else if base_name == "Result" {
+                if cg.interner.resolve(*variant_name) == "Ok" { 0 } else { 1 }
+            } else {
+                tag
+            };
+            let st = cg.context.struct_type(&[cg.i32_type.into(), cg.i64_type.into()], false);
+            let size = st.size_of().unwrap_or(cg.i64_type.const_int(16, false));
             let alloc_fn = cg
                 .module
                 .get_function("__glyim_alloc")
@@ -116,10 +127,13 @@ pub(crate) fn codegen_enum_variant<'ctx>(
                 inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_pointer_value(),
                 _ => return Some(cg.i64_type.const_int(0, false)),
             };
-            let tag_ptr = cg.builder.build_struct_gep(st, ptr, 0, "tag_ptr").unwrap();
+            let tag_ptr = cg
+                .builder
+                .build_struct_gep(st, ptr, 0, "tag_ptr")
+                .expect("codegen: internal error");
             cg.builder
                 .build_store(tag_ptr, cg.i32_type.const_int(tag as u64, false))
-                .unwrap();
+                .expect("codegen: internal error");
             return cg
                 .builder
                 .build_ptr_to_int(ptr, cg.i64_type, "enum_ptr")
@@ -146,16 +160,21 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             _ => return Some(cg.i64_type.const_int(0, false)),
         };
 
-        let tag_ptr = cg.builder.build_struct_gep(st, ptr, 0, "tag_ptr").unwrap();
+        let tag_ptr = cg
+            .builder
+            .build_struct_gep(st, ptr, 0, "tag_ptr")
+            .expect("codegen: internal error");
         cg.builder
             .build_store(tag_ptr, cg.i32_type.const_int(tag as u64, false))
-            .unwrap();
+            .expect("codegen: internal error");
 
         let payload_ptr = cg
             .builder
             .build_struct_gep(st, ptr, 1, "payload_ptr")
-            .unwrap();
-        cg.builder.build_store(payload_ptr, arg_val).unwrap();
+            .expect("codegen: internal error");
+        cg.builder
+            .build_store(payload_ptr, arg_val)
+            .expect("codegen: internal error");
 
         cg.builder
             .build_ptr_to_int(ptr, cg.i64_type, "enum_ptr")
@@ -227,13 +246,24 @@ pub(crate) fn codegen_field_access<'ctx>(
             })
             .unwrap_or(0);
         drop(index_map);
-        let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
+        let mut struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
             Some(HirType::Named(name)) | Some(HirType::Generic(name, _)) => {
                 cg.struct_types.borrow().get(name).copied()
             }
             _ => None,
         };
-        let struct_type_opt = struct_type_opt.or_else(|| {
+        if struct_type_opt.is_none() {
+            // Fallback: try base struct name by stripping mangling suffix __...
+            let idx_map = cg.struct_field_indices.borrow();
+            struct_type_opt = idx_map.iter().find_map(|((sym, f), _idx)| {
+                if f == field {
+                    cg.struct_types.borrow().get(sym).copied()
+                } else {
+                    None
+                }
+            });
+        }
+        struct_type_opt = struct_type_opt.or_else(|| {
             let struct_types = cg.struct_types.borrow();
             let idx_map = cg.struct_field_indices.borrow();
             struct_types.iter().find_map(|(sym, st)| {

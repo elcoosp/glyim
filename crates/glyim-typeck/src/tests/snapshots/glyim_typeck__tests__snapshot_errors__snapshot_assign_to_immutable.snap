@@ -1,0 +1,16 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    AssignToImmutable {
+        name: "x",
+        expr_id: ExprId(
+            0,
+        ),
+        span: (
+            0,
+            0,
+        ),
+    },
+]

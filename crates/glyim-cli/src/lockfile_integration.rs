@@ -79,6 +79,7 @@ pub fn resolve_and_write_lockfile(
             let abs_path = package_dir.join(path);
             if abs_path.join("glyim.toml").exists() {
                 let _hash = compute_path_hash(&abs_path)?;
+                // store path_hash for later use in lockfile
                 available.entry(req.name.clone()).or_default().push(
                     glyim_pkg::resolver::AvailableVersion {
                         version: "0.0.0".to_string(),
@@ -94,14 +95,28 @@ pub fn resolve_and_write_lockfile(
     let resolution = resolve(&requirements, existing_lockfile.as_ref(), &available)
         .map_err(|e| format!("resolve: {e}"))?;
 
+    // Compute path hashes for all path dependencies
+    let mut path_hashes: HashMap<String, String> = HashMap::new();
+    for req in &requirements {
+        if let LockSource::Path { ref path } = req.source {
+            let abs_path = package_dir.join(path);
+            let hash = compute_path_hash(&abs_path)?;
+            path_hashes.insert(req.name.clone(), format!("sha256:{}", hash));
+        }
+    }
+
     let mut resolved_map: HashMap<String, (String, String, bool, Vec<String>, LockSource)> =
         HashMap::new();
     for (name, pkg) in &resolution.packages {
+        let hash = match path_hashes.get(name) {
+            Some(real) => real.clone(),
+            None => format!("sha256:{}", hex::encode([0u8; 32])), // placeholder for registry deps
+        };
         resolved_map.insert(
             name.clone(),
             (
                 pkg.version.clone(),
-                format!("sha256:{}", hex::encode([0u8; 32])),
+                hash,
                 pkg.is_macro,
                 pkg.deps.clone(),
                 pkg.source.clone(),
@@ -162,7 +177,7 @@ mod tests {
 
     #[test]
     fn lockfile_written_to_disk() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("internal error");
         let lockfile_path = dir.path().join("glyim.lock");
         let mut resolved = HashMap::new();
         resolved.insert(
@@ -177,15 +192,15 @@ mod tests {
         );
         let lock = generate_lockfile(&resolved);
         let serialized = serialize_lockfile(&lock);
-        std::fs::write(&lockfile_path, &serialized).unwrap();
-        let content = std::fs::read_to_string(&lockfile_path).unwrap();
+        std::fs::write(&lockfile_path, &serialized).expect("internal error");
+        let content = std::fs::read_to_string(&lockfile_path).expect("internal error");
         assert!(content.contains("test-pkg"));
         assert!(content.contains("@generated"));
     }
 
     #[test]
     fn resolve_empty_deps_writes_empty_lockfile() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("internal error");
         let manifest = PackageManifest {
             package: glyim_pkg::manifest::Package::default(),
             dependencies: HashMap::new(),
@@ -196,8 +211,9 @@ mod tests {
             features: glyim_pkg::manifest::FeaturesConfig::default(),
             workspace: None,
         };
-        resolve_and_write_lockfile(dir.path(), &manifest).unwrap();
-        let content = std::fs::read_to_string(dir.path().join("glyim.lock")).unwrap();
+        resolve_and_write_lockfile(dir.path(), &manifest).expect("internal error");
+        let content =
+            std::fs::read_to_string(dir.path().join("glyim.lock")).expect("internal error");
         assert!(content.contains("@generated"));
     }
 }

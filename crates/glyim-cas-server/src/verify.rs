@@ -66,7 +66,7 @@ pub async fn verify_wasm(
 
     // If verification passes, also store the blob in the CAS
     if matches {
-        let _ = state.store.lock().await.store(&wasm_bytes);
+        let _ = state.store.write().await.store(&wasm_bytes);
     }
 
     (

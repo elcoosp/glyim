@@ -1,0 +1,6 @@
+---
+source: crates/glyim-cli/tests/ui.rs
+assertion_line: 57
+expression: actual
+---
+

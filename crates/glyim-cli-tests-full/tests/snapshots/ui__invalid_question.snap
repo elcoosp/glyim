@@ -1,0 +1,10 @@
+---
+source: crates/glyim-cli/tests/ui.rs
+expression: actual
+---
+  × unresolved name `v`
+   ╭─[tests/ui/invalid_question.g:1:1]
+ 1 │ main = () => { let x = 42?; x }
+   · ▲
+   · ╰── unresolved name `v`
+   ╰────
