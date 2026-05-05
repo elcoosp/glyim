@@ -10,6 +10,7 @@ pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> String {
         HirType::Str => "str".to_string(),
         HirType::Unit => "unit".to_string(),
         HirType::Never => "never".to_string(),
+        HirType::Error => "error".to_string(),
         HirType::Named(s) => interner.resolve(*s).to_string(),
         HirType::Generic(s, args) => {
             let inner = args

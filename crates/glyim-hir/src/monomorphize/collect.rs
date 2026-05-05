@@ -259,6 +259,7 @@ impl<'a> MonoContext<'a> {
             | HirType::Str
             | HirType::Unit
             | HirType::Never
+            | HirType::Error
             | HirType::Opaque(_) => {
                 ty.clone()
             }
@@ -844,6 +845,7 @@ impl<'a> MonoContext<'a> {
             | HirType::Str
             | HirType::Unit
             | HirType::Never
+            | HirType::Error
             | HirType::Opaque(_)
             | HirType::RawPtr(_)
             | HirType::Option(_)

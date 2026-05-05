@@ -400,6 +400,7 @@ pub(crate) fn codegen_expr<'ctx>(
                     HirType::Result(ok, err) => {
                         format!("Result_{}_{}", mangle_type(cg, ok), mangle_type(cg, err))
                     }
+                    HirType::Error => "error".to_string(),
                     HirType::Tuple(elems) => elems
                         .iter()
                         .map(|e| mangle_type(cg, e))

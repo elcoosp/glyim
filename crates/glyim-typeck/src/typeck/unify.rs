@@ -46,7 +46,9 @@ fn unify_recursive(
         | (HirType::Float, HirType::Float)
         | (HirType::Str, HirType::Str)
         | (HirType::Unit, HirType::Unit)
-        | (HirType::Never, HirType::Never) => Ok(()),
+        | (HirType::Never, HirType::Never)
+        | (HirType::Error, _)
+        | (_, HirType::Error) => Ok(()),
         // Named types (non-param) must match exactly
         (HirType::Named(cn), HirType::Named(gn)) if !type_params.contains(gn) => {
             if cn == gn {

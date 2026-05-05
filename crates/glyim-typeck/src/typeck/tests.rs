@@ -178,7 +178,7 @@ fn infer_unit_lit() {
 }
 
 #[test]
-fn infer_ident_unbound_falls_back_to_int() {
+fn infer_ident_unbound_falls_back_to_error() {
     let mut tc = TypeChecker::new(Interner::new());
     let name = tc.interner.intern("x");
     let expr = HirExpr::Ident {
@@ -186,7 +186,8 @@ fn infer_ident_unbound_falls_back_to_int() {
         name,
         span: Span::new(0, 1),
     };
-    assert_eq!(tc.check_expr(&expr), Some(HirType::Int));
+    assert_eq!(tc.check_expr(&expr), Some(HirType::Error));
+    assert!(!tc.errors.is_empty());
 }
 
 #[test]

@@ -58,6 +58,7 @@ impl<'ctx> Codegen<'ctx> {
                 // All raw pointers are represented as i8* at the LLVM level.
                 Some(self.context.ptr_type(AddressSpace::from(0u16)).into())
             }
+            HirType::Error => Some(self.i64_type.into()),
             HirType::Never | HirType::Opaque(_) => {
                 // Uninhabited types have zero size; we return i8* to allow sizeof.
                 Some(self.context.i8_type().into())

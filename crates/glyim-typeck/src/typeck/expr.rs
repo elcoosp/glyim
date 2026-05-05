@@ -52,10 +52,13 @@ impl TypeChecker {
             HirExpr::BoolLit { .. } => HirType::Bool,
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
-            HirExpr::Ident { name, .. } => self.lookup_binding(name).unwrap_or(HirType::Int),
+            HirExpr::Ident { name, .. } => self.lookup_binding(name).unwrap_or_else(|| { self.errors.push(TypeError::UnresolvedName { name: *name }); HirType::Error }),
             HirExpr::Binary { op, lhs, rhs, .. } => {
-                self.check_expr(lhs);
-                self.check_expr(rhs);
+                let lt = self.check_expr(lhs).unwrap_or(HirType::Error);
+                let rt = self.check_expr(rhs).unwrap_or(HirType::Error);
+                if matches!(lt, HirType::Error) || matches!(rt, HirType::Error) {
+                    return HirType::Error;
+                }
                 match op {
                     HirBinOp::Eq
                     | HirBinOp::Neq
@@ -67,13 +70,15 @@ impl TypeChecker {
                 }
             }
             HirExpr::Unary { operand, .. } => {
-                self.check_expr(operand);
+                let t = self.check_expr(operand).unwrap_or(HirType::Error);
+                if matches!(t, HirType::Error) { return HirType::Error; }
                 HirType::Int
             }
             HirExpr::Block { stmts, .. } => {
                 let mut last = HirType::Unit;
                 for stmt in stmts {
                     if let Some(t) = self.check_stmt(stmt) {
+                        if matches!(t, HirType::Error) { return HirType::Error; }
                         last = t;
                     }
                 }
@@ -85,7 +90,8 @@ impl TypeChecker {
                 else_branch,
                 ..
             } => {
-                self.check_expr(condition);
+                let cond_t = self.check_expr(condition).unwrap_or(HirType::Error);
+                if matches!(cond_t, HirType::Error) { return HirType::Error; }
                 let then_type = self.check_expr(then_branch);
                 if let Some(eb) = else_branch {
                     self.check_expr(eb);
@@ -93,13 +99,15 @@ impl TypeChecker {
                 then_type.unwrap_or(HirType::Unit)
             }
             HirExpr::Println { arg, .. } => {
-                self.check_expr(arg);
+                let t = self.check_expr(arg).unwrap_or(HirType::Error);
+                if matches!(t, HirType::Error) { return HirType::Error; }
                 HirType::Unit
             }
             HirExpr::Assert {
                 condition, message, ..
             } => {
-                self.check_expr(condition);
+                let ct = self.check_expr(condition).unwrap_or(HirType::Error);
+                if matches!(ct, HirType::Error) { return HirType::Error; }
                 if let Some(msg) = message {
                     self.check_expr(msg);
                 }
@@ -281,8 +289,15 @@ impl TypeChecker {
         let field_count = fields.len();
         let field_value_types: Vec<HirType> = fields
             .iter()
-            .filter_map(|(_, val)| self.check_expr(val))
+            .filter_map(|(_, val)| {
+                let t = self.check_expr(val).unwrap_or(HirType::Error);
+                if matches!(t, HirType::Error) { return Some(HirType::Error); }
+                Some(t)
+            })
             .collect();
+        if field_value_types.iter().any(|t| matches!(t, HirType::Error)) {
+            return HirType::Error;
+        }
         if let Some(info) = self.structs.get(&struct_name) {
             for field_sym in &field_names {
                 if !info.field_map.contains_key(field_sym) {
