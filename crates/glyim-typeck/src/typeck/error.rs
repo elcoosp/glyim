@@ -49,6 +49,11 @@ impl Diagnostic for TypeError {
         None
     }
 
+    fn related(&self) -> Option<Box<dyn Iterator<Item = miette::Report> + '_>> {
+        // TODO: walk the span expansion chain and emit "note: expanded from macro X"
+        None
+    }
+
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
         if let TypeError::MismatchedTypes {
             expected, found, ..

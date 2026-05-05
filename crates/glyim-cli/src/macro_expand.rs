@@ -1,10 +1,31 @@
 use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::registry::MacroRegistry;
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
+use std::sync::Mutex;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Expand macros found in the source text.
+/// Records the location of a macro expansion for later diagnostic attribution.
+#[derive(Clone, Debug)]
+struct MacroExpansionRecord {
+    call_site: (usize, usize),  // start, end of @macro_name(...) in source
+    def_site: (usize, usize),   // start, end of the macro definition
+    macro_name: String,
+    expanded_range: (usize, usize), // start, end of the expanded text in the result
+}
+
+static EXPANSION_RECORDS: Mutex<Vec<MacroExpansionRecord>> = Mutex::new(Vec::new());
+
+pub fn get_expansion_records() -> Vec<MacroExpansionRecord> {
+    EXPANSION_RECORDS.lock().unwrap().clone()
+}
+
+pub fn clear_expansion_records() {
+    EXPANSION_RECORDS.lock().unwrap().clear();
+}
+
 pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<String, String> {
     let store = LocalContentStore::new(cas_dir).map_err(|e| format!("create store: {e}"))?;
     let store: Arc<dyn ContentStore> = Arc::new(store);
@@ -81,7 +102,15 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
 
             let before = &result[..at_pos];
             let after_str = &result[call_end..];
+            let new_before_len = before.len();
             result = format!("{before}{expanded_str}{after_str}");
+            // Record this expansion for diagnostics
+            EXPANSION_RECORDS.lock().unwrap().push(MacroExpansionRecord {
+                call_site: (at_pos, call_end),
+                def_site: (0, 0), // TODO: get actual macro definition location
+                macro_name: macro_name.to_string(),
+                expanded_range: (new_before_len, new_before_len + expanded_str.len()),
+            });
             let has_nested_macro = expanded_str.contains('@');
             if has_nested_macro {
                 scan_from = at_pos;
