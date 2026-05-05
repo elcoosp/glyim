@@ -170,7 +170,7 @@ impl<'a> MonoContext<'a> {
             HirExpr::Match { scrutinee, arms, .. } => {
                 self.concretize_enum_variant_names(scrutinee, sub);
                 for arm in arms {
-                    if let Some(ref mut g) = arm.guard {
+                    if let Some(g) = &mut arm.guard {
                         self.concretize_enum_variant_names(g, sub);
                     }
                     self.concretize_enum_variant_names(&mut arm.body, sub);
@@ -215,7 +215,6 @@ impl<'a> MonoContext<'a> {
     }
 
     fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
-        // (unchanged)
         match expr {
             HirExpr::As {
                 id,
