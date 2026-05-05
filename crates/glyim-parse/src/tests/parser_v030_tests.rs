@@ -1,6 +1,6 @@
-use glyim_parse::{ExprKind, Item, parse};
+use crate::{ExprKind, Item, parse};
 
-fn unwrap_main_expr(out: &glyim_parse::ParseOutput) -> &ExprKind {
+fn unwrap_main_expr(out: &crate::ParseOutput) -> &ExprKind {
     if let Item::Binding { value, .. } = &out.ast.items[0] {
         if let ExprKind::Lambda { body, .. } = &value.kind {
             return &body.kind;

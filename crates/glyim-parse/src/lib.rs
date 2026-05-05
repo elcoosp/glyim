@@ -15,3 +15,6 @@ pub use error::ParseError;
 pub use parser::{ParseOutput, parse};
 pub mod declarations;
 pub mod doc_comment;
+
+#[cfg(test)]
+mod tests;

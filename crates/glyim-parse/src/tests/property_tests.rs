@@ -1,4 +1,4 @@
-use glyim_parse::parse;
+use crate::parse;
 use proptest::prelude::*;
 
 proptest! {

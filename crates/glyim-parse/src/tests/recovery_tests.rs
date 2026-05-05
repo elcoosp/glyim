@@ -1,4 +1,4 @@
-use glyim_parse::parse;
+use crate::parse;
 
 #[test]
 fn recovery_after_broken_fn_param() {
@@ -9,7 +9,7 @@ fn recovery_after_broken_fn_param() {
         "should have parse errors for doubled comma"
     );
     let has_bar = out.ast.items.iter().any(|item| {
-        matches!(item, glyim_parse::Item::FnDef { name, .. } if out.interner.resolve(*name) == "bar")
+        matches!(item, crate::Item::FnDef { name, .. } if out.interner.resolve(*name) == "bar")
     });
     assert!(has_bar, "bar should be parsed despite earlier error");
 }
@@ -27,7 +27,7 @@ fn recovery_after_unknown_token_in_struct() {
         .ast
         .items
         .iter()
-        .filter(|item| matches!(item, glyim_parse::Item::StructDef { .. }))
+        .filter(|item| matches!(item, crate::Item::StructDef { .. }))
         .count();
     assert!(
         struct_count >= 1,
@@ -41,7 +41,7 @@ fn recovery_skips_garbage_between_items() {
     let src = "fn foo() { 1 }\n@garbage!!!\nfn bar() { 2 }\nmain = () => bar()";
     let out = parse(src);
     assert!(!out.errors.is_empty(), "should have errors for garbage");
-    let has_foo = out.ast.items.iter().any(|i| matches!(i, glyim_parse::Item::FnDef { name, .. } if out.interner.resolve(*name) == "foo"));
-    let has_bar = out.ast.items.iter().any(|i| matches!(i, glyim_parse::Item::FnDef { name, .. } if out.interner.resolve(*name) == "bar"));
+    let has_foo = out.ast.items.iter().any(|i| matches!(i, crate::Item::FnDef { name, .. } if out.interner.resolve(*name) == "foo"));
+    let has_bar = out.ast.items.iter().any(|i| matches!(i, crate::Item::FnDef { name, .. } if out.interner.resolve(*name) == "bar"));
     assert!(has_foo && has_bar, "both valid functions should be parsed");
 }

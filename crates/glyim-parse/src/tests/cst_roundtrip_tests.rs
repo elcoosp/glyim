@@ -1,5 +1,5 @@
-use glyim_parse::ast_to_cst;
-use glyim_parse::parse;
+use crate::ast_to_cst;
+use crate::parse;
 use glyim_syntax::SyntaxKind;
 
 #[test]
