@@ -1,7 +1,6 @@
 use glyim_cli::pipeline;
 
 #[test]
-#[ignore = "generic method resolution not yet implemented"]
 fn generic_method_len() {
     let src = r#"
 struct Vec<T> { data: *mut T, len: i64, cap: i64 }

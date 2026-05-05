@@ -78,6 +78,11 @@ impl<'a> MonoContext<'a> {
         if let Some(rt) = &mut mono.ret {
             *rt = crate::types::substitute_type(rt, &sub);
         }
+        tracing::debug!(
+            "[specialize_fn] specialized body for {}: {:#?}",
+            self.interner.resolve(f.name),
+            mono.body
+        );
         mono.body = self.substitute_expr_types(&mono.body, &sub);
 
         // Brute-force pass: walk the body and replace any As target type

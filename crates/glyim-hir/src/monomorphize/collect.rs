@@ -114,6 +114,11 @@ impl<'a> MonoContext<'a> {
                 self.scan_expr_for_generic_calls(&specialized.body, &sub);
                 self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
                 self.fn_specs.insert(key, specialized);
+                // Ensure the receiver's concrete type is registered as a struct
+                if let Some((_, HirType::Generic(receiver_sym, _))) = generic_fn.params.first() {
+                    let concrete_args = type_args.clone();
+                    self.enqueue_type_if_generic(&HirType::Generic(*receiver_sym, concrete_args));
+                }
             }
         }
 

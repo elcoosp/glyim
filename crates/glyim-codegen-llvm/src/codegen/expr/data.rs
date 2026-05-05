@@ -235,13 +235,24 @@ pub(crate) fn codegen_field_access<'ctx>(
             })
             .unwrap_or(0);
         drop(index_map);
-        let struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
+        let mut struct_type_opt = match &cg.expr_types.get(obj_id.as_usize()) {
             Some(HirType::Named(name)) | Some(HirType::Generic(name, _)) => {
                 cg.struct_types.borrow().get(name).copied()
             }
             _ => None,
         };
-        let struct_type_opt = struct_type_opt.or_else(|| {
+        if struct_type_opt.is_none() {
+            // Fallback: try base struct name by stripping mangling suffix __...
+            let idx_map = cg.struct_field_indices.borrow();
+            struct_type_opt = idx_map.iter().find_map(|((sym, f), idx)| {
+                if f == field {
+                    cg.struct_types.borrow().get(sym).copied()
+                } else {
+                    None
+                }
+            });
+        }
+        struct_type_opt = struct_type_opt.or_else(|| {
             let struct_types = cg.struct_types.borrow();
             let idx_map = cg.struct_field_indices.borrow();
             struct_types.iter().find_map(|(sym, st)| {
