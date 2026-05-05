@@ -1,6 +1,5 @@
 #[allow(unused_imports)]
 pub use glyim_cli::pipeline;
-pub use glyim_cli::pipeline::BuildMode;
 pub use std::path::PathBuf;
 pub use std::sync::Mutex;
 

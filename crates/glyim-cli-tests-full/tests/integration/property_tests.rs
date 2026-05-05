@@ -1,10 +1,8 @@
 #[allow(unused_imports, dead_code)]
 use crate::common::*;
-use proptest::prelude::*;
 #[cfg(test)]
 mod arithmetic_proptests {
     use glyim_cli::pipeline;
-    use proptest::prelude::*;
 
     proptest! {
         #[test]

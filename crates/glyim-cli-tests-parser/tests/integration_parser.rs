@@ -1,7 +1,6 @@
 use glyim_parse::parse;
 use glyim_hir::lower;
 use glyim_typeck::TypeChecker;
-use glyim_interner::Interner;
 use std::path::PathBuf;
 
 
