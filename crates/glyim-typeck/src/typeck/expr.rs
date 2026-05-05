@@ -435,13 +435,15 @@ impl TypeChecker {
                 field: variant_name,
             });
         }
-        let mut arg_types = Vec::new();
-        for arg in args {
-            if let Some(ty) = self.check_expr(arg) {
-                arg_types.push(ty);
+        let mut arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
+        if let Some(info) = self.enums.get(&enum_name) {
+            // If enum has more type params than provided args, pad with type param symbols
+            while arg_types.len() < info.type_params.len() {
+                let tp = info.type_params[arg_types.len()];
+                arg_types.push(HirType::Named(tp));
             }
         }
-        if arg_types.len() == 1 {
+        if !arg_types.is_empty() {
             HirType::Generic(enum_name, arg_types)
         } else {
             HirType::Named(enum_name)

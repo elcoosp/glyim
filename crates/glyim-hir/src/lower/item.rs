@@ -220,14 +220,15 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
         Item::MacroDef {
             name,
             name_span,
+            params,
             body,
             ..
         } => Some(HirItem::Fn(HirFn {
             doc: None,
             name: *name,
             type_params: vec![],
-            params: vec![],
-            param_mutability: vec![],
+            params: params.iter().map(|(sym, _span)| (*sym, HirType::Int)).collect(),
+            param_mutability: params.iter().map(|_| false).collect(),
             ret: None,
             body: lower_expr(body, ctx),
             span: glyim_diag::Span::new(name_span.start, body.span.end),
