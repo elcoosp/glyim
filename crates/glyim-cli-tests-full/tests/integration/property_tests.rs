@@ -3,7 +3,7 @@ use crate::common::*;
 #[cfg(test)]
 mod arithmetic_proptests {
     use glyim_cli::pipeline;
-    use proptest::proptest;
+    use proptest::*;
 
     proptest! {
         #[test]
