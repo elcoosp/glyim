@@ -1,4 +1,4 @@
-use crate::macro_expand;
+use glyim_compiler::macro_expand;
 use std::path::PathBuf;
 
 pub fn cmd_macro_inspect(input: PathBuf) -> i32 {

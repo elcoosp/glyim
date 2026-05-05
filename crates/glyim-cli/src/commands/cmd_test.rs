@@ -1,24 +1,46 @@
-use crate::pipeline;
+use glyim_testr::config::TestConfig;
 use std::path::PathBuf;
 
-pub fn cmd_test(input: PathBuf, ignore: bool, filter: Option<String>, nocapture: bool) -> i32 {
-    let include_ignored = ignore;
-    if nocapture {
-        eprintln!("note: --nocapture flag is not yet fully implemented");
-    }
-    let result = if input.is_dir() {
-        pipeline::run_tests_package(&input, filter.as_deref(), include_ignored, nocapture)
-    } else {
-        pipeline::run_tests(&input, filter.as_deref(), include_ignored, None, nocapture)
-    };
-    match result {
-        Ok(summary) => {
-            eprintln!("{}", summary.format_summary());
-            summary.exit_code()
-        }
+pub fn cmd_test(
+    input: PathBuf,
+    ignore: bool,
+    filter: Option<String>,
+    nocapture: bool,
+    watch: bool,
+    optimize_check: bool,
+) -> i32 {
+    let mut config = TestConfig::default();
+    config.filter = filter;
+    config.include_ignored = ignore;
+    config.nocapture = nocapture;
+    config.watch = watch;
+    config.optimize_check = optimize_check;
+
+    let source = match std::fs::read_to_string(&input) {
+        Ok(s) => s,
         Err(e) => {
-            eprintln!("error: {e}");
-            1
+            eprintln!("error reading {}: {}", input.display(), e);
+            return 1;
         }
+    };
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("error creating runtime: {}", e);
+            return 1;
+        }
+    };
+
+    if watch {
+        rt.block_on(glyim_testr::run_watch(&input, &config));
+        0
+    } else {
+        let results = rt.block_on(glyim_testr::run_tests(&source, &config));
+        let failed = results
+            .iter()
+            .filter(|r| matches!(r.outcome, glyim_testr::types::TestOutcome::Failed { .. }))
+            .count();
+        if failed > 0 { 1 } else { 0 }
     }
 }

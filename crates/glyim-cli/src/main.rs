@@ -68,6 +68,10 @@ enum Command {
         filter: Option<String>,
         #[arg(long)]
         nocapture: bool,
+        #[arg(long)]
+        watch: bool,
+        #[arg(long)]
+        optimize: bool,
     },
     Add {
         package: String,
@@ -188,7 +192,9 @@ fn main() {
             ignore,
             filter,
             nocapture,
-        } => cmd_test(input, ignore, filter, nocapture),
+            watch,
+            optimize,
+        } => cmd_test(input, ignore, filter, nocapture, watch, optimize),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),

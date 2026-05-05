@@ -1,4 +1,8 @@
-use glyim_cli::pipeline;
+
+
+
+
+use glyim_compiler::pipeline;
 use std::path::PathBuf;
 
 fn temp_g(content: &str) -> PathBuf {
@@ -296,45 +300,13 @@ fn e2e_generic_edge() {
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), -100);
 }
 
-#[test]
-fn e2e_test_should_panic_passes() {
-    let input = temp_g("#[test(should_panic)]\nfn panics() { 1 }");
-    let summary = pipeline::run_tests(&input, None, false, None, false).unwrap();
-    assert_eq!(summary.passed(), 1, "should_panic test should pass");
-    assert_eq!(summary.exit_code(), 0);
-}
 
-#[test]
-fn e2e_test_should_panic_fails_on_zero() {
-    let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
-    let summary = pipeline::run_tests(&input, None, false, None, false).unwrap();
-    assert_eq!(
-        summary.failed(),
-        1,
-        "should_panic test that returns 0 should fail"
-    );
-    assert_eq!(summary.exit_code(), 1);
-}
 
-#[test]
-fn e2e_test_filter() {
-    let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
-    let summary = pipeline::run_tests(&input, Some("b"), false, None, false).unwrap();
-    assert_eq!(summary.total(), 1);
-    assert_eq!(summary.failed(), 1);
-}
 
-#[test]
-fn e2e_test_filter_no_match() {
-    let input = temp_g("#[test]\nfn a() { 0 }");
-    let result = pipeline::run_tests(&input, Some("nonexistent"), false, None, false);
-    assert!(result.is_err());
-    let msg = format!("{:?}", result.unwrap_err());
-    assert!(
-        msg.contains("no #[test]"),
-        "error should mention no test functions: {msg}"
-    );
-}
+
+
+
+
 
 #[test]
 fn e2e_type_error_unknown_field() {
@@ -1438,19 +1410,19 @@ main = () => {
 #[ignore = "nested generics: 0 as T in struct literals needs rewriting"]
 fn stress_nest_vec() {
     let src = include_str!("../../../tests/stress/nest_vec.g");
-    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 0);
+    assert_eq!(glyim_compiler::pipeline::run_jit(src).unwrap(), 0);
 }
 
 #[test]
 #[ignore = "nested generics: type annotations need full concretization pass"]
 fn stress_nest_option() {
     let src = include_str!("../../../tests/stress/nest_option.g");
-    assert_eq!(glyim_cli::pipeline::run_jit(src).unwrap(), 42);
+    assert_eq!(glyim_compiler::pipeline::run_jit(src).unwrap(), 42);
 }
 
 #[cfg(test)]
 mod arithmetic_proptests {
-    use glyim_cli::pipeline;
+    use glyim_compiler::pipeline;
     use proptest::prelude::*;
 
     proptest! {
@@ -1746,3 +1718,47 @@ fn e2e_float_cmp() {
     assert!(result.is_ok(), "float cmp: {:?}", result.err());
     assert_eq!(result.unwrap(), 1);
 }
+
+#[tokio::test]
+async fn e2e_test_should_panic_passes() {
+    let input = temp_g("#[test(should_panic)]\nfn panics() { 1 }");
+    let source = std::fs::read_to_string(&input).unwrap();
+    let results = glyim_testr::run_tests(&source, &glyim_testr::config::TestConfig::default()).await;
+    let passed = results.iter().filter(|r| matches!(r.outcome, glyim_testr::types::TestOutcome::Passed)).count();
+    assert_eq!(passed, 1, "should_panic test should pass");
+}
+
+#[tokio::test]
+async fn e2e_test_should_panic_fails_on_zero() {
+    let input = temp_g("#[test(should_panic)]\nfn no_panic() { 0 }");
+    let source = std::fs::read_to_string(&input).unwrap();
+    let results = glyim_testr::run_tests(&source, &glyim_testr::config::TestConfig::default()).await;
+    let failed = results.iter().filter(|r| matches!(r.outcome, glyim_testr::types::TestOutcome::Failed { .. })).count();
+    assert_eq!(failed, 1, "should_panic test that returns 0 should fail");
+}
+
+#[tokio::test]
+async fn e2e_test_filter() {
+    let input = temp_g("#[test]\nfn a() { 0 }\n#[test]\nfn b() { 1 }");
+    let source = std::fs::read_to_string(&input).unwrap();
+    let config = glyim_testr::config::TestConfig {
+        filter: Some("b".into()),
+        ..Default::default()
+    };
+    let results = glyim_testr::run_tests(&source, &config).await;
+    assert_eq!(results.len(), 1);
+    assert!(matches!(results[0].outcome, glyim_testr::types::TestOutcome::Failed { .. }));
+}
+
+#[tokio::test]
+async fn e2e_test_filter_no_match() {
+    let input = temp_g("#[test]\nfn a() { 0 }");
+    let source = std::fs::read_to_string(&input).unwrap();
+    let config = glyim_testr::config::TestConfig {
+        filter: Some("nonexistent".into()),
+        ..Default::default()
+    };
+    let results = glyim_testr::run_tests(&source, &config).await;
+    assert!(results.is_empty(), "expected no test to match");
+}
+

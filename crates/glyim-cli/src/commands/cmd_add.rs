@@ -1,4 +1,4 @@
-use crate::lockfile_integration;
+use glyim_compiler::lockfile_integration;
 use glyim_pkg::manifest::{Dependency, PackageManifest};
 
 pub fn cmd_add(package: String, macro_dep: bool) -> i32 {

@@ -1,4 +1,4 @@
-use glyim_cli::pipeline;
+use glyim_compiler::pipeline;
 
 #[test]
 fn generic_method_return_i64() {

@@ -975,3 +975,386 @@ If you want a practical next step:
 5) Add **persistent profiles (5.1)** and use them to drive both JIT and AOT.
 
 If you tell me what your language looks like (static vs dynamic, heavy generics, data‑parallel workloads, etc.), I can rank these ideas for your specific use case and sketch a minimal implementation plan for the top 2–3.
+By integrating your test runner directly into a JIT-first, incrementally-optimized compiler, you move from a **"Compile-Link-Execute"** model to a **"Live-Execution"** model. The test runner becomes less like a separate tool (like `cargo test` or `pytest`) and more like a live spreadsheet that instantly recalculates results the moment you type.
+
+Here is how your test runner directly benefits from the pipeline features, illustrated with architecture diagrams.
+
+---
+
+### Diagram 1: The "Live Spreadsheet" Test Loop (Local Dev)
+This diagram shows the local developer experience. Notice how the traditional "linker" and "process startup" bottlenecks are completely bypassed thanks to OrcV2 `JITDylib` swapping and Semantic AST Diffing.
+
+```mermaid
+flowchart TD
+    subgraph DevMachine [Developer Machine]
+        A[Developer edits test or source file] --> B[Watcher triggers AST Diff]
+        
+        B --> C{What changed?}
+        
+        C -->|Only local var name/formatting| D[Semantic Hash Unchanged]
+        D --> E[Skip JIT entirely!]
+        E --> F[Instantly return previous Test PASS/FAIL]
+        
+        C -->|Pure logic change in function X| G[Micro IR Patching]
+        G --> H[Re-optimize ONLY Function X via Inkwell]
+        H --> I[Hot-swap Function X in JITDylib]
+        
+        C -->|Signature/Type change| J[Rebuild Module in Staging Dylib]
+        J --> K[Atomic pointer flip to Staging Dylib]
+        
+        I --> L[Run Affected Tests directly in memory]
+        K --> L
+        
+        L --> M[Test Runner evaluates Assertions]
+        
+        M --> N{Pass?}
+        N -->|Yes| O[Green Terminal output < 5ms]
+        N -->|No| P[Red output with precise failure]
+        
+        subgraph ShadowMode [Shadow Execution Safety Net]
+            Q[Speculative Optimized Code] -.-> R[Shadow Interpreter]
+            R -.->|Divergence?| S[Capture E-Graph State & IR]
+        end
+        
+        P --> S
+    end
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style O fill:#9f9,stroke:#333,stroke-width:2px
+    style P fill:#f99,stroke:#333,stroke-width:2px
+    style F fill:#ff9,stroke:#333,stroke-width:2px
+```
+
+#### How the features apply here:
+1.  **Semantic AST Diffing (1.1):** If a developer just renames a variable in a test or adds a comment, the test runner realizes the *semantic hash* hasn't changed. It outputs "PASS" in **<1 millisecond** without invoking Inkwell or the LLVM backend at all.
+2.  **Micro IR Patching (1.1) & Dylib Swapping (3.1):** If the logic of a math function changes, only that function's IR is patched. The test runner calls the newly optimized function *in the same running process*. No process spawn, no linker.
+3.  **Shadow Execution (7.1):** If a test fails, and you suspect an aggressive speculative optimization (4.1) broke it, the runner can instantly provide the exact E-Graph rewrite or IR mutation that caused the divergence.
+
+---
+
+### Diagram 2: "Zero-Link" Effect-Driven Parallel Testing
+Standard test runners use heuristics (e.g., "run tests in separate processes") to prevent state leakage. Your compiler *knows* exactly what state leaks because of effect tracking.
+
+```mermaid
+flowchart LR
+    subgraph TestDiscovery [Compiler Analysis Phase]
+        A[Test Suite] --> B[Effect Analysis]
+        B --> C[Test A: Pure / No IO]
+        B --> D[Test B: Mutates Global State]
+        B --> E[Test C: Pure / Heavy Math]
+    end
+
+    subgraph Execution [JIT Execution Phase]
+        C --> F[Thread 1: Run Test A]
+        E --> G[Thread 2: Run Test C - Speculatively Optimized]
+        D --> H[Thread 3: Run Test B - Isolated]
+    end
+
+    F --> I[Aggregate Results]
+    G --> I
+    H --> I
+    
+    J[Effect System Guarantees] -.->|Zero Race Conditions| K[No mutexes needed for A & C]
+```
+
+#### How the features apply here:
+1.  **Effect Systems (1.2):** Because your IR tracks `pure`, `nothrow`, and `noalloc`, the test runner automatically parallelizes pure tests across all CPU cores with **zero risk of race conditions**. You don't need test decorators like `#[parallel]`; the compiler proves it safe.
+2.  **Speculative Optimizations (4.1):** Heavy computation tests (e.g., algorithmic benchmarks) run at native C++ speeds because the JIT speculatively optimized the underlying functions based on the types used in the test.
+
+---
+
+### Diagram 3: "Tests as PGO Training" (JIT ↔ AOT Feedback Loop)
+In traditional setups, you have to run a separate "Profile Guided Optimization" (PGO) workload (like a benchmark) to make your release build fast. In your architecture, **your test suite IS the PGO workload**.
+
+```mermaid
+flowchart TD
+    subgraph DevLoop [Developer `test` command]
+        A[Run Tests via JIT] --> B[JIT collects profiles]
+        B --> C[Types: usually i32, usually f64]
+        B --> D[Branches: 90% taken]
+        B --> E[Hot Functions: vec_push, parse_json]
+        A --> F[Tests Pass! Code is ready]
+    end
+
+    subgraph ReleaseLoop [CI/CD `release` command]
+        F --> G[Trigger AOT Build]
+        G --> H[Load JIT Test Profiles]
+        H --> I[Guide E-Graph Rewrites 2.2]
+        H --> J[Guide LLVM Inlining/Unrolling]
+        H --> K[Guide ThinLTO Import Decisions 6.1]
+        I & J & K --> L[Generate highly optimized Binary]
+    end
+
+    style H fill:#bbf,stroke:#333,stroke-width:2px
+    style L fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+#### How the features apply here:
+1.  **Persistent Runtime Profiles (5.1):** Every time you run `my_lang test`, the JIT is silently recording real-world types, branch probabilities, and hot paths. When you run `my_lang build --release`, the AOT compiler ingests this data. Your release binary is literally optimized for the exact shapes and types your tests exercised.
+2.  **E-Graph Profile Guidance (2.2):** If your tests show a specific algebraic pattern is hit 10,000 times, the AOT e-graph pass will aggressively rewrite the AST to match that pattern before lowering to LLVM.
+
+---
+
+### Diagram 4: CI/CD "Sub-Function" Distributed Caching
+When tests run in CI, they usually take forever because CI machines start from a clean slate. By applying the AOT caching strategies, your CI test runner becomes an exercise in "downloading artifacts" rather than "compiling."
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer Push
+    participant CI as CI Runner
+    participant CAS as Remote CAS (S3/Redis)
+    participant Runner as Test Executor
+
+    Dev->>CI: git push (changed `math.rs`)
+    CI->>CI: Frontend parses `math.rs`
+    CI->>CAS: Query: Hash(math_ir, target=x86, O2)
+    
+    alt Cache HIT (Unchanged functions)
+        CAS-->>CI: Return Pre-optimized Object Code
+        Note over CI,Runner: 0ms compilation time for 95% of the module
+    else Cache MISS (Changed function)
+        CI->>CI: Run Inkwell/LLVM on 1 function
+        CI->>CAS: Upload new optimized object
+    end
+    
+    CI->>Runner: Link cached objects + 1 new object
+    Runner->>Runner: Execute Test Suite
+    Runner-->>Dev: Test Results in < 5 seconds
+```
+
+#### How the features apply here:
+1.  **Sub-Function Granularity CAS (3.2 / Xcode 26 style):** The test runner in CI doesn't compile files. It asks the CAS: "Do you have the object code for function `add_numbers`?" If another developer or a previous CI run already compiled it, the test runner downloads the raw machine code and links it instantly.
+2.  **Target-Projection Cache (6.3):** If CI runs tests on `linux/amd64` and `linux/arm64`, the first machine compiles and uploads to CAS. The second machine skips compilation entirely and just downloads the arm64 artifacts from CAS.
+
+---
+
+### Summary of the "Superpowers" for your Test Runner
+
+1.  **Sub-millisecond "No-op" runs:** Changing a comment or a variable name in a 100,000 LOC project? The test runner finishes before you lift your finger off the keyboard (via Semantic Diffing).
+2.  **Zero-process-spawn overhead:** Tests run inside the live JIT memory space. No `fork()`ing, no linking, no loading dynamic libraries from disk (via OrcV2 Lazy Reexports).
+3.  **Guaranteed-safe massive parallelism:** Run 10,000 unit tests on 64 cores simultaneously without writing a single thread lock, entirely driven by the compiler's effect system.
+4.  **Self-training Release Binaries:** Your unit tests automatically act as the training gym for your production release builds.
+5.  **Time-Travel Debugging for Compiler Bugs:** If a test fails, the test runner can hand you the exact E-Graph state and speculative optimization guard that failed, bridging the gap between "test failure" and "compiler internals."
+Traditional mutation testing is famously slow because it operates at the text level: alter an AST node, save to disk, trigger the OS file watcher, re-parse, re-run the whole frontend, re-compile to LLVM IR, re-optimize, link, and finally run the test. If you have 10,000 mutants, this takes hours.
+
+Because your compiler is a JIT-first, IR-patching, E-graph-optimizing monster, you can completely break the rules. You can perform **Compiler-Level Mutation Testing**. 
+
+Here are deeply integrated, highly innovative mutant testing features, along with architectural diagrams showing exactly how they exploit your pipeline.
+
+---
+
+### Feature 1: In-Memory "Quantum" Mutant Multiplexing (Zero-Compile Mutants)
+
+Traditional tools recompile for every mutant. Your compiler can compile **all mutants for a function simultaneously** into hidden `JITDylib`s and swap them in memory at the speed of a function pointer change.
+
+**How it works:**
+1. When mutating function `calculate_total()`, instead of swapping AST nodes on disk, your compiler clones the optimized LLVM IR.
+2. You apply 50 different IR mutations (e.g., `add` -> `sub`, `sdiv` -> `udiv`, removing a bounds check).
+3. You use Inkwell/OrcV2 to compile these into 50 separate, non-exported `JITDylib`s in memory.
+4. The test runner calls `calculate_total()` via an indirection table. 
+5. For test iteration 1, the pointer points to Mutant 1. For iteration 2, an `AtomicPtr` flips to Mutant 2. **Zero recompilation, zero process restarts.**
+
+```mermaid
+flowchart TD
+    subgraph JITMemory [In-Memory JIT State]
+        subgraph Dylib1 [Original JITDylib]
+            F_Orig[calculate_total]
+        end
+        
+        subgraph MutantDylibs [Hidden Mutant Dylibs]
+            M1[Mutant 1: add -> sub]
+            M2[Mutant 2: remove check]
+            M3[Mutant 3: early return]
+        end
+        
+        Dispatch[Atomic Dispatch Pointer]
+        
+        F_Orig -.->|Baseline| Dispatch
+        M1 -.->|Test Run 1| Dispatch
+        M2 -.->|Test Run 2| Dispatch
+        M3 -.->|Test Run 3| Dispatch
+    end
+
+    TestRunner[Test Runner Loop] -->|Calls| Dispatch
+    Dispatch -->|Executes Machine Code| CPU
+    
+    CPU -->|Result| TestRunner
+    
+    TestRunner -->|Mutant 1 Killed!| Log[(Mutation Report)]
+    TestRunner -->|Mutant 2 Escaped!| Log
+
+    style MutantDylibs fill:#ff9,stroke:#333,stroke-width:2px
+    style Dispatch fill:#9cf,stroke:#333,stroke-width:2px
+```
+
+**Why it's awesome:** You bypass the file system, the parser, the frontend, and the optimizer for 99% of the mutation testing phase. You are literally just shuffling `fn` pointers in RAM.
+
+---
+
+### Feature 2: E-Graph "Meta-Mutations" (Testing the Optimizer, Not Just the Code)
+
+Most mutation testing checks if the *source logic* is tested. But what if the *compiler optimization* introduces a bug? (e.g., an algebraic rewrite assumes associativity that doesn't hold for floating-point math, or an optimization incorrectly removes a side effect).
+
+**How it works:**
+Instead of mutating the source code, you mutate the **compiler's E-Graph rewrite rules** before lowering to LLVM IR.
+1. You define a "Meta-Mutant": Disable the "Loop Invariant Code Motion" rule.
+2. The compiler lowers the code to LLVM *without* that optimization.
+3. Run the tests. If they fail, it means your program's correctness accidentally relied on that specific optimization being present (a critical finding!).
+4. Another Meta-Mutant: Swap a strength-reduction rule (`x * 2` -> `x << 1`) with a no-op rule. Run tests to see if they assume specific timing/allocation behavior.
+
+```mermaid
+flowchart LR
+    subgraph StandardMutant [Standard Mutation]
+        A1[Source AST] -->|change + to -| B1[Modified AST]
+        B1 --> C1[Normal E-Graph Optimizer]
+        C1 --> D1[LLVM IR]
+    end
+
+    subgraph MetaMutant [Your Meta-Mutation]
+        A2[Source AST Unchanged] --> B2[Normal E-Graph Optimizer]
+        B2 --> C2{Mutate Rewriter}
+        
+        C2 -->|Disable 'Float Reassociate'| D2[Sub-Optimal LLVM IR]
+        C2 -->|Swap 'Alloc to Stack'| D3[Buggy LLVM IR]
+    end
+    
+    D1 --> E[Test Executor]
+    D2 --> E
+    D3 --> E
+
+    style MetaMutant fill:#f9f,stroke:#333,stroke-width:2px
+    style C2 fill:#ff9,stroke:#333,stroke-width:2px
+```
+
+**Why it's awesome:** You are mutation-testing your *toolchain's behavior*. This catches heisenbugs that only appear in Release mode (`-O3`) but not Debug mode (`-O0`), which is traditionally nearly impossible to automate.
+
+---
+
+### Feature 3: Zero-Overhead Equivalent Mutant Pruning
+
+The biggest waste in mutation testing is "Equivalent Mutants"—changes that look different but compile to the exact same logic (e.g., `x + 0` -> `x * 1`). Traditional tools run tests on these, wasting massive time before realizing they can't be killed.
+
+**How it works:**
+Because you have an E-Graph middle-end, you can prove mathematical equivalence *before* ever generating LLVM IR or running a test.
+1. Generate mutant AST: `x * 1`.
+2. Insert both Original AST and Mutant AST into an E-Graph.
+3. Run equality saturation (the rebuild step).
+4. Ask the E-Graph: "Are `x + 0` and `x * 1` in the exact same E-Class?"
+5. If YES: **Discard the mutant instantly.** Do not compile. Do not run tests.
+
+```mermaid
+flowchart TD
+    M[Generate 10,000 AST Mutants] --> EGraph[E-Graph Engine]
+    
+    EGraph --> Check{Are they in the same E-Class?}
+    
+    Check -->|Yes: Mathematically Equivalent| Trash[Discard Instantly ~7,000 mutants]
+    Check -->|No: Semantically Different| IR[Lower to LLVM IR]
+    
+    Trash --> Time1[Time saved: 0 seconds]
+    IR --> JIT[Compile via Inkwell]
+    JIT --> Test[Run Tests on ~3,000 mutants]
+    
+    style Trash fill:#999,stroke:#333
+    style Time1 fill:#9f9,stroke:#333
+```
+
+**Why it's awesome:** You eliminate the #1 scalability bottleneck of mutation testing purely as a side-effect of your compiler's algebraic optimizer. No external pruning heuristics needed.
+
+---
+
+### Feature 4: Speculative Guard / Deoptimization Mutation
+
+We discussed adding Speculative Optimizations (guarded type specialization) to your JIT. Mutation testing is the perfect way to ensure the fallback paths actually work.
+
+**How it works:**
+The compiler generates "Guards" (e.g., `if type == i32, fast_path(); else deopt();`). 
+1. The test runner creates a "Guard Mutant": It forcefully inverts the condition of every JIT guard in a specific function.
+2. This artificially forces the program down the *slow, deoptimized fallback path* (usually interpreting or running generic code).
+3. The test runner checks: Does the program still produce the correct output, even when every speculative assumption is violently violated?
+
+```mermaid
+sequenceDiagram
+    participant Test as Test Runner
+    participant JIT as JIT Compiled Code
+    participant Guard as Speculative Guard
+    participant Slow as Slow Fallback Path
+
+    Test->>JIT: Execute Function(param)
+    
+    Note over Guard: Normal Execution
+    JIT->>Guard: Is param an i32?
+    Guard-->>JIT: Yes (Fast Path)
+    JIT-->>Test: Result A
+    
+    Note over Test: Mutant Activated: Invert Guard!
+    Test->>JIT: Execute Function(param)
+    
+    Note over Guard: Mutated Execution
+    JIT->>Guard: Is param an i32?
+    Guard-->>JIT: No (Forced Deopt!)
+    JIT->>Slow: Trigger OSR / Interpreter
+    Slow-->>Test: Result B
+    
+    Test->>Test: Assert(Result A == Result B)
+```
+
+**Why it's awesome:** Deoptimization paths are notoriously undertested because they are hard to trigger manually. This guarantees your compiler's "safe fallback" mechanisms are bulletproof.
+
+---
+
+### Feature 5: Mutation-Aware Incremental Compilation (The Red/Green Mutant DAG)
+
+When a developer changes a line of code, traditional mutation testing tools restart from scratch. Your compiler tracks dependencies via fingerprints.
+
+**How it works:**
+1. Yesterday, you ran mutation testing. The compiler saved a **Mutant Dependency Graph**.
+2. Today, the developer changes `function_A()`.
+3. The compiler checks the Mutant DAG: "Which mutants depend on the IR fingerprint of `function_A()`?"
+4. It finds 50 mutants in `function_A`, and 200 mutants in `function_B` (which calls A).
+5. It marks those 250 mutants **RED** (needs re-testing).
+6. It marks the other 9,750 mutants **GREEN** (skip them entirely, their cached "Killed/Escaped" status is still valid).
+
+```mermaid
+graph TD
+    Change[Dev changes Function A] -->|Invalidate Fingerprint| FA(Function A IR)
+    
+    FA -->|Cascades to| MA(Mutant A1)
+    FA -->|Cascades to| MA2(Mutant A2)
+    FA -->|Cascades to| FB(Function B IR - Caller)
+    
+    FB -->|Cascades to| MB(Mutant B1)
+    
+    subgraph GreenCache [Green Cache - SKIP THESE]
+        MC(Mutant C1 - Unaffected)
+        MD(Mutant D1 - Unaffected)
+    end
+    
+    MA & MA2 & MB --> TestRunner[Re-run ONLY 3 Mutants]
+    
+    style Change fill:#f9f,stroke:#333,stroke-width:2px
+    style GreenCache fill:#9f9,stroke:#333,stroke-width:1px, stroke-dasharray: 5 5
+    style TestRunner fill:#ff9,stroke:#333,stroke-width:2px
+```
+
+**Why it's awesome:** Continuous Mutation Testing becomes viable. You can run a full mutation suite on every pull request, but only pay the execution cost for the exact lines of code that changed.
+
+---
+
+### Summary: The Ultimate Mutation Test Command
+
+With these features, your user isn't running a slow Python script that shells out to your compiler. They are running a native, deeply integrated subcommand:
+
+```bash
+my_lang test --mutate --mode=aggressive
+```
+
+**What happens under the hood:**
+1. **E-Graph** immediately deletes 60% of proposed mutants as mathematically equivalent. *(Feature 3)*
+2. The remaining mutants are compiled into a hidden **JIT Dylib Pool**. *(Feature 1)*
+3. Tests run, instantly swapping function pointers. No disk I/O.
+4. The runner forces **Guard Inversions** to test slow-paths. *(Feature 4)*
+5. It runs **Meta-Mutations** to ensure floating-point optimizations didn't break logic. *(Feature 2)*
+6. Next time the developer saves a file, the **Mutant DAG** only re-runs mutants touching that specific AST node. *(Feature 5)*
+
+This transforms mutation testing from a "nice-in-theory, impossible-in-practice" academic concept into a standard, snappy part of the `save -> test` loop.

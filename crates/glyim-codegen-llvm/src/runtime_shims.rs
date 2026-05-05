@@ -44,7 +44,6 @@ pub unsafe extern "C" fn glyim_assert_fail_impl(msg: *const u8, len: i64) {
     }
 }
 
-/// Helper: create a global constant null-terminated string and return an i8* pointer to it.
 unsafe fn create_fmt_ptr<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
@@ -94,12 +93,6 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     if module.get_function("printf").is_none() {
         module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
     }
-    if module.get_function("abort").is_none() {
-        module.add_function("abort", void_type.fn_type(&[], false), None);
-    }
-    if module.get_function("printf").is_none() {
-        module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), None);
-    }
 
     let pint_fn = module.add_function(
         "__glyim_println_int",
@@ -122,7 +115,7 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
         module.add_function("__glyim_getenv", __glyim_getenv_ty, None);
     }
 
-    let __glyim_str_eq_ty = context.bool_type().fn_type(&[ptr_type.into(), ptr_type.into()], false);
+    let __glyim_str_eq_ty = i64_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
     if module.get_function("__glyim_str_eq").is_none() {
         module.add_function("__glyim_str_eq", __glyim_str_eq_ty, None);
     }
@@ -131,7 +124,6 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
         return;
     }
 
-    // AOT: emit IR bodies with correct format string pointers
     unsafe {
         let newline_fmt = create_fmt_ptr(context, module, b"%lld\n\0", "newline_fmt");
         let str_fmt = create_fmt_ptr(context, module, b"%s\n\0", "str_fmt");
@@ -178,21 +170,26 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     }
 }
 
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_getenv_impl(name: *const u8) -> *const u8 {
     unsafe { getenv(name as *const libc::c_char) as *const u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn glyim_str_eq_impl(a: *const u8, b: *const u8) -> bool {
-    if a.is_null() || b.is_null() { return false; }
+pub unsafe extern "C" fn glyim_str_eq_impl(a: *const u8, b: *const u8) -> i64 {
+    if a.is_null() || b.is_null() {
+        return 0;
+    }
     let mut i = 0;
     loop {
         let ca = unsafe { *a.add(i) };
         let cb = unsafe { *b.add(i) };
-        if ca != cb { return false; }
-        if ca == 0 { return true; }
+        if ca != cb {
+            return 0;
+        }
+        if ca == 0 {
+            return 1;
+        }
         i += 1;
     }
 }

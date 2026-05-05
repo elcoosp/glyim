@@ -1,4 +1,4 @@
-use crate::pipeline;
+use glyim_compiler::pipeline;
 use std::path::PathBuf;
 
 pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool, test: bool) -> i32 {

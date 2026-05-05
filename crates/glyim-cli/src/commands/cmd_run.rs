@@ -1,4 +1,4 @@
-use crate::pipeline::{self, BuildMode};
+use glyim_compiler::pipeline::{self, BuildMode};
 use std::path::PathBuf;
 
 pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool) -> i32 {

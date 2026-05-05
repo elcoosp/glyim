@@ -1,4 +1,4 @@
-use crate::lockfile_integration;
+use glyim_compiler::lockfile_integration;
 use glyim_pkg::manifest::PackageManifest;
 
 pub fn cmd_remove(package: String) -> i32 {

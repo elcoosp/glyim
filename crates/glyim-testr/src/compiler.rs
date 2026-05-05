@@ -27,7 +27,7 @@ impl Compiler {
         std::fs::write(&source_path, &modified_source).map_err(CompileError::Io)?;
 
         let bin_path = tmp_dir.path().join("test_bin");
-        glyim_cli::pipeline::build(&source_path, Some(&bin_path), None)
+        glyim_compiler::pipeline::build(&source_path, Some(&bin_path), None)
             .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
 
         Ok(CompiledArtifact {

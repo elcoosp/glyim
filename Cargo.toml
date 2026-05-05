@@ -20,6 +20,7 @@ members = [
     "crates/glyim-cli-tests-extra",
     "crates/glyim-cli-tests-full",
     "crates/glyim-testr",
+    "crates/glyim-compiler",
 ]
 
 [workspace.package]

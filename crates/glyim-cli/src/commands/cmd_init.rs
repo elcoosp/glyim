@@ -1,4 +1,4 @@
-use crate::pipeline;
+use glyim_compiler::pipeline;
 
 pub fn cmd_init(name: String) -> i32 {
     match pipeline::init(&name) {

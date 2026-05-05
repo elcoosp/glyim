@@ -7,7 +7,7 @@ pub fn inject_harness(original: &str, tests: &[String]) -> String {
     out.push_str(r#"
 extern {
     fn getenv(name: *const u8) -> *const u8;
-    fn str_eq(a: *const u8, b: *const u8) -> bool;
+    fn str_eq(a: *const u8, b: *const u8) -> i64;
     fn write(fd: i32, buf: *const u8, len: i64) -> i64;
 }
 

@@ -1807,6 +1807,7 @@ dependencies = [
  "clap",
  "dirs-next",
  "glyim-codegen-llvm",
+ "glyim-compiler",
  "glyim-diag",
  "glyim-doc",
  "glyim-hir",
@@ -1816,6 +1817,7 @@ dependencies = [
  "glyim-macro-vfs",
  "glyim-parse",
  "glyim-pkg",
+ "glyim-testr",
  "glyim-typeck",
  "hex",
  "inkwell",
@@ -1831,6 +1833,7 @@ dependencies = [
  "similar 3.1.0",
  "supports-color",
  "tempfile",
+ "tokio",
  "toml 1.1.2+spec-1.1.0",
  "tracing",
  "tracing-chrome",
@@ -1846,8 +1849,11 @@ name = "glyim-cli-tests-extra"
 version = "0.5.0"
 dependencies = [
  "glyim-cli",
+ "glyim-compiler",
+ "glyim-testr",
  "proptest",
  "rstest 0.24.0",
+ "tokio",
  "trycmd",
 ]
 
@@ -1858,17 +1864,20 @@ dependencies = [
  "dirs-next",
  "glyim-cli",
  "glyim-codegen-llvm",
+ "glyim-compiler",
  "glyim-diag",
  "glyim-hir",
  "glyim-interner",
  "glyim-macro-core",
  "glyim-macro-vfs",
  "glyim-parse",
+ "glyim-testr",
  "glyim-typeck",
  "insta",
  "proptest",
  "rstest 0.26.1",
  "tempfile",
+ "tokio",
  "wat",
 ]
 
@@ -1886,6 +1895,33 @@ dependencies = [
  "llvm-sys",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
+ "wat",
+]
+
+[[package]]
+name = "glyim-compiler"
+version = "0.5.0"
+dependencies = [
+ "dirs-next",
+ "glyim-codegen-llvm",
+ "glyim-diag",
+ "glyim-doc",
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-lex",
+ "glyim-macro-core",
+ "glyim-macro-vfs",
+ "glyim-parse",
+ "glyim-pkg",
+ "glyim-typeck",
+ "hex",
+ "inkwell",
+ "rstest 0.24.0",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "toml 1.1.2+spec-1.1.0",
  "tracing",
  "wat",
 ]
@@ -2030,8 +2066,8 @@ name = "glyim-testr"
 version = "0.5.0"
 dependencies = [
  "chrono",
- "glyim-cli",
  "glyim-codegen-llvm",
+ "glyim-compiler",
  "glyim-hir",
  "glyim-interner",
  "glyim-parse",

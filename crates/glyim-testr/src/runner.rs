@@ -20,20 +20,60 @@ impl TestRunner {
         source: &str,
         display: &dyn DisplayBackend,
     ) -> Vec<TestResult> {
-        let artifact = Compiler::compile(source).expect("compilation failed");
-        display.suite_started(artifact.test_defs.len());
+        let artifact = match Compiler::compile(source) {
+            Ok(a) => a,
+            Err(e) => {
+                let errname = match &e {
+                    crate::compiler::CompileError::NoTests => "no tests".into(),
+                    other => other.to_string(),
+                };
+                display.suite_started(0);
+                display.suite_finished(0, 0, 0);
+                return vec![TestResult {
+                    name: errname,
+                    outcome: crate::types::TestOutcome::CompilationError(e.to_string()),
+                    duration: Duration::ZERO,
+                }];
+            }
+        };
 
-        let mut set = JoinSet::new();
+        // Filter tests if config has a filter
+        let test_defs: Vec<&crate::types::TestDef> = if let Some(ref filter) = self.config.filter {
+            artifact.test_defs.iter().filter(|t| t.name == *filter).collect()
+        } else {
+            artifact.test_defs.iter().collect()
+        };
 
-        for test_def in &artifact.test_defs {
+        display.suite_started(test_defs.len());
+
+        let mut set: JoinSet<Result<TestResult, String>> = JoinSet::new();
+
+        for test_def in &test_defs {
             let name = test_def.name.clone();
             let bin_path = artifact.bin_path.clone();
             let timeout = Duration::from_secs(self.config.timeout_secs);
+            let should_panic = test_def.should_panic;
             display.test_started(&name);
 
             set.spawn(async move {
                 let exec = Executor::new(bin_path, timeout);
-                exec.run_test(&name).await
+                let mut result = exec.run_test(&name).await?;
+                // Adjust outcome for should_panic
+                if should_panic {
+                    match result.outcome {
+                        crate::types::TestOutcome::Failed { .. } => {
+                            result.outcome = crate::types::TestOutcome::Passed;
+                        }
+                        crate::types::TestOutcome::Passed => {
+                            result.outcome = crate::types::TestOutcome::Failed {
+                                exit_code: 0,
+                                stderr: String::new(),
+                            };
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(result)
             });
         }
 

@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-pub use glyim_cli::pipeline;
+pub use glyim_compiler::pipeline;
 pub use std::path::PathBuf;
 
 pub fn temp_g(content: &str) -> PathBuf {

@@ -8,6 +8,9 @@ description = "Heavy test dependencies for CLI (trycmd, rstest, proptest)"
 
 [dependencies]
 glyim-cli = { path = "../glyim-cli" }
+glyim-compiler = { path = "../glyim-compiler" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+glyim-testr = { path = "../glyim-testr" }
 trycmd = "0.15"
 rstest = "0.24"
 proptest = "1"

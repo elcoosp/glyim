@@ -34,6 +34,9 @@ glyim-typeck = { path = "../glyim-typeck" }
 glyim-macro-core = { path = "../glyim-macro-core" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-compiler = { path = "../glyim-compiler" }
+glyim-testr = { path = "../glyim-testr" }
+tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
@@ -53,6 +56,9 @@ wat = "1"
 rstest = "0.24"
 trycmd = "0.15"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-compiler = { path = "../glyim-compiler" }
+glyim-testr = { path = "../glyim-testr" }
+tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
 proptest = "1"

@@ -1,4 +1,4 @@
-use crate::lockfile_integration;
+use glyim_compiler::lockfile_integration;
 
 pub fn cmd_fetch() -> i32 {
     let result: Result<i32, i32> = (|| {

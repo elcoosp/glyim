@@ -1,6 +1,6 @@
 #[allow(unused_imports, dead_code)]
 use crate::common::*;
-use glyim_cli::cross;
+use glyim_compiler::cross;
 
 #[test]
 fn host_target_is_valid() {
@@ -38,7 +38,7 @@ fn cross_compile_produces_correct_elf_magic() {
     let output = dir.path().join("a.out");
 
     let result =
-        glyim_cli::pipeline::build(&input, Some(&output), Some("aarch64-unknown-linux-gnu"));
+        glyim_compiler::pipeline::build(&input, Some(&output), Some("aarch64-unknown-linux-gnu"));
     if let Err(ref e) = result {
         let msg = format!("{e}");
         if msg.contains("unsupported") || msg.contains("target") {
@@ -60,5 +60,5 @@ fn cross_compile_produces_correct_elf_magic() {
 
 #[test]
 fn missing_sysroot_returns_error() {
-    assert!(glyim_cli::cross::ensure_sysroot("bogus-triple").is_err());
+    assert!(glyim_compiler::cross::ensure_sysroot("bogus-triple").is_err());
 }

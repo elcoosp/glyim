@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
-use std::fs;
 
 /// File watcher stub — real implementation uses notify crate.
 pub struct FileWatcher {
@@ -10,7 +9,7 @@ pub struct FileWatcher {
 
 impl FileWatcher {
     pub fn new(_paths: &[PathBuf], _debounce: Duration) -> Result<Self, String> {
-        let (tx, rx) = mpsc::channel();
+        let (_tx, rx) = mpsc::channel();
         // Keep the sender alive so the channel stays open
         std::thread::spawn(move || {
             loop {
