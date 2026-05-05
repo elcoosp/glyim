@@ -11,8 +11,8 @@ expression: errors
             2,
         ),
         span: (
-            0,
-            0,
+            41,
+            55,
         ),
     },
     InvalidReturnType {

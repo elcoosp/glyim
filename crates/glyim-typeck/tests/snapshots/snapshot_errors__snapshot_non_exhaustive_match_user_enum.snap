@@ -9,8 +9,8 @@ expression: errors
             "Blue",
         ],
         span: (
-            0,
-            0,
+            51,
+            87,
         ),
     },
 ]
