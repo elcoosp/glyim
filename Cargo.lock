@@ -1293,6 +1293,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-cli-tests-extra"
+version = "0.5.0"
+dependencies = [
+ "glyim-cli",
+ "proptest",
+ "rstest",
+ "trycmd",
+]
+
+[[package]]
+name = "glyim-cli-tests-full"
+version = "0.5.0"
+dependencies = [
+ "glyim-cli",
+]
+
+[[package]]
+name = "glyim-cli-tests-parser"
+version = "0.5.0"
+dependencies = [
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-parse",
+ "glyim-typeck",
+ "tempfile",
+]
+
+[[package]]
 name = "glyim-codegen-llvm"
 version = "0.5.0"
 dependencies = [

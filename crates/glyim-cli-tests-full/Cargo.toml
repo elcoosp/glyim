@@ -1,0 +1,10 @@
+[package]
+name = "glyim-cli-tests-full"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Full CLI integration tests (includes codegen / LLVM linkage)"
+
+[dependencies]
+glyim-cli = { path = "../glyim-cli" }

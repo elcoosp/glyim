@@ -383,24 +383,22 @@ impl<'a> MonoContext<'a> {
                 args,
                 span,
             } => {
-                // Always compute a concrete (mangled) name when the expression type
-                // is known to be a Generic or a Named that resulted from monomorphisation.
-                let expr_type = self.get_expr_type(*id);
-                let new_enum_name = match &expr_type {
-                    Some(HirType::Generic(base_sym, concrete_args))
-                        if !concrete_args.iter().any(|a| self.has_unresolved_type_param(a)) =>
+                // Use the type substitution to compute the concrete enum name
+                // when the enum has type parameters that map to concrete types.
+                let new_enum_name = if let Some(enum_def) = self.find_enum(*enum_name) {
+                    let concrete_args: Vec<HirType> = enum_def.type_params
+                        .iter()
+                        .map(|tp| type_sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                        .collect();
+                    if !concrete_args.is_empty()
+                        && !concrete_args.iter().any(|a| self.has_unresolved_type_param(a))
                     {
-                        let key = (*base_sym, concrete_args.clone());
-                        enum_spec_map.get(&key).copied().unwrap_or_else(|| {
-                            let mangled = self.mangle_name(*base_sym, concrete_args);
-                            mangled
-                        })
+                        self.mangle_name(*enum_name, &concrete_args)
+                    } else {
+                        *enum_name
                     }
-                    Some(HirType::Named(base_sym)) => {
-                        let key = (*base_sym, vec![]);
-                        enum_spec_map.get(&key).copied().unwrap_or(*base_sym)
-                    }
-                    _ => *enum_name,
+                } else {
+                    *enum_name
                 };
                 HirExpr::EnumVariant {
                     id: *id,

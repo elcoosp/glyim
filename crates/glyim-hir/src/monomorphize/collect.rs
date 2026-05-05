@@ -116,6 +116,11 @@ impl<'a> MonoContext<'a> {
                 // Collect type overrides for the specialised body so that
                 // enclosed enum/struct expressions get concrete names.
                 self.collect_type_overrides_for_expr(&specialized.body, &sub);
+                tracing::debug!(
+                    "[collect specialized body] fn={} body={:#?}",
+                    self.interner.resolve(generic_fn.name),
+                    specialized.body
+                );
                 self.fn_specs.insert(key, specialized);
                 // Enqueue all concrete types from the function signature (params and return)
                 for (_, param_ty) in &generic_fn.params {

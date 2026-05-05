@@ -17,6 +17,9 @@ members = [
     "crates/glyim-doc",
     "crates/glyim-lint",
     "crates/glyim-fmt",
+    "crates/glyim-cli-tests-parser",
+    "crates/glyim-cli-tests-extra",
+    "crates/glyim-cli-tests-full",
 ]
 
 [workspace.package]

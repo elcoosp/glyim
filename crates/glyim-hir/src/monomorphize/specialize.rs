@@ -85,6 +85,9 @@ impl<'a> MonoContext<'a> {
         );
         mono.body = self.substitute_expr_types(&mono.body, &sub);
 
+        // Concretize enum variant names using the type substitution.
+        self.concretize_enum_variant_names(&mut mono.body, &sub);
+
         // Brute-force pass: walk the body and replace any As target type
         // that matches a type parameter with its concrete type.
         if !sub.is_empty() {
@@ -106,7 +109,113 @@ impl<'a> MonoContext<'a> {
         mono
     }
 
+    /// Walk the expression tree and replace any `EnumVariant` node whose enum name
+    /// is still a generic base (e.g., `Option`) with the mangled concrete name
+    /// (e.g., `Option__i64`) according to the given type substitution.
+    fn concretize_enum_variant_names(
+        &mut self,
+        expr: &mut HirExpr,
+        sub: &HashMap<Symbol, HirType>,
+    ) {
+        match expr {
+            HirExpr::EnumVariant { enum_name, args, .. } => {
+                if let Some(_) = self.find_enum(*enum_name) {
+                    // Compute concrete type args from the enum's type parameters
+                    let concrete_args: Vec<HirType> = self
+                        .find_enum(*enum_name)
+                        .map(|e| {
+                            e.type_params
+                                .iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !concrete_args.is_empty()
+                        && concrete_args.iter().all(|a| !self.has_unresolved_type_param(a))
+                    {
+                        *enum_name = self.mangle_name(*enum_name, &concrete_args);
+                    }
+                }
+                for a in args {
+                    self.concretize_enum_variant_names(a, sub);
+                }
+            }
+            HirExpr::Block { stmts, .. } => {
+                for stmt in stmts {
+                    match stmt {
+                        HirStmt::Expr(e)
+                        | HirStmt::Let { value: e, .. }
+                        | HirStmt::LetPat { value: e, .. }
+                        | HirStmt::Assign { value: e, .. } => {
+                            self.concretize_enum_variant_names(e, sub);
+                        }
+                        HirStmt::AssignField { object, value, .. } => {
+                            self.concretize_enum_variant_names(object, sub);
+                            self.concretize_enum_variant_names(value, sub);
+                        }
+                        HirStmt::AssignDeref { target, value, .. } => {
+                            self.concretize_enum_variant_names(target, sub);
+                            self.concretize_enum_variant_names(value, sub);
+                        }
+                    }
+                }
+            }
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
+                self.concretize_enum_variant_names(condition, sub);
+                self.concretize_enum_variant_names(then_branch, sub);
+                if let Some(eb) = else_branch {
+                    self.concretize_enum_variant_names(eb, sub);
+                }
+            }
+            HirExpr::Match { scrutinee, arms, .. } => {
+                self.concretize_enum_variant_names(scrutinee, sub);
+                for arm in arms {
+                    if let Some(ref mut g) = arm.guard {
+                        self.concretize_enum_variant_names(g, sub);
+                    }
+                    self.concretize_enum_variant_names(&mut arm.body, sub);
+                }
+            }
+            HirExpr::While { condition, body, .. }
+            | HirExpr::ForIn { iter: condition, body, .. } => {
+                self.concretize_enum_variant_names(condition, sub);
+                self.concretize_enum_variant_names(body, sub);
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.concretize_enum_variant_names(lhs, sub);
+                self.concretize_enum_variant_names(rhs, sub);
+            }
+            HirExpr::Unary { operand, .. }
+            | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::As { expr: operand, .. }
+            | HirExpr::Return { value: Some(operand), .. }
+            | HirExpr::Println { arg: operand, .. } => {
+                self.concretize_enum_variant_names(operand, sub);
+            }
+            HirExpr::Assert { condition, message, .. } => {
+                self.concretize_enum_variant_names(condition, sub);
+                if let Some(m) = message {
+                    self.concretize_enum_variant_names(m, sub);
+                }
+            }
+            HirExpr::Call { args, .. }
+            | HirExpr::MethodCall { args, .. }
+            | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    self.concretize_enum_variant_names(a, sub);
+                }
+            }
+            HirExpr::StructLit { fields, .. } => {
+                for (_, val) in fields {
+                    self.concretize_enum_variant_names(val, sub);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
+        // (unchanged)
         match expr {
             HirExpr::As {
                 id,
