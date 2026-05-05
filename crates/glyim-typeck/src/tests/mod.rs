@@ -1,3 +1,10 @@
-// Auto-generated
 pub mod enum_specialization_test;
+pub mod error_variants;
+pub mod generic_inference;
+pub mod method_resolution;
+pub mod mono_integration;
 pub mod nested_enum_rewrite;
+pub mod property_random;
+pub mod property_tests;
+pub mod snapshot_errors;
+pub mod snapshot_typeck;

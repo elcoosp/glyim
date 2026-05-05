@@ -1,0 +1,16 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    NonExhaustiveMatch {
+        missing: [
+            "Green",
+            "Blue",
+        ],
+        span: (
+            51,
+            87,
+        ),
+    },
+]

@@ -1,0 +1,14 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    InvalidReturnType {
+        expected: Bool,
+        found: Int,
+    },
+    InvalidReturnType {
+        expected: Int,
+        found: Bool,
+    },
+]

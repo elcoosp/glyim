@@ -1,0 +1,14 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    UnknownField {
+        struct_name: "Point",
+        field: "y",
+        span: (
+            0,
+            0,
+        ),
+    },
+]

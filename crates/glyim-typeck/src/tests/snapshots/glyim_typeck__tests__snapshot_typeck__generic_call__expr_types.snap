@@ -1,0 +1,5 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_typeck.rs
+expression: expr_types
+---
+[Never, Named(Symbol(1)), Named(Symbol(1)), Never, Never, Int, Int]

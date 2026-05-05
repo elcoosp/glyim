@@ -1,0 +1,20 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_errors.rs
+expression: errors
+---
+[
+    DerefNonPointer {
+        found: Int,
+        expr_id: ExprId(
+            4,
+        ),
+        span: (
+            32,
+            33,
+        ),
+    },
+    InvalidReturnType {
+        expected: Int,
+        found: Never,
+    },
+]
