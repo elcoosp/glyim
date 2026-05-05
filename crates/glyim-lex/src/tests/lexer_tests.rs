@@ -1,5 +1,5 @@
 //! Lexer integration tests (extracted from src/lexer.rs)
-use glyim_lex::tokenize;
+use crate::tokenize;
 use glyim_syntax::SyntaxKind;
 
 #[allow(dead_code)]
