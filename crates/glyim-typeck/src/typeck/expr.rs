@@ -52,7 +52,7 @@ impl TypeChecker {
             HirExpr::BoolLit { .. } => HirType::Bool,
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
-            HirExpr::Ident { name, .. } => self.lookup_binding(name).unwrap_or_else(|| { self.errors.push(TypeError::UnresolvedName { name: *name }); HirType::Error }),
+            HirExpr::Ident { name, span, .. } => self.lookup_binding(name).unwrap_or_else(|| { self.errors.push(TypeError::UnresolvedName { name: *name, span: (span.start, span.end) }); HirType::Error }),
             HirExpr::Binary { op, lhs, rhs, .. } => {
                 let lt = self.check_expr(lhs).unwrap_or(HirType::Error);
                 let rt = self.check_expr(rhs).unwrap_or(HirType::Error);
@@ -192,6 +192,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::DerefNonPointer {
                             found: inner_ty,
                             expr_id: *id,
+                            span: (expr.get_span().start, expr.get_span().end),
                         });
                         HirType::Never
                     }
@@ -304,6 +305,7 @@ impl TypeChecker {
                     self.errors.push(TypeError::UnknownField {
                         struct_name,
                         field: *field_sym,
+                        span: (0, 0),
                     });
                 }
             }
@@ -313,6 +315,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::MissingField {
                             struct_name,
                             field: field.name,
+                            span: (0, 0),
                         });
                     }
                 }
@@ -372,6 +375,7 @@ impl TypeChecker {
                     self.errors.push(TypeError::UnknownField {
                         struct_name: *name,
                         field,
+                        span: (0, 0),
                     });
                     HirType::Never
                 }
@@ -383,6 +387,7 @@ impl TypeChecker {
                     self.errors.push(TypeError::UnknownField {
                         struct_name: *name,
                         field,
+                        span: (0, 0),
                     });
                     HirType::Never
                 }
@@ -391,6 +396,7 @@ impl TypeChecker {
                 self.errors.push(TypeError::UnknownField {
                     struct_name: self.dummy_symbol(),
                     field,
+                    span: (0, 0),
                 });
                 HirType::Never
             }
@@ -407,6 +413,7 @@ impl TypeChecker {
         self.errors.push(TypeError::UnknownField {
             struct_name: self.dummy_symbol(),
             field,
+            span: (0, 0),
         });
         HirType::Int
     }
@@ -414,7 +421,7 @@ impl TypeChecker {
         if let Some(info) = self.structs.get(&struct_name) {
             if !info.field_map.contains_key(&field) {
                 self.errors
-                    .push(TypeError::UnknownField { struct_name, field });
+                    .push(TypeError::UnknownField { struct_name, field, span: (0, 0) });
             } else if let Some(field_info) = info.fields.iter().find(|f| f.name == field) {
                 return field_info.ty.clone();
             }
@@ -433,6 +440,7 @@ impl TypeChecker {
             self.errors.push(TypeError::UnknownField {
                 struct_name: enum_name,
                 field: variant_name,
+                span: (0, 0),
             });
         }
         let mut arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();

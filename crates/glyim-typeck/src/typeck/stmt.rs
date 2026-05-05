@@ -99,6 +99,7 @@ impl TypeChecker {
                 let immutable = binding.map(|b| !b.mutable).unwrap_or(false);
                 if immutable {
                     self.errors.push(TypeError::AssignToImmutable {
+                        span: (0, 0),
                         name: *target,
                         expr_id: ExprId::new(0),
                     });
@@ -127,6 +128,7 @@ impl TypeChecker {
                     }
                     _ => {
                         self.errors.push(TypeError::AssignThroughNonPointer {
+                        span: (0, 0),
                             found: ptr_ty,
                             expr_id: ExprId::new(0),
                         });
