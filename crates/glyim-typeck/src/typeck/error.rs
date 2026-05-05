@@ -49,7 +49,7 @@ impl Diagnostic for TypeError {
         None
     }
 
-    fn related(&self) -> Option<Box<dyn Iterator<Item = miette::Report> + '_>> {
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
         // TODO: walk the span expansion chain and emit "note: expanded from macro X"
         None
     }

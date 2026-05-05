@@ -2,7 +2,6 @@ use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::registry::MacroRegistry;
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
 use std::sync::Mutex;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -100,16 +99,23 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
                 .unwrap_or_else(|_| inner.as_bytes().to_vec());
             let expanded_str = String::from_utf8_lossy(&expanded).into_owned();
 
+            // Record expansion metadata *before* modifying result
+            let call_site = (at_pos, call_end);
+            let def_site = (0, 0); // TODO: get actual macro definition location
+            let rec_macro_name = macro_name.to_string();
+            let expanded_start = at_pos; // new position after before
+            let expanded_end = expanded_start + expanded_str.len();
+            let expanded_range = (expanded_start, expanded_end);
+
             let before = &result[..at_pos];
             let after_str = &result[call_end..];
-            let new_before_len = before.len();
             result = format!("{before}{expanded_str}{after_str}");
-            // Record this expansion for diagnostics
+
             EXPANSION_RECORDS.lock().unwrap().push(MacroExpansionRecord {
-                call_site: (at_pos, call_end),
-                def_site: (0, 0), // TODO: get actual macro definition location
-                macro_name: macro_name.to_string(),
-                expanded_range: (new_before_len, new_before_len + expanded_str.len()),
+                call_site,
+                def_site,
+                macro_name: rec_macro_name,
+                expanded_range,
             });
             let has_nested_macro = expanded_str.contains('@');
             if has_nested_macro {
