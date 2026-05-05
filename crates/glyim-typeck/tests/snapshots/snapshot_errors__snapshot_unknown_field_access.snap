@@ -4,12 +4,8 @@ expression: errors
 ---
 [
     UnknownField {
-        struct_name: Symbol(
-            0,
-        ),
-        field: Symbol(
-            5,
-        ),
+        struct_name: "Point",
+        field: "y",
         span: (
             0,
             0,

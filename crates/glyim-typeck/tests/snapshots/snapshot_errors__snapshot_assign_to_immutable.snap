@@ -4,9 +4,7 @@ expression: errors
 ---
 [
     AssignToImmutable {
-        name: Symbol(
-            2,
-        ),
+        name: "x",
         expr_id: ExprId(
             0,
         ),

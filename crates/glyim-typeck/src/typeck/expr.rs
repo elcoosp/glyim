@@ -56,7 +56,7 @@ impl TypeChecker {
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::Ident { name, span, .. } => self.lookup_binding(name).unwrap_or_else(|| {
                 self.errors.push(TypeError::UnresolvedName {
-                    name: *name,
+                    name: self.interner.resolve(*name).to_string(),
                     span: (span.start, span.end),
                 });
                 HirType::Error
@@ -349,8 +349,8 @@ impl TypeChecker {
             for field_sym in &field_names {
                 if !info.field_map.contains_key(field_sym) {
                     self.errors.push(TypeError::UnknownField {
-                        struct_name,
-                        field: *field_sym,
+                        struct_name: self.interner.resolve(struct_name).to_string(),
+                        field: self.interner.resolve(*field_sym).to_string(),
                         span: (span.start, span.end),
                     });
                 }
@@ -359,8 +359,8 @@ impl TypeChecker {
                 for field in &info.fields {
                     if !field_names.contains(&field.name) {
                         self.errors.push(TypeError::MissingField {
-                            struct_name,
-                            field: field.name,
+                            struct_name: self.interner.resolve(struct_name).to_string(),
+                            field: self.interner.resolve(field.name).to_string(),
                             span: (span.start, span.end),
                         });
                     }
@@ -422,8 +422,8 @@ impl TypeChecker {
                     self.check_struct_field_access(*name, field, span)
                 } else {
                     self.errors.push(TypeError::UnknownField {
-                        struct_name: *name,
-                        field,
+                        struct_name: self.interner.resolve(*name).to_string(),
+                        field: self.interner.resolve(field).to_string(),
                         span: (span.start, span.end),
                     });
                     HirType::Never
@@ -434,8 +434,8 @@ impl TypeChecker {
                     self.check_struct_field_access(*name, field, span)
                 } else {
                     self.errors.push(TypeError::UnknownField {
-                        struct_name: *name,
-                        field,
+                        struct_name: self.interner.resolve(*name).to_string(),
+                        field: self.interner.resolve(field).to_string(),
                         span: (span.start, span.end),
                     });
                     HirType::Never
@@ -443,8 +443,8 @@ impl TypeChecker {
             }
             _ => {
                 self.errors.push(TypeError::UnknownField {
-                    struct_name: self.dummy_symbol(),
-                    field,
+                    struct_name: "???".to_string(),
+                    field: self.interner.resolve(field).to_string(),
                     span: (0, 0),
                 });
                 HirType::Never
@@ -465,8 +465,8 @@ impl TypeChecker {
             return elems[idx].clone();
         }
         self.errors.push(TypeError::UnknownField {
-            struct_name: self.dummy_symbol(),
-            field,
+            struct_name: "???".to_string(),
+            field: self.interner.resolve(field).to_string(),
             span: (0, 0),
         });
         HirType::Int
@@ -480,8 +480,8 @@ impl TypeChecker {
         if let Some(info) = self.structs.get(&struct_name) {
             if !info.field_map.contains_key(&field) {
                 self.errors.push(TypeError::UnknownField {
-                    struct_name,
-                    field,
+                    struct_name: self.interner.resolve(struct_name).to_string(),
+                    field: self.interner.resolve(field).to_string(),
                     span: (0, 0),
                 });
             } else if let Some(field_info) = info.fields.iter().find(|f| f.name == field) {
@@ -501,8 +501,8 @@ impl TypeChecker {
             && !info.variant_map.contains_key(&variant_name)
         {
             self.errors.push(TypeError::UnknownField {
-                struct_name: enum_name,
-                field: variant_name,
+                struct_name: self.interner.resolve(enum_name).to_string(),
+                field: self.interner.resolve(variant_name).to_string(),
                 span: (span.start, span.end),
             });
         }

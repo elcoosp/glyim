@@ -1,11 +1,10 @@
 ---
 source: crates/glyim-cli/tests/ui.rs
-assertion_line: 57
 expression: actual
 ---
-  × unresolved name: Symbol(1)
+  × unresolved name `foo`
    ╭─[tests/ui/unresolved_name.g:1:1]
  1 │ main = () => foo
    · ▲
-   · ╰── unresolved name: Symbol(1)
+   · ╰── unresolved name `foo`
    ╰────

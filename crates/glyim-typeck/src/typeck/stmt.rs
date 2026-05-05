@@ -97,7 +97,7 @@ impl TypeChecker {
                 if immutable {
                     self.errors.push(TypeError::AssignToImmutable {
                         span: (0, 0),
-                        name: *target,
+                        name: self.interner.resolve(*target).to_string(),
                         expr_id: ExprId::new(0),
                     });
                 }

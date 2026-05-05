@@ -1,11 +1,10 @@
 ---
 source: crates/glyim-cli/tests/ui.rs
-assertion_line: 57
 expression: actual
 ---
-  × cannot assign to immutable binding
+  × cannot assign to immutable `x`
    ╭─[tests/ui/assign_to_immutable_pattern.g:1:1]
  1 │ fn main() { let x = 5; x = 10; x }
    · ▲
-   · ╰── cannot assign to immutable binding
+   · ╰── cannot assign to immutable `x`
    ╰────

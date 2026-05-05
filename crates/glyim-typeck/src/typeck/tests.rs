@@ -326,7 +326,7 @@ fn struct_lit_unknown_field_pushes_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1, z: 3 }");
     let has_unknown_z = tc.errors.iter().any(|e| {
         if let TypeError::UnknownField { field, .. } = e {
-            tc.interner.resolve(*field) == "z"
+            *field == "z"
         } else {
             false
         }
@@ -343,7 +343,7 @@ fn struct_lit_missing_field_pushes_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => Point { x: 1 }");
     let has_missing = tc.errors.iter().any(|e| {
         if let TypeError::MissingField { field, .. } = e {
-            tc.interner.resolve(*field) == "y"
+            *field == "y"
         } else {
             false
         }
@@ -360,7 +360,7 @@ fn field_access_unknown_field_pushes_error() {
     let tc = typecheck("struct Point { x, y }\nmain = () => { let p = Point { x: 1, y: 2 }; p.z }");
     let has_unknown = tc.errors.iter().any(|e| {
         if let TypeError::UnknownField { field, .. } = e {
-            tc.interner.resolve(*field) == "z"
+            *field == "z"
         } else {
             false
         }

@@ -15,20 +15,20 @@ pub enum TypeError {
     },
     #[error("unknown type: {name:?}")]
     UnknownType { name: Symbol },
-    #[error("unknown field {field:?} on struct {struct_name:?}")]
+    #[error("unknown field `{field}` on struct `{struct_name}`")]
     UnknownField {
-        struct_name: Symbol,
-        field: Symbol,
+        struct_name: String,
+        field: String,
         span: (usize, usize),
     },
-    #[error("missing field {field:?} in struct {struct_name:?}")]
+    #[error("missing field `{field}` in struct `{struct_name}`")]
     MissingField {
-        struct_name: Symbol,
-        field: Symbol,
+        struct_name: String,
+        field: String,
         span: (usize, usize),
     },
-    #[error("extra field {field:?} in struct {struct_name:?}")]
-    ExtraField { struct_name: Symbol, field: Symbol },
+    #[error("extra field `{field}` in struct `{struct_name}`")]
+    ExtraField { struct_name: String, field: String },
     #[error("non-exhaustive match, missing variants: {missing:?}")]
     NonExhaustiveMatch {
         missing: Vec<String>,
@@ -42,9 +42,9 @@ pub enum TypeError {
     InvalidReturnType { expected: HirType, found: HirType },
     #[error("if condition must be `bool`, found `{found:?}`")]
     IfConditionMustBeBool { found: HirType, expr_id: ExprId },
-    #[error("cannot assign to immutable binding")]
+    #[error("cannot assign to immutable `{name}`")]
     AssignToImmutable {
-        name: Symbol,
+        name: String,
         expr_id: ExprId,
         span: (usize, usize),
     },
@@ -60,8 +60,8 @@ pub enum TypeError {
         expr_id: ExprId,
         span: (usize, usize),
     },
-    #[error("unresolved name: {name:?}")]
-    UnresolvedName { name: Symbol, span: (usize, usize) },
+    #[error("unresolved name `{name}`")]
+    UnresolvedName { name: String, span: (usize, usize) },
 }
 
 impl Diagnostic for TypeError {
