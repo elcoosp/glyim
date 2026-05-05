@@ -439,7 +439,7 @@ impl TypeChecker {
                 self.errors.push(TypeError::UnknownField {
                     struct_name: self.dummy_symbol(),
                     field,
-                    span: (0, 0),
+                        span: (0, 0),
                 });
                 HirType::Never
             }
@@ -466,7 +466,7 @@ impl TypeChecker {
                 self.errors.push(TypeError::UnknownField {
                     struct_name,
                     field,
-                    span: (0, 0),
+                        span: (0, 0),
                 });
             } else if let Some(field_info) = info.fields.iter().find(|f| f.name == field) {
                 return field_info.ty.clone();
@@ -561,7 +561,7 @@ impl TypeChecker {
                             expected: param_ty.clone(),
                             found: arg_ty.clone(),
                             expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
-                span: (0, 0),
+                    span: (0, 0),
                         });
                     }
                 }
