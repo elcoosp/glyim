@@ -234,6 +234,7 @@ impl Default for PipelineConfig {
     }
 }
 
+#[allow(dead_code)]
 struct CompiledHir {
     hir: glyim_hir::Hir,
     mono_hir: glyim_hir::Hir,

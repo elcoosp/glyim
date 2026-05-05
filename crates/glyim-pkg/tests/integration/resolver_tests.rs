@@ -1,3 +1,4 @@
+#![allow(unused_imports, dead_code)]
 use glyim_pkg::lockfile::LockSource;
 use glyim_pkg::resolver::*;
 use std::collections::HashMap;

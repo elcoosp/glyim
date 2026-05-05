@@ -87,7 +87,7 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
             let (_def_start, _def_end) = registry.get_def_span(macro_name).unwrap_or((0, 0));
             let macro_name = macro_name.to_string();
             let mut table = glyim_diag::MACRO_EXPANSION_TABLE.lock().unwrap();
-            let expansion_id = table.len() as u32;
+            let _expansion_id = table.len() as u32;
             table.push(glyim_diag::MacroExpansion {
                 call_site: glyim_diag::Span::new(call_site.0, call_site.1),
                 def_site: glyim_diag::Span::new(_def_start, _def_end),

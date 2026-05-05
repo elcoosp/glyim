@@ -62,6 +62,9 @@ impl TypeChecker {
         self.expr_types[idx] = ty;
     }
 
+    #[allow(dead_code)]
+
+
     fn dummy_symbol(&self) -> Symbol {
         glyim_interner::Interner::new().intern("__dummy")
     }
@@ -250,6 +253,8 @@ impl Default for TypeChecker {
 }
 
 /// Walk all HIR items and return the maximum expression ID found.
+#[allow(dead_code)]
+
 fn max_expr_id(hir: &glyim_hir::Hir) -> usize {
     use glyim_hir::node::{HirExpr, HirStmt};
     fn expr_max(expr: &HirExpr, max_id: &mut usize) {

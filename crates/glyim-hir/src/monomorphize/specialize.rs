@@ -119,22 +119,35 @@ impl<'a> MonoContext<'a> {
     ) {
         match expr {
             HirExpr::EnumVariant { enum_name, args, .. } => {
-                if let Some(_) = self.find_enum(*enum_name) {
-                    // Compute concrete type args from the enum's type parameters
-                    let concrete_args: Vec<HirType> = self
-                        .find_enum(*enum_name)
-                        .map(|e| {
-                            e.type_params
-                                .iter()
-                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
-                                .collect()
-                        })
-                        .unwrap_or_default();
+                tracing::debug!(
+                    "[concretize_enum] found EnumVariant enum={} variant=? sub={:?}",
+                    self.interner.resolve(*enum_name),
+                    sub
+                );
+                if let Some(edef) = self.find_enum(*enum_name) {
+                    let concrete_args: Vec<HirType> = edef
+                        .type_params
+                        .iter()
+                        .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                        .collect();
+                    tracing::debug!(
+                        "[concretize_enum] concrete_args={:?} has_unresolved={}",
+                        concrete_args,
+                        concrete_args.iter().any(|a| self.has_unresolved_type_param(a))
+                    );
                     if !concrete_args.is_empty()
                         && concrete_args.iter().all(|a| !self.has_unresolved_type_param(a))
                     {
-                        *enum_name = self.mangle_name(*enum_name, &concrete_args);
+                        let mangled = self.mangle_name(*enum_name, &concrete_args);
+                        tracing::debug!(
+                            "[concretize_enum] replacing {} with {}",
+                            self.interner.resolve(*enum_name),
+                            self.interner.resolve(mangled)
+                        );
+                        *enum_name = mangled;
                     }
+                } else {
+                    tracing::debug!("[concretize_enum] enum not found in definitions");
                 }
                 for a in args {
                     self.concretize_enum_variant_names(a, sub);

@@ -244,7 +244,7 @@ pub(crate) fn codegen_field_access<'ctx>(
         if struct_type_opt.is_none() {
             // Fallback: try base struct name by stripping mangling suffix __...
             let idx_map = cg.struct_field_indices.borrow();
-            struct_type_opt = idx_map.iter().find_map(|((sym, f), idx)| {
+            struct_type_opt = idx_map.iter().find_map(|((sym, f), _idx)| {
                 if f == field {
                     cg.struct_types.borrow().get(sym).copied()
                 } else {
