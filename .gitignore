@@ -2,3 +2,4 @@ target
 wr*.sh
 corpus
 mutants.out*
+cas_store

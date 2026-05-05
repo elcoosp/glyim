@@ -113,11 +113,18 @@ impl<'a> MonoContext<'a> {
                     .collect();
                 self.scan_expr_for_generic_calls(&specialized.body, &sub);
                 self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
+                // Collect type overrides for the specialised body so that
+                // enclosed enum/struct expressions get concrete names.
+                self.collect_type_overrides_for_expr(&specialized.body, &sub);
                 self.fn_specs.insert(key, specialized);
-                // Ensure the receiver's concrete type is registered as a struct
-                if let Some((_, HirType::Generic(receiver_sym, _))) = generic_fn.params.first() {
-                    let concrete_args = type_args.clone();
-                    self.enqueue_type_if_generic(&HirType::Generic(*receiver_sym, concrete_args));
+                // Enqueue all concrete types from the function signature (params and return)
+                for (_, param_ty) in &generic_fn.params {
+                    let concrete_param = crate::types::substitute_type(param_ty, &sub);
+                    self.enqueue_type_if_generic(&concrete_param);
+                }
+                if let Some(ret_ty) = &generic_fn.ret {
+                    let concrete_ret = crate::types::substitute_type(ret_ty, &sub);
+                    self.enqueue_type_if_generic(&concrete_ret);
                 }
             }
         }
