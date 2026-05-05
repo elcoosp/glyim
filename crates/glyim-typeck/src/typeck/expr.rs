@@ -517,7 +517,7 @@ impl TypeChecker {
         &mut self,
         callee: Symbol,
         args: &[HirExpr],
-        call_span: Span,
+        _call_span: Span,
     ) -> (HirType, Option<Vec<HirType>>) {
         let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
         // If the callee name already contains __ (e.g., Vec_get__Entry_i64_i64),

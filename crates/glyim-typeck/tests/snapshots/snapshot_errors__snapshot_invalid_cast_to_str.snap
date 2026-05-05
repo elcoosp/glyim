@@ -9,5 +9,9 @@ expression: errors
         expr_id: ExprId(
             0,
         ),
+        span: (
+            13,
+            15,
+        ),
     },
 ]

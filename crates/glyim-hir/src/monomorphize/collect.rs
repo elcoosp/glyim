@@ -1014,7 +1014,7 @@ impl<'a> MonoContext<'a> {
             }
             if let Some(struct_def) = self.find_struct(name) {
                 let specialized = self.specialize_struct(&struct_def, &args);
-                // Scan field types for nested generics
+                // Scan field types for nested generics and enqueue them
                 for field in &specialized.fields {
                     self.enqueue_type_if_generic(&field.ty);
                 }
@@ -1026,7 +1026,7 @@ impl<'a> MonoContext<'a> {
                     self.interner.resolve(name),
                     args
                 );
-                // Scan variant types for nested generics
+                // Recursively enqueue all types found in the specialized enum's fields
                 for variant in &specialized.variants {
                     for field in &variant.fields {
                         self.enqueue_type_if_generic(&field.ty);
@@ -1037,6 +1037,29 @@ impl<'a> MonoContext<'a> {
                     "[process_type_spec] inserted into enum_specs, count={}",
                     self.enum_specs.len()
                 );
+            }
+        }
+        // Reprocess newly enqueued types until queue is empty
+        while !self.type_work_queue.is_empty() {
+            let (name, args) = self.type_work_queue.pop().unwrap();
+            let key = (name, args.clone());
+            if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
+                continue;
+            }
+            if let Some(struct_def) = self.find_struct(name) {
+                let specialized = self.specialize_struct(&struct_def, &args);
+                for field in &specialized.fields {
+                    self.enqueue_type_if_generic(&field.ty);
+                }
+                self.struct_specs.insert(key, specialized);
+            } else if let Some(enum_def) = self.find_enum(name) {
+                let specialized = self.specialize_enum(&enum_def, &args);
+                for variant in &specialized.variants {
+                    for field in &variant.fields {
+                        self.enqueue_type_if_generic(&field.ty);
+                    }
+                }
+                self.enum_specs.insert(key, specialized);
             }
         }
     }

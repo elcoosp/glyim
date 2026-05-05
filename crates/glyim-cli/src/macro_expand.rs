@@ -88,7 +88,7 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
             let rec_macro_name = macro_name.to_string();
             let expanded_start = at_pos; // new position after before
             let expanded_end = expanded_start + expanded_str.len();
-            let expanded_range = (expanded_start, expanded_end);
+            let _expanded_range = (expanded_start, expanded_end);
 
             let before = &result[..at_pos];
             let after_str = &result[call_end..];

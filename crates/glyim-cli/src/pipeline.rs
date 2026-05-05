@@ -1,5 +1,5 @@
 use glyim_codegen_llvm::runtime_shims;
-use glyim_codegen_llvm::{Codegen, compile_to_ir};
+use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
 use glyim_interner::Interner;
@@ -70,6 +70,12 @@ impl std::error::Error for PipelineError {}
 impl From<std::io::Error> for PipelineError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
+    }
+}
+
+impl From<String> for PipelineError {
+    fn from(s: String) -> Self {
+        Self::Codegen(s)
     }
 }
 static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
@@ -301,11 +307,12 @@ fn execute_jit(
             "jit",
         )
         .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => Codegen::new(
+        BuildMode::Release => CodegenBuilder::new(
             &context,
             compiled.interner.clone(),
             compiled.merged_types.clone(),
-        ),
+        )
+        .build()?,
     };
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
@@ -454,11 +461,12 @@ pub fn build_with_mode(
             &input.to_string_lossy(),
         )
         .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => Codegen::new(
+        BuildMode::Release => CodegenBuilder::new(
             &context,
             compiled.interner.clone(),
             compiled.merged_types.clone(),
-        ),
+        )
+        .build()?,
     };
     if let Some(t) = &config.target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
@@ -657,7 +665,7 @@ pub fn run_tests(
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    let mut codegen = Codegen::new(&context, interner, merged_types);
+    let mut codegen = CodegenBuilder::new(&context, interner, merged_types).build()?;
     if is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -775,11 +783,12 @@ pub fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, 
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
-    let mut codegen = Codegen::new(
+    let mut codegen = CodegenBuilder::new(
         &context,
         compiled.interner.clone(),
         compiled.merged_types.clone(),
-    );
+    )
+    .build()?;
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
     }
@@ -919,7 +928,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    let mut cg = Codegen::new(&context, interner, merged_types);
+    let mut cg = CodegenBuilder::new(&context, interner, merged_types).build()?;
     cg = cg.with_jit_mode();
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     let engine = cg
