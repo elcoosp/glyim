@@ -40,7 +40,7 @@ impl MacroRegistry {
         if let Some(hash) = self.store.resolve_name(name)
             && let Some(wasm) = self.store.retrieve(hash)
         {
-            self.macros.insert(name.to_string(), wasm);
+            self.macros.insert(name.to_string(), (wasm, None));
             return true;
         }
         false
