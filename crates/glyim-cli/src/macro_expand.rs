@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Expand macros found in the source text.
-// Macro expansions are recorded in glyim_diag::MACRO_EXPANSION_TABLE
-// for diagnostic backtrace via miette::Diagnostic::related().
-
+/// Macro expansions are recorded in glyim_diag::MACRO_EXPANSION_TABLE
+/// for diagnostic backtrace via miette::Diagnostic::related().
 pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<String, String> {
     let store = LocalContentStore::new(cas_dir).map_err(|e| format!("create store: {e}"))?;
     let store: Arc<dyn ContentStore> = Arc::new(store);

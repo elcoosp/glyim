@@ -161,7 +161,7 @@ impl TypeChecker {
                 // If any argument is Error, suppress cascading errors
                 if args
                     .iter()
-                    .any(|a| self.check_expr(a).map_or(false, |t| t == HirType::Error))
+                    .any(|a| self.check_expr(a).is_some_and(|t| t == HirType::Error))
                 {
                     return HirType::Error;
                 }
@@ -201,7 +201,7 @@ impl TypeChecker {
             HirExpr::TupleLit { elements, .. } => {
                 let elem_types: Vec<HirType> =
                     elements.iter().filter_map(|e| self.check_expr(e)).collect();
-                if elem_types.iter().any(|t| *t == HirType::Error) {
+                if elem_types.contains(&HirType::Error) {
                     return HirType::Error;
                 }
                 HirType::Tuple(elem_types)
@@ -285,7 +285,7 @@ impl TypeChecker {
                     // (method_resolved removed)
                     if let Some(methods) = self.impl_methods.get(&type_name) {
                         // Try both the base name and the mangled name with type suffix
-                        if let Some(fn_def) = methods.iter().filter(|f| f.name == base_sym).next() {
+                        if let Some(fn_def) = methods.iter().find(|f| f.name == base_sym) {
                             let mut sub = std::collections::HashMap::new();
                             // Infer from receiver type args
                             if let HirType::Generic(_, type_args) = &receiver_ty {
@@ -507,7 +507,7 @@ impl TypeChecker {
             });
         }
         let mut arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
-        if arg_types.iter().any(|t| *t == HirType::Error) {
+        if arg_types.contains(&HirType::Error) {
             return HirType::Error;
         }
         if let Some(info) = self.enums.get(&enum_name) {
@@ -564,8 +564,8 @@ impl TypeChecker {
                 }
             }
         }
-        if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
-            if fn_def.type_params.is_empty() {
+        if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee)
+            && fn_def.type_params.is_empty() {
                 for (i, arg_ty) in arg_types.iter().enumerate() {
                     if let Some((_, param_ty)) = fn_def.params.get(i)
                         && param_ty != arg_ty
@@ -579,7 +579,6 @@ impl TypeChecker {
                     }
                 }
             }
-        }
         let fn_def = self.fns.iter().find(|f| f.name == callee);
         if let Some(fn_def) = fn_def {
             if !fn_def.type_params.is_empty() {

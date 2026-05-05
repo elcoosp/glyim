@@ -10,20 +10,6 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
 
-        tracing::debug!(
-            "[specialize_fn] ENTER fn={} type_params=[{}] concrete={:?}",
-            self.interner.resolve(f.name),
-            f.type_params
-                .iter()
-                .map(|s| self.interner.resolve(*s))
-                .collect::<Vec<_>>()
-                .join(", "),
-            concrete
-                .iter()
-                .map(|t| format!("{:?}", t))
-                .collect::<Vec<_>>()
-        );
-
         // Use explicit type parameters of the function if present
         for (i, tp) in f.type_params.iter().enumerate() {
             if let Some(ct) = concrete.get(i) {
@@ -78,36 +64,10 @@ impl<'a> MonoContext<'a> {
         if let Some(rt) = &mut mono.ret {
             *rt = crate::types::substitute_type(rt, &sub);
         }
-        tracing::debug!(
-            "[specialize_fn] specialized body for {}: {:#?}",
-            self.interner.resolve(f.name),
-            mono.body
-        );
         mono.body = self.substitute_expr_types(&mono.body, &sub);
 
-        // Build an extended substitution map that includes concrete args
-        // derived from the return type (required for Option/Result enums).
-        let mut extended_sub = sub.clone();
-        if let Some(ref ret) = mono.ret {
-            fn extract_enum_args(ty: &HirType) -> Option<(Symbol, Vec<HirType>)> {
-                match ty {
-                    HirType::Option(inner) => {
-                        // Determine the symbol used for the Option enum (it's interned as "Option")
-                        Some((Symbol::from_raw(0), vec![inner.as_ref().clone()])) // placeholder; we need the real symbol, we'll get it inside the method
-                    }
-                    _ => None,
-                }
-            }
-            if let Some((base, args)) = extract_enum_args(ret) {
-                let option_sym = self.interner.intern("Option");
-                extended_sub.insert(base, HirType::Generic(option_sym, args));
-            }
-        }
-
-        // Concretize enum variant names using the extended substitution.
-        eprintln!("[specialize_fn] BEFORE concretize call, sub={:?}", extended_sub);
-        self.concretize_enum_variant_names(&mut mono.body, &extended_sub);
-        eprintln!("[specialize_fn] AFTER concretize call");
+        // Concretize enum variant names using the type substitution.
+        self.concretize_enum_variant_names(&mut mono.body, &sub);
 
         // Brute-force pass: walk the body and replace any As target type
         // that matches a type parameter with its concrete type.
@@ -129,28 +89,32 @@ impl<'a> MonoContext<'a> {
         expr: &mut HirExpr,
         sub: &HashMap<Symbol, HirType>,
     ) {
-        eprintln!("[concretize_enum_variant_names] ENTER");
         match expr {
             HirExpr::EnumVariant { enum_name, args, .. } => {
+                // Debug: show what we are processing
                 eprintln!("[concretize] processing EnumVariant {}", self.interner.resolve(*enum_name));
+                if self.interner.resolve(*enum_name) == "Option" {
+                    eprintln!("[concretize DUMP] all enums in HIR:");
+                    for item in &self.hir.items {
+                        if let crate::HirItem::Enum(e) = item {
+                            eprintln!("  enum {} (params={:?})", self.interner.resolve(e.name),
+                                      e.type_params.iter().map(|s| self.interner.resolve(*s)).collect::<Vec<_>>());
+                        }
+                    }
+                }
                 if let Some(edef) = self.find_enum(*enum_name) {
-                    eprintln!("[concretize] found enum def, type_params={:?}",
-                              edef.type_params.iter().map(|&s| self.interner.resolve(s)).collect::<Vec<_>>());
-                    eprintln!("[concretize] sub keys={:?}",
-                              sub.keys().map(|&k| self.interner.resolve(k)).collect::<Vec<_>>());
                     let concrete_args: Vec<HirType> = edef
                         .type_params
                         .iter()
-                        .map(|tp| {
-                            let v = sub.get(tp).cloned().unwrap_or(HirType::Named(*tp));
-                            eprintln!("[concretize] tp={} resolved={:?}", self.interner.resolve(*tp), v);
-                            v
-                        })
+                        .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
                         .collect();
+                    eprintln!("[concretize] concrete_args={:?}", concrete_args);
                     if !concrete_args.is_empty()
                         && concrete_args.iter().all(|a| !self.has_unresolved_type_param(a))
                     {
-                        *enum_name = self.mangle_name(*enum_name, &concrete_args);
+                        let mangled = self.mangle_name(*enum_name, &concrete_args);
+                        eprintln!("[concretize] replacing {} with {}", self.interner.resolve(*enum_name), self.interner.resolve(mangled));
+                        *enum_name = mangled;
                     }
                 }
                 for a in args {
@@ -232,7 +196,6 @@ impl<'a> MonoContext<'a> {
     }
 
     fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
-        // (unchanged)
         match expr {
             HirExpr::As {
                 id,
@@ -241,12 +204,6 @@ impl<'a> MonoContext<'a> {
                 span,
             } => {
                 let new_target = crate::types::substitute_type(&target_type, sub);
-                tracing::debug!(
-                    "[force_sub] As id={:?} old_target={:?} new_target={:?}",
-                    id,
-                    target_type,
-                    new_target
-                );
                 HirExpr::As {
                     id,
                     expr: Box::new(Self::force_substitute_as_targets(*inner, sub)),

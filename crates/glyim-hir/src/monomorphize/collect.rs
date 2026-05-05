@@ -916,10 +916,7 @@ impl<'a> MonoContext<'a> {
             | HirType::Error
             | HirType::Opaque(_)
             | HirType::RawPtr(_)
-            | HirType::Func(_, _) => match ty {
-                HirType::RawPtr(inner) => self.enqueue_type_if_generic(inner),
-                _ => {}
-            },
+            | HirType::Func(_, _) => if let HirType::RawPtr(inner) = ty { self.enqueue_type_if_generic(inner) },
             _ => {}
         }
     }
@@ -1093,8 +1090,8 @@ impl<'a> MonoContext<'a> {
             }
         }
         // Reprocess newly enqueued types until queue is empty
-        while !self.type_work_queue.is_empty() {
-            let (name, args) = self.type_work_queue.pop().unwrap();
+        while let Some((name, args)) = self.type_work_queue.pop() {
+            
             let key = (name, args.clone());
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;
