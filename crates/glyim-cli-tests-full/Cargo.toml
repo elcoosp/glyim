@@ -13,5 +13,12 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-parse = { path = "../glyim-parse" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
+glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-diag = { path = "../glyim-diag" }
+glyim-typeck = { path = "../glyim-typeck" }
 tempfile = "3"
 wat = "1"
+dirs-next = "2"
+insta = { version = "1", features = ["yaml"] }
+proptest = "1"
+rstest = "0.26"
