@@ -168,6 +168,11 @@ impl TypeChecker {
                 bindings,
                 ..
             } => {
+                eprintln!("DEBUG EnumVariant binding: scrutinee_ty={:?}, variant={}, bindings={:?}",
+                    scrutinee_ty,
+                    self.interner.resolve(*variant_name),
+                    bindings.iter().map(|(sym, _)| self.interner.resolve(*sym)).collect::<Vec<_>>());
+
                 // Collect binding types first to avoid borrow conflicts
                 let binding_tys: Vec<(HirPattern, HirType)> = match scrutinee_ty {
                     HirType::Named(enum_name) | HirType::Generic(enum_name, _) => {
@@ -192,6 +197,7 @@ impl TypeChecker {
                     _ => vec![],
                 };
                 for (binding_pat, field_ty) in binding_tys {
+                    eprintln!("DEBUG EnumVariant: binding {:?} to {:?}", binding_pat, field_ty);
                     self.bind_match_pattern(&binding_pat, &field_ty);
                 }
             }
