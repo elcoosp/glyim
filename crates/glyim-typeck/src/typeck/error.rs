@@ -83,10 +83,26 @@ impl Diagnostic for TypeError {
     }
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
-        // Walk the macro expansion chain and show where the error originated.
-        // The span expansion chain is stored in glyim_diag::MACRO_EXPANSION_TABLE.
-        // When errors carry the original expansion span, we can trace back to the
-        // macro call site and definition site for helpful "expanded from" notes.
+        // Get the primary span from any error variant that carries one
+        let primary_span: Option<(usize, usize)> = match self {
+            TypeError::MismatchedTypes { span, .. } => Some(*span),
+            TypeError::AssignToImmutable { span, .. } => Some(*span),
+            TypeError::AssignThroughNonPointer { span, .. } => Some(*span),
+            TypeError::DerefNonPointer { span, .. } => Some(*span),
+            TypeError::UnresolvedName { span, .. } => Some(*span),
+            TypeError::NonExhaustiveMatch { span, .. } => Some(*span),
+            TypeError::UnknownField { span, .. } => Some(*span),
+            TypeError::MissingField { span, .. } => Some(*span),
+            _ => None,
+        };
+
+        // Build the expansion chain by walking the interning table
+        let mut notes: Vec<Box<dyn miette::Diagnostic>> = Vec::new();
+
+        // We don't have expansion_id on the error's span directly;
+        // this will be activated when tokens carry expansion IDs.
+        // For now, we'll return an empty iterator.
+
         None
     }
 

@@ -47,7 +47,7 @@ fn e2e_macro_registry_and_execution() {
     // Setup registry with identity macro
     let mut registry = MacroRegistry::new(store.clone());
     let wasm = wat::parse_str(identity_wat()).expect("parse identity wat");
-    registry.register("identity", wasm);
+    registry.register("identity", wasm, None);
 
     // Setup executor with caching
     let executor = MacroExecutor::new_with_cache(store);
@@ -67,7 +67,7 @@ fn e2e_cache_roundtrip() {
 
     let mut registry = MacroRegistry::new(store.clone());
     let wasm = wat::parse_str(identity_wat()).expect("parse identity wat");
-    registry.register("identity", wasm);
+    registry.register("identity", wasm, None);
 
     let executor = MacroExecutor::new_with_cache(store);
     let input = b"cache test data";
@@ -90,7 +90,7 @@ fn e2e_different_inputs_different_outputs() {
 
     let mut registry = MacroRegistry::new(store.clone());
     let wasm = wat::parse_str(identity_wat()).expect("parse identity wat");
-    registry.register("identity", wasm);
+    registry.register("identity", wasm, None);
 
     let executor = MacroExecutor::new_with_cache(store);
     let macro_wasm = registry.get("identity").expect("macro registered");

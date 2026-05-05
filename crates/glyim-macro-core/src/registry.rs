@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 /// A registry that maps macro names to their Wasm bytecode.
 pub struct MacroRegistry {
-    macros: HashMap<String, Vec<u8>>,
+    macros: HashMap<String, (Vec<u8>, Option<(usize, usize)>)>,
     store: Arc<dyn ContentStore>,
 }
 
@@ -17,14 +17,19 @@ impl MacroRegistry {
         }
     }
 
-    /// Register a macro with its Wasm blob.
-    pub fn register(&mut self, name: &str, wasm: Vec<u8>) {
-        self.macros.insert(name.to_string(), wasm);
+    /// Register a macro with its Wasm blob and optional definition span.
+    pub fn register(&mut self, name: &str, wasm: Vec<u8>, def_span: Option<(usize, usize)>) {
+        self.macros.insert(name.to_string(), (wasm, def_span));
     }
 
     /// Look up a macro's Wasm blob.
     pub fn get(&self, name: &str) -> Option<&[u8]> {
-        self.macros.get(name).map(|v| v.as_slice())
+        self.macros.get(name).map(|(v, _)| v.as_slice())
+    }
+
+    /// Look up a macro's definition span.
+    pub fn get_def_span(&self, name: &str) -> Option<(usize, usize)> {
+        self.macros.get(name).and_then(|(_, span)| *span)
     }
 
     /// Load a macro from the content store by its name.
@@ -52,7 +57,7 @@ mod tests {
     fn register_and_get() {
         let mut reg = MacroRegistry::new(Arc::new(InMemoryStore::new()));
         let wasm = vec![0, 1, 2, 3];
-        reg.register("test_macro", wasm.clone());
+        reg.register("test_macro", wasm.clone(), None);
         assert_eq!(reg.get("test_macro"), Some(wasm.as_slice()));
     }
 

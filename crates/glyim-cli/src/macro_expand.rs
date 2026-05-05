@@ -84,7 +84,7 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
 
             // Record expansion metadata *before* modifying result
             let call_site = (at_pos, call_end);
-            let def_site = (0, 0); // TODO: get actual macro definition location
+            let def_site = registry.get_def_span(macro_name).unwrap_or((0, 0));
             let rec_macro_name = macro_name.to_string();
             let expanded_start = at_pos; // new position after before
             let expanded_end = expanded_start + expanded_str.len();
@@ -151,7 +151,7 @@ fn load_builtin_identity(registry: &mut MacroRegistry) -> Result<(), String> {
 "#;
     let wasm =
         wat::parse_str(identity_wat).map_err(|e| format!("parse built-in identity wat: {e}"))?;
-    registry.register("identity", wasm);
+    registry.register("identity", wasm, None);
     Ok(())
 }
 
@@ -186,7 +186,7 @@ fn load_package_macros(pkg_dir: &Path, registry: &mut MacroRegistry) {
             Err(_) => continue,
         };
         if let Some(wasm) = store.retrieve(hash) {
-            registry.register(&pkg.name, wasm);
+            registry.register(&pkg.name, wasm, None);
         }
     }
 }
@@ -238,7 +238,7 @@ mod tests {
         let store: Arc<dyn ContentStore> = Arc::new(store);
         let mut registry = MacroRegistry::new(store.clone());
         let wasm = wat::parse_str(identity_wat()).expect("parse identity wat");
-        registry.register("my_custom", wasm);
+        registry.register("my_custom", wasm, None);
         let executor = MacroExecutor::new_with_cache(store.clone());
 
         let source = r#"@my_custom(hello world)"#;
