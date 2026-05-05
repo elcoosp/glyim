@@ -31,11 +31,12 @@ impl Executor {
         let stderr = child.stderr.take().unwrap();
 
         let (stdout_tx, mut stdout_rx) = mpsc::unbounded_channel::<String>();
+        let stdout_tx_clone = stdout_tx.clone();
 
         let stdout_task = tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                if stdout_tx.send(line).is_err() {
+                if stdout_tx_clone.send(line).is_err() {
                     break;
                 }
             }

@@ -305,3 +305,258 @@ If you want to build the absolute state-of-the-art LLVM file watcher, combine th
    * **152ms:** `Staging` becomes `Active`. Old `Active` is marked for GC.
 
 By leveraging Inkwell's access to the raw OrcV2 APIs (Lazy Reexports, JITDylibs, Custom Layers), you can build a JIT that doesn't just "re-run" fast, but *mutates the running program's machine code in-flight*.
+You already JIT, so your AOT path should basically be: “make release builds feel as incremental and cache‑friendly as CI or IDE builds.”
+
+Below are concrete, innovative feature ideas for the AOT side, specifically assuming LLVM/Inkwell.
+
+---
+
+## 0. Mental model for an AOT‑first incremental pipeline
+
+Think of the AOT pipeline as a graph with three big layers:
+
+- Your frontend IR (AST/typed IR).
+- LLVM IR modules (and bitcode).
+- Machine code + linking (LTO/ThinLTO).
+
+State‑of‑the‑art tooling already does:
+
+- ThinLTO + per‑object caching (summaries + backends; incremental via cache directory)【turn3fetch0】.
+- Rust‑style per‑query dependency graphs + “red/green” reuse of cached work【turn8find0】.
+- Xcode/Swift LLVM CAS with sub‑function granularity keys and remote gRPC caches【turn6fetch0】.
+
+Your opportunity: push this further *inside* your own frontend and IR, and make LLVM do less by doing smarter work upstream.
+
+---
+
+## 1. Summary‑Driven ThinLTO for your language (not just C/C++)
+
+LLVM’s ThinLTO is explicitly designed to be scalable and incremental by using per‑module summaries and a combined index; linkers can cache backend results to speed up incremental builds【turn1fetch0】【turn3fetch0】.
+
+Innovative twist for your language:
+
+- **Your own “language summary” layer**:
+  - Emit, per module, a **typed summary** (exported names, their signatures, inlining heuristics, purity flags, ABI shape).
+  - During “thin link”, merge these summaries first, before invoking LLVM’s ThinLTO.
+- **Guided importing**:
+  - Use your summary to decide which functions to aggressively import across modules *before* LLVM’s ThinLTO backend.
+  - Do this based on your high‑level info (e.g., “this function is called from N hot loops and is pure”).
+
+Why this is innovative:
+
+- You’re treating your language’s IR as first‑class citizens in the LTO planning phase, not just dumping LLVM bitcode.
+- You can avoid re‑running large parts of LLVM’s backend by keeping stable summaries across builds and only reimporting where your summaries changed.
+- It pairs beautifully with LLVM’s ThinLTO caching: unchanged summaries → same backend cache keys → cache hits【turn3fetch0】.
+
+---
+
+## 2. Sub‑function granular CAS behind Inkwell (like Xcode 26, but for your language)
+
+Xcode 26 introduced LLVM CAS‑based compilation caching with cache keys at **sub‑function granularity** and support for remote gRPC caches【turn6fetch0】.
+
+You can do something similar with Inkwell:
+
+- **Custom caching layer on top of Inkwell’s Module**:
+  - After your frontend emits an LLVM `Module`, before heavy optimization, you hash:
+    - The LLVM IR string or bitcode.
+    - Your own “summary metadata” (type info, inlining hints).
+    - Target triple + feature flags + optimization level.
+  - Use that as a key into a **local CAS** (flat files, sqlite, or custom object store).
+  - On hit, just load the pre‑optimized module or even the pre‑codegened object directly into the JIT/AOT pipeline.
+- **Remote CAS for team/CI**:
+  - Expose a simple gRPC/HTTP service that stores/retrieves entries keyed by that hash.
+  - In CI or on a team, the first machine to build a function combo populates the cache; everyone else gets cache hits for the heavy backend work.
+
+Why this is innovative:
+
+- You’re reusing LLVM’s strength, but at a granularity tuned to your language (e.g., per crate, per module, per generic instantiation).
+- You can make your AOT releases share cache with your JIT runs (if the optimization level and target match), so “slow release builds” on your dev machine get faster over time.
+
+---
+
+## 3. Frontend‑level dependency DAG + red/green reuse (Rust‑style, but portable)
+
+Rust’s incremental engine builds a dependency graph of *queries* and uses a red/green marking algorithm to decide which cached results can be reused【turn8find0】.
+
+You can adapt this directly for your AOT path:
+
+- Define a set of **queries**:
+  - `parse(file)`
+  - `type_check(module)`
+  - `monomorphize(generic_instance_id)`
+  - `lower_to_llvm(module)`
+  - `optimize_llvm(module)`
+  - `codegen(module)`
+- Between builds:
+  - Serialize the **dependency graph** and fingerprints of each query’s inputs (e.g., source hash + flags + upstream summaries).
+  - On the next build, compute fingerprints of the new inputs; try to mark nodes “green” if their fingerprint is unchanged and dependencies are green【turn8find0】.
+- For LLVM‑heavy work:
+  - Mark `lower_to_llvm` and `optimize_llvm` as expensive; make sure their inputs include:
+    - The typed IR of the module.
+    - Imported summaries from other modules.
+    - The “ThinLTO plan” (which functions to import).
+
+Why this is innovative:
+
+- You avoid re‑emitting LLVM IR and rerunning LLVM passes for unchanged parts of your code, even when they sit in big modules.
+- You can even share this dependency graph across JIT and AOT (JIT can use it for hot reload; AOT can use it for release rebuilds).
+
+---
+
+## 4. “Hot module” specialization: AOT cache tuned for generics
+
+Most languages with generics suffer from “instantiation churn” in AOT builds. Innovative idea: treat **generic instantiations as separate cache nodes** in your dependency graph.
+
+How:
+
+- For each generic function/type, assign a **stable instantiation key** based on:
+  - The generic definition’s fingerprint.
+  - The fingerprints of the type arguments (or their summaries).
+- Keep a global cache:
+  - `mono_ir(gen_def_id, args_hash) -> LLVM Module/Bitcode`.
+- During AOT builds:
+  - When a generic definition changes, invalidate only the instantiations that actually used it; others stay cached.
+  - When you add a new instantiation, if the definition and type args are unchanged, you can sometimes reuse the existing LLVM IR.
+
+Why this is innovative:
+
+- You’re doing “per instantiation” caching at the frontend IR level, not just per file.
+- This pairs extremely well with a CAS (from idea 2): the CAS key for an instantiation is just the hash of definition + args + target.
+
+---
+
+## 5. ThinLTO‑aware build graph with “function import sets”
+
+ThinLTO works by building a combined summary index and then parallelizing backends, using caching to make incremental builds fast【turn1fetch0】【turn3fetch0】.
+
+You can be smarter about *what* changes:
+
+- Maintain a persistent **“ThinLTO plan”** across builds:
+  - Which functions are imported into which modules.
+  - Which modules are in the same “linked cluster” for inlining decisions.
+- When only a non‑exported function changes:
+  - If its callers are all in the same module and the import set didn’t change, you can often skip re‑linking large parts of the product; just re‑run the backend for that module.
+
+Implementation with Inkwell:
+
+- After the “thin link” step (summary index built), serialize:
+  - The import decisions.
+  - The module partitioning for backend threads.
+- On incremental builds:
+  - Reuse previous import decisions unless the summaries changed.
+  - Only re‑run backends for modules where:
+    - The bitcode changed, or
+    - New functions were imported into them.
+
+Why this is innovative:
+
+- You’re turning “link time” into a cacheable, incremental step instead of a monolithic barrier.
+- For large apps, you can drastically reduce the amount of re‑linking and re‑codegen even when low‑level functions change.
+
+---
+
+## 6. Target‑triples as first‑class cache dimensions (multi‑target AOT)
+
+AOT usually means “build per target”. You can innovate by making **cross‑target builds** almost free:
+
+- Structure your cache keys as:
+  - `(frontend_ir_hash, target_triple, features, opt_level)`.
+- When a user builds for `x86_64` then later for `aarch64`:
+  - Reuse all frontend and summary work; only re‑run LLVM codegen for the new triple.
+- For embedded/OS‑dev:
+  - Allow the same IR to be cached and codegened for many targets (bare metal, different OS ABIs, etc.).
+
+Why this is innovative:
+
+- Most compilers treat cross‑target builds as separate universes; you treat them as “different projections of the same IR”.
+- This is especially powerful if your language is used for portable libraries or game engines.
+
+---
+
+## 7. “Safe partial LTO” with risk profiles per module
+
+In real projects, people often disable LTO because it makes builds too slow. Innovative idea:
+
+- Let the user annotate **“LTO risk profile”** per module:
+  - `hot` – fully participate in LTO, inlining, etc.
+  - `cold` – only import; do not export internal details.
+  - `sealed` – never participate in cross‑module inlining.
+- Use this to:
+  - Run aggressive LTO only over the “hot” modules; keep “cold”/“sealed” modules as pre‑compiled bitcode you can reuse across many builds.
+
+This isn’t in mainstream tools; it’s a novel way to make LTO feel incremental by **shrinking the LTO universe**.
+
+---
+
+## 8. Debug‑info / symbol layering for faster debug builds
+
+Often the slowness in AOT “debug builds” is debug info generation. Innovative idea:
+
+- Separate **“symbol layers”**:
+  - Core types and publicly exported symbols (always full debug info).
+  - Private implementation details (less debug info; compress or strip in CI).
+- Cache these layers independently:
+  - When you change a private function, you only invalidate its symbol layer; the public interface stays cached.
+
+Why this is innovative:
+
+- You align caching with what developers actually need in the debugger most of the time, reducing rebuilds without losing usability.
+
+---
+
+## 9. “Branch‑aware” release caches (Git‑aware but content‑defined)
+
+Even though AOT is for “release”, developers often build releases on multiple branches. You can avoid redundant work:
+
+- Use a **content‑defined cache** keyed by:
+  - Your frontend IR.
+  - Dependency summaries.
+  - Target + options (see idea 6).
+- Don’t key it on branch name; key it on content.
+- If two branches share a large library, they share the cached backend outputs.
+
+This is conceptually similar to LLVM CAS / Xcode 26’s approach【turn6fetch0】, but you can push it further by:
+
+- Exposing a `--cache-branch-agnostic` flag to explicitly say “reuse release artifacts across branches when IR matches”.
+
+---
+
+## 10. “Speculative AOT precompilation” from dev/JIT to release
+
+Since you default to JIT, you can do something very innovative:
+
+- While the user is running JIT builds, the compiler can:
+  - Collect **instantiation profiles** (which generics are hot).
+  - Pre‑compute **AOT‑friendly summaries** for hot modules in the background.
+- When the user runs `release`:
+  - Feed these profiles/summaries into the AOT pipeline:
+    - Prioritize those instantiations for caching and LTO.
+    - Prepopulate the ThinLTO backend cache for the hot modules.
+
+Why this is innovative:
+
+- The JIT dev loop literally warms up the AOT release cache.
+- This is unique to tools that have both JIT and AOT.
+
+---
+
+## How this maps concretely to your stack
+
+- **Inkwell side:**
+  - Build an `AotCache` abstraction that:
+    - Accepts `(Module, Summaries, Target, Flags)` and returns a cached object or optimized bitcode.
+    - Internally uses a CAS and optional remote gRPC service (idea 2).
+  - Integrate with ThinLTO: on the AOT path, run `clang -flto=thin` style flow but with your own summaries and cached import sets (idea 5).
+
+- **Your frontend side:**
+  - Implement a query engine (idea 3) to track dependencies and fingerprints of:
+    - Source files
+    - Module boundaries
+    - Generic instantiations
+  - Expose “instantiation keys” to the cache so you can deduplicate work across modules and targets (idea 4, 6).
+
+- **Dev UX:**
+  - Show a small “AOT cache hit/miss” indicator during releases.
+  - Provide a `--clean-aot-cache` and `--warm-aot-cache-from-jit` flag to tie JIT dev sessions to release builds.
+
+If you tell me what your current AOT pipeline looks like (how you invoke LLVM, whether you already use ThinLTO, how you package the final binary), I can sketch a minimal implementation plan for 2–3 of these features that will give you the biggest “incremental AOT” wins.

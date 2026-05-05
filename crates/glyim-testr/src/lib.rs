@@ -5,3 +5,5 @@ pub mod harness;
 pub mod artifact;
 pub mod compiler;
 pub mod executor;
+pub mod display;
+pub mod runner;
