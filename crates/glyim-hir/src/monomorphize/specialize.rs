@@ -91,18 +91,7 @@ impl<'a> MonoContext<'a> {
     ) {
         match expr {
             HirExpr::EnumVariant { enum_name, args, .. } => {
-                // Debug: show what we are processing
-                eprintln!("[concretize] processing EnumVariant {}", self.interner.resolve(*enum_name));
-                if self.interner.resolve(*enum_name) == "Option" {
-                    eprintln!("[concretize DUMP] all enums in HIR:");
-                    for item in &self.hir.items {
-                        if let crate::HirItem::Enum(e) = item {
-                            eprintln!("  enum {} (params={:?})", self.interner.resolve(e.name),
-                                      e.type_params.iter().map(|s| self.interner.resolve(*s)).collect::<Vec<_>>());
-                        }
-                    }
-                }
-                eprintln!("[concretize] find_enum({}) = {}", self.interner.resolve(*enum_name), self.find_enum(*enum_name).is_some());
+                // If the enum has a definition, use it to compute concrete type args.
                 if let Some(edef) = self.find_enum(*enum_name) {
                     let concrete_args: Vec<HirType> = edef
                         .type_params
@@ -123,23 +112,26 @@ impl<'a> MonoContext<'a> {
                         *enum_name = self.mangle_name(*enum_name, &concrete_args);
                     }
                 } else {
-                    let resolved_name = self.interner.resolve(*enum_name);
-                    let concrete_args: Option<Vec<HirType>> = if resolved_name == "Option" && !sub.is_empty() {
-                        let args = vec![sub.values().next().unwrap().clone()];
-                        eprintln!("[concretize ELSE] Option args = {:?}", args);
-                        Some(args)
-                    } else if resolved_name == "Result" && sub.len() >= 2 {
-                        let mut iter = sub.values();
-                        let args = vec![iter.next().unwrap().clone(), iter.next().unwrap().clone()];
-                        eprintln!("[concretize ELSE] Result args = {:?}", args);
-                        Some(args)
-                    } else {
-                        None
-                    };
-                    if let Some(args) = concrete_args {
-                        let old = self.interner.resolve(*enum_name).to_string();
-                        *enum_name = self.mangle_name(*enum_name, &args);
-                        eprintln!("[concretize ELSE] replaced {} with {}", old, self.interner.resolve(*enum_name));
+                    // The enum definition wasn't found (e.g. built-in prelude enums).
+                    // Attempt to specialize it using the base definition from the HIR.
+                    let name = self.interner.resolve(*enum_name).to_string();
+                    if name == "Option" || name == "Result" {
+                        // Find the base enum in the original HIR.
+                        if let Some(base_def) = self.find_enum(*enum_name) {
+                            let args: Vec<HirType> = if name == "Option" && !sub.is_empty() {
+                                vec![sub.values().next().unwrap().clone()]
+                            } else if name == "Result" && sub.len() >= 2 {
+                                let mut iter = sub.values();
+                                vec![iter.next().unwrap().clone(), iter.next().unwrap().clone()]
+                            } else {
+                                vec![]
+                            };
+                            if !args.is_empty() {
+                                let specialized = self.specialize_enum(&base_def, &args);
+                                self.enum_specs.insert((*enum_name, args.clone()), specialized);
+                                *enum_name = self.mangle_name(*enum_name, &args);
+                            }
+                        }
                     }
                 }
                 for a in args {
