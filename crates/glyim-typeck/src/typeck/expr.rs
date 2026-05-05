@@ -8,6 +8,7 @@ use glyim_hir::node::HirExpr;
 use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::Symbol;
 use std::collections::HashMap;
+
 impl TypeChecker {
     #[tracing::instrument(skip_all)]
     pub(crate) fn check_expr(&mut self, expr: &HirExpr) -> Option<HirType> {
@@ -135,7 +136,9 @@ impl TypeChecker {
                 fields,
                 ..
             } => self.check_struct_lit(*struct_name, fields, expr.get_span()),
-            HirExpr::FieldAccess { object, field, .. } => self.check_field_access(object, *field, expr.get_span()),
+            HirExpr::FieldAccess { object, field, .. } => {
+                self.check_field_access(object, *field, expr.get_span())
+            }
             HirExpr::EnumVariant {
                 enum_name,
                 variant_name,
@@ -155,9 +158,11 @@ impl TypeChecker {
             HirExpr::Call {
                 id, callee, args, ..
             } => {
-
                 // If any argument is Error, suppress cascading errors
-                if args.iter().any(|a| self.check_expr(a).map_or(false, |t| t == HirType::Error)) {
+                if args
+                    .iter()
+                    .any(|a| self.check_expr(a).map_or(false, |t| t == HirType::Error))
+                {
                     return HirType::Error;
                 }
                 // If call_type_args already contains this id (from a MethodCall
@@ -177,13 +182,13 @@ impl TypeChecker {
                             }
                         }
                         let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
-
                         glyim_hir::types::substitute_type(&ret, &sub)
                     } else {
                         HirType::Int
                     }
                 } else {
-                    let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args, expr.get_span());
+                    let (ret_ty, inferred_args) =
+                        self.check_call_with_type_args(*callee, args, expr.get_span());
                     if let Some(type_args) = inferred_args {
                         self.call_type_args.insert(*id, type_args);
                     }
@@ -196,17 +201,26 @@ impl TypeChecker {
             HirExpr::TupleLit { elements, .. } => {
                 let elem_types: Vec<HirType> =
                     elements.iter().filter_map(|e| self.check_expr(e)).collect();
+                if elem_types.iter().any(|t| *t == HirType::Error) {
+                    return HirType::Error;
+                }
                 HirType::Tuple(elem_types)
             }
             HirExpr::ForIn { iter, body, .. } => {
-                self.check_expr(iter);
+                let iter_t = self.check_expr(iter).unwrap_or(HirType::Error);
+                if iter_t == HirType::Error {
+                    return HirType::Error;
+                }
                 self.check_expr(body);
                 HirType::Unit
             }
             HirExpr::While {
                 condition, body, ..
             } => {
-                self.check_expr(condition);
+                let cond_t = self.check_expr(condition).unwrap_or(HirType::Error);
+                if cond_t == HirType::Error {
+                    return HirType::Error;
+                }
                 self.check_expr(body);
                 HirType::Unit
             }
@@ -215,6 +229,9 @@ impl TypeChecker {
             HirExpr::Return { .. } => HirType::Never,
             HirExpr::Deref { expr, id, .. } => {
                 let inner_ty = self.check_expr(expr).unwrap_or(HirType::Never);
+                if inner_ty == HirType::Error {
+                    return HirType::Error;
+                }
                 match inner_ty {
                     HirType::RawPtr(inner) => *inner,
                     _ => {
@@ -234,16 +251,10 @@ impl TypeChecker {
                 args,
                 ..
             } => {
-
-                // If receiver type is Error, suppress further checks
                 let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
                 if receiver_ty == HirType::Error {
                     return HirType::Error;
                 }
-                let arg_types: Vec<HirType> =
-                    args.iter().filter_map(|a| self.check_expr(a)).collect();
-                let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
-                if receiver_ty == HirType::Error { return HirType::Error; }
                 let arg_types: Vec<HirType> =
                     args.iter().filter_map(|a| self.check_expr(a)).collect();
                 // look up method in impl methods by mangled name computed from receiver type
@@ -272,16 +283,6 @@ impl TypeChecker {
                     let _mangled_sym = self.interner.intern(&mangled);
 
                     // (method_resolved removed)
-                    eprintln!("[typeck MethodCall] receiver_ty={:?}", receiver_ty);
-                    eprintln!("[typeck MethodCall] mangled name: {}", mangled);
-                    eprintln!(
-                        "[typeck MethodCall] known impl_methods for {:?}: {:?}",
-                        type_name,
-                        self.impl_methods.get(&type_name).map(|ms| ms
-                            .iter()
-                            .map(|f| self.interner.resolve(f.name))
-                            .collect::<Vec<_>>())
-                    );
                     if let Some(methods) = self.impl_methods.get(&type_name) {
                         // Try both the base name and the mangled name with type suffix
                         if let Some(fn_def) = methods.iter().filter(|f| f.name == base_sym).next() {
@@ -323,7 +324,12 @@ impl TypeChecker {
             }
         }
     }
-    fn check_struct_lit(&mut self, struct_name: Symbol, fields: &[(Symbol, HirExpr)], span: Span) -> HirType {
+    fn check_struct_lit(
+        &mut self,
+        struct_name: Symbol,
+        fields: &[(Symbol, HirExpr)],
+        span: Span,
+    ) -> HirType {
         let field_names: Vec<Symbol> = fields.iter().map(|(sym, _)| *sym).collect();
         let field_count = fields.len();
         let field_value_types: Vec<HirType> = fields
@@ -336,10 +342,7 @@ impl TypeChecker {
                 Some(t)
             })
             .collect();
-        if field_value_types
-            .iter()
-            .any(|t| t == &HirType::Error)
-        {
+        if field_value_types.iter().any(|t| t == &HirType::Error) {
             return HirType::Error;
         }
         if let Some(info) = self.structs.get(&struct_name) {
@@ -408,6 +411,9 @@ impl TypeChecker {
     }
     fn check_field_access(&mut self, object: &HirExpr, field: Symbol, span: Span) -> HirType {
         let obj_type = self.check_expr(object).unwrap_or(HirType::Never);
+        if obj_type == HirType::Error {
+            return HirType::Error;
+        }
 
         match &obj_type {
             HirType::Tuple(elems) => self.check_tuple_field_access(field, elems, span),
@@ -439,13 +445,18 @@ impl TypeChecker {
                 self.errors.push(TypeError::UnknownField {
                     struct_name: self.dummy_symbol(),
                     field,
-                        span: (0, 0),
+                    span: (0, 0),
                 });
                 HirType::Never
             }
         }
     }
-    fn check_tuple_field_access(&mut self, field: Symbol, elems: &[HirType], _span: Span) -> HirType {
+    fn check_tuple_field_access(
+        &mut self,
+        field: Symbol,
+        elems: &[HirType],
+        _span: Span,
+    ) -> HirType {
         let field_name = self.interner.resolve(field);
         if let Some(index_str) = field_name.strip_prefix('_')
             && let Ok(idx) = index_str.parse::<usize>()
@@ -460,13 +471,18 @@ impl TypeChecker {
         });
         HirType::Int
     }
-    fn check_struct_field_access(&mut self, struct_name: Symbol, field: Symbol, _span: Span) -> HirType {
+    fn check_struct_field_access(
+        &mut self,
+        struct_name: Symbol,
+        field: Symbol,
+        _span: Span,
+    ) -> HirType {
         if let Some(info) = self.structs.get(&struct_name) {
             if !info.field_map.contains_key(&field) {
                 self.errors.push(TypeError::UnknownField {
                     struct_name,
                     field,
-                        span: (0, 0),
+                    span: (0, 0),
                 });
             } else if let Some(field_info) = info.fields.iter().find(|f| f.name == field) {
                 return field_info.ty.clone();
@@ -491,6 +507,9 @@ impl TypeChecker {
             });
         }
         let mut arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
+        if arg_types.iter().any(|t| *t == HirType::Error) {
+            return HirType::Error;
+        }
         if let Some(info) = self.enums.get(&enum_name) {
             // If enum has more type params than provided args AND the enum has exactly 2 type params
             // (Result<T,E> pattern), pad with type param symbols.
@@ -534,24 +553,18 @@ impl TypeChecker {
         _call_span: Span,
     ) -> (HirType, Option<Vec<HirType>>) {
         let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
-        // If the callee name already contains __ (e.g., Vec_get__Entry_i64_i64),
-        // the function is already specialized — don't infer new type args.
         let callee_name = self.interner.resolve(callee);
         if callee_name.contains("__") {
-            // Already specialized — return the function's return type without type args
             if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
                 return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
             }
-            // Look up in impl_methods by mangled name
             for methods in self.impl_methods.values() {
                 if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
                     return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
                 }
             }
         }
-        // Check argument types against parameter types (only for non-generic fns)
         if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee) {
-            // Only check arg types for fully concrete functions
             if fn_def.type_params.is_empty() {
                 for (i, arg_ty) in arg_types.iter().enumerate() {
                     if let Some((_, param_ty)) = fn_def.params.get(i)
@@ -561,7 +574,7 @@ impl TypeChecker {
                             expected: param_ty.clone(),
                             found: arg_ty.clone(),
                             expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
-                    span: (0, 0),
+                            span: (0, 0),
                         });
                     }
                 }
@@ -588,15 +601,6 @@ impl TypeChecker {
                         .iter()
                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
                         .collect();
-                    eprintln!(
-                        "[typeck DEBUG] check_call_with_type_args fn={} type_args=[{}]",
-                        self.interner.resolve(callee),
-                        type_args
-                            .iter()
-                            .map(|t| format!("{:?}", t))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
                     let ret = fn_def.ret.clone().unwrap_or(HirType::Int);
                     return (
                         glyim_hir::types::substitute_type(&ret, &sub),
@@ -606,7 +610,6 @@ impl TypeChecker {
             }
             return (fn_def.ret.clone().unwrap_or(HirType::Int), None);
         }
-        // Look up in impl_methods by mangled name; also infer type params
         for methods in self.impl_methods.values() {
             if let Some(fn_def) = methods.iter().find(|f| f.name == callee) {
                 if !fn_def.type_params.is_empty() && !arg_types.is_empty() {
@@ -651,6 +654,9 @@ impl TypeChecker {
     }
     fn check_as(&mut self, expr: &HirExpr, target_type: &HirType, as_span: Span) -> HirType {
         let from_ty = self.check_expr(expr).unwrap_or(HirType::Int);
+        if from_ty == HirType::Error {
+            return HirType::Error;
+        }
         let resolved_target = resolve_named_type(&self.interner, target_type);
         let resolved_from = resolve_named_type(&self.interner, &from_ty);
         if !is_valid_cast(&resolved_from, &resolved_target) {

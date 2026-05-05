@@ -216,7 +216,7 @@ impl<'a> MonoContext<'a> {
                         .collect(),
                     span: *span,
                 }
-            },
+            }
 
             HirExpr::Block { id, stmts, span } => HirExpr::Block {
                 id: *id,

@@ -71,13 +71,16 @@ impl Diagnostic for TypeError {
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
         match self {
-            TypeError::MismatchedTypes { span, expected, found, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some(format!("expected {:?}, found {:?}", expected, found)),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
+            TypeError::MismatchedTypes {
+                span,
+                expected,
+                found,
+                ..
+            } => Some(Box::new(std::iter::once(miette::LabeledSpan::new(
+                Some(format!("expected {:?}, found {:?}", expected, found)),
+                span.0,
+                span.1 - span.0,
+            )))),
             _ => None,
         }
     }

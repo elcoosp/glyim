@@ -899,12 +899,10 @@ impl<'a> MonoContext<'a> {
             | HirType::Error
             | HirType::Opaque(_)
             | HirType::RawPtr(_)
-            | HirType::Func(_, _) => {
-                match ty {
-                    HirType::RawPtr(inner) => self.enqueue_type_if_generic(inner),
-                    _ => {}
-                }
-            }
+            | HirType::Func(_, _) => match ty {
+                HirType::RawPtr(inner) => self.enqueue_type_if_generic(inner),
+                _ => {}
+            },
             _ => {}
         }
     }

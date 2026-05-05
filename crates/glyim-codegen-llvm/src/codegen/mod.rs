@@ -50,7 +50,6 @@ impl<'ctx> CodegenBuilder<'ctx> {
         }
     }
 
-
     pub fn build(mut self) -> Result<Codegen<'ctx>, String> {
         let module = self.context.create_module("glyim_out");
         let builder = self.context.create_builder();
@@ -99,7 +98,6 @@ impl<'ctx> CodegenBuilder<'ctx> {
         })
     }
 }
-
 
 pub struct Codegen<'ctx> {
     pub(crate) context: &'ctx Context,
