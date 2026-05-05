@@ -1,6 +1,7 @@
 use crate::TypeChecker;
 use crate::typeck::error::TypeError;
 use crate::typeck::resolver::{is_valid_cast, resolve_named_type};
+use glyim_diag::Span;
 use glyim_hir::HirBinOp;
 use glyim_hir::monomorphize::type_to_short_string;
 use glyim_hir::node::HirExpr;
@@ -133,14 +134,14 @@ impl TypeChecker {
                 struct_name,
                 fields,
                 ..
-            } => self.check_struct_lit(*struct_name, fields),
-            HirExpr::FieldAccess { object, field, .. } => self.check_field_access(object, *field),
+            } => self.check_struct_lit(*struct_name, fields, expr.get_span()),
+            HirExpr::FieldAccess { object, field, .. } => self.check_field_access(object, *field, expr.get_span()),
             HirExpr::EnumVariant {
                 enum_name,
                 variant_name,
                 args,
                 ..
-            } => self.check_enum_variant(*enum_name, *variant_name, args),
+            } => self.check_enum_variant(*enum_name, *variant_name, args, expr.get_span()),
             HirExpr::Match {
                 scrutinee, arms, ..
             } => self.check_match(
@@ -149,6 +150,7 @@ impl TypeChecker {
                     .iter()
                     .map(|arm| (arm.pattern.clone(), arm.guard.clone(), arm.body.clone()))
                     .collect::<Vec<_>>(),
+                expr.get_span(),
             ),
             HirExpr::Call {
                 id, callee, args, ..
@@ -307,7 +309,7 @@ impl TypeChecker {
             }
         }
     }
-    fn check_struct_lit(&mut self, struct_name: Symbol, fields: &[(Symbol, HirExpr)]) -> HirType {
+    fn check_struct_lit(&mut self, struct_name: Symbol, fields: &[(Symbol, HirExpr)], span: Span) -> HirType {
         let field_names: Vec<Symbol> = fields.iter().map(|(sym, _)| *sym).collect();
         let field_count = fields.len();
         let field_value_types: Vec<HirType> = fields
@@ -332,7 +334,7 @@ impl TypeChecker {
                     self.errors.push(TypeError::UnknownField {
                         struct_name,
                         field: *field_sym,
-                        span: (0, 0),
+                        span: (span.start, span.end),
                     });
                 }
             }
@@ -342,7 +344,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::MissingField {
                             struct_name,
                             field: field.name,
-                            span: (0, 0),
+                            span: (span.start, span.end),
                         });
                     }
                 }
@@ -390,7 +392,7 @@ impl TypeChecker {
         }
         HirType::Named(struct_name)
     }
-    fn check_field_access(&mut self, object: &HirExpr, field: Symbol) -> HirType {
+    fn check_field_access(&mut self, object: &HirExpr, field: Symbol, span: Span) -> HirType {
         let obj_type = self.check_expr(object).unwrap_or(HirType::Never);
 
         match &obj_type {
@@ -402,7 +404,7 @@ impl TypeChecker {
                     self.errors.push(TypeError::UnknownField {
                         struct_name: *name,
                         field,
-                        span: (0, 0),
+                        span: (span.start, span.end),
                     });
                     HirType::Never
                 }
@@ -414,7 +416,7 @@ impl TypeChecker {
                     self.errors.push(TypeError::UnknownField {
                         struct_name: *name,
                         field,
-                        span: (0, 0),
+                        span: (span.start, span.end),
                     });
                     HirType::Never
                 }
@@ -463,6 +465,7 @@ impl TypeChecker {
         enum_name: Symbol,
         variant_name: Symbol,
         args: &[HirExpr],
+        span: Span,
     ) -> HirType {
         if let Some(info) = self.enums.get(&enum_name)
             && !info.variant_map.contains_key(&variant_name)
@@ -470,7 +473,7 @@ impl TypeChecker {
             self.errors.push(TypeError::UnknownField {
                 struct_name: enum_name,
                 field: variant_name,
-                span: (0, 0),
+                span: (span.start, span.end),
             });
         }
         let mut arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
@@ -492,9 +495,10 @@ impl TypeChecker {
         &mut self,
         scrutinee: &HirExpr,
         arms: &[(glyim_hir::HirPattern, Option<HirExpr>, HirExpr)],
+        span: Span,
     ) -> HirType {
         let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
-        self.check_match_exhaustiveness(&scrutinee_ty, arms);
+        self.check_match_exhaustiveness(&scrutinee_ty, arms, span);
         let mut arm_types = vec![];
         for arm in arms {
             self.push_scope();

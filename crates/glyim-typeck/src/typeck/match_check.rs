@@ -1,5 +1,6 @@
 use crate::TypeChecker;
 use crate::typeck::error::TypeError;
+use glyim_diag::Span;
 use glyim_hir::HirPattern;
 use glyim_hir::node::HirExpr;
 use glyim_hir::types::HirType;
@@ -11,6 +12,7 @@ impl TypeChecker {
         &mut self,
         scrutinee_type: &HirType,
         arms: &[(HirPattern, Option<HirExpr>, HirExpr)],
+        span: Span,
     ) {
         let enum_variants = self.get_enum_variants(scrutinee_type);
         if enum_variants.is_empty() {
@@ -34,7 +36,7 @@ impl TypeChecker {
         if !missing.is_empty() {
             self.errors.push(TypeError::NonExhaustiveMatch {
                 missing,
-                span: (0, 0),
+                span: (span.start, span.end),
             }); // TODO: get match expr span
         }
     }
