@@ -1,0 +1,18 @@
+---
+source: crates/glyim-typeck/tests/snapshot_errors.rs
+assertion_line: 25
+expression: errors
+---
+[
+    MismatchedTypes {
+        expected: Str,
+        found: Int,
+        expr_id: ExprId(
+            0,
+        ),
+        span: (
+            13,
+            15,
+        ),
+    },
+]

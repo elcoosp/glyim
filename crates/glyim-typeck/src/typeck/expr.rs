@@ -178,7 +178,7 @@ impl TypeChecker {
                         HirType::Int
                     }
                 } else {
-                    let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args);
+                    let (ret_ty, inferred_args) = self.check_call_with_type_args(*callee, args, expr.get_span());
                     if let Some(type_args) = inferred_args {
                         self.call_type_args.insert(*id, type_args);
                     }
@@ -187,7 +187,7 @@ impl TypeChecker {
             }
             HirExpr::As {
                 expr, target_type, ..
-            } => self.check_as(expr, target_type),
+            } => self.check_as(expr, target_type, expr.get_span()),
             HirExpr::TupleLit { elements, .. } => {
                 let elem_types: Vec<HirType> =
                     elements.iter().filter_map(|e| self.check_expr(e)).collect();
@@ -396,10 +396,10 @@ impl TypeChecker {
         let obj_type = self.check_expr(object).unwrap_or(HirType::Never);
 
         match &obj_type {
-            HirType::Tuple(elems) => self.check_tuple_field_access(field, elems),
+            HirType::Tuple(elems) => self.check_tuple_field_access(field, elems, span),
             HirType::Named(name) => {
                 if self.structs.contains_key(name) {
-                    self.check_struct_field_access(*name, field)
+                    self.check_struct_field_access(*name, field, span)
                 } else {
                     self.errors.push(TypeError::UnknownField {
                         struct_name: *name,
@@ -411,7 +411,7 @@ impl TypeChecker {
             }
             HirType::Generic(name, _args) => {
                 if self.structs.contains_key(name) {
-                    self.check_struct_field_access(*name, field)
+                    self.check_struct_field_access(*name, field, span)
                 } else {
                     self.errors.push(TypeError::UnknownField {
                         struct_name: *name,
@@ -431,7 +431,7 @@ impl TypeChecker {
             }
         }
     }
-    fn check_tuple_field_access(&mut self, field: Symbol, elems: &[HirType]) -> HirType {
+    fn check_tuple_field_access(&mut self, field: Symbol, elems: &[HirType], _span: Span) -> HirType {
         let field_name = self.interner.resolve(field);
         if let Some(index_str) = field_name.strip_prefix('_')
             && let Ok(idx) = index_str.parse::<usize>()
@@ -446,7 +446,7 @@ impl TypeChecker {
         });
         HirType::Int
     }
-    fn check_struct_field_access(&mut self, struct_name: Symbol, field: Symbol) -> HirType {
+    fn check_struct_field_access(&mut self, struct_name: Symbol, field: Symbol, _span: Span) -> HirType {
         if let Some(info) = self.structs.get(&struct_name) {
             if !info.field_map.contains_key(&field) {
                 self.errors.push(TypeError::UnknownField {
@@ -517,6 +517,7 @@ impl TypeChecker {
         &mut self,
         callee: Symbol,
         args: &[HirExpr],
+        call_span: Span,
     ) -> (HirType, Option<Vec<HirType>>) {
         let arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
         // If the callee name already contains __ (e.g., Vec_get__Entry_i64_i64),
@@ -546,6 +547,7 @@ impl TypeChecker {
                             expected: param_ty.clone(),
                             found: arg_ty.clone(),
                             expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
+                span: (0, 0),
                         });
                     }
                 }
@@ -633,7 +635,7 @@ impl TypeChecker {
         }
         (HirType::Int, None)
     }
-    fn check_as(&mut self, expr: &HirExpr, target_type: &HirType) -> HirType {
+    fn check_as(&mut self, expr: &HirExpr, target_type: &HirType, as_span: Span) -> HirType {
         let from_ty = self.check_expr(expr).unwrap_or(HirType::Int);
         let resolved_target = resolve_named_type(&self.interner, target_type);
         let resolved_from = resolve_named_type(&self.interner, &from_ty);
@@ -642,6 +644,7 @@ impl TypeChecker {
                 expected: target_type.clone(),
                 found: from_ty,
                 expr_id: ExprId::new(0),
+                span: (as_span.start, as_span.end),
             });
         }
         target_type.clone()

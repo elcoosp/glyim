@@ -11,6 +11,7 @@ pub enum TypeError {
         expected: HirType,
         found: HirType,
         expr_id: ExprId,
+        span: (usize, usize),
     },
     #[error("unknown type: {name:?}")]
     UnknownType { name: Symbol },
@@ -69,7 +70,16 @@ impl Diagnostic for TypeError {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        None
+        match self {
+            TypeError::MismatchedTypes { span, expected, found, .. } => {
+                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
+                    Some(format!("expected {:?}, found {:?}", expected, found)),
+                    span.0,
+                    span.1 - span.0,
+                ))))
+            }
+            _ => None,
+        }
     }
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {

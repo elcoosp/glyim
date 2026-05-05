@@ -44,6 +44,7 @@ impl TypeChecker {
                             expected: annotated.clone(),
                             found: inferred,
                             expr_id: value.get_id(),
+                            span: (0, 0),
                         });
                     }
                     // Backward inference: extract type args from annotation for generic calls
@@ -119,6 +120,7 @@ impl TypeChecker {
                                 expected: *inner,
                                 found: value_ty,
                                 expr_id: ExprId::new(0),
+                                span: (0, 0),
                             });
                         }
                     }

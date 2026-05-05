@@ -132,10 +132,16 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                         glyim_parse::VariantKind::Unnamed(types)
                         | glyim_parse::VariantKind::Named(types) => types
                             .iter()
-                            .map(|(sym, _, _)| StructField {
-                                name: *sym,
-                                ty: HirType::Int,
-                                doc: None,
+                            .map(|(sym, _, ty_opt)| {
+                                let ty = ty_opt
+                                    .as_ref()
+                                    .map(|t| crate::lower::types::lower_type_expr(t, ctx))
+                                    .unwrap_or(HirType::Int);
+                                StructField {
+                                    name: *sym,
+                                    ty,
+                                    doc: None,
+                                }
                             })
                             .collect(),
                     },
