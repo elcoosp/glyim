@@ -1,9 +1,9 @@
-use glyim_pkg::cas_client::CasClient;
 use glyim_codegen_llvm::runtime_shims;
 use glyim_codegen_llvm::{Codegen, compile_to_ir};
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
 use glyim_interner::Interner;
+use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
 use inkwell::OptimizationLevel;
@@ -242,7 +242,9 @@ fn compile_source_to_hir(
     input_path: &std::path::Path,
     config: &PipelineConfig,
 ) -> Result<CompiledHir, PipelineError> {
-    let is_no_std = config.force_no_std.unwrap_or_else(|| detect_no_std(&source));
+    let is_no_std = config
+        .force_no_std
+        .unwrap_or_else(|| detect_no_std(&source));
 
     let cas_dir = &config.cas_dir;
     let source = crate::macro_expand::expand_macros(
@@ -262,8 +264,7 @@ fn compile_source_to_hir(
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
-    let mut hir =
-        glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::TypeCheck(errs));

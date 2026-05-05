@@ -203,7 +203,9 @@ async fn main() -> std::io::Result<()> {
     tracing::info!("Starting REST server on http://{}", rest_addr);
     let rest_listener = tokio::net::TcpListener::bind(rest_addr).await?;
     let rest_handle = tokio::spawn(async move {
-        axum::serve(rest_listener, rest_app).await.expect("internal error");
+        axum::serve(rest_listener, rest_app)
+            .await
+            .expect("internal error");
     });
 
     // ── gRPC server on port 9091 ─────────────────────────────────

@@ -60,14 +60,15 @@ impl<'a> MonoContext<'a> {
                     let method_sym = self.interner.intern(method_name);
                     for item in &self.hir.items {
                         if let HirItem::Impl(imp) = item
-                            && imp.target_name == type_sym {
-                                for m in &imp.methods {
-                                    if m.name == method_sym && m.type_params.is_empty() {
-                                        // The method is already fully specialized
-                                        return Some(m.clone());
-                                    }
+                            && imp.target_name == type_sym
+                        {
+                            for m in &imp.methods {
+                                if m.name == method_sym && m.type_params.is_empty() {
+                                    // The method is already fully specialized
+                                    return Some(m.clone());
                                 }
                             }
+                        }
                     }
                 }
             }
@@ -124,13 +125,14 @@ impl<'a> MonoContext<'a> {
 
                 for item in &self.hir.items {
                     if let HirItem::Impl(imp) = item
-                        && imp.target_name == type_sym {
-                            for m in &imp.methods {
-                                if m.name == method_sym {
-                                    return Some(m.clone());
-                                }
+                        && imp.target_name == type_sym
+                    {
+                        for m in &imp.methods {
+                            if m.name == method_sym {
+                                return Some(m.clone());
                             }
                         }
+                    }
                 }
             }
         }
@@ -337,9 +339,9 @@ impl<'a> MonoContext<'a> {
         for item in &self.hir.items {
             if let HirItem::Fn(fn_def) = item
                 && let Some(result) = self.find_in_block(&fn_def.body, callee, call_id, type_params)
-                {
-                    return Some(result);
-                }
+            {
+                return Some(result);
+            }
         }
         None
     }
@@ -372,16 +374,18 @@ impl<'a> MonoContext<'a> {
                             continue;
                         }
                         _ => {
-                            if found && let Some(var_sym) = target_var
+                            if found
+                                && let Some(var_sym) = target_var
                                 && let HirStmt::Expr(inner) = stmt
-                                    && let Some(args) = self.extract_type_args_from_call_on_var(
-                                        inner,
-                                        *callee,
-                                        var_sym,
-                                        type_params,
-                                    ) {
-                                        return Some(args);
-                                    }
+                                && let Some(args) = self.extract_type_args_from_call_on_var(
+                                    inner,
+                                    *callee,
+                                    var_sym,
+                                    type_params,
+                                )
+                            {
+                                return Some(args);
+                            }
                         }
                     }
                 }
@@ -414,16 +418,18 @@ impl<'a> MonoContext<'a> {
     ) -> Option<Vec<HirType>> {
         match expr {
             HirExpr::Call { args, .. } => {
-                if !args.is_empty() && {
-                    match &args[0] {
-                        HirExpr::Ident { name, .. } => *name == var_sym,
-                        _ => false,
-                    }
-                }
-                    && let Some(cached) = self.call_type_args.get(&expr.get_id())
-                        && !cached.is_empty() {
-                            return Some(cached.clone());
+                if !args.is_empty()
+                    && {
+                        match &args[0] {
+                            HirExpr::Ident { name, .. } => *name == var_sym,
+                            _ => false,
                         }
+                    }
+                    && let Some(cached) = self.call_type_args.get(&expr.get_id())
+                    && !cached.is_empty()
+                {
+                    return Some(cached.clone());
+                }
                 None
             }
             _ => None,

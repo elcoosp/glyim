@@ -32,7 +32,10 @@ impl TypeChecker {
             .collect();
 
         if !missing.is_empty() {
-            self.errors.push(TypeError::NonExhaustiveMatch { missing, span: (0, 0) });  // TODO: get match expr span
+            self.errors.push(TypeError::NonExhaustiveMatch {
+                missing,
+                span: (0, 0),
+            }); // TODO: get match expr span
         }
     }
 

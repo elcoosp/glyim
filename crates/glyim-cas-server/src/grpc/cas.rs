@@ -95,9 +95,17 @@ impl ContentAddressableStorage for CasService {
         for digest in &req.digests {
             let (data, status) = {
                 let store_guard = self.store.read().await;
-                match digest.hash.parse::<ContentHash>().ok().and_then(|h| store_guard.retrieve(h)) {
+                match digest
+                    .hash
+                    .parse::<ContentHash>()
+                    .ok()
+                    .and_then(|h| store_guard.retrieve(h))
+                {
                     Some(bytes) => (bytes, None),
-                    None => (vec![], Some(Self::grpc_status(tonic::Code::NotFound, "blob not found"))),
+                    None => (
+                        vec![],
+                        Some(Self::grpc_status(tonic::Code::NotFound, "blob not found")),
+                    ),
                 }
             };
 
@@ -174,7 +182,10 @@ mod tests {
             digest_function: 1,
         };
 
-        let resp = svc.find_missing_blobs(Request::new(req)).await.expect("internal error");
+        let resp = svc
+            .find_missing_blobs(Request::new(req))
+            .await
+            .expect("internal error");
         assert!(resp.into_inner().missing_blob_digests.is_empty());
     }
 
@@ -215,7 +226,10 @@ mod tests {
             acceptable_compressors: vec![],
             digest_function: 1,
         };
-        let read_resp = svc.batch_read_blobs(Request::new(read_req)).await.expect("internal error");
+        let read_resp = svc
+            .batch_read_blobs(Request::new(read_req))
+            .await
+            .expect("internal error");
         assert_eq!(read_resp.into_inner().responses[0].data, data);
     }
 }

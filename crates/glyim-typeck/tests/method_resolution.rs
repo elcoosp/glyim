@@ -4,7 +4,11 @@ use glyim_typeck::TypeChecker;
 
 fn typecheck_source(source: &str) -> TypeChecker {
     let parse_out = parse(source);
-    assert!(parse_out.errors.is_empty(), "parse errors: {:?}", parse_out.errors);
+    assert!(
+        parse_out.errors.is_empty(),
+        "parse errors: {:?}",
+        parse_out.errors
+    );
     let mut interner = parse_out.interner;
     let hir = lower(&parse_out.ast, &mut interner);
     let mut tc = TypeChecker::new(interner);
@@ -42,7 +46,10 @@ fn extern_fn_is_registered() {
         "extern {\n    fn write(fd: i64, buf: *const u8, len: i64) -> i64;\n}\nfn main() -> i64 { 0 }",
     );
     let write_sym = tc.interner.intern("write");
-    assert!(tc.extern_fns.contains_key(&write_sym), "write should be in extern_fns");
+    assert!(
+        tc.extern_fns.contains_key(&write_sym),
+        "write should be in extern_fns"
+    );
 }
 
 #[test]
@@ -51,13 +58,20 @@ fn multiple_impl_methods_are_registered() {
         "struct Counter { val: i64 }\nimpl Counter {\n    fn inc(mut self: Counter) -> Counter { self.val = self.val + 1; self }\n    fn dec(mut self: Counter) -> Counter { self.val = self.val - 1; self }\n}\nfn main() -> i64 { 0 }",
     );
     let counter_sym = tc.interner.intern("Counter");
-    let methods = tc.impl_methods.get(&counter_sym).expect("Counter should have methods");
+    let methods = tc
+        .impl_methods
+        .get(&counter_sym)
+        .expect("Counter should have methods");
     assert!(
-        methods.iter().any(|m| tc.interner.resolve(m.name) == "Counter_inc"),
+        methods
+            .iter()
+            .any(|m| tc.interner.resolve(m.name) == "Counter_inc"),
         "inc method missing"
     );
     assert!(
-        methods.iter().any(|m| tc.interner.resolve(m.name) == "Counter_dec"),
+        methods
+            .iter()
+            .any(|m| tc.interner.resolve(m.name) == "Counter_dec"),
         "dec method missing"
     );
 }

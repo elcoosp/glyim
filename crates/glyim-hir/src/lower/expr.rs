@@ -1,8 +1,8 @@
-use crate::node::MatchArm;
 use crate::lower::context::LoweringContext;
 use crate::lower::ops::{lower_binop, lower_unop};
 use crate::lower::pattern::lower_pattern;
 use crate::lower::types::lower_type_expr;
+use crate::node::MatchArm;
 use crate::types::{ExprId, HirType};
 use crate::{HirExpr, HirPattern, HirStmt};
 use glyim_parse::{BlockItem, ExprKind, StmtKind};
@@ -420,7 +420,11 @@ fn lower_match(
             let pattern = lower_pattern(&arm.pattern, ctx);
             let guard = arm.guard.as_ref().map(|e| lower_expr(e, ctx));
             let body = lower_expr(&arm.body, ctx);
-            MatchArm { pattern, guard, body }
+            MatchArm {
+                pattern,
+                guard,
+                body,
+            }
         })
         .collect();
     HirExpr::Match {

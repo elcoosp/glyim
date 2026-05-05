@@ -29,7 +29,11 @@ pub struct Span {
 impl Span {
     pub fn new(start: usize, end: usize) -> Self {
         assert!(start <= end);
-        Self { start, end, expansion_id: None }
+        Self {
+            start,
+            end,
+            expansion_id: None,
+        }
     }
 
     pub fn with_expansion(
@@ -43,8 +47,17 @@ impl Span {
         assert!(start <= end);
         let mut table = MACRO_EXPANSION_TABLE.lock().unwrap();
         let id = table.len() as u32;
-        table.push(MacroExpansion { call_site, def_site, macro_name, parent });
-        Self { start, end, expansion_id: Some(id) }
+        table.push(MacroExpansion {
+            call_site,
+            def_site,
+            macro_name,
+            parent,
+        });
+        Self {
+            start,
+            end,
+            expansion_id: Some(id),
+        }
     }
 
     pub fn expansion(&self) -> Option<MacroExpansion> {

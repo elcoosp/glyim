@@ -203,24 +203,24 @@ pub(crate) fn codegen_match<'ctx>(
                         if let Some(inner) = match &arm0.pattern {
                             HirPattern::OptionSome(i) | HirPattern::ResultOk(i) => Some(i),
                             _ => None,
+                        } && let HirPattern::Var(name) = &**inner
+                        {
+                            let payload_ptr = cg
+                                .builder
+                                .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
+                                .ok()?;
+                            let payload_val = cg
+                                .builder
+                                .build_load(cg.i64_type, payload_ptr, "payload_val")
+                                .ok()?
+                                .into_int_value();
+                            let alloca = cg
+                                .builder
+                                .build_alloca(cg.i64_type, cg.interner.resolve(*name))
+                                .ok()?;
+                            cg.builder.build_store(alloca, payload_val).ok()?;
+                            fctx.vars.insert(*name, alloca);
                         }
-                            && let HirPattern::Var(name) = &**inner {
-                                let payload_ptr = cg
-                                    .builder
-                                    .build_struct_gep(st, enum_ptr, 1, "payload_ptr")
-                                    .ok()?;
-                                let payload_val = cg
-                                    .builder
-                                    .build_load(cg.i64_type, payload_ptr, "payload_val")
-                                    .ok()?
-                                    .into_int_value();
-                                let alloca = cg
-                                    .builder
-                                    .build_alloca(cg.i64_type, cg.interner.resolve(*name))
-                                    .ok()?;
-                                cg.builder.build_store(alloca, payload_val).ok()?;
-                                fctx.vars.insert(*name, alloca);
-                            }
                     }
                     _ => {}
                 }

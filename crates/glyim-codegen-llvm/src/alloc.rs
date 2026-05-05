@@ -64,11 +64,15 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
 
     // oom: unreachable immediately (compiler may add trap later)
     builder.position_at_end(oom_block);
-    builder.build_unreachable().expect("codegen: internal error");
+    builder
+        .build_unreachable()
+        .expect("codegen: internal error");
 
     // ok: return the pointer
     builder.position_at_end(ok_block);
-    builder.build_return(Some(&raw_ptr)).expect("codegen: return failure");
+    builder
+        .build_return(Some(&raw_ptr))
+        .expect("codegen: return failure");
 
     // ── glyim_free(ptr: *i8) -> void ─────────────────────────────
 
@@ -77,7 +81,9 @@ pub fn emit_alloc_shims(module: &inkwell::module::Module<'_>, no_std: bool) {
     let free_entry = ctx.append_basic_block(free_wrapper, "entry");
 
     builder.position_at_end(free_entry);
-    let ptr_param = free_wrapper.get_first_param().expect("codegen: internal error");
+    let ptr_param = free_wrapper
+        .get_first_param()
+        .expect("codegen: internal error");
     builder
         .build_call(free_fn, &[ptr_param.into()], "")
         .expect("codegen: internal error");

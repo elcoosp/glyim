@@ -212,7 +212,8 @@ mod tests {
             workspace: None,
         };
         resolve_and_write_lockfile(dir.path(), &manifest).expect("internal error");
-        let content = std::fs::read_to_string(dir.path().join("glyim.lock")).expect("internal error");
+        let content =
+            std::fs::read_to_string(dir.path().join("glyim.lock")).expect("internal error");
         assert!(content.contains("@generated"));
     }
 }

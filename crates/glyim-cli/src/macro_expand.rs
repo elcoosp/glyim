@@ -1,16 +1,16 @@
 use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::registry::MacroRegistry;
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
-use std::sync::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Mutex;
 
 /// Expand macros found in the source text.
 /// Records the location of a macro expansion for later diagnostic attribution.
 #[derive(Clone, Debug)]
 struct MacroExpansionRecord {
-    call_site: (usize, usize),  // start, end of @macro_name(...) in source
-    def_site: (usize, usize),   // start, end of the macro definition
+    call_site: (usize, usize), // start, end of @macro_name(...) in source
+    def_site: (usize, usize),  // start, end of the macro definition
     macro_name: String,
     expanded_range: (usize, usize), // start, end of the expanded text in the result
 }
@@ -111,12 +111,15 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
             let after_str = &result[call_end..];
             result = format!("{before}{expanded_str}{after_str}");
 
-            EXPANSION_RECORDS.lock().unwrap().push(MacroExpansionRecord {
-                call_site,
-                def_site,
-                macro_name: rec_macro_name,
-                expanded_range,
-            });
+            EXPANSION_RECORDS
+                .lock()
+                .unwrap()
+                .push(MacroExpansionRecord {
+                    call_site,
+                    def_site,
+                    macro_name: rec_macro_name,
+                    expanded_range,
+                });
             let has_nested_macro = expanded_str.contains('@');
             if has_nested_macro {
                 scan_from = at_pos;

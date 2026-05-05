@@ -79,25 +79,26 @@ impl<'a> MonoContext<'a> {
                     let mut found_override = false;
                     for (expr_id, concrete_args) in &overrides {
                         if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id)
-                            && callee == fn_name {
-                                eprintln!(
-                                    "[mono queue] using override for {}: {:?}",
-                                    fn_name_str, concrete_args
-                                );
-                                let specialized = self.specialize_fn(&generic_fn, concrete_args);
-                                let sub: HashMap<Symbol, HirType> = generic_fn
-                                    .type_params
-                                    .iter()
-                                    .zip(concrete_args.iter())
-                                    .map(|(tp, ct)| (*tp, ct.clone()))
-                                    .collect();
-                                self.scan_expr_for_generic_calls(&specialized.body, &sub);
-                                self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
-                                self.fn_specs
-                                    .insert((fn_name, concrete_args.clone()), specialized);
-                                found_override = true;
-                                break;
-                            }
+                            && callee == fn_name
+                        {
+                            eprintln!(
+                                "[mono queue] using override for {}: {:?}",
+                                fn_name_str, concrete_args
+                            );
+                            let specialized = self.specialize_fn(&generic_fn, concrete_args);
+                            let sub: HashMap<Symbol, HirType> = generic_fn
+                                .type_params
+                                .iter()
+                                .zip(concrete_args.iter())
+                                .map(|(tp, ct)| (*tp, ct.clone()))
+                                .collect();
+                            self.scan_expr_for_generic_calls(&specialized.body, &sub);
+                            self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
+                            self.fn_specs
+                                .insert((fn_name, concrete_args.clone()), specialized);
+                            found_override = true;
+                            break;
+                        }
                     }
                     if found_override {
                         continue;
@@ -260,9 +261,7 @@ impl<'a> MonoContext<'a> {
             | HirType::Unit
             | HirType::Never
             | HirType::Error
-            | HirType::Opaque(_) => {
-                ty.clone()
-            }
+            | HirType::Opaque(_) => ty.clone(),
             HirType::RawPtr(inner) => {
                 eprintln!("[concretize_type] RawPtr");
                 HirType::RawPtr(Box::new(self.concretize_type(inner)))
@@ -351,95 +350,98 @@ impl<'a> MonoContext<'a> {
                 }
                 let fn_def_opt = self.find_fn(*callee);
                 if let Some(ref fn_def) = fn_def_opt
-                    && !fn_def.type_params.is_empty() {
-                        eprintln!(
-                            "[mono scan] Call callee={} found fn_def with {} type_params",
-                            callee_name,
-                            fn_def.type_params.len()
-                        );
-                        if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
-                            let substituted = self.substitute_type_args(type_args, current_sub);
-                            let concrete_args = self.concretize_type_args(&substituted);
-                            if !concrete_args.is_empty()
-                                && !concrete_args
-                                    .iter()
-                                    .any(|a| self.has_unresolved_type_param(a))
-                            {
-                                self.queue_fn_specialization(*callee, concrete_args);
-                            }
-                        } else {
-                            let mut sub = HashMap::new();
-                            for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
-                                if let Some(arg_expr) = args.get(param_idx) {
-                                    let arg_ty = self
-                                        .get_expr_type(arg_expr.get_id())
-                                        .unwrap_or(HirType::Never);
-                                    if arg_ty != HirType::Never {
-                                        Self::extract_type_substitutions(
-                                            param_ty,
-                                            &arg_ty,
-                                            &fn_def.type_params,
-                                            &mut sub,
-                                        );
-                                    }
+                    && !fn_def.type_params.is_empty()
+                {
+                    eprintln!(
+                        "[mono scan] Call callee={} found fn_def with {} type_params",
+                        callee_name,
+                        fn_def.type_params.len()
+                    );
+                    if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
+                        let substituted = self.substitute_type_args(type_args, current_sub);
+                        let concrete_args = self.concretize_type_args(&substituted);
+                        if !concrete_args.is_empty()
+                            && !concrete_args
+                                .iter()
+                                .any(|a| self.has_unresolved_type_param(a))
+                        {
+                            self.queue_fn_specialization(*callee, concrete_args);
+                        }
+                    } else {
+                        let mut sub = HashMap::new();
+                        for (param_idx, (_, param_ty)) in fn_def.params.iter().enumerate() {
+                            if let Some(arg_expr) = args.get(param_idx) {
+                                let arg_ty = self
+                                    .get_expr_type(arg_expr.get_id())
+                                    .unwrap_or(HirType::Never);
+                                if arg_ty != HirType::Never {
+                                    Self::extract_type_substitutions(
+                                        param_ty,
+                                        &arg_ty,
+                                        &fn_def.type_params,
+                                        &mut sub,
+                                    );
                                 }
                             }
-                            if sub.len() == fn_def.type_params.len() {
-                                let concrete: Vec<HirType> = fn_def
-                                    .type_params
-                                    .iter()
-                                    .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
-                                    .collect();
-                                if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
-                                    self.queue_fn_specialization(*callee, concrete);
-                                }
-                            }
-
-                            // FALLBACK: try to infer type args from later calls on the same variable
-                            if sub.is_empty() && args.is_empty()
-                                && let Some(concrete) = self.infer_from_same_var_in_block(
-                                    callee,
-                                    expr.get_id(),
-                                    &fn_def.type_params,
-                                ) {
-                                    self.call_type_args_overrides
-                                        .insert(expr.get_id(), concrete.clone());
-                                    self.queue_fn_specialization(*callee, concrete);
-                                }
-
-                            // SAFE FALLBACK (inner): inside else block for no call_type_args
-                            if sub.is_empty()
-                                && !self
-                                    .body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
-                            {
-                                let concrete: Vec<HirType> =
-                                    fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                                eprintln!(
-                                    "[mono scan] SAFE FALLBACK (inner): queueing {} with [Int]",
-                                    callee_name
-                                );
-                                self.call_type_args_overrides
-                                    .insert(expr.get_id(), concrete.clone());
+                        }
+                        if sub.len() == fn_def.type_params.len() {
+                            let concrete: Vec<HirType> = fn_def
+                                .type_params
+                                .iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                .collect();
+                            if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
                                 self.queue_fn_specialization(*callee, concrete);
                             }
                         }
-                    }
-                // SAFE FALLBACK (outer): runs when call_type_args existed but were unresolved
-                if let Some(ref fn_def) = fn_def_opt
-                    && !fn_def.type_params.is_empty()
-                        && self.call_type_args.get(&expr.get_id()).is_some()
-                        && !self.fn_queued.contains(&(*callee, vec![HirType::Int]))
-                        && !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params) {
+
+                        // FALLBACK: try to infer type args from later calls on the same variable
+                        if sub.is_empty()
+                            && args.is_empty()
+                            && let Some(concrete) = self.infer_from_same_var_in_block(
+                                callee,
+                                expr.get_id(),
+                                &fn_def.type_params,
+                            )
+                        {
+                            self.call_type_args_overrides
+                                .insert(expr.get_id(), concrete.clone());
+                            self.queue_fn_specialization(*callee, concrete);
+                        }
+
+                        // SAFE FALLBACK (inner): inside else block for no call_type_args
+                        if sub.is_empty()
+                            && !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
+                        {
                             let concrete: Vec<HirType> =
                                 fn_def.type_params.iter().map(|_| HirType::Int).collect();
                             eprintln!(
-                                "[mono scan] SAFE FALLBACK (outer): queueing {} with [Int]",
+                                "[mono scan] SAFE FALLBACK (inner): queueing {} with [Int]",
                                 callee_name
                             );
                             self.call_type_args_overrides
                                 .insert(expr.get_id(), concrete.clone());
                             self.queue_fn_specialization(*callee, concrete);
                         }
+                    }
+                }
+                // SAFE FALLBACK (outer): runs when call_type_args existed but were unresolved
+                if let Some(ref fn_def) = fn_def_opt
+                    && !fn_def.type_params.is_empty()
+                    && self.call_type_args.get(&expr.get_id()).is_some()
+                    && !self.fn_queued.contains(&(*callee, vec![HirType::Int]))
+                    && !self.body_depends_on_type_params(&fn_def.body, &fn_def.type_params)
+                {
+                    let concrete: Vec<HirType> =
+                        fn_def.type_params.iter().map(|_| HirType::Int).collect();
+                    eprintln!(
+                        "[mono scan] SAFE FALLBACK (outer): queueing {} with [Int]",
+                        callee_name
+                    );
+                    self.call_type_args_overrides
+                        .insert(expr.get_id(), concrete.clone());
+                    self.queue_fn_specialization(*callee, concrete);
+                }
                 for a in args {
                     self.scan_expr_for_generic_calls(a, current_sub);
                 }
@@ -524,13 +526,13 @@ impl<'a> MonoContext<'a> {
                             ..
                         } => {
                             if let Some(HirType::Generic(_, type_args)) = ty
-                                && let HirExpr::Call { id, .. } = value {
-                                    let concrete =
-                                        self.substitute_type_args(type_args, current_sub);
-                                    if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
-                                        self.call_type_args_overrides.insert(*id, concrete);
-                                    }
+                                && let HirExpr::Call { id, .. } = value
+                            {
+                                let concrete = self.substitute_type_args(type_args, current_sub);
+                                if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
+                                    self.call_type_args_overrides.insert(*id, concrete);
                                 }
+                            }
                             self.scan_expr_for_generic_calls(value, current_sub)
                         }
                         HirStmt::AssignDeref { target, value, .. } => {
@@ -592,14 +594,15 @@ impl<'a> MonoContext<'a> {
             } => {
                 for (field_sym, f) in fields {
                     if let HirExpr::Call { callee, args, .. } = f
-                        && args.is_empty() {
-                            self.try_infer_call_from_struct_field(
-                                *callee,
-                                *struct_name,
-                                *field_sym,
-                                current_sub,
-                            );
-                        }
+                        && args.is_empty()
+                    {
+                        self.try_infer_call_from_struct_field(
+                            *callee,
+                            *struct_name,
+                            *field_sym,
+                            current_sub,
+                        );
+                    }
                     self.scan_expr_for_generic_calls(f, current_sub);
                 }
             }
@@ -659,26 +662,27 @@ impl<'a> MonoContext<'a> {
                 return;
             }
             if let Some(struct_def) = self.find_struct(struct_name)
-                && let Some(field) = struct_def.fields.iter().find(|f| f.name == field_sym) {
-                    let field_ty = crate::types::substitute_type(&field.ty, current_sub);
-                    if let Some(ret_ty) = &fn_def.ret {
-                        let mut sub = HashMap::new();
-                        Self::extract_type_substitutions(
-                            ret_ty,
-                            &field_ty,
-                            &fn_def.type_params,
-                            &mut sub,
-                        );
-                        if sub.len() == fn_def.type_params.len() {
-                            let concrete: Vec<HirType> = fn_def
-                                .type_params
-                                .iter()
-                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
-                                .collect();
-                            self.queue_fn_specialization(callee, concrete);
-                        }
+                && let Some(field) = struct_def.fields.iter().find(|f| f.name == field_sym)
+            {
+                let field_ty = crate::types::substitute_type(&field.ty, current_sub);
+                if let Some(ret_ty) = &fn_def.ret {
+                    let mut sub = HashMap::new();
+                    Self::extract_type_substitutions(
+                        ret_ty,
+                        &field_ty,
+                        &fn_def.type_params,
+                        &mut sub,
+                    );
+                    if sub.len() == fn_def.type_params.len() {
+                        let concrete: Vec<HirType> = fn_def
+                            .type_params
+                            .iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                            .collect();
+                        self.queue_fn_specialization(callee, concrete);
                     }
                 }
+            }
         }
     }
 
@@ -804,14 +808,15 @@ impl<'a> MonoContext<'a> {
             }
             HirExpr::SizeOf { target_type, .. } => {
                 if let HirType::Generic(sym, args) = target_type
-                    && let Some(s) = self.find_struct(*sym) {
-                        let concrete_args = self.substitute_type_args(args, current_sub);
-                        let key = (*sym, concrete_args.clone());
-                        if !self.struct_specs.contains_key(&key) {
-                            let specialized = self.specialize_struct(&s, &concrete_args);
-                            self.struct_specs.insert(key, specialized);
-                        }
+                    && let Some(s) = self.find_struct(*sym)
+                {
+                    let concrete_args = self.substitute_type_args(args, current_sub);
+                    let key = (*sym, concrete_args.clone());
+                    if !self.struct_specs.contains_key(&key) {
+                        let specialized = self.specialize_struct(&s, &concrete_args);
+                        self.struct_specs.insert(key, specialized);
                     }
+                }
             }
             _ => {}
         }

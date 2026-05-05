@@ -175,16 +175,24 @@ impl TypeChecker {
                             if let Some(variant) =
                                 info.variants.iter().find(|v| v.name == *variant_name)
                             {
-                                let sub: std::collections::HashMap<_, _> = if let HirType::Generic(_, type_args) = scrutinee_ty {
-                                    info.type_params.iter().zip(type_args.iter()).map(|(tp, ct)| (*tp, ct.clone())).collect()
-                                } else {
-                                    std::collections::HashMap::new()
-                                };
+                                let sub: std::collections::HashMap<_, _> =
+                                    if let HirType::Generic(_, type_args) = scrutinee_ty {
+                                        info.type_params
+                                            .iter()
+                                            .zip(type_args.iter())
+                                            .map(|(tp, ct)| (*tp, ct.clone()))
+                                            .collect()
+                                    } else {
+                                        std::collections::HashMap::new()
+                                    };
                                 bindings
                                     .iter()
                                     .zip(variant.fields.iter())
                                     .map(|((_, binding_pat), field)| {
-                                        (binding_pat.clone(), glyim_hir::types::substitute_type(&field.ty, &sub))
+                                        (
+                                            binding_pat.clone(),
+                                            glyim_hir::types::substitute_type(&field.ty, &sub),
+                                        )
                                     })
                                     .collect()
                             } else {

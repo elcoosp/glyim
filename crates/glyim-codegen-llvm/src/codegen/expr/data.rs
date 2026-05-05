@@ -116,7 +116,10 @@ pub(crate) fn codegen_enum_variant<'ctx>(
                 inkwell::values::ValueKind::Basic(basic_val) => basic_val.into_pointer_value(),
                 _ => return Some(cg.i64_type.const_int(0, false)),
             };
-            let tag_ptr = cg.builder.build_struct_gep(st, ptr, 0, "tag_ptr").expect("codegen: internal error");
+            let tag_ptr = cg
+                .builder
+                .build_struct_gep(st, ptr, 0, "tag_ptr")
+                .expect("codegen: internal error");
             cg.builder
                 .build_store(tag_ptr, cg.i32_type.const_int(tag as u64, false))
                 .expect("codegen: internal error");
@@ -146,7 +149,10 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             _ => return Some(cg.i64_type.const_int(0, false)),
         };
 
-        let tag_ptr = cg.builder.build_struct_gep(st, ptr, 0, "tag_ptr").expect("codegen: internal error");
+        let tag_ptr = cg
+            .builder
+            .build_struct_gep(st, ptr, 0, "tag_ptr")
+            .expect("codegen: internal error");
         cg.builder
             .build_store(tag_ptr, cg.i32_type.const_int(tag as u64, false))
             .expect("codegen: internal error");
@@ -155,7 +161,9 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             .builder
             .build_struct_gep(st, ptr, 1, "payload_ptr")
             .expect("codegen: internal error");
-        cg.builder.build_store(payload_ptr, arg_val).expect("codegen: internal error");
+        cg.builder
+            .build_store(payload_ptr, arg_val)
+            .expect("codegen: internal error");
 
         cg.builder
             .build_ptr_to_int(ptr, cg.i64_type, "enum_ptr")

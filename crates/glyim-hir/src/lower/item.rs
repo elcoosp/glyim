@@ -227,7 +227,10 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             doc: None,
             name: *name,
             type_params: vec![],
-            params: params.iter().map(|(sym, _span)| (*sym, HirType::Int)).collect(),
+            params: params
+                .iter()
+                .map(|(sym, _span)| (*sym, HirType::Int))
+                .collect(),
             param_mutability: params.iter().map(|_| false).collect(),
             ret: None,
             body: lower_expr(body, ctx),
