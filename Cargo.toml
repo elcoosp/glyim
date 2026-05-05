@@ -17,7 +17,6 @@ members = [
     "crates/glyim-doc",
     "crates/glyim-lint",
     "crates/glyim-fmt",
-    "crates/glyim-cli-tests-parser",
     "crates/glyim-cli-tests-extra",
     "crates/glyim-cli-tests-full",
 ]
@@ -43,6 +42,6 @@ opt-level = 2
 
 [profile.test]
 lto = "thin"
-codegen-units = 8
+codegen-units = 16
 # SIGSEV on 1
 opt-level = 0

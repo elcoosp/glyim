@@ -102,19 +102,38 @@ impl<'a> MonoContext<'a> {
                         }
                     }
                 }
+                eprintln!("[concretize] find_enum({}) = {}", self.interner.resolve(*enum_name), self.find_enum(*enum_name).is_some());
                 if let Some(edef) = self.find_enum(*enum_name) {
                     let concrete_args: Vec<HirType> = edef
                         .type_params
                         .iter()
-                        .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                        .map(|tp| {
+                            sub.get(tp).cloned().unwrap_or_else(|| {
+                                if edef.type_params.len() == 1 && !sub.is_empty() {
+                                    sub.values().next().unwrap().clone()
+                                } else {
+                                    HirType::Named(*tp)
+                                }
+                            })
+                        })
                         .collect();
-                    eprintln!("[concretize] concrete_args={:?}", concrete_args);
                     if !concrete_args.is_empty()
                         && concrete_args.iter().all(|a| !self.has_unresolved_type_param(a))
                     {
-                        let mangled = self.mangle_name(*enum_name, &concrete_args);
-                        eprintln!("[concretize] replacing {} with {}", self.interner.resolve(*enum_name), self.interner.resolve(mangled));
-                        *enum_name = mangled;
+                        *enum_name = self.mangle_name(*enum_name, &concrete_args);
+                    }
+                } else {
+                    let resolved_name = self.interner.resolve(*enum_name);
+                    let concrete_args: Option<Vec<HirType>> = if resolved_name == "Option" && !sub.is_empty() {
+                        Some(vec![sub.values().next().unwrap().clone()])
+                    } else if resolved_name == "Result" && sub.len() >= 2 {
+                        let mut iter = sub.values();
+                        Some(vec![iter.next().unwrap().clone(), iter.next().unwrap().clone()])
+                    } else {
+                        None
+                    };
+                    if let Some(args) = concrete_args {
+                        *enum_name = self.mangle_name(*enum_name, &args);
                     }
                 }
                 for a in args {

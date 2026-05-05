@@ -898,7 +898,7 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
 fn debug_ir(codegen: &glyim_codegen_llvm::Codegen) {
     if std::env::var("GLYIM_DEBUG_IR").is_ok() {
-        tracing::debug!("Generated IR:\n{}", codegen.ir_string());
+        eprintln!("=== DEBUG IR ===\n{}", codegen.ir_string());
     }
 }
 
@@ -932,6 +932,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut cg = CodegenBuilder::new(&context, interner, merged_types).build()?;
     cg = cg.with_jit_mode();
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    debug_ir(&cg);
     let engine = cg
         .get_module()
         .create_jit_execution_engine(OptimizationLevel::None)
