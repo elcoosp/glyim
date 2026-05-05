@@ -6,6 +6,7 @@ use inkwell::values::{ArrayValue, IntValue, PointerValue};
 
 unsafe extern "C" {
     fn printf(fmt: *const libc::c_char, ...) -> libc::c_int;
+    fn getenv(name: *const libc::c_char) -> *const libc::c_char;
 }
 unsafe extern "C" {
     fn write(fd: libc::c_int, buf: *const libc::c_void, count: libc::size_t) -> libc::ssize_t;
@@ -116,6 +117,16 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
         None,
     );
 
+    let __glyim_getenv_ty = ptr_type.fn_type(&[ptr_type.into()], false);
+    if module.get_function("__glyim_getenv").is_none() {
+        module.add_function("__glyim_getenv", __glyim_getenv_ty, None);
+    }
+
+    let __glyim_str_eq_ty = context.bool_type().fn_type(&[ptr_type.into(), ptr_type.into()], false);
+    if module.get_function("__glyim_str_eq").is_none() {
+        module.add_function("__glyim_str_eq", __glyim_str_eq_ty, None);
+    }
+
     if jit {
         return;
     }
@@ -167,6 +178,25 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
     }
 }
 
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_getenv_impl(name: *const u8) -> *const u8 {
+    unsafe { getenv(name as *const libc::c_char) as *const u8 }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_str_eq_impl(a: *const u8, b: *const u8) -> bool {
+    if a.is_null() || b.is_null() { return false; }
+    let mut i = 0;
+    loop {
+        let ca = unsafe { *a.add(i) };
+        let cb = unsafe { *b.add(i) };
+        if ca != cb { return false; }
+        if ca == 0 { return true; }
+        i += 1;
+    }
+}
+
 pub fn map_runtime_shims_for_jit(
     engine: &inkwell::execution_engine::ExecutionEngine,
     module: &Module,
@@ -178,6 +208,12 @@ pub fn map_runtime_shims_for_jit(
     }
     if let Some(f) = module.get_function("__glyim_println_str") {
         engine.add_global_mapping(&f, glyim_println_str_impl as *const () as usize);
+    }
+    if let Some(f) = module.get_function("__glyim_getenv") {
+        engine.add_global_mapping(&f, glyim_getenv_impl as *const () as usize);
+    }
+    if let Some(f) = module.get_function("__glyim_str_eq") {
+        engine.add_global_mapping(&f, glyim_str_eq_impl as *const () as usize);
     }
     if let Some(f) = module.get_function("__glyim_assert_fail") {
         let ptr = custom_assert_fn.unwrap_or(glyim_assert_fail_impl);
