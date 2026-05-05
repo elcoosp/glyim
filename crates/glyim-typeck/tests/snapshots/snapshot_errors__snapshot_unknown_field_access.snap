@@ -10,5 +10,9 @@ expression: errors
         field: Symbol(
             5,
         ),
+        span: (
+            0,
+            0,
+        ),
     },
 ]

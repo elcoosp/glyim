@@ -8,5 +8,9 @@ expression: errors
             "Green",
             "Blue",
         ],
+        span: (
+            0,
+            0,
+        ),
     },
 ]

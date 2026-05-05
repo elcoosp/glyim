@@ -10,6 +10,10 @@ expression: errors
         field: Symbol(
             2,
         ),
+        span: (
+            0,
+            0,
+        ),
     },
     InvalidReturnType {
         expected: Int,
