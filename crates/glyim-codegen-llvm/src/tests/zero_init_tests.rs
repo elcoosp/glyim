@@ -1,4 +1,4 @@
-use glyim_codegen_llvm::compile_to_ir;
+use crate::compile_to_ir;
 
 #[test]
 fn zero_as_struct_produces_valid_ir() {

@@ -224,3 +224,6 @@ Got:
     }
 }
 pub mod wasm_abi;
+
+#[cfg(test)]
+mod tests;

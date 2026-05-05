@@ -1,4 +1,4 @@
-use glyim_codegen_llvm::compile_to_wasm;
+use crate::compile_to_wasm;
 
 #[test]
 fn compile_trivial_to_wasm() {

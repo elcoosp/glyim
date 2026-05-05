@@ -1,4 +1,4 @@
-use glyim_codegen_llvm::compile_to_ir;
+use crate::compile_to_ir;
 
 fn check_filecheck(source: &str, patterns: &[&str]) {
     let ir = compile_to_ir(source).unwrap();

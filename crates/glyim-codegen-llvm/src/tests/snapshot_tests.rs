@@ -1,4 +1,4 @@
-use glyim_codegen_llvm::compile_to_ir;
+use crate::compile_to_ir;
 use std::fs;
 use std::path::PathBuf;
 
