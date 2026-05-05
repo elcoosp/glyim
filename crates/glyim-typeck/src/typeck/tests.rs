@@ -1602,7 +1602,7 @@ fn unify_types_param_not_in_list() {
         &type_params,
         &mut sub,
     );
-    assert!_eq!(sub.get(&t), Some(&HirType::Named(u)));
+    assert_eq!(sub.get(&t), Some(&HirType::Named(u)));
 }
 
 #[test]
