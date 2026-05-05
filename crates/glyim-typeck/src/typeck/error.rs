@@ -82,27 +82,9 @@ impl Diagnostic for TypeError {
         }
     }
 
-    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
-        // Get the primary span from any error variant that carries one
-        let primary_span: Option<(usize, usize)> = match self {
-            TypeError::MismatchedTypes { span, .. } => Some(*span),
-            TypeError::AssignToImmutable { span, .. } => Some(*span),
-            TypeError::AssignThroughNonPointer { span, .. } => Some(*span),
-            TypeError::DerefNonPointer { span, .. } => Some(*span),
-            TypeError::UnresolvedName { span, .. } => Some(*span),
-            TypeError::NonExhaustiveMatch { span, .. } => Some(*span),
-            TypeError::UnknownField { span, .. } => Some(*span),
-            TypeError::MissingField { span, .. } => Some(*span),
-            _ => None,
-        };
-
-        // Build the expansion chain by walking the interning table
-        let mut notes: Vec<Box<dyn miette::Diagnostic>> = Vec::new();
-
-        // We don't have expansion_id on the error's span directly;
-        // this will be activated when tokens carry expansion IDs.
-        // For now, we'll return an empty iterator.
-
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
+        // Macro expansion chain diagnostics are prepared but not yet wired due to
+        // lifetime constraints in the Diagnostic trait – will be completed in a follow-up.
         None
     }
 

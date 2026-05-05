@@ -129,10 +129,32 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 .map(|(i, v)| HirVariant {
                     name: v.name,
                     fields: match &v.kind {
-                        glyim_parse::VariantKind::Unnamed(types)
-                        | glyim_parse::VariantKind::Named(types) => types
+                        glyim_parse::VariantKind::Unnamed(types) => types
+                            .iter()
+                            .enumerate()
+                            .map(|(j, (sym, _, ty_opt))| {
+                                // For unnamed variants, the field symbol is the type expression.
+                                // The field name is synthesized (e.g., __0, __1).
+                                let field_name = ctx.intern(&format!("__{}", j));
+                                let ty = ty_opt
+                                    .as_ref()
+                                    .map(|t| crate::lower::types::lower_type_expr(t, ctx))
+                                    .unwrap_or_else(|| {
+                                        // Interpret the field symbol as a type expression
+                                        let type_expr = glyim_parse::TypeExpr::Named(*sym);
+                                        crate::lower::types::lower_type_expr(&type_expr, ctx)
+                                    });
+                                StructField {
+                                    name: field_name,
+                                    ty,
+                                    doc: None,
+                                }
+                            })
+                            .collect(),
+                        glyim_parse::VariantKind::Named(types) => types
                             .iter()
                             .map(|(sym, _, ty_opt)| {
+                                // For named variants, field name is explicit, type from annotation or Int
                                 let ty = ty_opt
                                     .as_ref()
                                     .map(|t| crate::lower::types::lower_type_expr(t, ctx))

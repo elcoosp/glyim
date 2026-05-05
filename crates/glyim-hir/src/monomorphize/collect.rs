@@ -268,14 +268,32 @@ impl<'a> MonoContext<'a> {
             }
             HirType::Option(inner) => {
                 eprintln!("[concretize_type] Option");
-                HirType::Option(Box::new(self.concretize_type(inner)))
+                let concrete_inner = self.concretize_type(inner);
+                if !self.has_unresolved_type_param(&concrete_inner) {
+                    let option_sym = self.interner.intern("Option");
+                    let key = (option_sym, vec![concrete_inner.clone()]);
+                    if self.enum_specs.contains_key(&key) {
+                        let mangled = self.mangle_name(option_sym, &[concrete_inner.clone()]);
+                        return HirType::Named(mangled);
+                    }
+                }
+                HirType::Option(Box::new(concrete_inner))
             }
             HirType::Result(ok, err) => {
                 eprintln!("[concretize_type] Result");
-                HirType::Result(
-                    Box::new(self.concretize_type(ok)),
-                    Box::new(self.concretize_type(err)),
-                )
+                let concrete_ok = self.concretize_type(ok);
+                let concrete_err = self.concretize_type(err);
+                if !self.has_unresolved_type_param(&concrete_ok)
+                    && !self.has_unresolved_type_param(&concrete_err)
+                {
+                    let result_sym = self.interner.intern("Result");
+                    let key = (result_sym, vec![concrete_ok.clone(), concrete_err.clone()]);
+                    if self.enum_specs.contains_key(&key) {
+                        let mangled = self.mangle_name(result_sym, &[concrete_ok, concrete_err]);
+                        return HirType::Named(mangled);
+                    }
+                }
+                HirType::Result(Box::new(concrete_ok), Box::new(concrete_err))
             }
             HirType::Tuple(elems) => {
                 eprintln!("[concretize_type] Tuple");
@@ -843,6 +861,34 @@ impl<'a> MonoContext<'a> {
                     self.enqueue_type_if_generic(a);
                 }
             }
+            HirType::Option(inner) => {
+                let concrete_inner = self.concretize_type(inner);
+                if !self.has_unresolved_type_param(&concrete_inner) {
+                    let option_sym = self.interner.intern("Option");
+                    let key = (option_sym, vec![concrete_inner.clone()]);
+                    if !self.type_queued.contains(&key) {
+                        self.type_queued.insert(key.clone());
+                        self.type_work_queue.push(key);
+                    }
+                }
+                self.enqueue_type_if_generic(inner);
+            }
+            HirType::Result(ok, err) => {
+                let concrete_ok = self.concretize_type(ok);
+                let concrete_err = self.concretize_type(err);
+                if !self.has_unresolved_type_param(&concrete_ok)
+                    && !self.has_unresolved_type_param(&concrete_err)
+                {
+                    let result_sym = self.interner.intern("Result");
+                    let key = (result_sym, vec![concrete_ok.clone(), concrete_err.clone()]);
+                    if !self.type_queued.contains(&key) {
+                        self.type_queued.insert(key.clone());
+                        self.type_work_queue.push(key);
+                    }
+                }
+                self.enqueue_type_if_generic(ok);
+                self.enqueue_type_if_generic(err);
+            }
             HirType::Named(_)
             | HirType::Int
             | HirType::Bool
@@ -853,16 +899,8 @@ impl<'a> MonoContext<'a> {
             | HirType::Error
             | HirType::Opaque(_)
             | HirType::RawPtr(_)
-            | HirType::Option(_)
-            | HirType::Result(_, _)
             | HirType::Func(_, _) => {
-                // Sub-components: Option, Result, RawPtr
                 match ty {
-                    HirType::Option(inner) => self.enqueue_type_if_generic(inner),
-                    HirType::Result(ok, err) => {
-                        self.enqueue_type_if_generic(ok);
-                        self.enqueue_type_if_generic(err);
-                    }
                     HirType::RawPtr(inner) => self.enqueue_type_if_generic(inner),
                     _ => {}
                 }

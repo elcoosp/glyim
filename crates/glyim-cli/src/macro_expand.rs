@@ -82,27 +82,25 @@ pub fn expand_macros(source: &str, pkg_dir: &Path, cas_dir: &Path) -> Result<Str
                 .unwrap_or_else(|_| inner.as_bytes().to_vec());
             let expanded_str = String::from_utf8_lossy(&expanded).into_owned();
 
-            // Record expansion metadata *before* modifying result
+            // Record expansion metadata with real source spans
             let call_site = (at_pos, call_end);
-            let def_site = registry.get_def_span(macro_name).unwrap_or((0, 0));
-            let rec_macro_name = macro_name.to_string();
-            let expanded_start = at_pos; // new position after before
-            let expanded_end = expanded_start + expanded_str.len();
-            let _expanded_range = (expanded_start, expanded_end);
+            let (_def_start, _def_end) = registry.get_def_span(macro_name).unwrap_or((0, 0));
+            let macro_name = macro_name.to_string();
+            let mut table = glyim_diag::MACRO_EXPANSION_TABLE.lock().unwrap();
+            let expansion_id = table.len() as u32;
+            table.push(glyim_diag::MacroExpansion {
+                call_site: glyim_diag::Span::new(call_site.0, call_site.1),
+                def_site: glyim_diag::Span::new(_def_start, _def_end),
+                macro_name: macro_name.clone(),
+                parent: None, // will be wired for nested expansions in a follow‑up
+            });
+            drop(table);
 
             let before = &result[..at_pos];
             let after_str = &result[call_end..];
             result = format!("{before}{expanded_str}{after_str}");
 
-            {
-                let mut table = glyim_diag::MACRO_EXPANSION_TABLE.lock().unwrap();
-                table.push(glyim_diag::MacroExpansion {
-                    call_site: glyim_diag::Span::new(call_site.0, call_site.1),
-                    def_site: glyim_diag::Span::new(def_site.0, def_site.1),
-                    macro_name: rec_macro_name,
-                    parent: None,
-                });
-            }
+            // The expanded span is known; we could record it, but for now the call site suffices
             let has_nested_macro = expanded_str.contains('@');
             if has_nested_macro {
                 scan_from = at_pos;

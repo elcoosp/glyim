@@ -63,7 +63,7 @@ impl TypeChecker {
             HirExpr::Binary { op, lhs, rhs, .. } => {
                 let lt = self.check_expr(lhs).unwrap_or(HirType::Error);
                 let rt = self.check_expr(rhs).unwrap_or(HirType::Error);
-                if matches!(lt, HirType::Error) || matches!(rt, HirType::Error) {
+                if lt == HirType::Error || rt == HirType::Error {
                     return HirType::Error;
                 }
                 match op {
@@ -78,7 +78,7 @@ impl TypeChecker {
             }
             HirExpr::Unary { operand, .. } => {
                 let t = self.check_expr(operand).unwrap_or(HirType::Error);
-                if matches!(t, HirType::Error) {
+                if t == HirType::Error {
                     return HirType::Error;
                 }
                 HirType::Int
@@ -87,7 +87,7 @@ impl TypeChecker {
                 let mut last = HirType::Unit;
                 for stmt in stmts {
                     if let Some(t) = self.check_stmt(stmt) {
-                        if matches!(t, HirType::Error) {
+                        if t == HirType::Error {
                             return HirType::Error;
                         }
                         last = t;
@@ -102,7 +102,7 @@ impl TypeChecker {
                 ..
             } => {
                 let cond_t = self.check_expr(condition).unwrap_or(HirType::Error);
-                if matches!(cond_t, HirType::Error) {
+                if cond_t == HirType::Error {
                     return HirType::Error;
                 }
                 let then_type = self.check_expr(then_branch);
@@ -113,7 +113,7 @@ impl TypeChecker {
             }
             HirExpr::Println { arg, .. } => {
                 let t = self.check_expr(arg).unwrap_or(HirType::Error);
-                if matches!(t, HirType::Error) {
+                if t == HirType::Error {
                     return HirType::Error;
                 }
                 HirType::Unit
@@ -122,7 +122,7 @@ impl TypeChecker {
                 condition, message, ..
             } => {
                 let ct = self.check_expr(condition).unwrap_or(HirType::Error);
-                if matches!(ct, HirType::Error) {
+                if ct == HirType::Error {
                     return HirType::Error;
                 }
                 if let Some(msg) = message {
@@ -155,6 +155,11 @@ impl TypeChecker {
             HirExpr::Call {
                 id, callee, args, ..
             } => {
+
+                // If any argument is Error, suppress cascading errors
+                if args.iter().any(|a| self.check_expr(a).map_or(false, |t| t == HirType::Error)) {
+                    return HirType::Error;
+                }
                 // If call_type_args already contains this id (from a MethodCall
                 // that was desugared into this Call), use the stored type args
                 // instead of inferring from the argument types again.
@@ -229,7 +234,16 @@ impl TypeChecker {
                 args,
                 ..
             } => {
+
+                // If receiver type is Error, suppress further checks
                 let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
+                if receiver_ty == HirType::Error {
+                    return HirType::Error;
+                }
+                let arg_types: Vec<HirType> =
+                    args.iter().filter_map(|a| self.check_expr(a)).collect();
+                let receiver_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
+                if receiver_ty == HirType::Error { return HirType::Error; }
                 let arg_types: Vec<HirType> =
                     args.iter().filter_map(|a| self.check_expr(a)).collect();
                 // look up method in impl methods by mangled name computed from receiver type
@@ -316,7 +330,7 @@ impl TypeChecker {
             .iter()
             .filter_map(|(_, val)| {
                 let t = self.check_expr(val).unwrap_or(HirType::Error);
-                if matches!(t, HirType::Error) {
+                if t == HirType::Error {
                     return Some(HirType::Error);
                 }
                 Some(t)
@@ -324,7 +338,7 @@ impl TypeChecker {
             .collect();
         if field_value_types
             .iter()
-            .any(|t| matches!(t, HirType::Error))
+            .any(|t| t == &HirType::Error)
         {
             return HirType::Error;
         }
