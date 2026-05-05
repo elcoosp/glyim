@@ -437,9 +437,10 @@ impl TypeChecker {
         }
         let mut arg_types: Vec<HirType> = args.iter().filter_map(|a| self.check_expr(a)).collect();
         if let Some(info) = self.enums.get(&enum_name) {
-            // If enum has more type params than provided args, pad with type param symbols
-            while arg_types.len() < info.type_params.len() {
-                let tp = info.type_params[arg_types.len()];
+            // If enum has more type params than provided args AND the enum has exactly 2 type params
+            // (Result<T,E> pattern), pad with type param symbols.
+            if arg_types.len() == 1 && info.type_params.len() == 2 {
+                let tp = info.type_params[1];
                 arg_types.push(HirType::Named(tp));
             }
         }
