@@ -1,0 +1,10 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × expected = but found integer literal
+   ╭─[tests/ui/let_missing_eq.g:1:7]
+ 1 │ let x 42
+   ·       ─┬
+   ·        ╰── unexpected integer literal
+   ╰────

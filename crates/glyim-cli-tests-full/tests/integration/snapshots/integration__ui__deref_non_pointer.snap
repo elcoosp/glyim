@@ -1,0 +1,10 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × cannot dereference non-pointer type `Int`
+   ╭─[tests/ui/deref_non_pointer.g:1:1]
+ 1 │ main = () => { let x = 42; *x }
+   · ▲
+   · ╰── cannot dereference non-pointer type `Int`
+   ╰────

@@ -1,0 +1,11 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × non-exhaustive match, missing variants: ["Green", "Blue"]
+   ╭─[tests/ui/non_exhaustive_match.g:1:1]
+ 1 │ enum Color { Red, Green, Blue }
+   · ▲
+   · ╰── non-exhaustive match, missing variants: ["Green", "Blue"]
+ 2 │ main = () => match Color::Red { Color::Red => 1 }
+   ╰────

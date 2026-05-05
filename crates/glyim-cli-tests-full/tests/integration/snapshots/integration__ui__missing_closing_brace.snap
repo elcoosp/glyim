@@ -1,0 +1,5 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+expression: actual
+---
+  × expected } but reached end of input
