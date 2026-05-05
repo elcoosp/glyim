@@ -6,3 +6,6 @@ pub mod wasi_stubs;
 pub use cache::InMemoryStore;
 pub mod registry;
 pub mod wasm_interface;
+
+#[cfg(test)]
+mod tests;

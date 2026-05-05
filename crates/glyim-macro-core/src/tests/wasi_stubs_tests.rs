@@ -1,4 +1,4 @@
-use glyim_macro_core::wasi_stubs::DeterministicWasi;
+use crate::wasi_stubs::DeterministicWasi;
 
 #[test]
 fn wasi_view_creation() {

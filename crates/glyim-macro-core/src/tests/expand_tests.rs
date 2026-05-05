@@ -1,6 +1,6 @@
 use glyim_interner::Symbol;
-use glyim_macro_core::context::{Field, MacroContext};
-use glyim_macro_core::expand::{MacroArg, interpret_macro};
+use crate::context::{Field, MacroContext};
+use crate::expand::{MacroArg, interpret_macro};
 
 struct TestCtx;
 impl MacroContext for TestCtx {

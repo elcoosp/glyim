@@ -1,4 +1,4 @@
-use glyim_macro_core::executor::MacroExecutor;
+use crate::executor::MacroExecutor;
 use glyim_macro_vfs::LocalContentStore;
 use std::sync::Arc;
 
