@@ -4,11 +4,9 @@ use std::sync::Once;
 static START_SERVER: Once = Once::new();
 static mut SERVER_PID: Option<u32> = None;
 
-/// Start the CAS server once per test run.
 fn ensure_server() {
     unsafe {
         START_SERVER.call_once(|| {
-            // Build the CAS server in release mode first
             let status = Command::new("cargo")
                 .args(["build", "-p", "glyim-cas-server"])
                 .status()
@@ -45,7 +43,6 @@ fn two_machines_share_macro_cache() {
 
     let glyim = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/release/glyim");
 
-    // Build glyim in release mode too
     let build_status = Command::new("cargo")
         .args(["build", "--release", "-p", "glyim-cli"])
         .status()

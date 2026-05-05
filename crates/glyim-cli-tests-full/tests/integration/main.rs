@@ -27,5 +27,12 @@ mod test_harness;
 mod tuples;
 mod types;
 mod variables;
+mod cross;
+mod jit;
+mod test_runner;
+mod ui;
+mod generic_debug;
+mod macro_cache_e2e;
+mod macro_e2e;
 
 fn main() {}

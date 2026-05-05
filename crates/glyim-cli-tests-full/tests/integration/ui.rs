@@ -1,3 +1,5 @@
+#[allow(unused_imports, dead_code)]
+use crate::common::*;
 use glyim_diag::miette;
 use glyim_hir::lower;
 use glyim_parse::parse;
@@ -58,118 +60,60 @@ fn run_ui_test(name: &str) {
 }
 
 #[test]
-fn ui_let_missing_eq() {
-    run_ui_test("let_missing_eq");
-}
+fn ui_let_missing_eq() { run_ui_test("let_missing_eq"); }
 #[test]
-fn ui_assign_immutable() {
-    run_ui_test("assign_immutable");
-}
+fn ui_assign_immutable() { run_ui_test("assign_immutable"); }
 #[test]
-fn ui_missing_main() {
-    run_ui_test("missing_main");
-}
+fn ui_missing_main() { run_ui_test("missing_main"); }
 #[test]
-fn ui_unterminated_string() {
-    run_ui_test("unterminated_string");
-}
+fn ui_unterminated_string() { run_ui_test("unterminated_string"); }
 #[test]
-fn ui_missing_closing_brace() {
-    run_ui_test("missing_closing_brace");
-}
+fn ui_missing_closing_brace() { run_ui_test("missing_closing_brace"); }
 #[test]
-fn ui_multiple_errors() {
-    run_ui_test("multiple_errors");
-}
+fn ui_multiple_errors() { run_ui_test("multiple_errors"); }
 #[test]
-fn ui_if_missing_brace() {
-    run_ui_test("if_missing_brace");
-}
+fn ui_if_missing_brace() { run_ui_test("if_missing_brace"); }
 #[test]
-fn ui_unexpected_token() {
-    run_ui_test("unexpected_token");
-}
+fn ui_unexpected_token() { run_ui_test("unexpected_token"); }
 #[test]
-fn ui_missing_comma_in_params() {
-    run_ui_test("missing_comma_in_params");
-}
+fn ui_missing_comma_in_params() { run_ui_test("missing_comma_in_params"); }
 #[test]
-fn ui_duplicate_param() {
-    run_ui_test("duplicate_param");
-}
+fn ui_duplicate_param() { run_ui_test("duplicate_param"); }
 #[test]
-fn ui_nested_error() {
-    run_ui_test("nested_error");
-}
+fn ui_nested_error() { run_ui_test("nested_error"); }
 #[test]
-fn ui_empty_source() {
-    run_ui_test("empty_source");
-}
+fn ui_empty_source() { run_ui_test("empty_source"); }
 #[test]
-fn ui_bool_mismatch() {
-    run_ui_test("bool_mismatch");
-}
+fn ui_bool_mismatch() { run_ui_test("bool_mismatch"); }
 #[test]
-fn ui_type_mismatch() {
-    run_ui_test("type_mismatch");
-}
+fn ui_type_mismatch() { run_ui_test("type_mismatch"); }
 #[test]
-fn ui_assign_deref_non_ptr() {
-    run_ui_test("assign_deref_non_ptr");
-}
+fn ui_assign_deref_non_ptr() { run_ui_test("assign_deref_non_ptr"); }
 #[test]
-fn ui_deref_non_pointer() {
-    run_ui_test("deref_non_pointer");
-}
+fn ui_deref_non_pointer() { run_ui_test("deref_non_pointer"); }
 #[test]
-fn ui_non_exhaustive_match() {
-    run_ui_test("non_exhaustive_match");
-}
+fn ui_non_exhaustive_match() { run_ui_test("non_exhaustive_match"); }
 #[test]
-fn ui_invalid_question() {
-    run_ui_test("invalid_question");
-}
+fn ui_invalid_question() { run_ui_test("invalid_question"); }
 #[test]
-fn ui_invalid_cast() {
-    run_ui_test("invalid_cast");
-}
+fn ui_invalid_cast() { run_ui_test("invalid_cast"); }
 #[test]
-fn ui_struct_unknown_field() {
-    run_ui_test("struct_unknown_field");
-}
+fn ui_struct_unknown_field() { run_ui_test("struct_unknown_field"); }
 #[test]
-fn ui_struct_missing_field() {
-    run_ui_test("struct_missing_field");
-}
+fn ui_struct_missing_field() { run_ui_test("struct_missing_field"); }
 #[test]
-fn ui_unresolved_name() {
-    run_ui_test("unresolved_name");
-}
+fn ui_unresolved_name() { run_ui_test("unresolved_name"); }
 #[test]
-fn ui_assign_through_non_pointer() {
-    run_ui_test("assign_through_non_pointer");
-}
+fn ui_assign_through_non_pointer() { run_ui_test("assign_through_non_pointer"); }
 #[test]
-fn ui_invalid_return_type() {
-    run_ui_test("invalid_return_type");
-}
+fn ui_invalid_return_type() { run_ui_test("invalid_return_type"); }
 #[test]
-fn ui_if_condition_must_be_bool() {
-    run_ui_test("if_condition_must_be_bool");
-}
+fn ui_if_condition_must_be_bool() { run_ui_test("if_condition_must_be_bool"); }
 #[test]
-fn ui_expected_function_call() {
-    run_ui_test("expected_function_call");
-}
+fn ui_expected_function_call() { run_ui_test("expected_function_call"); }
 #[test]
-fn ui_invalid_question_mark() {
-    run_ui_test("invalid_question_mark");
-}
+fn ui_invalid_question_mark() { run_ui_test("invalid_question_mark"); }
 #[test]
-fn ui_assign_to_immutable_pattern() {
-    run_ui_test("assign_to_immutable_pattern");
-}
+fn ui_assign_to_immutable_pattern() { run_ui_test("assign_to_immutable_pattern"); }
 #[test]
-fn ui_struct_extra_field() {
-    run_ui_test("struct_extra_field");
-}
+fn ui_struct_extra_field() { run_ui_test("struct_extra_field"); }

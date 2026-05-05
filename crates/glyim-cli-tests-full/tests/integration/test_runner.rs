@@ -1,3 +1,5 @@
+#[allow(unused_imports, dead_code)]
+use crate::common::*;
 use glyim_cli::test_runner::*;
 
 #[test]

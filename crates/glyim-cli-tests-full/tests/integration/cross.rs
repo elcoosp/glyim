@@ -1,3 +1,5 @@
+#[allow(unused_imports, dead_code)]
+use crate::common::*;
 use glyim_cli::cross;
 
 #[test]
@@ -27,7 +29,6 @@ use std::fs;
 
 #[test]
 fn cross_compile_produces_correct_elf_magic() {
-    // Only run on Linux where ELF magic is relevant
     if !cfg!(target_os = "linux") {
         return;
     }
@@ -56,6 +57,7 @@ fn cross_compile_produces_correct_elf_magic() {
     let e_machine = u16::from_le_bytes([bytes[18], bytes[19]]);
     assert_eq!(e_machine, 0xB7, "ELF machine type is not AArch64 (0xB7)");
 }
+
 #[test]
 fn missing_sysroot_returns_error() {
     assert!(glyim_cli::cross::ensure_sysroot("bogus-triple").is_err());

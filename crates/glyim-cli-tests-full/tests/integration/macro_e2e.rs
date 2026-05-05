@@ -2,8 +2,8 @@ use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::registry::MacroRegistry;
 use glyim_macro_vfs::LocalContentStore;
 use std::sync::Arc;
+use crate::common::pipeline;
 
-/// Simple identity macro in WAT: copies input bytes to output and returns length.
 fn identity_wat() -> &'static str {
     r#"
 (module
@@ -44,15 +44,12 @@ fn e2e_macro_registry_and_execution() {
     let store = LocalContentStore::new(dir.path()).unwrap();
     let store = Arc::new(store);
 
-    // Setup registry with identity macro
     let mut registry = MacroRegistry::new(store.clone());
     let wasm = wat::parse_str(identity_wat()).expect("parse identity wat");
     registry.register("identity", wasm, None);
 
-    // Setup executor with caching
     let executor = MacroExecutor::new_with_cache(store);
 
-    // Execute
     let macro_wasm = registry.get("identity").expect("macro registered");
     let input = b"hello glyim macros!";
     let result = executor.execute(macro_wasm, input).expect("execution");
@@ -73,11 +70,9 @@ fn e2e_cache_roundtrip() {
     let input = b"cache test data";
     let macro_wasm = registry.get("identity").expect("macro registered");
 
-    // First execution (cache miss)
     let out1 = executor.execute(macro_wasm, input).expect("first exec");
     assert_eq!(out1, input);
 
-    // Second execution (cache hit)
     let out2 = executor.execute(macro_wasm, input).expect("second exec");
     assert_eq!(out2, out1);
 }
@@ -101,4 +96,36 @@ fn e2e_different_inputs_different_outputs() {
     assert_eq!(out_a, b"aaa");
     assert_eq!(out_b, b"bbb");
     assert_ne!(out_a, out_b);
+}
+
+#[test]
+fn identity_macro_in_pipeline() {
+    let dir = tempfile::tempdir().unwrap();
+    let source_path = dir.path().join("test.g");
+    std::fs::write(&source_path, "@identity(main = () => 42)").unwrap();
+
+    let result = pipeline::run(&source_path, None);
+    match result {
+        Ok(code) => assert_eq!(code, 42, "expected exit code 42, got {code}"),
+        Err(e) => {
+            eprintln!(
+                "EXPANDED SOURCE:\n{}\n",
+                std::fs::read_to_string(&source_path).unwrap()
+            );
+            panic!("pipeline failed: {e}");
+        }
+    }
+}
+
+#[test]
+fn identity_macro_cache_hit() {
+    let dir = tempfile::tempdir().unwrap();
+    let source_path = dir.path().join("test.g");
+    std::fs::write(&source_path, "@identity(main = () => 99)").unwrap();
+
+    let result1 = pipeline::run(&source_path, None);
+    assert_eq!(result1.unwrap(), 99);
+
+    let result2 = pipeline::run(&source_path, None);
+    assert_eq!(result2.unwrap(), 99, "cache hit must produce same result");
 }
