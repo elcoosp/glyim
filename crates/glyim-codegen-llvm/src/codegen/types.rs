@@ -83,6 +83,7 @@ pub(crate) fn codegen_struct_def(cg: &Codegen, def: &glyim_hir::item::StructDef)
 }
 
 pub(crate) fn codegen_enum_def(cg: &Codegen, def: &glyim_hir::item::EnumDef) {
+    eprintln!("[codegen_enum_def] registering enum {}", cg.interner.resolve(def.name));
     // Compute payload size from actual field types (respects specialized generics)
     let mut max_payload_bytes: u32 = 0;
     for variant in &def.variants {

@@ -125,15 +125,21 @@ impl<'a> MonoContext<'a> {
                 } else {
                     let resolved_name = self.interner.resolve(*enum_name);
                     let concrete_args: Option<Vec<HirType>> = if resolved_name == "Option" && !sub.is_empty() {
-                        Some(vec![sub.values().next().unwrap().clone()])
+                        let args = vec![sub.values().next().unwrap().clone()];
+                        eprintln!("[concretize ELSE] Option args = {:?}", args);
+                        Some(args)
                     } else if resolved_name == "Result" && sub.len() >= 2 {
                         let mut iter = sub.values();
-                        Some(vec![iter.next().unwrap().clone(), iter.next().unwrap().clone()])
+                        let args = vec![iter.next().unwrap().clone(), iter.next().unwrap().clone()];
+                        eprintln!("[concretize ELSE] Result args = {:?}", args);
+                        Some(args)
                     } else {
                         None
                     };
                     if let Some(args) = concrete_args {
+                        let old = self.interner.resolve(*enum_name).to_string();
                         *enum_name = self.mangle_name(*enum_name, &args);
+                        eprintln!("[concretize ELSE] replaced {} with {}", old, self.interner.resolve(*enum_name));
                     }
                 }
                 for a in args {
