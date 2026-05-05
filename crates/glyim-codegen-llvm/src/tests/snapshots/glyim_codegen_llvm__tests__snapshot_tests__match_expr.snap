@@ -98,8 +98,8 @@ exit:                                             ; preds = %loop.cond
 define i32 @main() {
 entry:
   %ret_val = alloca i32, align 4
-  %enum_alloc = call ptr @__glyim_alloc(i64 ptrtoint (ptr getelementptr ({ i32 }, ptr null, i32 1) to i64))
-  %tag_ptr = getelementptr inbounds nuw { i32 }, ptr %enum_alloc, i32 0, i32 0
+  %enum_alloc = call ptr @__glyim_alloc(i64 ptrtoint (ptr getelementptr ({ i32, i64 }, ptr null, i32 1) to i64))
+  %tag_ptr = getelementptr inbounds nuw { i32, i64 }, ptr %enum_alloc, i32 0, i32 0
   store i32 0, ptr %tag_ptr, align 4
   %enum_ptr = ptrtoint ptr %enum_alloc to i64
   %m = alloca i64, align 8
