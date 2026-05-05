@@ -141,3 +141,35 @@ fn ui_struct_unknown_field() {
 fn ui_struct_missing_field() {
     run_ui_test("struct_missing_field");
 }
+#[test]
+fn ui_unresolved_name() {
+    run_ui_test("unresolved_name");
+}
+#[test]
+fn ui_assign_through_non_pointer() {
+    run_ui_test("assign_through_non_pointer");
+}
+#[test]
+fn ui_invalid_return_type() {
+    run_ui_test("invalid_return_type");
+}
+#[test]
+fn ui_if_condition_must_be_bool() {
+    run_ui_test("if_condition_must_be_bool");
+}
+#[test]
+fn ui_expected_function_call() {
+    run_ui_test("expected_function_call");
+}
+#[test]
+fn ui_invalid_question_mark() {
+    run_ui_test("invalid_question_mark");
+}
+#[test]
+fn ui_assign_to_immutable_pattern() {
+    run_ui_test("assign_to_immutable_pattern");
+}
+#[test]
+fn ui_struct_extra_field() {
+    run_ui_test("struct_extra_field");
+}

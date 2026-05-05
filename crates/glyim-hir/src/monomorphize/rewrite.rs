@@ -150,68 +150,72 @@ impl<'a> MonoContext<'a> {
                 scrutinee,
                 arms,
                 span,
-            } => HirExpr::Match {
-                id: *id,
-                scrutinee: Box::new(self.rewrite_expr(
+            } => {
+                let rewritten_scrutinee = Box::new(self.rewrite_expr(
                     scrutinee,
                     fn_map,
                     struct_map,
                     enum_spec_map,
                     type_sub,
-                )),
-                arms: arms
-                    .iter()
-                    .map(|arm| {
-                        let pat = &arm.pattern;
-                        let guard = &arm.guard;
-                        let body = &arm.body;
-                        let rewritten_guard = guard.as_ref().map(|g| {
-                            self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub)
-                        });
-                        let rewritten_pat = if let HirPattern::EnumVariant {
-                            enum_name,
-                            variant_name,
-                            bindings,
-                            span,
-                        } = pat
-                        {
-                            // For patterns, we can't easily get the concrete args because patterns don't carry type info.
-                            // We'll try to find the specialized enum from the scrutinee's type (which is available as the match scrutinee expr_type).
-                            // But we don't have access to scrutinee type here. For now, try exact match and fallback to base.
-                            // Better: the pattern rewriting is cosmetic; the codegen match logic already uses the rewritten EnumVariant expression.
-                            // So just keep the original pattern name? Actually the codegen match looks at the pattern to determine tag.
-                            // We need the pattern to match the concrete enum name.
-                            // Since we already rewrote the scrutinee EnumVariant, the value has the correct tag layout.
-                            // The pattern just needs to match the tag index of the concrete enum.
-                            // We'll search enum_spec_map for any entry where the base matches.
-                            let new_enum_name = enum_spec_map
-                                .iter()
-                                .find(|((base, _), _)| base == enum_name)
-                                .map(|(_, mangled)| *mangled)
-                                .unwrap_or(*enum_name);
-                            HirPattern::EnumVariant {
-                                enum_name: new_enum_name,
-                                variant_name: *variant_name,
-                                bindings: bindings.clone(),
-                                span: *span,
+                ));
+                let scrutinee_ty = self
+                    .get_expr_type(scrutinee.get_id())
+                    .as_ref()
+                    .map(|t| crate::types::substitute_type(t, type_sub))
+                    .map(|t| self.concretize_type(&t));
+                HirExpr::Match {
+                    id: *id,
+                    scrutinee: rewritten_scrutinee,
+                    arms: arms
+                        .iter()
+                        .map(|arm| {
+                            let pat = &arm.pattern;
+                            let guard = &arm.guard;
+                            let body = &arm.body;
+                            let rewritten_guard = guard.as_ref().map(|g| {
+                                self.rewrite_expr(g, fn_map, struct_map, enum_spec_map, type_sub)
+                            });
+                            let rewritten_pat = if let HirPattern::EnumVariant {
+                                enum_name: original_enum_name,
+                                variant_name,
+                                bindings,
+                                span,
+                            } = pat
+                            {
+                                let new_enum_name = scrutinee_ty
+                                    .as_ref()
+                                    .and_then(|t| match t {
+                                        HirType::Generic(base, args) => {
+                                            enum_spec_map.get(&(*base, args.clone())).copied()
+                                        }
+                                        HirType::Named(name) => Some(*name),
+                                        _ => None,
+                                    })
+                                    .unwrap_or(*original_enum_name);
+                                HirPattern::EnumVariant {
+                                    enum_name: new_enum_name,
+                                    variant_name: *variant_name,
+                                    bindings: bindings.clone(),
+                                    span: *span,
+                                }
+                            } else {
+                                pat.clone()
+                            };
+                            MatchArm {
+                                pattern: rewritten_pat,
+                                guard: rewritten_guard,
+                                body: self.rewrite_expr(
+                                    body,
+                                    fn_map,
+                                    struct_map,
+                                    enum_spec_map,
+                                    type_sub,
+                                ),
                             }
-                        } else {
-                            pat.clone()
-                        };
-                        MatchArm {
-                            pattern: rewritten_pat,
-                            guard: rewritten_guard,
-                            body: self.rewrite_expr(
-                                body,
-                                fn_map,
-                                struct_map,
-                                enum_spec_map,
-                                type_sub,
-                            ),
-                        }
-                    })
-                    .collect(),
-                span: *span,
+                        })
+                        .collect(),
+                    span: *span,
+                }
             },
 
             HirExpr::Block { id, stmts, span } => HirExpr::Block {

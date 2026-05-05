@@ -1,0 +1,11 @@
+---
+source: crates/glyim-cli/tests/ui.rs
+assertion_line: 57
+expression: actual
+---
+  × unresolved name: Symbol(3)
+   ╭─[tests/ui/invalid_question_mark.g:1:1]
+ 1 │ main = () => { let x = 42?; x }
+   · ▲
+   · ╰── unresolved name: Symbol(3)
+   ╰────

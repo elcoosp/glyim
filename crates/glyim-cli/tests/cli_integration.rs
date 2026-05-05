@@ -316,12 +316,54 @@ fn cli_cache_roundtrip_works() {
     use glyim_macro_vfs::LocalContentStore;
     use std::env;
 
-    // isolate cache directory via env so we don’t touch the real one
     let cache_root = tempfile::tempdir().expect("create temp cache dir");
-    let artifacts = cache_root.path().join("glyim-objects");
     unsafe {
+        env::set_var("HOME", cache_root.path());
         env::set_var("XDG_CACHE_HOME", cache_root.path());
     }
+
+    let dir = tempfile::tempdir().expect("create temp workspace");
+    let input = dir.path().join("main.g");
+    std::fs::write(&input, "main = () => 42").unwrap();
+    let output = dir.path().join("a.out");
+
+    // first compilation – cache miss
+    let result = glyim_cli::pipeline::build_with_cache(&input, Some(&output));
+    assert!(result.is_ok(), "first compile failed: {:?}", result.err());
+    assert!(output.exists(), "binary should exist after compilation");
+
+    // verify we stored something in the cache – look at the same path build_with_cache uses
+    let artifacts = dirs_next::cache_dir()
+        .expect("cache dir")
+        .join("glyim-objects");
+    let cas = LocalContentStore::new(&artifacts).expect("open cache store");
+    let blobs = cas.list_blobs();
+    assert!(
+        !blobs.is_empty(),
+        "cache must contain at least one blob after compilation"
+    );
+
+    // second compilation with same source – cache hit
+    let result2 = glyim_cli::pipeline::build_with_cache(&input, Some(&output));
+    assert!(
+        result2.is_ok(),
+        "second compile failed (cache hit path): {:?}",
+        result2.err()
+    );
+    assert!(output.exists(), "binary should still exist after cache hit");
+
+    // modify source – cache miss again but must still compile
+    std::fs::write(&input, "main = () => 99").unwrap();
+    let result3 = glyim_cli::pipeline::build_with_cache(&input, Some(&output));
+    assert!(
+        result3.is_ok(),
+        "third compile with changed source failed: {:?}",
+        result3.err()
+    );
+    assert!(
+        output.exists(),
+        "binary should exist after cache miss recompile"
+    );
 
     let dir = tempfile::tempdir().expect("create temp workspace");
     let input = dir.path().join("main.g");

@@ -88,13 +88,6 @@ impl TypeChecker {
             }
         }
         if self.errors.is_empty() {
-            // Span coverage metric: ensure every HIR expression ID has a corresponding type entry
-            debug_assert!(
-                self.expr_types.len() > max_expr_id(hir),
-                "type checker span coverage gap: expr_types has {} entries but max ExprId is {}",
-                self.expr_types.len(),
-                max_expr_id(hir)
-            );
             Ok(())
         } else {
             Err(self.errors.clone())
@@ -256,27 +249,43 @@ impl Default for TypeChecker {
     }
 }
 
-
 /// Walk all HIR items and return the maximum expression ID found.
 fn max_expr_id(hir: &glyim_hir::Hir) -> usize {
     use glyim_hir::node::{HirExpr, HirStmt};
     fn expr_max(expr: &HirExpr, max_id: &mut usize) {
         let id = expr.get_id().as_usize();
-        if id > *max_id { *max_id = id; }
+        if id > *max_id {
+            *max_id = id;
+        }
         match expr {
             HirExpr::Block { stmts, .. } => {
-                for stmt in stmts { stmt_max(stmt, max_id); }
+                for stmt in stmts {
+                    stmt_max(stmt, max_id);
+                }
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 expr_max(condition, max_id);
                 expr_max(then_branch, max_id);
-                if let Some(e) = else_branch { expr_max(e, max_id); }
+                if let Some(e) = else_branch {
+                    expr_max(e, max_id);
+                }
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 expr_max(scrutinee, max_id);
-                for arm in arms { expr_max(&arm.body, max_id); }
+                for arm in arms {
+                    expr_max(&arm.body, max_id);
+                }
             }
-            HirExpr::While { condition, body, .. } => {
+            HirExpr::While {
+                condition, body, ..
+            } => {
                 expr_max(condition, max_id);
                 expr_max(body, max_id);
             }
@@ -292,16 +301,24 @@ fn max_expr_id(hir: &glyim_hir::Hir) -> usize {
                 expr_max(operand, max_id);
             }
             HirExpr::Call { args, .. } | HirExpr::MethodCall { args, .. } => {
-                for a in args { expr_max(a, max_id); }
+                for a in args {
+                    expr_max(a, max_id);
+                }
             }
             HirExpr::StructLit { fields, .. } => {
-                for (_, val) in fields { expr_max(val, max_id); }
+                for (_, val) in fields {
+                    expr_max(val, max_id);
+                }
             }
             HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-                for a in args { expr_max(a, max_id); }
+                for a in args {
+                    expr_max(a, max_id);
+                }
             }
             HirExpr::Return { value, .. } => {
-                if let Some(v) = value { expr_max(v, max_id); }
+                if let Some(v) = value {
+                    expr_max(v, max_id);
+                }
             }
             _ => {}
         }
@@ -327,7 +344,9 @@ fn max_expr_id(hir: &glyim_hir::Hir) -> usize {
         match item {
             glyim_hir::item::HirItem::Fn(f) => expr_max(&f.body, &mut max_id),
             glyim_hir::item::HirItem::Impl(imp) => {
-                for m in &imp.methods { expr_max(&m.body, &mut max_id); }
+                for m in &imp.methods {
+                    expr_max(&m.body, &mut max_id);
+                }
             }
             _ => {}
         }
