@@ -18,6 +18,7 @@ pub mod decl_table;
 pub mod dependency_names;
 pub mod normalize;
 pub mod semantic_hash;
+pub mod effects;
 
 #[cfg(test)]
 mod tests;
