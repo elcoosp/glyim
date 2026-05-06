@@ -91,6 +91,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
             current_subprogram: None,
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
+            effect_analysis: None,
             jit_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
@@ -132,6 +133,8 @@ pub struct Codegen<'ctx> {
         std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
     pub(crate) errors: RefCell<Vec<String>>,
     pub(crate) jit_mode: bool,
+    /// Effect analysis results (Phase 3) – drives LLVM attribute annotation.
+    pub(crate) effect_analysis: Option<glyim_hir::effects::EffectSet>,
     pub(crate) target_triple: Option<String>,
 }
 
@@ -173,6 +176,7 @@ impl<'ctx> Codegen<'ctx> {
             current_subprogram: None,
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
+            effect_analysis: None,
             jit_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
@@ -216,6 +220,7 @@ impl<'ctx> Codegen<'ctx> {
             current_subprogram: None,
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
+            effect_analysis: None,
             jit_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
@@ -801,6 +806,12 @@ impl<'ctx> Codegen<'ctx> {
 
     pub fn with_jit_mode(mut self) -> Self {
         self.jit_mode = true;
+        self
+    }
+
+    /// Attach effect analysis results for LLVM attribute annotation.
+    pub fn with_effects(mut self, effects: glyim_hir::effects::EffectSet) -> Self {
+        self.effect_analysis = Some(effects);
         self
     }
 
