@@ -47,6 +47,8 @@ pub struct PackageGraphOrchestrator {
     graph: PackageGraph,
     config: OrchestratorConfig,
     cross_state: CrossPackageIncremental,
+    // MerkleStore for future per-function caching (Phase 4 integration)
+    #[allow(dead_code)]
     merkle: Arc<MerkleStore>,
     artifact_mgr: ArtifactManager,
     remote_store: Option<RemoteContentStore>,
