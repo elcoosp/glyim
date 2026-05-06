@@ -2038,6 +2038,9 @@ dependencies = [
 [[package]]
 name = "glyim-interner"
 version = "0.5.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "glyim-lex"
@@ -2115,6 +2118,7 @@ dependencies = [
  "glyim-query",
  "glyim-typeck",
  "petgraph 0.8.3",
+ "postcard",
  "serde",
  "sha2 0.11.0",
  "tempfile",

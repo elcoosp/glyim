@@ -86,7 +86,7 @@ impl PackageGraph {
             // Dependencies
             for (dep_name, _dep_spec) in &node.manifest.dependencies {
                 if let Some(&dep_idx) = name_to_idx.get(dep_name) {
-                    graph.add_edge(idx, dep_idx, DependencyEdge {
+                    graph.add_edge(dep_idx, idx, DependencyEdge {
                         dep_name: dep_name.clone(),
                         is_macro: false,
                     });
@@ -98,7 +98,7 @@ impl PackageGraph {
             // Macro dependencies
             for (dep_name, _dep_spec) in &node.manifest.macros {
                 if let Some(&dep_idx) = name_to_idx.get(dep_name) {
-                    graph.add_edge(idx, dep_idx, DependencyEdge {
+                    graph.add_edge(dep_idx, idx, DependencyEdge {
                         dep_name: dep_name.clone(),
                         is_macro: true,
                     });
@@ -144,7 +144,7 @@ impl PackageGraph {
     /// Return all packages that directly depend on the given package.
     pub fn direct_dependents(&self, package_name: &str) -> Vec<&PackageNode> {
         if let Some(&idx) = self.name_to_idx.get(package_name) {
-            self.graph.neighbors_directed(idx, petgraph::Direction::Incoming)
+            self.graph.neighbors_directed(idx, petgraph::Direction::Outgoing)
                 .map(|n| &self.graph[n])
                 .collect()
         } else {
@@ -163,7 +163,7 @@ impl PackageGraph {
                     continue;
                 }
                 result.push(node);
-                for neighbor in self.graph.neighbors_directed(node, petgraph::Direction::Incoming) {
+                for neighbor in self.graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
                     stack.push(neighbor);
                 }
             }

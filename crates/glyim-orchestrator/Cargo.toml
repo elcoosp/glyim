@@ -16,6 +16,7 @@ glyim-merkle = { path = "../glyim-merkle" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-pkg = { path = "../glyim-pkg" }
 petgraph = "0.8"
+postcard = { version = "1", features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
 tracing = "0.1"
