@@ -6,11 +6,14 @@ license.workspace = true
 rust-version.workspace = true
 description = "Heavy test dependencies for CLI (trycmd, rstest, proptest)"
 
+# LEAVE THIS EMPTY
 [dependencies]
-glyim-cli = { path = "../glyim-cli" }
+
+# MOVE EVERYTHING HERE
+[dev-dependencies]
 glyim-compiler = { path = "../glyim-compiler" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 glyim-testr = { path = "../glyim-testr" }
 trycmd = "0.15"
-rstest = "0.24"
+rstest = "0.26"
 proptest = "1"

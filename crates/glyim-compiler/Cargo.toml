@@ -18,6 +18,7 @@ glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
 glyim-query = { path = "../glyim-query" }
+glyim-merkle = { path = "../glyim-merkle" }
 wat = "1"
 glyim-doc = { path = "../glyim-doc" }
 inkwell = { version = "0.9", features = ["llvm22-1-prefer-dynamic"] }
@@ -30,5 +31,5 @@ serde_json = "1"
 toml = "1.1.2"
 
 [dev-dependencies]
-rstest = "0.24"
+rstest = "0.26"
 tempfile = "3"

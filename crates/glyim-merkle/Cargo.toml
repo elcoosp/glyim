@@ -1,0 +1,19 @@
+[package]
+name = "glyim-merkle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Merkle IR DAG for branch-agnostic incremental compilation caching"
+
+[dependencies]
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
+glyim-interner = { path = "../glyim-interner" }
+dashmap = "6"
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["alloc"] }
+sha2 = "0.11"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

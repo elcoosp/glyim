@@ -2,7 +2,7 @@ use crate::types::{ExprId, HirPattern, HirType};
 use glyim_diag::Span;
 use glyim_interner::Symbol;
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HirBinOp {
     Add,
     Sub,
@@ -19,7 +19,7 @@ pub enum HirBinOp {
     Or,
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HirUnOp {
     Neg,
     Not,

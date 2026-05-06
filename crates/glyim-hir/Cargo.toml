@@ -13,6 +13,8 @@ glyim-parse = { path = "../glyim-parse" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
 tracing = "0.1"
+sha2 = "0.11"
+serde = "1"
 
 [dev-dependencies]
 glyim-typeck = { path = "../glyim-typeck" }

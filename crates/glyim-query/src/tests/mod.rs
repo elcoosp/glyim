@@ -7,3 +7,5 @@ mod invalidation_tests;
 mod context_tests;
 mod persistence_tests;
 mod incremental_tests;
+
+mod granularity_tests;

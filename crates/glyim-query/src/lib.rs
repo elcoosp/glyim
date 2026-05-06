@@ -16,6 +16,8 @@ pub use context::QueryContext;
 pub use dep_graph::DependencyGraph;
 pub use invalidation::InvalidationReport;
 pub use incremental::IncrementalState;
+pub mod granularity;
+pub use granularity::{GranularityMonitor, CacheGranularity, EditHistory};
 
 #[cfg(test)]
 mod tests;

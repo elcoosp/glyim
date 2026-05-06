@@ -6,8 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 description = "Full CLI integration tests (includes codegen / LLVM linkage)"
 
+# LEAVE THIS COMPLETELY EMPTY
 [dependencies]
-glyim-cli = { path = "../glyim-cli" }
+
+# PUT EVERYTHING HERE
+[dev-dependencies]
 glyim-compiler = { path = "../glyim-compiler" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 glyim-testr = { path = "../glyim-testr" }

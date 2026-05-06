@@ -16,6 +16,8 @@ pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
 pub use types::{ExprId, HirPattern, HirType};
 pub mod decl_table;
 pub mod dependency_names;
+pub mod normalize;
+pub mod semantic_hash;
 
 #[cfg(test)]
 mod tests;

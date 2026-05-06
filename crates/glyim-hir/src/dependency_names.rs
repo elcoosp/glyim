@@ -1,5 +1,6 @@
 use glyim_interner::Symbol;
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 pub struct NameDependencyTable {
     definitions: HashMap<Symbol, HashSet<Symbol>>,
@@ -7,7 +8,7 @@ pub struct NameDependencyTable {
     dependents: HashMap<Symbol, HashSet<Symbol>>,
 }
 
-static EMPTY: HashSet<Symbol> = HashSet::new();
+static EMPTY: LazyLock<HashSet<Symbol>> = LazyLock::new(HashSet::new);
 
 impl NameDependencyTable {
     pub fn new() -> Self {
