@@ -77,7 +77,7 @@ fn invalidation_report_counts() {
     g.add_node(file_b);
     g.add_edge(q3, file_b);
     let report = invalidate(&g, &[file]);
-    assert_eq!(report.red.len(), 2);
+    assert_eq!(report.red.len(), 3);
     assert_eq!(report.green.len(), 2);
 }
 

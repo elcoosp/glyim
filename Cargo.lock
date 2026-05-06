@@ -1881,6 +1881,7 @@ name = "glyim-cli-tests-full"
 version = "0.5.0"
 dependencies = [
  "dirs-next",
+ "glyim-cli",
  "glyim-codegen-llvm",
  "glyim-compiler",
  "glyim-diag",

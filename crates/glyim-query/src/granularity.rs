@@ -18,8 +18,8 @@ pub struct EditHistory {
 
 const MAX_RECENT_EDITS: usize = 30;
 const CONCENTRATION_FINE_THRESHOLD: f64 = 0.7;
-const CONCENTRATION_COARSE_THRESHOLD: f64 = 0.3;
-const HIGH_CHURN_THRESHOLD: u32 = 20;
+const CONCENTRATION_COARSE_THRESHOLD: f64 = 0.1;
+const HIGH_CHURN_THRESHOLD: u32 = 10;
 
 pub struct GranularityMonitor {
     edit_history: DashMap<PathBuf, EditHistory>,

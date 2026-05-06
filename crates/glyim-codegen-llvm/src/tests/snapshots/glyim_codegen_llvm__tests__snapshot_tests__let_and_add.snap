@@ -39,7 +39,29 @@ entry:
 
 declare ptr @__glyim_getenv(ptr)
 
-declare i1 @__glyim_str_eq(ptr, ptr)
+define i64 @__glyim_str_eq(ptr %0, ptr %1) {
+entry:
+  %a_null = icmp eq ptr %0, null
+  %b_null = icmp eq ptr %1, null
+  %either_null = or i1 %a_null, %b_null
+  br i1 %either_null, label %mismatch, label %loop.cond
+
+loop.cond:                                        ; preds = %match, %entry
+  %byte_a = load i8, ptr %0, align 1
+  %byte_b = load i8, ptr %1, align 1
+  %eq = icmp eq i8 %byte_a, %byte_b
+  %zero_a = icmp eq i8 %byte_a, 0
+  br i1 %eq, label %match, label %mismatch
+
+mismatch:                                         ; preds = %loop.cond, %entry
+  ret i64 0
+
+match:                                            ; preds = %loop.cond
+  br i1 %zero_a, label %end, label %loop.cond
+
+end:                                              ; preds = %match
+  ret i64 1
+}
 
 declare ptr @malloc(i64)
 
