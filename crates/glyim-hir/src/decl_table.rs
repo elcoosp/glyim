@@ -153,6 +153,8 @@ impl DeclTable {
                     is_pub: imp.is_pub || m.is_pub,
                     is_macro_generated: false,
                     is_extern_backed: false,
+                is_test: false,
+                test_config: None,
                 };
                 methods.push(hir_method);
             }

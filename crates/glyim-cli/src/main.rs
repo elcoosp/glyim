@@ -84,6 +84,8 @@ enum Command {
         watch: bool,
         #[arg(long)]
         optimize: bool,
+        #[arg(long)]
+        coverage: bool,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
         remote_cache: Option<String>,
     },
@@ -218,7 +220,8 @@ fn main() {
             watch,
             optimize,
             remote_cache,
-        } => cmd_test(input, ignore, filter, nocapture, watch, optimize, remote_cache),
+            coverage,
+        } => cmd_test(input, ignore, filter, nocapture, watch, optimize, remote_cache, coverage),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),

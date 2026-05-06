@@ -18,7 +18,7 @@ fn mkfn(i: &mut Interner, name: &str, param: &str, body: HirExpr) -> HirFn {
     HirFn { doc: None, name: i.intern(name), type_params: vec![],
         params: vec![(i.intern(param), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body, span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false }
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, }
 }
 
 #[test] fn interpret_int_literal() {

@@ -6,6 +6,7 @@ mod ops;
 mod stmt;
 mod string;
 mod types;
+mod coverage;
 
 use crate::debug::DebugInfoGen;
 use glyim_diag::Span;
@@ -29,7 +30,27 @@ pub enum DebugMode {
     Full,
 }
 
+/// Controls the level of coverage instrumentation.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CoverageMode {
+    /// No instrumentation (default).
+    Off,
+    /// Instrument function entries only.
+    Function,
+    /// Instrument function entries and branch conditions.
+    Branch,
+    /// Instrument function entries, branch conditions, and expression evaluations.
+    Full,
+}
+
+impl Default for CoverageMode {
+    fn default() -> Self {
+        Self::Off
+    }
+}
+
 pub struct CodegenBuilder<'ctx> {
+    coverage_mode: CoverageMode,
     context: &'ctx Context,
     interner: Interner,
     expr_types: Vec<HirType>,
@@ -46,6 +67,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
             interner,
             expr_types,
             debug_mode: DebugMode::None,
+            coverage_mode: CoverageMode::Off,
             library_mode: false,
             source: None,
             file_name: None,
@@ -71,6 +93,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
         };
 
         Ok(Codegen {
+            coverage_mode: self.coverage_mode,
             context: self.context,
             module,
             builder,
@@ -109,6 +132,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
 }
 
 pub struct Codegen<'ctx> {
+    pub(crate) coverage_mode: CoverageMode,
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: inkwell::builder::Builder<'ctx>,
@@ -163,6 +187,7 @@ impl<'ctx> Codegen<'ctx> {
         let result_sym = interner.intern("Result");
         let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full).ok();
         Ok(Self {
+            coverage_mode: CoverageMode::Off,
             context,
             module,
             builder,
@@ -208,6 +233,7 @@ impl<'ctx> Codegen<'ctx> {
         let debug_info =
             DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
         Ok(Self {
+            coverage_mode: CoverageMode::Off,
             context,
             module,
             builder,
@@ -250,7 +276,6 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    /// Report a non-fatal error during codegen.
     /// Report a non-fatal error during codegen.
     pub fn report_error(&self, msg: String) {
         self.errors.borrow_mut().push(msg);
@@ -440,6 +465,13 @@ impl<'ctx> Codegen<'ctx> {
                 f = func.get_next_function();
             }
         }
+        // Phase 6B: Coverage instrumentation
+        let mut cov_counter = 0u32;
+        let num_fns = hir.items.iter().filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_))).count();
+        if self.coverage_mode != CoverageMode::Off && num_fns > 0 {
+            coverage::emit_coverage_globals(&self.module, num_fns, self.coverage_mode);
+        }
+
         // Pass 3 — emit bodies (all forward declarations already present)
         for item in &hir.items {
             match item {

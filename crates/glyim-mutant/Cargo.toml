@@ -1,0 +1,22 @@
+[package]
+name = "glyim-mutant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Mutation testing engine for Glyim"
+
+[dependencies]
+glyim-hir = { path = "../glyim-hir" }
+glyim-interner = { path = "../glyim-interner" }
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
+glyim-compiler = { path = "../glyim-compiler" }
+glyim-query = { path = "../glyim-query" }
+glyim-merkle = { path = "../glyim-merkle" }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+sha2 = "0.11"
+
+[dev-dependencies]
+glyim-parse = { path = "../glyim-parse" }
+glyim-typeck = { path = "../glyim-typeck" }

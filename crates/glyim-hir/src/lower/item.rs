@@ -1,4 +1,5 @@
 use crate::HirFn;
+use crate::node::HirTestConfig;
 use crate::item::{
     EnumDef, ExternBlock, ExternFn, HirImplDef, HirItem, HirVariant, StructDef, StructField,
 };
@@ -41,6 +42,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 is_pub: false,
                 is_macro_generated: false,
                 is_extern_backed: false,
+                is_test: false,
+                test_config: None,
             }))
         }
         Item::FnDef {
@@ -68,6 +71,19 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     )
                 })
                 .unzip();
+            let is_test = attrs.iter().any(|a| a.name == "test");
+            let should_panic = attrs.iter().any(|a| a.name == "test" && a.args.iter().any(|arg| arg.key == "should_panic"));
+            let ignored = attrs.iter().any(|a| a.name == "ignore");
+            let test_config = if is_test {
+                Some(HirTestConfig {
+                    should_panic,
+                    ignored,
+                    tags: Vec::new(),
+                    source_file: String::new(),
+                })
+            } else {
+                None
+            };
             Some(HirItem::Fn(HirFn {
                 doc: None,
                 name: *name,
@@ -80,6 +96,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 is_pub: false,
                 is_macro_generated: false,
                 is_extern_backed: false,
+                is_test,
+                test_config,
             }))
         }
         Item::StructDef {
@@ -230,6 +248,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             is_pub: false,
                             is_macro_generated: false,
                             is_extern_backed: false,
+                            is_test: false,
+                            test_config: None,
                         })
                     } else {
                         None
@@ -266,6 +286,8 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             is_pub: false,
             is_macro_generated: true,
             is_extern_backed: false,
+            is_test: false,
+            test_config: None,
         })),
         Item::ExternBlock {
             doc: _,

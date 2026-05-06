@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "crates/glyim-interner",
+members = ["crates/glyim-interner",
     "crates/glyim-diag",
     "crates/glyim-syntax",
     "crates/glyim-lex",
@@ -26,6 +25,7 @@ members = [
     "crates/glyim-bytecode",
     "crates/glyim-egraph",
     "crates/glyim-orchestrator",
+    "crates/glyim-mutant",
 ]
 
 [workspace.package]

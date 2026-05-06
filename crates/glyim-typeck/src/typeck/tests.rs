@@ -718,6 +718,8 @@ fn check_fn_generic_return_matches_inferred() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     tc.fns.push(f);
     let f_clone = tc.fns.last().unwrap().clone();
@@ -748,6 +750,8 @@ fn check_fn_return_mismatch_error() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     tc.fns.push(f);
     let f_clone = tc.fns.last().unwrap().clone();
@@ -1008,6 +1012,8 @@ fn infer_generic_call_sets_type_args() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     });
     let call = HirExpr::Call {
         id: ExprId::new(2),
@@ -1098,6 +1104,8 @@ fn check_fn_return_generic_to_named_mismatch() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     tc.fns.push(f);
     let f_clone = tc.fns.last().unwrap().clone();
@@ -1310,6 +1318,8 @@ fn check_fn_return_generic_named_named_mismatch() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     tc.fns.push(f);
     let f_clone = tc.fns.last().unwrap().clone();
@@ -1343,6 +1353,8 @@ fn check_fn_return_generic_named_samesym() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     tc.fns.push(f);
     let f_clone = tc.fns.last().unwrap().clone();
@@ -1371,6 +1383,8 @@ fn infer_generic_call_empty_type_args() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     });
     tc.call_type_args.insert(ExprId::new(2), vec![]);
     let call = HirExpr::Call {
@@ -1493,6 +1507,8 @@ fn check_fn_generic_return_mismatched_named() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     });
     tc.fns.push(tc.fns[0].clone());
     let f_clone = tc.fns[1].clone();
@@ -1524,6 +1540,8 @@ fn call_with_wrong_param_type() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     });
     let call = HirExpr::Call {
         id: ExprId::new(1),

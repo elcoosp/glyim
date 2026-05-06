@@ -140,6 +140,7 @@ impl<'a> SemanticNormalizer<'a> {
             body,
             is_pub: hir_fn.is_pub,
             is_extern_backed: hir_fn.is_extern_backed,
+            // is_test and test_config are NOT part of normalized representation
         }
     }
 

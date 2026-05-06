@@ -282,6 +282,15 @@ pub struct MatchArm {
     pub body: HirExpr,
 }
 
+// Phase 6A : Test configuration metadata
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirTestConfig {
+    pub should_panic: bool,
+    pub ignored: bool,
+    pub tags: Vec<String>,
+    pub source_file: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirFn {
     pub doc: Option<String>,
@@ -295,6 +304,8 @@ pub struct HirFn {
     pub is_pub: bool,
     pub is_macro_generated: bool,
     pub is_extern_backed: bool,
+    pub is_test: bool,
+    pub test_config: Option<HirTestConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

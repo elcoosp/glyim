@@ -2106,6 +2106,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-mutant"
+version = "0.5.0"
+dependencies = [
+ "glyim-compiler",
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-macro-vfs",
+ "glyim-merkle",
+ "glyim-parse",
+ "glyim-query",
+ "glyim-typeck",
+ "serde",
+ "sha2 0.11.0",
+ "tracing",
+]
+
+[[package]]
 name = "glyim-orchestrator"
 version = "0.5.0"
 dependencies = [

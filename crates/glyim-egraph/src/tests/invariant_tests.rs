@@ -20,6 +20,8 @@ fn certificate_deterministic() {
         is_pub: false,
         is_macro_generated: false,
         is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     let types = vec![HirType::Int];
     let cert1 = InvariantCertificate::compute(&hir_fn, &interner, &types);
@@ -40,6 +42,8 @@ fn certificate_different_functions_different_hash() {
         body: HirExpr::IntLit { id: ExprId::new(0), value: 1, span: Span::new(0, 0) },
         span: Span::new(0, 0),
         is_pub: false, is_macro_generated: false, is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     let fn_b = HirFn {
         name: interner.intern("b"),
@@ -61,6 +65,8 @@ fn certificate_serialization_roundtrip() {
         param_mutability: vec![false], ret: Some(HirType::Int),
         body: HirExpr::IntLit { id: ExprId::new(0), value: 99, span: Span::new(0, 0) },
         span: Span::new(0, 0), is_pub: false, is_macro_generated: false, is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     let cert = InvariantCertificate::compute(&hir_fn, &interner, &[]);
     let bytes = cert.to_bytes();
@@ -77,6 +83,8 @@ fn certificate_content_hash_is_deterministic() {
         param_mutability: vec![false], ret: Some(HirType::Int),
         body: HirExpr::IntLit { id: ExprId::new(0), value: 42, span: Span::new(0, 0) },
         span: Span::new(0, 0), is_pub: false, is_macro_generated: false, is_extern_backed: false,
+                is_test: false,
+                test_config: None,
     };
     let cert = InvariantCertificate::compute(&hir_fn, &interner, &[]);
     let h1 = cert.content_hash();

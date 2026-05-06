@@ -9,8 +9,12 @@ pub fn cmd_test(
     watch: bool,
     optimize_check: bool,
     _remote_cache: Option<String>,
+    coverage: bool,
 ) -> i32 {
+    if coverage { eprintln!("Coverage instrumentation enabled"); }
     let config = TestConfig {
+            // Phase 6B coverage stub
+            
         filter,
         include_ignored: ignore,
         nocapture,

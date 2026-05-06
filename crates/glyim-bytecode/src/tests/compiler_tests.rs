@@ -21,7 +21,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let mut i=Interner::new(); let f = HirFn { doc: None, name: i.intern("a"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body: int(42), span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert!(bc.instructions.contains(&BytecodeOp::PushI64(42)));
     assert!(bc.instructions.contains(&BytecodeOp::Return));
@@ -30,7 +30,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let mut i=Interner::new(); let f = HirFn { doc: None, name: i.intern("a"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body: bin(HirBinOp::Add, int(1), int(2)), span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert!(bc.instructions.contains(&BytecodeOp::BinOp(binop_to_tag(HirBinOp::Add))));
 }
@@ -39,7 +39,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let f = HirFn { doc: None, name: i.intern("t"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body: b, span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert!(bc.instructions.contains(&BytecodeOp::PushBool(true)));
 }
@@ -47,7 +47,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let mut i=Interner::new(); let f = HirFn { doc: None, name: i.intern("t"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body: int(0), span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert_eq!(bc.param_count, 1);
 }
@@ -55,7 +55,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let mut i=Interner::new(); let f = HirFn { doc: None, name: i.intern("t"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body: int(99), span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert_eq!(*bc.instructions.last().unwrap(), BytecodeOp::Return);
 }
@@ -67,7 +67,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let f = HirFn { doc: None, name: i.intern("lt"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body, span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert!(bc.instructions.contains(&BytecodeOp::PushI64(10)));
     assert!(bc.instructions.contains(&BytecodeOp::StoreLocal(1)));
@@ -80,7 +80,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let f = HirFn { doc: None, name: i.intern("ie"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body, span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert!(bc.instructions.iter().any(|op| matches!(op, BytecodeOp::JumpIfFalse(_))));
 }
@@ -90,7 +90,7 @@ fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::Bytec
     let f = HirFn { doc: None, name: i.intern("cl"), type_params: vec![],
         params: vec![(i.intern("x"), HirType::Int)], param_mutability: vec![false],
         ret: Some(HirType::Int), body, span: s(), is_pub: false,
-        is_macro_generated: false, is_extern_backed: false };
+        is_macro_generated: false, is_extern_backed: false, is_test: false, test_config: None, };
     let bc = compile(&i, &f);
     assert!(bc.instructions.contains(&BytecodeOp::Call { name: "helper".into(), arg_count: 2 }));
 }
