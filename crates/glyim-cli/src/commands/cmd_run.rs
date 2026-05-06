@@ -12,7 +12,6 @@ pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool, live: bool
     // If workspace, use orchestrator run (which calls run_jit on main package)
     if let Some(root) = glyim_compiler::pipeline::find_package_root(&input) {
         if root.join("glyim.toml").exists() {
-            // Use orchestrator's 'run' command
             let config = OrchestratorConfig {
                 mode,
                 target: target.clone(),
@@ -36,7 +35,6 @@ pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool, live: bool
         }
     }
 
-    // Fallback to live or JIT run
     if incremental {
         let source = match std::fs::read_to_string(&input) {
             Ok(s) => s,
