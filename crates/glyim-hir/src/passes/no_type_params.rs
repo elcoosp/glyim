@@ -122,11 +122,10 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
                 assert_no_type_params(m, interner);
             }
         }
-        HirExpr::Return { value, .. } => {
-            if let Some(v) = value {
-                assert_no_type_params(v, interner);
-            }
+        HirExpr::Return { value: Some(v), .. } => {
+            assert_no_type_params(v, interner);
         }
+        HirExpr::Return { value: None, .. } => {}
         HirExpr::SizeOf { target_type, .. } | HirExpr::As { target_type, .. } => {
             assert!(
                 !has_unresolved_param(target_type, interner),

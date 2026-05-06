@@ -174,6 +174,8 @@ impl PackageGraph {
     }
 
     /// Number of packages in the graph.
+    pub fn is_empty(&self) -> bool { self.graph.node_count() == 0 }
+
     pub fn len(&self) -> usize {
         self.graph.node_count()
     }

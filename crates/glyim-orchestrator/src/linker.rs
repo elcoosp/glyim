@@ -53,7 +53,7 @@ pub fn link_multi_object(
     let linker = config
         .linker
         .as_deref()
-        .unwrap_or(if cfg!(target_os = "macos") { "cc" } else { "cc" });
+        .unwrap_or("cc");
 
     let mut cmd = Command::new(linker);
     cmd.arg("-o").arg(output_path);

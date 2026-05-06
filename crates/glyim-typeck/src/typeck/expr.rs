@@ -334,13 +334,7 @@ impl TypeChecker {
         let field_count = fields.len();
         let field_value_types: Vec<HirType> = fields
             .iter()
-            .filter_map(|(_, val)| {
-                let t = self.check_expr(val).unwrap_or(HirType::Error);
-                if t == HirType::Error {
-                    return Some(HirType::Error);
-                }
-                Some(t)
-            })
+            .map(|(_, val)| self.check_expr(val).unwrap_or(HirType::Error))
             .collect();
         if field_value_types.iter().any(|t| t == &HirType::Error) {
             return HirType::Error;

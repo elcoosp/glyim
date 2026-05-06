@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A registry that maps macro names to their Wasm bytecode.
+type MacroEntry = (Vec<u8>, Option<(usize, usize)>);
 pub struct MacroRegistry {
-    macros: HashMap<String, (Vec<u8>, Option<(usize, usize)>)>,
+    macros: HashMap<String, MacroEntry>,
     store: Arc<dyn ContentStore>,
 }
 

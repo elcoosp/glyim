@@ -284,7 +284,7 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn type_refers_to_params(
         ty: &HirType,
         type_params: &[glyim_interner::Symbol],
-        interner: &glyim_interner::Interner,
+        _interner: &glyim_interner::Interner,
     ) -> bool {
         match ty {
             HirType::Named(sym) => type_params.contains(sym),
@@ -292,20 +292,20 @@ impl<'a> MonoContext<'a> {
                 type_params.contains(sym)
                     || args
                         .iter()
-                        .any(|a| MonoContext::type_refers_to_params(a, type_params, interner))
+                        .any(|a| MonoContext::type_refers_to_params(a, type_params, _interner))
             }
             HirType::Tuple(elems) => elems
                 .iter()
-                .any(|e| MonoContext::type_refers_to_params(e, type_params, interner)),
+                .any(|e| MonoContext::type_refers_to_params(e, type_params, _interner)),
             HirType::RawPtr(inner) => {
-                MonoContext::type_refers_to_params(inner, type_params, interner)
+                MonoContext::type_refers_to_params(inner, type_params, _interner)
             }
             HirType::Option(inner) => {
-                MonoContext::type_refers_to_params(inner, type_params, interner)
+                MonoContext::type_refers_to_params(inner, type_params, _interner)
             }
             HirType::Result(ok, err) => {
-                MonoContext::type_refers_to_params(ok, type_params, interner)
-                    || MonoContext::type_refers_to_params(err, type_params, interner)
+                MonoContext::type_refers_to_params(ok, type_params, _interner)
+                    || MonoContext::type_refers_to_params(err, type_params, _interner)
             }
             _ => false,
         }

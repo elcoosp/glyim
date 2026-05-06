@@ -288,9 +288,9 @@ impl<'a> MonoContext<'a> {
                 let concrete_inner = self.concretize_type(inner);
                 if !self.has_unresolved_type_param(&concrete_inner) {
                     let option_sym = self.interner.intern("Option");
-                    let key = (option_sym, vec![concrete_inner.clone()]);
+                    let key = (option_sym, std::slice::from_ref(&concrete_inner).to_vec());
                     if self.enum_specs.contains_key(&key) {
-                        let mangled = self.mangle_name(option_sym, &[concrete_inner.clone()]);
+                        let mangled = self.mangle_name(option_sym, std::slice::from_ref(&concrete_inner));
                         return HirType::Named(mangled);
                     }
                 }
@@ -882,7 +882,7 @@ impl<'a> MonoContext<'a> {
                 let concrete_inner = self.concretize_type(inner);
                 if !self.has_unresolved_type_param(&concrete_inner) {
                     let option_sym = self.interner.intern("Option");
-                    let key = (option_sym, vec![concrete_inner.clone()]);
+                    let key = (option_sym, std::slice::from_ref(&concrete_inner).to_vec());
                     if !self.type_queued.contains(&key) {
                         self.type_queued.insert(key.clone());
                         self.type_work_queue.push(key);

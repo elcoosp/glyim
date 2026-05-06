@@ -132,7 +132,7 @@ impl QueryPipeline {
         let ctx = QueryContext::new();
         let merkle_store = glyim_macro_vfs::LocalContentStore::new(cache_dir.join("artifacts"))
             .ok()
-            .map(|store| Arc::new(MerkleStore::new(Arc::new(store))));
+            .map(|store| { #[allow(clippy::arc_with_non_send_sync)] { Arc::new(MerkleStore::new(Arc::new(store))) } });
         Self {
             ctx,
             cache_dir: cache_dir.to_path_buf(),

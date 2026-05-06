@@ -10,12 +10,14 @@ pub fn cmd_test(
     optimize_check: bool,
     _remote_cache: Option<String>,
 ) -> i32 {
-    let mut config = TestConfig::default();
-    config.filter = filter;
-    config.include_ignored = ignore;
-    config.nocapture = nocapture;
-    config.watch = watch;
-    config.optimize_check = optimize_check;
+    let config = TestConfig {
+        filter,
+        include_ignored: ignore,
+        nocapture,
+        watch,
+        optimize_check,
+        ..Default::default()
+    };
 
     let source = match std::fs::read_to_string(&input) {
         Ok(s) => s,

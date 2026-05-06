@@ -60,6 +60,7 @@ impl EffectAnalyzer {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn analyze_expr(&self, expr: &crate::HirExpr, interner: &Interner, effect: &mut EffectSet) {
         match expr {
             crate::HirExpr::Call { callee, .. } => {

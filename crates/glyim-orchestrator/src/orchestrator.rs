@@ -71,6 +71,7 @@ impl PackageGraphOrchestrator {
         let local_store = LocalContentStore::new(&cas_dir)
             .map_err(|e| format!("CAS init: {e}"))?;
         let store: Arc<dyn ContentStore> = Arc::new(local_store);
+        #[allow(clippy::arc_with_non_send_sync)]
         let merkle = Arc::new(MerkleStore::new(store.clone()));
         let artifact_mgr = ArtifactManager::new(store, merkle.clone());
 
@@ -128,15 +129,16 @@ impl PackageGraphOrchestrator {
             });
 
             // Try remote pull if not found locally
-            if artifact_hash.is_some() && !self.config.force_rebuild {
-                let hash = artifact_hash.unwrap();
-                let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
-                if !local_exists
-                    && let Some(ref remote) = self.remote_store
-                        && let Some(remote_data) = remote.retrieve(hash) {
-                            self.artifact_mgr.store_object_code(&remote_data);
-                            self.report.artifacts_pulled += 1;
-                        }
+            if let Some(hash) = artifact_hash {
+                if !self.config.force_rebuild {
+                    let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
+                    if !local_exists
+                        && let Some(ref remote) = self.remote_store
+                            && let Some(remote_data) = remote.retrieve(hash) {
+                                self.artifact_mgr.store_object_code(&remote_data);
+                                self.report.artifacts_pulled += 1;
+                            }
+                }
             }
 
             let should_skip = !self.config.force_rebuild

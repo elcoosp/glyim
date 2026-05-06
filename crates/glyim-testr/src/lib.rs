@@ -56,12 +56,9 @@ pub fn run_tests_sync(source: &str, config: &TestConfig) -> std::vec::Vec<types:
     };
     rt.block_on(async {
         // If compilation or test collection fails, return empty
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let rt_local = tokio::runtime::Runtime::new().unwrap();
             rt_local.block_on(run_tests(source, config))
-        })) {
-            Ok(res) => res,
-            Err(_) => vec![],
-        }
+        })).unwrap_or_default()
     })
 }

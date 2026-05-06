@@ -23,8 +23,8 @@ pub fn cmd_fetch() -> i32 {
             match PackageGraphOrchestrator::new(&root, config) {
                 Ok(_orch) => {
                     eprintln!("Workspace orchestrator initialized.");
-                    if remote_url.is_some() {
-                        eprintln!("Remote cache configured: {}", remote_url.unwrap());
+                    if let Some(ref url) = remote_url {
+                        eprintln!("Remote cache configured: {}", url);
                         eprintln!("Artifacts will be pulled on demand during builds.");
                     } else {
                         eprintln!("No remote cache configured.");
