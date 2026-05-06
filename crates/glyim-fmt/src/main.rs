@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::process;
+use glyim_fmt::{format_source, FormatConfig};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -16,18 +17,18 @@ fn main() {
         process::exit(1);
     });
 
-    // For now, re-emit the source unchanged.
+    let config = FormatConfig::default();
+    let formatted = format_source(&source, &config).unwrap_or_else(|e| {
+        eprintln!("{}: formatting error: {}", input, e);
+        process::exit(1);
+    });
+
     if check_mode {
-        let tokens = glyim_lex::tokenize(&source);
-        let mut formatted = String::new();
-        for tok in &tokens {
-            formatted.push_str(tok.text);
-        }
         if formatted != source {
             eprintln!("{}: formatting required", input);
             process::exit(1);
         }
     } else {
-        print!("{}", source);
+        print!("{}", formatted);
     }
 }

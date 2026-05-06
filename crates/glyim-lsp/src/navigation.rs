@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use crate::AnalysisDatabase;
 use crate::database::FileMap;
-use lsp_types::*;
+use lsp_types::{*, Url};
 use glyim_diag::LineCol;
 
 pub fn goto_definition(
@@ -125,4 +126,88 @@ pub fn document_symbols(
         });
     }
     Some(DocumentSymbolResponse::Nested(results))
+}
+
+pub fn rename(
+    db: &AnalysisDatabase,
+    params: &RenameParams,
+) -> Option<WorkspaceEdit> {
+    let uri = &params.text_document_position.text_document.uri;
+    let path = uri.to_file_path().ok()?;
+    let file_id = db.file_map.read().unwrap().get_by_path(&path)?;
+
+    let source_maps = db.source_maps.read().unwrap();
+    let sm = source_maps.get(&file_id)?;
+    let pos = params.text_document_position.position;
+    let offset = sm.line_col_to_offset(LineCol {
+        line: pos.line as usize,
+        column: pos.character as usize,
+    })?;
+
+    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol = symbol_index.lookup_by_location(file_id, offset)?;
+
+    let ref_graph = db.reference_graph.read().unwrap();
+    let refs = ref_graph.find_references(&symbol.name);
+
+    let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+    for r in refs {
+        let sm = source_maps.get(&r.file_id)?;
+        let (start, end) = sm.span_to_position(r.span.start, r.span.end)?;
+        let fm = db.file_map.read().unwrap();
+        let path = fm.path(r.file_id)?;
+        let uri = Url::from_file_path(path).ok()?;
+        let edit = TextEdit {
+            range: Range {
+                start: Position { line: start.line as u32, character: start.column as u32 },
+                end: Position { line: end.line as u32, character: end.column as u32 },
+            },
+            new_text: params.new_name.clone(),
+        };
+        changes.entry(uri).or_default().push(edit);
+    }
+
+    Some(WorkspaceEdit {
+        changes: Some(changes),
+        ..Default::default()
+    })
+}
+
+pub fn workspace_symbols(
+    db: &AnalysisDatabase,
+    params: &WorkspaceSymbolParams,
+) -> Option<Vec<SymbolInformation>> {
+    let query = params.query.as_str();
+    let symbol_index = db.symbol_index.read().unwrap();
+    let matches = symbol_index.query(query, 20);
+    let source_maps = db.source_maps.read().unwrap();
+    let file_map = db.file_map.read().unwrap();
+
+    let result = matches.iter().filter_map(|info| {
+        let sm = source_maps.get(&info.definition.file_id)?;
+        let (start, _) = sm.span_to_position(info.definition.span.start, info.definition.span.end)?;
+        let path = file_map.path(info.definition.file_id)?;
+        let uri = Url::from_file_path(path).ok()?;
+        Some(SymbolInformation {
+            name: info.name.clone(),
+            kind: match info.kind {
+                crate::symbol_index::SymbolKind::Function => SymbolKind::FUNCTION,
+                crate::symbol_index::SymbolKind::Struct => SymbolKind::STRUCT,
+                crate::symbol_index::SymbolKind::Enum => SymbolKind::ENUM,
+                _ => SymbolKind::VARIABLE,
+            },
+            location: Location {
+                uri,
+                range: Range {
+                    start: Position { line: start.line as u32, character: start.column as u32 },
+                    end: Position { line: start.line as u32, character: start.column as u32 + 1 },
+                },
+            },
+            container_name: None,
+            deprecated: None,
+            tags: None,
+        })
+    }).collect();
+
+    Some(result)
 }
