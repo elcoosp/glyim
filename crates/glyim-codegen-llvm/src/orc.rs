@@ -6,6 +6,8 @@ use llvm_sys::orc2::lljit;
 
 pub struct OrcSession {
     jit: lljit::LLVMOrcLLJITRef,
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     target_triple: String,
 }
 

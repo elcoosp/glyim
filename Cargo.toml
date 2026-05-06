@@ -23,6 +23,7 @@ members = [
     "crates/glyim-compiler",
     "crates/glyim-query",
     "crates/glyim-merkle",
+    "crates/glyim-bytecode",
 ]
 
 [workspace.package]
