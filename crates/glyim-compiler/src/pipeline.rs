@@ -4,7 +4,6 @@ use glyim_query::fingerprint::Fingerprint;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
-use glyim_interner::Interner;
 use glyim_pkg::cas_client::CasClient;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
@@ -399,12 +398,10 @@ pub fn semantic_source_hash(source: &str) -> glyim_macro_vfs::ContentHash {
 pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
     use glyim_hir::semantic_hash::semantic_hash_item;
     use glyim_hir::lower as lower_fn;
-    use glyim_interner::Interner;
 
-    let mut interner = Interner::new();
     let parse_out = glyim_parse::parse(source);
+    let mut interner = parse_out.interner;
     if interner.is_empty() || !parse_out.errors.is_empty() {
-        // When parsing fails, fall back to raw source hash
         return glyim_macro_vfs::ContentHash::of(source.as_bytes());
     }
     let hir = lower_fn(&parse_out.ast, &mut interner);
@@ -414,6 +411,9 @@ pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
     }).collect();
     if item_hashes.is_empty() {
         return glyim_macro_vfs::ContentHash::of(b"empty_module");
+    }
+    for item in &hir.items {
+        let h = semantic_hash_item(item, &interner);
     }
     let mut combined = Vec::new();
     for h in &item_hashes {
@@ -815,7 +815,6 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
 fn debug_ir(codegen: &glyim_codegen_llvm::Codegen) {
     if std::env::var("GLYIM_DEBUG_IR").is_ok() {
-        eprintln!("=== DEBUG IR ===\n{}", codegen.ir_string());
     }
 }
 

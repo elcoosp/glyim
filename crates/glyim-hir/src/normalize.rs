@@ -115,7 +115,10 @@ impl<'a> SemanticNormalizer<'a> {
     }
 
     fn resolve_name(&self, sym: Symbol) -> String {
-        self.interner.resolve(sym).to_string()
+        self.interner
+            .try_resolve(sym)
+            .unwrap_or("<unknown>")
+            .to_string()
     }
 
     pub fn normalize_fn(&mut self, hir_fn: &HirFn) -> NormalizedHirFn {
@@ -126,10 +129,12 @@ impl<'a> SemanticNormalizer<'a> {
             self.register_param(sym);
         }
         let body = self.normalize_expr(&hir_fn.body);
+        // canonicalize parameter names to _p0, _p1, …
+        let canon_params: Vec<(String, HirType)> = hir_fn.params.iter().enumerate().map(|(i, (_, t))| (format!("_p{}", i), t.clone())).collect();
         NormalizedHirFn {
             name: self.resolve_name(hir_fn.name),
             type_params: hir_fn.type_params.iter().map(|&s| self.resolve_name(s)).collect(),
-            params: hir_fn.params.iter().map(|(s, t)| (self.resolve_name(*s), t.clone())).collect(),
+            params: canon_params,
             param_mutability: hir_fn.param_mutability.clone(),
             ret: hir_fn.ret.clone(),
             body,

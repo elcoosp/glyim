@@ -116,5 +116,7 @@ fn compute_concentration(
     if half_span < 1.0 {
         return 1.0;
     }
-    1.0 - (avg_distance / half_span).min(1.0)
+    let conc = 1.0 - (avg_distance / half_span).min(1.0);
+    eprintln!("compute_concentration: edges={}, span={:.1}, avg_dist={:.1}, half_span={:.1}, conc={:.3}", edits.len(), span, avg_distance, half_span, conc);
+    conc
 }
