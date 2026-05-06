@@ -1,3 +1,4 @@
+use crate::interface::DependencyInterface;
 use glyim_compiler::pipeline::BuildMode;
 use glyim_merkle::MerkleStore;
 use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore, RemoteContentStore, RemoteStoreConfig};
@@ -201,7 +202,7 @@ impl PackageGraphOrchestrator {
         let context = inkwell::context::Context::create();
         let mut codegen = glyim_codegen_llvm::CodegenBuilder::new(
             &context,
-            interner,
+            interner.clone(),
             tc.expr_types.clone(),
         )
         .build()
@@ -234,6 +235,13 @@ impl PackageGraphOrchestrator {
         let artifact_hash = self.artifact_mgr.store_package_artifact(&artifact);
         self.cross_state.update_package_root(&pkg.name, source_hash);
         self.cross_state.save(&self.workspace_root).ok();
+
+        // Compute and store DependencyInterface for downstream packages
+        let dep_iface = DependencyInterface::from_hir(&hir, &pkg.name, &pkg.manifest.package.version, &interner);
+        let iface_bytes = dep_iface.to_bytes();
+        let iface_hash = ContentHash::of(&iface_bytes);
+        self.artifact_mgr.store_object_code(&iface_bytes);  // store interface in CAS
+        self.cross_state.record_dep_fingerprint(&pkg.name, "interface", iface_hash);
 
         // Push to remote if configured
         if let Some(ref remote) = self.remote_store {

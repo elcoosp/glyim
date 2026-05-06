@@ -18,7 +18,7 @@ impl ExprId {
 }
 
 /// High-level types in the Glyim type system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum HirType {
     /// 64-bit signed integer
     Int,

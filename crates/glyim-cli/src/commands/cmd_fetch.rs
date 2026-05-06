@@ -16,7 +16,7 @@ pub fn cmd_fetch() -> i32 {
                 ..Default::default()
             };
             match PackageGraphOrchestrator::new(&root, config) {
-                Ok(mut orch) => {
+                Ok(orch) => {
                     // Perform a dry-run build to trigger remote pulls without linking
                     // We can call a dedicated fetch method or just check what can be pulled
                     eprintln!("Fetching dependencies for workspace...");
