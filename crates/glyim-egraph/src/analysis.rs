@@ -1,5 +1,4 @@
-use egg::{Analysis, DidMerge, EGraph};
-use crate::lang::{GlyimExpr, GlyimOp};
+use egg::{Analysis, DidMerge, EGraph, Id};
 use glyim_hir::types::HirType;
 
 #[derive(Clone, Debug, Default)]
@@ -17,24 +16,23 @@ pub enum ConstValue {
     Bool(bool),
 }
 
-impl Analysis<GlyimExpr> for GlyimAnalysis {
+impl Analysis<crate::lang::GlyimLang> for GlyimAnalysis {
     type Data = GlyimAnalysis;
-    fn make(_egraph: &mut EGraph<GlyimExpr, Self>, enode: &GlyimExpr, _id: egg::Id) -> Self::Data {
+    fn make(_egraph: &mut EGraph<crate::lang::GlyimLang, Self>, enode: &crate::lang::GlyimLang, _id: Id) -> Self::Data {
         let mut data = GlyimAnalysis::default();
-        match enode.op {
-            GlyimOp::Num => {
-                if let Ok(n) = enode.data.parse::<i64>() { data.constant = Some(ConstValue::Int(n)); }
+        match enode {
+            crate::lang::GlyimLang::Num(n) => {
+                data.constant = Some(ConstValue::Int(*n));
                 data.is_pure = true; data.cost = 1.0; data.ty = Some(HirType::Int);
             }
-            GlyimOp::BoolLit => {
-                if let Ok(b) = enode.data.parse::<bool>() { data.constant = Some(ConstValue::Bool(b)); }
+            crate::lang::GlyimLang::BoolLit(b) => {
+                data.constant = Some(ConstValue::Bool(*b));
                 data.is_pure = true; data.cost = 1.0; data.ty = Some(HirType::Bool);
             }
-            GlyimOp::FNum => {
-                if let Ok(bits) = enode.data.parse::<u64>() { data.constant = Some(ConstValue::Float(bits)); }
+            crate::lang::GlyimLang::FNum(bits) => {
+                data.constant = Some(ConstValue::Float(*bits));
                 data.is_pure = true; data.cost = 1.0; data.ty = Some(HirType::Float);
             }
-            GlyimOp::BinOp(_) | GlyimOp::UnOp(_) => { data.is_pure = false; data.cost = 1.0; }
             _ => { data.is_pure = false; data.cost = 1.0; }
         }
         data
