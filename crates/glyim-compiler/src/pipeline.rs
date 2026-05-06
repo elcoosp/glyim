@@ -1,6 +1,7 @@
 use glyim_codegen_llvm::runtime_shims;
 use glyim_query::incremental::IncrementalState;
 use glyim_query::fingerprint::Fingerprint;
+use glyim_egraph;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_interner::Interner;
 use glyim_hir::ExprId;
@@ -284,6 +285,9 @@ fn compile_source_to_hir(
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
+
+    // Phase 3: E-graph algebraic optimization
+    let mono_hir = glyim_egraph::optimize::optimize_module(&mono_hir, &merged_types, &interner);
 
     Ok(CompiledHir {
         hir,
