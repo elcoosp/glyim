@@ -6,7 +6,7 @@
 
 use glyim_query::{QueryContext, Fingerprint, Dependency, IncrementalState};
 use glyim_merkle::{MerkleStore, MerkleNode, MerkleNodeData, MerkleNodeHeader};
-use glyim_macro_vfs::{ContentHash, ContentStore};
+use glyim_macro_vfs::{ContentHash};
 use glyim_interner::Interner;
 use glyim_hir::{Hir, HirItem};
 use std::collections::HashMap;
@@ -111,11 +111,16 @@ pub enum RedReason {
 /// Orchestrates the query-driven incremental compilation pipeline.
 pub struct QueryPipeline {
     ctx: QueryContext,
-    cache_dir: PathBuf,
+    #[allow(dead_code)]
+    #[allow(dead_code)]
+    #[allow(dead_code)]
+    pub(crate) cache_dir: PathBuf,
     state: IncrementalState,
     config: PipelineConfig,
     report: IncrementalReport,
-    merkle_store: Option<Arc<MerkleStore>>,
+    #[allow(dead_code)]
+    #[allow(dead_code)]
+    pub(crate) merkle_store: Option<Arc<MerkleStore>>,
 }
 
 impl QueryPipeline {

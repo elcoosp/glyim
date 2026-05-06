@@ -237,7 +237,7 @@ impl Default for PipelineConfig {
 }
 
 #[allow(dead_code)]
-pub(crate) struct CompiledHir {
+pub struct CompiledHir {
     hir: glyim_hir::Hir,
     mono_hir: glyim_hir::Hir,
     merged_types: Vec<glyim_hir::types::HirType>,

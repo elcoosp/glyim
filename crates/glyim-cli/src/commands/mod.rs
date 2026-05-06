@@ -11,6 +11,8 @@ pub use cmd_init::*;
 mod cmd_export;
 pub use cmd_export::*;
 mod cmd_test;
+pub use cmd_incremental_status::*;
+mod cmd_incremental_status;
 pub use cmd_test::*;
 mod cmd_add;
 pub use cmd_add::*;

@@ -50,12 +50,16 @@ enum Command {
         release: bool,
         #[arg(long)]
         live: bool,
+        #[arg(long)]
+        incremental: bool,
     },
     Ir {
         input: PathBuf,
     },
     Check {
         input: PathBuf,
+        #[arg(long)]
+        incremental: bool,
     },
     Init {
         name: String,
@@ -117,6 +121,10 @@ enum Command {
     },
     #[command(subcommand)]
     Cache(CacheCommand),
+    /// Show incremental compilation cache statistics.
+    IncrementalStatus {
+        input: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -190,9 +198,10 @@ fn main() {
             release,
                     
             live,
-                } => cmd_run(input, target, release, live),
+            incremental,
+        } => cmd_run(input, target, release, live, incremental),
         Command::Ir { input } => cmd_ir(input),
-        Command::Check { input } => cmd_check(input),
+        Command::Check { input, incremental } => cmd_check(input, incremental),
         Command::Init { name } => cmd_init(name),
         Command::Test {
             input,
@@ -219,6 +228,7 @@ fn main() {
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),
         Command::MacroInspect { input } => cmd_macro_inspect(input),
+        Command::IncrementalStatus { input } => cmd_incremental_status(input),
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
