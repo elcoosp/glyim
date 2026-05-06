@@ -36,6 +36,7 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-compiler = { path = "../glyim-compiler" }
 glyim-testr = { path = "../glyim-testr" }
+glyim-mutant = { path = "../glyim-mutant" }
 tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
@@ -59,6 +60,7 @@ trycmd = "1.2"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-compiler = { path = "../glyim-compiler" }
 glyim-testr = { path = "../glyim-testr" }
+glyim-mutant = { path = "../glyim-mutant" }
 tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }

@@ -86,6 +86,20 @@ enum Command {
         optimize: bool,
         #[arg(long)]
         coverage: bool,
+        #[arg(long)]
+        mutate: bool,
+        #[arg(long)]
+        mutation_score: Option<f64>,
+        #[arg(long)]
+        mutation_operators: Option<String>,
+        #[arg(long)]
+        max_mutants: Option<usize>,
+        #[arg(long)]
+        concurrent_mutants: Option<usize>,
+        #[arg(long)]
+        mutation_report: Option<std::path::PathBuf>,
+        #[arg(long)]
+        coverage_mode: Option<String>,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
         remote_cache: Option<String>,
     },
@@ -221,7 +235,18 @@ fn main() {
             optimize,
             remote_cache,
             coverage,
-        } => cmd_test(input, ignore, filter, nocapture, watch, optimize, remote_cache, coverage),
+            mutate,
+            mutation_score,
+            mutation_operators,
+            max_mutants,
+            concurrent_mutants,
+            mutation_report,
+            coverage_mode,
+        } => cmd_test(
+            input, ignore, filter, nocapture, watch, optimize, remote_cache,
+            coverage, mutate, mutation_score, mutation_operators, max_mutants,
+            concurrent_mutants, mutation_report, coverage_mode,
+        ),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),

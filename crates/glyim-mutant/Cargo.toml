@@ -13,11 +13,11 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-compiler = { path = "../glyim-compiler" }
 glyim-query = { path = "../glyim-query" }
 glyim-merkle = { path = "../glyim-merkle" }
+glyim-parse = { path = "../glyim-parse" }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 sha2 = "0.11"
 
 [dev-dependencies]
-glyim-diag = { path = "../glyim-diag" }
-glyim-parse = { path = "../glyim-parse" }
 glyim-typeck = { path = "../glyim-typeck" }
+glyim-diag = { path = "../glyim-diag" }

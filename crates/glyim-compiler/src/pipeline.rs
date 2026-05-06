@@ -924,6 +924,50 @@ fn debug_ir(_codegen: &glyim_codegen_llvm::Codegen) {
 #[cfg(test)]
 mod no_std_tests;
 
+
+/// Execute a single test function via JIT, returning the test exit code.
+pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError> {
+    let parse_out = glyim_parse::parse(source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let decl_output = glyim_parse::declarations::parse_declarations(source);
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
+    let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
+    let expr_types = typeck.expr_types.clone();
+    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
+    let context = inkwell::context::Context::create();
+    let mut cg = CodegenBuilder::new(&context, interner, merged_types).build()?;
+    cg = cg.with_jit_mode();
+    cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
+    debug_ir(&cg);
+    let engine = cg
+        .get_module()
+        .create_jit_execution_engine(inkwell::OptimizationLevel::None)
+        .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
+    runtime_shims::map_runtime_shims_for_jit(
+        &engine,
+        cg.get_module(),
+        *CUSTOM_ASSERT_FN.lock().unwrap(),
+        *CUSTOM_ABORT_FN.lock().unwrap(),
+    );
+    unsafe {
+        let test_fn = engine
+            .get_function::<unsafe extern "C" fn() -> i32>(test_name)
+            .map_err(|e| PipelineError::Codegen(format!("JIT test function '{}': {e}", test_name)))?;
+        Ok(test_fn.call())
+    }
+}
+
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
