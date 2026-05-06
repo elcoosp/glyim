@@ -141,6 +141,8 @@ enum Command {
     MacroInspect {
         input: PathBuf,
     },
+    /// Start the Glyim language server
+    Lsp,
     #[command(subcommand)]
     Cache(CacheCommand),
     /// Show incremental compilation cache statistics.
@@ -265,6 +267,9 @@ fn main() {
         Command::DumpHir { input } => cmd_dump_hir(input),
         Command::MacroInspect { input } => cmd_macro_inspect(input),
         Command::IncrementalStatus { input } => cmd_incremental_status(input),
+        Command::Lsp { .. } => {
+            cmd_lsp()
+        }
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));

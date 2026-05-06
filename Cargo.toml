@@ -26,6 +26,7 @@ members = ["crates/glyim-interner",
     "crates/glyim-egraph",
     "crates/glyim-orchestrator",
     "crates/glyim-mutant",
+    "crates/glyim-lsp",
 ]
 
 [workspace.package]

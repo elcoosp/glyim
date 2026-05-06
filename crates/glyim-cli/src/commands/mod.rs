@@ -34,5 +34,7 @@ mod cmd_dump_ast;
 pub use cmd_dump_ast::*;
 mod cmd_dump_hir;
 pub use cmd_dump_hir::*;
+mod cmd_lsp;
+pub use cmd_lsp::*;
 mod cmd_macro_inspect;
 pub use cmd_macro_inspect::*;
