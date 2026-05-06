@@ -5,9 +5,11 @@
 //! the incremental state, Merkle store, and dependency tracking.
 
 use glyim_query::{QueryContext, Fingerprint, Dependency, IncrementalState};
-use glyim_merkle::MerkleStore;
+use glyim_merkle::{MerkleStore, MerkleNode, MerkleNodeData, MerkleNodeHeader};
+use glyim_macro_vfs::{ContentHash, ContentStore};
 use glyim_interner::Interner;
-use glyim_hir::{Hir, HirItem};              // Hir, HirItem used by item_fingerprints
+use glyim_hir::{Hir, HirItem};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,6 +18,65 @@ use crate::pipeline::{
     CompiledHir, PipelineConfig, PipelineError,
     compile_source_to_hir,
 };
+
+
+/// Compute which items changed since the last compilation.
+pub fn compute_item_diff(
+    hir: &Hir,
+    interner: &Interner,
+    prev_hashes: &HashMap<String, Fingerprint>,
+) -> (Vec<String>, Vec<String>) {
+    let current = item_fingerprints(hir, interner);
+    let current_map: HashMap<String, Fingerprint> = current.into_iter().collect();
+
+    let mut red = Vec::new();
+    let mut green = Vec::new();
+
+    for (name, fp) in &current_map {
+        match prev_hashes.get(name) {
+            Some(old_fp) if old_fp == fp => green.push(name.clone()),
+            _ => red.push(name.clone()),
+        }
+    }
+
+    (red, green)
+}
+
+/// Store a per-item compilation artifact in the Merkle store.
+pub fn store_item_artifact(
+    merkle: &MerkleStore,
+    item_name: &str,
+    artifact_kind: &str,
+    data: &[u8],
+) -> ContentHash {
+    let node = MerkleNode {
+        hash: ContentHash::ZERO,
+        children: vec![],
+        data: MerkleNodeData::HirItem {
+            kind: artifact_kind.to_string(),
+            name: item_name.to_string(),
+            serialized: data.to_vec(),
+        },
+        header: MerkleNodeHeader {
+            data_type_tag: 0x02, // HirItem
+            child_count: 0,
+        },
+    };
+    merkle.put(node)
+}
+
+/// Load a per-item artifact from the Merkle store.
+pub fn load_item_artifact(
+    merkle: &MerkleStore,
+    hash: &ContentHash,
+) -> Option<Vec<u8>> {
+    merkle.get(hash).map(|node| {
+        match node.data {
+            MerkleNodeData::HirItem { serialized, .. } => serialized,
+            _ => vec![],
+        }
+    })
+}
 
 /// Diagnostic report for incremental compilation.
 #[derive(Debug, Clone, Default)]
@@ -49,37 +110,24 @@ pub enum RedReason {
 
 /// Orchestrates the query-driven incremental compilation pipeline.
 pub struct QueryPipeline {
-    /// The query context for memoization.
     ctx: QueryContext,
-    /// Directory for persistent incremental state.
     cache_dir: PathBuf,
-    /// The incremental state (source hashes, item hashes, dep graph).
     state: IncrementalState,
-    /// Compilation configuration.
     config: PipelineConfig,
-    /// Incremental build report.
     report: IncrementalReport,
-    /// The underlying CAS store for Merkle artifact caching.
     merkle_store: Option<Arc<MerkleStore>>,
 }
 
 impl QueryPipeline {
-    /// Create a new query-driven pipeline.
     pub fn new(
         cache_dir: &Path,
         config: PipelineConfig,
     ) -> Self {
         let state = IncrementalState::load_or_create(cache_dir);
         let ctx = QueryContext::new();
-        // Initialize MerkleStore if possible
-        let merkle_store = std::fs::create_dir_all(cache_dir.join("artifacts"))
+        let merkle_store = glyim_macro_vfs::LocalContentStore::new(cache_dir.join("artifacts"))
             .ok()
-            .and_then(|_| {
-                glyim_macro_vfs::LocalContentStore::new(cache_dir.join("artifacts"))
-                    .ok()
-                    .map(|store| Arc::new(MerkleStore::new(Arc::new(store))))
-            });
-
+            .map(|store| Arc::new(MerkleStore::new(Arc::new(store))));
         Self {
             ctx,
             cache_dir: cache_dir.to_path_buf(),
@@ -90,7 +138,6 @@ impl QueryPipeline {
         }
     }
 
-    /// Compile source code using the incremental query pipeline.
     pub fn compile(
         &mut self,
         source: &str,
@@ -99,7 +146,6 @@ impl QueryPipeline {
         let start = Instant::now();
         self.report = IncrementalReport::default();
 
-        // Step 1: Compute source fingerprint and check if anything changed
         let source_fp = Fingerprint::of(source.as_bytes());
         let input_str = input_path.to_string_lossy().to_string();
         let module_key = Fingerprint::combine(
@@ -107,37 +153,28 @@ impl QueryPipeline {
             source_fp,
         );
 
-        // Step 2: If source unchanged, try to return cached result
         if self.ctx.is_green(&module_key) {
             self.report.cache_hits += 1;
             self.report.total_elapsed = start.elapsed();
             self.report.was_full_rebuild = false;
-            // Need to re-run the full pipeline since we don't yet store CompiledHir in cache
-            // (Phase 4C will add per-item caching)
-            tracing::info!("Incremental: source unchanged, but running full pipeline (per-item cache not yet implemented)");
         } else {
             self.report.was_full_rebuild = true;
-            // Record the change
             self.state.record_source(&input_str, source_fp);
         }
 
-        // Step 3: Run the pipeline (for now, full linear pipeline)
         let compiled = compile_source_to_hir(
             source.to_string(),
             input_path,
             &self.config,
         )?;
 
-        // Record the result in the query context
-        // In Phase 4B/C, this will store per-item artifacts in MerkleStore
         self.ctx.insert(
             module_key,
-            Arc::new(()), // placeholder - Phase 4B will store actual CompiledHir
+            Arc::new(()),
             source_fp,
             vec![Dependency::file(&input_str, source_fp)],
         );
 
-        // Save incremental state
         if let Err(e) = self.state.save() {
             tracing::warn!("Failed to save incremental state: {e}");
         }
@@ -146,12 +183,10 @@ impl QueryPipeline {
         Ok(compiled)
     }
 
-    /// Get a reference to the incremental report.
     pub fn report(&self) -> &IncrementalReport {
         &self.report
     }
 
-    /// Get a reference to the query context.
     pub fn ctx(&self) -> &QueryContext {
         &self.ctx
     }
