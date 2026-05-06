@@ -27,10 +27,7 @@ impl FlakeTracker {
 
     /// Record a test outcome.
     pub fn record(&mut self, test_name: &str, outcome: &TestOutcome) {
-        let passed = match outcome {
-            TestOutcome::Passed => true,
-            _ => false,
-        };
+        let passed = matches!(outcome, TestOutcome::Passed);
         let entry = self.history.entry(test_name.to_string()).or_default();
         entry.push(passed);
         if entry.len() > self.max_history {

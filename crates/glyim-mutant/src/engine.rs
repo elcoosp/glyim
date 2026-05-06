@@ -107,7 +107,8 @@ impl MutationEngine {
             }
             HirExpr::As { expr, .. } => self.collect_expr_mutations(expr, fn_name, mutations, count),
             HirExpr::Deref { expr, .. } => self.collect_expr_mutations(expr, fn_name, mutations, count),
-            HirExpr::Return { value, .. } => if let Some(v) = value { self.collect_expr_mutations(v, fn_name, mutations, count); }
+            HirExpr::Return { value: Some(v), .. } => self.collect_expr_mutations(v, fn_name, mutations, count),
+            HirExpr::Return { value: None, .. } => {}
             _ => {}
         }
     }

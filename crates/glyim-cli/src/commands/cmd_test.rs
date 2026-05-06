@@ -1,6 +1,7 @@
 use glyim_testr::config::TestConfig;
 use std::path::PathBuf;
 
+#[allow(clippy::too_many_arguments)]
 pub fn cmd_test(
     input: PathBuf,
     ignore: bool,
