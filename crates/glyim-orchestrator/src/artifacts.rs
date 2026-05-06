@@ -7,6 +7,7 @@ use serde::{Serialize, Deserialize};
 /// Manages compilation artifacts in the CAS.
 pub struct ArtifactManager {
     cas: Arc<dyn ContentStore>,
+    #[allow(dead_code)]
     merkle: Arc<MerkleStore>,
 }
 
