@@ -1946,6 +1946,7 @@ name = "glyim-compiler"
 version = "0.5.0"
 dependencies = [
  "dirs-next",
+ "glyim-bytecode",
  "glyim-codegen-llvm",
  "glyim-diag",
  "glyim-doc",

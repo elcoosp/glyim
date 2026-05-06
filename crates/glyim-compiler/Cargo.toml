@@ -18,6 +18,7 @@ glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
 glyim-query = { path = "../glyim-query" }
+glyim-bytecode = { path = "../glyim-bytecode" }
 glyim-merkle = { path = "../glyim-merkle" }
 wat = "1"
 glyim-doc = { path = "../glyim-doc" }

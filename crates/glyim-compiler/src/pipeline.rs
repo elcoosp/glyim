@@ -357,10 +357,6 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 /// On subsequent calls it loads previous state, detects changes,
 /// invalidates affected queries, and re-runs only the Red stages.
 #[allow(dead_code)]
-#[allow(dead_code)]
-#[allow(dead_code)]
-#[allow(dead_code)]
-#[allow(dead_code)]
 pub(crate) fn compile_source_to_hir_incremental(
     source: String,
     input_path: &std::path::Path,
@@ -421,6 +417,43 @@ pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
         combined.extend_from_slice(h.as_bytes());
     }
     glyim_macro_vfs::ContentHash::of(&combined)
+}
+
+/// Execute the program using the bytecode interpreter (Tier-0).
+/// Provides sub-millisecond feedback without LLVM compilation.
+pub fn run_live(source: &str) -> Result<i32, PipelineError> {
+    use glyim_bytecode::compiler::BytecodeCompiler;
+    use glyim_bytecode::interpreter::BytecodeInterpreter;
+    use glyim_bytecode::value::Value;
+    let parse_out = glyim_parse::parse(source);
+    if !parse_out.errors.is_empty() {
+        return Err(PipelineError::Parse(parse_out.errors));
+    }
+    let mut interner = parse_out.interner;
+    let decl_output = glyim_parse::declarations::parse_declarations(source);
+    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
+    let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
+    if let Err(errs) = typeck.check(&hir) {
+        return Err(PipelineError::TypeCheck(errs));
+    }
+    let mut compiler = BytecodeCompiler::new(&interner);
+    let mut interpreter = BytecodeInterpreter::new();
+    for item in &hir.items {
+        if let glyim_hir::HirItem::Fn(hir_fn) = item {
+            if interner.resolve(hir_fn.name) == "main" {
+                let bc_fn = compiler.compile_fn(hir_fn);
+                let result = interpreter.execute_fn(&bc_fn, &[]);
+                return match result {
+                    Value::Int(n) => Ok(n as i32),
+                    Value::Bool(true) => Ok(0),
+                    Value::Bool(false) => Ok(1),
+                    _ => Ok(0),
+                };
+            }
+        }
+    }
+    Err(PipelineError::Codegen("no 'main' function found".into()))
 }
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {

@@ -48,6 +48,8 @@ enum Command {
         debug: bool,
         #[arg(long, conflicts_with = "debug")]
         release: bool,
+        #[arg(long)]
+        live: bool,
     },
     Ir {
         input: PathBuf,
@@ -186,7 +188,9 @@ fn main() {
             target,
             debug: _,
             release,
-        } => cmd_run(input, target, release),
+                    
+            live,
+                } => cmd_run(input, target, release, live),
         Command::Ir { input } => cmd_ir(input),
         Command::Check { input } => cmd_check(input),
         Command::Init { name } => cmd_init(name),
