@@ -1,12 +1,9 @@
 use std::ffi::CString;
 use std::ptr;
-
-// LLJIT types/functions are in llvm_sys::orc2::lljit
 use llvm_sys::orc2::lljit;
 
 pub struct OrcSession {
     jit: lljit::LLVMOrcLLJITRef,
-    #[allow(dead_code)]
     #[allow(dead_code)]
     target_triple: String,
 }
@@ -17,6 +14,11 @@ impl OrcSession {
     }
 
     pub fn with_target_triple(target_triple: Option<&str>) -> Self {
+        // Initialize native target (required for JIT on host)
+        inkwell::targets::Target::initialize_native(
+            &inkwell::targets::InitializationConfig::default(),
+        ).expect("failed to initialize native target for JIT");
+
         let triple = target_triple
             .map(|s| s.to_string())
             .unwrap_or_else(|| {
