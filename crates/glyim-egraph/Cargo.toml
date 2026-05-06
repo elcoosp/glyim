@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "E-graph based algebraic optimization for Glyim"
 
 [dependencies]
-egg = "0.6"
+egg = "0.11"
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 serde = { version = "1", features = ["derive"] }
