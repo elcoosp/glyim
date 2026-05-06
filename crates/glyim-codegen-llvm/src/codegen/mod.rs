@@ -32,8 +32,10 @@ pub enum DebugMode {
 
 /// Controls the level of coverage instrumentation.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum CoverageMode {
     /// No instrumentation (default).
+    #[default]
     Off,
     /// Instrument function entries only.
     Function,
@@ -43,11 +45,6 @@ pub enum CoverageMode {
     Full,
 }
 
-impl Default for CoverageMode {
-    fn default() -> Self {
-        Self::Off
-    }
-}
 
 pub struct CodegenBuilder<'ctx> {
     coverage_mode: CoverageMode,

@@ -121,8 +121,8 @@ impl MutationEngine {
         count: &mut usize,
     ) {
         if *count >= self.config.max_mutations_per_fn { return; }
-        if self.config.operators.contains(&MutationOperator::StatementDeletion) {
-            if let HirExpr::Block { stmts, .. } = expr {
+        if self.config.operators.contains(&MutationOperator::StatementDeletion)
+            && let HirExpr::Block { stmts, .. } = expr {
                 for (i, stmt) in stmts.iter().enumerate() {
                     if *count >= self.config.max_mutations_per_fn { break; }
                     if matches!(stmt, HirStmt::Expr(_) | HirStmt::Let { .. }) {
@@ -140,6 +140,5 @@ impl MutationEngine {
                     }
                 }
             }
-        }
     }
 }

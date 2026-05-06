@@ -267,7 +267,7 @@ fn main() {
         Command::DumpHir { input } => cmd_dump_hir(input),
         Command::MacroInspect { input } => cmd_macro_inspect(input),
         Command::IncrementalStatus { input } => cmd_incremental_status(input),
-        Command::Lsp { .. } => {
+        Command::Lsp => {
             cmd_lsp()
         }
         Command::Cache(cmd) => match cmd {

@@ -50,7 +50,7 @@ pub fn build_router(
         let tx = analysis_tx.clone();
         let client = client.clone();
         router.notification::<notification::DidOpenTextDocument>(move |(), params| {
-            if let Some(path) = params.text_document.uri.to_file_path().ok() {
+            if let Ok(path) = params.text_document.uri.to_file_path() {
                 let _ = tx.send(AnalysisMessage::FileChanged {
                     path: path.clone(),
                     content: params.text_document.text,
@@ -68,8 +68,8 @@ pub fn build_router(
         let tx = analysis_tx.clone();
         let client = client.clone();
         router.notification::<notification::DidChangeTextDocument>(move |(), params| {
-            if let Some(path) = params.text_document.uri.to_file_path().ok() {
-                if let Some(change) = params.content_changes.into_iter().last() {
+            if let Ok(path) = params.text_document.uri.to_file_path()
+                && let Some(change) = params.content_changes.into_iter().last() {
                     let _ = tx.send(AnalysisMessage::FileChanged {
                         path: path.clone(),
                         content: change.text,
@@ -77,7 +77,6 @@ pub fn build_router(
                     });
                     publish_diagnostics(&db, &path, &client);
                 }
-            }
             ControlFlow::Continue(())
         });
     }
@@ -86,7 +85,7 @@ pub fn build_router(
     {
         let tx = analysis_tx.clone();
         router.notification::<notification::DidCloseTextDocument>(move |(), params| {
-            if let Some(path) = params.text_document.uri.to_file_path().ok() {
+            if let Ok(path) = params.text_document.uri.to_file_path() {
                 let _ = tx.send(AnalysisMessage::FileClosed { path });
             }
             ControlFlow::Continue(())

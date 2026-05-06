@@ -49,6 +49,12 @@ pub struct SymbolIndex {
     by_location: HashMap<(u32, usize), SymbolInfo>,
 }
 
+impl Default for SymbolIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolIndex {
     pub fn new() -> Self {
         Self {

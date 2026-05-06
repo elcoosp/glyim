@@ -26,6 +26,12 @@ pub struct ReferenceGraph {
     references: HashMap<String, Vec<Reference>>,
 }
 
+impl Default for ReferenceGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReferenceGraph {
     pub fn new() -> Self {
         Self {

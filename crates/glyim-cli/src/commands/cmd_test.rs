@@ -93,12 +93,11 @@ pub fn cmd_test(
         }
 
         // Check score threshold
-        if let Some(threshold) = mutation_score {
-            if score < threshold {
+        if let Some(threshold) = mutation_score
+            && score < threshold {
                 eprintln!("Mutation score {:.1}% is below threshold {:.1}%", score, threshold);
                 return 1;
             }
-        }
 
         return if survived > 0 { 1 } else { 0 };
     }
@@ -165,11 +164,10 @@ fn collect_test_names(source: &str) -> Vec<String> {
     let parse_out = glyim_parse::parse(source);
     let mut names = Vec::new();
     for item in &parse_out.ast.items {
-        if let glyim_parse::Item::FnDef { name, attrs, .. } = item {
-            if attrs.iter().any(|a| a.name == "test") {
+        if let glyim_parse::Item::FnDef { name, attrs, .. } = item
+            && attrs.iter().any(|a| a.name == "test") {
                 names.push(parse_out.interner.resolve(*name).to_string());
             }
-        }
     }
     names
 }

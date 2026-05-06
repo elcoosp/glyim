@@ -10,6 +10,12 @@ pub struct FileMap {
     id_to_path: HashMap<FileId, PathBuf>,
     next_id: u32,
 }
+impl Default for FileMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileMap {
     pub fn new() -> Self {
         Self { path_to_id: HashMap::new(), id_to_path: HashMap::new(), next_id: 0 }
@@ -44,6 +50,12 @@ pub struct AnalysisDatabase {
     pub hirs: RwLock<HashMap<FileId, Hir>>,
     pub diagnostics: RwLock<HashMap<FileId, Vec<lsp_types::Diagnostic>>>,
 }
+impl Default for AnalysisDatabase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnalysisDatabase {
     pub fn new() -> Self {
         Self {
