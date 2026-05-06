@@ -1642,7 +1642,6 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-interner = { path = "../glyim-interner" }
 dashmap = "6"
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
 sha2 = "0.11"
 tracing = "0.1"
 

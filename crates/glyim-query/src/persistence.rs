@@ -2,7 +2,6 @@ use crate::context::QueryContext;
 use crate::dependency::Dependency;
 use crate::fingerprint::Fingerprint;
 use crate::result::QueryStatus;
-use std::any::Any;
 use std::fs;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;

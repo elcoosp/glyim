@@ -392,18 +392,17 @@ pub fn semantic_source_hash(source: &str) -> glyim_macro_vfs::ContentHash {
 
 /// Compute a true semantic hash by parsing, lowering, normalizing, and hashing.
 pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
-    use glyim_hir::normalize::SemanticNormalizer;
     use glyim_hir::semantic_hash::semantic_hash_item;
-    use glyim_hir::lower;
+    use glyim_hir::lower as lower_fn;
     use glyim_interner::Interner;
-    use glyim_parse;
 
     let mut interner = Interner::new();
-    let ast = match glyim_parse::parse(source) {
-        Ok(ast) => ast,
-        Err(_) => return glyim_macro_vfs::ContentHash::of(source.as_bytes()),
-    };
-    let hir = lower::lower(&ast, &mut interner);
+    let parse_out = glyim_parse::parse(source);
+    if !parse_out.errors.is_empty() {
+        // When parsing fails, fall back to raw source hash
+        return glyim_macro_vfs::ContentHash::of(source.as_bytes());
+    }
+    let hir = lower_fn(&parse_out.ast, &mut interner);
     let item_hashes: Vec<glyim_macro_vfs::ContentHash> = hir.items.iter().map(|item| {
         let semantic = semantic_hash_item(item, &interner);
         glyim_macro_vfs::ContentHash::from_bytes(*semantic.as_bytes())
@@ -411,14 +410,11 @@ pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
     if item_hashes.is_empty() {
         return glyim_macro_vfs::ContentHash::of(b"empty_module");
     }
-    let mut acc = item_hashes[0];
-    for h in &item_hashes[1..] {
-        let mut combined = Vec::new();
-        combined.extend_from_slice(acc.as_bytes());
+    let mut combined = Vec::new();
+    for h in &item_hashes {
         combined.extend_from_slice(h.as_bytes());
-        acc = glyim_macro_vfs::ContentHash::of(&combined);
     }
-    acc
+    glyim_macro_vfs::ContentHash::of(&combined)
 }
 
 pub fn check(input: &Path) -> Result<(), PipelineError> {

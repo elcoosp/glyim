@@ -10,9 +10,9 @@ description = "Demand-driven, memoized query engine for incremental compilation"
 glyim-interner = { path = "../glyim-interner" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 dashmap = "6"
+postcard = { version = "1", features = ["alloc"] }
 petgraph = "0.8"
 serde = { version = "1", features = ["derive"] }
-bincode = "3"
 sha2 = "0.11"
 tracing = "0.1"
 

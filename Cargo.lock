@@ -528,12 +528,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bincode"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd6a120d2e16b3e1b4a24bd70f23b12d3e16b81f113364a26935f8db7245452d"
-
-[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2100,11 +2094,11 @@ dependencies = [
 name = "glyim-query"
 version = "0.5.0"
 dependencies = [
- "bincode",
  "dashmap",
  "glyim-interner",
  "glyim-macro-vfs",
  "petgraph 0.8.3",
+ "postcard",
  "serde",
  "sha2 0.11.0",
  "tempfile",

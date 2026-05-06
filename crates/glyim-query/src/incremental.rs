@@ -115,7 +115,10 @@ impl IncrementalState {
             );
         }
 
-        self.ctx.invalidate_dependencies(&changed_deps)
+        // Convert dependencies to fingerprints and invalidate
+        let changed_fps: Vec<Fingerprint> =
+            changed_deps.iter().map(|d| d.fingerprint()).collect();
+        self.ctx.invalidate_fingerprints(&changed_fps)
     }
 
     /// Access the query context (immutable).

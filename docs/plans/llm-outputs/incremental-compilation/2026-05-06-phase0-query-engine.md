@@ -86,7 +86,6 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 dashmap = "6"
 petgraph = "0.7"
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
 sha2 = "0.11"
 tracing = "0.1"
 

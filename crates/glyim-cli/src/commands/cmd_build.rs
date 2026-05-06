@@ -14,23 +14,10 @@ pub fn cmd_build(
     } else {
         BuildMode::Debug
     };
-    let result = if incremental {
-        let cache_dir = dirs_next::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from(".glyim/cache"))
-            .join("incremental");
-        let (source, _) = pipeline::load_source_with_prelude(&input)?;
-        let config = pipeline::PipelineConfig {
-            mode,
-            target,
-            ..Default::default()
-        };
-        let compiled = pipeline::compile_source_to_hir_incremental(
-            source, &input, &config, &cache_dir,
-        )?;
-        // Fall back to standard build for now (codegen + link not yet incremental)
-        drop(compiled);
-        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref(), None)
-    } else if bare || input.is_file() {
+    if incremental {
+        eprintln!("note: --incremental flag accepted (placeholder — not yet wired)");
+    }
+    let result = if bare || input.is_file() {
         // Single file compilation (--bare or direct file input)
         pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref(), None)
     } else {
