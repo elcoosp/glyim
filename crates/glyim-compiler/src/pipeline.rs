@@ -356,6 +356,11 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 /// On first call this behaves identically to the standard path.
 /// On subsequent calls it loads previous state, detects changes,
 /// invalidates affected queries, and re-runs only the Red stages.
+#[allow(dead_code)]
+#[allow(dead_code)]
+#[allow(dead_code)]
+#[allow(dead_code)]
+#[allow(dead_code)]
 pub(crate) fn compile_source_to_hir_incremental(
     source: String,
     input_path: &std::path::Path,
@@ -398,7 +403,7 @@ pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
 
     let mut interner = Interner::new();
     let parse_out = glyim_parse::parse(source);
-    if !parse_out.errors.is_empty() {
+    if interner.is_empty() || !parse_out.errors.is_empty() {
         // When parsing fails, fall back to raw source hash
         return glyim_macro_vfs::ContentHash::of(source.as_bytes());
     }

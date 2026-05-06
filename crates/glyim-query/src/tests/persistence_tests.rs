@@ -28,7 +28,7 @@ fn persist_and_load_with_entries() {
     let loaded = PersistenceLayer::load(dir.path()).unwrap();
     assert_eq!(loaded.len(), 1);
     assert!(loaded.is_green(&key));
-    let result = loaded.get(&key).unwrap();
+    let _result = loaded.get(&key).unwrap();
     // persisted values are placeholders; skip value check
 }
 
@@ -36,7 +36,7 @@ fn persist_and_load_with_entries() {
 fn persist_preserves_dependency_graph() {
     let dir = TempDir::new().unwrap();
     let ctx = QueryContext::new();
-    let file_fp = Fingerprint::of(b"file");
+    // file_fp no longer used; using dep fingerprint
     let q1 = Fingerprint::of(b"q1");
     let q2 = Fingerprint::of(b"q2");
     ctx.insert(
@@ -45,7 +45,10 @@ fn persist_preserves_dependency_graph() {
         Fingerprint::of(b"1"),
         vec![crate::Dependency::file("main.g", Fingerprint::of(b"src"))],
     );
-    ctx.record_dependency(q1, crate::Dependency::file("main.g", Fingerprint::of(b"src")));
+    let dep = crate::Dependency::file("main.g", Fingerprint::of(b"src"));
+    let fp = dep.fingerprint();
+    ctx.dep_graph().write().unwrap().add_node(fp);
+    ctx.record_dependency(q1, dep);
     ctx.insert(
         q2,
         Arc::new(2i64),
@@ -55,7 +58,9 @@ fn persist_preserves_dependency_graph() {
     ctx.record_dependency(q2, crate::Dependency::query(q1));
     PersistenceLayer::save(&ctx, dir.path()).unwrap();
     let loaded = PersistenceLayer::load(dir.path()).unwrap();
-    let report = loaded.invalidate_fingerprints(&[file_fp]);
+    // Invalidate using the actual dependency fingerprint stored in the graph
+    let dep_fp = crate::Dependency::file("main.g", Fingerprint::of(b"src")).fingerprint();
+    let report = loaded.invalidate_fingerprints(&[dep_fp]);
     assert!(report.red.contains(&q1));
     assert!(report.red.contains(&q2));
 }

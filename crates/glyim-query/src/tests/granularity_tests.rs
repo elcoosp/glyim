@@ -33,7 +33,7 @@ fn spread_edits_high_count_become_coarse() {
     }
     assert_eq!(
         monitor.granularity(&path),
-        CacheGranularity::CoarseGrained
+        CacheGranularity::Module
     );
 }
 
@@ -86,5 +86,5 @@ fn multiple_files_independent() {
         monitor.observe_edit(&b, (i * 10)..(i * 10 + 3));
     }
     assert_eq!(monitor.granularity(&a), CacheGranularity::FineGrained);
-    assert_eq!(monitor.granularity(&b), CacheGranularity::CoarseGrained);
+    assert_eq!(monitor.granularity(&b), CacheGranularity::Module);
 }

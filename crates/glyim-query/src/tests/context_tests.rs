@@ -56,12 +56,13 @@ fn query_invalidate_marks_red() {
 #[test]
 fn query_invalidate_via_graph() {
     let ctx = QueryContext::new();
-    let file_fp = Fingerprint::of(b"file_fingerprint");
     let query_fp = Fingerprint::of(b"query_fingerprint");
     let dep = crate::Dependency::file("main.g", Fingerprint::of(b"src"));
+    let dep_fp = dep.fingerprint();
+    ctx.dep_graph().write().unwrap().add_node(dep_fp);
     ctx.insert(query_fp, Arc::new(42i64), Fingerprint::of(b"42"), vec![dep.clone()]);
     ctx.record_dependency(query_fp, dep);
-    let report = ctx.invalidate_fingerprints(&[file_fp]);
+    let report = ctx.invalidate_fingerprints(&[dep_fp]);
     assert!(report.red.contains(&query_fp));
 }
 

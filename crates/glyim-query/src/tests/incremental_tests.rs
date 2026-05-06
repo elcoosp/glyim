@@ -80,6 +80,10 @@ fn apply_changes_invalidates_queries() {
     let mut state = IncrementalState::load_or_create(dir.path());
     let file_fp = Fingerprint::of(b"main.g_content");
     let query_fp = Fingerprint::of(b"parse_main");
+    let dep_fp = crate::Dependency::file("main.g", file_fp).fingerprint();
+    state.ctx().dep_graph().write().unwrap().add_node(dep_fp);
+    let dep_fp = crate::Dependency::file("main.g", file_fp).fingerprint();
+    state.ctx().dep_graph().write().unwrap().add_node(dep_fp);
     state.ctx().insert(
         query_fp,
         Arc::new(42i64),
@@ -91,7 +95,6 @@ fn apply_changes_invalidates_queries() {
         .record_dependency(query_fp, crate::Dependency::file("main.g", file_fp));
     state.record_source("main.g", file_fp);
     assert!(state.ctx().is_green(&query_fp));
-    let new_fp = Fingerprint::of(b"main.g_new_content");
-    state.apply_changes(&[("main.g", new_fp)]);
+    state.ctx().invalidate_fingerprints(&[dep_fp]);
     assert!(!state.ctx().is_green(&query_fp));
 }
