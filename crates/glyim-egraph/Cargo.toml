@@ -12,6 +12,7 @@ glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
+glyim-diag = { path = "../glyim-diag" }
 tracing = "0.1"
 
 [dev-dependencies]
