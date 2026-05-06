@@ -33,7 +33,7 @@ rust-version = "1.97.0"
 
 [profile.dev]
 opt-level = 0
-debug = 1
+debug = "line-tables-only"
 split-debuginfo = "unpacked"
 
 [profile.dev.package.inkwell]
@@ -43,7 +43,6 @@ opt-level = 2
 opt-level = 2
 
 [profile.test]
-lto = "thin"
 codegen-units = 16
 # SIGSEV on 1
 opt-level = 0

@@ -117,7 +117,44 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
 
     let __glyim_str_eq_ty = i64_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
     if module.get_function("__glyim_str_eq").is_none() {
-        module.add_function("__glyim_str_eq", __glyim_str_eq_ty, None);
+        let str_eq_fn = module.add_function("__glyim_str_eq", __glyim_str_eq_ty, None);
+        // Emit body: null-terminated byte comparison
+        let entry_bb = context.append_basic_block(str_eq_fn, "entry");
+        let loop_cond_bb = context.append_basic_block(str_eq_fn, "loop.cond");
+        let mismatch_bb = context.append_basic_block(str_eq_fn, "mismatch");
+        let match_bb = context.append_basic_block(str_eq_fn, "match");
+        let end_bb = context.append_basic_block(str_eq_fn, "end");
+
+        let builder = context.create_builder();
+        builder.position_at_end(entry_bb);
+        // if a == null || b == null → mismatch
+        let a = str_eq_fn.get_nth_param(0).unwrap().into_pointer_value();
+        let b = str_eq_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let null_ptr = ptr_type.const_null();
+        let a_is_null = builder.build_int_compare(inkwell::IntPredicate::EQ, a, null_ptr, "a_null").unwrap();
+        let b_is_null = builder.build_int_compare(inkwell::IntPredicate::EQ, b, null_ptr, "b_null").unwrap();
+        let either_null = builder.build_or(a_is_null, b_is_null, "either_null").unwrap();
+        builder.build_conditional_branch(either_null, mismatch_bb, loop_cond_bb).unwrap();
+
+        // loop.cond: load bytes, compare, if zero → match
+        builder.position_at_end(loop_cond_bb);
+        let byte_a = builder.build_load(context.i8_type(), a, "byte_a").unwrap().into_int_value();
+        let byte_b = builder.build_load(context.i8_type(), b, "byte_b").unwrap().into_int_value();
+        let eq = builder.build_int_compare(inkwell::IntPredicate::EQ, byte_a, byte_b, "eq").unwrap();
+        let zero_a = builder.build_int_compare(inkwell::IntPredicate::EQ, byte_a, context.i8_type().const_int(0, false), "zero_a").unwrap();
+        builder.build_conditional_branch(eq, match_bb, mismatch_bb).unwrap();
+
+        // match: if zero_a → end (return 1), else advance and loop
+        builder.position_at_end(match_bb);
+        builder.build_conditional_branch(zero_a, end_bb, loop_cond_bb).unwrap();
+
+        // mismatch: return 0
+        builder.position_at_end(mismatch_bb);
+        builder.build_return(Some(&i64_type.const_int(0, false))).unwrap();
+
+        // end: return 1
+        builder.position_at_end(end_bb);
+        builder.build_return(Some(&i64_type.const_int(1, false))).unwrap();
     }
 
     if jit {
