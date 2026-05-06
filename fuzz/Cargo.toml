@@ -36,3 +36,9 @@ name = "fuzz_typeck"
 path = "fuzz_targets/fuzz_typeck.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_lower"
+path = "fuzz_targets/fuzz_lower.rs"
+test = false
+doc = false

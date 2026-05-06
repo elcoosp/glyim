@@ -28,6 +28,7 @@ members = ["crates/glyim-interner",
     "crates/glyim-mutant",
     "crates/glyim-lsp",
     "crates/glyim-bench",
+    "crates/glyim-config",
 ]
 
 [workspace.package]

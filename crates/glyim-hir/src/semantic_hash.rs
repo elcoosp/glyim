@@ -2,7 +2,7 @@ use crate::normalize::{SemanticNormalizer, NormalizedHirFn, NormalizedExpr, Norm
 use crate::{HirItem, HirFn};
 use crate::item::StructDef;
 use glyim_interner::Interner;
-use sha2::{Digest, Sha256};
+use blake3::Hasher;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct SemanticHash([u8; 32]);
@@ -10,23 +10,21 @@ pub struct SemanticHash([u8; 32]);
 impl SemanticHash {
     pub const ZERO: Self = Self([0u8; 32]);
     pub fn of(data: &[u8]) -> Self {
-        let mut hasher = Sha256::new();
+        let mut hasher = Hasher::new();
         hasher.update(data);
-        let digest = hasher.finalize();
         let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&digest);
+        bytes.copy_from_slice(hasher.finalize().as_bytes());
         Self(bytes)
     }
     pub fn as_bytes(&self) -> &[u8; 32] { &self.0 }
     pub fn to_hex(self) -> String { self.0.iter().map(|b| format!("{:02x}", b)).collect() }
     pub fn combine(a: Self, b: Self) -> Self {
-        let mut hasher = Sha256::new();
+        let mut hasher = Hasher::new();
         hasher.update(b"combine:");
-        hasher.update(a.0);
-        hasher.update(b.0);
-        let digest = hasher.finalize();
+        hasher.update(a.0.as_slice());
+        hasher.update(b.0.as_slice());
         let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&digest);
+        bytes.copy_from_slice(hasher.finalize().as_bytes());
         Self(bytes)
     }
 }

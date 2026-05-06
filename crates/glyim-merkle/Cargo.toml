@@ -10,6 +10,7 @@ description = "Merkle IR DAG for branch-agnostic incremental compilation caching
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-interner = { path = "../glyim-interner" }
 dashmap = "6"
+lru = "0.18"
 serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", features = ["alloc"] }
 sha2 = "0.11"

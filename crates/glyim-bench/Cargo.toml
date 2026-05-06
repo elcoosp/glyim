@@ -28,10 +28,6 @@ blake3 = "1"
 jemalloc-ctl = "0.5"
 jemallocator = "0.5"
 
-[[bench]]
-name = "bench_full_build"
-harness = false
-
 [lib]
 name = "glyim_bench"
 path = "src/lib.rs"
