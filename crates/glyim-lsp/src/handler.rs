@@ -4,14 +4,14 @@ use std::sync::Arc;
 use std::ops::ControlFlow;
 use tokio::sync::mpsc;
 use async_lsp::router::Router;
-use async_lsp::LanguageClient;
+
 use async_lsp::ClientSocket;
 use async_lsp::lsp_types::*;
 
 pub fn build_router(
     db: Arc<AnalysisDatabase>,
     analysis_tx: mpsc::UnboundedSender<AnalysisMessage>,
-    mut client: ClientSocket,
+    client: ClientSocket,
 ) -> Router<()> {
     let mut router = Router::new(());
 
