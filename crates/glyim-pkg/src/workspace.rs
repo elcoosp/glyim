@@ -35,7 +35,7 @@ pub fn detect_workspace(start: &Path) -> Option<Workspace> {
 }
 
 /// Resolve glob patterns like "crates/*" to actual directories containing glyim.toml.
-fn resolve_member_globs(root: &Path, patterns: &[String]) -> Option<Vec<PathBuf>> {
+pub fn resolve_member_globs(root: &Path, patterns: &[String]) -> Option<Vec<PathBuf>> {
     let mut members = Vec::new();
     for pattern in patterns {
         if let Some(dir) = pattern.strip_suffix("/*") {

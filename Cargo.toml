@@ -25,6 +25,7 @@ members = [
     "crates/glyim-merkle",
     "crates/glyim-bytecode",
     "crates/glyim-egraph",
+    "crates/glyim-orchestrator",
 ]
 
 [workspace.package]

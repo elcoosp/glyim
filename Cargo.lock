@@ -2101,6 +2101,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-orchestrator"
+version = "0.5.0"
+dependencies = [
+ "glyim-codegen-llvm",
+ "glyim-compiler",
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-macro-vfs",
+ "glyim-merkle",
+ "glyim-parse",
+ "glyim-pkg",
+ "glyim-query",
+ "glyim-typeck",
+ "petgraph 0.8.3",
+ "serde",
+ "sha2 0.11.0",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "glyim-parse"
 version = "0.5.0"
 dependencies = [

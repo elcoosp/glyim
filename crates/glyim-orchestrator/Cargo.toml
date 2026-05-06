@@ -1,0 +1,26 @@
+[package]
+name = "glyim-orchestrator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Cross-module incremental compilation orchestrator for Glyim"
+
+[dependencies]
+glyim-compiler = { path = "../glyim-compiler" }
+glyim-hir = { path = "../glyim-hir" }
+glyim-interner = { path = "../glyim-interner" }
+glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-query = { path = "../glyim-query" }
+glyim-merkle = { path = "../glyim-merkle" }
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
+glyim-pkg = { path = "../glyim-pkg" }
+petgraph = "0.8"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.11"
+tracing = "0.1"
+tempfile = "3"
+
+[dev-dependencies]
+glyim-parse = { path = "../glyim-parse" }
+glyim-typeck = { path = "../glyim-typeck" }
