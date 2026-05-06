@@ -1,7 +1,5 @@
 use glyim_compiler::lockfile_integration;
 use glyim_orchestrator::orchestrator::{PackageGraphOrchestrator, OrchestratorConfig};
-use glyim_macro_vfs::ContentHash;
-use std::path::PathBuf;
 
 pub fn cmd_fetch() -> i32 {
     let result: Result<i32, i32> = (|| {
@@ -23,7 +21,7 @@ pub fn cmd_fetch() -> i32 {
             };
 
             match PackageGraphOrchestrator::new(&root, config) {
-                Ok(orch) => {
+                Ok(_orch) => {
                     eprintln!("Workspace orchestrator initialized.");
                     if remote_url.is_some() {
                         eprintln!("Remote cache configured: {}", remote_url.unwrap());

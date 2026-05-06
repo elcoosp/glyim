@@ -120,8 +120,7 @@ impl DependencyInterface {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use glyim_interner::Interner;
-
+    
     #[test]
     fn empty_interface_serializes() {
         let iface = DependencyInterface {
