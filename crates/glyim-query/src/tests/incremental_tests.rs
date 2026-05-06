@@ -1,5 +1,5 @@
-use glyim_query::incremental::IncrementalState;
-use glyim_query::fingerprint::Fingerprint;
+use crate::incremental::IncrementalState;
+use crate::fingerprint::Fingerprint;
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -84,11 +84,11 @@ fn apply_changes_invalidates_queries() {
         query_fp,
         Arc::new(42i64),
         Fingerprint::of(b"42"),
-        vec![glyim_query::Dependency::file("main.g", file_fp)],
+        vec![crate::Dependency::file("main.g", file_fp)],
     );
     state
         .ctx()
-        .record_dependency(query_fp, glyim_query::Dependency::file("main.g", file_fp));
+        .record_dependency(query_fp, crate::Dependency::file("main.g", file_fp));
     state.record_source("main.g", file_fp);
     assert!(state.ctx().is_green(&query_fp));
     let new_fp = Fingerprint::of(b"main.g_new_content");

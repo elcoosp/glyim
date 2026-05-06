@@ -1,4 +1,4 @@
-use glyim_merkle::root::{MerkleRoot, compute_root_hash, ItemChange};
+use crate::root::{MerkleRoot, compute_root_hash, ItemChange};
 use glyim_macro_vfs::ContentHash;
 
 #[test]

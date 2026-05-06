@@ -1,5 +1,6 @@
-use glyim_query::context::QueryContext;
-use glyim_query::fingerprint::Fingerprint;
+use std::any::Any;
+use crate::context::QueryContext;
+use crate::fingerprint::Fingerprint;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -7,7 +8,7 @@ use std::sync::Arc;
 fn query_caches_result_on_first_call() {
     let ctx = QueryContext::new();
     let key = Fingerprint::of(b"test_key");
-    let value: Arc<dyn Send + Sync> = Arc::new(42i64);
+    let value: Arc<dyn Any + Send + Sync> = Arc::new(42i64);
     ctx.insert(key, value, Fingerprint::of(b"42"), vec![]);
     let result = ctx.get(&key);
     assert!(result.is_some());
@@ -36,7 +37,7 @@ fn query_overwrites_existing_result() {
 fn query_records_dependencies() {
     let ctx = QueryContext::new();
     let key = Fingerprint::of(b"query");
-    let dep = glyim_query::Dependency::file("main.g", Fingerprint::of(b"src"));
+    let dep = crate::Dependency::file("main.g", Fingerprint::of(b"src"));
     ctx.insert(key, Arc::new(42i64), Fingerprint::of(b"42"), vec![dep]);
     let r = ctx.get(&key).unwrap();
     assert_eq!(r.dependencies.len(), 1);
@@ -57,7 +58,7 @@ fn query_invalidate_via_graph() {
     let ctx = QueryContext::new();
     let file_fp = Fingerprint::of(b"file_fingerprint");
     let query_fp = Fingerprint::of(b"query_fingerprint");
-    let dep = glyim_query::Dependency::file("main.g", Fingerprint::of(b"src"));
+    let dep = crate::Dependency::file("main.g", Fingerprint::of(b"src"));
     ctx.insert(query_fp, Arc::new(42i64), Fingerprint::of(b"42"), vec![dep.clone()]);
     ctx.record_dependency(query_fp, dep);
     let report = ctx.invalidate_fingerprints(&[file_fp]);
@@ -91,7 +92,7 @@ fn query_method_calls_compute_on_first_call() {
         key,
         || {
             count_clone.fetch_add(1, Ordering::SeqCst);
-            Arc::new(42i64) as Arc<dyn Send + Sync>
+            Arc::new(42i64) as Arc<dyn Any + Send + Sync>
         },
         Fingerprint::of(b"42"),
         vec![],
@@ -106,20 +107,20 @@ fn query_method_reuses_cache_on_second_call() {
     let call_count = Arc::new(AtomicU32::new(0));
     let count_clone = call_count.clone();
     let key = Fingerprint::of(b"my_query");
-    let _ = ctx.query(
+    let _: i64 = ctx.query(
         key,
         || {
             count_clone.fetch_add(1, Ordering::SeqCst);
-            Arc::new(42i64) as Arc<dyn Send + Sync>
+            Arc::new(42i64) as Arc<dyn Any + Send + Sync>
         },
         Fingerprint::of(b"42"),
         vec![],
     );
-    let result = ctx.query(
+    let result: i64 = ctx.query(
         key,
         || {
             count_clone.fetch_add(1, Ordering::SeqCst);
-            Arc::new(99i64) as Arc<dyn Send + Sync>
+            Arc::new(99i64) as Arc<dyn Any + Send + Sync>
         },
         Fingerprint::of(b"99"),
         vec![],
@@ -134,22 +135,22 @@ fn query_method_recomputes_after_invalidation() {
     let call_count = Arc::new(AtomicU32::new(0));
     let count_clone = call_count.clone();
     let key = Fingerprint::of(b"my_query");
-    let result1 = ctx.query(
+    let result1: i64 = ctx.query(
         key,
         || {
             count_clone.fetch_add(1, Ordering::SeqCst);
-            Arc::new(42i64) as Arc<dyn Send + Sync>
+            Arc::new(42i64) as Arc<dyn Any + Send + Sync>
         },
         Fingerprint::of(b"42"),
         vec![],
     );
     assert_eq!(result1, 42i64);
     ctx.invalidate_key(key);
-    let result2 = ctx.query(
+    let result2: i64 = ctx.query(
         key,
         || {
             count_clone.fetch_add(1, Ordering::SeqCst);
-            Arc::new(100i64) as Arc<dyn Send + Sync>
+            Arc::new(100i64) as Arc<dyn Any + Send + Sync>
         },
         Fingerprint::of(b"100"),
         vec![],

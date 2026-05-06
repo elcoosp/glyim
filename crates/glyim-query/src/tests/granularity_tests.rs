@@ -1,4 +1,4 @@
-use glyim_query::granularity::{GranularityMonitor, CacheGranularity, EditHistory};
+use crate::granularity::{GranularityMonitor, CacheGranularity};
 use std::path::PathBuf;
 
 #[test]

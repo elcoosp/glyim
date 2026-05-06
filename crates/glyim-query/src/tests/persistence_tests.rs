@@ -1,6 +1,6 @@
-use glyim_query::context::QueryContext;
-use glyim_query::fingerprint::Fingerprint;
-use glyim_query::persistence::PersistenceLayer;
+use crate::context::QueryContext;
+use crate::fingerprint::Fingerprint;
+use crate::persistence::PersistenceLayer;
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -22,7 +22,7 @@ fn persist_and_load_with_entries() {
         key,
         Arc::new(42i64),
         Fingerprint::of(b"42"),
-        vec![glyim_query::Dependency::file("main.g", Fingerprint::of(b"src"))],
+        vec![crate::Dependency::file("main.g", Fingerprint::of(b"src"))],
     );
     PersistenceLayer::save(&ctx, dir.path()).unwrap();
     let loaded = PersistenceLayer::load(dir.path()).unwrap();
@@ -43,16 +43,16 @@ fn persist_preserves_dependency_graph() {
         q1,
         Arc::new(1i64),
         Fingerprint::of(b"1"),
-        vec![glyim_query::Dependency::file("main.g", Fingerprint::of(b"src"))],
+        vec![crate::Dependency::file("main.g", Fingerprint::of(b"src"))],
     );
-    ctx.record_dependency(q1, glyim_query::Dependency::file("main.g", Fingerprint::of(b"src")));
+    ctx.record_dependency(q1, crate::Dependency::file("main.g", Fingerprint::of(b"src")));
     ctx.insert(
         q2,
         Arc::new(2i64),
         Fingerprint::of(b"2"),
-        vec![glyim_query::Dependency::query(q1)],
+        vec![crate::Dependency::query(q1)],
     );
-    ctx.record_dependency(q2, glyim_query::Dependency::query(q1));
+    ctx.record_dependency(q2, crate::Dependency::query(q1));
     PersistenceLayer::save(&ctx, dir.path()).unwrap();
     let loaded = PersistenceLayer::load(dir.path()).unwrap();
     let report = loaded.invalidate_fingerprints(&[file_fp]);

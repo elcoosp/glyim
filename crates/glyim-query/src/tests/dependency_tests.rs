@@ -1,5 +1,5 @@
-use glyim_query::dependency::Dependency;
-use glyim_query::fingerprint::Fingerprint;
+use crate::dependency::Dependency;
+use crate::fingerprint::Fingerprint;
 use std::path::PathBuf;
 
 #[test]

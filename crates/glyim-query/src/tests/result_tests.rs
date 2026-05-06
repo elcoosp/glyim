@@ -1,7 +1,7 @@
-use glyim_query::result::{QueryResult, QueryStatus};
-use glyim_query::fingerprint::Fingerprint;
-use glyim_query::dependency::Dependency;
-use std::path::PathBuf;
+use std::any::Any;
+use crate::result::{QueryResult, QueryStatus};
+use crate::fingerprint::Fingerprint;
+use crate::dependency::Dependency;
 use std::sync::Arc;
 
 #[test]
@@ -18,7 +18,7 @@ fn query_status_red_is_not_valid() {
 
 #[test]
 fn query_result_stores_value() {
-    let value: Arc<dyn Send + Sync> = Arc::new(42i64);
+    let value: Arc<dyn Any + Send + Sync> = Arc::new(42i64);
     let result = QueryResult::new(
         value,
         Fingerprint::of(b"42"),
@@ -38,7 +38,7 @@ fn query_result_is_send_sync() {
 
 #[test]
 fn query_result_downcast() {
-    let value: Arc<dyn Send + Sync> = Arc::new(99i64);
+    let value: Arc<dyn Any + Send + Sync> = Arc::new(99i64);
     let result = QueryResult::new(
         value,
         Fingerprint::of(b"99"),
@@ -51,7 +51,7 @@ fn query_result_downcast() {
 
 #[test]
 fn query_result_downcast_wrong_type_returns_none() {
-    let value: Arc<dyn Send + Sync> = Arc::new(99i64);
+    let value: Arc<dyn Any + Send + Sync> = Arc::new(99i64);
     let result = QueryResult::new(
         value,
         Fingerprint::of(b"99"),

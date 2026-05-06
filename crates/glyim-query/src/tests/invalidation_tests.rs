@@ -1,6 +1,6 @@
-use glyim_query::invalidation::{InvalidationReport, invalidate};
-use glyim_query::dep_graph::DependencyGraph;
-use glyim_query::fingerprint::Fingerprint;
+use crate::invalidation::invalidate;
+use crate::dep_graph::DependencyGraph;
+use crate::fingerprint::Fingerprint;
 
 #[test]
 fn invalidate_nothing_when_no_changes() {

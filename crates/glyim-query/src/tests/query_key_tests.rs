@@ -1,5 +1,5 @@
-use glyim_query::query_key::QueryKey;
-use glyim_query::fingerprint::Fingerprint;
+use crate::query_key::QueryKey;
+use crate::fingerprint::Fingerprint;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,4 +1,4 @@
-use glyim_hir::dependency_names::NameDependencyTable;
+use crate::dependency_names::NameDependencyTable;
 use glyim_interner::Interner;
 
 #[test]

@@ -1,5 +1,5 @@
-use glyim_merkle::store::MerkleStore;
-use glyim_merkle::node::{MerkleNode, MerkleNodeData, MerkleNodeHeader};
+use crate::store::MerkleStore;
+use crate::node::{MerkleNode, MerkleNodeData, MerkleNodeHeader};
 use glyim_macro_vfs::ContentHash;
 use std::sync::Arc;
 

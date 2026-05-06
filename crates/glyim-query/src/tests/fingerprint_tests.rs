@@ -1,4 +1,4 @@
-use glyim_query::fingerprint::Fingerprint;
+use crate::fingerprint::Fingerprint;
 
 #[test]
 fn fingerprint_of_same_data_is_equal() {

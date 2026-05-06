@@ -1,5 +1,5 @@
-use glyim_query::dep_graph::DependencyGraph;
-use glyim_query::fingerprint::Fingerprint;
+use crate::dep_graph::DependencyGraph;
+use crate::fingerprint::Fingerprint;
 
 #[test]
 fn empty_graph_has_no_nodes() {
