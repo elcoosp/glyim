@@ -1,7 +1,6 @@
 use glyim_codegen_llvm::runtime_shims;
 use glyim_query::incremental::IncrementalState;
 use glyim_query::fingerprint::Fingerprint;
-use glyim_egraph;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_interner::Interner;
 use glyim_hir::ExprId;
@@ -110,7 +109,7 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
 }
 
 // ── shared monomorphize→merged_types helper ──────────────────────
-fn merge_mono_types(
+pub(crate) fn merge_mono_types(
     hir: &glyim_hir::Hir,
     interner: &mut Interner,
     expr_types: &[HirType],
@@ -247,7 +246,7 @@ pub(crate) struct CompiledHir {
     is_no_std: bool,
 }
 
-fn compile_source_to_hir(
+pub(crate) fn compile_source_to_hir(
     source: String,
     input_path: &std::path::Path,
     config: &PipelineConfig,
@@ -285,9 +284,6 @@ fn compile_source_to_hir(
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-
-    // Phase 3: E-graph algebraic optimization
-    let mono_hir = glyim_egraph::optimize::optimize_module(&mono_hir, &merged_types, &interner);
 
     Ok(CompiledHir {
         hir,
@@ -388,6 +384,76 @@ pub(crate) fn compile_source_to_hir_incremental(
         tracing::warn!("Failed to save incremental state: {e}");
     }
     Ok(compiled)
+}
+
+/// Build a project using the incremental query-driven pipeline.
+/// Returns the output path and a detailed incremental report.
+pub fn build_incremental(
+    input: &Path,
+    output: Option<&Path>,
+    mode: BuildMode,
+    target: Option<&str>,
+) -> Result<(PathBuf, crate::queries::IncrementalReport), PipelineError> {
+    use crate::queries::QueryPipeline;
+    let (source, _) = load_source_with_prelude(input)?;
+    let cache_dir = input.parent()
+        .unwrap_or(Path::new("."))
+        .join(".glyim/incremental");
+
+    let mut qp = QueryPipeline::new(
+        &cache_dir,
+        PipelineConfig {
+            mode,
+            target: target.map(String::from),
+            ..Default::default()
+        },
+    );
+
+    let compiled = qp.compile(&source, input)?;
+    let report = qp.report().clone();
+
+    let output_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+        let stem = input
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        PathBuf::from(stem)
+    });
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    let context = inkwell::context::Context::create();
+    let mut codegen = match mode {
+        BuildMode::Debug => Codegen::with_debug(
+            &context,
+            compiled.interner.clone(),
+            compiled.merged_types.clone(),
+            compiled.source.clone(),
+            &input.to_string_lossy(),
+        )
+        .map_err(PipelineError::Codegen)?,
+        BuildMode::Release => CodegenBuilder::new(
+            &context,
+            compiled.interner.clone(),
+            compiled.merged_types.clone(),
+        )
+        .build()?,
+    };
+    if let Some(t) = target {
+        crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
+        codegen = codegen.with_target(t);
+    }
+    if compiled.is_no_std {
+        codegen = codegen.with_no_std();
+    }
+    codegen
+        .generate(&compiled.mono_hir)
+        .map_err(PipelineError::Codegen)?;
+    codegen
+        .write_object_file_with_opt(&obj_path, mode.opt_level())
+        .map_err(PipelineError::Codegen)?;
+    link_object(&obj_path, &output_path, mode == BuildMode::Release)?;
+    Ok((output_path, report))
 }
 
 /// Compute a semantic hash of source code (uses full HIR normalization).
