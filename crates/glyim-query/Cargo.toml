@@ -1,0 +1,20 @@
+[package]
+name = "glyim-query"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Demand-driven, memoized query engine for incremental compilation"
+
+[dependencies]
+glyim-interner = { path = "../glyim-interner" }
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
+dashmap = "6"
+petgraph = "0.8"
+serde = { version = "1", features = ["derive"] }
+bincode = "3"
+sha2 = "0.11"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

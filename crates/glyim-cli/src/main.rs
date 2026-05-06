@@ -37,6 +37,8 @@ enum Command {
         release: bool,
         #[arg(long)]
         bare: bool,
+        #[arg(long)]
+        incremental: bool,
     },
     Run {
         input: PathBuf,
@@ -177,7 +179,8 @@ fn main() {
             debug: _,
             release,
             bare,
-        } => cmd_build(input, output, target, release, bare),
+            incremental,
+        } => cmd_build(input, output, target, release, bare, incremental),
         Command::Run {
             input,
             target,

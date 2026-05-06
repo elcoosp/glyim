@@ -21,6 +21,7 @@ members = [
     "crates/glyim-cli-tests-full",
     "crates/glyim-testr",
     "crates/glyim-compiler",
+    "crates/glyim-query",
 ]
 
 [workspace.package]
@@ -31,18 +32,18 @@ rust-version = "1.97.0"
 
 # ── Faster development builds ──────────────────────────────────
 
-[profile.dev]
-opt-level = 0
-debug = "line-tables-only"
-split-debuginfo = "unpacked"
+# [profile.dev]
+# opt-level = 0
+# debug = "line-tables-only"
+# split-debuginfo = "unpacked"
 
-[profile.dev.package.inkwell]
-opt-level = 2
+# [profile.dev.package.inkwell]
+# opt-level = 2
 
-[profile.dev.package.llvm-sys]
-opt-level = 2
+# [profile.dev.package.llvm-sys]
+# opt-level = 2
 
-[profile.test]
-codegen-units = 16
-# SIGSEV on 1
-opt-level = 0
+# [profile.test]
+# codegen-units = 16
+# # SIGSEV on 1
+# opt-level = 0

@@ -17,6 +17,7 @@ glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
+glyim-query = { path = "../glyim-query" }
 wat = "1"
 glyim-doc = { path = "../glyim-doc" }
 inkwell = { version = "0.9", features = ["llvm22-1-prefer-dynamic"] }

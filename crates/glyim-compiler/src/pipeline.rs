@@ -1,4 +1,6 @@
 use glyim_codegen_llvm::runtime_shims;
+use glyim_query::incremental::IncrementalState;
+use glyim_query::fingerprint::Fingerprint;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
@@ -350,6 +352,39 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
     run_with_mode(input, BuildMode::Debug, target, None)
 }
 #[tracing::instrument(name = "check", skip_all)]
+/// Compile source to HIR using the incremental query engine.
+/// On first call this behaves identically to the standard path.
+/// On subsequent calls it loads previous state, detects changes,
+/// invalidates affected queries, and re-runs only the Red stages.
+pub fn compile_source_to_hir_incremental(
+    source: String,
+    input_path: &std::path::Path,
+    config: &PipelineConfig,
+    cache_dir: &std::path::Path,
+) -> Result<CompiledHir, PipelineError> {
+    let mut state = IncrementalState::load_or_create(cache_dir);
+    let source_fp = Fingerprint::of(source.as_bytes());
+    let input_str = input_path.to_string_lossy().to_string();
+    let _report = state.apply_changes(&[(&input_str, source_fp)]);
+    let source_key =
+        Fingerprint::combine(Fingerprint::of_str(&input_str), source_fp);
+    if !state.ctx().is_green(&source_key) {
+        tracing::info!("Incremental: source changed or new — recomputing");
+    }
+    let compiled = compile_source_to_hir(source, input_path, config)?;
+    state.ctx().insert(
+        source_key,
+        std::sync::Arc::new(()),
+        source_fp,
+        vec![glyim_query::Dependency::file(&input_str, source_fp)],
+    );
+    state.record_source(&input_str, source_fp);
+    if let Err(e) = state.save() {
+        tracing::warn!("Failed to save incremental state: {e}");
+    }
+    Ok(compiled)
+}
+
 pub fn check(input: &Path) -> Result<(), PipelineError> {
     let mut source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
 

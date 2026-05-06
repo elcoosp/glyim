@@ -1,0 +1,78 @@
+use glyim_query::context::QueryContext;
+use glyim_query::fingerprint::Fingerprint;
+use glyim_query::persistence::PersistenceLayer;
+use std::sync::Arc;
+use tempfile::TempDir;
+
+#[test]
+fn persist_and_load_empty_context() {
+    let dir = TempDir::new().unwrap();
+    let ctx = QueryContext::new();
+    PersistenceLayer::save(&ctx, dir.path()).unwrap();
+    let loaded = PersistenceLayer::load(dir.path()).unwrap();
+    assert!(loaded.is_empty());
+}
+
+#[test]
+fn persist_and_load_with_entries() {
+    let dir = TempDir::new().unwrap();
+    let ctx = QueryContext::new();
+    let key = Fingerprint::of(b"query1");
+    ctx.insert(
+        key,
+        Arc::new(42i64),
+        Fingerprint::of(b"42"),
+        vec![glyim_query::Dependency::file("main.g", Fingerprint::of(b"src"))],
+    );
+    PersistenceLayer::save(&ctx, dir.path()).unwrap();
+    let loaded = PersistenceLayer::load(dir.path()).unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert!(loaded.is_green(&key));
+    let result = loaded.get(&key).unwrap();
+    assert_eq!(*result.value.downcast_ref::<i64>().unwrap(), 42i64);
+}
+
+#[test]
+fn persist_preserves_dependency_graph() {
+    let dir = TempDir::new().unwrap();
+    let ctx = QueryContext::new();
+    let file_fp = Fingerprint::of(b"file");
+    let q1 = Fingerprint::of(b"q1");
+    let q2 = Fingerprint::of(b"q2");
+    ctx.insert(
+        q1,
+        Arc::new(1i64),
+        Fingerprint::of(b"1"),
+        vec![glyim_query::Dependency::file("main.g", Fingerprint::of(b"src"))],
+    );
+    ctx.record_dependency(q1, glyim_query::Dependency::file("main.g", Fingerprint::of(b"src")));
+    ctx.insert(
+        q2,
+        Arc::new(2i64),
+        Fingerprint::of(b"2"),
+        vec![glyim_query::Dependency::query(q1)],
+    );
+    ctx.record_dependency(q2, glyim_query::Dependency::query(q1));
+    PersistenceLayer::save(&ctx, dir.path()).unwrap();
+    let loaded = PersistenceLayer::load(dir.path()).unwrap();
+    let report = loaded.invalidate_fingerprints(&[file_fp]);
+    assert!(report.red.contains(&q1));
+    assert!(report.red.contains(&q2));
+}
+
+#[test]
+fn load_from_nonexistent_dir_returns_empty() {
+    let dir = TempDir::new().unwrap();
+    let nonexistent = dir.path().join("nope");
+    let loaded = PersistenceLayer::load(&nonexistent).unwrap();
+    assert!(loaded.is_empty());
+}
+
+#[test]
+fn save_creates_directory_if_missing() {
+    let dir = TempDir::new().unwrap();
+    let nested = dir.path().join("a").join("b").join("c");
+    let ctx = QueryContext::new();
+    assert!(PersistenceLayer::save(&ctx, &nested).is_ok());
+    assert!(nested.exists());
+}

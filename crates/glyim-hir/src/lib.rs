@@ -15,6 +15,7 @@ pub use lower::lower_with_declarations;
 pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
 pub use types::{ExprId, HirPattern, HirType};
 pub mod decl_table;
+pub mod dependency_names;
 
 #[cfg(test)]
 mod tests;
