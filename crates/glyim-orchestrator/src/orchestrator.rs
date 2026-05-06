@@ -1,6 +1,6 @@
 use glyim_compiler::pipeline::BuildMode;
 use glyim_merkle::MerkleStore;
-use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore};
+use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore, RemoteContentStore, RemoteStoreConfig};
 use crate::graph::{PackageGraph, PackageNode};
 use crate::artifacts::ArtifactManager;
 use crate::incremental::CrossPackageIncremental;
@@ -51,6 +51,7 @@ pub struct PackageGraphOrchestrator {
     cross_state: CrossPackageIncremental,
     merkle: Arc<MerkleStore>,
     artifact_mgr: ArtifactManager,
+    remote_store: Option<RemoteContentStore>,
     report: OrchestratorReport,
 }
 
@@ -67,6 +68,18 @@ impl PackageGraphOrchestrator {
         let merkle = Arc::new(MerkleStore::new(store.clone()));
         let artifact_mgr = ArtifactManager::new(store, merkle.clone());
 
+        let remote_store = if let Some(ref url) = config.remote_cache_url {
+            let local_dir = root.join(".glyim/cas-remote");
+            let remote_config = RemoteStoreConfig {
+                endpoint: url.clone(),
+                auth_token: config.remote_cache_token.clone(),
+                local_dir,
+            };
+            RemoteContentStore::new(&remote_config).ok()
+        } else {
+            None
+        };
+
         Ok(Self {
             workspace_root: root.to_path_buf(),
             graph,
@@ -74,6 +87,7 @@ impl PackageGraphOrchestrator {
             cross_state,
             merkle,
             artifact_mgr,
+            remote_store,
             report: OrchestratorReport::default(),
         })
     }
@@ -90,6 +104,26 @@ impl PackageGraphOrchestrator {
             eprintln!("  Compiling {} ...", pkg_name);
 
             let artifact_hash = self.cross_state.get_package_root(&pkg_name);
+            // Try remote pull first if configured and not found locally
+            if artifact_hash.is_some() && !self.config.force_rebuild {
+                let hash = artifact_hash.unwrap();
+                let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
+                if !local_exists {
+                    if let Some(ref remote) = self.remote_store {
+                        if let Some(remote_data) = remote.retrieve(hash) {
+                            // Store locally for future use
+                            self.artifact_mgr.store_object_code(&remote_data);
+                            if let Some(art) = remote.retrieve_action_result(hash).or_else(|| {
+                                // reconstruct PackageArtifact from remote? For now, skip
+                                None
+                            }) {
+                                // Not needed for basic object code pull
+                            }
+                            self.report.artifacts_pulled += 1;
+                        }
+                    }
+                }
+            }
             let should_skip = !self.config.force_rebuild
                 && artifact_hash.is_some()
                 && self.artifact_mgr.retrieve_object_code(artifact_hash.unwrap()).is_some();
@@ -197,9 +231,25 @@ impl PackageGraphOrchestrator {
             },
             compiler_version: env!("CARGO_PKG_VERSION").to_string(),
         };
-        let _artifact_hash = self.artifact_mgr.store_package_artifact(&artifact);
+        let artifact_hash = self.artifact_mgr.store_package_artifact(&artifact);
         self.cross_state.update_package_root(&pkg.name, source_hash);
         self.cross_state.save(&self.workspace_root).ok();
+
+        // Push to remote if configured
+        if let Some(ref remote) = self.remote_store {
+            if remote.store(&obj_bytes) == obj_hash {
+                if let Err(e) = remote.store_action_result(artifact_hash, glyim_macro_vfs::ActionResult {
+                    output_files: vec![],
+                    exit_code: 0,
+                    stdout_hash: None,
+                    stderr_hash: None,
+                }) {
+                    eprintln!("    warning: remote push failed: {e}");
+                } else {
+                    self.report.artifacts_pushed += 1;
+                }
+            }
+        }
 
         Ok(obj_path)
     }
