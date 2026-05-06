@@ -16,7 +16,7 @@ sea-orm = { version = "2.0.0-rc", features = ["sqlx-sqlite", "runtime-tokio", "m
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time", "io-util"] }
 notify-debouncer-full = "0.7"
 owo-colors = "4"
-similar = "2"
+similar = "3"
 chrono = "0.4"
 regex = "1"
 tempfile = "3"

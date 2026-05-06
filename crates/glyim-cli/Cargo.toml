@@ -54,7 +54,7 @@ dirs-next = "2"
 insta = { version = "1", features = ["yaml"] }
 wat = "1"
 rstest = "0.26"
-trycmd = "0.15"
+trycmd = "1.2"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-compiler = { path = "../glyim-compiler" }
 glyim-testr = { path = "../glyim-testr" }
