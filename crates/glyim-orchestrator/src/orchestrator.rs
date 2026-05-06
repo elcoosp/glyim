@@ -129,8 +129,8 @@ impl PackageGraphOrchestrator {
             });
 
             // Try remote pull if not found locally
-            if let Some(hash) = artifact_hash {
-                if !self.config.force_rebuild {
+            if let Some(hash) = artifact_hash
+                && !self.config.force_rebuild {
                     let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
                     if !local_exists
                         && let Some(ref remote) = self.remote_store
@@ -139,7 +139,6 @@ impl PackageGraphOrchestrator {
                                 self.report.artifacts_pulled += 1;
                             }
                 }
-            }
 
             let should_skip = !self.config.force_rebuild
                 && !source_changed
