@@ -34,5 +34,6 @@ mod ui;
 mod generic_debug;
 mod macro_cache_e2e;
 mod macro_e2e;
+mod orchestrator_tests;
 
 fn main() {}

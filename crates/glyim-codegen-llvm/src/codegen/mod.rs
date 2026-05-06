@@ -36,6 +36,7 @@ pub struct CodegenBuilder<'ctx> {
     debug_mode: DebugMode,
     source: Option<String>,
     file_name: Option<String>,
+    pub(crate) library_mode: bool,
 }
 
 impl<'ctx> CodegenBuilder<'ctx> {
@@ -45,6 +46,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
             interner,
             expr_types,
             debug_mode: DebugMode::None,
+            library_mode: false,
             source: None,
             file_name: None,
         }
@@ -93,10 +95,16 @@ impl<'ctx> CodegenBuilder<'ctx> {
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
             jit_mode: false,
+            library_mode: self.library_mode,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
         })
+    }
+
+    pub fn with_library_mode(mut self) -> Self {
+        self.library_mode = true;
+        self
     }
 }
 
@@ -133,6 +141,7 @@ pub struct Codegen<'ctx> {
         std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
     pub(crate) errors: RefCell<Vec<String>>,
     pub(crate) jit_mode: bool,
+    pub(crate) library_mode: bool,
     /// Effect analysis results (Phase 3) – drives LLVM attribute annotation.
     pub(crate) effect_analysis: Option<glyim_hir::effects::EffectSet>,
     pub(crate) target_triple: Option<String>,
@@ -178,6 +187,7 @@ impl<'ctx> Codegen<'ctx> {
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
             jit_mode: false,
+            library_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
@@ -222,6 +232,7 @@ impl<'ctx> Codegen<'ctx> {
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
             jit_mode: false,
+            library_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
@@ -328,9 +339,9 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
-        crate::alloc::emit_alloc_shims(&self.module, self.no_std);
-        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        if !self.library_mode { crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode); }
+        if !self.library_mode { crate::alloc::emit_alloc_shims(&self.module, self.no_std); }
+        if !self.library_mode { crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std); }
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -459,7 +470,7 @@ impl<'ctx> Codegen<'ctx> {
             return Err(errors.join("\n"));
         }
 
-        if self.module.get_function("main").is_none() {
+        if self.module.get_function("main").is_none() && !self.library_mode {
             Err("no 'main' function".into())
         } else {
             if let Err(msg) = self.module.verify() {
@@ -576,9 +587,9 @@ impl<'ctx> Codegen<'ctx> {
         test_names: &[String],
         should_panic: &std::collections::HashSet<String>,
     ) -> Result<(), String> {
-        crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
-        crate::alloc::emit_alloc_shims(&self.module, self.no_std);
-        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        if !self.library_mode { crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode); }
+        if !self.library_mode { crate::alloc::emit_alloc_shims(&self.module, self.no_std); }
+        if !self.library_mode { crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std); }
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -806,6 +817,11 @@ impl<'ctx> Codegen<'ctx> {
 
     pub fn with_jit_mode(mut self) -> Self {
         self.jit_mode = true;
+        self
+    }
+    /// Compile in library mode: no runtime shims and no main requirement.
+    pub fn with_library_mode(mut self) -> Self {
+        self.library_mode = true;
         self
     }
 

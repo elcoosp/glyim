@@ -74,7 +74,16 @@ impl ArtifactManager {
         Ok(obj_path)
     }
 
-    pub fn verify_artifact(
+
+    pub fn register_name(&self, name: &str, hash: ContentHash) {
+        self.cas.register_name(name, hash);
+    }
+
+    pub fn resolve_name(&self, name: &str) -> Option<ContentHash> {
+        self.cas.resolve_name(name)
+    }
+
+        pub fn verify_artifact(
         artifact: &PackageArtifact,
         target_triple: Option<&str>,
         compiler_version: &str,

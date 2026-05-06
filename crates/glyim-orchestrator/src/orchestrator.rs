@@ -1,15 +1,16 @@
-use crate::interface::DependencyInterface;
 use glyim_compiler::pipeline::BuildMode;
 use glyim_merkle::MerkleStore;
-use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore, RemoteContentStore, RemoteStoreConfig};
+use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore, RemoteContentStore, RemoteStoreConfig, ActionResult};
 use crate::graph::{PackageGraph, PackageNode};
-use crate::artifacts::ArtifactManager;
+use crate::artifacts::{ArtifactManager, PackageArtifact};
+use crate::interface::DependencyInterface;
 use crate::incremental::CrossPackageIncremental;
 use crate::linker::{LinkConfig, link_multi_object};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+#[derive(Clone)]
 pub struct OrchestratorConfig {
     pub mode: BuildMode,
     pub target: Option<String>,
@@ -41,10 +42,6 @@ pub struct OrchestratorReport {
     pub artifacts_pulled: usize,
 }
 
-
-#[allow(dead_code)]
-
-#[allow(dead_code)]
 pub struct PackageGraphOrchestrator {
     workspace_root: PathBuf,
     graph: PackageGraph,
@@ -53,6 +50,8 @@ pub struct PackageGraphOrchestrator {
     merkle: Arc<MerkleStore>,
     artifact_mgr: ArtifactManager,
     remote_store: Option<RemoteContentStore>,
+    root_package: String,
+    temp_dirs: Vec<tempfile::TempDir>,
     report: OrchestratorReport,
 }
 
@@ -61,6 +60,10 @@ impl PackageGraphOrchestrator {
         let graph = crate::graph::PackageGraph::discover(root)
             .map_err(|e| e.to_string())?;
         let cross_state = CrossPackageIncremental::load(root).unwrap_or_default();
+
+        let root_package = graph.build_order()
+            .map(|order| order.last().map(|n| n.name.clone()).unwrap_or_default())
+            .unwrap_or_default();
 
         let cas_dir = root.join(".glyim/cas");
         let local_store = LocalContentStore::new(&cas_dir)
@@ -89,6 +92,8 @@ impl PackageGraphOrchestrator {
             merkle,
             artifact_mgr,
             remote_store,
+            root_package,
+            temp_dirs: Vec::new(),
             report: OrchestratorReport::default(),
         })
     }
@@ -105,35 +110,57 @@ impl PackageGraphOrchestrator {
             eprintln!("  Compiling {} ...", pkg_name);
 
             let artifact_hash = self.cross_state.get_package_root(&pkg_name);
-            // Try remote pull first if configured and not found locally
+            // Compute current source hash to detect changes
+            let pkg_node = self.graph.get(&pkg_name).unwrap();
+            let source_path = pkg_node.dir.join("src/main.g");
+            let current_source_hash = std::fs::read_to_string(&source_path)
+                .ok()
+                .map(|s| ContentHash::of(s.as_bytes()))
+                .unwrap_or(ContentHash::ZERO);
+            let source_changed = artifact_hash.map(|h| h != current_source_hash).unwrap_or(true);
+            // Check if any dependency changed
+            let deps_changed = pkg_node.manifest.dependencies.keys().any(|dep_name| {
+                let dep_hash = self.cross_state.get_package_root(dep_name)
+                    .unwrap_or(ContentHash::ZERO);
+                self.cross_state.did_dependency_change(&pkg_name, dep_name, dep_hash)
+            });
+
+            // Try remote pull if not found locally
             if artifact_hash.is_some() && !self.config.force_rebuild {
                 let hash = artifact_hash.unwrap();
                 let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
                 if !local_exists {
                     if let Some(ref remote) = self.remote_store {
                         if let Some(remote_data) = remote.retrieve(hash) {
-                            // Store locally for future use
                             self.artifact_mgr.store_object_code(&remote_data);
-                            if let Some(_art) = remote.retrieve_action_result(hash).or_else(|| {
-                                // reconstruct PackageArtifact from remote? For now, skip
-                                None
-                            }) {
-                                // Not needed for basic object code pull
-                            }
                             self.report.artifacts_pulled += 1;
                         }
                     }
                 }
             }
+
             let should_skip = !self.config.force_rebuild
+                && !source_changed
+                && !deps_changed
                 && artifact_hash.is_some()
-                && self.artifact_mgr.retrieve_object_code(artifact_hash.unwrap()).is_some();
+                && {
+                    let hash = artifact_hash.unwrap();
+                    let name = format!("artifact:{}", hash);
+                    if let Some(art_blob_hash) = self.artifact_mgr.resolve_name(&name) {
+                        self.artifact_mgr.retrieve_object_code(art_blob_hash).is_some()
+                    } else {
+                        false
+                    }
+                };
 
             if should_skip {
                 eprintln!("    (using cached artifact)");
                 self.report.packages_cached.push(pkg_name.clone());
-                // Retrieve artifact and extract object code
-                if let Some(art) = self.artifact_mgr.retrieve_package_artifact(artifact_hash.unwrap()) {
+                if let Some(art) = {
+                    let name = format!("artifact:{}", artifact_hash.unwrap());
+                    self.artifact_mgr.resolve_name(&name)
+                        .and_then(|h| self.artifact_mgr.retrieve_package_artifact(h))
+                } {
                     match self.artifact_mgr.extract_object_code(&art) {
                         Ok(path) => {
                             compiled_objects.push(path);
@@ -147,8 +174,8 @@ impl PackageGraphOrchestrator {
                 }
             }
 
-            let pkg_node = self.graph.get(&pkg_name).unwrap().clone();
-            match self.compile_single_package(&pkg_node) {
+            let pkg_node_clone = pkg_node.clone();
+            match self.compile_single_package(&pkg_node_clone) {
                 Ok(obj_path) => {
                     compiled_objects.push(obj_path);
                     self.report.packages_compiled.push(pkg_name.clone());
@@ -173,6 +200,7 @@ impl PackageGraphOrchestrator {
         link_multi_object(&compiled_objects, &output_path, &linker_config)
             .map_err(|e| OrchestratorError::Link(e.to_string()))?;
 
+        self.temp_dirs.clear();
         self.cross_state.save(&self.workspace_root).ok();
         self.report.total_elapsed = start.elapsed();
         Ok(output_path)
@@ -181,7 +209,6 @@ impl PackageGraphOrchestrator {
     fn compile_single_package(&mut self, pkg: &PackageNode) -> Result<PathBuf, OrchestratorError> {
         let source_path = pkg.dir.join("src/main.g");
         let source = std::fs::read_to_string(&source_path).map_err(OrchestratorError::Io)?;
-        // Compute source hash for cache key
         let source_hash = ContentHash::of(source.as_bytes());
 
         let parsed = glyim_parse::parse(&source);
@@ -200,27 +227,32 @@ impl PackageGraphOrchestrator {
         })?;
 
         let context = inkwell::context::Context::create();
-        let mut codegen = glyim_codegen_llvm::CodegenBuilder::new(
+        let is_root = pkg.name == self.root_package;
+        let mut builder = glyim_codegen_llvm::CodegenBuilder::new(
             &context,
             interner.clone(),
             tc.expr_types.clone(),
-        )
-        .build()
-        .map_err(OrchestratorError::Codegen)?;
+        );
+        if !is_root {
+            builder = builder.with_library_mode();
+        }
+        let mut codegen = builder.build().map_err(OrchestratorError::Codegen)?;
         codegen.generate(&hir).map_err(OrchestratorError::Codegen)?;
 
         let tmp_dir = tempfile::tempdir().map_err(OrchestratorError::Io)?;
         let obj_path = tmp_dir.path().join("output.o");
         codegen.write_object_file(&obj_path).map_err(OrchestratorError::Codegen)?;
 
-        // Store object code in CAS and update cross-package state
-        let obj_bytes = std::fs::read(&obj_path).map_err(OrchestratorError::Io)?;
+        // Keep temp_dir alive for linking
+        let obj_path_clone = obj_path.clone();
+        self.temp_dirs.push(tmp_dir);
+
+        let obj_bytes = std::fs::read(&obj_path_clone).map_err(OrchestratorError::Io)?;
         let obj_hash = self.artifact_mgr.store_object_code(&obj_bytes);
-        // Create package artifact (simplified; full version would include symbol table)
-        let artifact = crate::artifacts::PackageArtifact {
+        let artifact = PackageArtifact {
             package_name: pkg.name.clone(),
             version: pkg.manifest.package.version.clone(),
-            merkle_root: source_hash,  // use source hash as root for now
+            merkle_root: source_hash,
             symbol_table_hash: ContentHash::of(b"placeholder"),
             object_code_hash: obj_hash,
             per_fn_objects: Vec::new(),
@@ -234,32 +266,31 @@ impl PackageGraphOrchestrator {
         };
         let artifact_hash = self.artifact_mgr.store_package_artifact(&artifact);
         self.cross_state.update_package_root(&pkg.name, source_hash);
+        // Map source hash to artifact hash for quick cache lookups
+        self.artifact_mgr.register_name(&format!("artifact:{}", source_hash), artifact_hash);
         self.cross_state.save(&self.workspace_root).ok();
 
-        // Compute and store DependencyInterface for downstream packages
+        // Compute and store DependencyInterface
         let dep_iface = DependencyInterface::from_hir(&hir, &pkg.name, &pkg.manifest.package.version, &interner);
         let iface_bytes = dep_iface.to_bytes();
         let iface_hash = ContentHash::of(&iface_bytes);
-        self.artifact_mgr.store_object_code(&iface_bytes);  // store interface in CAS
+        self.artifact_mgr.store_object_code(&iface_bytes);
         self.cross_state.record_dep_fingerprint(&pkg.name, "interface", iface_hash);
 
         // Push to remote if configured
         if let Some(ref remote) = self.remote_store {
             if remote.store(&obj_bytes) == obj_hash {
-                if let Err(e) = remote.store_action_result(artifact_hash, glyim_macro_vfs::ActionResult {
+                let _ = remote.store_action_result(artifact_hash, ActionResult {
                     output_files: vec![],
                     exit_code: 0,
                     stdout_hash: None,
                     stderr_hash: None,
-                }) {
-                    eprintln!("    warning: remote push failed: {e}");
-                } else {
-                    self.report.artifacts_pushed += 1;
-                }
+                });
+                self.report.artifacts_pushed += 1;
             }
         }
 
-        Ok(obj_path)
+        Ok(obj_path_clone)
     }
 
     pub fn check(&mut self) -> Result<(), OrchestratorError> {
@@ -281,9 +312,7 @@ impl PackageGraphOrchestrator {
             .map_err(|e| OrchestratorError::Pipeline(format!("{e:?}")))
     }
 
-    pub fn report(&self) -> &OrchestratorReport {
-        &self.report
-    }
+    pub fn report(&self) -> &OrchestratorReport { &self.report }
 }
 
 #[derive(Debug)]

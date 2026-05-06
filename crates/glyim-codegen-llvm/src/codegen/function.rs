@@ -8,6 +8,9 @@ use std::collections::HashMap;
 #[tracing::instrument(skip_all)]
 pub(crate) fn declare_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) {
     let name = cg.interner.resolve(f.name);
+    if cg.library_mode && name == "main" {
+        return;
+    }
     if cg.module.get_function(name).is_some() {
         return;
     }
@@ -23,6 +26,9 @@ pub(crate) fn declare_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) {
 pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), String> {
     declare_fn(cg, f);
     let name = cg.interner.resolve(f.name);
+    if cg.library_mode && name == "main" {
+        return Ok(());
+    }
     let is_main = name == "main";
     let fn_value = cg.module.get_function(name).ok_or("declare_fn failed")?;
     if let Some(ref di) = cg.debug_info {

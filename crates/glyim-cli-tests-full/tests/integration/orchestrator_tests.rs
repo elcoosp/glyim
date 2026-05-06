@@ -3,9 +3,7 @@ use std::path::Path;
 use glyim_orchestrator::orchestrator::{
     PackageGraphOrchestrator,
     OrchestratorConfig,
-    OrchestratorReport,
 };
-use glyim_compiler::pipeline::BuildMode;
 
 /// Write a minimal glyim.toml
 fn write_manifest(dir: &Path, name: &str, deps: &[&str]) {
@@ -22,6 +20,12 @@ fn write_manifest(dir: &Path, name: &str, deps: &[&str]) {
 }
 
 /// Write a trivial main.g file returning 42
+fn write_lib_g(dir: &Path) {
+    let src_dir = dir.join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("main.g"), "pub fn answer() -> i64 { 42 }\n").unwrap();
+}
+
 fn write_main_g(dir: &Path) {
     let src_dir = dir.join("src");
     fs::create_dir_all(&src_dir).unwrap();
@@ -66,7 +70,7 @@ fn two_package_workspace_build() {
     let a_dir = root.join("a");
     std::fs::create_dir_all(&a_dir).unwrap();
     write_manifest(&a_dir, "a", &[]);
-    write_main_g(&a_dir);
+    write_lib_g(&a_dir);
 
     let b_dir = root.join("b");
     std::fs::create_dir_all(&b_dir).unwrap();
@@ -127,7 +131,7 @@ fn change_in_dep_triggers_rebuild_of_dependent() {
     let a_dir = root.join("a");
     std::fs::create_dir_all(&a_dir).unwrap();
     write_manifest(&a_dir, "a", &[]);
-    write_main_g(&a_dir);
+    write_lib_g(&a_dir);
 
     let b_dir = root.join("b");
     std::fs::create_dir_all(&b_dir).unwrap();
@@ -141,7 +145,7 @@ fn change_in_dep_triggers_rebuild_of_dependent() {
     orch.build().unwrap();
 
     // Modify a's source
-    fs::write(a_dir.join("src/main.g"), "main = () => 99").unwrap();
+    fs::write(a_dir.join("src/main.g"), "pub fn answer() -> i64 { 99 }\n").unwrap();
 
     // Second build
     let mut orch2 = PackageGraphOrchestrator::new(root, config).unwrap();
