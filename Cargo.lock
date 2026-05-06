@@ -2117,6 +2117,7 @@ dependencies = [
  "glyim-pkg",
  "glyim-query",
  "glyim-typeck",
+ "inkwell",
  "petgraph 0.8.3",
  "postcard",
  "serde",

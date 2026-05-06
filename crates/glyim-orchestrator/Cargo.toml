@@ -15,6 +15,9 @@ glyim-query = { path = "../glyim-query" }
 glyim-merkle = { path = "../glyim-merkle" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-pkg = { path = "../glyim-pkg" }
+glyim-parse = { path = "../glyim-parse" }
+glyim-typeck = { path = "../glyim-typeck" }
+inkwell = { version = "0.9", features = ["llvm22-1-prefer-dynamic"] }
 petgraph = "0.8"
 postcard = { version = "1", features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
