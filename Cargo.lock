@@ -2144,6 +2144,7 @@ dependencies = [
 name = "glyim-diag"
 version = "0.5.0"
 dependencies = [
+ "glyim-interner",
  "miette",
  "miette-derive",
  "serde",
@@ -2246,6 +2247,7 @@ dependencies = [
  "glyim-syntax",
  "glyim-typeck",
  "lsp-types",
+ "parking_lot",
  "serde",
  "serde_json",
  "tempfile",

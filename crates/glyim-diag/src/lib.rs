@@ -1,4 +1,6 @@
 pub mod source_map;
+pub mod diagnostic;
+pub mod suggest;
 pub use source_map::{FileId, SourceMap, LineCol};
 pub use miette::{self, Diagnostic, LabeledSpan, Report, Severity, SourceSpan};
 use std::sync::{LazyLock, Mutex};
@@ -20,7 +22,7 @@ pub struct MacroExpansion {
 pub static MACRO_EXPANSION_TABLE: LazyLock<Mutex<Vec<MacroExpansion>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Span {
     /// The file this span belongs to (None for spans created before Phase 7 migration).
     pub file_id: Option<FileId>,

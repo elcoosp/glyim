@@ -14,11 +14,12 @@ pub struct OptimizeConfig {
     pub iter_limit: usize,
     pub node_limit: usize,
     pub time_limit_ms: u64,
+    pub memory_budget: usize,
 }
 
 impl Default for OptimizeConfig {
     fn default() -> Self {
-        Self { iter_limit: 10, node_limit: 50_000, time_limit_ms: 50 }
+        Self { iter_limit: 10, node_limit: 50_000, time_limit_ms: 50, memory_budget: 100 * 1024 * 1024 }
     }
 }
 

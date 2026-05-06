@@ -55,9 +55,19 @@ impl Interner {
     pub fn resolve_symbol(&self, s: &str) -> Option<Symbol> {
         self.map.get(s).map(|&id| Symbol(id))
     }
+
+    /// Placeholder compact – currently a no-op.
+    pub fn compact(&mut self) {}
+
     pub fn len(&self) -> usize {
         self.strings.len()
     }
+
+    /// Return an iterator over all interned strings as Symbols.
+    pub fn all_symbols(&self) -> Vec<&str> {
+        self.strings.iter().map(|s| s.as_str()).collect()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }

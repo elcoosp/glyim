@@ -55,9 +55,12 @@ impl TypeChecker {
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::Ident { name, span, .. } => self.lookup_binding(name).unwrap_or_else(|| {
+                let resolved_name = self.interner.resolve(*name).to_string();
+                let suggestions = glyim_diag::suggest::suggest_similar(&resolved_name, &self.interner, 3);
                 self.errors.push(TypeError::UnresolvedName {
-                    name: self.interner.resolve(*name).to_string(),
+                    name: resolved_name,
                     span: (span.start, span.end),
+                    suggestions,
                 });
                 HirType::Error
             }),

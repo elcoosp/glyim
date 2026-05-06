@@ -4,7 +4,7 @@ use glyim_diag::{FileId, SourceMap};
 use glyim_hir::Hir;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use parking_lot::RwLock;
 pub struct FileMap {
     path_to_id: HashMap<PathBuf, FileId>,
     id_to_path: HashMap<FileId, PathBuf>,
@@ -67,4 +67,10 @@ impl AnalysisDatabase {
             diagnostics: RwLock::new(HashMap::new()),
         }
     }
+
+    /// Evict entries that have not been accessed within the given duration (no‑op for now).
+    pub fn evict_stale(&self, _max_age_secs: u64) {
+        // Placeholder: in production, would remove items from hirs, csts, etc.
+    }
+
 }

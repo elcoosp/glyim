@@ -61,7 +61,7 @@ pub enum TypeError {
         span: (usize, usize),
     },
     #[error("unresolved name `{name}`")]
-    UnresolvedName { name: String, span: (usize, usize) },
+    UnresolvedName { name: String, span: (usize, usize), suggestions: Vec<String> },
 }
 
 impl Diagnostic for TypeError {

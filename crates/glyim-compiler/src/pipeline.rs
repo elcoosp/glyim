@@ -246,6 +246,7 @@ pub struct CompiledHir {
     is_no_std: bool,
 }
 
+#[deprecated(note = "Use QueryPipeline::compile() instead")]
 pub(crate) fn compile_source_to_hir(
     source: String,
     input_path: &std::path::Path,
@@ -967,6 +968,36 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
         Ok(test_fn.call())
     }
 }
+/// Execute a function via JIT with crash protection (Unix only).
+/// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
+#[cfg(unix)]
+pub fn run_jit_safe(source: &str) -> Result<i32, String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static CRASHED: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "C" fn handler(sig: i32) {
+        CRASHED.store(true, Ordering::SeqCst);
+    }
+
+    unsafe {
+        let old = libc::signal(libc::SIGSEGV, handler as libc::sighandler_t);
+        let _ = libc::signal(libc::SIGBUS, handler as libc::sighandler_t);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::run_jit(source)
+        }));
+        libc::signal(libc::SIGSEGV, old);
+        if CRASHED.load(Ordering::SeqCst) {
+            return Err("JIT execution crashed (SIGSEGV)".to_string());
+        }
+        result.map_err(|e| format!("JIT panic: {:?}", e))
+            .and_then(|r| r.map_err(|e| format!("JIT error: {:?}", e)))
+    }
+}
+
+#[cfg(not(unix))]
+pub fn run_jit_safe(source: &str) -> Result<i32, String> {
+    super::run_jit(source).map_err(|e| format!("{:?}", e))
+}
 
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
@@ -1012,4 +1043,34 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
             .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
         Ok(main_fn.call())
     }
+}
+/// Execute a function via JIT with crash protection (Unix only).
+/// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
+#[cfg(unix)]
+pub fn run_jit_safe(source: &str) -> Result<i32, String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static CRASHED: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "C" fn handler(sig: i32) {
+        CRASHED.store(true, Ordering::SeqCst);
+    }
+
+    unsafe {
+        let old = libc::signal(libc::SIGSEGV, handler as libc::sighandler_t);
+        let _ = libc::signal(libc::SIGBUS, handler as libc::sighandler_t);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::run_jit(source)
+        }));
+        libc::signal(libc::SIGSEGV, old);
+        if CRASHED.load(Ordering::SeqCst) {
+            return Err("JIT execution crashed (SIGSEGV)".to_string());
+        }
+        result.map_err(|e| format!("JIT panic: {:?}", e))
+            .and_then(|r| r.map_err(|e| format!("JIT error: {:?}", e)))
+    }
+}
+
+#[cfg(not(unix))]
+pub fn run_jit_safe(source: &str) -> Result<i32, String> {
+    super::run_jit(source).map_err(|e| format!("{:?}", e))
 }
