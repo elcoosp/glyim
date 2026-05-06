@@ -39,6 +39,8 @@ enum Command {
         bare: bool,
         #[arg(long)]
         incremental: bool,
+        #[arg(long, help = "URL of remote CAS server for artifact caching")]
+        remote_cache: Option<String>,
     },
     Run {
         input: PathBuf,
@@ -52,6 +54,8 @@ enum Command {
         live: bool,
         #[arg(long)]
         incremental: bool,
+        #[arg(long, help = "URL of remote CAS server for artifact caching")]
+        remote_cache: Option<String>,
     },
     Ir {
         input: PathBuf,
@@ -80,6 +84,8 @@ enum Command {
         watch: bool,
         #[arg(long)]
         optimize: bool,
+        #[arg(long, help = "URL of remote CAS server for artifact caching")]
+        remote_cache: Option<String>,
     },
     Add {
         package: String,
@@ -190,7 +196,8 @@ fn main() {
             release,
             bare,
             incremental,
-        } => cmd_build(input, output, target, release, bare, incremental),
+            remote_cache,
+        } => cmd_build(input, output, target, release, bare, incremental, remote_cache),
         Command::Run {
             input,
             target,
@@ -198,8 +205,8 @@ fn main() {
             release,
                     
             live,
-            incremental,
-        } => cmd_run(input, target, release, live, incremental),
+            incremental, remote_cache,
+        } => cmd_run(input, target, release, live, incremental, remote_cache),
         Command::Ir { input } => cmd_ir(input),
         Command::Check { input, incremental } => cmd_check(input, incremental),
         Command::Init { name } => cmd_init(name),
@@ -210,7 +217,8 @@ fn main() {
             nocapture,
             watch,
             optimize,
-        } => cmd_test(input, ignore, filter, nocapture, watch, optimize),
+            remote_cache,
+        } => cmd_test(input, ignore, filter, nocapture, watch, optimize, remote_cache),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),

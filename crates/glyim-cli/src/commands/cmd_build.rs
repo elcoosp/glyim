@@ -9,6 +9,7 @@ pub fn cmd_build(
     release: bool,
     bare: bool,
     incremental: bool,
+    remote_cache: Option<String>,
 ) -> i32 {
     let mode = if release {
         BuildMode::Release
@@ -37,6 +38,7 @@ pub fn cmd_build(
             let config = OrchestratorConfig {
                 mode: if release { BuildMode::Release } else { BuildMode::Debug },
                 target: target.clone(),
+                remote_cache_url: remote_cache.clone(),
                 ..Default::default()
             };
             let mut orch = match PackageGraphOrchestrator::new(&root, config) {
