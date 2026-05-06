@@ -194,6 +194,12 @@ pub unsafe extern "C" fn glyim_str_eq_impl(a: *const u8, b: *const u8) -> i64 {
     }
 }
 
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn str_eq(a: *const u8, b: *const u8) -> i64 {
+    unsafe { glyim_str_eq_impl(a, b) }
+}
+
 pub fn map_runtime_shims_for_jit(
     engine: &inkwell::execution_engine::ExecutionEngine,
     module: &Module,

@@ -12,31 +12,32 @@ extern {
 }
 
 fn main() -> i64 {
-    let name_ptr = getenv("GLYIM_TEST" as *const u8);
+    let name_ptr = getenv("GLYIM_TEST\0" as *const u8);
     if name_ptr == (0 as *const u8) {
-        write(2, "error: GLYIM_TEST not set\n" as *const u8, 26);
+        write(2, "error: GLYIM_TEST not set\n\0" as *const u8, 26);
         return 1;
     }
 "#);
 
     for test in tests {
-        let pass_len = 5 + test.len() + 1; // "PASS <name>\n"
-        let fail_len = 5 + test.len() + 1; // "FAIL <name>\n"
+        let test_null = format!("{}\0", test);
+        let pass_len = 5 + test.len() + 1; // "PASS <name>\n" (null terminator excluded from write length)
+        let fail_len = 5 + test.len() + 1;
 
         out.push_str(&format!(
-            "    if str_eq(name_ptr, \"{}\" as *const u8) {{\n",
-            test
+            "    if str_eq(name_ptr, \"{}\" as *const u8) != 0 {{\n",
+            test_null
         ));
         out.push_str(&format!("        let result = {}();\n", test));
         out.push_str("        if result == 0 {\n");
         out.push_str(&format!(
-            "            write(1, \"PASS {}\\n\" as *const u8, {});\n",
+            "            write(1, \"PASS {}\\n\0\" as *const u8, {});\n",
             test, pass_len
         ));
         out.push_str("            return 0;\n");
         out.push_str("        } else {\n");
         out.push_str(&format!(
-            "            write(1, \"FAIL {}\\n\" as *const u8, {});\n",
+            "            write(1, \"FAIL {}\\n\0\" as *const u8, {});\n",
             test, fail_len
         ));
         out.push_str("            return result;\n");
@@ -45,7 +46,7 @@ fn main() -> i64 {
     }
 
     out.push_str(r#"
-    write(2, "error: unknown test\n" as *const u8, 20);
+    write(2, "error: unknown test\n\0" as *const u8, 20);
     return 1;
 }
 "#);
