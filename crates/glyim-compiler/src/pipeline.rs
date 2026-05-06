@@ -356,7 +356,7 @@ pub fn run(input: &Path, target: Option<&str>) -> Result<i32, PipelineError> {
 /// On first call this behaves identically to the standard path.
 /// On subsequent calls it loads previous state, detects changes,
 /// invalidates affected queries, and re-runs only the Red stages.
-pub fn compile_source_to_hir_incremental(
+pub(crate) fn compile_source_to_hir_incremental(
     source: String,
     input_path: &std::path::Path,
     config: &PipelineConfig,
