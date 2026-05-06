@@ -113,7 +113,7 @@ impl PackageGraphOrchestrator {
                         if let Some(remote_data) = remote.retrieve(hash) {
                             // Store locally for future use
                             self.artifact_mgr.store_object_code(&remote_data);
-                            if let Some(art) = remote.retrieve_action_result(hash).or_else(|| {
+                            if let Some(_art) = remote.retrieve_action_result(hash).or_else(|| {
                                 // reconstruct PackageArtifact from remote? For now, skip
                                 None
                             }) {
