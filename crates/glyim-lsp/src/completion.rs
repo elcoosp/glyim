@@ -11,7 +11,7 @@ pub fn provide_completions(
     let path = uri.to_file_path().ok()?;
     let file_id = file_map.get_by_path(&path)?;
 
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let symbols = symbol_index.symbols_in_file(file_id);
 
     let items: Vec<CompletionItem> = symbols.iter().map(|sym| {
@@ -30,7 +30,7 @@ pub fn provide_completions(
                 let params: Vec<String> = ts.params.iter().map(|(n, t)| format!("{}: {:?}", n, t)).collect();
                 format!("fn {}({})", sym.name, params.join(", "))
             }),
-            documentation: sym.documentation.as_ref().map(|d| {
+            documentation: sym.documentation.as_ref().map(|d: &String| {
                 Documentation::MarkupContent(MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: d.clone(),

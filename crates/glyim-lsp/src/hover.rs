@@ -12,7 +12,7 @@ pub fn provide_hover(
     let path = uri.to_file_path().ok()?;
     let file_id = file_map.get_by_path(&path)?;
 
-    let source_maps = db.source_maps.read().unwrap();
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
 
     let pos = params.text_document_position_params.position;
@@ -21,7 +21,7 @@ pub fn provide_hover(
         column: pos.character as usize,
     })?;
 
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let symbol = symbol_index.lookup_by_location(file_id, offset)?;
 
     let mut markdown = String::new();
@@ -31,7 +31,7 @@ pub fn provide_hover(
         markdown.push_str(&format!("```glyim\nfn {}({}){}\n```\n", symbol.name, params.join(", "), ret));
     }
 
-    if let Some(ref doc) = symbol.documentation {
+    if let Some(doc) = &symbol.documentation {
         markdown.push_str(doc);
     }
 

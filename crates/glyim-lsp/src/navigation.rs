@@ -13,7 +13,7 @@ pub fn goto_definition(
     let path = uri.to_file_path().ok()?;
     let file_id = file_map.get_by_path(&path)?;
 
-    let source_maps = db.source_maps.read().unwrap();
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
 
     let pos = params.text_document_position_params.position;
@@ -22,7 +22,7 @@ pub fn goto_definition(
         column: pos.character as usize,
     })?;
 
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let symbol = symbol_index.lookup_by_location(file_id, offset)?;
     let def = &symbol.definition;
 
@@ -50,7 +50,7 @@ pub fn find_references(
     let path = uri.to_file_path().ok()?;
     let file_id = file_map.get_by_path(&path)?;
 
-    let source_maps = db.source_maps.read().unwrap();
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
 
     let pos = params.text_document_position.position;
@@ -59,10 +59,10 @@ pub fn find_references(
         column: pos.character as usize,
     })?;
 
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let symbol = symbol_index.lookup_by_location(file_id, offset)?;
 
-    let ref_graph = db.reference_graph.read().unwrap();
+    let ref_graph = db.reference_graph.read();
     let refs = ref_graph.find_references(&symbol.name);
 
     let locations: Vec<Location> = refs.iter().filter_map(|r| {
@@ -91,9 +91,9 @@ pub fn document_symbols(
     let path = uri.to_file_path().ok()?;
     let file_id = file_map.get_by_path(&path)?;
 
-    let source_maps = db.source_maps.read().unwrap();
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let symbols = symbol_index.symbols_in_file(file_id);
 
     let mut results = Vec::new();
@@ -134,9 +134,9 @@ pub fn rename(
 ) -> Option<WorkspaceEdit> {
     let uri = &params.text_document_position.text_document.uri;
     let path = uri.to_file_path().ok()?;
-    let file_id = db.file_map.read().unwrap().get_by_path(&path)?;
+    let file_id = db.file_map.read().get_by_path(&path)?;
 
-    let source_maps = db.source_maps.read().unwrap();
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
     let pos = params.text_document_position.position;
     let offset = sm.line_col_to_offset(LineCol {
@@ -144,17 +144,17 @@ pub fn rename(
         column: pos.character as usize,
     })?;
 
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let symbol = symbol_index.lookup_by_location(file_id, offset)?;
 
-    let ref_graph = db.reference_graph.read().unwrap();
+    let ref_graph = db.reference_graph.read();
     let refs = ref_graph.find_references(&symbol.name);
 
     let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
     for r in refs {
         let sm = source_maps.get(&r.file_id)?;
         let (start, end) = sm.span_to_position(r.span.start, r.span.end)?;
-        let fm = db.file_map.read().unwrap();
+        let fm = db.file_map.read();
         let path = fm.path(r.file_id)?;
         let uri = Url::from_file_path(path).ok()?;
         let edit = TextEdit {
@@ -178,10 +178,10 @@ pub fn workspace_symbols(
     params: &WorkspaceSymbolParams,
 ) -> Option<Vec<SymbolInformation>> {
     let query = params.query.as_str();
-    let symbol_index = db.symbol_index.read().unwrap();
+    let symbol_index = db.symbol_index.read();
     let matches = symbol_index.query(query, 20);
-    let source_maps = db.source_maps.read().unwrap();
-    let file_map = db.file_map.read().unwrap();
+    let source_maps = db.source_maps.read();
+    let file_map = db.file_map.read();
 
     let result = matches.iter().filter_map(|info| {
         let sm = source_maps.get(&info.definition.file_id)?;

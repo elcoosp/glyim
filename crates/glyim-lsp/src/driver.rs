@@ -1,80 +1,62 @@
 use crate::AnalysisDatabase;
-use glyim_diag::SourceMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::mpsc::{self, Receiver, Sender};
-use std::collections::HashMap;
+use tokio::sync::mpsc::Receiver;
 
-/// Message from the LSP handler to the analysis driver.
 pub enum AnalysisMessage {
     FileChanged { path: PathBuf, content: String, version: i32 },
     FileClosed { path: PathBuf },
-    FullReanalysis,
     Shutdown,
 }
 
 pub struct AnalysisDriver {
     db: Arc<AnalysisDatabase>,
     rx: Receiver<AnalysisMessage>,
-    /// Pending coalesced file changes: path -> (content, version)
-    pending: HashMap<PathBuf, (String, i32)>,
-    /// Coalesce timer (none for now – immediate processing)
 }
 
 impl AnalysisDriver {
     pub fn new(db: Arc<AnalysisDatabase>, rx: Receiver<AnalysisMessage>) -> Self {
-        Self { db, rx, pending: HashMap::new() }
+        Self { db, rx }
     }
 
     pub async fn run(mut self) {
-        loop {
-            // Wait for first message
-            let msg = match self.rx.recv().await {
-                Some(m) => m,
-                None => break, // channel closed
-            };
+        while let Some(msg) = self.rx.recv().await {
             match msg {
-                AnalysisMessage::Shutdown => break,
-                AnalysisMessage::FileChanged { path, content, version } => {
-                    self.pending.insert(path.clone(), (content, version));
-                    // Coalesce: drain any additional messages in the queue
-                    while let Ok(msg) = self.rx.try_recv() {
-                        match msg {
-                            AnalysisMessage::FileChanged { path, content, version } => {
-                                self.pending.insert(path, (content, version));
-                            }
-                            AnalysisMessage::FileClosed { path } => {
-                                self.pending.remove(&path);
-                                self.db.file_map.write().unwrap().remove(&path);
-                            }
-                            AnalysisMessage::FullReanalysis => {
-                                // process immediately and break out of coalesce loop
-                                self.reanalyze_all();
-                                break;
-                            }
-                            AnalysisMessage::Shutdown => return,
-                        }
-                    }
-                    // Now process all pending changes
-                    for (path, (content, _version)) in self.pending.drain() {
-                        self.analyze_file(&path, &content);
-                    }
+                AnalysisMessage::FileChanged { path, content, version: _version } => {
+                    self.analyze_file(&path, &content);
                 }
                 AnalysisMessage::FileClosed { path } => {
-                    self.db.file_map.write().unwrap().remove(&path);
+                    self.db.file_map.write().remove(&path);
                 }
-                AnalysisMessage::FullReanalysis => {
-                    self.reanalyze_all();
-                }
+                AnalysisMessage::Shutdown => break,
             }
         }
     }
 
-    fn analyze_file(&self, _path: &PathBuf, _content: &str) {
-        // TODO: actual incremental pipeline
-    }
-
-    fn reanalyze_all(&self) {
-        // TODO
+    fn analyze_file(&self, path: &PathBuf, content: &str) {
+        let file_id = { self.db.file_map.write().get_or_create(path) };
+        let sm = glyim_diag::SourceMap::new(path.clone(), file_id, content.to_string());
+        {
+            let mut source_maps = self.db.source_maps.write();
+            source_maps.insert(file_id, sm);
+        }
+        let parse_out = glyim_parse::parse(content);
+        let mut diagnostics = Vec::new();
+        if !parse_out.errors.is_empty() {
+            let source_maps = self.db.source_maps.read();
+            if let Some(sm) = source_maps.get(&file_id) {
+                diagnostics.extend(
+                    crate::diagnostics::convert_parse_errors(file_id, sm, &parse_out.errors),
+                );
+            }
+        }
+        self.db.diagnostics.write().insert(file_id, diagnostics);
+        if parse_out.errors.is_empty() {
+            let mut interner = parse_out.interner;
+            let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+            self.db.hirs.write().insert(file_id, hir.clone());
+            self.db.symbol_index.write().build_from_hir(file_id, &hir, &interner);
+            self.db.reference_graph.write().build_from_hir(file_id, &hir, &interner);
+        }
     }
 }

@@ -7,8 +7,8 @@ pub fn provide_folding_ranges(
 ) -> Option<Vec<FoldingRange>> {
     let uri = &params.text_document.uri;
     let path = uri.to_file_path().ok()?;
-    let file_id = db.file_map.read().unwrap().get_by_path(&path)?;
-    let source_maps = db.source_maps.read().unwrap();
+    let file_id = db.file_map.read().get_by_path(&path)?;
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
     let source = sm.source();
 
@@ -18,7 +18,7 @@ pub fn provide_folding_ranges(
 
     for (line_idx, line) in source.lines().enumerate() {
         let line_num = line_idx as u32;
-        for (col, ch) in line.char_indices() {
+        for (col, ch) in line.char_indices().collect::<Vec<_>>() {
             if ch == '{' {
                 stack.push((line_num, col as u32));
             } else if ch == '}' {

@@ -8,8 +8,8 @@ pub fn format_document(
 ) -> Option<Vec<TextEdit>> {
     let uri = &params.text_document.uri;
     let path = uri.to_file_path().ok()?;
-    let file_id = db.file_map.read().unwrap().get_by_path(&path)?;
-    let source_maps = db.source_maps.read().unwrap();
+    let file_id = db.file_map.read().get_by_path(&path)?;
+    let source_maps = db.source_maps.read();
     let sm = source_maps.get(&file_id)?;
     let original = sm.source();
 

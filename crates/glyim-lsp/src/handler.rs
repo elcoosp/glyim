@@ -10,7 +10,7 @@ use async_lsp::lsp_types::*;
 
 pub fn build_router(
     db: Arc<AnalysisDatabase>,
-    analysis_tx: mpsc::UnboundedSender<AnalysisMessage>,
+    analysis_tx: mpsc::Sender<AnalysisMessage>,
     client: ClientSocket,
 ) -> Router<()> {
     let mut router = Router::new(());
@@ -107,7 +107,7 @@ pub fn build_router(
         router.request::<request::Completion, _>(move |(), params| {
             let db = db.clone();
             async move {
-                let fm = db.file_map.read().unwrap();
+                let fm = db.file_map.read();
                 Ok(crate::completion::provide_completions(&db, &fm, &params))
             }
         });
@@ -119,7 +119,7 @@ pub fn build_router(
         router.request::<request::HoverRequest, _>(move |(), params| {
             let db = db.clone();
             async move {
-                let fm = db.file_map.read().unwrap();
+                let fm = db.file_map.read();
                 Ok(crate::hover::provide_hover(&db, &fm, &params))
             }
         });
@@ -131,7 +131,7 @@ pub fn build_router(
         router.request::<request::GotoDefinition, _>(move |(), params| {
             let db = db.clone();
             async move {
-                let fm = db.file_map.read().unwrap();
+                let fm = db.file_map.read();
                 Ok(crate::navigation::goto_definition(&db, &fm, &params))
             }
         });
@@ -143,7 +143,7 @@ pub fn build_router(
         router.request::<request::References, _>(move |(), params| {
             let db = db.clone();
             async move {
-                let fm = db.file_map.read().unwrap();
+                let fm = db.file_map.read();
                 Ok(crate::navigation::find_references(&db, &fm, &params))
             }
         });
@@ -155,7 +155,7 @@ pub fn build_router(
         router.request::<request::DocumentSymbolRequest, _>(move |(), params| {
             let db = db.clone();
             async move {
-                let fm = db.file_map.read().unwrap();
+                let fm = db.file_map.read();
                 Ok(crate::navigation::document_symbols(&db, &fm, &params))
             }
         });
@@ -165,10 +165,10 @@ pub fn build_router(
 }
 
 fn publish_diagnostics(db: &AnalysisDatabase, path: &std::path::Path, client: &ClientSocket) {
-    let file_id = { db.file_map.read().unwrap().get_by_path(path) };
+    let file_id = { db.file_map.read().get_by_path(path) };
     let Some(id) = file_id else { return };
     let diags: Vec<Diagnostic> = {
-        db.diagnostics.read().unwrap().get(&id).cloned().unwrap_or_default()
+        db.diagnostics.read().get(&id).cloned().unwrap_or_default()
     };
     if let Ok(uri) = Url::from_file_path(path) {
         let _ = client.notify::<notification::PublishDiagnostics>(

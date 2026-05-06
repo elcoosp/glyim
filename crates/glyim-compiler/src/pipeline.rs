@@ -1,11 +1,11 @@
 use glyim_codegen_llvm::runtime_shims;
-use glyim_query::incremental::IncrementalState;
-use glyim_query::fingerprint::Fingerprint;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
-use glyim_interner::Interner;
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
+use glyim_interner::Interner;
 use glyim_pkg::cas_client::CasClient;
+use glyim_query::fingerprint::Fingerprint;
+use glyim_query::incremental::IncrementalState;
 use glyim_typeck::TypeChecker;
 use glyim_typeck::TypeError;
 use inkwell::OptimizationLevel;
@@ -368,8 +368,7 @@ pub(crate) fn compile_source_to_hir_incremental(
     let source_fp = Fingerprint::of(source.as_bytes());
     let input_str = input_path.to_string_lossy().to_string();
     let _report = state.apply_changes(&[(&input_str, source_fp)]);
-    let source_key =
-        Fingerprint::combine(Fingerprint::of_str(&input_str), source_fp);
+    let source_key = Fingerprint::combine(Fingerprint::of_str(&input_str), source_fp);
     if !state.ctx().is_green(&source_key) {
         tracing::info!("Incremental: source changed or new — recomputing");
     }
@@ -397,7 +396,8 @@ pub fn build_incremental(
 ) -> Result<(PathBuf, crate::queries::IncrementalReport), PipelineError> {
     use crate::queries::QueryPipeline;
     let (source, _) = load_source_with_prelude(input)?;
-    let cache_dir = input.parent()
+    let cache_dir = input
+        .parent()
         .unwrap_or(Path::new("."))
         .join(".glyim/incremental");
 
@@ -464,8 +464,8 @@ pub fn semantic_source_hash(source: &str) -> glyim_macro_vfs::ContentHash {
 
 /// Compute a true semantic hash by parsing, lowering, normalizing, and hashing.
 pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
-    use glyim_hir::semantic_hash::semantic_hash_item;
     use glyim_hir::lower as lower_fn;
+    use glyim_hir::semantic_hash::semantic_hash_item;
 
     let parse_out = glyim_parse::parse(source);
     let mut interner = parse_out.interner;
@@ -473,10 +473,14 @@ pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
         return glyim_macro_vfs::ContentHash::of(source.as_bytes());
     }
     let hir = lower_fn(&parse_out.ast, &mut interner);
-    let item_hashes: Vec<glyim_macro_vfs::ContentHash> = hir.items.iter().map(|item| {
-        let semantic = semantic_hash_item(item, &interner);
-        glyim_macro_vfs::ContentHash::from_bytes(*semantic.as_bytes())
-    }).collect();
+    let item_hashes: Vec<glyim_macro_vfs::ContentHash> = hir
+        .items
+        .iter()
+        .map(|item| {
+            let semantic = semantic_hash_item(item, &interner);
+            glyim_macro_vfs::ContentHash::from_bytes(*semantic.as_bytes())
+        })
+        .collect();
     if item_hashes.is_empty() {
         return glyim_macro_vfs::ContentHash::of(b"empty_module");
     }
@@ -502,7 +506,8 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     }
     let mut interner = parse_out.interner;
     let decl_output = glyim_parse::declarations::parse_declarations(source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -512,16 +517,17 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let mut interpreter = BytecodeInterpreter::new();
     for item in &hir.items {
         if let glyim_hir::HirItem::Fn(hir_fn) = item
-            && interner.resolve(hir_fn.name) == "main" {
-                let bc_fn = compiler.compile_fn(hir_fn);
-                let result = interpreter.execute_fn(&bc_fn, &[]);
-                return match result {
-                    Value::Int(n) => Ok(n as i32),
-                    Value::Bool(true) => Ok(0),
-                    Value::Bool(false) => Ok(1),
-                    _ => Ok(0),
-                };
-            }
+            && interner.resolve(hir_fn.name) == "main"
+        {
+            let bc_fn = compiler.compile_fn(hir_fn);
+            let result = interpreter.execute_fn(&bc_fn, &[]);
+            return match result {
+                Value::Int(n) => Ok(n as i32),
+                Value::Bool(true) => Ok(0),
+                Value::Bool(false) => Ok(1),
+                _ => Ok(0),
+            };
+        }
     }
     Err(PipelineError::Codegen("no 'main' function found".into()))
 }
@@ -678,6 +684,43 @@ pub fn find_package_root(start: &Path) -> Option<PathBuf> {
         }
     }
 }
+
+
+
+
+
+/// Execute a function via JIT with crash protection (Unix only).
+/// Execute a function via JIT with crash protection (Unix only).
+/// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
+/// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
+#[cfg(unix)]
+pub fn run_jit_safe(source: &str) -> Result<i32, String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static CRASHED: AtomicBool = AtomicBool::new(false);
+    unsafe extern "C" fn handler(_sig: libc::c_int) {
+        CRASHED.store(true, Ordering::SeqCst);
+    }
+    unsafe {
+        let old = libc::signal(libc::SIGSEGV, handler as libc::sighandler_t);
+        let _ = libc::signal(libc::SIGBUS, handler as libc::sighandler_t);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::run_jit(source)
+        }));
+        libc::signal(libc::SIGSEGV, old);
+        if CRASHED.load(Ordering::SeqCst) {
+            return Err("JIT execution crashed (SIGSEGV)".to_string());
+        }
+        result.map_err(|e: Box<dyn std::any::Any + Send>| format!("JIT panic: {:?}", e))
+            .and_then(|r: Result<i32, crate::pipeline::PipelineError>| r.map_err(|e| format!("JIT error: {:?}", e)))
+    }
+}
+
+#[cfg(not(unix))]
+
+
+
+#[cfg(not(unix))]
+
 #[cfg(test)]
 mod root_tests;
 
@@ -918,13 +961,13 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
 
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
 fn debug_ir(_codegen: &glyim_codegen_llvm::Codegen) {
-    if std::env::var("GLYIM_DEBUG_IR").is_ok() {
-    }
+    if std::env::var("GLYIM_DEBUG_IR").is_ok() {}
 }
+
+
 
 #[cfg(test)]
 mod no_std_tests;
-
 
 /// Execute a single test function via JIT, returning the test exit code.
 pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError> {
@@ -964,40 +1007,13 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     unsafe {
         let test_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>(test_name)
-            .map_err(|e| PipelineError::Codegen(format!("JIT test function '{}': {e}", test_name)))?;
+            .map_err(|e| {
+                PipelineError::Codegen(format!("JIT test function '{}': {e}", test_name))
+            })?;
         Ok(test_fn.call())
     }
 }
-/// Execute a function via JIT with crash protection (Unix only).
-/// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
-#[cfg(unix)]
-pub fn run_jit_safe(source: &str) -> Result<i32, String> {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static CRASHED: AtomicBool = AtomicBool::new(false);
 
-    unsafe extern "C" fn handler(sig: i32) {
-        CRASHED.store(true, Ordering::SeqCst);
-    }
-
-    unsafe {
-        let old = libc::signal(libc::SIGSEGV, handler as libc::sighandler_t);
-        let _ = libc::signal(libc::SIGBUS, handler as libc::sighandler_t);
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            super::run_jit(source)
-        }));
-        libc::signal(libc::SIGSEGV, old);
-        if CRASHED.load(Ordering::SeqCst) {
-            return Err("JIT execution crashed (SIGSEGV)".to_string());
-        }
-        result.map_err(|e| format!("JIT panic: {:?}", e))
-            .and_then(|r| r.map_err(|e| format!("JIT error: {:?}", e)))
-    }
-}
-
-#[cfg(not(unix))]
-pub fn run_jit_safe(source: &str) -> Result<i32, String> {
-    super::run_jit(source).map_err(|e| format!("{:?}", e))
-}
 
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
@@ -1043,34 +1059,4 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
             .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
         Ok(main_fn.call())
     }
-}
-/// Execute a function via JIT with crash protection (Unix only).
-/// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
-#[cfg(unix)]
-pub fn run_jit_safe(source: &str) -> Result<i32, String> {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static CRASHED: AtomicBool = AtomicBool::new(false);
-
-    unsafe extern "C" fn handler(sig: i32) {
-        CRASHED.store(true, Ordering::SeqCst);
-    }
-
-    unsafe {
-        let old = libc::signal(libc::SIGSEGV, handler as libc::sighandler_t);
-        let _ = libc::signal(libc::SIGBUS, handler as libc::sighandler_t);
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            super::run_jit(source)
-        }));
-        libc::signal(libc::SIGSEGV, old);
-        if CRASHED.load(Ordering::SeqCst) {
-            return Err("JIT execution crashed (SIGSEGV)".to_string());
-        }
-        result.map_err(|e| format!("JIT panic: {:?}", e))
-            .and_then(|r| r.map_err(|e| format!("JIT error: {:?}", e)))
-    }
-}
-
-#[cfg(not(unix))]
-pub fn run_jit_safe(source: &str) -> Result<i32, String> {
-    super::run_jit(source).map_err(|e| format!("{:?}", e))
 }

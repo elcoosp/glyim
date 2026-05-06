@@ -2123,6 +2123,7 @@ dependencies = [
  "glyim-typeck",
  "hex",
  "inkwell",
+ "libc",
  "rstest",
  "serde_json",
  "sha2 0.11.0",
