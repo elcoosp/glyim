@@ -2,6 +2,7 @@ use glyim_codegen_llvm::runtime_shims;
 use glyim_query::incremental::IncrementalState;
 use glyim_query::fingerprint::Fingerprint;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
+use glyim_interner::Interner;
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
 use glyim_pkg::cas_client::CasClient;
@@ -413,7 +414,7 @@ pub fn semantic_hash_of_source(source: &str) -> glyim_macro_vfs::ContentHash {
         return glyim_macro_vfs::ContentHash::of(b"empty_module");
     }
     for item in &hir.items {
-        let h = semantic_hash_item(item, &interner);
+        let _h = semantic_hash_item(item, &interner);
     }
     let mut combined = Vec::new();
     for h in &item_hashes {
@@ -813,7 +814,7 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
 }
 
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
-fn debug_ir(codegen: &glyim_codegen_llvm::Codegen) {
+fn debug_ir(_codegen: &glyim_codegen_llvm::Codegen) {
     if std::env::var("GLYIM_DEBUG_IR").is_ok() {
     }
 }
