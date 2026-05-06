@@ -64,8 +64,7 @@ pub fn cmd_test(
             eprintln!("\nSurvived Mutants:");
             for (mutation, _) in &results {
                 if !results.iter().any(|(m, k)| m.id == mutation.id && *k) {
-                    eprintln!("  {}. {}::{}", mutation.id, mutation.function_name,
-                        format!("{:?}", mutation.operator));
+        eprintln!("  {}. {}::{:?}", mutation.id, mutation.function_name, mutation.operator);
                 }
             }
         }
