@@ -103,29 +103,64 @@ pub fn build_router(
     }
 
     // completion stub
-    router.request::<request::Completion, _>(|(), _params| async {
-        Ok::<Option<CompletionResponse>, _>(None)
-    });
+    {
+        let db = db.clone();
+        router.request::<request::Completion, _>(move |(), params| {
+            let db = db.clone();
+            async move {
+                let fm = db.file_map.read().unwrap();
+                Ok(crate::completion::provide_completions(&db, &fm, &params))
+            }
+        });
+    }
 
     // hover stub
-    router.request::<request::HoverRequest, _>(|(), _params| async {
-        Ok::<Option<Hover>, _>(None)
-    });
+    {
+        let db = db.clone();
+        router.request::<request::HoverRequest, _>(move |(), params| {
+            let db = db.clone();
+            async move {
+                let fm = db.file_map.read().unwrap();
+                Ok(crate::hover::provide_hover(&db, &fm, &params))
+            }
+        });
+    }
 
     // goto definition stub
-    router.request::<request::GotoDefinition, _>(|(), _params| async {
-        Ok::<Option<GotoDefinitionResponse>, _>(None)
-    });
+    {
+        let db = db.clone();
+        router.request::<request::GotoDefinition, _>(move |(), params| {
+            let db = db.clone();
+            async move {
+                let fm = db.file_map.read().unwrap();
+                Ok(crate::navigation::goto_definition(&db, &fm, &params))
+            }
+        });
+    }
 
     // references stub
-    router.request::<request::References, _>(|(), _params| async {
-        Ok::<Option<Vec<Location>>, _>(None)
-    });
+    {
+        let db = db.clone();
+        router.request::<request::References, _>(move |(), params| {
+            let db = db.clone();
+            async move {
+                let fm = db.file_map.read().unwrap();
+                Ok(crate::navigation::find_references(&db, &fm, &params))
+            }
+        });
+    }
 
     // document symbol stub
-    router.request::<request::DocumentSymbolRequest, _>(|(), _params| async {
-        Ok::<Option<DocumentSymbolResponse>, _>(None)
-    });
+    {
+        let db = db.clone();
+        router.request::<request::DocumentSymbolRequest, _>(move |(), params| {
+            let db = db.clone();
+            async move {
+                let fm = db.file_map.read().unwrap();
+                Ok(crate::navigation::document_symbols(&db, &fm, &params))
+            }
+        });
+    }
 
     router
 }
