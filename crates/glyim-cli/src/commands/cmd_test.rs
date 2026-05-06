@@ -8,7 +8,7 @@ pub fn cmd_test(
     nocapture: bool,
     watch: bool,
     optimize_check: bool,
-    ___remote_cache: Option<String>,
+    _remote_cache: Option<String>,
 ) -> i32 {
     let mut config = TestConfig::default();
     config.filter = filter;
