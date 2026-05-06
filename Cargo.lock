@@ -1986,6 +1986,7 @@ version = "0.5.0"
 dependencies = [
  "miette",
  "miette-derive",
+ "serde",
  "thiserror 2.0.18",
  "tracing",
 ]

@@ -1,3 +1,5 @@
+pub mod source_map;
+pub use source_map::{FileId, SourceMap, LineCol};
 pub use miette::{self, Diagnostic, LabeledSpan, Report, Severity, SourceSpan};
 use std::sync::{LazyLock, Mutex};
 
@@ -20,6 +22,8 @@ pub static MACRO_EXPANSION_TABLE: LazyLock<Mutex<Vec<MacroExpansion>>> =
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Span {
+    /// The file this span belongs to (None for spans created before Phase 7 migration).
+    pub file_id: Option<FileId>,
     pub start: usize,
     pub end: usize,
     /// Index into MACRO_EXPANSION_TABLE, or None if not from a macro
@@ -27,9 +31,22 @@ pub struct Span {
 }
 
 impl Span {
+    /// Create a span with no file association (legacy). Prefer `Span::with_file`.
     pub fn new(start: usize, end: usize) -> Self {
         assert!(start <= end);
         Self {
+            file_id: None,
+            start,
+            end,
+            expansion_id: None,
+        }
+    }
+
+    /// Create a span associated with a specific file.
+    pub fn with_file(file_id: FileId, start: usize, end: usize) -> Self {
+        assert!(start <= end);
+        Self {
+            file_id: Some(file_id),
             start,
             end,
             expansion_id: None,
@@ -54,6 +71,7 @@ impl Span {
             parent,
         });
         Self {
+            file_id: None, // expansion spans currently inherit file from context
             start,
             end,
             expansion_id: Some(id),
