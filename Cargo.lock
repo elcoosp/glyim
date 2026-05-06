@@ -1860,6 +1860,7 @@ dependencies = [
  "glyim-lex",
  "glyim-macro-core",
  "glyim-macro-vfs",
+ "glyim-orchestrator",
  "glyim-parse",
  "glyim-pkg",
  "glyim-testr",
