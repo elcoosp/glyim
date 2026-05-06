@@ -1,4 +1,4 @@
-use glyim_hir::{Hir, HirExpr, HirStmt, HirItem, HirFn};
+use glyim_hir::{Hir, HirExpr, HirStmt, HirItem};
 use glyim_interner::Symbol;
 use crate::config::{MutationConfig, MutationOperator};
 use crate::operators;

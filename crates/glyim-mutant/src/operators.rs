@@ -1,4 +1,4 @@
-use glyim_hir::{HirExpr, HirBinOp, HirUnOp, HirStmt, HirType};
+use glyim_hir::{HirExpr, HirBinOp, HirUnOp};
 use crate::config::MutationOperator;
 
 /// Generate a mutated expression if the operator applies.
@@ -48,7 +48,7 @@ pub fn apply_operator(
             } else { None }
         },
         MutationOperator::BooleanNotElimination => {
-            if let HirExpr::Unary { id, op: HirUnOp::Not, operand, span } = expr {
+            if let HirExpr::Unary { id: _, op: HirUnOp::Not, operand, span: _ } = expr {
                 Some(*operand.clone())
             } else { None }
         },

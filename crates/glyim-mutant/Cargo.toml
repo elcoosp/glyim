@@ -18,5 +18,6 @@ tracing = "0.1"
 sha2 = "0.11"
 
 [dev-dependencies]
+glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
 glyim-typeck = { path = "../glyim-typeck" }
