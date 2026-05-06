@@ -152,13 +152,11 @@ impl QueryContext {
         value_fingerprint: Fingerprint,
         dependencies: Vec<Dependency>,
     ) -> V {
-        if let Some(cached) = self.cache.get(&key) {
-            if cached.is_valid() {
-                if let Some(val) = cached.value.downcast_ref::<V>() {
+        if let Some(cached) = self.cache.get(&key)
+            && cached.is_valid()
+                && let Some(val) = cached.value.downcast_ref::<V>() {
                     return val.clone();
                 }
-            }
-        }
         drop(self.cache.get(&key));
         let value = compute();
         let result_value = value

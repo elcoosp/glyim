@@ -31,9 +31,8 @@ pub fn collect_tests(
             if !is_test { continue; }
             if is_ignored && !include_ignored { continue; }
             let test_name = interner.resolve(*name).to_string();
-            if let Some(f) = filter {
-                if test_name != f { continue; }
-            }
+            if let Some(f) = filter
+                && test_name != f { continue; }
             tests.push(TestDef {
                 name: test_name,
                 source_file: String::new(),

@@ -67,8 +67,7 @@ impl IncrementalState {
             .iter()
             .filter(|(path, hash)| {
                 self.source_hashes
-                    .get(*path)
-                    .map_or(true, |old| old != hash)
+                    .get(*path) != Some(hash)
             })
             .map(|(path, _)| path.to_string())
             .collect()

@@ -131,14 +131,12 @@ impl PackageGraphOrchestrator {
             if artifact_hash.is_some() && !self.config.force_rebuild {
                 let hash = artifact_hash.unwrap();
                 let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
-                if !local_exists {
-                    if let Some(ref remote) = self.remote_store {
-                        if let Some(remote_data) = remote.retrieve(hash) {
+                if !local_exists
+                    && let Some(ref remote) = self.remote_store
+                        && let Some(remote_data) = remote.retrieve(hash) {
                             self.artifact_mgr.store_object_code(&remote_data);
                             self.report.artifacts_pulled += 1;
                         }
-                    }
-                }
             }
 
             let should_skip = !self.config.force_rebuild
@@ -280,8 +278,8 @@ impl PackageGraphOrchestrator {
         self.cross_state.record_dep_fingerprint(&pkg.name, "interface", iface_hash);
 
         // Push to remote if configured
-        if let Some(ref remote) = self.remote_store {
-            if remote.store(&obj_bytes) == obj_hash {
+        if let Some(ref remote) = self.remote_store
+            && remote.store(&obj_bytes) == obj_hash {
                 let _ = remote.store_action_result(artifact_hash, ActionResult {
                     output_files: vec![],
                     exit_code: 0,
@@ -290,7 +288,6 @@ impl PackageGraphOrchestrator {
                 });
                 self.report.artifacts_pushed += 1;
             }
-        }
 
         Ok(obj_path_clone)
     }

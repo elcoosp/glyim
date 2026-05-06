@@ -525,7 +525,7 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::Binary {
                 id: *id,
-                op: op.clone(),
+                op: *op,
                 lhs: Box::new(self.substitute_expr_types(lhs, sub)),
                 rhs: Box::new(self.substitute_expr_types(rhs, sub)),
                 span: *span,
@@ -607,7 +607,7 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::Unary {
                 id: *id,
-                op: op.clone(),
+                op: *op,
                 operand: Box::new(self.substitute_expr_types(operand, sub)),
                 span: *span,
             },

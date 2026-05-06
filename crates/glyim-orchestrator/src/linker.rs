@@ -3,6 +3,7 @@ use std::process::Command;
 
 /// Configuration for the multi-object linker.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct LinkConfig {
     /// Override the default linker (e.g., `ld`, `mold`, `lld`).
     pub linker: Option<String>,
@@ -18,18 +19,6 @@ pub struct LinkConfig {
     pub sysroot: Option<PathBuf>,
 }
 
-impl Default for LinkConfig {
-    fn default() -> Self {
-        Self {
-            linker: None,
-            library_search_paths: vec![],
-            target_triple: None,
-            use_lto: false,
-            extra_args: vec![],
-            sysroot: None,
-        }
-    }
-}
 
 /// Errors that can occur during linking.
 #[derive(Debug)]
@@ -64,7 +53,7 @@ pub fn link_multi_object(
     let linker = config
         .linker
         .as_deref()
-        .unwrap_or_else(|| if cfg!(target_os = "macos") { "cc" } else { "cc" });
+        .unwrap_or(if cfg!(target_os = "macos") { "cc" } else { "cc" });
 
     let mut cmd = Command::new(linker);
     cmd.arg("-o").arg(output_path);

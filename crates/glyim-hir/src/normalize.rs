@@ -162,11 +162,10 @@ impl<'a> SemanticNormalizer<'a> {
             }
             HirExpr::Unary { op, operand, .. } => {
                 let operand_n = self.normalize_expr(operand);
-                if let HirUnOp::Not = op {
-                    if let NormalizedExpr::Unary { op: HirUnOp::Not, operand: inner } = &operand_n {
+                if let HirUnOp::Not = op
+                    && let NormalizedExpr::Unary { op: HirUnOp::Not, operand: inner } = &operand_n {
                         return (**inner).clone();
                     }
-                }
                 NormalizedExpr::Unary { op: *op, operand: Box::new(operand_n) }
             }
             HirExpr::Block { stmts, .. } => {

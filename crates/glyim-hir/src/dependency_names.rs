@@ -50,15 +50,13 @@ impl NameDependencyTable {
                         if let Some(defs) = self.definitions.get(&dep) {
                             for &def_name in defs {
                                 if !changed.contains(&def_name) && !affected.contains(&def_name)
-                                {
-                                    if let Some(sub_deps) = self.dependents.get(&def_name) {
+                                    && let Some(sub_deps) = self.dependents.get(&def_name) {
                                         for &sub_dep in sub_deps {
                                             if affected.insert(sub_dep) {
                                                 queue.push(sub_dep);
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                         queue.push(dep);

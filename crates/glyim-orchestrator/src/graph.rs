@@ -84,7 +84,7 @@ impl PackageGraph {
         for idx in indices {
             let node = graph[idx].clone();
             // Dependencies
-            for (dep_name, _dep_spec) in &node.manifest.dependencies {
+            for dep_name in node.manifest.dependencies.keys() {
                 if let Some(&dep_idx) = name_to_idx.get(dep_name) {
                     graph.add_edge(dep_idx, idx, DependencyEdge {
                         dep_name: dep_name.clone(),
@@ -96,7 +96,7 @@ impl PackageGraph {
                 }
             }
             // Macro dependencies
-            for (dep_name, _dep_spec) in &node.manifest.macros {
+            for dep_name in node.manifest.macros.keys() {
                 if let Some(&dep_idx) = name_to_idx.get(dep_name) {
                     graph.add_edge(dep_idx, idx, DependencyEdge {
                         dep_name: dep_name.clone(),

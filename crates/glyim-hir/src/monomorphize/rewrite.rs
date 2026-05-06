@@ -261,7 +261,7 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::Binary {
                 id: *id,
-                op: op.clone(),
+                op: *op,
                 lhs: Box::new(self.rewrite_expr(lhs, fn_map, struct_map, enum_spec_map, type_sub)),
                 rhs: Box::new(self.rewrite_expr(rhs, fn_map, struct_map, enum_spec_map, type_sub)),
                 span: *span,
@@ -273,7 +273,7 @@ impl<'a> MonoContext<'a> {
                 span,
             } => HirExpr::Unary {
                 id: *id,
-                op: op.clone(),
+                op: *op,
                 operand: Box::new(self.rewrite_expr(
                     operand,
                     fn_map,

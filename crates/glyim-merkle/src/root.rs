@@ -46,9 +46,9 @@ pub enum ItemChange {
 pub fn compute_root_hash(items: &[(String, ContentHash)]) -> ContentHash {
     let mut hasher = Sha256::new();
     hasher.update(b"merkle_root:");
-    hasher.update(&(items.len() as u64).to_le_bytes());
+    hasher.update((items.len() as u64).to_le_bytes());
     for (name, hash) in items {
-        hasher.update(&(name.len() as u64).to_le_bytes());
+        hasher.update((name.len() as u64).to_le_bytes());
         hasher.update(name.as_bytes());
         hasher.update(hash.as_bytes());
     }

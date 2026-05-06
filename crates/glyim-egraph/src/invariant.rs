@@ -89,12 +89,9 @@ impl InvariantCertificate {
 
 #[allow(unused_variables)]
 fn collect_callees(expr: &glyim_hir::node::HirExpr, interner: &Interner, callees: &mut Vec<String>) {
-    match expr {
-        glyim_hir::node::HirExpr::Call { callee, .. } => {
-            let name = interner.resolve(*callee).to_string();
-            if !callees.contains(&name) { callees.push(name); }
-        }
-        _ => {}
+    if let glyim_hir::node::HirExpr::Call { callee, .. } = expr {
+        let name = interner.resolve(*callee).to_string();
+        if !callees.contains(&name) { callees.push(name); }
     }
 }
 

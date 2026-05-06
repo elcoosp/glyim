@@ -33,8 +33,8 @@ pub fn cmd_build(
     }
 
     // If a workspace is detected, use the orchestrator
-    if let Some(root) = glyim_compiler::pipeline::find_package_root(&input) {
-        if root.join("glyim.toml").exists() {
+    if let Some(root) = glyim_compiler::pipeline::find_package_root(&input)
+        && root.join("glyim.toml").exists() {
             let config = OrchestratorConfig {
                 mode: if release { BuildMode::Release } else { BuildMode::Debug },
                 target: target.clone(),
@@ -65,7 +65,6 @@ pub fn cmd_build(
                 }
             }
         }
-    }
 
     // Fallback: single file compilation
     let result = if bare || input.is_file() {

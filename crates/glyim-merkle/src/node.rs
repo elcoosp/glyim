@@ -42,11 +42,11 @@ impl MerkleNodeData {
 impl MerkleNode {
     pub fn compute_hash(&self) -> ContentHash {
         let mut hasher = Sha256::new();
-        hasher.update(&(self.children.len() as u64).to_le_bytes());
+        hasher.update((self.children.len() as u64).to_le_bytes());
         for child in &self.children {
             hasher.update(child.as_bytes());
         }
-        hasher.update(&self.serialize_data());
+        hasher.update(self.serialize_data());
         let digest = hasher.finalize();
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&digest);
@@ -110,7 +110,7 @@ impl MerkleNode {
         // Recompute hash to verify integrity
         let hash = {
             let mut hasher = Sha256::new();
-            hasher.update(&(children.len() as u64).to_le_bytes());
+            hasher.update((children.len() as u64).to_le_bytes());
             for child in &children {
                 hasher.update(child.as_bytes());
             }

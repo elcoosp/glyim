@@ -26,6 +26,12 @@ pub struct EffectAnalyzer {
     effects: HashMap<Symbol, EffectSet>,
 }
 
+impl Default for EffectAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EffectAnalyzer {
     pub fn new() -> Self { Self { effects: HashMap::new() } }
 

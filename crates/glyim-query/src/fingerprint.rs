@@ -29,8 +29,8 @@ impl Fingerprint {
     /// This is used to compute a composite fingerprint from multiple inputs.
     pub fn combine(a: Self, b: Self) -> Self {
         let mut hasher = Sha256::new();
-        hasher.update(&a.0);
-        hasher.update(&b.0);
+        hasher.update(a.0);
+        hasher.update(b.0);
         let digest = hasher.finalize();
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&digest);

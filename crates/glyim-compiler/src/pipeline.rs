@@ -510,8 +510,8 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let mut compiler = BytecodeCompiler::new(&interner);
     let mut interpreter = BytecodeInterpreter::new();
     for item in &hir.items {
-        if let glyim_hir::HirItem::Fn(hir_fn) = item {
-            if interner.resolve(hir_fn.name) == "main" {
+        if let glyim_hir::HirItem::Fn(hir_fn) = item
+            && interner.resolve(hir_fn.name) == "main" {
                 let bc_fn = compiler.compile_fn(hir_fn);
                 let result = interpreter.execute_fn(&bc_fn, &[]);
                 return match result {
@@ -521,7 +521,6 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
                     _ => Ok(0),
                 };
             }
-        }
     }
     Err(PipelineError::Codegen("no 'main' function found".into()))
 }

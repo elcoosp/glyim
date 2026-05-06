@@ -2,6 +2,12 @@ use crate::types::TestOutcome;
 
 pub struct FlakeTracker;
 
+impl Default for FlakeTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FlakeTracker {
     pub fn new() -> Self {
         Self
