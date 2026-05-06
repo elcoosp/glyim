@@ -54,21 +54,19 @@ impl MerkleNode {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        // Use postcard to encode the header
         let header_bytes =
             postcard::to_allocvec(&self.header).expect("serialize header");
         let mut buf = Vec::new();
         buf.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
         buf.extend_from_slice(&header_bytes);
-        // Children hashes (fixed 32 bytes each)
         for child in &self.children {
             buf.extend_from_slice(child.as_bytes());
         }
-        // Data payload
         buf.extend_from_slice(&self.serialize_data());
         buf
     }
 
+    #[allow(unused_assignments)]
     pub fn deserialize(data: &[u8]) -> Result<Self, NodeDeserializeError> {
         let mut offset = 0;
 
@@ -109,7 +107,7 @@ impl MerkleNode {
         let merkle_data =
             Self::deserialize_data(header.data_type_tag, &data_blob)?;
 
-        // Recompute hash to verify integrity (optional, but useful)
+        // Recompute hash to verify integrity
         let hash = {
             let mut hasher = Sha256::new();
             hasher.update(&(children.len() as u64).to_le_bytes());
