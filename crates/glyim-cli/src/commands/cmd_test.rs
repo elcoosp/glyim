@@ -9,14 +9,14 @@ pub fn cmd_test(
     watch: bool,
     optimize_check: bool,
     _remote_cache: Option<String>,
-    coverage: bool,
+    ____coverage: bool,
     mutate: bool,
     mutation_score: Option<f64>,
     mutation_operators: Option<String>,
     max_mutants: Option<usize>,
-    concurrent_mutants: Option<usize>,
+    _____concurrent_mutants: Option<usize>,
     mutation_report: Option<PathBuf>,
-    coverage_mode: Option<String>,
+    _____coverage_mode: Option<String>,
 ) -> i32 {
     let source = match std::fs::read_to_string(&input) {
         Ok(s) => s,

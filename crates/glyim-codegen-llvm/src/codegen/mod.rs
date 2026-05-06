@@ -466,7 +466,7 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
         // Phase 6B: Coverage instrumentation
-        let mut cov_counter = 0u32;
+        let _cov_counter = 0u32;
         let num_fns = hir.items.iter().filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_))).count();
         if self.coverage_mode != CoverageMode::Off && num_fns > 0 {
             coverage::emit_coverage_globals(&self.module, num_fns, self.coverage_mode);

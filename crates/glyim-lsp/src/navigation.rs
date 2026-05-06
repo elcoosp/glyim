@@ -115,11 +115,12 @@ pub fn document_symbols(
                 end: Position { line: start.line as u32, character: start.column as u32 },
             },
             children: None,
+            #[allow(deprecated)]
+            deprecated: None,
             detail: sym.type_signature.as_ref().map(|ts| {
                 let params: Vec<String> = ts.params.iter().map(|(n, t)| format!("{}: {:?}", n, t)).collect();
                 format!("({})", params.join(", "))
             }),
-            deprecated: None,
             tags: None,
         });
     }
