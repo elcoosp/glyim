@@ -21,6 +21,7 @@ glyim-hir = { path = "../glyim-hir" }
 glyim-cli = { path = "../glyim-cli" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-orchestrator = { path = "../glyim-orchestrator" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-typeck = { path = "../glyim-typeck" }
 tempfile = "3"

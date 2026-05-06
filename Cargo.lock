@@ -1915,6 +1915,7 @@ dependencies = [
  "glyim-interner",
  "glyim-macro-core",
  "glyim-macro-vfs",
+ "glyim-orchestrator",
  "glyim-parse",
  "glyim-testr",
  "glyim-typeck",
