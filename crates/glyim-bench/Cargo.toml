@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Benchmarking and profiling infrastructure for Glyim"
 
 [dependencies]
+glyim-egraph = { path = "../glyim-egraph" }
 glyim-profiler = { path = "../glyim-profiler" }
 tempfile = "3"
 glyim-compiler = { path = "../glyim-compiler" }

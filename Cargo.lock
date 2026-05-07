@@ -1950,6 +1950,7 @@ dependencies = [
  "criterion",
  "glyim-codegen-llvm",
  "glyim-compiler",
+ "glyim-egraph",
  "glyim-hir",
  "glyim-interner",
  "glyim-lsp",
