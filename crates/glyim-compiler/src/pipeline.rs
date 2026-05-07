@@ -841,6 +841,7 @@ pub fn run_package(
     run_with_mode(&main_path, mode, target, force_no_std)
 }
 
+
 fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
     let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -857,6 +858,7 @@ fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
     }
     None
 }
+
 fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(), PipelineError> {
     link_object_with_coverage(obj_path, output_path, use_lto, None)
 }
