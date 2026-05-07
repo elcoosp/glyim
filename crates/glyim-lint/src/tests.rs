@@ -1,6 +1,5 @@
 use super::*;
 use glyim_hir::lower;
-use glyim_interner::Interner;
 use glyim_parse::parse;
 
 fn lint_source(source: &str) -> Vec<LintDiagnostic> {

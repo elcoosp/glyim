@@ -58,7 +58,7 @@ pub fn format_source(source: &str, config: &FormatConfig) -> Result<String, Form
                             out.push('\t');
                         }
                     }
-                    at_line_start = false;
+                    // at_line_start = false;
                 }
                 out.push_str(tok.text);
                 out.push('\n');
@@ -84,7 +84,7 @@ pub fn format_source(source: &str, config: &FormatConfig) -> Result<String, Form
                     out.push('\t');
                 }
             }
-            at_line_start = false;
+            // at_line_start = false;
         }
 
         out.push_str(tok.text);

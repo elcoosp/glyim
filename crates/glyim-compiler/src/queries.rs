@@ -114,6 +114,7 @@ pub enum RedReason {
 ///
 /// # Stability
 /// *Stable.*
+#[allow(dead_code)]
 pub struct QueryPipeline {
     ctx: QueryContext,
     pub(crate) cache_dir: PathBuf,

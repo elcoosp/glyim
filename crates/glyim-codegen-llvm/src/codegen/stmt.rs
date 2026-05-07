@@ -29,7 +29,6 @@ pub(crate) fn codegen_stmt<'ctx>(
     stmt: &HirStmt,
     fctx: &mut FunctionContext<'ctx>,
 ) -> Option<IntValue<'ctx>> {
-    eprintln!("STMT: {:?}", stmt);
     let span = match stmt {
         HirStmt::Let { span, .. } => *span,
         HirStmt::LetPat { span, .. } => *span,

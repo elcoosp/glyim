@@ -478,17 +478,15 @@ fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut 
                     });
                     break;
                 }
+                // Check for terminal in any statement
                 match stmt {
                     HirStmt::Expr(e) => {
                         if is_terminal(e) { found_terminal = true; }
-                        find_unreachable_after_stmt(e, interner, diags);
                     }
-                    HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. }
-                    | HirStmt::Assign { value, .. } => {
-                        find_unreachable_after_stmt(value, interner, diags);
-                    }
-                    HirStmt::AssignDeref { value, .. } | HirStmt::AssignField { value, .. } => {
-                        find_unreachable_after_stmt(value, interner, diags);
+                    HirStmt::Let { value: e, .. } | HirStmt::LetPat { value: e, .. }
+                    | HirStmt::Assign { value: e, .. } | HirStmt::AssignDeref { value: e, .. }
+                    | HirStmt::AssignField { value: e, .. } => {
+                        if is_terminal(e) { found_terminal = true; }
                     }
                 }
             }
@@ -519,7 +517,14 @@ fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut 
 }
 
 fn is_terminal(expr: &HirExpr) -> bool {
-    matches!(expr, HirExpr::Return { .. })
+    match expr {
+        HirExpr::Return { .. } => true,
+        HirExpr::Block { stmts, .. } => stmts.iter().any(|s| match s {
+            HirStmt::Expr(e) => is_terminal(e),
+            _ => false,
+        }),
+        _ => false,
+    }
 }
 
 #[cfg(test)]

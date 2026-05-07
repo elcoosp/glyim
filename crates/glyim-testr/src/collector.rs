@@ -9,7 +9,9 @@ pub fn collect_tests(
     include_ignored: bool,
 ) -> Vec<TestDef> {
     let mut tests = Vec::new();
-    for item in &ast.items {
+    eprintln!("[collect_tests] AST has {} items", ast.items.len());
+    for (idx, item) in ast.items.iter().enumerate() {
+        eprintln!("[collect_tests] item {} = {:?}", idx, item);
         if let glyim_parse::Item::FnDef { name, attrs, .. } = item {
             let mut is_test = false;
             let mut is_opt = false;

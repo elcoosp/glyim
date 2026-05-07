@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 pub mod cross;
 pub mod lockfile_integration;
 pub mod macro_expand;
