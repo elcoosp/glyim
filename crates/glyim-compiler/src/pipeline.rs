@@ -834,36 +834,62 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
 }
 
 fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool, coverage_lib: Option<&std::path::Path>) -> Result<(), PipelineError> {
-    let linker = if which("cc") {
-        "cc"
-    } else if which("gcc") {
-        "gcc"
-    } else {
-        return Err(PipelineError::Link(
-            "no C compiler found (tried 'cc' and 'gcc')".into(),
-        ));
-    };
-    let mut args: Vec<std::ffi::OsString> = vec![
-        "-o".into(),
-        output_path.as_os_str().into(),
-        obj_path.as_os_str().into(),
-        "-lc".into(),
-        "-no-pie".into(),
-    ];
     if let Some(lib) = coverage_lib {
-        args.push(lib.as_os_str().into());
-    }
-    if use_lto {
-        args.push("-flto=thin".into());
-    }
-    let output = Command::new(linker)
-        .args(&args)
-        .output()
-        .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
-    if !output.status.success() {
-        return Err(PipelineError::Link(
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        ));
+        // Use rustc to link when coverage runtime is required, ensuring Rust runtime is available
+        let linker = "rustc";
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "-o".into(),
+            output_path.as_os_str().into(),
+            obj_path.as_os_str().into(),
+            lib.as_os_str().into(),
+        ];
+        if use_lto {
+            args.push("-C".into());
+            args.push("lto=thin".into());
+        }
+        // rustc defaults to PIE on some platforms; add -C link-arg=-no-pie if needed
+        if cfg!(target_os = "linux") {
+            args.push("-C".into());
+            args.push("link-arg=-no-pie".into());
+        }
+        let output = Command::new(linker)
+            .args(&args)
+            .output()
+            .map_err(|e| PipelineError::Link(format!("failed to invoke rustc: {e}")))?;
+        if !output.status.success() {
+            return Err(PipelineError::Link(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+    } else {
+        let linker = if which("cc") {
+            "cc"
+        } else if which("gcc") {
+            "gcc"
+        } else {
+            return Err(PipelineError::Link(
+                "no C compiler found (tried 'cc' and 'gcc')".into(),
+            ));
+        };
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "-o".into(),
+            output_path.as_os_str().into(),
+            obj_path.as_os_str().into(),
+            "-lc".into(),
+            "-no-pie".into(),
+        ];
+        if use_lto {
+            args.push("-flto=thin".into());
+        }
+        let output = Command::new(linker)
+            .args(&args)
+            .output()
+            .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
+        if !output.status.success() {
+            return Err(PipelineError::Link(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
     }
     Ok(())
 }

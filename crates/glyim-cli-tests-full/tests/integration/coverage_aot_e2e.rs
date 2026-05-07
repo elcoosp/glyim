@@ -11,7 +11,6 @@ fn temp_g(content: &str) -> PathBuf {
 }
 
 #[test]
-#[ignore = "AOT coverage requires linking with rustc instead of cc - see issue #XXX"]
 fn coverage_aot_run_produces_dump() {
     let dir = tempfile::tempdir().unwrap();
     let source = "fn main() -> i64 { let mut i = 0; while i < 2 { i = i + 1 }; i }";
