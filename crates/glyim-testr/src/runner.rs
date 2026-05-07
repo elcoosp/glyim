@@ -20,7 +20,7 @@ impl TestRunner {
         source: &str,
         display: &dyn DisplayBackend,
     ) -> Vec<TestResult> {
-        let artifact = match Compiler::compile(source) {
+        let artifact = match Compiler::compile(source, self.config.filter.as_deref()) {
             Ok(a) => a,
             Err(e) => {
                 let errname = match &e {
@@ -37,12 +37,7 @@ impl TestRunner {
             }
         };
 
-        // Filter tests if config has a filter
-        let test_defs: Vec<&crate::types::TestDef> = if let Some(ref filter) = self.config.filter {
-            artifact.test_defs.iter().filter(|t| t.name == *filter).collect()
-        } else {
-            artifact.test_defs.iter().collect()
-        };
+        let test_defs: Vec<&crate::types::TestDef> = artifact.test_defs.iter().collect();
 
         display.suite_started(test_defs.len());
 

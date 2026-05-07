@@ -5,7 +5,7 @@ use crate::harness;
 pub struct Compiler;
 
 impl Compiler {
-    pub fn compile(source: &str) -> Result<CompiledArtifact, CompileError> {
+    pub fn compile(source: &str, filter: Option<&str>) -> Result<CompiledArtifact, CompileError> {
         let parse_out = glyim_parse::parse(source);
         if !parse_out.errors.is_empty() {
             return Err(CompileError::Parse(
@@ -13,7 +13,7 @@ impl Compiler {
             ));
         }
         let interner = &parse_out.interner;
-        let test_defs = collect_tests(&parse_out.ast, interner, None, false);
+        let test_defs = collect_tests(&parse_out.ast, interner, filter, false);
 
         let test_names: Vec<String> = test_defs.iter().map(|t| t.name.clone()).collect();
         if test_names.is_empty() {

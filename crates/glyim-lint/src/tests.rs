@@ -65,9 +65,19 @@ fn unused_function_called_no_warning() {
 #[test]
 fn dead_code_after_return() {
     let src = "fn main() { return 1; let x = 2; }";
+    // Parse and print HIR to understand structure
+    let parse_out = glyim_parse::parse(src);
+    let mut interner = parse_out.interner;
+    let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
+    for item in &hir.items {
+        if let glyim_hir::item::HirItem::Fn(f) = item {
+            eprintln!("Function body: {:#?}", f.body);
+        }
+    }
     let diags = lint_source(src);
+    eprintln!("All diagnostics: {:#?}", diags);
     let dead: Vec<_> = diags.iter().filter(|d| d.lint_id == LintId("dead_code")).collect();
-    assert_eq!(dead.len(), 1);
+    assert_eq!(dead.len(), 1, "expected 1 dead_code diagnostic, got {:?}", dead);
     assert!(dead[0].message.contains("unreachable"));
 }
 

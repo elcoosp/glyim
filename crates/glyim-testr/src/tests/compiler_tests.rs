@@ -4,7 +4,7 @@ use std::process::Command;
 #[test]
 fn compiled_binary_runs_test_via_env_and_outputs_pass() {
     let source = "#[test]\nfn my_test() -> i64 { 0 }";
-    let artifact = Compiler::compile(source).expect("compile");
+    let artifact = Compiler::compile(source, None).expect("compile");
     let output = Command::new(&artifact.bin_path)
         .env("GLYIM_TEST", "my_test")
         .stderr(std::process::Stdio::piped())
@@ -19,7 +19,7 @@ fn compiled_binary_runs_test_via_env_and_outputs_pass() {
 #[test]
 fn compiled_binary_reports_fail_for_failing_test() {
     let source = "#[test]\nfn my_test() -> i64 { 1 }";
-    let artifact = Compiler::compile(source).expect("compile");
+    let artifact = Compiler::compile(source, None).expect("compile");
     let output = Command::new(&artifact.bin_path)
         .env("GLYIM_TEST", "my_test")
         .stdout(std::process::Stdio::piped())
