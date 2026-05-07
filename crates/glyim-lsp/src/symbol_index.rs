@@ -179,6 +179,15 @@ impl SymbolIndex {
     }
 
     /// Clear the index for a specific file.
+
+    /// Only for testing: insert a symbol directly into all indices.
+    #[doc(hidden)]
+    pub fn insert_test_symbol(&mut self, file_id: FileId, sym: SymbolInfo) {
+        self.by_name.entry(sym.name.clone()).or_default().push(sym.clone());
+        self.by_file.entry(file_id).or_default().push(sym.clone());
+        self.by_location.insert((file_id.0, sym.definition.span.start), sym);
+    }
+
     pub fn clear_file(&mut self, file_id: FileId) {
         if let Some(symbols) = self.by_file.remove(&file_id) {
             for sym in symbols {

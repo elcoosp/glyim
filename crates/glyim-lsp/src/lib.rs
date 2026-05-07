@@ -15,3 +15,6 @@ pub mod handler;
 pub use database::AnalysisDatabase;
 pub use symbol_index::{SymbolIndex, SymbolInfo, SymbolKind, DefinitionLocation, TypeSignature};
 pub use reference_graph::{ReferenceGraph, Reference, ReferenceKind};
+
+#[cfg(test)]
+mod tests;
