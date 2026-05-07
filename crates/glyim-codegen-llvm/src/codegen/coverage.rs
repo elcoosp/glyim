@@ -89,10 +89,17 @@ pub fn instrument_function_entry<'ctx>(
         None => builder.position_at_end(entry),
     }
 
+    increment_counter_at_builder(module, &builder, counter_index, i64_type, i32_type);
+}
+
+fn increment_counter_at_builder(
+    module: &inkwell::module::Module,
+    builder: &inkwell::builder::Builder,
+    counter_index: u64,
+    i64_type: inkwell::types::IntType,
+    i32_type: inkwell::types::IntType,
+) {
     let cov_global = module.get_global("__glyim_cov_counts").unwrap();
-    let _array_type = i64_type.array_type(0); // placeholder, we just need the type for GEP; size not needed
-    // Use actual array type: we don't have it here, but we can use cov_global's type?
-    // Instead, use i64_type.array_type(0) as dummy; build_in_bounds_gep doesn't validate length.
     let ptr = cov_global.as_pointer_value();
     let zero = i32_type.const_int(0, false);
     let idx = i32_type.const_int(counter_index as u64, false);
@@ -108,6 +115,17 @@ pub fn instrument_function_entry<'ctx>(
     let current = builder.build_load(i64_type, counter_ptr, "cov_cur").unwrap().into_int_value();
     let incremented = builder.build_int_add(current, i64_type.const_int(1, false), "cov_inc").unwrap();
     builder.build_store(counter_ptr, incremented).unwrap();
+}
+
+pub fn emit_branch_counter_increment(
+    cg: &crate::codegen::Codegen,
+    counter_id: u64,
+) {
+    let module = &cg.module;
+    let builder = &cg.builder;
+    let i64_type = cg.i64_type;
+    let i32_type = cg.i32_type;
+    increment_counter_at_builder(module, builder, counter_id, i64_type, i32_type);
 }
 
 pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
