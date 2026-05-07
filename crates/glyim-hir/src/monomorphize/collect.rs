@@ -378,11 +378,6 @@ impl<'a> MonoContext<'a> {
                 if let Some(ref fn_def) = fn_def_opt
                     && !fn_def.type_params.is_empty()
                 {
-                    eprintln!(
-                        "[mono scan] Call callee={} found fn_def with {} type_params",
-                        callee_name,
-                        fn_def.type_params.len()
-                    );
                     if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
                         let substituted = self.substitute_type_args(type_args, current_sub);
                         let concrete_args = self.concretize_type_args(&substituted);
@@ -441,10 +436,6 @@ impl<'a> MonoContext<'a> {
                         {
                             let concrete: Vec<HirType> =
                                 fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                            eprintln!(
-                                "[mono scan] SAFE FALLBACK (inner): queueing {} with [Int]",
-                                callee_name
-                            );
                             self.call_type_args_overrides
                                 .insert(expr.get_id(), concrete.clone());
                             self.queue_fn_specialization(*callee, concrete);
@@ -460,10 +451,6 @@ impl<'a> MonoContext<'a> {
                 {
                     let concrete: Vec<HirType> =
                         fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                    eprintln!(
-                        "[mono scan] SAFE FALLBACK (outer): queueing {} with [Int]",
-                        callee_name
-                    );
                     self.call_type_args_overrides
                         .insert(expr.get_id(), concrete.clone());
                     self.queue_fn_specialization(*callee, concrete);
@@ -850,7 +837,6 @@ impl<'a> MonoContext<'a> {
     /// Enqueue a concrete type for specialization if it contains generic components.
     /// Recursively processes nested Generic types.
     pub(crate) fn enqueue_type_if_generic(&mut self, ty: &HirType) {
-        eprintln!("[enqueue] ty={:?}", ty);
         match ty {
             HirType::Generic(sym, args) => {
                 let concrete_args = self.concretize_type_args(args);

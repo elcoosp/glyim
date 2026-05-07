@@ -298,7 +298,7 @@ pub(crate) fn compile_source_to_hir(
 
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
 
@@ -309,7 +309,7 @@ pub(crate) fn compile_source_to_hir(
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
+        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
     }
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
 
@@ -539,7 +539,7 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     use glyim_bytecode::value::Value;
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
     let decl_output = glyim_parse::declarations::parse_declarations(source);
@@ -548,7 +548,7 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
+        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
     }
     let mut compiler = BytecodeCompiler::new(&interner);
     let mut interpreter = BytecodeInterpreter::new();
@@ -584,7 +584,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
 
@@ -597,7 +597,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner);
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
+        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
     }
     Ok(())
 }
@@ -921,7 +921,7 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
     let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
@@ -985,7 +985,7 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
     let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
@@ -1011,7 +1011,7 @@ mod no_std_tests;
 pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
     let decl_output = glyim_parse::declarations::parse_declarations(source);
@@ -1020,7 +1020,7 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
+        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
     }
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
@@ -1066,7 +1066,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     ProfileCollector::enter_stage(StageName::Codegen);
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Parse(parse_out.errors));
+        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
 
@@ -1079,7 +1079,7 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::TypeCheck(errs));
+        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
     }
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();

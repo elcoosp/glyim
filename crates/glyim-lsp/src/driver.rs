@@ -1,5 +1,6 @@
 use crate::AnalysisDatabase;
 use glyim_compiler::queries::QueryPipeline;
+use glyim_compiler::pipeline::PipelineError;
 use glyim_compiler::pipeline::PipelineConfig;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -47,6 +48,7 @@ impl AnalysisDriver {
         let config = PipelineConfig::default();
         let mut qp = QueryPipeline::new(&self.cache_dir, config);
         let mut diagnostics = Vec::new();
+        let source_maps = self.db.source_maps.read();
         match qp.compile(content, &path) {
             Ok(compiled) => {
                 let hir = compiled.mono_hir.clone();
@@ -56,6 +58,31 @@ impl AnalysisDriver {
                 self.db.reference_graph.write().build_from_hir(file_id, &hir, &interner);
             }
             Err(e) => {
+                // If the error contains Diagnostics, convert them directly
+                if let PipelineError::Diagnostics(diags) = &e {
+                    for d in diags {
+                        let severity = match d.severity {
+                            glyim_diag::diagnostic::Severity::Error => lsp_types::DiagnosticSeverity::ERROR,
+                            glyim_diag::diagnostic::Severity::Warning => lsp_types::DiagnosticSeverity::WARNING,
+                            _ => lsp_types::DiagnosticSeverity::INFORMATION,
+                        };
+                        let range = if let Some(ref sm) = source_maps.get(&file_id) {
+                            let (start, end) = sm.span_to_position(d.span.start, d.span.end).unwrap_or((glyim_diag::LineCol{line:0,column:0}, glyim_diag::LineCol{line:0,column:0}));
+                            lsp_types::Range {
+                                start: lsp_types::Position { line: start.line as u32, character: start.column as u32 },
+                                end: lsp_types::Position { line: end.line as u32, character: end.column as u32 },
+                            }
+                        } else {
+                            lsp_types::Range::default()
+                        };
+                        diagnostics.push(lsp_types::Diagnostic {
+                            range,
+                            severity: Some(severity),
+                            message: d.message.clone(),
+                            ..Default::default()
+                        });
+                    }
+                }
                 let err_msg = format!("{}", e);
                 // Fall back to simple parse for error reporting
                 let parse_out = glyim_parse::parse(content);
