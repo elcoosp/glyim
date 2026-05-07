@@ -107,3 +107,23 @@ mod tests {
         assert_ts::<ParseError>();
     }
 }
+
+
+impl From<ParseError> for glyim_diag::diagnostic::Diagnostic {
+    fn from(err: ParseError) -> glyim_diag::diagnostic::Diagnostic {
+        let (start, end, msg) = match &err {
+            ParseError::Expected { span, .. } => (span.0, span.1, err.to_string()),
+            ParseError::UnexpectedEof { .. } => (0, 0, err.to_string()),
+            ParseError::ExpectedExpr { span, .. } => (span.0, span.1, err.to_string()),
+            ParseError::Message { span, .. } => (span.0, span.1, err.to_string()),
+        };
+        glyim_diag::diagnostic::Diagnostic {
+            severity: glyim_diag::diagnostic::Severity::Error,
+            file: None,
+            span: glyim_diag::Span::new(start, end),
+            message: msg,
+            code: None,
+            suggestion: None,
+        }
+    }
+}

@@ -4,10 +4,21 @@ use std::path::PathBuf;
 /// Severity level for a diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
+
     Error,
     Warning,
     Note,
     Help,
+}
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Error => write!(f, "error"),
+            Self::Warning => write!(f, "warning"),
+            Self::Note => write!(f, "note"),
+            Self::Help => write!(f, "help"),
+        }
+    }
 }
 
 /// A single diagnostic with file location, message, and optional fix.

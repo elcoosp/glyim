@@ -1,3 +1,4 @@
+use glyim_diag::diagnostic::Diagnostic;
 use glyim_codegen_llvm::runtime_shims;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_hir::ExprId;
@@ -45,6 +46,7 @@ pub enum PipelineError {
     Run(std::io::Error),
     Manifest(crate::manifest::ManifestError),
     MissingSysroot(String),
+    Diagnostics(Vec<Diagnostic>),
 }
 impl std::fmt::Display for PipelineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -69,6 +71,12 @@ impl std::fmt::Display for PipelineError {
             Self::Run(e) => write!(f, "execution error: {e}"),
             Self::Manifest(e) => write!(f, "manifest error: {e}"),
             Self::MissingSysroot(msg) => write!(f, "sysroot error: {msg}"),
+            Self::Diagnostics(diags) => {
+                for d in diags {
+                    writeln!(f, "{}: {}", d.severity, d.message)?;
+                }
+                Ok(())
+            }
         }
     }
 }
