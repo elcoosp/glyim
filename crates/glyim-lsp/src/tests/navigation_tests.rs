@@ -1,5 +1,5 @@
 use crate::database::AnalysisDatabase;
-use crate::navigation::{goto_definition, find_references, document_symbols};
+use crate::navigation::{goto_definition, document_symbols};
 use crate::reference_graph::{Reference, ReferenceKind};
 use crate::symbol_index::{SymbolInfo, SymbolKind, DefinitionLocation, TypeSignature};
 use glyim_diag::{FileId, Span, SourceMap};
@@ -50,13 +50,12 @@ fn make_test_db() -> (AnalysisDatabase, FileId) {
 fn goto_definition_works() {
     let (db, file_id) = make_test_db();
     let file_map = db.file_map.read();
-    let file_id = file_id; // use it to keep compiler happy if needed
     let params = GotoDefinitionParams {
         text_document_position_params: TextDocumentPositionParams {
             text_document: TextDocumentIdentifier {
                 uri: Url::from_file_path("/test/main.g").unwrap(),
             },
-            position: Position { line: 0, character: 1 },
+            position: Position { line: 0, character: 0 },
         },
         work_done_progress_params: WorkDoneProgressParams { work_done_token: None },
         partial_result_params: PartialResultParams { partial_result_token: None },

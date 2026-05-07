@@ -1,5 +1,5 @@
 use crate::diagnostics::convert_parse_errors;
-use glyim_diag::{FileId, SourceMap, Span};
+use glyim_diag::{FileId, SourceMap};
 use glyim_parse::ParseError;
 use std::path::PathBuf;
 

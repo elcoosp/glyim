@@ -40,7 +40,7 @@ fn hover_params() -> HoverParams {
             text_document: TextDocumentIdentifier {
                 uri: Url::from_file_path("/test/main.g").unwrap(),
             },
-            position: Position { line: 0, character: 1 }, // within "fn"
+            position: Position { line: 0, character: 0 }, // within "fn"
         },
         work_done_progress_params: WorkDoneProgressParams { work_done_token: None },
     }
