@@ -93,7 +93,7 @@ pub fn cmd_build(
 
     // Fallback: single file compilation
     let result = if bare || input.is_file() {
-        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref(), None)
+        pipeline::build_with_mode(&input, output.as_deref(), mode, target.as_deref(), None, coverage)
     } else {
         pipeline::build_package(&input, output.as_deref(), mode, target.as_deref())
     };

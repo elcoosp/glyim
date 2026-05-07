@@ -47,14 +47,14 @@ pub enum CoverageMode {
 
 
 pub struct CodegenBuilder<'ctx> {
-    pub(crate) coverage_mode: CoverageMode,
+    coverage_mode: CoverageMode,
     context: &'ctx Context,
     interner: Interner,
     expr_types: Vec<HirType>,
-    pub(crate) debug_mode: DebugMode,
-    pub(crate) source: Option<String>,
-    pub(crate) file_name: Option<String>,
-    pub(crate) library_mode: bool,
+    debug_mode: DebugMode,
+    source: Option<String>,
+    file_name: Option<String>,
+    library_mode: bool,
 }
 
 impl<'ctx> CodegenBuilder<'ctx> {
@@ -136,44 +136,44 @@ impl<'ctx> CodegenBuilder<'ctx> {
 }
 
 pub struct Codegen<'ctx> {
-    pub(crate) coverage_mode: CoverageMode,
-    pub(crate) coverage_counter: std::sync::atomic::AtomicU32,
-    pub(crate) context: &'ctx Context,
-    pub(crate) module: Module<'ctx>,
-    pub(crate) builder: inkwell::builder::Builder<'ctx>,
-    pub(crate) i64_type: IntType<'ctx>,
-    pub(crate) i32_type: IntType<'ctx>,
+    coverage_mode: CoverageMode,
+    coverage_counter: std::sync::atomic::AtomicU32,
+    context: &'ctx Context,
+    module: Module<'ctx>,
+    builder: inkwell::builder::Builder<'ctx>,
+    i64_type: IntType<'ctx>,
+    i32_type: IntType<'ctx>,
     #[allow(dead_code)]
-    pub(crate) f64_type: inkwell::types::FloatType<'ctx>,
-    pub(crate) interner: Interner,
-    pub(crate) string_counter: RefCell<u32>,
-    pub(crate) expr_types: Vec<HirType>,
+    f64_type: inkwell::types::FloatType<'ctx>,
+    interner: Interner,
+    string_counter: RefCell<u32>,
+    expr_types: Vec<HirType>,
     #[allow(dead_code)]
     pub(crate) mono_cache:
         RefCell<HashMap<(Symbol, Vec<HirType>), inkwell::values::FunctionValue<'ctx>>>,
-    pub(crate) struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
-    pub(crate) struct_field_indices: RefCell<HashMap<(Symbol, Symbol), usize>>,
+    struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
+    struct_field_indices: RefCell<HashMap<(Symbol, Symbol), usize>>,
     pub(crate) enum_types:
         RefCell<HashMap<Symbol, (IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
-    pub(crate) enum_struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
-    pub(crate) enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
+    enum_struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
+    enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
     #[allow(dead_code)]
-    pub(crate) option_sym: Symbol,
+    option_sym: Symbol,
     #[allow(dead_code)]
-    pub(crate) result_sym: Symbol,
+    result_sym: Symbol,
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,
     current_subprogram: Option<DISubprogram<'ctx>>,
-    pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
-    pub(crate) no_std: bool,
+    macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
+    no_std: bool,
     pub(crate) extern_methods:
         std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
-    pub(crate) errors: RefCell<Vec<String>>,
-    pub(crate) jit_mode: bool,
-    pub(crate) library_mode: bool,
+    errors: RefCell<Vec<String>>,
+    jit_mode: bool,
+    library_mode: bool,
     /// Effect analysis results (Phase 3) – drives LLVM attribute annotation.
-    pub(crate) effect_analysis: Option<glyim_hir::effects::EffectSet>,
-    pub(crate) target_triple: Option<String>,
+    effect_analysis: Option<glyim_hir::effects::EffectSet>,
+    target_triple: Option<String>,
 }
 
 impl<'ctx> Codegen<'ctx> {

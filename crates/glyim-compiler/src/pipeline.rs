@@ -446,6 +446,7 @@ pub fn build_incremental(
         PipelineConfig {
             mode,
             target: target.map(String::from),
+            coverage_mode: CoverageMode::Off, // incremental doesn't support coverage from CLI yet; will add later
             ..Default::default()
         },
     );
@@ -464,22 +465,14 @@ pub fn build_incremental(
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = inkwell::context::Context::create();
-    let mut codegen = match mode {
-        BuildMode::Debug => Codegen::with_debug(
-            &context,
-            compiled.interner.clone(),
-            compiled.merged_types.clone(),
-            compiled.source.clone(),
-            &input.to_string_lossy(),
-        )
-        .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => CodegenBuilder::new(
-            &context,
-            compiled.interner.clone(),
-            compiled.merged_types.clone(),
-        )
-        .build()?,
-    };
+    let cov_mode = config.coverage_mode;
+    let mut codegen = CodegenBuilder::new(
+        &context,
+        compiled.interner.clone(),
+        compiled.merged_types.clone(),
+    )
+    .with_coverage_mode(cov_mode)
+    .build()?;
     if let Some(t) = target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         codegen = codegen.with_target(t);
@@ -655,12 +648,14 @@ pub fn build_with_mode(
     mode: BuildMode,
     target: Option<&str>,
     force_no_std: Option<bool>,
+    coverage: bool,
 ) -> Result<PathBuf, PipelineError> {
     let (source, _) = load_source_with_prelude(input)?;
     let config = PipelineConfig {
         mode,
         target: target.map(|s| s.to_string()),
         force_no_std,
+        coverage_mode: if coverage { CoverageMode::Function } else { CoverageMode::Off },
         ..Default::default()
     };
     let compiled = compile_source_to_hir(source, input, &config)?;
@@ -675,22 +670,14 @@ pub fn build_with_mode(
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
-    let mut codegen = match mode {
-        BuildMode::Debug => Codegen::with_debug(
-            &context,
-            compiled.interner.clone(),
-            compiled.merged_types.clone(),
-            compiled.source.clone(),
-            &input.to_string_lossy(),
-        )
-        .map_err(PipelineError::Codegen)?,
-        BuildMode::Release => CodegenBuilder::new(
-            &context,
-            compiled.interner.clone(),
-            compiled.merged_types.clone(),
-        )
-        .build()?,
-    };
+    let cov_mode = config.coverage_mode;
+    let mut codegen = CodegenBuilder::new(
+        &context,
+        compiled.interner.clone(),
+        compiled.merged_types.clone(),
+    )
+    .with_coverage_mode(cov_mode)
+    .build()?;
     if let Some(t) = &config.target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
@@ -789,7 +776,7 @@ pub fn build_package(
         ));
     }
     let force_no_std = Some(is_manifest_no_std(&full_manifest));
-    build_with_mode(&main_path, output, mode, target, force_no_std)
+    build_with_mode(&main_path, output, mode, target, force_no_std, false)
 }
 pub fn run_package(
     package_dir: &Path,
