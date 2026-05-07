@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Benchmarking and profiling infrastructure for Glyim"
 
 [dependencies]
+glyim-typeck = { path = "../glyim-typeck" }
 glyim-egraph = { path = "../glyim-egraph" }
 glyim-profiler = { path = "../glyim-profiler" }
 tempfile = "3"
@@ -37,4 +38,8 @@ path = "src/lib.rs"
 
 [[bench]]
 name = "bench_incremental"
+harness = false
+
+[[bench]]
+name = "bench_stages"
 harness = false
