@@ -31,3 +31,17 @@ pub struct CoverageDump {
     pub metadata: HashMap<u64, SourceLocation>,
     pub version: u32,
 }
+
+impl CoverageDump {
+    pub fn merge(&mut self, other: &CoverageDump) {
+        for (file_id, info) in &other.files {
+            self.files.entry(*file_id).or_insert_with(|| info.clone());
+        }
+        for (counter_id, count) in &other.counters {
+            *self.counters.entry(*counter_id).or_insert(0) += count;
+        }
+        for (counter_id, loc) in &other.metadata {
+            self.metadata.entry(*counter_id).or_insert_with(|| loc.clone());
+        }
+    }
+}

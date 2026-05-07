@@ -139,9 +139,40 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
         Some(g) => g,
         None => return,
     };
-    let dump_global = match module.get_global("__glyim_cov_dump") {
-        Some(g) => g,
-        None => return,
+    // Create dump global now with current instrumenter data
+    let dump_global = if let Some(existing) = module.get_global("__glyim_cov_dump") {
+        existing
+    } else {
+        use std::collections::HashMap;
+        let instr_meta = match cg.coverage_instrumenter.as_ref() {
+            Some(i) => i.metadata.clone(),
+            None => HashMap::new(),
+        };
+        let mut files = HashMap::new();
+        files.insert(0u32, glyim_coverage::data::FileInfo {
+            path: cg.source_str.as_deref().unwrap_or("unknown").to_string(),
+        });
+        let dump = glyim_coverage::data::CoverageDump {
+            files,
+            counters: HashMap::new(),
+            metadata: instr_meta,
+            version: 1,
+        };
+        let json = serde_json::to_string(&dump).unwrap();
+        let ctx = module.get_context();
+        let i8_type = ctx.i8_type();
+        let arr_type = i8_type.array_type(json.len() as u32);
+        let g = module.add_global(
+            arr_type,
+            Some(inkwell::AddressSpace::from(0u16)),
+            "__glyim_cov_dump",
+        );
+        let elems: Vec<_> = json.as_bytes().iter().map(|&b| i8_type.const_int(b as u64, false)).collect();
+        let const_array = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
+        g.set_initializer(&const_array);
+        g.set_constant(true);
+        g.set_linkage(inkwell::module::Linkage::Private);
+        g
     };
     let flush_fn = module.get_function("glyim_cov_flush_impl").unwrap_or_else(|| {
         let ctx = module.get_context();
@@ -149,11 +180,11 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
         let i64_type = ctx.i64_type();
         let ptr_type = ctx.ptr_type(inkwell::AddressSpace::from(0u16));
         let fn_type = void_type.fn_type(&[
-            ptr_type.into(),    // counters: *const i64
-            i64_type.into(),    // counters_len: u64
-            ptr_type.into(),    // dump_json: *const u8
-            i64_type.into(),    // dump_json_len: u64
-            ptr_type.into(),    // out_path: *const u8
+            ptr_type.into(),
+            i64_type.into(),
+            ptr_type.into(),
+            i64_type.into(),
+            ptr_type.into(),
         ], false);
         module.add_function("glyim_cov_flush_impl", fn_type, None)
     });
@@ -161,7 +192,6 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
     let builder = &cg.builder;
     let i64_type = cg.i64_type;
     let counters_ptr = counters_global.as_pointer_value();
-    // Cast to *const i64
     let counters_len = match cg.coverage_instrumenter.as_ref() {
         Some(instr) => i64_type.const_int(instr.counter_id, false),
         None => i64_type.const_int(0, false),
@@ -169,8 +199,7 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
     let dump_ptr = dump_global.as_pointer_value();
     let dump_len = {
         let arr_type = dump_global.get_value_type();
-        let size = arr_type.size_of().unwrap_or(i64_type.const_int(0, false));
-        size
+        arr_type.size_of().unwrap_or(i64_type.const_int(0, false))
     };
     let out_path_ptr = {
         let path = std::env::var("GLYIM_COV_FILE").unwrap_or_else(|_| "glyim-cov.json".to_string());

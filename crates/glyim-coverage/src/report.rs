@@ -1,6 +1,5 @@
 use crate::data::{CoverageDump, LocationKind};
 use std::collections::HashMap;
-use std::fs;
 
 pub struct TextReport {
     pub annotated_lines: String,

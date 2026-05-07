@@ -294,6 +294,9 @@ pub fn map_runtime_shims_for_jit(
         let ptr: unsafe extern "C" fn() = custom_abort_fn.unwrap_or(abort_handler_default);
         engine.add_global_mapping(&f, ptr as *const () as usize);
     }
+    if let Some(f) = module.get_function("glyim_cov_flush_impl") {
+        engine.add_global_mapping(&f, glyim_cov_flush_impl as *const () as usize);
+    }
 
     #[unsafe(no_mangle)]
     unsafe extern "C" fn abort_handler_default() {
@@ -309,7 +312,9 @@ pub unsafe extern "C" fn glyim_cov_flush_impl(
     dump_json_len: u64,
     out_path: *const u8,
 ) {
+    eprintln!("[cov_flush] called len={} dump_len={}", counters_len, dump_json_len);
     if counters.is_null() || dump_json.is_null() || out_path.is_null() {
+        eprintln!("[cov_flush] null arg");
         return;
     }
     let counts = std::slice::from_raw_parts(counters, counters_len as usize);

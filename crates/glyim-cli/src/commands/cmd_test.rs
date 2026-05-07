@@ -110,6 +110,7 @@ pub fn cmd_test(
         nocapture,
         watch,
         optimize_check,
+        coverage: ____coverage,
         ..Default::default()
     };
 

@@ -20,7 +20,11 @@ impl TestRunner {
         source: &str,
         display: &dyn DisplayBackend,
     ) -> Vec<TestResult> {
-        let artifact = match Compiler::compile(source, self.config.filter.as_deref()) {
+        let artifact = match if self.config.coverage {
+            Compiler::compile_with_opts(source, self.config.filter.as_deref(), true)
+        } else {
+            Compiler::compile(source, self.config.filter.as_deref())
+        } {
             Ok(a) => a,
             Err(e) => {
                 if matches!(e, crate::compiler::CompileError::NoTests) {
@@ -147,6 +151,35 @@ impl TestRunner {
 
         let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
         let failed = results.len() - passed;
+        // Coverage: merge per-test dumps if coverage enabled
+        if self.config.coverage {
+            let cov_dir = std::path::Path::new("glyim-cov");
+            let _ = std::fs::create_dir_all(cov_dir);
+            let mut merged_dump = glyim_coverage::data::CoverageDump {
+                files: std::collections::HashMap::new(),
+                counters: std::collections::HashMap::new(),
+                metadata: std::collections::HashMap::new(),
+                version: 1,
+            };
+            for entry in std::fs::read_dir(cov_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap_or_else(|_| std::fs::read_dir(".").unwrap())) {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        if let Ok(data) = std::fs::read_to_string(&path) {
+                            if let Ok(dump) = serde_json::from_str::<glyim_coverage::data::CoverageDump>(&data) {
+                                merged_dump.merge(&dump);
+                            }
+                        }
+                    }
+                }
+            }
+            let merged_path = cov_dir.join("merged.json");
+            if let Ok(json) = serde_json::to_string(&merged_dump) {
+                let _ = std::fs::write(&merged_path, &json);
+                eprintln!("Coverage report: {}", merged_path.display());
+            }
+        }
+
         display.suite_finished(passed, failed, results.len());
         results
     }

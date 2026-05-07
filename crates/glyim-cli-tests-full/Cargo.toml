@@ -24,6 +24,8 @@ glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-orchestrator = { path = "../glyim-orchestrator" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-typeck = { path = "../glyim-typeck" }
+glyim-coverage = { path = "../glyim-coverage" }
+serde_json = "1"
 tempfile = "3"
 wat = "1"
 dirs-next = "2"

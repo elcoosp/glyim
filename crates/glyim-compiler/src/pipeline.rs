@@ -1053,7 +1053,18 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
 ///
 /// # Stability
 /// *Stable.*
-pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
+pub fn run_jit_with_coverage(source: &str, cov_path: &std::path::Path) -> Result<i32, PipelineError> {
+    let config = PipelineConfig {
+        mode: BuildMode::Debug,
+        coverage_mode: glyim_codegen_llvm::codegen::CoverageMode::Function,
+        coverage_output: Some(cov_path.to_path_buf()),
+        ..Default::default()
+    };
+    run_jit_with_config(source, &config)
+}
+
+fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, PipelineError> {
+    // existing run_jit code but using provided config
     ProfileCollector::enter_stage(StageName::Parse);
     ProfileCollector::enter_stage(StageName::Codegen);
     let parse_out = glyim_parse::parse(source);
@@ -1061,13 +1072,8 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
     }
     let mut interner = parse_out.interner;
-
-    // Phase 1: scan declarations to build symbol table
     let decl_output = glyim_parse::declarations::parse_declarations(source);
-    let decl_table =
-        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
-
-    // Phase 2: full lowering with pre-resolved symbols
+    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
@@ -1076,30 +1082,32 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mono_hir) =
-        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
+    let (merged_types, mono_hir) = merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
-    let mut cg = CodegenBuilder::new(&context, interner, merged_types).build()?;
+    let mut cg = CodegenBuilder::new(&context, interner, merged_types)
+        .with_coverage_mode(config.coverage_mode)
+        .build()?;
     cg = cg.with_jit_mode();
+    if let Some(ref path) = config.coverage_output {
+        eprintln!("[pipeline] GLYIM_COV_FILE={}", path.display());
+        unsafe { std::env::set_var("GLYIM_COV_FILE", path.to_string_lossy().as_ref()); }
+    }
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     debug_ir(&cg);
-    let engine = cg
-        .get_module()
-        .create_jit_execution_engine(OptimizationLevel::None)
+    let engine = cg.get_module().create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    runtime_shims::map_runtime_shims_for_jit(
-        &engine,
-        cg.get_module(),
-        *CUSTOM_ASSERT_FN.lock().unwrap(),
-        *CUSTOM_ABORT_FN.lock().unwrap(),
-    );
+    runtime_shims::map_runtime_shims_for_jit(&engine, cg.get_module(), *CUSTOM_ASSERT_FN.lock().unwrap(), *CUSTOM_ABORT_FN.lock().unwrap());
     unsafe {
-        let main_fn = engine
-            .get_function::<unsafe extern "C" fn() -> i32>("main")
+        let main_fn = engine.get_function::<unsafe extern "C" fn() -> i32>("main")
             .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
         let exit_code = main_fn.call();
         ProfileCollector::exit_stage(StageName::Codegen, 1, 0, 0);
         ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
         Ok(exit_code)
     }
+}
+
+pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
+    let config = PipelineConfig::default();
+    run_jit_with_config(source, &config)
 }

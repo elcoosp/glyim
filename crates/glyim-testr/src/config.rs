@@ -17,6 +17,7 @@ pub struct TestConfig {
     pub num_jobs: usize,
     pub timeout_secs: u64,
     pub optimize_check: bool,
+    pub coverage: bool,
 }
 
 impl Default for TestConfig {
@@ -34,6 +35,7 @@ impl Default for TestConfig {
                 .unwrap_or(4),
             timeout_secs: 30,
             optimize_check: false,
+            coverage: false,
         }
     }
 }
