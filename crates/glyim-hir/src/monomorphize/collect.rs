@@ -1043,16 +1043,7 @@ impl<'a> MonoContext<'a> {
 
     /// Process the type specialization queue recursively.
     pub(crate) fn process_type_specializations(&mut self) {
-        eprintln!(
-            "[process_type_spec] queue length: {}",
-            self.type_work_queue.len()
-        );
         while let Some((name, args)) = self.type_work_queue.pop() {
-            eprintln!(
-                "[process_type_spec] processing {:?} with args {:?}",
-                self.interner.resolve(name),
-                args
-            );
             let key = (name, args.clone());
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;
@@ -1066,11 +1057,6 @@ impl<'a> MonoContext<'a> {
                 self.struct_specs.insert(key, specialized);
             } else if let Some(enum_def) = self.find_enum(name) {
                 let specialized = self.specialize_enum(&enum_def, &args);
-                eprintln!(
-                    "[process_type_spec] specialized enum {} with args {:?}",
-                    self.interner.resolve(name),
-                    args
-                );
                 // Recursively enqueue all types found in the specialized enum's fields
                 for variant in &specialized.variants {
                     for field in &variant.fields {
@@ -1078,10 +1064,6 @@ impl<'a> MonoContext<'a> {
                     }
                 }
                 self.enum_specs.insert(key, specialized);
-                eprintln!(
-                    "[process_type_spec] inserted into enum_specs, count={}",
-                    self.enum_specs.len()
-                );
             }
         }
         // Reprocess newly enqueued types until queue is empty
