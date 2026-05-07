@@ -76,14 +76,15 @@ mod tests {
     fn flaky_after_intermittent_fails() {
         let mut tracker = FlakeTracker::new();
         let name = "unstable";
+        // 8 runs, 1 failure => pass rate 7/8 = 0.875 (within flaky range)
         for i in 0..8 {
-            if i % 3 == 0 {
+            if i == 0 {
                 tracker.record(name, &TestOutcome::Failed { exit_code: 1, stderr: String::new() });
             } else {
                 tracker.record(name, &TestOutcome::Passed);
             }
         }
-        // Should be >0.0 because pass rate is not 1.0 and >= min_runs
-        assert!(tracker.score(name) > 0.0);
+        let score = tracker.score(name);
+        assert!(score > 0.0, "expected flaky score > 0, got {}", score);
     }
 }
