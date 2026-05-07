@@ -151,12 +151,6 @@ enum Command {
         check: bool,
     },
     /// Start the Glyim language server
-    /// Format a Glyim source file
-    Fmt {
-        input: PathBuf,
-        #[arg(long)]
-        check: bool,
-    },
     Lsp,
     #[command(subcommand)]
     Cache(CacheCommand),
