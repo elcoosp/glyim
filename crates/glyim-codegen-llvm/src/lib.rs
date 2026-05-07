@@ -1,14 +1,14 @@
 mod alloc;
 pub mod codegen;
 mod debug;
+pub mod dispatch;
 mod hash_shims;
 pub mod helpers;
-pub mod dispatch;
-pub mod orc;
-pub mod micro_module;
 pub mod live;
-pub mod tiered;
+pub mod micro_module;
+pub mod orc;
 pub mod runtime_shims;
+pub mod tiered;
 pub use codegen::Codegen;
 pub use codegen::CodegenBuilder;
 
@@ -43,7 +43,6 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     let mut cg = CodegenBuilder::new(&ctx, interner, vec![]).build()?;
-    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
@@ -80,7 +79,6 @@ pub fn compile_to_ir_debug(
     } else {
         CodegenBuilder::new(&ctx, interner, vec![]).build()?
     };
-    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
