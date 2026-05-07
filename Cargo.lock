@@ -2018,6 +2018,7 @@ dependencies = [
  "glyim-orchestrator",
  "glyim-parse",
  "glyim-pkg",
+ "glyim-profiler",
  "glyim-testr",
  "glyim-typeck",
  "hex",

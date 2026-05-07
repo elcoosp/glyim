@@ -10,12 +10,16 @@ pub fn cmd_build(
     bare: bool,
     incremental: bool,
     remote_cache: Option<String>,
+    profile: bool,
 ) -> i32 {
     let mode = if release {
         BuildMode::Release
     } else {
         BuildMode::Debug
     };
+    if profile {
+        glyim_profiler::ProfileCollector::enable();
+    }
     if incremental {
         eprintln!("Using incremental compilation pipeline...");
         return match pipeline::build_incremental(&input, output.as_deref(), mode, target.as_deref()) {
@@ -51,6 +55,7 @@ pub fn cmd_build(
             match orch.build() {
                 Ok(_bin_path) => {
                     eprintln!("Workspace build complete.");
+            if profile { print_profile(); }
                     let report = orch.report();
                     eprintln!("Compiled packages: {:?}", report.packages_compiled);
                     if !report.packages_failed.is_empty() {
@@ -75,11 +80,33 @@ pub fn cmd_build(
     match result {
         Ok(path) => {
             eprintln!("Built: {}", path.display());
+            if profile { print_profile(); }
             0
         }
         Err(e) => {
             eprintln!("error: {e}");
             1
         }
+    }
+}
+
+
+fn print_profile() {
+    let p = glyim_profiler::ProfileCollector::finish();
+    eprintln!("\n=== Compilation Profile ===");
+    eprintln!("Total duration: {:.1}ms", p.total_duration.as_secs_f64() * 1000.0);
+    let mut stages: Vec<_> = p.stages.iter().collect();
+    stages.sort_by_key(|(_, s)| s.duration);
+    for (name, stage) in stages.iter().rev() {
+        if stage.duration.as_nanos() > 0 {
+            eprintln!("  {:?}: {:.3}ms ({} items, {} hits, {} misses)",
+                name, stage.duration.as_secs_f64() * 1000.0,
+                stage.items_processed, stage.cache_hits, stage.cache_misses);
+        }
+    }
+    if p.incremental.total_items > 0 {
+        eprintln!("Incremental: {} green / {} red, hit rate {:.1}%",
+            p.incremental.green_items, p.incremental.red_items,
+            p.incremental.cache_hit_ratio * 100.0);
     }
 }

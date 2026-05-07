@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
+#[command(version)]
 #[command(
     name = "glyim",
     version,
@@ -19,6 +20,8 @@ struct Cli {
     trace: bool,
     #[arg(long = "tree", global = true, help = "Show spans as an indented tree")]
     tree: bool,
+    #[arg(long = "profile", global = true, help = "Print stage timings")]
+    profile: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -215,15 +218,25 @@ fn main() {
             bare,
             incremental,
             remote_cache,
-        } => cmd_build(input, output, target, release, bare, incremental, remote_cache),
+        } => cmd_build(
+            input,
+            output,
+            target,
+            release,
+            bare,
+            incremental,
+            remote_cache,
+            cli.profile,
+        ),
         Command::Run {
             input,
             target,
             debug: _,
             release,
-                    
+
             live,
-            incremental, remote_cache,
+            incremental,
+            remote_cache,
         } => cmd_run(input, target, release, live, incremental, remote_cache),
         Command::Ir { input } => cmd_ir(input),
         Command::Check { input, incremental } => cmd_check(input, incremental),
@@ -245,9 +258,21 @@ fn main() {
             mutation_report,
             coverage_mode,
         } => cmd_test(
-            input, ignore, filter, nocapture, watch, optimize, remote_cache,
-            coverage, mutate, mutation_score, mutation_operators, max_mutants,
-            concurrent_mutants, mutation_report, coverage_mode,
+            input,
+            ignore,
+            filter,
+            nocapture,
+            watch,
+            optimize,
+            remote_cache,
+            coverage,
+            mutate,
+            mutation_score,
+            mutation_operators,
+            max_mutants,
+            concurrent_mutants,
+            mutation_report,
+            coverage_mode,
         ),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
@@ -267,9 +292,7 @@ fn main() {
         Command::DumpHir { input } => cmd_dump_hir(input),
         Command::MacroInspect { input } => cmd_macro_inspect(input),
         Command::IncrementalStatus { input } => cmd_incremental_status(input),
-        Command::Lsp => {
-            cmd_lsp()
-        }
+        Command::Lsp => cmd_lsp(),
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));
