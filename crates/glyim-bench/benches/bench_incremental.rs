@@ -112,7 +112,7 @@ fn bench_egraph(c: &mut Criterion) {
             let mut interner = parse_out.interner;
             let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
             if let Some(glyim_hir::HirItem::Fn(f)) = hir.items.first() {
-                let _ = glyim_egraph::optimize_fn(f, &[], &interner, &Default::default());
+                let _ = glyim_egraph::optimize::optimize_fn(f, &[], &interner, &Default::default());
             }
         });
     });
