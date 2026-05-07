@@ -15,7 +15,6 @@ glyim-compiler = { path = "../glyim-compiler" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-parse = { path = "../glyim-parse" }
-glyim-typeck = { path = "../glyim-typeck" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-query = { path = "../glyim-query" }
 glyim-merkle = { path = "../glyim-merkle" }
