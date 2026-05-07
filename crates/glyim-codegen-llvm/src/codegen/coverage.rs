@@ -92,7 +92,7 @@ pub fn emit_coverage_globals<'ctx>(
 pub fn instrument_function_entry<'ctx>(
     module: &Module<'ctx>,
     function: FunctionValue<'ctx>,
-    counter_index: u32,
+    counter_index: u64,
     mode: CoverageMode,
 ) {
     if mode == CoverageMode::Off {

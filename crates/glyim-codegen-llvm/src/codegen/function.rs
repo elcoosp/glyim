@@ -46,14 +46,19 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     let ret_bb = cg.context.append_basic_block(fn_value, "ret");
     // Coverage: instrument function entry if coverage is enabled
     if cg.coverage_mode != crate::codegen::CoverageMode::Off {
-        // Generate a counter index based on the function name (unique per compilation)
-        let counter_index = cg.coverage_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        crate::codegen::coverage::instrument_function_entry(
-            &cg.module,
-            fn_value,
-            counter_index,
-            cg.coverage_mode,
-        );
+        if let Some(ref mut instr) = cg.coverage_instrumenter {
+            let line = crate::debug::DebugInfoGen::byte_offset_to_line(
+                cg.source_str.as_deref().unwrap_or(""),
+                f.span.start,
+            );
+            let counter_index = instr.record_function_entry(0, line);
+            crate::codegen::coverage::instrument_function_entry(
+                &cg.module,
+                fn_value,
+                counter_index,
+                cg.coverage_mode,
+            );
+        }
     }
     cg.builder.position_at_end(entry);
     let ret_val_ptr = cg

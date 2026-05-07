@@ -1,5 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 use inkwell::AddressSpace;
+use serde_json;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::values::{ArrayValue, IntValue, PointerValue};
@@ -299,3 +300,32 @@ pub fn map_runtime_shims_for_jit(
         std::process::abort();
     }
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_cov_flush_impl(
+    counters: *const i64,
+    counters_len: u64,
+    dump_json: *const u8,
+    dump_json_len: u64,
+    out_path: *const u8,
+) {
+    if counters.is_null() || dump_json.is_null() || out_path.is_null() {
+        return;
+    }
+    let counts = std::slice::from_raw_parts(counters, counters_len as usize);
+    let json_bytes = std::slice::from_raw_parts(dump_json, dump_json_len as usize);
+    let mut dump: glyim_coverage::data::CoverageDump = match serde_json::from_slice(json_bytes) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    for (id, count) in dump.metadata.keys().copied().zip(counts.iter()) {
+        dump.counters.insert(id, *count);
+    }
+    let data = match serde_json::to_string(&dump) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let path = std::ffi::CStr::from_ptr(out_path as *const libc::c_char).to_string_lossy();
+    let _ = std::fs::write(path.as_ref(), &data);
+}
+
