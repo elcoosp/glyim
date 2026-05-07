@@ -2,6 +2,33 @@ use inkwell::module::Module;
 use inkwell::values::FunctionValue;
 use crate::codegen::CoverageMode;
 use inkwell::AddressSpace;
+use glyim_coverage::data::{LocationKind, SourceLocation};
+use std::collections::HashMap;
+
+pub struct CoverageInstrumenter {
+    pub counter_id: u64,
+    pub metadata: HashMap<u64, SourceLocation>,
+}
+
+impl CoverageInstrumenter {
+    pub fn new() -> Self {
+        Self { counter_id: 0, metadata: HashMap::new() }
+    }
+
+    pub fn record_function_entry(&mut self, file_id: u32, line: u32) -> u64 {
+        let id = self.counter_id;
+        self.metadata.insert(id, SourceLocation {
+            file_id,
+            start_line: line,
+            start_col: 0,
+            end_line: line,
+            end_col: 0,
+            kind: LocationKind::FunctionEntry,
+        });
+        self.counter_id += 1;
+        id
+    }
+}
 
 /// Emit the global coverage counter array and the runtime dump function.
 pub fn emit_coverage_globals<'ctx>(

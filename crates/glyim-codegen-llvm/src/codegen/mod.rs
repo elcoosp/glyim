@@ -115,6 +115,11 @@ impl<'ctx> CodegenBuilder<'ctx> {
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
+            coverage_instrumenter: if self.coverage_mode != CoverageMode::Off {
+                Some(coverage::CoverageInstrumenter::new())
+            } else {
+                None
+            },
             jit_mode: false,
             library_mode: self.library_mode,
             target_triple: None,
@@ -164,6 +169,7 @@ pub struct Codegen<'ctx> {
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,
     current_subprogram: Option<DISubprogram<'ctx>>,
+    pub coverage_instrumenter: Option<coverage::CoverageInstrumenter>,
     macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
     no_std: bool,
     pub(crate) extern_methods:
@@ -214,6 +220,7 @@ impl<'ctx> Codegen<'ctx> {
             debug_info,
             source_str: Some(source_str),
             current_subprogram: None,
+            coverage_instrumenter: None,
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
@@ -261,6 +268,7 @@ impl<'ctx> Codegen<'ctx> {
             debug_info,
             source_str: Some(source_str),
             current_subprogram: None,
+            coverage_instrumenter: None,
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
