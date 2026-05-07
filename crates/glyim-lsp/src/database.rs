@@ -4,13 +4,15 @@ use glyim_diag::{FileId, SourceMap};
 use glyim_hir::Hir;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time;
+use std::time::Instant;
 use parking_lot::RwLock;
+
 pub struct FileMap {
     path_to_id: HashMap<PathBuf, FileId>,
     id_to_path: HashMap<FileId, PathBuf>,
     next_id: u32,
 }
+
 impl Default for FileMap {
     fn default() -> Self {
         Self::new()
@@ -43,6 +45,7 @@ impl FileMap {
         }
     }
 }
+
 pub struct AnalysisDatabase {
     pub file_map: RwLock<FileMap>,
     pub source_maps: RwLock<HashMap<FileId, SourceMap>>,
@@ -50,7 +53,9 @@ pub struct AnalysisDatabase {
     pub reference_graph: RwLock<ReferenceGraph>,
     pub hirs: RwLock<HashMap<FileId, Hir>>,
     pub diagnostics: RwLock<HashMap<FileId, Vec<lsp_types::Diagnostic>>>,
+    pub file_access_times: RwLock<HashMap<FileId, Instant>>,
 }
+
 impl Default for AnalysisDatabase {
     fn default() -> Self {
         Self::new()
@@ -70,16 +75,14 @@ impl AnalysisDatabase {
         }
     }
 
-    /// Evict entries that have not been accessed within the given duration (no‑op for now).
-    pub fn evict_stale(&self, _max_age_secs: u64) {
-        // Placeholder: in production, would remove items from hirs, csts, etc.
+    /// Record access to a file (call before LSP reads).
+    pub fn touch(&self, file_id: FileId) {
+        self.file_access_times.write().insert(file_id, Instant::now());
     }
-
-}
 
     /// Evict entries that have not been accessed within `max_age`.
     pub fn evict_stale(&self, max_age: std::time::Duration) {
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         let mut stale_ids = Vec::new();
         {
             let access_times = self.file_access_times.read();
@@ -92,7 +95,6 @@ impl AnalysisDatabase {
         if stale_ids.is_empty() {
             return;
         }
-        // Remove stale entries
         {
             let mut hirs = self.hirs.write();
             let mut source_maps = self.source_maps.write();
@@ -105,19 +107,11 @@ impl AnalysisDatabase {
                 access_times.remove(id);
             }
         }
-        // Also remove from symbol index and reference graph
         {
             let mut sym_index = self.symbol_index.write();
-            let mut ref_graph = self.reference_graph.write();
             for id in &stale_ids {
                 sym_index.clear_file(*id);
-                // Reference graph does not have a per-file clear method; we'll keep it as is
             }
         }
     }
-
-    /// Record access to a file (call before LSP reads).
-    pub fn touch(&self, file_id: FileId) {
-        self.file_access_times.write().insert(file_id, std::time::Instant::now());
-    }
-
+}

@@ -79,6 +79,14 @@ impl LintRegistry {
             allow_attribute: true,
             group: LintGroup::Style,
         });
+        registry.register(LintDescriptor {
+            id: LintId("dead_code"),
+            name: "Dead Code",
+            description: "Code is unreachable or after a return/break",
+            default_severity: Severity::Warning,
+            allow_attribute: true,
+            group: LintGroup::Correctness,
+        });
 
         registry
     }
@@ -141,6 +149,15 @@ pub fn lint(hir: &Hir, interner: &Interner, registry: &LintRegistry) -> Vec<Lint
         for item in &hir.items {
             if let glyim_hir::item::HirItem::Fn(f) = item {
                 diags.extend(check_unnecessary_mut(&f.body, interner));
+            }
+        }
+    }
+
+    // dead_code lint (detect unreachable code after return/break)
+    if registry.get(LintId("dead_code")).is_some() {
+        for item in &hir.items {
+            if let glyim_hir::item::HirItem::Fn(f) = item {
+                diags.extend(check_dead_code(&f.body, interner));
             }
         }
     }
@@ -434,6 +451,75 @@ fn collect_called_symbols(hir: &Hir) -> HashSet<Symbol> {
     }
 
     called
+}
+
+
+
+// ----- dead_code helpers -----
+
+fn check_dead_code(expr: &HirExpr, interner: &Interner) -> Vec<LintDiagnostic> {
+    let mut diags = vec![];
+    find_unreachable_after_stmt(expr, interner, &mut diags);
+    diags
+}
+
+fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut Vec<LintDiagnostic>) {
+    match expr {
+        HirExpr::Block { stmts, span, .. } => {
+            let mut found_terminal = false;
+            for (_i, stmt) in stmts.iter().enumerate() {
+                if found_terminal {
+                    diags.push(LintDiagnostic {
+                        lint_id: LintId("dead_code"),
+                        severity: Severity::Warning,
+                        span: *span,
+                        message: "unreachable statement after return".to_string(),
+                        suggestion: None,
+                    });
+                    break;
+                }
+                match stmt {
+                    HirStmt::Expr(e) => {
+                        if is_terminal(e) { found_terminal = true; }
+                        find_unreachable_after_stmt(e, interner, diags);
+                    }
+                    HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. }
+                    | HirStmt::Assign { value, .. } => {
+                        find_unreachable_after_stmt(value, interner, diags);
+                    }
+                    HirStmt::AssignDeref { value, .. } | HirStmt::AssignField { value, .. } => {
+                        find_unreachable_after_stmt(value, interner, diags);
+                    }
+                }
+            }
+        }
+        HirExpr::If { condition, then_branch, else_branch, .. } => {
+            find_unreachable_after_stmt(condition, interner, diags);
+            find_unreachable_after_stmt(then_branch, interner, diags);
+            if let Some(e) = else_branch {
+                find_unreachable_after_stmt(e, interner, diags);
+            }
+        }
+        HirExpr::Match { scrutinee, arms, .. } => {
+            find_unreachable_after_stmt(scrutinee, interner, diags);
+            for arm in arms {
+                find_unreachable_after_stmt(&arm.body, interner, diags);
+            }
+        }
+        HirExpr::While { condition, body, .. } => {
+            find_unreachable_after_stmt(condition, interner, diags);
+            find_unreachable_after_stmt(body, interner, diags);
+        }
+        HirExpr::ForIn { iter, body, .. } => {
+            find_unreachable_after_stmt(iter, interner, diags);
+            find_unreachable_after_stmt(body, interner, diags);
+        }
+        _ => {}
+    }
+}
+
+fn is_terminal(expr: &HirExpr) -> bool {
+    matches!(expr, HirExpr::Return { .. })
 }
 
 #[cfg(test)]

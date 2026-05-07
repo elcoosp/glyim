@@ -41,6 +41,16 @@ pub fn optimize_fn(
         .with_egraph(egraph)
         .run(&rules);
 
+    // Check if we exceeded the memory budget (estimated by node count * 100 bytes)
+    let approx_memory = (runner.egraph.total_number_of_nodes() as usize) * 100;
+    if approx_memory > config.memory_budget {
+        tracing::warn!(
+            "E-graph memory budget exceeded ({} MB > {} MB), using partial results",
+            approx_memory / (1024 * 1024),
+            config.memory_budget / (1024 * 1024)
+        );
+    }
+
     let _best = crate::extract::extract_best(&runner.egraph, root);
     let mut next_id = 1000;
     let optimized_body = egraph_to_hir_expr(&runner.egraph, root, &mut Interner::new(), &mut next_id);

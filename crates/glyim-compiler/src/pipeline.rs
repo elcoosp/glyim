@@ -86,6 +86,12 @@ impl From<String> for PipelineError {
 }
 static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
 static CUSTOM_ABORT_FN: Mutex<Option<unsafe extern "C" fn()>> = Mutex::new(None);
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
 pub fn set_jit_abort_handler(handler: unsafe extern "C" fn()) {
     *CUSTOM_ABORT_FN.lock().unwrap() = Some(handler);
 }
@@ -155,6 +161,12 @@ pub(crate) fn merge_mono_types(
 ///
 /// # Stability
 /// *Stable.*
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
+#[allow(deprecated)]
 #[tracing::instrument(name = "build", skip_all)]
 pub fn build(
     input: &Path,
@@ -246,12 +258,12 @@ impl Default for PipelineConfig {
 
 #[allow(dead_code)]
 pub struct CompiledHir {
-    hir: glyim_hir::Hir,
-    mono_hir: glyim_hir::Hir,
-    merged_types: Vec<glyim_hir::types::HirType>,
-    interner: glyim_interner::Interner,
-    source: String,
-    is_no_std: bool,
+    pub hir: glyim_hir::Hir,
+    pub mono_hir: glyim_hir::Hir,
+    pub merged_types: Vec<glyim_hir::types::HirType>,
+    pub interner: glyim_interner::Interner,
+    pub source: String,
+    pub is_no_std: bool,
 }
 
 #[deprecated(note = "Use QueryPipeline::compile() instead")]

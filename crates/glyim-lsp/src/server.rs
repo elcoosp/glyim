@@ -13,7 +13,8 @@ pub async fn run_server(_log_file: Option<std::path::PathBuf>) {
         build_router(db.clone(), tx.clone(), peer_socket)
     });
 
-    let driver = AnalysisDriver::new(db, rx);
+    let cache_dir = std::env::temp_dir().join("glyim-lsp-incremental");
+    let driver = AnalysisDriver::new(db, rx, cache_dir);
     tokio::spawn(driver.run());
 
     let stdin = async_lsp::stdio::PipeStdin::lock_tokio().unwrap();

@@ -147,7 +147,9 @@ impl QueryPipeline {
         }
     }
 
-    pub fn compile(
+    #[allow(deprecated)]
+#[allow(deprecated)]
+pub fn compile(
         &mut self,
         source: &str,
         input_path: &Path,
@@ -202,6 +204,8 @@ impl QueryPipeline {
 }
 
 /// Compute a per-item fingerprint from the HIR.
+#[allow(deprecated)]
+#[allow(deprecated)]
 pub fn item_fingerprints(hir: &Hir, interner: &Interner) -> Vec<(String, Fingerprint)> {
     use glyim_hir::semantic_hash::semantic_hash_item;
     hir.items.iter().filter_map(|item| {

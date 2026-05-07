@@ -62,3 +62,20 @@ fn unused_function_called_no_warning() {
     let unused_fns: Vec<_> = diags.iter().filter(|d| d.lint_id == LintId("unused_function")).collect();
     assert!(unused_fns.is_empty(), "called function should not be reported as unused");
 }
+
+#[test]
+fn dead_code_after_return() {
+    let src = "fn main() { return 1; let x = 2; }";
+    let diags = lint_source(src);
+    let dead: Vec<_> = diags.iter().filter(|d| d.lint_id == LintId("dead_code")).collect();
+    assert_eq!(dead.len(), 1);
+    assert!(dead[0].message.contains("unreachable"));
+}
+
+#[test]
+fn no_dead_code_without_return() {
+    let src = "fn main() { let x = 1; x }";
+    let diags = lint_source(src);
+    let dead: Vec<_> = diags.iter().filter(|d| d.lint_id == LintId("dead_code")).collect();
+    assert!(dead.is_empty());
+}
