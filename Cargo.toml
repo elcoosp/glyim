@@ -30,6 +30,7 @@ members = ["crates/glyim-interner",
     "crates/glyim-profiler",
     "crates/glyim-bench",
     "crates/glyim-config",
+    "crates/glyim-coverage",
 ]
 
 [workspace.package]
