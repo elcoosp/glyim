@@ -67,14 +67,8 @@ fn bench_codegen(c: &mut Criterion) {
         let source = fixture.source.clone();
         group.bench_function(format!("{n}fn"), move |b| {
             b.iter(|| {
-                let parse_out = glyim_parse::parse(black_box(&source));
-                let mut interner = parse_out.interner;
-                let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-                let ctx = inkwell::context::Context::create();
-                let mut cg = glyim_codegen_llvm::CodegenBuilder::new(&ctx, interner, vec![])
-                    .build()
-                    .unwrap();
-                let _ = cg.generate(&hir);
+                // compile_to_ir does parse+lower+codegen internally
+                let _ = glyim_codegen_llvm::compile_to_ir(black_box(&source));
             });
         });
     }
