@@ -32,3 +32,7 @@ jemallocator = "0.5"
 [lib]
 name = "glyim_bench"
 path = "src/lib.rs"
+
+[[bench]]
+name = "bench_incremental"
+harness = false
