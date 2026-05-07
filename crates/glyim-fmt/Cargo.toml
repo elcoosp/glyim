@@ -15,4 +15,3 @@ glyim-lex = { path = "../glyim-lex" }
 glyim-syntax = { path = "../glyim-syntax" }
 
 [dev-dependencies]
-proptest = "1"
