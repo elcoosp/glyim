@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 ///
 /// Tracks source file hashes and the query context for memoized results.
 /// Persisted via postcard binary serialization.
+/// Current version of the incremental state format.
+/// Must be bumped when the layout of cached data changes.
+const CURRENT_VERSION: u32 = 1;
+
 pub struct IncrementalState {
     /// Directory for persistent storage.
     cache_dir: PathBuf,
@@ -24,9 +28,30 @@ impl IncrementalState {
     pub fn load_or_create(cache_dir: &Path) -> Self {
         let state_dir = cache_dir.join("incremental");
         let source_hashes_path = state_dir.join("source-hashes.bin");
+        let version_path = state_dir.join("version.bin");
+
+        // Check version; if mismatch, start fresh.
+        let saved_version: Option<u32> = if version_path.exists() {
+            std::fs::read(&version_path)
+                .ok()
+                .and_then(|bytes| postcard::from_bytes(&bytes).ok())
+        } else {
+            None
+        };
+        let should_reset = saved_version != Some(CURRENT_VERSION);
+        if should_reset {
+            tracing::warn!(
+                "Incremental state version mismatch (expected {}, got {:?}); clearing cache.",
+                CURRENT_VERSION,
+                saved_version,
+            );
+            // Remove old state
+            let _ = std::fs::remove_dir_all(&state_dir);
+            let _ = std::fs::create_dir_all(&state_dir);
+        }
 
         let source_hashes: HashMap<String, Fingerprint> =
-            if source_hashes_path.exists() {
+            if !should_reset && source_hashes_path.exists() {
                 let data =
                     std::fs::read(&source_hashes_path).unwrap_or_default();
                 postcard::from_bytes(&data).unwrap_or_default()
@@ -34,7 +59,11 @@ impl IncrementalState {
                 HashMap::new()
             };
 
-        let ctx = PersistenceLayer::load(&state_dir).unwrap_or_default();
+        let ctx = if should_reset {
+            QueryContext::new()
+        } else {
+            PersistenceLayer::load(&state_dir).unwrap_or_default()
+        };
 
         Self {
             cache_dir: state_dir,
@@ -134,6 +163,13 @@ impl IncrementalState {
     pub fn save(&self) -> Result<(), String> {
         std::fs::create_dir_all(&self.cache_dir)
             .map_err(|e| format!("create dir: {e}"))?;
+
+        // Save version
+        let version_path = self.cache_dir.join("version.bin");
+        let version_bytes = postcard::to_allocvec(&CURRENT_VERSION)
+            .map_err(|e| format!("serialize version: {e}"))?;
+        std::fs::write(&version_path, version_bytes)
+            .map_err(|e| format!("write version: {e}"))?;
 
         // Save source hashes
         let source_hashes_path =
