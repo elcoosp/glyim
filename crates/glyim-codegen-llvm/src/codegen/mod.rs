@@ -188,6 +188,7 @@ impl<'ctx> Codegen<'ctx> {
         let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full).ok();
         Ok(Self {
             coverage_mode: CoverageMode::Off,
+            coverage_counter: AtomicU32::new(0),
             context,
             module,
             builder,
@@ -234,6 +235,7 @@ impl<'ctx> Codegen<'ctx> {
             DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
         Ok(Self {
             coverage_mode: CoverageMode::Off,
+            coverage_counter: AtomicU32::new(0),
             context,
             module,
             builder,
