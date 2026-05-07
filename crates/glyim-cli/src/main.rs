@@ -64,7 +64,7 @@ enum Command {
         #[arg(long)]
         live: bool,
         #[arg(long)]
-        enable_coverage: bool,
+        coverage: bool,
         #[arg(long)]
         incremental: bool,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
@@ -98,7 +98,7 @@ enum Command {
         #[arg(long)]
         optimize: bool,
         #[arg(long)]
-        enable_coverage: bool,
+        coverage: bool,
         #[arg(long)]
         mutate: bool,
         #[arg(long)]
@@ -251,7 +251,7 @@ fn main() {
             target,
             debug: _,
             release,
-
+            coverage: _,
             live,
             incremental,
             remote_cache,
@@ -262,7 +262,7 @@ fn main() {
             live,
             incremental,
             remote_cache,
-            cli.enable_coverage,
+            cli.coverage,
         ),
         Command::Ir { input } => cmd_ir(input),
         Command::Check { input, incremental } => cmd_check(input, incremental),
