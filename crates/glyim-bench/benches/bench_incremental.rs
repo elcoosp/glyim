@@ -4,7 +4,6 @@ use glyim_compiler::queries::QueryPipeline;
 use glyim_compiler::pipeline::{PipelineConfig, run_jit};
 use std::time::Duration;
 
-// ── Full build scaling ──
 fn bench_full_build(c: &mut Criterion) {
     let mut group = c.benchmark_group("full_build");
     group.sample_size(10);
@@ -25,7 +24,6 @@ fn bench_full_build(c: &mut Criterion) {
     group.finish();
 }
 
-// ── Incremental edit ──
 fn bench_incremental_edit(c: &mut Criterion) {
     let mut group = c.benchmark_group("incremental");
     group.sample_size(10);
@@ -35,27 +33,31 @@ fn bench_incremental_edit(c: &mut Criterion) {
     let source = fixture.source.clone();
     let path = fixture.path.clone();
 
-    // Full build baseline
-    group.bench_function("full_build_100fn", |b| {
-        b.iter(|| {
-            let cache_dir = tempfile::tempdir().unwrap();
-            let mut qp = QueryPipeline::new(cache_dir.path(), PipelineConfig::default());
-            let _ = qp.compile(black_box(&source), black_box(&path));
-        });
+    group.bench_function("full_build_100fn", {
+        let src = source.clone();
+        let p = path.clone();
+        move |b| {
+            b.iter(|| {
+                let cache_dir = tempfile::tempdir().unwrap();
+                let mut qp = QueryPipeline::new(cache_dir.path(), PipelineConfig::default());
+                let _ = qp.compile(black_box(&src), black_box(&p));
+            })
+        }
     });
 
-    // Edit 1 function
     let edit1_source = source.replacen("fn fn_42", "fn fn_42_edited", 1);
-    group.bench_function("edit_1fn", move |b| {
+    group.bench_function("edit_1fn", {
         let src = edit1_source.clone();
-        b.iter(|| {
-            let cache_dir = tempfile::tempdir().unwrap();
-            let mut qp = QueryPipeline::new(cache_dir.path(), PipelineConfig::default());
-            let _ = qp.compile(black_box(&src), black_box(&path));
-        });
+        let p = path.clone();
+        move |b| {
+            b.iter(|| {
+                let cache_dir = tempfile::tempdir().unwrap();
+                let mut qp = QueryPipeline::new(cache_dir.path(), PipelineConfig::default());
+                let _ = qp.compile(black_box(&src), black_box(&p));
+            })
+        }
     });
 
-    // Edit 5 functions
     let edit5_source = {
         let mut s = source.clone();
         for i in &[10, 20, 30, 40, 50] {
@@ -65,19 +67,21 @@ fn bench_incremental_edit(c: &mut Criterion) {
         }
         s
     };
-    group.bench_function("edit_5fn", move |b| {
+    group.bench_function("edit_5fn", {
         let src = edit5_source.clone();
-        b.iter(|| {
-            let cache_dir = tempfile::tempdir().unwrap();
-            let mut qp = QueryPipeline::new(cache_dir.path(), PipelineConfig::default());
-            let _ = qp.compile(black_box(&src), black_box(&path));
-        });
+        let p = path.clone();
+        move |b| {
+            b.iter(|| {
+                let cache_dir = tempfile::tempdir().unwrap();
+                let mut qp = QueryPipeline::new(cache_dir.path(), PipelineConfig::default());
+                let _ = qp.compile(black_box(&src), black_box(&p));
+            })
+        }
     });
 
     group.finish();
 }
 
-// ── Parser throughput ──
 fn bench_parser(c: &mut Criterion) {
     let mut group = c.benchmark_group("parser");
     group.sample_size(20);
@@ -95,7 +99,6 @@ fn bench_parser(c: &mut Criterion) {
     group.finish();
 }
 
-// ── E‑graph optimization ──
 fn bench_egraph(c: &mut Criterion) {
     let mut group = c.benchmark_group("egraph");
     group.sample_size(20);
@@ -116,7 +119,6 @@ fn bench_egraph(c: &mut Criterion) {
     group.finish();
 }
 
-// ── JIT execute ──
 fn bench_jit_exec(c: &mut Criterion) {
     let mut group = c.benchmark_group("jit");
     group.sample_size(10);
