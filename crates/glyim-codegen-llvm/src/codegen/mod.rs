@@ -17,6 +17,7 @@ use inkwell::debug_info::{DISubprogram, DWARFEmissionKind};
 use inkwell::module::Module;
 use inkwell::types::IntType;
 use std::cell::RefCell;
+use std::sync::atomic::AtomicU32;
 use std::collections::HashMap;
 
 /// Controls the level of debug information emitted during codegen.
@@ -91,6 +92,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
 
         Ok(Codegen {
             coverage_mode: self.coverage_mode,
+            coverage_counter: AtomicU32::new(0),
             context: self.context,
             module,
             builder,
@@ -130,6 +132,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
 
 pub struct Codegen<'ctx> {
     pub(crate) coverage_mode: CoverageMode,
+    pub(crate) coverage_counter: std::sync::atomic::AtomicU32,
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: inkwell::builder::Builder<'ctx>,

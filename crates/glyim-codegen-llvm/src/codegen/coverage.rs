@@ -27,7 +27,7 @@ pub fn emit_coverage_globals<'ctx>(
 }
 
 /// Insert a counter increment at the beginning of a function.
-pub fn _instrument_function_entry<'ctx>(
+pub fn instrument_function_entry<'ctx>(
     module: &Module<'ctx>,
     function: FunctionValue<'ctx>,
     counter_index: u32,
