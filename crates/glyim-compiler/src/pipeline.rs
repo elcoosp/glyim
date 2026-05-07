@@ -315,34 +315,8 @@ pub(crate) fn compile_source_to_hir(
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mut mono_hir) =
+    let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-
-    // Compact the interner and remap all HIR symbols
-    interner.reset_ref_counts();
-    // Mark all symbols that appear in the HIR as referenced
-    {
-        let compact_hir = &hir;
-        let mono_compact = &mono_hir;
-        // Walk items and increment ref counts
-        fn mark_symbol(interner: &mut glyim_interner::Interner, ident: glyim_interner::Symbol) {
-            interner.increment_ref(ident);
-        }
-        // Simple walk to mark all symbols from both HIRs
-        for item in compact_hir.items.iter().chain(mono_compact.items.iter()) {
-            match item {
-                glyim_hir::HirItem::Fn(f) => mark_symbol(&mut interner, f.name),
-                glyim_hir::HirItem::Struct(s) => mark_symbol(&mut interner, s.name),
-                glyim_hir::HirItem::Enum(e) => mark_symbol(&mut interner, e.name),
-                glyim_hir::HirItem::Impl(i) => mark_symbol(&mut interner, i.target_name),
-                glyim_hir::HirItem::Extern(_) => {},
-            }
-        }
-    }
-    let mapping = interner.compact();
-    // Remap symbols in both HIRs
-    glyim_hir::remap_symbols_in_hir(&mut hir, &mapping);
-    glyim_hir::remap_symbols_in_hir(&mut mono_hir, &mapping);
 
     Ok(CompiledHir {
         hir,
