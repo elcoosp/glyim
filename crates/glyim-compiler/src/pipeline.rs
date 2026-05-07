@@ -2,6 +2,7 @@ use glyim_diag::diagnostic::Diagnostic;
 use glyim_profiler::ProfileCollector;
 use glyim_profiler::StageName;
 use glyim_codegen_llvm::runtime_shims;
+use glyim_codegen_llvm::codegen::CoverageMode;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
@@ -252,6 +253,7 @@ pub struct PipelineConfig {
     pub target: Option<String>,
     pub force_no_std: Option<bool>,
     pub jit_mode: bool,
+    pub coverage_mode: CoverageMode,
     pub cas_dir: std::path::PathBuf,
 }
 
@@ -262,6 +264,7 @@ impl Default for PipelineConfig {
             target: None,
             force_no_std: None,
             jit_mode: false,
+            coverage_mode: CoverageMode::Off,
             cas_dir: dirs_next::data_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas")),
         }

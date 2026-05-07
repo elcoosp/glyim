@@ -32,8 +32,7 @@ pub enum DebugMode {
 }
 
 /// Controls the level of coverage instrumentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum CoverageMode {
     /// No instrumentation (default).
     #[default]
@@ -52,9 +51,9 @@ pub struct CodegenBuilder<'ctx> {
     context: &'ctx Context,
     interner: Interner,
     expr_types: Vec<HirType>,
-    debug_mode: DebugMode,
-    source: Option<String>,
-    file_name: Option<String>,
+    pub(crate) debug_mode: DebugMode,
+    pub(crate) source: Option<String>,
+    pub(crate) file_name: Option<String>,
     pub(crate) library_mode: bool,
 }
 
@@ -122,6 +121,12 @@ impl<'ctx> CodegenBuilder<'ctx> {
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
         })
+    }
+
+    /// Set the coverage instrumentation mode.
+    pub fn with_coverage_mode(mut self, mode: CoverageMode) -> Self {
+        self.coverage_mode = mode;
+        self
     }
 
     pub fn with_library_mode(mut self) -> Self {
@@ -854,6 +859,12 @@ impl<'ctx> Codegen<'ctx> {
         self
     }
     /// Compile in library mode: no runtime shims and no main requirement.
+    /// Set the coverage instrumentation mode.
+    pub fn with_coverage_mode(mut self, mode: CoverageMode) -> Self {
+        self.coverage_mode = mode;
+        self
+    }
+
     pub fn with_library_mode(mut self) -> Self {
         self.library_mode = true;
         self
