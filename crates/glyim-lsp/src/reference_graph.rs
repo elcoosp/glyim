@@ -112,6 +112,13 @@ impl ReferenceGraph {
         }
     }
 
+    
+    /// Only for testing: insert a reference directly.
+    #[doc(hidden)]
+    pub fn insert_test_reference(&mut self, name: &str, reference: Reference) {
+        self.references.entry(name.to_string()).or_default().push(reference);
+    }
+
     pub fn find_references(&self, symbol_name: &str) -> &[Reference] {
         self.references.get(symbol_name).map(|v| v.as_slice()).unwrap_or(&[])
     }

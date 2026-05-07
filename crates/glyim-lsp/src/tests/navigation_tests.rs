@@ -1,6 +1,6 @@
 use crate::database::AnalysisDatabase;
 use crate::navigation::{goto_definition, find_references, document_symbols};
-use crate::reference_graph::{ReferenceGraph, Reference, ReferenceKind};
+use crate::reference_graph::{Reference, ReferenceKind};
 use crate::symbol_index::{SymbolInfo, SymbolKind, DefinitionLocation, TypeSignature};
 use glyim_diag::{FileId, Span, SourceMap};
 use std::path::PathBuf;
@@ -34,15 +34,13 @@ fn make_test_db() -> (AnalysisDatabase, FileId) {
     }
     {
         let mut refs = db.reference_graph.write();
-        let mut graph = ReferenceGraph::new();
-        graph.references.insert("add".into(), vec![
-            Reference {
-                file_id,
-                span: Span::new(0, 3),
-                is_definition: true,
-                kind: ReferenceKind::Call,
-            },
-        ]);
+        let mut graph = crate::reference_graph::ReferenceGraph::new();
+        graph.insert_test_reference("add", Reference {
+            file_id,
+            span: Span::new(0, 3),
+            is_definition: true,
+            kind: ReferenceKind::Call,
+        });
         *refs = graph;
     }
     (db, file_id)
@@ -52,6 +50,7 @@ fn make_test_db() -> (AnalysisDatabase, FileId) {
 fn goto_definition_works() {
     let (db, file_id) = make_test_db();
     let file_map = db.file_map.read();
+    let file_id = file_id; // use it to keep compiler happy if needed
     let params = GotoDefinitionParams {
         text_document_position_params: TextDocumentPositionParams {
             text_document: TextDocumentIdentifier {
