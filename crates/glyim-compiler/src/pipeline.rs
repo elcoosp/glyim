@@ -701,8 +701,8 @@ pub fn run_jit_safe(source: &str) -> Result<i32, String> {
         CRASHED.store(true, Ordering::SeqCst);
     }
     unsafe {
-        let old = libc::signal(libc::SIGSEGV, handler as libc::sighandler_t);
-        let _ = libc::signal(libc::SIGBUS, handler as libc::sighandler_t);
+        let old = libc::signal(libc::SIGSEGV, handler as *const () as libc::sighandler_t);
+        let _ = libc::signal(libc::SIGBUS, handler as *const () as libc::sighandler_t);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             super::run_jit(source)
         }));
