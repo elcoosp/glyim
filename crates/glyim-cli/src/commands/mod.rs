@@ -41,3 +41,5 @@ pub use cmd_macro_inspect::*;
 
 mod cmd_fmt;
 pub use cmd_fmt::*;
+mod cmd_coverage;
+pub use cmd_coverage::*;
