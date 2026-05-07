@@ -109,6 +109,10 @@ pub enum RedReason {
 }
 
 /// Orchestrates the query-driven incremental compilation pipeline.
+/// The query-driven incremental compilation pipeline.
+///
+/// # Stability
+/// *Stable.*
 pub struct QueryPipeline {
     ctx: QueryContext,
     #[allow(dead_code)]

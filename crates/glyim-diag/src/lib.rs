@@ -23,6 +23,10 @@ pub static MACRO_EXPANSION_TABLE: LazyLock<Mutex<Vec<MacroExpansion>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+/// A byte-offset range in a source file.
+///
+/// # Stability
+/// *Stable.*
 pub struct Span {
     /// The file this span belongs to (None for spans created before Phase 7 migration).
     pub file_id: Option<FileId>,

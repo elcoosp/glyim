@@ -13,6 +13,10 @@ use inkwell::context::Context;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{fs, process::Command};
+/// The build mode for compilation.
+///
+/// # Stability
+/// *Stable.*
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
     #[default]
@@ -147,6 +151,10 @@ pub(crate) fn merge_mono_types(
     (merged, mono_result.hir)
 }
 
+/// Compile a Glyim source file into an executable binary.
+///
+/// # Stability
+/// *Stable.*
 #[tracing::instrument(name = "build", skip_all)]
 pub fn build(
     input: &Path,
@@ -1015,6 +1023,10 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
 }
 
 
+/// Execute source code via JIT compilation and return its exit code.
+///
+/// # Stability
+/// *Stable.*
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
