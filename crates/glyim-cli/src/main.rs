@@ -22,7 +22,11 @@ struct Cli {
     tree: bool,
     #[arg(long = "profile", global = true, help = "Print stage timings")]
     profile: bool,
-    #[arg(long = "coverage", global = true, help = "Enable coverage instrumentation")]
+    #[arg(
+        long = "coverage",
+        global = true,
+        help = "Enable coverage instrumentation"
+    )]
     coverage: bool,
     #[command(subcommand)]
     command: Command,
@@ -43,7 +47,7 @@ enum Command {
         #[arg(long)]
         bare: bool,
         #[arg(long)]
-        enable_coverage: bool,
+        coverage: bool,
         #[arg(long)]
         incremental: bool,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
@@ -251,7 +255,15 @@ fn main() {
             live,
             incremental,
             remote_cache,
-        } => cmd_run(input, target, release, live, incremental, remote_cache, cli.enable_coverage),
+        } => cmd_run(
+            input,
+            target,
+            release,
+            live,
+            incremental,
+            remote_cache,
+            cli.enable_coverage,
+        ),
         Command::Ir { input } => cmd_ir(input),
         Command::Check { input, incremental } => cmd_check(input, incremental),
         Command::Init { name } => cmd_init(name),
