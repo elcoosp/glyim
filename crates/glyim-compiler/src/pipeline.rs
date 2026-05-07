@@ -254,6 +254,7 @@ pub struct PipelineConfig {
     pub force_no_std: Option<bool>,
     pub jit_mode: bool,
     pub coverage_mode: CoverageMode,
+    pub coverage_output: Option<std::path::PathBuf>,
     pub cas_dir: std::path::PathBuf,
 }
 
@@ -265,6 +266,7 @@ impl Default for PipelineConfig {
             force_no_std: None,
             jit_mode: false,
             coverage_mode: CoverageMode::Off,
+            coverage_output: None,
             cas_dir: dirs_next::data_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from(".glyim/cas")),
         }

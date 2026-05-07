@@ -129,3 +129,74 @@ pub fn instrument_function_entry<'ctx>(
     let incremented = builder.build_int_add(current, i64_type.const_int(1, false), "cov_inc").unwrap();
     builder.build_store(counter_ptr, incremented).unwrap();
 }
+
+pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
+    if cg.coverage_mode == CoverageMode::Off {
+        return;
+    }
+    let module = &cg.module;
+    let counters_global = match module.get_global("__glyim_cov_counts") {
+        Some(g) => g,
+        None => return,
+    };
+    let dump_global = match module.get_global("__glyim_cov_dump") {
+        Some(g) => g,
+        None => return,
+    };
+    let flush_fn = module.get_function("glyim_cov_flush_impl").unwrap_or_else(|| {
+        let ctx = module.get_context();
+        let void_type = ctx.void_type();
+        let i64_type = ctx.i64_type();
+        let ptr_type = ctx.ptr_type(inkwell::AddressSpace::from(0u16));
+        let fn_type = void_type.fn_type(&[
+            ptr_type.into(),    // counters: *const i64
+            i64_type.into(),    // counters_len: u64
+            ptr_type.into(),    // dump_json: *const u8
+            i64_type.into(),    // dump_json_len: u64
+            ptr_type.into(),    // out_path: *const u8
+        ], false);
+        module.add_function("glyim_cov_flush_impl", fn_type, None)
+    });
+
+    let builder = &cg.builder;
+    let i64_type = cg.i64_type;
+    let counters_ptr = counters_global.as_pointer_value();
+    // Cast to *const i64
+    let counters_len = match cg.coverage_instrumenter.as_ref() {
+        Some(instr) => i64_type.const_int(instr.counter_id, false),
+        None => i64_type.const_int(0, false),
+    };
+    let dump_ptr = dump_global.as_pointer_value();
+    let dump_len = {
+        let arr_type = dump_global.get_value_type();
+        let size = arr_type.size_of().unwrap_or(i64_type.const_int(0, false));
+        size
+    };
+    let out_path_ptr = {
+        let path = std::env::var("GLYIM_COV_FILE").unwrap_or_else(|_| "glyim-cov.json".to_string());
+        let path_bytes = format!("{}\0", path);
+        let bytes = path_bytes.as_bytes();
+        let i8_type = cg.context.i8_type();
+        let arr_type = i8_type.array_type(bytes.len() as u32);
+        let global = module.add_global(arr_type, Some(inkwell::AddressSpace::from(0u16)), "cov_out_path");
+        let elems: Vec<_> = bytes.iter().map(|&b| i8_type.const_int(b as u64, false)).collect();
+        let const_array = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
+        global.set_initializer(&const_array);
+        global.set_constant(true);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        let zero = cg.i32_type.const_int(0, false);
+        unsafe { cg.builder.build_gep(arr_type, global.as_pointer_value(), &[zero, zero], "cov_path_ptr") }.unwrap()
+    };
+
+    let _ = builder.build_call(
+        flush_fn,
+        &[
+            counters_ptr.into(),
+            counters_len.into(),
+            dump_ptr.into(),
+            dump_len.into(),
+            out_path_ptr.into(),
+        ],
+        "cov_flush",
+    );
+}
