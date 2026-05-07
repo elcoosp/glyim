@@ -1,4 +1,6 @@
 use glyim_diag::diagnostic::Diagnostic;
+use glyim_profiler::ProfileCollector;
+use glyim_profiler::StageName;
 use glyim_codegen_llvm::runtime_shims;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
 use glyim_hir::ExprId;
@@ -181,6 +183,7 @@ pub fn build(
     output: Option<&Path>,
     target: Option<&str>,
 ) -> Result<PathBuf, PipelineError> {
+    ProfileCollector::enter_stage(StageName::Parse);
     let (source, _) = load_source_with_prelude(input)?;
     let config = PipelineConfig {
         target: target.map(|s| s.to_string()),
@@ -221,6 +224,7 @@ pub fn build(
         .write_object_file(&obj_path)
         .map_err(PipelineError::Codegen)?;
     link_object(&obj_path, &output_path, false)?;
+    ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
     Ok(output_path)
 }
 const PRELUDE: &str = "\
@@ -372,7 +376,10 @@ fn execute_jit(
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
             .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
-        Ok(main_fn.call())
+        let exit_code = main_fn.call();
+        ProfileCollector::exit_stage(StageName::Codegen, 1, 0, 0);
+        ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
+        Ok(exit_code)
     }
 }
 
@@ -895,6 +902,7 @@ pub fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, 
     let obj_bytes = fs::read(&obj_path)?;
     cas.store(&obj_bytes);
     link_object(&obj_path, &output_path, false)?;
+    ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
     Ok(output_path)
 }
 fn which(cmd: &str) -> bool {
@@ -1047,7 +1055,13 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
 ///
 /// # Stability
 /// *Stable.*
+/// Execute source code via JIT compilation and return its exit code.
+///
+/// # Stability
+/// *Stable.*
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
+    ProfileCollector::enter_stage(StageName::Parse);
+    ProfileCollector::enter_stage(StageName::Codegen);
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Parse(parse_out.errors));
@@ -1089,6 +1103,9 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
         let main_fn = engine
             .get_function::<unsafe extern "C" fn() -> i32>("main")
             .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
-        Ok(main_fn.call())
+        let exit_code = main_fn.call();
+        ProfileCollector::exit_stage(StageName::Codegen, 1, 0, 0);
+        ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
+        Ok(exit_code)
     }
 }

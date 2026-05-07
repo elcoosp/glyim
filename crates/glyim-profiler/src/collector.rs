@@ -63,7 +63,7 @@ impl ProfileCollector {
             let mut c = c.borrow_mut();
             if !c.enabled { return; }
             if let Some(start) = c.stage_starts.remove(&stage) {
-                let duration = start.elapsed();
+                let duration: Duration = start.elapsed();
                 c.profile.stages.insert(stage, StageProfile {
                     duration,
                     items_processed: items,
@@ -94,7 +94,7 @@ impl ProfileCollector {
     pub fn finish() -> CompilationProfile {
         COLLECTOR.with(|c| {
             let mut c = c.borrow_mut();
-            c.profile.total_duration = c.profile.started_at.signed_duration_since(chrono::Utc::now()).to_std().unwrap_or_default();
+            c.profile.total_duration = Instant::now().duration_since(Instant::now() - c.profile.total_duration);
             c.profile.clone()
         })
     }

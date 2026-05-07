@@ -27,6 +27,7 @@ members = ["crates/glyim-interner",
     "crates/glyim-orchestrator",
     "crates/glyim-mutant",
     "crates/glyim-lsp",
+    "crates/glyim-profiler",
     "crates/glyim-bench",
     "crates/glyim-config",
 ]

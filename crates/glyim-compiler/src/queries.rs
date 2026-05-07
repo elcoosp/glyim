@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use glyim_profiler::ProfileCollector;
+
 use crate::pipeline::{
     CompiledHir, PipelineConfig, PipelineError,
     compile_source_to_hir,
@@ -108,22 +110,16 @@ pub enum RedReason {
     RuleSetUpdated,
 }
 
-/// Orchestrates the query-driven incremental compilation pipeline.
 /// The query-driven incremental compilation pipeline.
 ///
 /// # Stability
 /// *Stable.*
 pub struct QueryPipeline {
     ctx: QueryContext,
-    #[allow(dead_code)]
-    #[allow(dead_code)]
-    #[allow(dead_code)]
     pub(crate) cache_dir: PathBuf,
     state: IncrementalState,
     config: PipelineConfig,
     report: IncrementalReport,
-    #[allow(dead_code)]
-    #[allow(dead_code)]
     pub(crate) merkle_store: Option<Arc<MerkleStore>>,
 }
 
@@ -136,7 +132,7 @@ impl QueryPipeline {
         let ctx = QueryContext::new();
         let merkle_store = glyim_macro_vfs::LocalContentStore::new(cache_dir.join("artifacts"))
             .ok()
-            .map(|store| { #[allow(clippy::arc_with_non_send_sync)] { Arc::new(MerkleStore::new(Arc::new(store))) } });
+            .map(|store| { Arc::new(MerkleStore::new(Arc::new(store))) });
         Self {
             ctx,
             cache_dir: cache_dir.to_path_buf(),
@@ -147,13 +143,12 @@ impl QueryPipeline {
         }
     }
 
-    #[allow(deprecated)]
-#[allow(deprecated)]
-pub fn compile(
+    pub fn compile(
         &mut self,
         source: &str,
         input_path: &Path,
     ) -> Result<CompiledHir, PipelineError> {
+        ProfileCollector::enter_stage(glyim_profiler::StageName::Parse);
         let start = Instant::now();
         self.report = IncrementalReport::default();
 
@@ -168,16 +163,23 @@ pub fn compile(
             self.report.cache_hits += 1;
             self.report.total_elapsed = start.elapsed();
             self.report.was_full_rebuild = false;
+            ProfileCollector::exit_stage(glyim_profiler::StageName::Parse, 1, 1, 0);
+            // Return a dummy CompiledHir (quick path, data not used)
+            // For safety, fall through to compile_source_to_hir
         } else {
             self.report.was_full_rebuild = true;
             self.state.record_source(&input_str, source_fp);
         }
+        ProfileCollector::exit_stage(glyim_profiler::StageName::Parse, 1, 0, 1);
+        ProfileCollector::enter_stage(glyim_profiler::StageName::TypeCheck);
 
         let compiled = compile_source_to_hir(
             source.to_string(),
             input_path,
             &self.config,
         )?;
+
+        ProfileCollector::exit_stage(glyim_profiler::StageName::TypeCheck, 1, 0, 0);
 
         self.ctx.insert(
             module_key,
@@ -204,8 +206,6 @@ pub fn compile(
 }
 
 /// Compute a per-item fingerprint from the HIR.
-#[allow(deprecated)]
-#[allow(deprecated)]
 pub fn item_fingerprints(hir: &Hir, interner: &Interner) -> Vec<(String, Fingerprint)> {
     use glyim_hir::semantic_hash::semantic_hash_item;
     hir.items.iter().filter_map(|item| {

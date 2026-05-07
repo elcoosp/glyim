@@ -1957,6 +1957,7 @@ dependencies = [
  "glyim-mutant",
  "glyim-orchestrator",
  "glyim-parse",
+ "glyim-profiler",
  "glyim-query",
  "glyim-typeck",
  "jemalloc-ctl",
@@ -2120,6 +2121,7 @@ dependencies = [
  "glyim-merkle",
  "glyim-parse",
  "glyim-pkg",
+ "glyim-profiler",
  "glyim-query",
  "glyim-typeck",
  "hex",
@@ -2377,6 +2379,14 @@ dependencies = [
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "wiremock",
+]
+
+[[package]]
+name = "glyim-profiler"
+version = "0.5.0"
+dependencies = [
+ "chrono",
+ "serde",
 ]
 
 [[package]]
