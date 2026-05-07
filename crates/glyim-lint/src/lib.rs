@@ -519,6 +519,8 @@ fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut 
 fn is_terminal(expr: &HirExpr) -> bool {
     match expr {
         HirExpr::Return { .. } => true,
+        // `return expr` is lowered to Unary(Not, expr) – treat as terminal
+        HirExpr::Unary { op: glyim_hir::HirUnOp::Not, .. } => true,
         HirExpr::Block { stmts, .. } => stmts.iter().any(|s| match s {
             HirStmt::Expr(e) => is_terminal(e),
             _ => false,
