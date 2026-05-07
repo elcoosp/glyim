@@ -21,7 +21,7 @@ glyim-merkle = { path = "../glyim-merkle" }
 glyim-orchestrator = { path = "../glyim-orchestrator" }
 glyim-mutant = { path = "../glyim-mutant" }
 glyim-lsp = { path = "../glyim-lsp" }
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }

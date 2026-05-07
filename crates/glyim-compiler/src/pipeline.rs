@@ -465,7 +465,7 @@ pub fn build_incremental(
     let tmp_dir = tempfile::tempdir()?;
     let obj_path = tmp_dir.path().join("output.o");
     let context = inkwell::context::Context::create();
-    let cov_mode = config.coverage_mode;
+    let cov_mode = CoverageMode::Off;
     let mut codegen = CodegenBuilder::new(
         &context,
         compiled.interner.clone(),

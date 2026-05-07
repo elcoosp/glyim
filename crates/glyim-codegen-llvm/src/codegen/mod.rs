@@ -138,11 +138,11 @@ impl<'ctx> CodegenBuilder<'ctx> {
 pub struct Codegen<'ctx> {
     coverage_mode: CoverageMode,
     coverage_counter: std::sync::atomic::AtomicU32,
-    context: &'ctx Context,
-    module: Module<'ctx>,
-    builder: inkwell::builder::Builder<'ctx>,
-    i64_type: IntType<'ctx>,
-    i32_type: IntType<'ctx>,
+    pub(crate) context: &'ctx Context,
+    pub(crate) module: Module<'ctx>,
+    pub(crate) builder: inkwell::builder::Builder<'ctx>,
+    pub(crate) i64_type: IntType<'ctx>,
+    pub(crate) i32_type: IntType<'ctx>,
     #[allow(dead_code)]
     f64_type: inkwell::types::FloatType<'ctx>,
     interner: Interner,

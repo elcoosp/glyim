@@ -9,8 +9,7 @@ fn coverage_instrumentation_emits_counter_increment() {
     let mut interner = parse_out.interner;
     let hir = lower(&parse_out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
-    let mut builder = CodegenBuilder::new(&ctx, interner, vec![]);
-    builder.coverage_mode = CoverageMode::Function;
+    let builder = CodegenBuilder::new(&ctx, interner, vec![]).with_coverage_mode(CoverageMode::Function);
     let mut cg = builder.build().expect("codegen build");
     cg.generate(&hir).expect("codegen generate");
     let ir = cg.ir_string();
