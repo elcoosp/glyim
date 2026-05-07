@@ -2,6 +2,33 @@ use crate::{Hir, HirExpr, HirStmt, HirItem, HirFn, HirPattern, HirType};
 use glyim_interner::Symbol;
 use std::collections::{HashMap, HashSet};
 
+/// Apply a symbol mapping to a HirType, recursively remapping all embedded symbols.
+pub fn remap_type(ty: &HirType, mapping: &HashMap<Symbol, Symbol>) -> HirType {
+    match ty {
+        HirType::Named(sym) => HirType::Named(remap_sym(*sym, mapping)),
+        HirType::Generic(sym, args) => {
+            HirType::Generic(
+                remap_sym(*sym, mapping),
+                args.iter().map(|a| remap_type(a, mapping)).collect(),
+            )
+        }
+        HirType::Tuple(elems) => HirType::Tuple(elems.iter().map(|e| remap_type(e, mapping)).collect()),
+        HirType::RawPtr(inner) => HirType::RawPtr(Box::new(remap_type(inner, mapping))),
+        HirType::Option(inner) => HirType::Option(Box::new(remap_type(inner, mapping))),
+        HirType::Result(ok, err) => HirType::Result(
+            Box::new(remap_type(ok, mapping)),
+            Box::new(remap_type(err, mapping)),
+        ),
+        HirType::Func(params, ret) => HirType::Func(
+            params.iter().map(|p| remap_type(p, mapping)).collect(),
+            Box::new(remap_type(ret, mapping)),
+        ),
+        HirType::Opaque(sym) => HirType::Opaque(remap_sym(*sym, mapping)),
+        other => other.clone(),
+    }
+}
+
+
 /// Walk the entire HIR and replace every `Symbol` with the given mapping.
 pub fn remap_symbols_in_hir(hir: &mut Hir, mapping: &HashMap<Symbol, Symbol>) {
     for item in &mut hir.items {
@@ -14,6 +41,12 @@ pub fn collect_all_symbols(hir: &Hir, symbols: &mut HashSet<Symbol>) {
     for item in &hir.items {
         collect_item(item, &mut |sym| { symbols.insert(sym); });
     }
+}
+
+
+/// Collect all symbols referenced in a type into a set.
+pub fn collect_symbols_from_type(ty: &HirType, symbols: &mut HashSet<Symbol>) {
+    for_each_type(ty, &mut |sym| { symbols.insert(sym); });
 }
 
 // -- private helpers --
@@ -56,7 +89,7 @@ fn for_each_fn<F: FnMut(Symbol)>(fn_def: &HirFn, f: &mut F) {
     for_each_expr(&fn_def.body, f);
 }
 
-fn for_each_type<F: FnMut(Symbol)>(ty: &HirType, f: &mut F) {
+pub(crate) fn for_each_type<F: FnMut(Symbol)>(ty: &HirType, f: &mut F) {
     match ty {
         HirType::Named(sym) => f(*sym),
         HirType::Generic(sym, args) => {

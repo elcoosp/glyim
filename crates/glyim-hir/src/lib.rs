@@ -19,7 +19,7 @@ pub mod dependency_names;
 pub mod normalize;
 pub mod semantic_hash;
 pub mod remap_symbols;
-pub use remap_symbols::remap_symbols_in_hir;
+pub use remap_symbols::{remap_symbols_in_hir, remap_type, collect_symbols_from_type};
 pub mod effects;
 
 #[cfg(test)]
