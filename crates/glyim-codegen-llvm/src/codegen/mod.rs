@@ -485,6 +485,15 @@ impl<'ctx> Codegen<'ctx> {
         let num_fns = hir.items.iter().filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_))).count();
         if self.coverage_mode != CoverageMode::Off && num_fns > 0 {
             coverage::emit_coverage_globals(&self.module, num_fns, self.coverage_mode);
+            if let Some(ref instr) = self.coverage_instrumenter {
+                if let Err(e) = coverage::emit_coverage_dump_global(
+                    &self.module,
+                    instr,
+                    self.source_str.as_deref().unwrap_or("unknown"),
+                ) {
+                    self.report_error(e);
+                }
+            }
         }
 
         // Pass 3 — emit bodies (all forward declarations already present)
