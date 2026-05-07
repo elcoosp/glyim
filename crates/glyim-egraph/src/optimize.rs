@@ -34,15 +34,29 @@ pub fn optimize_fn(
     let root = hir_expr_to_egraph(&mut egraph, &hir_fn.body, interner, types, &mut type_map);
 
     let rules = core_rewrites();
-    let runner = Runner::<GlyimLang, GlyimAnalysis, ()>::new(GlyimAnalysis::default())
+    let memory_budget = config.memory_budget.clone();
+    let hook = move |runner: &mut Runner<GlyimLang, GlyimAnalysis, ()>| -> Result<(), String> {
+        let approx_memory = (runner.egraph.total_number_of_nodes() as usize) * 100;
+        if approx_memory > memory_budget {
+            return Err(format!(
+                "e-graph memory budget exceeded: {} MB > {} MB",
+                approx_memory / (1024 * 1024),
+                memory_budget / (1024 * 1024)
+            ));
+        }
+        Ok(())
+    };
+
+    let report = Runner::<GlyimLang, GlyimAnalysis, ()>::new(GlyimAnalysis::default())
         .with_iter_limit(config.iter_limit)
         .with_node_limit(config.node_limit)
         .with_time_limit(std::time::Duration::from_millis(config.time_limit_ms))
+        .with_hook(hook)
         .with_egraph(egraph)
         .run(&rules);
 
-    // Check if we exceeded the memory budget (estimated by node count * 100 bytes)
-    let approx_memory = (runner.egraph.total_number_of_nodes() as usize) * 100;
+    let egraph_after = report.egraph;
+    let approx_memory = (egraph_after.total_number_of_nodes() as usize) * 100;
     if approx_memory > config.memory_budget {
         tracing::warn!(
             "E-graph memory budget exceeded ({} MB > {} MB), using partial results",
@@ -50,10 +64,9 @@ pub fn optimize_fn(
             config.memory_budget / (1024 * 1024)
         );
     }
-
-    let _best = crate::extract::extract_best(&runner.egraph, root);
+    let _best = crate::extract::extract_best(&egraph_after, root);
     let mut next_id = 1000;
-    let optimized_body = egraph_to_hir_expr(&runner.egraph, root, &mut Interner::new(), &mut next_id);
+    let optimized_body = egraph_to_hir_expr(&egraph_after, root, &mut Interner::new(), &mut next_id);
 
     HirFn {
         body: optimized_body,
