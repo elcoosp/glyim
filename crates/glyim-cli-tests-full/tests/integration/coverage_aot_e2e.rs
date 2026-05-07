@@ -28,7 +28,7 @@ fn coverage_aot_run_produces_dump() {
     ).expect("build should succeed");
 
     let mut cmd = Command::new(&bin);
-    cmd.env("GLYIM_COV_FILE", &cov_path);
+    cmd.current_dir(&dir);
     let status = cmd.status().expect("binary execution failed");
     assert!(status.success(), "binary should exit successfully");
     assert!(cov_path.exists(), "coverage file should exist");
