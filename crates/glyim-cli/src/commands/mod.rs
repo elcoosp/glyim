@@ -38,3 +38,6 @@ mod cmd_lsp;
 pub use cmd_lsp::*;
 mod cmd_macro_inspect;
 pub use cmd_macro_inspect::*;
+
+mod cmd_fmt;
+pub use cmd_fmt::*;
