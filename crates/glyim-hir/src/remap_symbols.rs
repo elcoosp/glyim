@@ -71,6 +71,7 @@ fn for_each_type<F: FnMut(Symbol)>(ty: &HirType, f: &mut F) {
             for p in params { for_each_type(p, f); }
             for_each_type(ret, f);
         }
+        HirType::Opaque(sym) => f(*sym),
         _ => {}
     }
 }
@@ -109,8 +110,9 @@ fn for_each_expr<F: FnMut(Symbol)>(expr: &HirExpr, f: &mut F) {
             if let Some(m) = message { for_each_expr(m, f); }
         }
         HirExpr::Call { callee, args, .. } => { f(*callee); for a in args { for_each_expr(a, f); } }
-        HirExpr::MethodCall { receiver, method_name, args, .. } => {
+        HirExpr::MethodCall { receiver, method_name, resolved_callee, args, .. } => {
             for_each_expr(receiver, f); f(*method_name);
+            if let Some(callee) = resolved_callee { f(*callee); }
             for a in args { for_each_expr(a, f); }
         }
         HirExpr::Match { scrutinee, arms, .. } => {

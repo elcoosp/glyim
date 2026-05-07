@@ -315,24 +315,10 @@ pub(crate) fn compile_source_to_hir(
 
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mut mono_hir) =
+    let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
 
 
-    // ----- Interner compaction with complete symbol marking -----
-    {
-        use glyim_hir::remap_symbols::collect_all_symbols;
-        let mut all_symbols = std::collections::HashSet::new();
-        collect_all_symbols(&hir, &mut all_symbols);
-        collect_all_symbols(&mono_hir, &mut all_symbols);
-        interner.reset_ref_counts();
-        for sym in all_symbols {
-            interner.increment_ref(sym);
-        }
-        let mapping = interner.compact();
-        glyim_hir::remap_symbols_in_hir(&mut hir, &mapping);
-        glyim_hir::remap_symbols_in_hir(&mut mono_hir, &mapping);
-    }
     Ok(CompiledHir {
         hir,
         mono_hir,
