@@ -502,7 +502,7 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
-        self.emit_macro_debug_section();
+self.emit_macro_debug_section();
         if let Some(ref di) = self.debug_info {
             di.finalize();
         }

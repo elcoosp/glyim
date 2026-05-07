@@ -695,7 +695,12 @@ pub fn build_with_mode(
     codegen
         .write_object_file_with_opt(&obj_path, mode.opt_level())
         .map_err(PipelineError::Codegen)?;
-    link_object(&obj_path, &output_path, mode == BuildMode::Release)?;
+    let cov_lib = if coverage {
+        find_coverage_rt_lib()
+    } else {
+        None
+    };
+    link_object_with_coverage(&obj_path, &output_path, mode == BuildMode::Release, cov_lib.as_deref())?;
     Ok(output_path)
 }
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
@@ -807,7 +812,28 @@ pub fn run_package(
     run_with_mode(&main_path, mode, target, force_no_std)
 }
 
+
+fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
+    let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf());
+    if let Some(workspace_root) = workspace_root {
+        let target_dir = workspace_root.join("target");
+        for profile in &["debug", "release"] {
+            let path = target_dir.join(profile).join("libglyim_coverage_rt.a");
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
 fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(), PipelineError> {
+    link_object_with_coverage(obj_path, output_path, use_lto, None)
+}
+
+fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool, coverage_lib: Option<&std::path::Path>) -> Result<(), PipelineError> {
     let linker = if which("cc") {
         "cc"
     } else if which("gcc") {
@@ -824,6 +850,9 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
         "-lc".into(),
         "-no-pie".into(),
     ];
+    if let Some(lib) = coverage_lib {
+        args.push(lib.as_os_str().into());
+    }
     if use_lto {
         args.push("-flto=thin".into());
     }
@@ -1110,3 +1139,5 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let config = PipelineConfig::default();
     run_jit_with_config(source, &config)
 }
+
+
