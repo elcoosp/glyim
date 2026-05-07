@@ -4,6 +4,7 @@ use glyim_diag::{FileId, SourceMap};
 use glyim_hir::Hir;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time;
 use parking_lot::RwLock;
 pub struct FileMap {
     path_to_id: HashMap<PathBuf, FileId>,
@@ -65,6 +66,7 @@ impl AnalysisDatabase {
             reference_graph: RwLock::new(ReferenceGraph::new()),
             hirs: RwLock::new(HashMap::new()),
             diagnostics: RwLock::new(HashMap::new()),
+            file_access_times: RwLock::new(HashMap::new()),
         }
     }
 
@@ -74,3 +76,48 @@ impl AnalysisDatabase {
     }
 
 }
+
+    /// Evict entries that have not been accessed within `max_age`.
+    pub fn evict_stale(&self, max_age: std::time::Duration) {
+        let now = std::time::Instant::now();
+        let mut stale_ids = Vec::new();
+        {
+            let access_times = self.file_access_times.read();
+            for (file_id, last_access) in access_times.iter() {
+                if now.duration_since(*last_access) > max_age {
+                    stale_ids.push(*file_id);
+                }
+            }
+        }
+        if stale_ids.is_empty() {
+            return;
+        }
+        // Remove stale entries
+        {
+            let mut hirs = self.hirs.write();
+            let mut source_maps = self.source_maps.write();
+            let mut diags = self.diagnostics.write();
+            let mut access_times = self.file_access_times.write();
+            for id in &stale_ids {
+                hirs.remove(id);
+                source_maps.remove(id);
+                diags.remove(id);
+                access_times.remove(id);
+            }
+        }
+        // Also remove from symbol index and reference graph
+        {
+            let mut sym_index = self.symbol_index.write();
+            let mut ref_graph = self.reference_graph.write();
+            for id in &stale_ids {
+                sym_index.clear_file(*id);
+                // Reference graph does not have a per-file clear method; we'll keep it as is
+            }
+        }
+    }
+
+    /// Record access to a file (call before LSP reads).
+    pub fn touch(&self, file_id: FileId) {
+        self.file_access_times.write().insert(file_id, std::time::Instant::now());
+    }
+
