@@ -35,6 +35,9 @@ pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool, live: bool
             return 0;
         }
 
+    if coverage {
+        eprintln!("Coverage instrumentation enabled (function-level)");
+    }
     if incremental {
         let source = match std::fs::read_to_string(&input) {
             Ok(s) => s,

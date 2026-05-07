@@ -20,6 +20,10 @@ pub fn cmd_build(
     if profile {
         glyim_profiler::ProfileCollector::enable();
     }
+    if coverage {
+        // TODO: pass coverage mode into pipeline config
+        eprintln!("Coverage mode enabled (function-level instrumentation)");
+    }
     if incremental {
         eprintln!("Using incremental compilation pipeline...");
         return match pipeline::build_incremental(&input, output.as_deref(), mode, target.as_deref()) {

@@ -13,3 +13,4 @@ pub mod micro_module_tests;
 pub mod live_tests;
 
 pub mod tiered_tests;
+pub mod coverage_tests;
