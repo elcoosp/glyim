@@ -137,3 +137,6 @@ impl std::fmt::Display for FormatError {
 }
 
 impl std::error::Error for FormatError {}
+
+#[cfg(test)]
+mod tests;
