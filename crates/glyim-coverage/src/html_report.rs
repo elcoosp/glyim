@@ -1,4 +1,4 @@
-use crate::data::{CoverageDump, LocationKind};
+use crate::data::CoverageDump;
 use std::collections::HashMap;
 
 pub fn generate_html_report(dump: &CoverageDump, source: &str, file_path: &str) -> String {

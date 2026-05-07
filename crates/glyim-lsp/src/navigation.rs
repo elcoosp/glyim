@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use crate::AnalysisDatabase;
 use crate::database::FileMap;
-use lsp_types::{*, Url};
 use glyim_diag::LineCol;
+use lsp_types::{Url, *};
+use std::collections::HashMap;
 
 pub fn goto_definition(
     db: &AnalysisDatabase,
@@ -35,8 +35,14 @@ pub fn goto_definition(
     Some(GotoDefinitionResponse::Scalar(Location {
         uri: target_uri,
         range: Range {
-            start: Position { line: start.line as u32, character: start.column as u32 },
-            end: Position { line: end.line as u32, character: end.column as u32 },
+            start: Position {
+                line: start.line as u32,
+                character: start.column as u32,
+            },
+            end: Position {
+                line: end.line as u32,
+                character: end.column as u32,
+            },
         },
     }))
 }
@@ -65,19 +71,28 @@ pub fn find_references(
     let ref_graph = db.reference_graph.read();
     let refs = ref_graph.find_references(&symbol.name);
 
-    let locations: Vec<Location> = refs.iter().filter_map(|r| {
-        let sm = source_maps.get(&r.file_id)?;
-        let (start, end) = sm.span_to_position(r.span.start, r.span.end)?;
-        let path = file_map.path(r.file_id)?;
-        let uri = Url::from_file_path(path).ok()?;
-        Some(Location {
-            uri,
-            range: Range {
-                start: Position { line: start.line as u32, character: start.column as u32 },
-                end: Position { line: end.line as u32, character: end.column as u32 },
-            },
+    let locations: Vec<Location> = refs
+        .iter()
+        .filter_map(|r| {
+            let sm = source_maps.get(&r.file_id)?;
+            let (start, end) = sm.span_to_position(r.span.start, r.span.end)?;
+            let path = file_map.path(r.file_id)?;
+            let uri = Url::from_file_path(path).ok()?;
+            Some(Location {
+                uri,
+                range: Range {
+                    start: Position {
+                        line: start.line as u32,
+                        character: start.column as u32,
+                    },
+                    end: Position {
+                        line: end.line as u32,
+                        character: end.column as u32,
+                    },
+                },
+            })
         })
-    }).collect();
+        .collect();
 
     Some(locations)
 }
@@ -98,7 +113,8 @@ pub fn document_symbols(
 
     let mut results = Vec::new();
     for sym in symbols {
-        let (start, end) = sm.span_to_position(sym.definition.span.start, sym.definition.span.end)?;
+        let (start, end) =
+            sm.span_to_position(sym.definition.span.start, sym.definition.span.end)?;
         results.push(DocumentSymbol {
             name: sym.name.clone(),
             kind: match sym.kind {
@@ -108,18 +124,34 @@ pub fn document_symbols(
                 _ => SymbolKind::VARIABLE,
             },
             range: Range {
-                start: Position { line: start.line as u32, character: start.column as u32 },
-                end: Position { line: end.line as u32, character: end.column as u32 },
+                start: Position {
+                    line: start.line as u32,
+                    character: start.column as u32,
+                },
+                end: Position {
+                    line: end.line as u32,
+                    character: end.column as u32,
+                },
             },
             selection_range: Range {
-                start: Position { line: start.line as u32, character: start.column as u32 },
-                end: Position { line: start.line as u32, character: start.column as u32 },
+                start: Position {
+                    line: start.line as u32,
+                    character: start.column as u32,
+                },
+                end: Position {
+                    line: start.line as u32,
+                    character: start.column as u32,
+                },
             },
             children: None,
             #[allow(deprecated)]
             deprecated: None,
             detail: sym.type_signature.as_ref().map(|ts| {
-                let params: Vec<String> = ts.params.iter().map(|(n, t)| format!("{}: {:?}", n, t)).collect();
+                let params: Vec<String> = ts
+                    .params
+                    .iter()
+                    .map(|(n, t)| format!("{}: {:?}", n, t))
+                    .collect();
                 format!("({})", params.join(", "))
             }),
             tags: None,
@@ -128,10 +160,7 @@ pub fn document_symbols(
     Some(DocumentSymbolResponse::Nested(results))
 }
 
-pub fn rename(
-    db: &AnalysisDatabase,
-    params: &RenameParams,
-) -> Option<WorkspaceEdit> {
+pub fn rename(db: &AnalysisDatabase, params: &RenameParams) -> Option<WorkspaceEdit> {
     let uri = &params.text_document_position.text_document.uri;
     let path = uri.to_file_path().ok()?;
     let file_id = db.file_map.read().get_by_path(&path)?;
@@ -159,8 +188,14 @@ pub fn rename(
         let uri = Url::from_file_path(path).ok()?;
         let edit = TextEdit {
             range: Range {
-                start: Position { line: start.line as u32, character: start.column as u32 },
-                end: Position { line: end.line as u32, character: end.column as u32 },
+                start: Position {
+                    line: start.line as u32,
+                    character: start.column as u32,
+                },
+                end: Position {
+                    line: end.line as u32,
+                    character: end.column as u32,
+                },
             },
             new_text: params.new_name.clone(),
         };
@@ -183,31 +218,42 @@ pub fn workspace_symbols(
     let source_maps = db.source_maps.read();
     let file_map = db.file_map.read();
 
-    let result = matches.iter().filter_map(|info| {
-        let sm = source_maps.get(&info.definition.file_id)?;
-        let (start, _) = sm.span_to_position(info.definition.span.start, info.definition.span.end)?;
-        let path = file_map.path(info.definition.file_id)?;
-        let uri = Url::from_file_path(path).ok()?;
-        Some(SymbolInformation {
-            name: info.name.clone(),
-            kind: match info.kind {
-                crate::symbol_index::SymbolKind::Function => SymbolKind::FUNCTION,
-                crate::symbol_index::SymbolKind::Struct => SymbolKind::STRUCT,
-                crate::symbol_index::SymbolKind::Enum => SymbolKind::ENUM,
-                _ => SymbolKind::VARIABLE,
-            },
-            location: Location {
-                uri,
-                range: Range {
-                    start: Position { line: start.line as u32, character: start.column as u32 },
-                    end: Position { line: start.line as u32, character: start.column as u32 + 1 },
+    let result = matches
+        .iter()
+        .filter_map(|info| {
+            let sm = source_maps.get(&info.definition.file_id)?;
+            let (start, _) =
+                sm.span_to_position(info.definition.span.start, info.definition.span.end)?;
+            let path = file_map.path(info.definition.file_id)?;
+            let uri = Url::from_file_path(path).ok()?;
+            Some(SymbolInformation {
+                name: info.name.clone(),
+                kind: match info.kind {
+                    crate::symbol_index::SymbolKind::Function => SymbolKind::FUNCTION,
+                    crate::symbol_index::SymbolKind::Struct => SymbolKind::STRUCT,
+                    crate::symbol_index::SymbolKind::Enum => SymbolKind::ENUM,
+                    _ => SymbolKind::VARIABLE,
                 },
-            },
-            container_name: None,
-            deprecated: None,
-            tags: None,
+                location: Location {
+                    uri,
+                    range: Range {
+                        start: Position {
+                            line: start.line as u32,
+                            character: start.column as u32,
+                        },
+                        end: Position {
+                            line: start.line as u32,
+                            character: start.column as u32 + 1,
+                        },
+                    },
+                },
+                container_name: None,
+                #[allow(deprecated)]
+                deprecated: None,
+                tags: None,
+            })
         })
-    }).collect();
+        .collect();
 
     Some(result)
 }

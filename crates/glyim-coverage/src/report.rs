@@ -1,4 +1,4 @@
-use crate::data::{CoverageDump, LocationKind};
+use crate::data::CoverageDump;
 use std::collections::HashMap;
 
 pub struct TextReport {
@@ -18,7 +18,10 @@ pub fn generate_text_report(dump: &CoverageDump, source: &str) -> String {
         }
     }
 
-    let covered_lines: usize = line_counts.keys().filter(|&&l| l <= total_lines as u32).count();
+    let covered_lines: usize = line_counts
+        .keys()
+        .filter(|&&l| l <= total_lines as u32)
+        .count();
     let percent = if total_lines > 0 {
         (covered_lines as f64 / total_lines as f64) * 100.0
     } else {
@@ -26,7 +29,10 @@ pub fn generate_text_report(dump: &CoverageDump, source: &str) -> String {
     };
 
     let mut out = String::new();
-    out.push_str(&format!("Coverage: {:.1}% ({}/{})\n", percent, covered_lines, total_lines));
+    out.push_str(&format!(
+        "Coverage: {:.1}% ({}/{})\n",
+        percent, covered_lines, total_lines
+    ));
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
     for (i, line) in lines.iter().enumerate() {
@@ -42,7 +48,7 @@ pub fn generate_text_report(dump: &CoverageDump, source: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::{CoverageDump, FileInfo, LocationKind, SourceLocation};
+    use crate::data::{CoverageDump, LocationKind, SourceLocation};
     use std::collections::HashMap;
 
     #[test]
@@ -62,14 +68,17 @@ mod tests {
         let mut counters = HashMap::new();
         counters.insert(0, 1);
         let mut metadata = HashMap::new();
-        metadata.insert(0, SourceLocation {
-            file_id: 0,
-            start_line: 1,
-            start_col: 0,
-            end_line: 1,
-            end_col: 0,
-            kind: LocationKind::FunctionEntry,
-        });
+        metadata.insert(
+            0,
+            SourceLocation {
+                file_id: 0,
+                start_line: 1,
+                start_col: 0,
+                end_line: 1,
+                end_col: 0,
+                kind: LocationKind::FunctionEntry,
+            },
+        );
         let dump = CoverageDump {
             files: HashMap::new(),
             counters,

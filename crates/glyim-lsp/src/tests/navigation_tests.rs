@@ -48,7 +48,7 @@ fn make_test_db() -> (AnalysisDatabase, FileId) {
 
 #[test]
 fn goto_definition_works() {
-    let (db, file_id) = make_test_db();
+    let (db, _file_id) = make_test_db();
     let file_map = db.file_map.read();
     let params = GotoDefinitionParams {
         text_document_position_params: TextDocumentPositionParams {

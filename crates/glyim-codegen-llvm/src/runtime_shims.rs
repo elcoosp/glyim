@@ -312,13 +312,11 @@ pub unsafe extern "C" fn glyim_cov_flush_impl(
     dump_json_len: u64,
     out_path: *const u8,
 ) {
-    eprintln!("[cov_flush] called len={} dump_len={}", counters_len, dump_json_len);
     if counters.is_null() || dump_json.is_null() || out_path.is_null() {
-        eprintln!("[cov_flush] null arg");
         return;
     }
-    let counts = std::slice::from_raw_parts(counters, counters_len as usize);
-    let json_bytes = std::slice::from_raw_parts(dump_json, dump_json_len as usize);
+    let counts = unsafe { std::slice::from_raw_parts(counters, counters_len as usize) };
+    let json_bytes = unsafe { std::slice::from_raw_parts(dump_json, dump_json_len as usize) };
     let mut dump: glyim_coverage::data::CoverageDump = match serde_json::from_slice(json_bytes) {
         Ok(d) => d,
         Err(_) => return,
@@ -330,7 +328,7 @@ pub unsafe extern "C" fn glyim_cov_flush_impl(
         Ok(s) => s,
         Err(_) => return,
     };
-    let path = std::ffi::CStr::from_ptr(out_path as *const libc::c_char).to_string_lossy();
+    let path = unsafe { std::ffi::CStr::from_ptr(out_path as *const libc::c_char) }.to_string_lossy();
     let _ = std::fs::write(path.as_ref(), &data);
 }
 

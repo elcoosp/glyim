@@ -1,12 +1,13 @@
-use glyim_mutant::engine::MutationEngine;
-use glyim_mutant::config::{MutationConfig, MutationOperator};
-use glyim_hir::{Hir, HirExpr, HirItem, HirFn};
-use glyim_hir::types::ExprId;
 use glyim_diag::Span;
+use glyim_hir::types::ExprId;
+use glyim_hir::{Hir, HirExpr, HirFn, HirItem};
 use glyim_interner::Interner;
+use glyim_mutant::config::{MutationConfig, MutationOperator};
+use glyim_mutant::engine::MutationEngine;
 
-fn span() -> Span { Span::new(0,0) }
-fn id() -> ExprId { ExprId::new(0) }
+fn span() -> Span {
+    Span::new(0, 0)
+}
 
 #[test]
 fn engine_generates_arithmetic_mutation() {
@@ -22,8 +23,16 @@ fn engine_generates_arithmetic_mutation() {
         body: HirExpr::Binary {
             id: ExprId::new(0),
             op: glyim_hir::HirBinOp::Add,
-            lhs: Box::new(HirExpr::IntLit { id: ExprId::new(1), value: 1, span: span() }),
-            rhs: Box::new(HirExpr::IntLit { id: ExprId::new(2), value: 2, span: span() }),
+            lhs: Box::new(HirExpr::IntLit {
+                id: ExprId::new(1),
+                value: 1,
+                span: span(),
+            }),
+            rhs: Box::new(HirExpr::IntLit {
+                id: ExprId::new(2),
+                value: 2,
+                span: span(),
+            }),
             span: span(),
         },
         span: span(),
@@ -33,7 +42,9 @@ fn engine_generates_arithmetic_mutation() {
         is_test: false,
         test_config: None,
     };
-    let hir = Hir { items: vec![HirItem::Fn(hir_fn)] };
+    let hir = Hir {
+        items: vec![HirItem::Fn(hir_fn)],
+    };
     let config = MutationConfig {
         operators: vec![MutationOperator::ArithmeticPlusToMinus],
         skip_tests: false,
@@ -42,7 +53,11 @@ fn engine_generates_arithmetic_mutation() {
     let mut engine = MutationEngine::new(config);
     let mutations = engine.generate_mutations(&hir);
     assert!(!mutations.is_empty());
-    assert!(mutations.iter().any(|m| matches!(m.operator, MutationOperator::ArithmeticPlusToMinus)));
+    assert!(
+        mutations
+            .iter()
+            .any(|m| matches!(m.operator, MutationOperator::ArithmeticPlusToMinus))
+    );
 }
 
 #[test]
@@ -59,8 +74,16 @@ fn engine_respects_skip_tests() {
         body: HirExpr::Binary {
             id: ExprId::new(0),
             op: glyim_hir::HirBinOp::Add,
-            lhs: Box::new(HirExpr::IntLit { id: ExprId::new(1), value: 1, span: span() }),
-            rhs: Box::new(HirExpr::IntLit { id: ExprId::new(2), value: 2, span: span() }),
+            lhs: Box::new(HirExpr::IntLit {
+                id: ExprId::new(1),
+                value: 1,
+                span: span(),
+            }),
+            rhs: Box::new(HirExpr::IntLit {
+                id: ExprId::new(2),
+                value: 2,
+                span: span(),
+            }),
             span: span(),
         },
         span: span(),
@@ -69,10 +92,15 @@ fn engine_respects_skip_tests() {
         is_extern_backed: false,
         is_test: true, // this is a test function
         test_config: Some(glyim_hir::node::HirTestConfig {
-            should_panic: false, ignored: false, tags: vec![], source_file: String::new()
+            should_panic: false,
+            ignored: false,
+            tags: vec![],
+            source_file: String::new(),
         }),
     };
-    let hir = Hir { items: vec![HirItem::Fn(hir_fn)] };
+    let hir = Hir {
+        items: vec![HirItem::Fn(hir_fn)],
+    };
     let config = MutationConfig::default(); // skip_tests is true by default
     let mut engine = MutationEngine::new(config);
     let mutations = engine.generate_mutations(&hir);

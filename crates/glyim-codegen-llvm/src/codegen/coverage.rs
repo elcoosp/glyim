@@ -31,40 +31,6 @@ impl CoverageInstrumenter {
 }
 
 /// Emit the global coverage counter array and the runtime dump function.
-use inkwell::module::Module as InkModule;
-
-pub fn emit_coverage_dump_global(
-    module: &InkModule<'_>,
-    instrumenter: &CoverageInstrumenter,
-    file_path: &str,
-) -> Result<(), String> {
-    use std::collections::HashMap;
-    let mut files = HashMap::new();
-    files.insert(0u32, glyim_coverage::data::FileInfo {
-        path: file_path.to_string(),
-    });
-    let dump = glyim_coverage::data::CoverageDump {
-        files,
-        counters: HashMap::new(),
-        metadata: instrumenter.metadata.clone(),
-        version: 1,
-    };
-    let json = serde_json::to_string(&dump).map_err(|e| e.to_string())?;
-    let ctx = module.get_context();
-    let i8_type = ctx.i8_type();
-    let arr_type = i8_type.array_type(json.len() as u32);
-    let global = module.add_global(
-        arr_type,
-        Some(inkwell::AddressSpace::from(0u16)),
-        "__glyim_cov_dump",
-    );
-    let elems: Vec<_> = json.as_bytes().iter().map(|&b| i8_type.const_int(b as u64, false)).collect();
-    let const_array = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
-    global.set_initializer(&const_array);
-    global.set_constant(true);
-    global.set_linkage(inkwell::module::Linkage::Private);
-    Ok(())
-}
 
 pub fn emit_coverage_globals<'ctx>(
     module: &Module<'ctx>,

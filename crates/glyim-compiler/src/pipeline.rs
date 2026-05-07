@@ -1089,7 +1089,6 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
         .build()?;
     cg = cg.with_jit_mode();
     if let Some(ref path) = config.coverage_output {
-        eprintln!("[pipeline] GLYIM_COV_FILE={}", path.display());
         unsafe { std::env::set_var("GLYIM_COV_FILE", path.to_string_lossy().as_ref()); }
     }
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;

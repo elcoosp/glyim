@@ -113,7 +113,6 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     };
     // Emit coverage flush if this is main
     if is_main {
-        eprintln!("[codegen] adding flush call for main");
         crate::codegen::coverage::emit_coverage_flush_call(cg);
     }
     cg.builder
