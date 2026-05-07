@@ -512,7 +512,10 @@ self.emit_macro_debug_section();
             return Err(errors.join("\n"));
         }
 
-        if self.module.get_function("main").is_none() && !self.library_mode {
+        if self.library_mode {
+            // In library mode, no main required
+            Ok(())
+        } else if self.module.get_function("main").is_none() {
             Err("no 'main' function".into())
         } else {
             if let Err(msg) = self.module.verify() {

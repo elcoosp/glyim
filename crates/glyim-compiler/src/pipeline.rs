@@ -1,13 +1,12 @@
-use glyim_diag::diagnostic::Diagnostic;
-use glyim_profiler::ProfileCollector;
-use glyim_profiler::StageName;
-use glyim_codegen_llvm::runtime_shims;
 use glyim_codegen_llvm::codegen::CoverageMode;
+use glyim_codegen_llvm::runtime_shims;
 use glyim_codegen_llvm::{Codegen, CodegenBuilder, compile_to_ir};
+use glyim_diag::diagnostic::Diagnostic;
 use glyim_hir::ExprId;
 use glyim_hir::types::HirType;
 use glyim_interner::Interner;
-use glyim_pkg::cas_client::CasClient;
+use glyim_profiler::ProfileCollector;
+use glyim_profiler::StageName;
 use glyim_query::fingerprint::Fingerprint;
 use glyim_query::incremental::IncrementalState;
 use glyim_typeck::TypeChecker;
@@ -127,6 +126,19 @@ fn load_source_with_prelude(input: &Path) -> Result<(String, bool), PipelineErro
     let source = format!("{}\n{}", PRELUDE, fs::read_to_string(input)?);
     let is_no_std = detect_no_std(&source);
     Ok((source, is_no_std))
+}
+fn load_source_with_prelude_opt(
+    input: &Path,
+    force_no_std: Option<bool>,
+) -> Result<(String, bool), PipelineError> {
+    let source = fs::read_to_string(input)?;
+    let is_no_std = force_no_std.unwrap_or_else(|| detect_no_std(&source));
+    let final_source = if is_no_std {
+        source
+    } else {
+        format!("{}\n{}", PRELUDE, source)
+    };
+    Ok((final_source, is_no_std))
 }
 
 // ── shared monomorphize→merged_types helper ──────────────────────
@@ -303,7 +315,9 @@ pub(crate) fn compile_source_to_hir(
 
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
 
@@ -314,7 +328,9 @@ pub(crate) fn compile_source_to_hir(
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            errs.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
 
@@ -322,8 +338,6 @@ pub(crate) fn compile_source_to_hir(
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
-
-
 
     Ok(CompiledHir {
         hir,
@@ -537,7 +551,9 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     use glyim_bytecode::value::Value;
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
     let decl_output = glyim_parse::declarations::parse_declarations(source);
@@ -546,7 +562,9 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            errs.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut compiler = BytecodeCompiler::new(&interner);
     let mut interpreter = BytecodeInterpreter::new();
@@ -582,7 +600,9 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
 
@@ -595,7 +615,9 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner);
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            errs.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     Ok(())
 }
@@ -651,13 +673,18 @@ pub fn build_with_mode(
     target: Option<&str>,
     force_no_std: Option<bool>,
     coverage: bool,
+    library: bool,
 ) -> Result<PathBuf, PipelineError> {
-    let (source, _) = load_source_with_prelude(input)?;
+    let (source, is_no_std) = load_source_with_prelude_opt(input, force_no_std)?;
     let config = PipelineConfig {
         mode,
         target: target.map(|s| s.to_string()),
-        force_no_std,
-        coverage_mode: if coverage { CoverageMode::Function } else { CoverageMode::Off },
+        force_no_std: Some(is_no_std),
+        coverage_mode: if coverage {
+            CoverageMode::Function
+        } else {
+            CoverageMode::Off
+        },
         ..Default::default()
     };
     let compiled = compile_source_to_hir(source, input, &config)?;
@@ -673,13 +700,16 @@ pub fn build_with_mode(
     let obj_path = tmp_dir.path().join("output.o");
     let context = Context::create();
     let cov_mode = config.coverage_mode;
-    let mut codegen = CodegenBuilder::new(
+    let mut builder = CodegenBuilder::new(
         &context,
         compiled.interner.clone(),
         compiled.merged_types.clone(),
     )
-    .with_coverage_mode(cov_mode)
-    .build()?;
+    .with_coverage_mode(cov_mode);
+    if library {
+        builder = builder.with_library_mode();
+    }
+    let mut codegen = builder.build()?;
     if let Some(t) = &config.target {
         crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
         crate::cross::ensure_sysroot(t).map_err(PipelineError::MissingSysroot)?;
@@ -700,7 +730,12 @@ pub fn build_with_mode(
     } else {
         None
     };
-    link_object_with_coverage(&obj_path, &output_path, mode == BuildMode::Release, cov_lib.as_deref())?;
+    link_object_with_coverage(
+        &obj_path,
+        &output_path,
+        mode == BuildMode::Release,
+        cov_lib.as_deref(),
+    )?;
     Ok(output_path)
 }
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
@@ -719,10 +754,6 @@ pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     }
 }
 
-
-
-
-
 /// Execute a function via JIT with crash protection (Unix only).
 /// Execute a function via JIT with crash protection (Unix only).
 /// On SIGSEGV/SIGBUS, returns an error instead of aborting the process.
@@ -737,24 +768,22 @@ pub fn run_jit_safe(source: &str) -> Result<i32, String> {
     unsafe {
         let old = libc::signal(libc::SIGSEGV, handler as *const () as libc::sighandler_t);
         let _ = libc::signal(libc::SIGBUS, handler as *const () as libc::sighandler_t);
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            super::run_jit(source)
-        }));
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| super::run_jit(source)));
         libc::signal(libc::SIGSEGV, old);
         if CRASHED.load(Ordering::SeqCst) {
             return Err("JIT execution crashed (SIGSEGV)".to_string());
         }
-        result.map_err(|e: Box<dyn std::any::Any + Send>| format!("JIT panic: {:?}", e))
-            .and_then(|r: Result<i32, crate::pipeline::PipelineError>| r.map_err(|e| format!("JIT error: {:?}", e)))
+        result
+            .map_err(|e: Box<dyn std::any::Any + Send>| format!("JIT panic: {:?}", e))
+            .and_then(|r: Result<i32, crate::pipeline::PipelineError>| {
+                r.map_err(|e| format!("JIT error: {:?}", e))
+            })
     }
 }
 
 #[cfg(not(unix))]
-
-
-
 #[cfg(not(unix))]
-
 #[cfg(test)]
 mod root_tests;
 
@@ -783,7 +812,7 @@ pub fn build_package(
         ));
     }
     let force_no_std = Some(is_manifest_no_std(&full_manifest));
-    build_with_mode(&main_path, output, mode, target, force_no_std, false)
+    build_with_mode(&main_path, output, mode, target, force_no_std, false, false)
 }
 pub fn run_package(
     package_dir: &Path,
@@ -812,7 +841,6 @@ pub fn run_package(
     run_with_mode(&main_path, mode, target, force_no_std)
 }
 
-
 fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
     let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -833,11 +861,22 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
     link_object_with_coverage(obj_path, output_path, use_lto, None)
 }
 
-fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool, coverage_lib: Option<&std::path::Path>) -> Result<(), PipelineError> {
+fn link_object_with_coverage(
+    obj_path: &Path,
+    output_path: &Path,
+    use_lto: bool,
+    coverage_lib: Option<&std::path::Path>,
+) -> Result<(), PipelineError> {
     if let Some(lib) = coverage_lib {
         // Use cc to link, force‑load the coverage archive so its symbols are always included
-        let linker = if which("cc") { "cc" } else if which("gcc") { "gcc" } else {
-            return Err(PipelineError::Link("no C compiler found (tried 'cc' and 'gcc')".into()));
+        let linker = if which("cc") {
+            "cc"
+        } else if which("gcc") {
+            "gcc"
+        } else {
+            return Err(PipelineError::Link(
+                "no C compiler found (tried 'cc' and 'gcc')".into(),
+            ));
         };
         let mut args: Vec<std::ffi::OsString> = vec![
             "-o".into(),
@@ -856,17 +895,27 @@ fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool,
         if !cfg!(target_vendor = "apple") {
             args.push("-Wl,--no-whole-archive".into());
         }
-        if use_lto { args.push("-flto=thin".into()); }
+        if use_lto {
+            args.push("-flto=thin".into());
+        }
         let output = Command::new(linker)
             .args(&args)
             .output()
             .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
         if !output.status.success() {
-            return Err(PipelineError::Link(String::from_utf8_lossy(&output.stderr).to_string()));
+            return Err(PipelineError::Link(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
         }
     } else {
-        let linker = if which("cc") { "cc" } else if which("gcc") { "gcc" } else {
-            return Err(PipelineError::Link("no C compiler found (tried 'cc' and 'gcc')".into()));
+        let linker = if which("cc") {
+            "cc"
+        } else if which("gcc") {
+            "gcc"
+        } else {
+            return Err(PipelineError::Link(
+                "no C compiler found (tried 'cc' and 'gcc')".into(),
+            ));
         };
         let mut args: Vec<std::ffi::OsString> = vec![
             "-o".into(),
@@ -875,13 +924,17 @@ fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool,
             "-lc".into(),
             "-no-pie".into(),
         ];
-        if use_lto { args.push("-flto=thin".into()); }
+        if use_lto {
+            args.push("-flto=thin".into());
+        }
         let output = Command::new(linker)
             .args(&args)
             .output()
             .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
         if !output.status.success() {
-            return Err(PipelineError::Link(String::from_utf8_lossy(&output.stderr).to_string()));
+            return Err(PipelineError::Link(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
         }
     }
     Ok(())
@@ -900,7 +953,9 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
     let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
@@ -964,7 +1019,9 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
     let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
     let parse_out = glyim_parse::parse(&source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
     let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
@@ -981,8 +1038,6 @@ fn debug_ir(_codegen: &glyim_codegen_llvm::Codegen) {
     if std::env::var("GLYIM_DEBUG_IR").is_ok() {}
 }
 
-
-
 #[cfg(test)]
 mod no_std_tests;
 
@@ -990,7 +1045,9 @@ mod no_std_tests;
 pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError> {
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
     let decl_output = glyim_parse::declarations::parse_declarations(source);
@@ -999,7 +1056,9 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            errs.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
@@ -1031,7 +1090,6 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     }
 }
 
-
 /// Execute source code via JIT compilation and return its exit code.
 ///
 /// # Stability
@@ -1040,7 +1098,10 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
 ///
 /// # Stability
 /// *Stable.*
-pub fn run_jit_with_coverage(source: &str, cov_path: &std::path::Path) -> Result<i32, PipelineError> {
+pub fn run_jit_with_coverage(
+    source: &str,
+    cov_path: &std::path::Path,
+) -> Result<i32, PipelineError> {
     let config = PipelineConfig {
         mode: BuildMode::Debug,
         coverage_mode: glyim_codegen_llvm::codegen::CoverageMode::Function,
@@ -1056,35 +1117,51 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     ProfileCollector::enter_stage(StageName::Codegen);
     let parse_out = glyim_parse::parse(source);
     if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(parse_out.errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            parse_out.errors.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     let mut interner = parse_out.interner;
     let decl_output = glyim_parse::declarations::parse_declarations(source);
-    let decl_table = glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
+    let decl_table =
+        glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            errs.into_iter().map(|e| e.into()).collect(),
+        ));
     }
     glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
     let expr_types = typeck.expr_types.clone();
     let call_type_args = std::mem::take(&mut typeck.call_type_args);
-    let (merged_types, mono_hir) = merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
+    let (merged_types, mono_hir) =
+        merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
     let mut cg = CodegenBuilder::new(&context, interner, merged_types)
         .with_coverage_mode(config.coverage_mode)
         .build()?;
     cg = cg.with_jit_mode();
     if let Some(ref path) = config.coverage_output {
-        unsafe { std::env::set_var("GLYIM_COV_FILE", path.to_string_lossy().as_ref()); }
+        unsafe {
+            std::env::set_var("GLYIM_COV_FILE", path.to_string_lossy().as_ref());
+        }
     }
     cg.generate(&mono_hir).map_err(PipelineError::Codegen)?;
     debug_ir(&cg);
-    let engine = cg.get_module().create_jit_execution_engine(OptimizationLevel::None)
+    let engine = cg
+        .get_module()
+        .create_jit_execution_engine(OptimizationLevel::None)
         .map_err(|e| PipelineError::Codegen(format!("JIT: {e}")))?;
-    runtime_shims::map_runtime_shims_for_jit(&engine, cg.get_module(), *CUSTOM_ASSERT_FN.lock().unwrap(), *CUSTOM_ABORT_FN.lock().unwrap());
+    runtime_shims::map_runtime_shims_for_jit(
+        &engine,
+        cg.get_module(),
+        *CUSTOM_ASSERT_FN.lock().unwrap(),
+        *CUSTOM_ABORT_FN.lock().unwrap(),
+    );
     unsafe {
-        let main_fn = engine.get_function::<unsafe extern "C" fn() -> i32>("main")
+        let main_fn = engine
+            .get_function::<unsafe extern "C" fn() -> i32>("main")
             .map_err(|e| PipelineError::Codegen(format!("JIT main: {e}")))?;
         let exit_code = main_fn.call();
         ProfileCollector::exit_stage(StageName::Codegen, 1, 0, 0);
@@ -1097,5 +1174,3 @@ pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
     let config = PipelineConfig::default();
     run_jit_with_config(source, &config)
 }
-
-

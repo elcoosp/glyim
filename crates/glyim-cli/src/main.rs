@@ -50,6 +50,8 @@ enum Command {
         coverage: bool,
         #[arg(long)]
         incremental: bool,
+        #[arg(long)]
+        library: bool,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
         remote_cache: Option<String>,
     },
@@ -241,6 +243,7 @@ fn main() {
             bare,
             coverage,
             incremental,
+            library,
             remote_cache,
         } => cmd_build(
             input,
@@ -252,6 +255,7 @@ fn main() {
             remote_cache,
             coverage,
             cli.profile,
+            library,
         ),
         Command::Run {
             input,

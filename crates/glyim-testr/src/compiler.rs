@@ -32,7 +32,7 @@ impl Compiler {
             let test_path = tmp_dir.path().join("test.g");
             std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
             let bin = tmp_dir.path().join("test_bin");
-            glyim_compiler::pipeline::build_with_mode(&test_path, Some(&bin), glyim_compiler::BuildMode::Debug, None, None, coverage)
+            glyim_compiler::pipeline::build_with_mode(&test_path, Some(&bin), glyim_compiler::BuildMode::Debug, None, None, coverage, false)
                 .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             return Ok(CompiledArtifact {
                 test_defs,
@@ -49,7 +49,7 @@ impl Compiler {
             let test_path = tmp_dir.path().join(format!("{}.g", test_def.name));
             std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
             let bin = tmp_dir.path().join(&test_def.name);
-            glyim_compiler::pipeline::build_with_mode(&test_path, Some(&bin), glyim_compiler::BuildMode::Debug, None, None, coverage)
+            glyim_compiler::pipeline::build_with_mode(&test_path, Some(&bin), glyim_compiler::BuildMode::Debug, None, None, coverage, false)
                 .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             per_test_binaries.push((test_def.name.clone(), bin));
         }
