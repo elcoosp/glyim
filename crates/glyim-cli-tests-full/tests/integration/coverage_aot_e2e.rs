@@ -13,7 +13,7 @@ fn temp_g(content: &str) -> PathBuf {
 #[test]
 fn coverage_aot_run_produces_dump() {
     let dir = tempfile::tempdir().unwrap();
-    let source = "fn main() -> i64 { let mut i = 0; while i < 2 { i = i + 1 }; i }";
+    let source = "fn main() -> i64 { let mut i = 0; while i < 2 { i = i + 1 }; 0 }";
     let input = temp_g(source);
     let output = dir.path().join("test_bin");
     let cov_path = dir.path().join("glyim-cov.json");

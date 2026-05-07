@@ -835,41 +835,9 @@ fn link_object(obj_path: &Path, output_path: &Path, use_lto: bool) -> Result<(),
 
 fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool, coverage_lib: Option<&std::path::Path>) -> Result<(), PipelineError> {
     if let Some(lib) = coverage_lib {
-        // Use rustc to link when coverage runtime is required, ensuring Rust runtime is available
-        let linker = "rustc";
-        let mut args: Vec<std::ffi::OsString> = vec![
-            "-o".into(),
-            output_path.as_os_str().into(),
-            obj_path.as_os_str().into(),
-            lib.as_os_str().into(),
-        ];
-        if use_lto {
-            args.push("-C".into());
-            args.push("lto=thin".into());
-        }
-        // rustc defaults to PIE on some platforms; add -C link-arg=-no-pie if needed
-        if cfg!(target_os = "linux") {
-            args.push("-C".into());
-            args.push("link-arg=-no-pie".into());
-        }
-        let output = Command::new(linker)
-            .args(&args)
-            .output()
-            .map_err(|e| PipelineError::Link(format!("failed to invoke rustc: {e}")))?;
-        if !output.status.success() {
-            return Err(PipelineError::Link(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ));
-        }
-    } else {
-        let linker = if which("cc") {
-            "cc"
-        } else if which("gcc") {
-            "gcc"
-        } else {
-            return Err(PipelineError::Link(
-                "no C compiler found (tried 'cc' and 'gcc')".into(),
-            ));
+        // Use cc to link, force‑load the coverage archive so its symbols are always included
+        let linker = if which("cc") { "cc" } else if which("gcc") { "gcc" } else {
+            return Err(PipelineError::Link("no C compiler found (tried 'cc' and 'gcc')".into()));
         };
         let mut args: Vec<std::ffi::OsString> = vec![
             "-o".into(),
@@ -878,81 +846,45 @@ fn link_object_with_coverage(obj_path: &Path, output_path: &Path, use_lto: bool,
             "-lc".into(),
             "-no-pie".into(),
         ];
-        if use_lto {
-            args.push("-flto=thin".into());
+        // Force load the entire coverage runtime archive on macOS / with Apple clang
+        if cfg!(target_vendor = "apple") {
+            args.push("-Wl,-force_load".into());
+        } else {
+            args.push("-Wl,--whole-archive".into());
         }
+        args.push(lib.as_os_str().into());
+        if !cfg!(target_vendor = "apple") {
+            args.push("-Wl,--no-whole-archive".into());
+        }
+        if use_lto { args.push("-flto=thin".into()); }
         let output = Command::new(linker)
             .args(&args)
             .output()
             .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
         if !output.status.success() {
-            return Err(PipelineError::Link(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ));
+            return Err(PipelineError::Link(String::from_utf8_lossy(&output.stderr).to_string()));
+        }
+    } else {
+        let linker = if which("cc") { "cc" } else if which("gcc") { "gcc" } else {
+            return Err(PipelineError::Link("no C compiler found (tried 'cc' and 'gcc')".into()));
+        };
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "-o".into(),
+            output_path.as_os_str().into(),
+            obj_path.as_os_str().into(),
+            "-lc".into(),
+            "-no-pie".into(),
+        ];
+        if use_lto { args.push("-flto=thin".into()); }
+        let output = Command::new(linker)
+            .args(&args)
+            .output()
+            .map_err(|e| PipelineError::Link(format!("failed to invoke '{linker}': {e}")))?;
+        if !output.status.success() {
+            return Err(PipelineError::Link(String::from_utf8_lossy(&output.stderr).to_string()));
         }
     }
     Ok(())
-}
-#[allow(dead_code)]
-fn compute_source_hash(source: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(source.as_bytes());
-    hasher.update(env!("CARGO_PKG_VERSION"));
-    hex::encode(hasher.finalize())
-}
-
-pub fn build_with_cache(input: &Path, output: Option<&Path>) -> Result<PathBuf, PipelineError> {
-    let (source, _) = load_source_with_prelude(input)?;
-    let hash = compute_source_hash(&source);
-    let cache_dir = dirs_next::cache_dir()
-        .unwrap_or_else(|| PathBuf::from(".glyim/cache"))
-        .join("glyim-objects");
-    let cas = CasClient::new(&cache_dir).map_err(PipelineError::Io)?;
-    let output_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
-        let stem = input
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        PathBuf::from(stem)
-    });
-    let hash_content = hash
-        .parse::<glyim_macro_vfs::ContentHash>()
-        .map_err(|e| PipelineError::Codegen(format!("hash parse: {e}")))?;
-    if let Some(cached_obj) = cas.retrieve(hash_content) {
-        let tmp_dir = tempfile::tempdir()?;
-        let obj_path = tmp_dir.path().join("cached.o");
-        fs::write(&obj_path, &cached_obj)?;
-        link_object(&obj_path, &output_path, false)?;
-        return Ok(output_path);
-    }
-    let config = PipelineConfig::default();
-    let compiled = compile_source_to_hir(source, input, &config)?;
-    let tmp_dir = tempfile::tempdir()?;
-    let obj_path = tmp_dir.path().join("output.o");
-    let context = Context::create();
-    let mut codegen = CodegenBuilder::new(
-        &context,
-        compiled.interner.clone(),
-        compiled.merged_types.clone(),
-    )
-    .build()?;
-    if compiled.is_no_std {
-        codegen = codegen.with_no_std();
-    }
-    codegen
-        .generate(&compiled.mono_hir)
-        .map_err(PipelineError::Codegen)?;
-    debug_ir(&codegen);
-    codegen
-        .write_object_file(&obj_path)
-        .map_err(PipelineError::Codegen)?;
-    let obj_bytes = fs::read(&obj_path)?;
-    cas.store(&obj_bytes);
-    link_object(&obj_path, &output_path, false)?;
-    ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
-    Ok(output_path)
 }
 fn which(cmd: &str) -> bool {
     Command::new(cmd)
