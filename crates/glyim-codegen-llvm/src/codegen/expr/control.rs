@@ -21,7 +21,24 @@ pub(crate) fn codegen_while<'ctx>(
 
         cg.builder.build_unconditional_branch(cond_bb).ok()?;
 
+        // Branch coverage: record entry and body counters
+        let while_counters = if cg.coverage_mode != crate::codegen::CoverageMode::Off {
+            if let Some(ref mut instr) = cg.coverage_instrumenter.borrow_mut().as_mut() {
+                let file_id = 0u32;
+                let line = crate::debug::DebugInfoGen::byte_offset_to_line(
+                    cg.source_str.as_deref().unwrap_or(""),
+                    condition.get_span().start,
+                );
+                let entry_counter = instr.record_branch(file_id, line, 0, 0);
+                let body_counter = instr.record_branch(file_id, line, 1, 0);
+                Some((entry_counter, body_counter))
+            } else { None }
+        } else { None };
+
         cg.builder.position_at_end(cond_bb);
+        if let Some((entry_counter, _)) = while_counters {
+            crate::codegen::coverage::emit_branch_counter_increment(cg, entry_counter);
+        }
         let cond_val = codegen_expr(cg, condition, fctx)?;
         let cond_bool = cg
             .builder
@@ -37,6 +54,9 @@ pub(crate) fn codegen_while<'ctx>(
             .ok()?;
 
         cg.builder.position_at_end(body_bb);
+        if let Some((_, body_counter)) = while_counters {
+            crate::codegen::coverage::emit_branch_counter_increment(cg, body_counter);
+        }
         codegen_block(cg, body, fctx)?;
         if cg
             .builder

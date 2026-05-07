@@ -478,7 +478,8 @@ impl<'ctx> Codegen<'ctx> {
         // Phase 6B: Coverage instrumentation (globals)
         let num_fns = hir.items.iter().filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_))).count();
         if self.coverage_mode != CoverageMode::Off && num_fns > 0 {
-            coverage::emit_coverage_globals(&self.module, num_fns, self.coverage_mode);
+            // Allocate extra space for branch/probe counters (up to 50 per function)
+            coverage::emit_coverage_globals(&self.module, num_fns * 50, self.coverage_mode);
         }
 
         // Pass 3 — emit bodies (all forward declarations already present)
