@@ -2008,6 +2008,7 @@ dependencies = [
  "glyim-compiler",
  "glyim-diag",
  "glyim-doc",
+ "glyim-fmt",
  "glyim-hir",
  "glyim-interner",
  "glyim-lex",
