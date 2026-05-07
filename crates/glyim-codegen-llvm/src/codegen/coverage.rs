@@ -28,6 +28,20 @@ impl CoverageInstrumenter {
         self.counter_id += 1;
         id
     }
+
+    pub fn record_branch(&mut self, file_id: u32, line: u32, col: u32, _branch_idx: u32) -> u64 {
+        let id = self.counter_id;
+        self.metadata.insert(id, SourceLocation {
+            file_id,
+            start_line: line,
+            start_col: col,
+            end_line: line,
+            end_col: col + 1,
+            kind: LocationKind::Branch,
+        });
+        self.counter_id += 1;
+        id
+    }
 }
 
 /// Emit the global coverage counter array and the runtime dump function.
@@ -110,7 +124,7 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
         existing
     } else {
         use std::collections::HashMap;
-        let instr_meta = match cg.coverage_instrumenter.as_ref() {
+        let instr_meta = match cg.coverage_instrumenter.borrow().as_ref() {
             Some(i) => i.metadata.clone(),
             None => HashMap::new(),
         };
@@ -158,7 +172,7 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
     let builder = &cg.builder;
     let i64_type = cg.i64_type;
     let counters_ptr = counters_global.as_pointer_value();
-    let counters_len = match cg.coverage_instrumenter.as_ref() {
+    let counters_len = match cg.coverage_instrumenter.borrow().as_ref() {
         Some(instr) => i64_type.const_int(instr.counter_id, false),
         None => i64_type.const_int(0, false),
     };

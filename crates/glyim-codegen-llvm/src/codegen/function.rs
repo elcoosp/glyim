@@ -46,7 +46,7 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     let ret_bb = cg.context.append_basic_block(fn_value, "ret");
     // Coverage: instrument function entry if coverage is enabled
     if cg.coverage_mode != crate::codegen::CoverageMode::Off {
-        if let Some(ref mut instr) = cg.coverage_instrumenter {
+        if let Some(ref mut instr) = cg.coverage_instrumenter.borrow_mut().as_mut() {
             let line = crate::debug::DebugInfoGen::byte_offset_to_line(
                 cg.source_str.as_deref().unwrap_or(""),
                 f.span.start,
