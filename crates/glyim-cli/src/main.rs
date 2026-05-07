@@ -22,6 +22,8 @@ struct Cli {
     tree: bool,
     #[arg(long = "profile", global = true, help = "Print stage timings")]
     profile: bool,
+    #[arg(long = "coverage", global = true, help = "Enable coverage instrumentation")]
+    coverage: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -41,7 +43,7 @@ enum Command {
         #[arg(long)]
         bare: bool,
         #[arg(long)]
-        coverage: bool,
+        enable_coverage: bool,
         #[arg(long)]
         incremental: bool,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
@@ -58,7 +60,7 @@ enum Command {
         #[arg(long)]
         live: bool,
         #[arg(long)]
-        coverage: bool,
+        enable_coverage: bool,
         #[arg(long)]
         incremental: bool,
         #[arg(long, help = "URL of remote CAS server for artifact caching")]
@@ -92,7 +94,7 @@ enum Command {
         #[arg(long)]
         optimize: bool,
         #[arg(long)]
-        coverage: bool,
+        enable_coverage: bool,
         #[arg(long)]
         mutate: bool,
         #[arg(long)]
@@ -226,6 +228,7 @@ fn main() {
             debug: _,
             release,
             bare,
+            coverage,
             incremental,
             remote_cache,
         } => cmd_build(
@@ -236,6 +239,7 @@ fn main() {
             bare,
             incremental,
             remote_cache,
+            coverage,
             cli.profile,
         ),
         Command::Run {
@@ -247,7 +251,7 @@ fn main() {
             live,
             incremental,
             remote_cache,
-        } => cmd_run(input, target, release, live, incremental, remote_cache, cli.coverage),
+        } => cmd_run(input, target, release, live, incremental, remote_cache, cli.enable_coverage),
         Command::Ir { input } => cmd_ir(input),
         Command::Check { input, incremental } => cmd_check(input, incremental),
         Command::Init { name } => cmd_init(name),

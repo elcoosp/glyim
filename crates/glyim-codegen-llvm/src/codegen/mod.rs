@@ -48,7 +48,7 @@ pub enum CoverageMode {
 
 
 pub struct CodegenBuilder<'ctx> {
-    coverage_mode: CoverageMode,
+    pub(crate) coverage_mode: CoverageMode,
     context: &'ctx Context,
     interner: Interner,
     expr_types: Vec<HirType>,

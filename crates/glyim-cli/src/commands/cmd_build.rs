@@ -10,6 +10,7 @@ pub fn cmd_build(
     bare: bool,
     incremental: bool,
     remote_cache: Option<String>,
+    coverage: bool,
     profile: bool,
 ) -> i32 {
     let mode = if release {
@@ -17,6 +18,8 @@ pub fn cmd_build(
     } else {
         BuildMode::Debug
     };
+    let use_cov = coverage;
+    let _use_cov = coverage;
     if profile {
         glyim_profiler::ProfileCollector::enable();
     }
@@ -59,7 +62,8 @@ pub fn cmd_build(
             match orch.build() {
                 Ok(_bin_path) => {
                     eprintln!("Workspace build complete.");
-            if profile { print_profile(); }
+            // use_cov moved to top
+    if profile { print_profile(); }
                     let report = orch.report();
                     eprintln!("Compiled packages: {:?}", report.packages_compiled);
                     if !report.packages_failed.is_empty() {
@@ -84,7 +88,8 @@ pub fn cmd_build(
     match result {
         Ok(path) => {
             eprintln!("Built: {}", path.display());
-            if profile { print_profile(); }
+            // use_cov moved to top
+    if profile { print_profile(); }
             0
         }
         Err(e) => {

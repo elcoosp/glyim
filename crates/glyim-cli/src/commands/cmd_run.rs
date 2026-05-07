@@ -2,7 +2,7 @@ use glyim_compiler::pipeline::{self, BuildMode};
 use glyim_orchestrator::orchestrator::{PackageGraphOrchestrator, OrchestratorConfig};
 use std::path::PathBuf;
 
-pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool, live: bool, incremental: bool, remote_cache: Option<String>) -> i32 {
+pub fn cmd_run(input: PathBuf, target: Option<String>, release: bool, live: bool, incremental: bool, remote_cache: Option<String>, coverage: bool) -> i32 {
     let mode = if release {
         BuildMode::Release
     } else {
