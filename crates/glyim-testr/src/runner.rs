@@ -23,10 +23,12 @@ impl TestRunner {
         let artifact = match Compiler::compile(source, self.config.filter.as_deref()) {
             Ok(a) => a,
             Err(e) => {
-                let errname = match &e {
-                    crate::compiler::CompileError::NoTests => "no tests".into(),
-                    other => other.to_string(),
-                };
+                if matches!(e, crate::compiler::CompileError::NoTests) {
+                    display.suite_started(0);
+                    display.suite_finished(0, 0, 0);
+                    return vec![];
+                }
+                let errname = e.to_string();
                 display.suite_started(0);
                 display.suite_finished(0, 0, 0);
                 return vec![TestResult {
@@ -37,23 +39,77 @@ impl TestRunner {
             }
         };
 
-        let test_defs: Vec<&crate::types::TestDef> = artifact.test_defs.iter().collect();
+        let num_tests = artifact.test_defs.len();
+        display.suite_started(num_tests);
 
-        display.suite_started(test_defs.len());
+        // If single binary, run each test against that binary
+        if let Some(ref single_bin) = artifact.bin_path {
+            let mut set: JoinSet<Result<TestResult, String>> = JoinSet::new();
+            for test_def in &artifact.test_defs {
+                let name = test_def.name.clone();
+                let bin = single_bin.clone();
+                let timeout = Duration::from_secs(self.config.timeout_secs);
+                let should_panic = test_def.should_panic;
+                display.test_started(&name);
+                set.spawn(async move {
+                    let exec = Executor::new(bin, timeout);
+                    let mut result = exec.run_test(&name).await?;
+                    if should_panic {
+                        match result.outcome {
+                            crate::types::TestOutcome::Failed { .. } => {
+                                result.outcome = crate::types::TestOutcome::Passed;
+                            }
+                            crate::types::TestOutcome::Passed => {
+                                result.outcome = crate::types::TestOutcome::Failed {
+                                    exit_code: 0,
+                                    stderr: String::new(),
+                                };
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(result)
+                });
+            }
+            let mut results = Vec::new();
+            while let Some(r) = set.join_next().await {
+                match r {
+                    Ok(Ok(tr)) => { display.test_finished(&tr); results.push(tr); }
+                    Ok(Err(e)) => {
+                        let tr = TestResult { name: "error".into(), outcome: crate::types::TestOutcome::CompilationError(e), duration: Duration::ZERO };
+                        display.test_finished(&tr);
+                        results.push(tr);
+                    }
+                    Err(je) => {
+                        let tr = TestResult { name: "panic".into(), outcome: crate::types::TestOutcome::CompilationError(format!("{je}")), duration: Duration::ZERO };
+                        display.test_finished(&tr);
+                        results.push(tr);
+                    }
+                }
+            }
+            let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
+            let failed = results.len() - passed;
+            display.suite_finished(passed, failed, results.len());
+            return results;
+        }
 
+        // Multiple binaries: map test name to binary
+        let binary_map: std::collections::HashMap<&str, &std::path::Path> = artifact.per_test_binaries.iter()
+            .map(|(name, path)| (name.as_str(), path.as_ref()))
+            .collect();
         let mut set: JoinSet<Result<TestResult, String>> = JoinSet::new();
-
-        for test_def in &test_defs {
+        for test_def in &artifact.test_defs {
             let name = test_def.name.clone();
-            let bin_path = artifact.bin_path.clone();
-            let timeout = Duration::from_secs(self.config.timeout_secs);
             let should_panic = test_def.should_panic;
+            let timeout = Duration::from_secs(self.config.timeout_secs);
             display.test_started(&name);
-
+            let bin_path = match binary_map.get(name.as_str()) {
+                Some(p) => p.to_path_buf(),
+                None => continue,
+            };
             set.spawn(async move {
                 let exec = Executor::new(bin_path, timeout);
                 let mut result = exec.run_test(&name).await?;
-                // Adjust outcome for should_panic
                 if should_panic {
                     match result.outcome {
                         crate::types::TestOutcome::Failed { .. } => {
@@ -73,41 +129,23 @@ impl TestRunner {
         }
 
         let mut results = Vec::new();
-
-        while let Some(result) = set.join_next().await {
-            match result {
-                Ok(Ok(test_result)) => {
-                    display.test_finished(&test_result);
-                    results.push(test_result);
-                }
+        while let Some(r) = set.join_next().await {
+            match r {
+                Ok(Ok(tr)) => { display.test_finished(&tr); results.push(tr); }
                 Ok(Err(e)) => {
-                    let tr = TestResult {
-                        name: "error".into(),
-                        outcome: crate::types::TestOutcome::CompilationError(e.to_string()),
-                        duration: Duration::ZERO,
-                    };
+                    let tr = TestResult { name: "error".into(), outcome: crate::types::TestOutcome::CompilationError(e), duration: Duration::ZERO };
                     display.test_finished(&tr);
                     results.push(tr);
                 }
-                Err(join_error) => {
-                    let tr = TestResult {
-                        name: "panic".into(),
-                        outcome: crate::types::TestOutcome::CompilationError(format!(
-                            "task panicked: {}",
-                            join_error
-                        )),
-                        duration: Duration::ZERO,
-                    };
+                Err(je) => {
+                    let tr = TestResult { name: "panic".into(), outcome: crate::types::TestOutcome::CompilationError(format!("{je}")), duration: Duration::ZERO };
                     display.test_finished(&tr);
                     results.push(tr);
                 }
             }
         }
 
-        let passed = results
-            .iter()
-            .filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed))
-            .count();
+        let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
         let failed = results.len() - passed;
         display.suite_finished(passed, failed, results.len());
         results

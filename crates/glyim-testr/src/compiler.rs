@@ -15,24 +15,45 @@ impl Compiler {
         let interner = &parse_out.interner;
         let test_defs = collect_tests(&parse_out.ast, interner, filter, false);
 
-        let test_names: Vec<String> = test_defs.iter().map(|t| t.name.clone()).collect();
-        if test_names.is_empty() {
+        if test_defs.is_empty() {
             return Err(CompileError::NoTests);
         }
 
-        let modified_source = harness::inject_harness(source, &test_names);
-
         let tmp_dir = tempfile::tempdir().map_err(CompileError::Io)?;
-        let source_path = tmp_dir.path().join("test.g");
-        std::fs::write(&source_path, &modified_source).map_err(CompileError::Io)?;
 
-        let bin_path = tmp_dir.path().join("test_bin");
-        glyim_compiler::pipeline::build(&source_path, Some(&bin_path), None)
-            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+        if test_defs.len() == 1 {
+            // Single test: compile binary that runs only that test
+            let test_name = &test_defs[0].name;
+            let test_source = harness::inject_single_test(source, test_name);
+            let test_path = tmp_dir.path().join("test.g");
+            std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
+            let bin = tmp_dir.path().join("test_bin");
+            glyim_compiler::pipeline::build(&test_path, Some(&bin), None)
+                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            return Ok(CompiledArtifact {
+                test_defs,
+                bin_path: Some(bin),
+                per_test_binaries: vec![],
+                _temp_dir: tmp_dir,
+            });
+        }
+
+        // Multiple tests: compile each as separate binary
+        let mut per_test_binaries: Vec<(String, std::path::PathBuf)> = Vec::new();
+        for test_def in &test_defs {
+            let test_source = harness::inject_single_test(source, &test_def.name);
+            let test_path = tmp_dir.path().join(format!("{}.g", test_def.name));
+            std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
+            let bin = tmp_dir.path().join(&test_def.name);
+            glyim_compiler::pipeline::build(&test_path, Some(&bin), None)
+                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            per_test_binaries.push((test_def.name.clone(), bin));
+        }
 
         Ok(CompiledArtifact {
-            bin_path,
             test_defs,
+            bin_path: None,
+            per_test_binaries,
             _temp_dir: tmp_dir,
         })
     }

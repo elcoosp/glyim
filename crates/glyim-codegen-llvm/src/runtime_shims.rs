@@ -112,20 +112,44 @@ pub(crate) fn emit_runtime_shims<'a>(context: &'a Context, module: &Module<'a>, 
 
     let __glyim_getenv_ty = ptr_type.fn_type(&[ptr_type.into()], false);
     if module.get_function("__glyim_getenv").is_none() {
-        module.add_function("__glyim_getenv", __glyim_getenv_ty, None);
+        let getenv_fn = module.add_function("__glyim_getenv", __glyim_getenv_ty, None);
+        if !jit {
+            let b = context.create_builder();
+            let bb = context.append_basic_block(getenv_fn, "entry");
+            b.position_at_end(bb);
+            let name_ptr = getenv_fn.get_nth_param(0).unwrap().into_pointer_value();
+            let getenv = module.get_function("getenv").unwrap_or_else(|| {
+                let gty = ptr_type.fn_type(&[ptr_type.into()], false);
+                module.add_function("getenv", gty, None)
+            });
+            let result = b.build_call(getenv, &[name_ptr.into()], "ret").unwrap().try_as_basic_value();
+            match result {
+                inkwell::values::ValueKind::Basic(inkwell::values::BasicValueEnum::PointerValue(ptr)) => {
+                    b.build_return(Some(&ptr)).unwrap();
+                }
+                _ => {
+                    let null = ptr_type.const_null();
+                    b.build_return(Some(&null)).unwrap();
+                }
+            };
+        }
     }
 
     let __glyim_str_eq_ty = i64_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
     if module.get_function("__glyim_str_eq").is_none() {
-        let str_eq_fn = module.add_function("__glyim_str_eq", __glyim_str_eq_ty, None);
-        // Emit body: null-terminated byte comparison
+        let str_eq_fn = module.add_function(
+            "__glyim_str_eq",
+            i64_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
+            None,
+        );
+        // Emit body: null-terminated byte comparison (works for both JIT and AOT)
+        let builder = context.create_builder();
         let entry_bb = context.append_basic_block(str_eq_fn, "entry");
         let loop_cond_bb = context.append_basic_block(str_eq_fn, "loop.cond");
         let mismatch_bb = context.append_basic_block(str_eq_fn, "mismatch");
         let match_bb = context.append_basic_block(str_eq_fn, "match");
         let end_bb = context.append_basic_block(str_eq_fn, "end");
 
-        let builder = context.create_builder();
         builder.position_at_end(entry_bb);
         // if a == null || b == null → mismatch
         let a = str_eq_fn.get_nth_param(0).unwrap().into_pointer_value();

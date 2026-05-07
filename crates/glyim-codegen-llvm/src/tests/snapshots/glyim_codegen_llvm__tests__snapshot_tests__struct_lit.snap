@@ -37,7 +37,13 @@ entry:
   unreachable
 }
 
-declare ptr @__glyim_getenv(ptr)
+define ptr @__glyim_getenv(ptr %0) {
+entry:
+  %ret = call ptr @getenv(ptr %0)
+  ret ptr %ret
+}
+
+declare ptr @getenv(ptr)
 
 define i64 @__glyim_str_eq(ptr %0, ptr %1) {
 entry:
