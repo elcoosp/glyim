@@ -1,3 +1,4 @@
+mod coverage;
 pub(crate) mod ctx;
 mod expr;
 mod function;
@@ -6,11 +7,10 @@ mod ops;
 mod stmt;
 mod string;
 mod types;
-mod coverage;
 
 use crate::debug::DebugInfoGen;
 use glyim_diag::Span;
-use glyim_hir::{Hir, HirType};
+use glyim_hir::{Hir, HirItem, HirType};
 use glyim_interner::{Interner, Symbol};
 use inkwell::context::Context;
 use inkwell::debug_info::{DISubprogram, DWARFEmissionKind};
@@ -43,7 +43,6 @@ pub enum CoverageMode {
     /// Instrument function entries, branch conditions, and expression evaluations.
     Full,
 }
-
 
 pub struct CodegenBuilder<'ctx> {
     coverage_mode: CoverageMode,
@@ -113,11 +112,13 @@ impl<'ctx> CodegenBuilder<'ctx> {
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
             effect_analysis: None,
-            coverage_instrumenter: std::cell::RefCell::new(if self.coverage_mode != CoverageMode::Off {
-                Some(coverage::CoverageInstrumenter::new())
-            } else {
-                None
-            }),
+            coverage_instrumenter: std::cell::RefCell::new(
+                if self.coverage_mode != CoverageMode::Off {
+                    Some(coverage::CoverageInstrumenter::new())
+                } else {
+                    None
+                },
+            ),
             jit_mode: false,
             library_mode: self.library_mode,
             target_triple: None,
@@ -374,9 +375,15 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        if !self.library_mode { crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode); }
-        if !self.library_mode { crate::alloc::emit_alloc_shims(&self.module, self.no_std); }
-        if !self.library_mode { crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std); }
+        if !self.library_mode {
+            crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
+        }
+        if !self.library_mode {
+            crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        }
+        if !self.library_mode {
+            crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        }
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -476,7 +483,11 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
         // Phase 6B: Coverage instrumentation (globals)
-        let num_fns = hir.items.iter().filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_))).count();
+        let num_fns = hir
+            .items
+            .iter()
+            .filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_)))
+            .count();
         if self.coverage_mode != CoverageMode::Off && num_fns > 0 {
             // Allocate extra space for branch/probe counters (up to 50 per function)
             coverage::emit_coverage_globals(&self.module, num_fns * 50, self.coverage_mode);
@@ -502,7 +513,7 @@ impl<'ctx> Codegen<'ctx> {
             }
         }
 
-self.emit_macro_debug_section();
+        self.emit_macro_debug_section();
         if let Some(ref di) = self.debug_info {
             di.finalize();
         }
@@ -626,15 +637,88 @@ self.emit_macro_debug_section();
         Ok(())
     }
 
+    /// Generate code for only a subset of HIR items, identified by their indices.
+    /// Useful for incremental per‑function compilation.
+        pub fn generate_for_items(
+        &mut self,
+        hir: &Hir,
+        item_indices: &[usize],
+    ) -> Result<(), String> {
+        // Pass 1: register all types (required for struct/enum references)
+        for item in &hir.items {
+            match item {
+                HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                HirItem::Extern(ext) => {
+                    for f in &ext.functions {
+                        let name = self.interner.resolve(f.name);
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f.params.iter().map(|pt| match pt {
+                            HirType::Int => self.i64_type.into(),
+                            HirType::Bool => self.i32_type.into(),
+                            HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            _ => self.i64_type.into(),
+                        }).collect();
+                        let ret_type = match &f.ret {
+                            HirType::Int => self.i64_type.into(),
+                            HirType::Bool => self.i32_type.into(),
+                            HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            _ => self.i64_type.into(),
+                        };
+                        if self.module.get_function(name).is_none() {
+                            let _fn_val = self.module.add_function(name, match ret_type {
+                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                _ => self.i64_type.fn_type(&param_types, false),
+                            }, None);
+                        }
+                        self.extern_methods.insert(f.name, f.name);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Pass 2: forward-declare selected functions
+        for &idx in item_indices {
+            if let HirItem::Fn(f) = &hir.items[idx] {
+                function::declare_fn(self, f);
+            }
+        }
+
+        // Pass 3: emit bodies for selected functions
+        for &idx in item_indices {
+            match &hir.items[idx] {
+                HirItem::Fn(f) => {
+                    function::codegen_fn(self, f).map_err(|e| { self.report_error(e.clone()); e })?;
+                }
+                HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        function::codegen_fn(self, m).map_err(|e| { self.report_error(e.clone()); e })?;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(ref di) = self.debug_info { di.finalize(); }
+        let errors = self.errors.borrow().clone();
+        if !errors.is_empty() { Err(errors.join("\n")) } else { Ok(()) }
+    }
+
     pub fn generate_for_tests(
         &mut self,
         hir: &Hir,
         test_names: &[String],
         should_panic: &std::collections::HashSet<String>,
     ) -> Result<(), String> {
-        if !self.library_mode { crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode); }
-        if !self.library_mode { crate::alloc::emit_alloc_shims(&self.module, self.no_std); }
-        if !self.library_mode { crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std); }
+        if !self.library_mode {
+            crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
+        }
+        if !self.library_mode {
+            crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        }
+        if !self.library_mode {
+            crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        }
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
