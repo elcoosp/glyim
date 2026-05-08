@@ -1,6 +1,0 @@
----
-source: crates/glyim-cli-tests-full/tests/integration/ui.rs
-assertion_line: 59
-expression: actual
----
-error: codegen fail

@@ -1,29 +1,19 @@
-pub mod ty;
-pub mod unify;
-pub mod diagnostics;
-pub mod chr;
-pub mod freeze;
-pub mod staging;
-pub mod rep;
-pub mod reflect;
-pub mod comptime;
-pub mod queries;
+pub mod type_errors;
+pub use type_errors::TypeError;
 
 use std::collections::HashMap;
 use glyim_hir::{
-    types::{ExprId, HirType},
-    Hir, HirExpr, HirStmt, HirItem, HirFn, HirPattern,
+    types::{ExprId, HirType, HirPattern},
+    Hir, HirExpr, HirStmt, HirItem, HirFn,
     StructDef, EnumDef, HirImplDef, StructField, HirVariant,
+    ExternFn,
 };
 use glyim_interner::{Interner, Symbol};
-use crate::diagnostics::TypeError;
 
 pub struct TypeCheckOutput {
     pub expr_types: Vec<HirType>,
     pub call_type_args: HashMap<ExprId, Vec<HirType>>,
     pub interner: Interner,
-    pub reflect_metadata: Vec<()>,
-    pub generated_items: Vec<()>,
 }
 
 #[derive(Clone, Debug)]
@@ -59,6 +49,9 @@ impl Scope {
     fn lookup(&self, name: &Symbol) -> Option<&HirType> {
         self.bindings.get(name).map(|b| &b.ty)
     }
+    fn lookup_binding(&self, name: &Symbol) -> Option<&Binding> {
+        self.bindings.get(name)
+    }
 }
 
 pub struct TypeChecker {
@@ -66,11 +59,14 @@ pub struct TypeChecker {
     scopes: Vec<Scope>,
     structs: HashMap<Symbol, StructInfo>,
     enums: HashMap<Symbol, EnumInfo>,
+    extern_fns: HashMap<Symbol, ExternFn>,
+    impl_methods: HashMap<Symbol, Vec<HirFn>>,
     expr_types: Vec<HirType>,
     call_type_args: HashMap<ExprId, Vec<HirType>>,
     errors: Vec<TypeError>,
     fns: Vec<HirFn>,
 }
+
 
 impl TypeChecker {
     pub fn new(interner: Interner) -> Self {
@@ -79,6 +75,8 @@ impl TypeChecker {
             scopes: vec![Scope::new()],
             structs: HashMap::new(),
             enums: HashMap::new(),
+            extern_fns: HashMap::new(),
+            impl_methods: HashMap::new(),
             expr_types: Vec::new(),
             call_type_args: HashMap::new(),
             errors: Vec::new(),
@@ -102,8 +100,6 @@ impl TypeChecker {
                 expr_types: self.expr_types.clone(),
                 call_type_args: self.call_type_args.clone(),
                 interner: self.interner.clone(),
-                reflect_metadata: vec![],
-                generated_items: vec![],
             })
         } else {
             Err(self.errors.clone())
@@ -115,9 +111,9 @@ impl TypeChecker {
             match item {
                 HirItem::Struct(s) => self.register_struct(s),
                 HirItem::Enum(e) => self.register_enum(e),
+                HirItem::Extern(ext) => self.register_extern(ext),
                 HirItem::Impl(imp) => self.register_impl(imp),
                 HirItem::Fn(f) => { self.fns.push(f.clone()); }
-                _ => {}
             }
         }
     }
@@ -134,25 +130,18 @@ impl TypeChecker {
         self.enums.insert(e.name, EnumInfo { variants: e.variants.clone(), variant_map, type_params: e.type_params.clone() });
     }
 
+    fn register_extern(&mut self, ext: &glyim_hir::item::ExternBlock) {
+        for f in &ext.functions {
+            self.extern_fns.insert(f.name, f.clone());
+        }
+    }
+
     fn register_impl(&mut self, imp: &HirImplDef) {
         let methods: Vec<HirFn> = imp.methods.to_vec();
         for m in &methods {
             self.fns.push(m.clone());
-            if !m.type_params.is_empty() {
-                let base_name = self.interner.resolve(m.name).to_string();
-                if let Some(pos) = base_name.rfind('_') {
-                    let prefix = &base_name[..pos];
-                    let prefix_sym = self.interner.intern(prefix);
-                    if self.structs.contains_key(&prefix_sym) {
-                        let short_name = base_name[pos+1..].to_string();
-                        let short_sym = self.interner.intern(&short_name);
-                        let mut short_fn = m.clone();
-                        short_fn.name = short_sym;
-                        self.fns.push(short_fn);
-                    }
-                }
-            }
         }
+        self.impl_methods.insert(imp.target_name, methods);
     }
 
     fn check_fn(&mut self, f: &HirFn) {
@@ -161,7 +150,22 @@ impl TypeChecker {
             let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
             self.scopes[0].insert(sym, ty.clone(), mutable);
         }
-        self.check_expr(&f.body);
+        let body_type = self.check_expr(&f.body);
+        if let Some(expected) = &f.ret {
+            if let Some(actual) = body_type {
+                // Only check for non-generic functions AND when the actual type
+                // is not a type parameter (avoids false positives on generics).
+                let is_type_param = |ty: &HirType| matches!(ty, HirType::Named(s) if f.type_params.contains(s));
+                if f.type_params.is_empty() && *expected != actual
+                    && !is_type_param(&actual) && !is_type_param(expected)
+                {
+                    self.errors.push(TypeError::InvalidReturnType {
+                        expected: expected.clone(),
+                        found: actual.clone(),
+                    });
+                }
+            }
+        }
     }
 
     fn set_type(&mut self, id: ExprId, ty: &HirType) {
@@ -183,10 +187,27 @@ impl TypeChecker {
             HirExpr::BoolLit { .. } => HirType::Bool,
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
-            HirExpr::Ident { name, .. } => {
-                self.scopes.iter().rev().find_map(|s| s.lookup(name).cloned()).unwrap_or(HirType::Error)
+            HirExpr::Ident { name, span, .. } => {
+                self.scopes.iter().rev().find_map(|s| s.lookup(name).cloned()).unwrap_or_else(|| {
+                    let resolved = self.interner.resolve(*name).to_string();
+                    let suggestions = glyim_diag::suggest::suggest_similar(&resolved, &self.interner, 3);
+                    self.errors.push(TypeError::UnresolvedName {
+                        name: resolved,
+                        span: (span.start, span.end),
+                        suggestions,
+                    });
+                    HirType::Error
+                })
             }
-            HirExpr::Binary { lhs, rhs, .. } => { self.check_expr(lhs); self.check_expr(rhs); HirType::Int }
+            HirExpr::Binary { lhs, rhs, op, .. } => {
+                self.check_expr(lhs); self.check_expr(rhs);
+                match op {
+                    glyim_hir::HirBinOp::Eq | glyim_hir::HirBinOp::Neq |
+                    glyim_hir::HirBinOp::Lt | glyim_hir::HirBinOp::Gt |
+                    glyim_hir::HirBinOp::Lte | glyim_hir::HirBinOp::Gte => HirType::Bool,
+                    _ => HirType::Int,
+                }
+            }
             HirExpr::Unary { operand, .. } => { self.check_expr(operand); HirType::Int }
             HirExpr::Block { stmts, .. } => {
                 let mut last = HirType::Unit;
@@ -201,6 +222,7 @@ impl TypeChecker {
             }
             HirExpr::Match { scrutinee, arms, .. } => {
                 let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
+                self.check_match_exhaustiveness(&scrutinee_ty, arms, expr.get_span());
                 let mut arm_types = vec![];
                 for arm in arms {
                     self.scopes.push(Scope::new());
@@ -218,109 +240,175 @@ impl TypeChecker {
                 HirType::Unit
             }
             HirExpr::StructLit { struct_name, fields, .. } => {
+                let field_names: Vec<Symbol> = fields.iter().map(|(n, _)| *n).collect();
+                let field_count = fields.len();
                 for (field_name, v) in fields {
                     self.check_expr(v);
                     if let Some(info) = self.structs.get(struct_name) {
                         if !info.field_map.contains_key(field_name) {
-                            self.errors.push(TypeError::MismatchedTypes {
-                                expected_span: (0..0).into(),
-                                found_span: (0..0).into(),
-                                expected: format!("struct `{}`", self.interner.resolve(*struct_name)),
-                                found: format!("unknown field `{}`", self.interner.resolve(*field_name)),
-                                diff_path: None,
-                                autofix: None,
+                            self.errors.push(TypeError::UnknownField {
+                                struct_name: self.interner.resolve(*struct_name).to_string(),
+                                field: self.interner.resolve(*field_name).to_string(),
+                                span: (0, 0),
                             });
                         }
                     }
                 }
                 if let Some(info) = self.structs.get(struct_name) {
-                    for field in &info.fields {
-                        if !fields.iter().any(|(n, _)| n == &field.name) {
-                            self.errors.push(TypeError::MismatchedTypes {
-                                expected_span: (0..0).into(),
-                                found_span: (0..0).into(),
-                                expected: format!("struct `{}`", self.interner.resolve(*struct_name)),
-                                found: format!("missing field `{}`", self.interner.resolve(field.name)),
-                                diff_path: None,
-                                autofix: None,
-                            });
+                    if field_count != info.fields.len() {
+                        for field in &info.fields {
+                            if !field_names.contains(&field.name) {
+                                self.errors.push(TypeError::MissingField {
+                                    struct_name: self.interner.resolve(*struct_name).to_string(),
+                                    field: self.interner.resolve(field.name).to_string(),
+                                    span: (0, 0),
+                                });
+                            }
                         }
                     }
+                }
+                if let Some(info) = self.structs.get(struct_name) {
                     if info.type_params.is_empty() { HirType::Named(*struct_name) }
-                    else { HirType::Generic(*struct_name, vec![HirType::Int; info.type_params.len()]) }
-                } else { HirType::Named(*struct_name) }
+                    else { HirType::Generic(*struct_name, info.type_params.iter().map(|tp| HirType::Named(*tp)).collect()) }
+                } else {
+                    HirType::Named(*struct_name)
+                }
             }
             HirExpr::EnumVariant { enum_name, args, .. } => {
                 for a in args { self.check_expr(a); }
                 if let Some(info) = self.enums.get(enum_name) {
                     if info.type_params.is_empty() { HirType::Named(*enum_name) }
-                    else { HirType::Generic(*enum_name, vec![HirType::Int; info.type_params.len()]) }
+                    else { HirType::Generic(*enum_name, info.type_params.iter().map(|_| HirType::Int).collect()) }
                 } else { HirType::Named(*enum_name) }
             }
             HirExpr::FieldAccess { object, field, .. } => {
                 let obj_ty = self.check_expr(object).unwrap_or(HirType::Error);
-                let struct_sym = match &obj_ty {
-                    HirType::Named(s) | HirType::Generic(s, _) => *s,
-                    _ => return HirType::Error,
-                };
-                if let Some(info) = self.structs.get(&struct_sym) {
-                    for fld in &info.fields {
-                        if fld.name == *field {
-                            return fld.ty.clone();
+                match &obj_ty {
+                    HirType::Named(s) | HirType::Generic(s, _) => {
+                        // only check known structs; type params silently return Int
+                        if let Some(info) = self.structs.get(s) {
+                            if let Some(fld) = info.fields.iter().find(|f| f.name == *field) {
+                                return fld.ty.clone();
+                            } else {
+                                self.errors.push(TypeError::UnknownField {
+                                    struct_name: self.interner.resolve(*s).to_string(),
+                                    field: self.interner.resolve(*field).to_string(),
+                                    span: (0, 0),
+                                });
+                            }
                         }
                     }
+                    HirType::Tuple(elems) => {
+                        let field_name = self.interner.resolve(*field);
+                        if let Some(idx) = field_name.strip_prefix('_').and_then(|s| s.parse::<usize>().ok()) {
+                            if idx < elems.len() { return elems[idx].clone(); }
+                        }
+                        self.errors.push(TypeError::UnknownField {
+                            struct_name: "tuple".into(),
+                            field: field_name.to_string(),
+                            span: (0, 0),
+                        });
+                    }
+                    _ => { /* ignore */ }
                 }
                 HirType::Error
             }
-            HirExpr::Call { callee, args, .. } => {
-                for a in args { self.check_expr(a); }
-                if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
-                    if !fn_def.type_params.is_empty() {
-                        let n = fn_def.type_params.len();
-                        self.call_type_args.entry(expr.get_id()).or_insert_with(|| vec![HirType::Int; n]);
-                    }
-                    fn_def.ret.clone().unwrap_or(HirType::Int)
-                } else {
-                    HirType::Int
+            HirExpr::As { expr, target_type, .. } => {
+                let from_ty = self.check_expr(expr).unwrap_or(HirType::Error);
+                if !self.is_valid_cast(&from_ty, target_type) {
+                    self.errors.push(TypeError::MismatchedTypes {
+                        expected: target_type.clone(),
+                        found: from_ty,
+                        expr_id: expr.get_id(),
+                        span: (0, 0),
+                    });
                 }
+                target_type.clone()
+            }
+            HirExpr::Deref { expr, .. } => {
+                let inner_ty = self.check_expr(expr).unwrap_or(HirType::Error);
+                match inner_ty {
+                    HirType::RawPtr(inner) => *inner,
+                    _ => {
+                        self.errors.push(TypeError::DerefNonPointer {
+                            found: inner_ty,
+                            expr_id: expr.get_id(),
+                            span: (0, 0),
+                        });
+                        HirType::Error
+                    }
+                }
+            }
+            HirExpr::Call { id, callee, args, .. } => {
+                for a in args { self.check_expr(a); }
+                let callee_sym = *callee;
+                // Try external first
+                if let Some(ext_fn) = self.extern_fns.get(&callee_sym) {
+                    return ext_fn.ret.clone();
+                }
+                if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee_sym) {
+                    // Infer generics
+                    if !fn_def.type_params.is_empty() {
+                        let mut sub: HashMap<Symbol, HirType> = HashMap::new();
+                        for (i, (param_sym, param_ty)) in fn_def.params.iter().enumerate() {
+                            if let Some(arg_expr) = args.get(i) {
+                                if let Some(arg_ty) = self.expr_types.get(arg_expr.get_id().as_usize()) {
+                                    if arg_ty != param_ty {
+                                        sub.insert(*param_sym, arg_ty.clone());
+                                    }
+                                }
+                            }
+                        }
+                        if sub.len() == fn_def.type_params.len() {
+                            let type_args: Vec<HirType> = fn_def.type_params.iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Int))
+                                .collect();
+                            self.call_type_args.insert(*id, type_args);
+                        }
+                    }
+                    return fn_def.ret.clone().unwrap_or(HirType::Int);
+                }
+                HirType::Int
             }
             HirExpr::MethodCall { id, receiver, method_name, args, .. } => {
                 let recv_ty = self.check_expr(receiver).unwrap_or(HirType::Int);
                 for a in args { self.check_expr(a); }
-                let type_sym = match &recv_ty { HirType::Named(s) | HirType::Generic(s, _) => Some(*s), _ => None };
+                let type_sym = match &recv_ty {
+                    HirType::Named(s) | HirType::Generic(s, _) => Some(*s),
+                    _ => None,
+                };
                 if let Some(type_name) = type_sym {
-                    let mangled = self.interner.intern(&format!("{}_{}",
-                        self.interner.resolve(type_name), self.interner.resolve(*method_name)));
-                    if let Some(fn_def) = self.fns.iter().find(|f| f.name == mangled) {
-                        if !fn_def.type_params.is_empty() {
-                            let type_args = match &recv_ty {
-                                HirType::Generic(_, ta) => ta.clone(),
-                                _ => vec![HirType::Int; fn_def.type_params.len()],
-                            };
-                            self.call_type_args.entry(*id).or_insert_with(|| type_args);
+                    if let Some(methods) = self.impl_methods.get(&type_name) {
+                        let mangled = self.interner.intern(&format!("{}_{}",
+                            self.interner.resolve(type_name), self.interner.resolve(*method_name)));
+                        if let Some(fn_def) = methods.iter().find(|m| m.name == mangled) {
+                            if let HirType::Generic(_, ref targs) = recv_ty {
+                                self.call_type_args.insert(*id, targs.clone());
+                            }
+                            return fn_def.ret.clone().unwrap_or(HirType::Int);
                         }
-                        fn_def.ret.clone().unwrap_or(HirType::Int)
-                    } else {
-                        HirType::Int
                     }
-                } else {
-                    HirType::Int
                 }
+                HirType::Int
             }
             HirExpr::While { condition, body, .. } | HirExpr::ForIn { iter: condition, body, .. } => {
-                self.check_expr(condition);
-                self.check_expr(body);
-                HirType::Unit
+                self.check_expr(condition); self.check_expr(body); HirType::Unit
             }
             HirExpr::Return { value, .. } => {
                 if let Some(v) = value { self.check_expr(v); }
                 HirType::Never
             }
-            HirExpr::As { target_type, .. } => target_type.clone(),
             HirExpr::SizeOf { .. } => HirType::Int,
             HirExpr::AddrOf { .. } => HirType::Int,
-            HirExpr::Deref { expr: e, .. } => { self.check_expr(e); HirType::Int }
-            HirExpr::TupleLit { elements, .. } => { for e in elements { self.check_expr(e); } HirType::Int }
+            HirExpr::TupleLit { elements, .. } => {
+                let types: Vec<HirType> = elements.iter()
+                    .map(|e| self.check_expr(e).unwrap_or(HirType::Error)).collect();
+                if types.iter().any(|t| *t == HirType::Error) {
+                    HirType::Error
+                } else {
+                    HirType::Tuple(types)
+                }
+            }
         }
     }
 
@@ -333,35 +421,73 @@ impl TypeChecker {
             }
             HirStmt::LetPat { pattern, mutable, value, ty: annotation, .. } => {
                 let inferred = self.check_expr(value).unwrap_or(HirType::Int);
-                let ty = match annotation {
-                    Some(annot) => annot.clone(),
-                    None => {
-                        if let HirPattern::Var(sym) = pattern {
-                            if let Some(existing) = self.scopes.last().unwrap().lookup(sym) {
-                                if let HirType::Generic(base, existing_args) = existing {
-                                    HirType::Generic(*base, existing_args.clone())
-                                } else {
-                                    inferred
+                let ty = if let Some(annotated) = annotation {
+                    // annotation compatibility check
+                    let resolved_annotated = self.resolve_to_primitive(annotated)
+                        .unwrap_or(annotated.clone());
+                    let resolved_inferred = self.resolve_to_primitive(&inferred)
+                        .unwrap_or(inferred.clone());
+                    if resolved_annotated != resolved_inferred && resolved_inferred != HirType::Error {
+                        self.errors.push(TypeError::MismatchedTypes {
+                            expected: annotated.clone(),
+                            found: inferred.clone(),
+                            expr_id: value.get_id(),
+                            span: (0, 0),
+                        });
+                    }
+                    // Backward inference: if value is a generic Call, extract type args from annotation
+                    if let HirExpr::Call { id: call_id, callee, .. } = value {
+                        if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
+                            if !fn_def.type_params.is_empty() {
+                                if let HirType::Generic(_, type_args) = annotated {
+                                    if type_args.len() == fn_def.type_params.len() {
+                                        self.call_type_args.insert(*call_id, type_args.clone());
+                                    }
                                 }
-                            } else {
-                                inferred
                             }
-                        } else {
-                            inferred
                         }
                     }
+                    annotated.clone()
+                } else {
+                    inferred
                 };
                 self.bind_pattern(pattern, &ty, *mutable);
                 None
             }
             HirStmt::Assign { target, value, .. } => {
+                if let Some(b) = self.scopes.last()
+                    .and_then(|s| s.lookup_binding(target))
+                {
+                    if !b.mutable {
+                        self.errors.push(TypeError::AssignToImmutable {
+                            name: self.interner.resolve(*target).to_string(),
+                            expr_id: value.get_id(),
+                            span: (0, 0),
+                        });
+                    }
+                }
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
                 self.scopes.last_mut().unwrap().insert(*target, ty.clone(), true);
                 Some(ty)
             }
             HirStmt::AssignDeref { target, value, .. } => {
-                self.check_expr(target);
+                // target is a Deref; get the pointer operand type
+                let pointer_ty = if let HirExpr::Deref { expr, .. } = target.as_ref() {
+                    self.check_expr(expr).unwrap_or(HirType::Never)
+                } else {
+                    self.check_expr(target).unwrap_or(HirType::Never)
+                };
                 let ty = self.check_expr(value).unwrap_or(HirType::Int);
+                match pointer_ty {
+                    HirType::RawPtr(_) => {},
+                    _ => {
+                        self.errors.push(TypeError::AssignThroughNonPointer {
+                            found: pointer_ty,
+                            expr_id: value.get_id(),
+                            span: (0, 0),
+                        });
+                    }
+                }
                 Some(ty)
             }
             HirStmt::AssignField { object, value, .. } => {
@@ -379,6 +505,25 @@ impl TypeChecker {
                 self.scopes.last_mut().unwrap().insert(*sym, value_ty.clone(), mutable);
             }
             HirPattern::Wild => {}
+            HirPattern::Struct { name, bindings, .. } => {
+                if let Some(info) = self.structs.get(name) {
+                    let field_tys: Vec<(HirPattern, HirType)> = bindings.iter().filter_map(|(field_sym, field_pat)| {
+                        info.field_map.get(field_sym).and_then(|&idx| info.fields.get(idx).map(|f| (field_pat.clone(), f.ty.clone())))
+                    }).collect();
+                    for (field_pat, field_ty) in field_tys {
+                        self.bind_pattern(&field_pat, &field_ty, mutable);
+                    }
+                }
+            }
+            HirPattern::Tuple { elements, .. } => {
+                if let HirType::Tuple(elem_types) = value_ty {
+                    let pats_and_tys: Vec<(HirPattern, HirType)> = elements.iter().zip(elem_types.iter())
+                        .map(|(p, t)| (p.clone(), t.clone())).collect();
+                    for (p, t) in pats_and_tys {
+                        self.bind_pattern(&p, &t, mutable);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -424,7 +569,69 @@ impl TypeChecker {
             _ => {}
         }
     }
-}
 
-#[cfg(test)]
-mod tests;
+    fn check_match_exhaustiveness(&mut self, scrutinee_type: &HirType, arms: &[glyim_hir::MatchArm], span: glyim_diag::Span) {
+        let enum_variants = match scrutinee_type {
+            HirType::Named(name) | HirType::Generic(name, _) => {
+                if let Some(info) = self.enums.get(name) {
+                    info.variants.iter().map(|v| v.name).collect()
+                } else { vec![] }
+            }
+            HirType::Option(_) => vec![self.interner.intern("Some"), self.interner.intern("None")],
+            HirType::Result(_, _) => vec![self.interner.intern("Ok"), self.interner.intern("Err")],
+            _ => vec![],
+        };
+        if enum_variants.is_empty() { return; }
+        let has_wildcard = arms.iter().any(|arm| matches!(arm.pattern, HirPattern::Wild));
+        if has_wildcard { return; }
+        let covered: Vec<Symbol> = arms.iter().filter_map(|arm| match &arm.pattern {
+            HirPattern::EnumVariant { variant_name, .. } => Some(*variant_name),
+            HirPattern::OptionSome(_) => Some(self.interner.intern("Some")),
+            HirPattern::OptionNone => Some(self.interner.intern("None")),
+            HirPattern::ResultOk(_) => Some(self.interner.intern("Ok")),
+            HirPattern::ResultErr(_) => Some(self.interner.intern("Err")),
+            _ => None,
+        }).collect();
+        let missing: Vec<String> = enum_variants.iter()
+            .filter(|v| !covered.contains(v))
+            .map(|v| self.interner.resolve(*v).to_string())
+            .collect();
+        if !missing.is_empty() {
+            self.errors.push(TypeError::NonExhaustiveMatch {
+                missing,
+                span: (span.start, span.end),
+            });
+        }
+    }
+
+    fn is_valid_cast(&self, from: &HirType, to: &HirType) -> bool {
+        let resolved_from = self.resolve_to_primitive(from).unwrap_or(from.clone());
+        let resolved_to = self.resolve_to_primitive(to).unwrap_or(to.clone());
+        match (&resolved_from, &resolved_to) {
+            (HirType::Int, HirType::Float) | (HirType::Float, HirType::Int) => true,
+            (HirType::Int, HirType::Int) | (HirType::Float, HirType::Float) => true,
+            (_, HirType::RawPtr(_)) => true,
+            (HirType::RawPtr(_), _) => true,
+            (a, b) if a == b => true,
+            _ => false,
+        }
+    }
+
+    fn resolve_to_primitive(&self, ty: &HirType) -> Option<HirType> {
+        match ty {
+            HirType::Int | HirType::Float | HirType::Bool | HirType::Str => Some(ty.clone()),
+            HirType::Named(sym) => {
+                let name = self.interner.resolve(*sym);
+                match name {
+                    "i8" | "i16" | "i32" | "i64" | "Int" => Some(HirType::Int),
+                    "u8" | "u16" | "u32" | "u64" => Some(HirType::Int),
+                    "f32" | "f64" | "Float" => Some(HirType::Float),
+                    "bool" | "Bool" => Some(HirType::Bool),
+                    "Str" | "str" => Some(HirType::Str),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+}

@@ -10,7 +10,7 @@ use glyim_profiler::StageName;
 use glyim_query::fingerprint::Fingerprint;
 use glyim_query::incremental::IncrementalState;
 use glyim_typeck::TypeChecker;
-use glyim_typeck::diagnostics::TypeError;
+use glyim_typeck::TypeError;
 use inkwell::OptimizationLevel;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
