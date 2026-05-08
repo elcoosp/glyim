@@ -1,13 +1,13 @@
-use crate::ty::TyArena;
 use crate::chr::ChrStore;
-use crate::unify::UnificationTable;
 use crate::diagnostics::TypeError;
-use crate::freeze;
 use crate::elab::ElabContext;
+use crate::freeze;
+use crate::ty::TyArena;
+use crate::unify::UnificationTable;
+use crate::TypeCheckOutput;
 use glyim_hir::Hir;
 use glyim_interner::Interner;
 use std::collections::HashMap;
-use crate::TypeCheckOutput;
 
 pub struct TyDatabase {
     pub arena: TyArena,
@@ -55,7 +55,8 @@ impl TyDatabase {
         let call_type_args: HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>> = {
             let mut map = HashMap::new();
             for (&id, tys) in &call_type_args_raw {
-                let hir_tys: Vec<glyim_hir::types::HirType> = tys.iter()
+                let hir_tys: Vec<glyim_hir::types::HirType> = tys
+                    .iter()
                     .map(|&ty| freeze::resolve_ty(&self.arena, &unification, ty))
                     .collect();
                 map.insert(id, hir_tys);

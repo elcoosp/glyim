@@ -11,3 +11,7 @@ mod integration_reflect;
 mod snapshot_errors;
 
 mod integration_macro;
+
+mod error_recovery;
+
+mod phase_consistency;
