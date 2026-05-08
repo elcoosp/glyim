@@ -25,7 +25,6 @@ struct AllocState {
 struct MacroExecutionEnv {
     wasi: WasiP1Ctx,
     alloc_state: RefCell<AllocState>,
-    table: wasmtime::component::ResourceTable,
 }
 
 /// The deterministic macro execution engine.
@@ -111,7 +110,6 @@ impl MacroExecutor {
         let env = MacroExecutionEnv {
             wasi,
             alloc_state: RefCell::new(AllocState::default()),
-            table: wasmtime::component::ResourceTable::new(),
         };
         let mut store = Store::new(&self.engine, env);
         store.set_fuel(MACRO_FUEL_BUDGET)

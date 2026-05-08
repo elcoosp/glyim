@@ -453,7 +453,6 @@ pub fn build_incremental(
     use crate::queries::QueryPipeline;
     use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, MerkleRoot, compute_root_hash};
     use glyim_macro_vfs::ContentHash;
-    use glyim_query::query_key::QueryKey;
 
     let (source, _) = load_source_with_prelude(input)?;
     let cache_dir = input

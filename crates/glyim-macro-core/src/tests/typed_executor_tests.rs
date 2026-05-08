@@ -50,7 +50,7 @@ fn typed_executor_identity_roundtrip() {
     let result_bytes = executor
         .execute(&wasm, &bytes)
         .expect("execute typed macro");
-    let result_expr = deserialize_expr(&result_bytes).expect("deserialize result");
+    let (result_expr, _symbols) = deserialize_expr(&result_bytes).expect("deserialize result");
     match result_expr {
         HirExpr::IntLit { value, .. } => assert_eq!(value, 42),
         _ => panic!("expected IntLit"),
