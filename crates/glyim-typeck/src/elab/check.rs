@@ -6,10 +6,10 @@ pub fn check_expr(ctx: &mut ElabContext, expr: &HirExpr, expected: Ty) {
     // Collect errors into a temporary vec, then push to ctx after
     let mut temp_errors: Vec<crate::diagnostics::TypeError> = Vec::new();
 
-    if matches!(ctx.db.arena.get(expected), &TyKind::Error) {
+    if matches!(ctx.arena.get(expected), &TyKind::Error) {
         let synth = synth_expr(ctx, expr);
         let _ = ctx.unification.unify(
-            &mut ctx.db.arena,
+            &mut ctx.arena,
             synth,
             expected,
             glyim_diag::Span::new(0, 0),
@@ -21,7 +21,7 @@ pub fn check_expr(ctx: &mut ElabContext, expr: &HirExpr, expected: Ty) {
 
     let synth = synth_expr(ctx, expr);
     let _ = ctx.unification.unify(
-        &mut ctx.db.arena,
+        &mut ctx.arena,
         synth,
         expected,
         glyim_diag::Span::new(0, 0),

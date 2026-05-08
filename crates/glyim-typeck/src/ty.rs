@@ -76,6 +76,11 @@ impl TyArena {
         self.kinds.push(TyKind::Infer);
         Ty(id)
     }
+    /// Set a type to Error (poison it after an occurs-check failure).
+    pub fn poison(&mut self, ty: Ty) {
+        self.kinds[ty.0] = TyKind::Error;
+    }
+
 
     pub fn get(&self, ty: Ty) -> &TyKind {
         &self.kinds[ty.0]

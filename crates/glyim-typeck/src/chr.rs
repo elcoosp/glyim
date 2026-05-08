@@ -1,7 +1,7 @@
-use crate::ty::{Ty, TyKind, TyArena};
-use crate::unify::{ErrorGuaranteed, UnificationTable};
+use crate::ty::{Ty, TyArena};
+use crate::unify::ErrorGuaranteed;
 use glyim_interner::Symbol;
-use glyim_diag::Span;
+
 use std::collections::HashSet;
 
 /// A logical goal we need to prove.
@@ -91,12 +91,12 @@ impl ChrStore {
                             if premises.iter().all(|p| self.proven_goals.contains(p)) {
                                 self.proven_goals.insert(goal.clone());
                             } else {
+                                self.pending_goals.push(goal.clone());
                                 for p in premises {
                                     if !self.proven_goals.contains(p) {
                                         self.pending_goals.push(p.clone());
                                     }
                                 }
-                                self.pending_goals.push(goal.clone());
                             }
                         }
                         ChrRule::Propagate { premises, new_goals, .. } => {
@@ -108,12 +108,12 @@ impl ChrStore {
                                     }
                                 }
                             } else {
+                                self.pending_goals.push(goal.clone());
                                 for p in premises {
                                     if !self.proven_goals.contains(p) {
                                         self.pending_goals.push(p.clone());
                                     }
                                 }
-                                self.pending_goals.push(goal.clone());
                             }
                         }
                     }

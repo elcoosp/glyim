@@ -1,7 +1,7 @@
 use crate::chr::{Goal, ChrRule, ChrStore};
 use crate::ty::{Ty, TyKind, TyArena};
 use glyim_interner::Interner;
-use glyim_diag::Span;
+
 
 #[test]
 fn goal_equality() {

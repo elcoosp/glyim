@@ -4,11 +4,12 @@ pub mod biabduction;
 use miette::SourceSpan;
 
 /// Convert our Span to SourceSpan.
-fn to_span(start: usize, end: usize) -> SourceSpan {
-    (start..end).into()
+/// Convert a glyim_diag::Span to a miette SourceSpan.
+pub fn span_to_src(s: glyim_diag::Span) -> SourceSpan {
+    (s.start..s.end).into()
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum TypeError {
     #[error("infinite type detected")]
     InfiniteType {

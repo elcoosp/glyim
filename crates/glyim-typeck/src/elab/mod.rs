@@ -2,20 +2,21 @@ pub mod scope;
 pub mod synth;
 pub mod check;
 
-use crate::ty::{Ty, TyKind};
+use crate::ty::{Ty, TyKind, TyArena};
 use crate::unify::UnificationTable;
 use crate::chr::ChrStore;
-use crate::db::TyDatabase;
 use crate::diagnostics::TypeError;
 use crate::staging::Level;
 use crate::elab::scope::Scope;
 use glyim_hir::{HirItem, HirFn};
+use glyim_interner::Interner;
 use std::collections::HashMap;
 
 pub struct ElabContext<'a> {
-    pub db: &'a mut TyDatabase,
-    pub unification: &'a mut UnificationTable,
-    pub chr_store: &'a mut ChrStore,
+    pub arena: &'a mut TyArena,
+    pub interner: &'a mut Interner,
+    pub unification: UnificationTable,
+    pub chr_store: ChrStore,
     pub current_level: Level,
     pub scope: Scope,
     pub expr_types: HashMap<glyim_hir::types::ExprId, Ty>,
@@ -26,12 +27,14 @@ pub struct ElabContext<'a> {
 
 impl<'a> ElabContext<'a> {
     pub fn new(
-        db: &'a mut TyDatabase,
-        unification: &'a mut UnificationTable,
-        chr_store: &'a mut ChrStore,
+        arena: &'a mut TyArena,
+        interner: &'a mut Interner,
+        unification: UnificationTable,
+        chr_store: ChrStore,
     ) -> Self {
         Self {
-            db,
+            arena,
+            interner,
             unification,
             chr_store,
             current_level: Level::Runtime,
@@ -66,39 +69,34 @@ impl<'a> ElabContext<'a> {
 
     fn hir_type_to_ty(&mut self, hir_type: &glyim_hir::types::HirType) -> Ty {
         match hir_type {
-            glyim_hir::types::HirType::Int => self.db.arena.alloc(TyKind::Int),
-            glyim_hir::types::HirType::Float => self.db.arena.alloc(TyKind::Float),
-            glyim_hir::types::HirType::Bool => self.db.arena.alloc(TyKind::Bool),
-            glyim_hir::types::HirType::Str => self.db.arena.alloc(TyKind::Str),
-            glyim_hir::types::HirType::Unit => self.db.arena.alloc(TyKind::Unit),
-            glyim_hir::types::HirType::Never => self.db.arena.alloc(TyKind::Never),
-            glyim_hir::types::HirType::Error => self.db.arena.alloc(TyKind::Error),
+            glyim_hir::types::HirType::Int => self.arena.alloc(TyKind::Int),
+            glyim_hir::types::HirType::Float => self.arena.alloc(TyKind::Float),
+            glyim_hir::types::HirType::Bool => self.arena.alloc(TyKind::Bool),
+            glyim_hir::types::HirType::Str => self.arena.alloc(TyKind::Str),
+            glyim_hir::types::HirType::Unit => self.arena.alloc(TyKind::Unit),
+            glyim_hir::types::HirType::Never => self.arena.alloc(TyKind::Never),
+            glyim_hir::types::HirType::Error => self.arena.alloc(TyKind::Error),
             glyim_hir::types::HirType::Named(name) => {
-                let name_copy = *name; // Symbol is Copy
-                let name_str = self.db.interner.resolve(name_copy).to_string();
-                // Drop immutable borrow before mutating
-                drop(name);
-                let sym = self.db.interner.intern(&name_str);
-                self.db.arena.alloc(TyKind::Named(sym))
+                let name_str = self.interner.resolve(*name).to_string();
+                let sym = self.interner.intern(&name_str);
+                self.arena.alloc(TyKind::Named(sym))
             }
             glyim_hir::types::HirType::Generic(name, args) => {
-                let name_copy = *name;
-                let name_str = self.db.interner.resolve(name_copy).to_string();
-                drop(name);
-                let sym = self.db.interner.intern(&name_str);
+                let name_str = self.interner.resolve(*name).to_string();
+                let sym = self.interner.intern(&name_str);
                 let arg_tys: Vec<Ty> = args.iter().map(|a| self.hir_type_to_ty(a)).collect();
-                self.db.arena.alloc(TyKind::App(sym, arg_tys))
+                self.arena.alloc(TyKind::App(sym, arg_tys))
             }
             glyim_hir::types::HirType::Func(params, ret) => {
                 let param_tys: Vec<Ty> = params.iter().map(|p| self.hir_type_to_ty(p)).collect();
                 let ret_ty = self.hir_type_to_ty(ret);
-                self.db.arena.alloc(TyKind::Fn(param_tys, ret_ty))
+                self.arena.alloc(TyKind::Fn(param_tys, ret_ty))
             }
             glyim_hir::types::HirType::RawPtr(inner) => {
                 let inner_ty = self.hir_type_to_ty(inner);
-                self.db.arena.alloc(TyKind::RawPtr(inner_ty))
+                self.arena.alloc(TyKind::RawPtr(inner_ty))
             }
-            _ => self.db.arena.alloc(TyKind::Error),
+            _ => self.arena.alloc(TyKind::Error),
         }
     }
 }

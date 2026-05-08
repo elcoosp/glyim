@@ -1,7 +1,6 @@
 use crate::diagnostics::AutoFix;
 use crate::ty::{Ty, TyKind, TyArena};
 use glyim_interner::Interner;
-use miette::SourceSpan;
 
 /// Ask "What wrapper makes this compile?"
 /// Takes an interner to resolve symbol names.

@@ -73,7 +73,7 @@ fn biabduction_wrap_ok() {
 fn unify_mismatch_includes_diff_path() {
     let mut arena = TyArena::new();
     let mut interner = Interner::new();
-    let mut table = UnificationTable::new();
+    let mut table = UnificationTable::with_interner(interner.clone());
     let vec_sym = interner.intern("Vec");
     let int_ty = arena.alloc(TyKind::Int);
     let bool_ty = arena.alloc(TyKind::Bool);
@@ -91,7 +91,7 @@ fn unify_mismatch_includes_diff_path() {
 fn unify_mismatch_option_includes_autofix() {
     let mut arena = TyArena::new();
     let mut interner = Interner::new();
-    let mut table = UnificationTable::new();
+    let mut table = UnificationTable::with_interner(interner.clone());
     let opt_sym = interner.intern("Option");
     let int_ty = arena.alloc(TyKind::Int);
     let option_int = arena.alloc(TyKind::App(opt_sym, vec![int_ty]));

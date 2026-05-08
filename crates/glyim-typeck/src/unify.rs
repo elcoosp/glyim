@@ -1,8 +1,9 @@
 use crate::ty::{Ty, TyKind, TyArena};
 use crate::diagnostics::TypeError;
 use crate::diagnostics::zippering::zip_diff;
-
+use crate::diagnostics::biabduction::bi_abductive_synthesis;
 use glyim_diag::Span;
+use glyim_interner::Interner;
 
 /// A token proving an error was emitted.
 #[derive(Clone, Copy, Debug)]
@@ -11,6 +12,8 @@ pub struct ErrorGuaranteed(pub(crate) ());
 pub struct UnificationTable {
     parents: Vec<Ty>,
     ranks: Vec<u8>,
+    /// Optional interner for diagnostics (autofix suggestions).
+    interner: Option<Interner>,
 }
 
 impl UnificationTable {
@@ -18,6 +21,15 @@ impl UnificationTable {
         Self {
             parents: Vec::new(),
             ranks: Vec::new(),
+            interner: None,
+        }
+    }
+
+    pub fn with_interner(interner: Interner) -> Self {
+        Self {
+            parents: Vec::new(),
+            ranks: Vec::new(),
+            interner: Some(interner),
         }
     }
 
@@ -39,7 +51,6 @@ impl UnificationTable {
         }
     }
 
-    /// Core unification with occurs check and error recovery.
     pub fn unify(
         &mut self,
         arena: &mut TyArena,
@@ -54,12 +65,10 @@ impl UnificationTable {
             return Ok(());
         }
 
-        // Error is infectious — unifies with anything
         if matches!(arena.get(a), TyKind::Error) || matches!(arena.get(b), TyKind::Error) {
             return Ok(());
         }
 
-        // Occurs check
         if self.occurs(arena, a, b) || self.occurs(arena, b, a) {
             let origin = arena.get_infer_span(a)
                 .or_else(|| arena.get_infer_span(b))
@@ -69,7 +78,6 @@ impl UnificationTable {
             return Err(ErrorGuaranteed(()));
         }
 
-        // Infer vars unify with anything
         if matches!(arena.get(a), TyKind::Infer) {
             self.union(a, b);
             return Ok(());
@@ -79,7 +87,6 @@ impl UnificationTable {
             return Ok(());
         }
 
-        // Structural recursion
         self.unify_structural(arena, a, b, span, emit_err)
     }
 
@@ -140,13 +147,15 @@ impl UnificationTable {
             }
             _ => {
                 let diff_path = zip_diff(arena, a, b, "root".to_string());
+                let autofix = self.interner.as_ref()
+                    .and_then(|i| bi_abductive_synthesis(arena, i, a, b));
                 emit_err(TypeError::MismatchedTypes {
                     expected_span: crate::diagnostics::span_to_src(arena.get_infer_span(a).unwrap_or(span)),
                     found_span: crate::diagnostics::span_to_src(arena.get_infer_span(b).unwrap_or(span)),
                     expected: format!("{:?}", arena.get(a)),
                     found: format!("{:?}", arena.get(b)),
                     diff_path,
-                    autofix: None,
+                    autofix,
                 });
                 Err(ErrorGuaranteed(()))
             }
