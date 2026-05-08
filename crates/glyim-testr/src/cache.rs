@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 pub struct IncrementalTestCache {
     store: MerkleStore,
+    #[allow(dead_code)]
     dir: PathBuf,
 }
 

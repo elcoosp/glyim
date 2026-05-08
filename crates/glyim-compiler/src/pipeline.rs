@@ -451,7 +451,7 @@ pub fn build_incremental(
     target: Option<&str>,
 ) -> Result<(PathBuf, crate::queries::IncrementalReport), PipelineError> {
     use crate::queries::QueryPipeline;
-    use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, MerkleRoot, compute_root_hash};
+    use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, compute_root_hash};
     use glyim_macro_vfs::ContentHash;
 
     let (source, _) = load_source_with_prelude(input)?;

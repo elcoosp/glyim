@@ -21,7 +21,7 @@ impl TestRunner {
         display: &dyn DisplayBackend,
     ) -> Vec<TestResult> {
         // If incremental mode, check cache first
-        let mut cached_results: Vec<crate::types::TestResult> = Vec::new();
+        let _cached_results: Vec<crate::types::TestResult> = Vec::new();
         let source_hash = glyim_macro_vfs::ContentHash::of(source.as_bytes());
         let cache = if self.config.incremental {
             crate::cache::IncrementalTestCache::new(&std::path::PathBuf::from(".glyim/incremental/test-cache"))

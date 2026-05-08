@@ -37,7 +37,7 @@ fn b() -> i64 { 1 }
 
     // May fail because test b returns non-zero. That's fine — we just want it to not crash.
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
 
     // It must at least find and run test 'a'
     assert!(stderr.contains("test a"), "output should mention test a, got stderr: {}", stderr);
