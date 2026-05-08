@@ -23,16 +23,28 @@ impl TyDatabase {
     }
 
     pub fn check_module(&mut self, hir: &Hir) -> Result<TypeCheckOutput, Vec<TypeError>> {
-        let mut chr_store = ChrStore::new(vec![]);
-        let mut unification = UnificationTable::new();
-        let mut ctx = ElabContext::new(self, &mut unification, &mut chr_store);
-        for item in &hir.items {
-            ctx.elaborate_item(item);
-        }
-        let errors = ctx.errors.clone();
-        let elab_map = ctx.expr_types.clone();
-        let call_type_args_raw = ctx.call_type_args.clone();
-        drop(ctx);
+        let unification = UnificationTable::with_interner(self.interner.clone());
+        let chr_store = ChrStore::new(vec![]);
+
+        // Run elaboration in a block so we can destructure ctx
+        let (elab_errors, elab_map, call_type_args_raw, unification, mut chr_store) = {
+            let mut ctx = ElabContext::new(
+                &mut self.arena,
+                &mut self.interner,
+                unification,
+                chr_store,
+            );
+            for item in &hir.items {
+                ctx.elaborate_item(item);
+            }
+            (
+                ctx.errors.clone(),
+                ctx.expr_types.clone(),
+                ctx.call_type_args.clone(),
+                ctx.unification,
+                ctx.chr_store,
+            )
+        };
 
         if let Err(_) = chr_store.solve(&self.arena) {
             // errors already accumulated
@@ -50,8 +62,8 @@ impl TyDatabase {
             map
         };
 
-        if !errors.is_empty() {
-            return Err(errors);
+        if !elab_errors.is_empty() {
+            return Err(elab_errors);
         }
 
         Ok(TypeCheckOutput {
