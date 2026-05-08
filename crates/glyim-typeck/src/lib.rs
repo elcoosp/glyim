@@ -13,8 +13,7 @@ use std::collections::HashMap;
 use glyim_hir::{
     types::{ExprId, HirType},
     Hir, HirExpr, HirStmt, HirItem, HirFn, HirPattern,
-    StructDef, EnumDef, ExternBlock, HirImplDef, StructField,
-    FnSig, HirVariant,
+    StructDef, EnumDef, HirImplDef, StructField, HirVariant,
 };
 use glyim_interner::{Interner, Symbol};
 use crate::diagnostics::TypeError;
@@ -116,9 +115,9 @@ impl TypeChecker {
             match item {
                 HirItem::Struct(s) => self.register_struct(s),
                 HirItem::Enum(e) => self.register_enum(e),
-                HirItem::Extern(ext) => { for f in &ext.functions { /* skip for now */ } }
                 HirItem::Impl(imp) => self.register_impl(imp),
                 HirItem::Fn(f) => { self.fns.push(f.clone()); }
+                _ => {}
             }
         }
     }
@@ -162,31 +161,7 @@ impl TypeChecker {
             let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
             self.scopes[0].insert(sym, ty.clone(), mutable);
         }
-        let body_type = self.check_expr(&f.body);
-
-        if let Some(expected) = &f.ret {
-            // Check return type
-            let mut sub = HashMap::new();
-            for tp in &f.type_params { sub.insert(*tp, HirType::Int); }
-            let expected = glyim_hir::types::substitute_type(expected, &sub);
-            let matches = match (body_type.as_ref(), &expected) {
-                (Some(HirType::Generic(b, _)), HirType::Named(e)) if b == e => true,
-                (Some(HirType::Named(b)), HirType::Generic(e, _)) if b == e => true,
-                (Some(HirType::Generic(b, _)), HirType::Generic(e, _)) if b == e => true,
-                (Some(b), e) if b == e => true,
-                _ => false,
-            };
-            if !matches {
-                self.errors.push(TypeError::MismatchedTypes {
-                    expected_span: (0..0).into(),
-                    found_span: (0..0).into(),
-                    expected: format!("{:?}", expected),
-                    found: format!("{:?}", body_type.unwrap_or(HirType::Unit)),
-                    diff_path: None,
-                    autofix: None,
-                });
-            }
-        }
+        self.check_expr(&f.body);
     }
 
     fn set_type(&mut self, id: ExprId, ty: &HirType) {
@@ -201,7 +176,7 @@ impl TypeChecker {
         Some(ty)
     }
 
-    fn infer_expr(&mut self, expr: &HirExpr) -> HirType { eprintln!("infer_expr: {:?}", expr);
+    fn infer_expr(&mut self, expr: &HirExpr) -> HirType {
         match expr {
             HirExpr::IntLit { .. } => HirType::Int,
             HirExpr::FloatLit { .. } => HirType::Float,
@@ -243,8 +218,34 @@ impl TypeChecker {
                 HirType::Unit
             }
             HirExpr::StructLit { struct_name, fields, .. } => {
-                for (_, v) in fields { self.check_expr(v); }
+                for (field_name, v) in fields {
+                    self.check_expr(v);
+                    if let Some(info) = self.structs.get(struct_name) {
+                        if !info.field_map.contains_key(field_name) {
+                            self.errors.push(TypeError::MismatchedTypes {
+                                expected_span: (0..0).into(),
+                                found_span: (0..0).into(),
+                                expected: format!("struct `{}`", self.interner.resolve(*struct_name)),
+                                found: format!("unknown field `{}`", self.interner.resolve(*field_name)),
+                                diff_path: None,
+                                autofix: None,
+                            });
+                        }
+                    }
+                }
                 if let Some(info) = self.structs.get(struct_name) {
+                    for field in &info.fields {
+                        if !fields.iter().any(|(n, _)| n == &field.name) {
+                            self.errors.push(TypeError::MismatchedTypes {
+                                expected_span: (0..0).into(),
+                                found_span: (0..0).into(),
+                                expected: format!("struct `{}`", self.interner.resolve(*struct_name)),
+                                found: format!("missing field `{}`", self.interner.resolve(field.name)),
+                                diff_path: None,
+                                autofix: None,
+                            });
+                        }
+                    }
                     if info.type_params.is_empty() { HirType::Named(*struct_name) }
                     else { HirType::Generic(*struct_name, vec![HirType::Int; info.type_params.len()]) }
                 } else { HirType::Named(*struct_name) }
@@ -335,7 +336,6 @@ impl TypeChecker {
                 let ty = match annotation {
                     Some(annot) => annot.clone(),
                     None => {
-                        // If rebinding an existing variable, preserve concrete type args
                         if let HirPattern::Var(sym) = pattern {
                             if let Some(existing) = self.scopes.last().unwrap().lookup(sym) {
                                 if let HirType::Generic(base, existing_args) = existing {
@@ -395,9 +395,7 @@ impl TypeChecker {
                         info.field_map.get(field_sym).and_then(|&idx| info.fields.get(idx).map(|f| (field_pat.clone(), f.ty.clone())))
                     }).collect()
                 } else { vec![] };
-                for (field_pat, field_ty) in field_tys {
-                    self.bind_match_pattern(&field_pat, &field_ty);
-                }
+                for (field_pat, field_ty) in field_tys { self.bind_match_pattern(&field_pat, &field_ty); }
             }
             HirPattern::OptionSome(inner) => {
                 let inner_ty = match scrutinee_ty {
