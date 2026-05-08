@@ -1,14 +1,14 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wasmtime::*;
 
 use glyim_macro_vfs::{ContentHash, ContentStore};
-use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi::p1::WasiP1Ctx;
+use wasmtime_wasi::WasiCtxBuilder;
 
-use crate::cache::{MacroExpansionCache, compute_cache_key};
+use crate::cache::{compute_cache_key, MacroExpansionCache};
 
 /// Fuel budget for macro execution — 200_000 instructions is generous
 /// but prevents infinite loops. Based on Wasmtime fuel metering where each
@@ -25,6 +25,7 @@ struct AllocState {
 struct MacroExecutionEnv {
     wasi: WasiP1Ctx,
     alloc_state: RefCell<AllocState>,
+    macro_ctx: Option<Arc<dyn crate::context::MacroContext + Send + Sync>>,
 }
 
 /// The deterministic macro execution engine.
@@ -104,15 +105,15 @@ impl MacroExecutor {
         };
 
         // Build WASI context
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdio()
-            .build_p1();
+        let wasi = WasiCtxBuilder::new().inherit_stdio().build_p1();
         let env = MacroExecutionEnv {
             wasi,
             alloc_state: RefCell::new(AllocState::default()),
+            macro_ctx: None,
         };
         let mut store = Store::new(&self.engine, env);
-        store.set_fuel(MACRO_FUEL_BUDGET)
+        store
+            .set_fuel(MACRO_FUEL_BUDGET)
             .map_err(|e| anyhow!("set_fuel: {e}"))?;
 
         let mut linker = Linker::new(&self.engine);
@@ -140,7 +141,50 @@ impl MacroExecutor {
         })?;
 
         // Add WASI to the linker
-        wasmtime_wasi::p1::wasi_snapshot_preview1::add_to_linker(&mut linker, |env: &mut MacroExecutionEnv| &mut env.wasi)?;
+        wasmtime_wasi::p1::wasi_snapshot_preview1::add_to_linker(
+            &mut linker,
+            |env: &mut MacroExecutionEnv| &mut env.wasi,
+        )?;
+        // Host function: trait_is_implemented
+        linker.func_wrap("env", "trait_is_implemented", {
+            |mut caller: Caller<'_, MacroExecutionEnv>,
+             t_ptr: i32,
+             t_len: i32,
+             ty_ptr: i32,
+             ty_len: i32|
+             -> i32 {
+                let memory = match caller.get_export("memory") {
+                    Some(e) => e.into_memory().unwrap(),
+                    None => return 0,
+                };
+                let trait_name = {
+                    let mut buf = vec![0u8; t_len as usize];
+                    memory.read(&caller, t_ptr as usize, &mut buf).ok();
+                    String::from_utf8_lossy(&buf).into_owned()
+                };
+                let type_name = {
+                    let mut buf = vec![0u8; ty_len as usize];
+                    memory.read(&caller, ty_ptr as usize, &mut buf).ok();
+                    String::from_utf8_lossy(&buf).into_owned()
+                };
+                let result = caller
+                    .data()
+                    .macro_ctx
+                    .as_ref()
+                    .map(|ctx| {
+                        ctx.trait_is_implemented(
+                            glyim_interner::Interner::new().intern(&trait_name),
+                            glyim_interner::Interner::new().intern(&type_name),
+                        )
+                    })
+                    .unwrap_or(false);
+                if result {
+                    1
+                } else {
+                    0
+                }
+            }
+        })?;
 
         let instance = linker.instantiate(&mut store, &module)?;
         let maybe_memory = instance.get_memory(&mut store, "memory");
@@ -158,32 +202,35 @@ impl MacroExecutor {
                     .grow(&mut store, required_pages - current_pages)
                     .map_err(|e| anyhow!("failed to grow memory: {:?}", e))?;
             }
-            memory.write(&mut store, 0, input)
+            memory
+                .write(&mut store, 0, input)
                 .map_err(|e| anyhow!("write input to memory: {e}"))?;
         }
 
         let output_offset = input.len() as i32;
 
         let mut result = [Val::I32(0)];
-        expand_fn.call(
-            &mut store,
-            &[
-                Val::I32(0),
-                Val::I32(input.len() as i32),
-                Val::I32(output_offset),
-            ],
-            &mut result,
-        ).map_err(|e| {
-            if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
-                if *trap == wasmtime::Trap::OutOfFuel {
-                    return anyhow!(
+        expand_fn
+            .call(
+                &mut store,
+                &[
+                    Val::I32(0),
+                    Val::I32(input.len() as i32),
+                    Val::I32(output_offset),
+                ],
+                &mut result,
+            )
+            .map_err(|e| {
+                if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
+                    if *trap == wasmtime::Trap::OutOfFuel {
+                        return anyhow!(
                         "macro execution exceeded fuel budget of {} instructions (infinite loop?)",
                         MACRO_FUEL_BUDGET
                     );
+                    }
                 }
-            }
-            anyhow!("macro expand call: {e}")
-        })?;
+                anyhow!("macro expand call: {e}")
+            })?;
 
         let output_len = match result[0] {
             Val::I32(len) => len as usize,
