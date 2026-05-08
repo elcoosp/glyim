@@ -15,7 +15,7 @@ impl FixtureGenerator {
             ));
         }
         source.push_str(
-            &"fn main() -> i64 {\n    let mut sum = 0;\n"
+            "fn main() -> i64 {\n    let mut sum = 0;\n"
         );
         for i in 0..function_count {
             source.push_str(&format!("    sum = sum + fn_{}({});\n", i, i));

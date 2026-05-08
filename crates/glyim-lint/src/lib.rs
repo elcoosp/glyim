@@ -118,8 +118,8 @@ pub fn lint(hir: &Hir, interner: &Interner, registry: &LintRegistry) -> Vec<Lint
     if registry.get(LintId("unused_function")).is_some() {
         let called = collect_called_symbols(hir);
         for item in &hir.items {
-            if let glyim_hir::item::HirItem::Fn(f) = item {
-                if !called.contains(&f.name) && interner.resolve(f.name) != "main" {
+            if let glyim_hir::item::HirItem::Fn(f) = item
+                && !called.contains(&f.name) && interner.resolve(f.name) != "main" {
                     diags.push(LintDiagnostic {
                         lint_id: LintId("unused_function"),
                         severity: Severity::Warning,
@@ -131,7 +131,6 @@ pub fn lint(hir: &Hir, interner: &Interner, registry: &LintRegistry) -> Vec<Lint
                         suggestion: None,
                     });
                 }
-            }
         }
     }
 
@@ -201,11 +200,10 @@ fn collect_decls(expr: &HirExpr, decls: &mut Vec<(Symbol, Span, bool)>, params: 
                     }
                     HirStmt::LetPat { pattern, mutable, value, span, .. } => {
                         // for simplicity, if pattern is a simple Var, treat like let
-                        if let glyim_hir::HirPattern::Var(sym) = pattern {
-                            if !params.contains(sym) {
+                        if let glyim_hir::HirPattern::Var(sym) = pattern
+                            && !params.contains(sym) {
                                 decls.push((*sym, *span, *mutable));
                             }
-                        }
                         collect_decls(value, decls, params);
                     }
                     HirStmt::Expr(e) => collect_decls(e, decls, params),
@@ -467,7 +465,7 @@ fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut 
     match expr {
         HirExpr::Block { stmts, span, .. } => {
             let mut found_terminal = false;
-            for (_i, stmt) in stmts.iter().enumerate() {
+            for stmt in stmts.iter() {
                 if found_terminal {
                     diags.push(LintDiagnostic {
                         lint_id: LintId("dead_code"),

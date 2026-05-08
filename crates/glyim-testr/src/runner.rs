@@ -177,17 +177,13 @@ impl TestRunner {
                 metadata: std::collections::HashMap::new(),
                 version: 1,
             };
-            for entry in std::fs::read_dir(cov_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap_or_else(|_| std::fs::read_dir(".").unwrap())) {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        if let Ok(data) = std::fs::read_to_string(&path) {
-                            if let Ok(dump) = serde_json::from_str::<glyim_coverage::data::CoverageDump>(&data) {
-                                merged_dump.merge(&dump);
-                            }
+            for entry in std::fs::read_dir(cov_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap_or_else(|_| std::fs::read_dir(".").unwrap())).flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("json")
+                    && let Ok(data) = std::fs::read_to_string(&path)
+                        && let Ok(dump) = serde_json::from_str::<glyim_coverage::data::CoverageDump>(&data) {
+                            merged_dump.merge(&dump);
                         }
-                    }
-                }
             }
             let merged_path = cov_dir.join("merged.json");
             if let Ok(json) = serde_json::to_string(&merged_dump) {

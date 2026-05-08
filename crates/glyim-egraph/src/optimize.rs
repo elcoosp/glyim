@@ -34,9 +34,9 @@ pub fn optimize_fn(
     let root = hir_expr_to_egraph(&mut egraph, &hir_fn.body, interner, types, &mut type_map);
 
     let rules = core_rewrites();
-    let memory_budget = config.memory_budget.clone();
+    let memory_budget = config.memory_budget;
     let hook = move |runner: &mut Runner<GlyimLang, GlyimAnalysis, ()>| -> Result<(), String> {
-        let approx_memory = (runner.egraph.total_number_of_nodes() as usize) * 100;
+        let approx_memory = runner.egraph.total_number_of_nodes() * 100;
         if approx_memory > memory_budget {
             return Err(format!(
                 "e-graph memory budget exceeded: {} MB > {} MB",

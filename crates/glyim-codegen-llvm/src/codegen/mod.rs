@@ -688,11 +688,11 @@ impl<'ctx> Codegen<'ctx> {
         for &idx in item_indices {
             match &hir.items[idx] {
                 HirItem::Fn(f) => {
-                    function::codegen_fn(self, f).map_err(|e| { self.report_error(e.clone()); e })?;
+                    function::codegen_fn(self, f).inspect_err(|e| { self.report_error(e.clone()); })?;
                 }
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        function::codegen_fn(self, m).map_err(|e| { self.report_error(e.clone()); e })?;
+                        function::codegen_fn(self, m).inspect_err(|e| { self.report_error(e.clone()); })?;
                     }
                 }
                 _ => {}

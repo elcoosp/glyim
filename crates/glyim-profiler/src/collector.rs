@@ -13,6 +13,12 @@ pub struct ProfileCollector {
     enabled: bool,
 }
 
+impl Default for ProfileCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProfileCollector {
     pub fn new() -> Self {
         Self {

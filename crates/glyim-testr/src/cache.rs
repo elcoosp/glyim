@@ -22,13 +22,11 @@ impl IncrementalTestCache {
         let key = format!("test-{}", test_name);
         let hash = self.store.resolve_name(&key)?;
         let node = self.store.get(&hash)?;
-        if let MerkleNodeData::ObjectCode { symbol_name, bytes } = &node.data {
-            if symbol_name == &source_hash.to_hex() {
-                if let Ok(result) = postcard::from_bytes::<crate::types::TestResult>(bytes) {
+        if let MerkleNodeData::ObjectCode { symbol_name, bytes } = &node.data
+            && symbol_name == &source_hash.to_hex()
+                && let Ok(result) = postcard::from_bytes::<crate::types::TestResult>(bytes) {
                     return Some(result);
                 }
-            }
-        }
         None
     }
 

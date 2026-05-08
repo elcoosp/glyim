@@ -102,7 +102,7 @@ fn increment_counter_at_builder(
     let cov_global = module.get_global("__glyim_cov_counts").unwrap();
     let ptr = cov_global.as_pointer_value();
     let zero = i32_type.const_int(0, false);
-    let idx = i32_type.const_int(counter_index as u64, false);
+    let idx = i32_type.const_int(counter_index, false);
     let indices = &[zero, idx];
     let counter_ptr = unsafe {
         builder.build_in_bounds_gep(

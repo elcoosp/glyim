@@ -84,13 +84,11 @@ impl MacroExecutor {
         };
 
         // Check cache first
-        if let Some(ref cache) = self.cache {
-            if let Some(key) = cache_key {
-                if let Some(data) = cache.lookup(&key) {
+        if let Some(ref cache) = self.cache
+            && let Some(key) = cache_key
+                && let Some(data) = cache.lookup(&key) {
                     return Ok(data);
                 }
-            }
-        }
 
         // Cache the compiled module
         let module = {
@@ -221,14 +219,13 @@ impl MacroExecutor {
                 &mut result,
             )
             .map_err(|e| {
-                if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
-                    if *trap == wasmtime::Trap::OutOfFuel {
+                if let Some(trap) = e.downcast_ref::<wasmtime::Trap>()
+                    && *trap == wasmtime::Trap::OutOfFuel {
                         return anyhow!(
                         "macro execution exceeded fuel budget of {} instructions (infinite loop?)",
                         MACRO_FUEL_BUDGET
                     );
                     }
-                }
                 anyhow!("macro expand call: {e}")
             })?;
 
@@ -247,13 +244,11 @@ impl MacroExecutor {
         };
 
         // Store in cache
-        if let Some(ref cache) = self.cache {
-            if let Some(key) = cache_key {
-                if let Err(e) = cache.store(&key, &out) {
+        if let Some(ref cache) = self.cache
+            && let Some(key) = cache_key
+                && let Err(e) = cache.store(&key, &out) {
                     eprintln!("[executor] cache store ERROR: {e}");
                 }
-            }
-        }
 
         Ok(out)
     }

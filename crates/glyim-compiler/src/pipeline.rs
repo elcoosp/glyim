@@ -485,10 +485,10 @@ pub fn build_incremental(
 
     // 3. Check for cached full object in Merkle store
     let mut obj_path_opt = None;
-    if let Some(ref merkle) = qp.merkle_store {
-        if let Some(hash) = merkle.resolve_name(&format!("full-obj:{}", merkle_root.to_hex())) {
-            if let Some(node) = merkle.get(&hash) {
-                if let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
+    if let Some(ref merkle) = qp.merkle_store
+        && let Some(hash) = merkle.resolve_name(&format!("full-obj:{}", merkle_root.to_hex()))
+            && let Some(node) = merkle.get(&hash)
+                && let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
                     let tmp_dir = tempfile::tempdir()?;
                     let cached_obj = tmp_dir.path().join("cached.o");
                     fs::write(&cached_obj, bytes)?;
@@ -496,9 +496,6 @@ pub fn build_incremental(
                     // Keep tmp_dir alive
                     Box::leak(Box::new(tmp_dir)); // leak to maintain lifetime (test binary only)
                 }
-            }
-        }
-    }
 
     // 4. If no cached object, perform full codegen
     let obj_path = match obj_path_opt {

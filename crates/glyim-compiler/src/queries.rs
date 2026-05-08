@@ -138,17 +138,13 @@ impl QueryPipeline {
             .map(|store| { Arc::new(MerkleStore::new(Arc::new(store))) });
         let mut prev = HashMap::new();
         // Load previous fingerprints from the Merkle root if available.
-        if let Some(ref m) = merkle_store {
-            if let Some(root_hash) = m.resolve_name("fingerprints_root") {
-                if let Some(node) = m.get(&root_hash) {
-                    if let MerkleNodeData::HirItem { serialized, .. } = &node.data {
-                        if let Ok(map) = postcard::from_bytes::<HashMap<String, Fingerprint>>(serialized) {
+        if let Some(ref m) = merkle_store
+            && let Some(root_hash) = m.resolve_name("fingerprints_root")
+                && let Some(node) = m.get(&root_hash)
+                    && let MerkleNodeData::HirItem { serialized, .. } = &node.data
+                        && let Ok(map) = postcard::from_bytes::<HashMap<String, Fingerprint>>(serialized) {
                             prev = map;
                         }
-                    }
-                }
-            }
-        }
         Self {
             ctx,
             cache_dir: cache_dir.to_path_buf(),
@@ -240,13 +236,11 @@ impl QueryPipeline {
         if let Some(ref merkle) = self.merkle_store {
             for name in &green_names {
                 let key = format!("obj:{}", name);
-                if let Some(hash) = merkle.resolve_name(&key) {
-                    if let Some(node) = merkle.get(&hash) {
-                        if let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
+                if let Some(hash) = merkle.resolve_name(&key)
+                    && let Some(node) = merkle.get(&hash)
+                        && let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
                             per_fn_objects.push((name.clone(), bytes.clone()));
                         }
-                    }
-                }
             }
         }
 
@@ -270,7 +264,7 @@ impl QueryPipeline {
                 &compiled.interner,
                 &compiled.merged_types,
                 &red_indices,
-            ).map_err(|e| PipelineError::Codegen(e))?;
+            ).map_err(PipelineError::Codegen)?;
 
             // Store new objects in Merkle cache
             if let Some(ref merkle) = self.merkle_store {

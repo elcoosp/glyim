@@ -49,7 +49,7 @@ impl AnalysisDriver {
         let mut qp = QueryPipeline::new(&self.cache_dir, config);
         let mut diagnostics = Vec::new();
         let source_maps = self.db.source_maps.read();
-        match qp.compile(content, &path) {
+        match qp.compile(content, path) {
             Ok(compiled) => {
                 let hir = compiled.mono_hir.clone();
                 let interner = compiled.interner.clone();
@@ -66,7 +66,7 @@ impl AnalysisDriver {
                             glyim_diag::diagnostic::Severity::Warning => lsp_types::DiagnosticSeverity::WARNING,
                             _ => lsp_types::DiagnosticSeverity::INFORMATION,
                         };
-                        let range = if let Some(ref sm) = source_maps.get(&file_id) {
+                        let range = if let Some(sm) = source_maps.get(&file_id) {
                             let (start, end) = sm.span_to_position(d.span.start, d.span.end).unwrap_or((glyim_diag::LineCol{line:0,column:0}, glyim_diag::LineCol{line:0,column:0}));
                             lsp_types::Range {
                                 start: lsp_types::Position { line: start.line as u32, character: start.column as u32 },

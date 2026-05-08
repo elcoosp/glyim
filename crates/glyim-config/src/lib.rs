@@ -190,6 +190,7 @@ pub struct RemoteCacheConfig {
 
 /// Configuration for profiling.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ProfilingConfig {
     /// Whether profiling is enabled.
     #[serde(default)]
@@ -202,12 +203,3 @@ pub struct ProfilingConfig {
     pub tree: bool,
 }
 
-impl Default for ProfilingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            trace: false,
-            tree: false,
-        }
-    }
-}

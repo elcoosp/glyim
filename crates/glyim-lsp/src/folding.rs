@@ -21,8 +21,8 @@ pub fn provide_folding_ranges(
         for (col, ch) in line.char_indices().collect::<Vec<_>>() {
             if ch == '{' {
                 stack.push((line_num, col as u32));
-            } else if ch == '}' {
-                if let Some((start_line, _)) = stack.pop() {
+            } else if ch == '}'
+                && let Some((start_line, _)) = stack.pop() {
                     ranges.push(FoldingRange {
                         start_line,
                         end_line: line_num,
@@ -32,7 +32,6 @@ pub fn provide_folding_ranges(
                         collapsed_text: None,
                     });
                 }
-            }
         }
     }
     Some(ranges)
