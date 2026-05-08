@@ -387,6 +387,27 @@ impl TypeChecker {
                                     .iter()
                                     .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                     .collect();
+                                // Propagate generic args to field call expressions
+                                for (fname, fexpr) in fields {
+                                    if let Some(field_def) = info.fields.iter().find(|f| f.name == *fname) {
+                                        let field_ty = glyim_hir::types::substitute_type(&field_def.ty, &sub);
+                                        if let HirExpr::Call { id, callee, .. } = fexpr {
+                                            if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
+                                                if !fn_def.type_params.is_empty() {
+                                                    let mut type_args = Vec::new();
+                                                    for tp in &fn_def.type_params {
+                                                        if let Some(arg) = sub.get(tp) {
+                                                            type_args.push(arg.clone());
+                                                        }
+                                                    }
+                                                    if !type_args.is_empty() {
+                                                        self.call_type_args.insert(*id, type_args);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 HirType::Generic(*struct_name, concrete_args)
                             }
                             Err(_) => HirType::Generic(
