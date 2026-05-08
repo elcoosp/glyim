@@ -160,3 +160,49 @@ fn chr_solve_deduplicates_goals() {
     let result = store.solve(&arena);
     assert!(result.is_ok());
 }
+
+#[test]
+fn chr_solve_reflectable() {
+    let mut interner = Interner::new();
+    let user_sym = interner.intern("User");
+    let mut arena = TyArena::new();
+    let user_ty = arena.alloc(TyKind::Named(user_sym));
+
+    let goal = Goal::Reflectable(user_ty);
+    let rule = ChrRule::Simplify {
+        goal: goal.clone(),
+        premises: vec![],
+    };
+
+    let mut store = ChrStore::new(vec![rule]);
+    store.push_goal(goal.clone());
+    let result = store.solve(&arena);
+    assert!(result.is_ok());
+    assert!(store.proven_goals().contains(&goal));
+}
+
+#[test]
+fn chr_solve_has_field() {
+    let mut interner = Interner::new();
+    let user_sym = interner.intern("User");
+    let name_sym = interner.intern("name");
+    let mut arena = TyArena::new();
+    let user_ty = arena.alloc(TyKind::Named(user_sym));
+
+    let goal = Goal::HasField(user_ty, name_sym);
+    let rule = ChrRule::Simplify {
+        goal: goal.clone(),
+        premises: vec![Goal::Reflectable(user_ty)],
+    };
+
+    let reflectable_rule = ChrRule::Simplify {
+        goal: Goal::Reflectable(user_ty),
+        premises: vec![],
+    };
+
+    let mut store = ChrStore::new(vec![rule, reflectable_rule]);
+    store.push_goal(goal.clone());
+    let result = store.solve(&arena);
+    assert!(result.is_ok());
+    assert!(store.proven_goals().contains(&goal));
+}

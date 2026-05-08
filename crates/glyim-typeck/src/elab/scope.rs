@@ -2,7 +2,6 @@ use crate::ty::Ty;
 use glyim_interner::Symbol;
 use std::collections::HashMap;
 
-/// Lexical scope: maps variable names to their types.
 #[derive(Clone, Debug)]
 pub struct Scope {
     bindings: HashMap<Symbol, Ty>,
@@ -17,10 +16,22 @@ impl Scope {
         }
     }
 
-    pub fn child(parent: Scope) -> Self {
+    pub fn child(parent: &Scope) -> Self {
         Self {
             bindings: HashMap::new(),
-            parent: Some(Box::new(parent)),
+            parent: Some(Box::new(parent.clone())),
+        }
+    }
+
+    pub fn push_child(&mut self) {
+        let old = self.clone();
+        self.bindings = HashMap::new();
+        self.parent = Some(Box::new(old));
+    }
+
+    pub fn pop_child(&mut self) {
+        if let Some(parent) = self.parent.take() {
+            *self = *parent;
         }
     }
 

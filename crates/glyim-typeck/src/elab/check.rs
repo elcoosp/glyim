@@ -9,7 +9,7 @@ pub fn check_expr(ctx: &mut ElabContext, expr: &HirExpr, expected: Ty) {
     if matches!(ctx.arena.get(expected), &TyKind::Error) {
         let synth = synth_expr(ctx, expr);
         let _ = ctx.unification.unify(
-            &mut ctx.arena,
+            ctx.arena,
             synth,
             expected,
             glyim_diag::Span::new(0, 0),
@@ -21,7 +21,7 @@ pub fn check_expr(ctx: &mut ElabContext, expr: &HirExpr, expected: Ty) {
 
     let synth = synth_expr(ctx, expr);
     let _ = ctx.unification.unify(
-        &mut ctx.arena,
+        ctx.arena,
         synth,
         expected,
         glyim_diag::Span::new(0, 0),

@@ -1,8 +1,8 @@
 use crate::ty::TyArena;
 use crate::chr::ChrStore;
 use crate::unify::UnificationTable;
-use crate::freeze;
 use crate::diagnostics::TypeError;
+use crate::freeze;
 use crate::elab::ElabContext;
 use glyim_hir::Hir;
 use glyim_interner::Interner;
@@ -33,6 +33,7 @@ impl TyDatabase {
                 &mut self.interner,
                 unification,
                 chr_store,
+                &hir.items,
             );
             for item in &hir.items {
                 ctx.elaborate_item(item);

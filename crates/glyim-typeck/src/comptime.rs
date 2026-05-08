@@ -1,6 +1,4 @@
 use crate::ty::TyArena;
-use crate::diagnostics::TypeError;
-use std::collections::HashMap;
 
 /// Fuel budget for Wasm execution.
 #[derive(Clone, Debug)]

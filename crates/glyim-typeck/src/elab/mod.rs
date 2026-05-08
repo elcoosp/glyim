@@ -23,6 +23,8 @@ pub struct ElabContext<'a> {
     pub call_type_args: HashMap<glyim_hir::types::ExprId, Vec<Ty>>,
     pub errors: Vec<TypeError>,
     pub generated_items: Vec<glyim_hir::HirExpr>,
+    /// The whole HIR for function lookups (type params, etc.)
+    pub hir_items: &'a [HirItem],
 }
 
 impl<'a> ElabContext<'a> {
@@ -31,6 +33,7 @@ impl<'a> ElabContext<'a> {
         interner: &'a mut Interner,
         unification: UnificationTable,
         chr_store: ChrStore,
+        hir_items: &'a [HirItem],
     ) -> Self {
         Self {
             arena,
@@ -43,6 +46,7 @@ impl<'a> ElabContext<'a> {
             call_type_args: HashMap::new(),
             errors: Vec::new(),
             generated_items: Vec::new(),
+            hir_items,
         }
     }
 
