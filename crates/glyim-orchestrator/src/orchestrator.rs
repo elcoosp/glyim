@@ -251,7 +251,7 @@ impl PackageGraphOrchestrator {
         let mut interner = parsed.interner;
         let hir = glyim_hir::lower(&parsed.ast, &mut interner);
         let mut tc = glyim_typeck::TypeChecker::new(interner.clone());
-        tc.check(&hir).map_err(|type_errors| {
+        let output = tc.check(&hir).map_err(|type_errors| {
             OrchestratorError::TypeCheck(
                 type_errors
                     .into_iter()
@@ -266,7 +266,7 @@ impl PackageGraphOrchestrator {
         let mut builder = glyim_codegen_llvm::CodegenBuilder::new(
             &context,
             interner.clone(),
-            tc.expr_types.clone(),
+            output.expr_types.clone(),
         );
         if !is_root {
             builder = builder.with_library_mode();

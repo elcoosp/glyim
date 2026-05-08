@@ -10,7 +10,7 @@ use glyim_profiler::StageName;
 use glyim_query::fingerprint::Fingerprint;
 use glyim_query::incremental::IncrementalState;
 use glyim_typeck::TypeChecker;
-use glyim_typeck::TypeError;
+use glyim_typeck::diagnostics::TypeError;
 use inkwell::OptimizationLevel;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
@@ -317,15 +317,15 @@ pub(crate) fn compile_source_to_hir(
 
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
+    let output = typeck.check(&hir).map_err(|errs| {
+        PipelineError::Diagnostics(
             errs.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
+        )
+    })?;
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
 
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let expr_types = output.expr_types.clone();
+    let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
 
@@ -660,7 +660,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
-    let mut typeck = TypeChecker::new(interner);
+    let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::Diagnostics(
             errs.into_iter().map(|e| e.into()).collect(),
@@ -1103,14 +1103,14 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
+    let output = typeck.check(&hir).map_err(|errs| {
+        PipelineError::Diagnostics(
             errs.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+        )
+    })?;
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    let expr_types = output.expr_types.clone();
+    let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = inkwell::context::Context::create();
@@ -1175,14 +1175,14 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
+    let output = typeck.check(&hir).map_err(|errs| {
+        PipelineError::Diagnostics(
             errs.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+        )
+    })?;
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    let expr_types = output.expr_types.clone();
+    let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
