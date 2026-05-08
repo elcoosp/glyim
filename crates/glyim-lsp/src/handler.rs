@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_future)]
+
 use crate::AnalysisDatabase;
 use crate::driver::AnalysisMessage;
 use std::sync::Arc;

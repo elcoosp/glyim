@@ -40,8 +40,8 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     for (i, row) in matrix.iter_mut().enumerate() {
         row[0] = i;
     }
-    for j in 0..=b_len {
-        matrix[0][j] = j;
+    for (j, entry) in matrix[0].iter_mut().enumerate() {
+        *entry = j;
     }
 
     for (i, a_char) in a.chars().enumerate() {

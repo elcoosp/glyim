@@ -97,11 +97,6 @@ impl From<String> for PipelineError {
 static CUSTOM_ASSERT_FN: Mutex<Option<unsafe extern "C" fn(*const u8, i64)>> = Mutex::new(None);
 static CUSTOM_ABORT_FN: Mutex<Option<unsafe extern "C" fn()>> = Mutex::new(None);
 #[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
 pub fn set_jit_abort_handler(handler: unsafe extern "C" fn()) {
     *CUSTOM_ABORT_FN.lock().unwrap() = Some(handler);
 }
@@ -184,11 +179,6 @@ pub(crate) fn merge_mono_types(
 ///
 /// # Stability
 /// *Stable.*
-#[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
-#[allow(deprecated)]
 #[allow(deprecated)]
 #[tracing::instrument(name = "build", skip_all)]
 pub fn build(

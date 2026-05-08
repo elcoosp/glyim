@@ -179,7 +179,6 @@ impl SymbolIndex {
     }
 
     /// Clear the index for a specific file.
-
     /// Only for testing: insert a symbol directly into all indices.
     #[doc(hidden)]
     pub fn insert_test_symbol(&mut self, file_id: FileId, sym: SymbolInfo) {

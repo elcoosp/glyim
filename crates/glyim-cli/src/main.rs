@@ -6,10 +6,8 @@ use std::path::PathBuf;
 use std::process;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
-#[command(version)]
 #[command(
     name = "glyim",
-    version,
     about = "The Glyim compiler",
     after_help = "Examples:\n  glyim init myproject\n  glyim run src/main.g\n  glyim check src/main.g\n  glyim ir src/main.g"
 )]

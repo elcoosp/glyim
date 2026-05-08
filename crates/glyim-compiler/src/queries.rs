@@ -133,6 +133,7 @@ impl QueryPipeline {
     ) -> Self {
         let state = IncrementalState::load_or_create(cache_dir);
         let ctx = QueryContext::new();
+        #[allow(clippy::arc_with_non_send_sync)]
         let merkle_store = glyim_macro_vfs::LocalContentStore::new(cache_dir.join("artifacts"))
             .ok()
             .map(|store| { Arc::new(MerkleStore::new(Arc::new(store))) });
@@ -211,6 +212,8 @@ impl QueryPipeline {
 
     /// Compile incrementally: diff items, load cached objects for unchanged items,
     /// recompile only red items, store new objects in the Merkle store.
+    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     pub fn compile_incremental(
         &mut self,
         source: &str,

@@ -2,6 +2,7 @@ use glyim_compiler::pipeline::{self, BuildMode};
 use glyim_orchestrator::orchestrator::{OrchestratorConfig, PackageGraphOrchestrator};
 use std::path::PathBuf;
 
+#[allow(clippy::too_many_arguments)]
 pub fn cmd_build(
     input: PathBuf,
     output: Option<PathBuf>,

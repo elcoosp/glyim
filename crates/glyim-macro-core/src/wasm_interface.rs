@@ -74,7 +74,8 @@ fn collect_symbols_expr(expr: &HirExpr, symbols: &mut Vec<String>) {
         HirExpr::EnumVariant { enum_name, variant_name, args, .. } => { let e = enum_name.raw().to_string(); if !symbols.contains(&e) { symbols.push(e); } let v = variant_name.raw().to_string(); if !symbols.contains(&v) { symbols.push(v); } for a in args { collect_symbols_expr(a, symbols); } }
         HirExpr::FieldAccess { object, field, .. } => { collect_symbols_expr(object, symbols); let s = field.raw().to_string(); if !symbols.contains(&s) { symbols.push(s); } }
         HirExpr::TupleLit { elements, .. } => { for e in elements { collect_symbols_expr(e, symbols); } }
-        HirExpr::Return { value, .. } => if let Some(v) = value { collect_symbols_expr(v, symbols); }
+        HirExpr::Return { value: Some(v), .. } => collect_symbols_expr(v, symbols),
+        HirExpr::Return { value: None, .. } => {}
         HirExpr::While { condition, body, .. } => { collect_symbols_expr(condition, symbols); collect_symbols_expr(body, symbols); }
         HirExpr::ForIn { iter, body, .. } => { collect_symbols_expr(iter, symbols); collect_symbols_expr(body, symbols); }
         HirExpr::Deref { expr, .. } => collect_symbols_expr(expr, symbols),

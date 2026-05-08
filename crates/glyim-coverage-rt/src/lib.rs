@@ -22,6 +22,10 @@ struct CoverageDump {
     version: u32,
 }
 
+/// # Safety
+///
+/// The caller must ensure that `counters`, `dump_json`, and `out_path` are valid non-null pointers
+/// pointing to valid memory of the specified lengths. This function will read from these pointers.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn glyim_cov_flush_impl(
     counters: *const i64, counters_len: u64,

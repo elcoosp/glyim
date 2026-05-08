@@ -461,6 +461,7 @@ fn check_dead_code(expr: &HirExpr, interner: &Interner) -> Vec<LintDiagnostic> {
     diags
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut Vec<LintDiagnostic>) {
     match expr {
         HirExpr::Block { stmts, span, .. } => {

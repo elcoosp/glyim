@@ -45,7 +45,6 @@ impl CoverageInstrumenter {
 }
 
 /// Emit the global coverage counter array and the runtime dump function.
-
 pub fn emit_coverage_globals<'ctx>(
     module: &Module<'ctx>,
     num_counters: usize,
