@@ -322,7 +322,8 @@ pub(crate) fn compile_source_to_hir(
             errs.into_iter().map(|e| e.into()).collect(),
         )
     })?;
-    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    interner = output.interner;
+glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
 
     let expr_types = output.expr_types.clone();
     let call_type_args = output.call_type_args.clone();
@@ -613,6 +614,7 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
             errs.into_iter().map(|e| e.into()).collect(),
         ));
     }
+    let interner = typeck.interner.clone();
     let mut compiler = BytecodeCompiler::new(&interner);
     let mut interpreter = BytecodeInterpreter::new();
     for item in &hir.items {
@@ -1108,7 +1110,8 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
             errs.into_iter().map(|e| e.into()).collect(),
         )
     })?;
-    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    interner = output.interner;
+glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
     let expr_types = output.expr_types.clone();
     let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
@@ -1180,7 +1183,8 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
             errs.into_iter().map(|e| e.into()).collect(),
         )
     })?;
-    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    interner = output.interner;
+glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
     let expr_types = output.expr_types.clone();
     let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =

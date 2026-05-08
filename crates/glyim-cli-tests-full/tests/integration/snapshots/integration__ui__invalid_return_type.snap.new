@@ -1,0 +1,20 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+assertion_line: 59
+expression: actual
+---
+  × type mismatch
+   ╭─[tests/ui/invalid_return_type.g:1:1]
+ 1 │ fn foo() -> bool { 42 }
+   · ▲
+   · ╰── type mismatch
+ 2 │ fn main() -> i64 { foo() }
+   ╰────
+
+  × type mismatch
+   ╭─[tests/ui/invalid_return_type.g:1:1]
+ 1 │ fn foo() -> bool { 42 }
+   · ▲
+   · ╰── type mismatch
+ 2 │ fn main() -> i64 { foo() }
+   ╰────
