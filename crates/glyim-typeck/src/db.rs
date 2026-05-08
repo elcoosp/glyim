@@ -1,4 +1,4 @@
-use crate::ty::{Ty, TyArena};
+use crate::ty::TyArena;
 use crate::chr::ChrStore;
 use crate::unify::UnificationTable;
 use crate::freeze;
