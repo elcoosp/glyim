@@ -92,4 +92,3 @@ main = () => {
 "#;
     assert_eq!(pipeline::run(&temp_g(src), None).unwrap(), 0);
 }
-

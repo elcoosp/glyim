@@ -1,9 +1,6 @@
+use glyim_orchestrator::orchestrator::{OrchestratorConfig, PackageGraphOrchestrator};
 use std::fs;
 use std::path::Path;
-use glyim_orchestrator::orchestrator::{
-    PackageGraphOrchestrator,
-    OrchestratorConfig,
-};
 
 /// Write a minimal glyim.toml
 fn write_manifest(dir: &Path, name: &str, deps: &[&str]) {
@@ -14,7 +11,10 @@ fn write_manifest(dir: &Path, name: &str, deps: &[&str]) {
     let content = if deps.is_empty() {
         format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n", name)
     } else {
-        format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n[dependencies]\n{}", name, deps_toml)
+        format!(
+            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\n[dependencies]\n{}",
+            name, deps_toml
+        )
     };
     fs::write(dir.join("glyim.toml"), content).unwrap();
 }
@@ -39,8 +39,11 @@ fn single_package_workspace_build() {
     let root = tmp.path();
 
     // Workspace manifest
-    fs::write(root.join("glyim.toml"),
-        "[workspace]\nmembers = [\"pkg\"]\n").unwrap();
+    fs::write(
+        root.join("glyim.toml"),
+        "[workspace]\nmembers = [\"pkg\"]\n",
+    )
+    .unwrap();
 
     let pkg_dir = root.join("pkg");
     std::fs::create_dir_all(&pkg_dir).unwrap();
@@ -64,8 +67,11 @@ fn two_package_workspace_build() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
-    fs::write(root.join("glyim.toml"),
-        "[workspace]\nmembers = [\"a\", \"b\"]\n").unwrap();
+    fs::write(
+        root.join("glyim.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .unwrap();
 
     let a_dir = root.join("a");
     std::fs::create_dir_all(&a_dir).unwrap();
@@ -87,8 +93,16 @@ fn two_package_workspace_build() {
     assert!(report.packages_failed.is_empty());
     assert_eq!(report.packages_compiled.len(), 2);
     // Ensure 'a' compiled before 'b'
-    let a_idx = report.packages_compiled.iter().position(|p| p == "a").unwrap();
-    let b_idx = report.packages_compiled.iter().position(|p| p == "b").unwrap();
+    let a_idx = report
+        .packages_compiled
+        .iter()
+        .position(|p| p == "a")
+        .unwrap();
+    let b_idx = report
+        .packages_compiled
+        .iter()
+        .position(|p| p == "b")
+        .unwrap();
     assert!(a_idx < b_idx, "dependency order wrong");
 }
 
@@ -98,8 +112,11 @@ fn incremental_build_uses_cache() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
-    fs::write(root.join("glyim.toml"),
-        "[workspace]\nmembers = [\"pkg\"]\n").unwrap();
+    fs::write(
+        root.join("glyim.toml"),
+        "[workspace]\nmembers = [\"pkg\"]\n",
+    )
+    .unwrap();
     let pkg_dir = root.join("pkg");
     std::fs::create_dir_all(&pkg_dir).unwrap();
     write_manifest(&pkg_dir, "pkg", &[]);
@@ -116,7 +133,11 @@ fn incremental_build_uses_cache() {
     let mut orch2 = PackageGraphOrchestrator::new(root, config).unwrap();
     orch2.build().unwrap();
     let second_report = orch2.report().clone();
-    assert_eq!(second_report.packages_cached.len(), 1, "Should have used cache for pkg");
+    assert_eq!(
+        second_report.packages_cached.len(),
+        1,
+        "Should have used cache for pkg"
+    );
 }
 
 /// Verify that a change in a dependency triggers rebuild of dependent
@@ -125,8 +146,11 @@ fn change_in_dep_triggers_rebuild_of_dependent() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
-    fs::write(root.join("glyim.toml"),
-        "[workspace]\nmembers = [\"a\", \"b\"]\n").unwrap();
+    fs::write(
+        root.join("glyim.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .unwrap();
 
     let a_dir = root.join("a");
     std::fs::create_dir_all(&a_dir).unwrap();

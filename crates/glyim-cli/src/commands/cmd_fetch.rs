@@ -1,5 +1,5 @@
 use glyim_compiler::lockfile_integration;
-use glyim_orchestrator::orchestrator::{PackageGraphOrchestrator, OrchestratorConfig};
+use glyim_orchestrator::orchestrator::{OrchestratorConfig, PackageGraphOrchestrator};
 
 pub fn cmd_fetch() -> i32 {
     let result: Result<i32, i32> = (|| {
@@ -28,7 +28,9 @@ pub fn cmd_fetch() -> i32 {
                         eprintln!("Artifacts will be pulled on demand during builds.");
                     } else {
                         eprintln!("No remote cache configured.");
-                        eprintln!("Set GLYIM_CACHE_URL and GLYIM_CACHE_TOKEN to enable remote caching.");
+                        eprintln!(
+                            "Set GLYIM_CACHE_URL and GLYIM_CACHE_TOKEN to enable remote caching."
+                        );
                     }
                     return Ok(0);
                 }
@@ -54,7 +56,9 @@ pub fn cmd_fetch() -> i32 {
                 eprintln!("    artifact: {}", artifact_hash);
             }
         }
-        eprintln!("To download pre-compiled artifacts, set GLYIM_CACHE_URL and run 'glyim build --remote-cache <URL>'.");
+        eprintln!(
+            "To download pre-compiled artifacts, set GLYIM_CACHE_URL and run 'glyim build --remote-cache <URL>'."
+        );
         Ok(0)
     })();
     result.unwrap_or_else(|code| code)

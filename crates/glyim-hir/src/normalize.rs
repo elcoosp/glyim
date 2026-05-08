@@ -12,34 +12,107 @@ pub enum NormalizedExpr {
     UnitLit,
     Local(u32),
     Name(String),
-    Binary { op: HirBinOp, lhs: Box<NormalizedExpr>, rhs: Box<NormalizedExpr> },
-    Unary { op: HirUnOp, operand: Box<NormalizedExpr> },
-    Block { stmts: Vec<NormalizedStmt> },
-    If { condition: Box<NormalizedExpr>, then_branch: Box<NormalizedExpr>, else_branch: Option<Box<NormalizedExpr>> },
-    Call { callee: String, args: Vec<NormalizedExpr> },
-    MethodCall { receiver: Box<NormalizedExpr>, method_name: String, resolved_callee: Option<String>, args: Vec<NormalizedExpr> },
-    Assert { condition: Box<NormalizedExpr>, message: Option<Box<NormalizedExpr>> },
-    Match { scrutinee: Box<NormalizedExpr>, arms: Vec<NormalizedMatchArm> },
-    FieldAccess { object: Box<NormalizedExpr>, field: String },
-    StructLit { struct_name: String, fields: Vec<(String, NormalizedExpr)> },
-    EnumVariant { enum_name: String, variant_name: String, args: Vec<NormalizedExpr> },
-    ForIn { pattern: NormalizedPattern, iter: Box<NormalizedExpr>, body: Box<NormalizedExpr> },
-    While { condition: Box<NormalizedExpr>, body: Box<NormalizedExpr> },
-    Return { value: Option<Box<NormalizedExpr>> },
-    As { expr: Box<NormalizedExpr>, target_type: HirType },
-    SizeOf { target_type: HirType },
-    TupleLit { elements: Vec<NormalizedExpr> },
-    AddrOf { target: String },
-    Deref { expr: Box<NormalizedExpr> },
-    Println { arg: Box<NormalizedExpr> },
+    Binary {
+        op: HirBinOp,
+        lhs: Box<NormalizedExpr>,
+        rhs: Box<NormalizedExpr>,
+    },
+    Unary {
+        op: HirUnOp,
+        operand: Box<NormalizedExpr>,
+    },
+    Block {
+        stmts: Vec<NormalizedStmt>,
+    },
+    If {
+        condition: Box<NormalizedExpr>,
+        then_branch: Box<NormalizedExpr>,
+        else_branch: Option<Box<NormalizedExpr>>,
+    },
+    Call {
+        callee: String,
+        args: Vec<NormalizedExpr>,
+    },
+    MethodCall {
+        receiver: Box<NormalizedExpr>,
+        method_name: String,
+        resolved_callee: Option<String>,
+        args: Vec<NormalizedExpr>,
+    },
+    Assert {
+        condition: Box<NormalizedExpr>,
+        message: Option<Box<NormalizedExpr>>,
+    },
+    Match {
+        scrutinee: Box<NormalizedExpr>,
+        arms: Vec<NormalizedMatchArm>,
+    },
+    FieldAccess {
+        object: Box<NormalizedExpr>,
+        field: String,
+    },
+    StructLit {
+        struct_name: String,
+        fields: Vec<(String, NormalizedExpr)>,
+    },
+    EnumVariant {
+        enum_name: String,
+        variant_name: String,
+        args: Vec<NormalizedExpr>,
+    },
+    ForIn {
+        pattern: NormalizedPattern,
+        iter: Box<NormalizedExpr>,
+        body: Box<NormalizedExpr>,
+    },
+    While {
+        condition: Box<NormalizedExpr>,
+        body: Box<NormalizedExpr>,
+    },
+    Return {
+        value: Option<Box<NormalizedExpr>>,
+    },
+    As {
+        expr: Box<NormalizedExpr>,
+        target_type: HirType,
+    },
+    SizeOf {
+        target_type: HirType,
+    },
+    TupleLit {
+        elements: Vec<NormalizedExpr>,
+    },
+    AddrOf {
+        target: String,
+    },
+    Deref {
+        expr: Box<NormalizedExpr>,
+    },
+    Println {
+        arg: Box<NormalizedExpr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NormalizedStmt {
-    Let { local_id: u32, mutable: bool, value: NormalizedExpr },
-    Assign { local_id: u32, value: NormalizedExpr },
-    AssignField { object: NormalizedExpr, field: String, value: NormalizedExpr },
-    AssignDeref { target: NormalizedExpr, value: NormalizedExpr },
+    Let {
+        local_id: u32,
+        mutable: bool,
+        value: NormalizedExpr,
+    },
+    Assign {
+        local_id: u32,
+        value: NormalizedExpr,
+    },
+    AssignField {
+        object: NormalizedExpr,
+        field: String,
+        value: NormalizedExpr,
+    },
+    AssignDeref {
+        target: NormalizedExpr,
+        value: NormalizedExpr,
+    },
     Expr(NormalizedExpr),
 }
 
@@ -59,9 +132,18 @@ pub enum NormalizedPattern {
     StrLit(String),
     Unit,
     Local(u32),
-    Struct { name: String, bindings: Vec<(String, NormalizedPattern)> },
-    EnumVariant { enum_name: String, variant_name: String, bindings: Vec<(String, NormalizedPattern)> },
-    Tuple { elements: Vec<NormalizedPattern> },
+    Struct {
+        name: String,
+        bindings: Vec<(String, NormalizedPattern)>,
+    },
+    EnumVariant {
+        enum_name: String,
+        variant_name: String,
+        bindings: Vec<(String, NormalizedPattern)>,
+    },
+    Tuple {
+        elements: Vec<NormalizedPattern>,
+    },
     OptionSome(Box<NormalizedPattern>),
     OptionNone,
     ResultOk(Box<NormalizedPattern>),
@@ -89,7 +171,12 @@ pub struct SemanticNormalizer<'a> {
 
 impl<'a> SemanticNormalizer<'a> {
     pub fn new(interner: &'a Interner) -> Self {
-        Self { interner, local_map: HashMap::new(), next_local: 0, param_set: HashMap::new() }
+        Self {
+            interner,
+            local_map: HashMap::new(),
+            next_local: 0,
+            param_set: HashMap::new(),
+        }
     }
 
     pub fn register_param(&mut self, sym: Symbol) {
@@ -130,10 +217,19 @@ impl<'a> SemanticNormalizer<'a> {
         }
         let body = self.normalize_expr(&hir_fn.body);
         // canonicalize parameter names to _p0, _p1, …
-        let canon_params: Vec<(String, HirType)> = hir_fn.params.iter().enumerate().map(|(i, (_, t))| (format!("_p{}", i), t.clone())).collect();
+        let canon_params: Vec<(String, HirType)> = hir_fn
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, (_, t))| (format!("_p{}", i), t.clone()))
+            .collect();
         NormalizedHirFn {
             name: self.resolve_name(hir_fn.name),
-            type_params: hir_fn.type_params.iter().map(|&s| self.resolve_name(s)).collect(),
+            type_params: hir_fn
+                .type_params
+                .iter()
+                .map(|&s| self.resolve_name(s))
+                .collect(),
             params: canon_params,
             param_mutability: hir_fn.param_mutability.clone(),
             ret: hir_fn.ret.clone(),
@@ -156,75 +252,111 @@ impl<'a> SemanticNormalizer<'a> {
                 let lhs_n = self.normalize_expr(lhs);
                 let rhs_n = self.normalize_expr(rhs);
                 if op.is_commutative() && lhs_n > rhs_n {
-                    NormalizedExpr::Binary { op: *op, lhs: Box::new(rhs_n), rhs: Box::new(lhs_n) }
+                    NormalizedExpr::Binary {
+                        op: *op,
+                        lhs: Box::new(rhs_n),
+                        rhs: Box::new(lhs_n),
+                    }
                 } else {
-                    NormalizedExpr::Binary { op: *op, lhs: Box::new(lhs_n), rhs: Box::new(rhs_n) }
+                    NormalizedExpr::Binary {
+                        op: *op,
+                        lhs: Box::new(lhs_n),
+                        rhs: Box::new(rhs_n),
+                    }
                 }
             }
             HirExpr::Unary { op, operand, .. } => {
                 let operand_n = self.normalize_expr(operand);
                 if let HirUnOp::Not = op
-                    && let NormalizedExpr::Unary { op: HirUnOp::Not, operand: inner } = &operand_n {
-                        return (**inner).clone();
-                    }
-                NormalizedExpr::Unary { op: *op, operand: Box::new(operand_n) }
-            }
-            HirExpr::Block { stmts, .. } => {
-                NormalizedExpr::Block { stmts: stmts.iter().map(|s| self.normalize_stmt(s)).collect() }
-            }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
-                NormalizedExpr::If {
-                    condition: Box::new(self.normalize_expr(condition)),
-                    then_branch: Box::new(self.normalize_expr(then_branch)),
-                    else_branch: else_branch.as_ref().map(|e| Box::new(self.normalize_expr(e))),
+                    && let NormalizedExpr::Unary {
+                        op: HirUnOp::Not,
+                        operand: inner,
+                    } = &operand_n
+                {
+                    return (**inner).clone();
+                }
+                NormalizedExpr::Unary {
+                    op: *op,
+                    operand: Box::new(operand_n),
                 }
             }
-            HirExpr::Call { callee, args, .. } => {
-                NormalizedExpr::Call {
-                    callee: self.resolve_name(*callee),
-                    args: args.iter().map(|a| self.normalize_expr(a)).collect(),
-                }
-            }
-            HirExpr::MethodCall { receiver, method_name, resolved_callee, args, .. } => {
-                NormalizedExpr::MethodCall {
-                    receiver: Box::new(self.normalize_expr(receiver)),
-                    method_name: self.resolve_name(*method_name),
-                    resolved_callee: resolved_callee.map(|s| self.resolve_name(s)),
-                    args: args.iter().map(|a| self.normalize_expr(a)).collect(),
-                }
-            }
-            HirExpr::Assert { condition, message, .. } => {
-                NormalizedExpr::Assert {
-                    condition: Box::new(self.normalize_expr(condition)),
-                    message: message.as_ref().map(|e| Box::new(self.normalize_expr(e))),
-                }
-            }
-            HirExpr::Match { scrutinee, arms, .. } => {
-                NormalizedExpr::Match {
-                    scrutinee: Box::new(self.normalize_expr(scrutinee)),
-                    arms: arms.iter().map(|arm| self.normalize_match_arm(arm)).collect(),
-                }
-            }
-            HirExpr::FieldAccess { object, field, .. } => {
-                NormalizedExpr::FieldAccess {
-                    object: Box::new(self.normalize_expr(object)),
-                    field: self.resolve_name(*field),
-                }
-            }
-            HirExpr::StructLit { struct_name, fields, .. } => {
-                NormalizedExpr::StructLit {
-                    struct_name: self.resolve_name(*struct_name),
-                    fields: fields.iter().map(|(n, e)| (self.resolve_name(*n), self.normalize_expr(e))).collect(),
-                }
-            }
-            HirExpr::EnumVariant { enum_name, variant_name, args, .. } => {
-                NormalizedExpr::EnumVariant {
-                    enum_name: self.resolve_name(*enum_name),
-                    variant_name: self.resolve_name(*variant_name),
-                    args: args.iter().map(|a| self.normalize_expr(a)).collect(),
-                }
-            }
-            HirExpr::ForIn { pattern, iter, body, .. } => {
+            HirExpr::Block { stmts, .. } => NormalizedExpr::Block {
+                stmts: stmts.iter().map(|s| self.normalize_stmt(s)).collect(),
+            },
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => NormalizedExpr::If {
+                condition: Box::new(self.normalize_expr(condition)),
+                then_branch: Box::new(self.normalize_expr(then_branch)),
+                else_branch: else_branch
+                    .as_ref()
+                    .map(|e| Box::new(self.normalize_expr(e))),
+            },
+            HirExpr::Call { callee, args, .. } => NormalizedExpr::Call {
+                callee: self.resolve_name(*callee),
+                args: args.iter().map(|a| self.normalize_expr(a)).collect(),
+            },
+            HirExpr::MethodCall {
+                receiver,
+                method_name,
+                resolved_callee,
+                args,
+                ..
+            } => NormalizedExpr::MethodCall {
+                receiver: Box::new(self.normalize_expr(receiver)),
+                method_name: self.resolve_name(*method_name),
+                resolved_callee: resolved_callee.map(|s| self.resolve_name(s)),
+                args: args.iter().map(|a| self.normalize_expr(a)).collect(),
+            },
+            HirExpr::Assert {
+                condition, message, ..
+            } => NormalizedExpr::Assert {
+                condition: Box::new(self.normalize_expr(condition)),
+                message: message.as_ref().map(|e| Box::new(self.normalize_expr(e))),
+            },
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => NormalizedExpr::Match {
+                scrutinee: Box::new(self.normalize_expr(scrutinee)),
+                arms: arms
+                    .iter()
+                    .map(|arm| self.normalize_match_arm(arm))
+                    .collect(),
+            },
+            HirExpr::FieldAccess { object, field, .. } => NormalizedExpr::FieldAccess {
+                object: Box::new(self.normalize_expr(object)),
+                field: self.resolve_name(*field),
+            },
+            HirExpr::StructLit {
+                struct_name,
+                fields,
+                ..
+            } => NormalizedExpr::StructLit {
+                struct_name: self.resolve_name(*struct_name),
+                fields: fields
+                    .iter()
+                    .map(|(n, e)| (self.resolve_name(*n), self.normalize_expr(e)))
+                    .collect(),
+            },
+            HirExpr::EnumVariant {
+                enum_name,
+                variant_name,
+                args,
+                ..
+            } => NormalizedExpr::EnumVariant {
+                enum_name: self.resolve_name(*enum_name),
+                variant_name: self.resolve_name(*variant_name),
+                args: args.iter().map(|a| self.normalize_expr(a)).collect(),
+            },
+            HirExpr::ForIn {
+                pattern,
+                iter,
+                body,
+                ..
+            } => {
                 let pattern_n = self.normalize_pattern(pattern);
                 NormalizedExpr::ForIn {
                     pattern: pattern_n,
@@ -232,70 +364,92 @@ impl<'a> SemanticNormalizer<'a> {
                     body: Box::new(self.normalize_expr(body)),
                 }
             }
-            HirExpr::While { condition, body, .. } => {
-                NormalizedExpr::While {
-                    condition: Box::new(self.normalize_expr(condition)),
-                    body: Box::new(self.normalize_expr(body)),
-                }
-            }
-            HirExpr::Return { value, .. } => {
-                NormalizedExpr::Return {
-                    value: value.as_ref().map(|e| Box::new(self.normalize_expr(e))),
-                }
-            }
-            HirExpr::As { expr, target_type, .. } => {
-                NormalizedExpr::As {
-                    expr: Box::new(self.normalize_expr(expr)),
-                    target_type: target_type.clone(),
-                }
-            }
-            HirExpr::SizeOf { target_type, .. } => {
-                NormalizedExpr::SizeOf { target_type: target_type.clone() }
-            }
-            HirExpr::TupleLit { elements, .. } => {
-                NormalizedExpr::TupleLit {
-                    elements: elements.iter().map(|e| self.normalize_expr(e)).collect(),
-                }
-            }
-            HirExpr::AddrOf { target, .. } => {
-                NormalizedExpr::AddrOf { target: self.resolve_name(*target) }
-            }
-            HirExpr::Deref { expr, .. } => {
-                NormalizedExpr::Deref { expr: Box::new(self.normalize_expr(expr)) }
-            }
-            HirExpr::Println { arg, .. } => {
-                NormalizedExpr::Println { arg: Box::new(self.normalize_expr(arg)) }
-            }
+            HirExpr::While {
+                condition, body, ..
+            } => NormalizedExpr::While {
+                condition: Box::new(self.normalize_expr(condition)),
+                body: Box::new(self.normalize_expr(body)),
+            },
+            HirExpr::Return { value, .. } => NormalizedExpr::Return {
+                value: value.as_ref().map(|e| Box::new(self.normalize_expr(e))),
+            },
+            HirExpr::As {
+                expr, target_type, ..
+            } => NormalizedExpr::As {
+                expr: Box::new(self.normalize_expr(expr)),
+                target_type: target_type.clone(),
+            },
+            HirExpr::SizeOf { target_type, .. } => NormalizedExpr::SizeOf {
+                target_type: target_type.clone(),
+            },
+            HirExpr::TupleLit { elements, .. } => NormalizedExpr::TupleLit {
+                elements: elements.iter().map(|e| self.normalize_expr(e)).collect(),
+            },
+            HirExpr::AddrOf { target, .. } => NormalizedExpr::AddrOf {
+                target: self.resolve_name(*target),
+            },
+            HirExpr::Deref { expr, .. } => NormalizedExpr::Deref {
+                expr: Box::new(self.normalize_expr(expr)),
+            },
+            HirExpr::Println { arg, .. } => NormalizedExpr::Println {
+                arg: Box::new(self.normalize_expr(arg)),
+            },
         }
     }
 
     pub fn normalize_stmt(&mut self, stmt: &HirStmt) -> NormalizedStmt {
         match stmt {
-            HirStmt::Let { name, mutable, value, .. } => {
+            HirStmt::Let {
+                name,
+                mutable,
+                value,
+                ..
+            } => {
                 let local_id = self.register_local(*name);
-                NormalizedStmt::Let { local_id, mutable: *mutable, value: self.normalize_expr(value) }
+                NormalizedStmt::Let {
+                    local_id,
+                    mutable: *mutable,
+                    value: self.normalize_expr(value),
+                }
             }
-            HirStmt::LetPat { pattern, mutable, value, .. } => {
+            HirStmt::LetPat {
+                pattern,
+                mutable,
+                value,
+                ..
+            } => {
                 let local_id = self.register_pattern_bindings(pattern);
-                NormalizedStmt::Let { local_id, mutable: *mutable, value: self.normalize_expr(value) }
+                NormalizedStmt::Let {
+                    local_id,
+                    mutable: *mutable,
+                    value: self.normalize_expr(value),
+                }
             }
             HirStmt::Assign { target, value, .. } => {
-                let local_id = self.local_map.get(target).copied().expect("assign target must be known local");
-                NormalizedStmt::Assign { local_id, value: self.normalize_expr(value) }
-            }
-            HirStmt::AssignField { object, field, value, .. } => {
-                NormalizedStmt::AssignField {
-                    object: self.normalize_expr(object),
-                    field: self.resolve_name(*field),
+                let local_id = self
+                    .local_map
+                    .get(target)
+                    .copied()
+                    .expect("assign target must be known local");
+                NormalizedStmt::Assign {
+                    local_id,
                     value: self.normalize_expr(value),
                 }
             }
-            HirStmt::AssignDeref { target, value, .. } => {
-                NormalizedStmt::AssignDeref {
-                    target: self.normalize_expr(target),
-                    value: self.normalize_expr(value),
-                }
-            }
+            HirStmt::AssignField {
+                object,
+                field,
+                value,
+                ..
+            } => NormalizedStmt::AssignField {
+                object: self.normalize_expr(object),
+                field: self.resolve_name(*field),
+                value: self.normalize_expr(value),
+            },
+            HirStmt::AssignDeref { target, value, .. } => NormalizedStmt::AssignDeref {
+                target: self.normalize_expr(target),
+                value: self.normalize_expr(value),
+            },
             HirStmt::Expr(expr) => NormalizedStmt::Expr(self.normalize_expr(expr)),
         }
     }
@@ -304,7 +458,11 @@ impl<'a> SemanticNormalizer<'a> {
         let pattern = self.normalize_pattern(&arm.pattern);
         let guard = arm.guard.as_ref().map(|e| self.normalize_expr(e));
         let body = self.normalize_expr(&arm.body);
-        NormalizedMatchArm { pattern, guard, body }
+        NormalizedMatchArm {
+            pattern,
+            guard,
+            body,
+        }
     }
 
     fn normalize_pattern(&mut self, pat: &HirPattern) -> NormalizedPattern {
@@ -323,26 +481,39 @@ impl<'a> SemanticNormalizer<'a> {
                     NormalizedPattern::Local(idx)
                 }
             }
-            HirPattern::Struct { name, bindings, .. } => {
-                NormalizedPattern::Struct {
-                    name: self.resolve_name(*name),
-                    bindings: bindings.iter().map(|(f, p)| (self.resolve_name(*f), self.normalize_pattern(p))).collect(),
-                }
+            HirPattern::Struct { name, bindings, .. } => NormalizedPattern::Struct {
+                name: self.resolve_name(*name),
+                bindings: bindings
+                    .iter()
+                    .map(|(f, p)| (self.resolve_name(*f), self.normalize_pattern(p)))
+                    .collect(),
+            },
+            HirPattern::EnumVariant {
+                enum_name,
+                variant_name,
+                bindings,
+                ..
+            } => NormalizedPattern::EnumVariant {
+                enum_name: self.resolve_name(*enum_name),
+                variant_name: self.resolve_name(*variant_name),
+                bindings: bindings
+                    .iter()
+                    .map(|(n, p)| (self.resolve_name(*n), self.normalize_pattern(p)))
+                    .collect(),
+            },
+            HirPattern::Tuple { elements, .. } => NormalizedPattern::Tuple {
+                elements: elements.iter().map(|p| self.normalize_pattern(p)).collect(),
+            },
+            HirPattern::OptionSome(inner) => {
+                NormalizedPattern::OptionSome(Box::new(self.normalize_pattern(inner)))
             }
-            HirPattern::EnumVariant { enum_name, variant_name, bindings, .. } => {
-                NormalizedPattern::EnumVariant {
-                    enum_name: self.resolve_name(*enum_name),
-                    variant_name: self.resolve_name(*variant_name),
-                    bindings: bindings.iter().map(|(n, p)| (self.resolve_name(*n), self.normalize_pattern(p))).collect(),
-                }
-            }
-            HirPattern::Tuple { elements, .. } => {
-                NormalizedPattern::Tuple { elements: elements.iter().map(|p| self.normalize_pattern(p)).collect() }
-            }
-            HirPattern::OptionSome(inner) => NormalizedPattern::OptionSome(Box::new(self.normalize_pattern(inner))),
             HirPattern::OptionNone => NormalizedPattern::OptionNone,
-            HirPattern::ResultOk(inner) => NormalizedPattern::ResultOk(Box::new(self.normalize_pattern(inner))),
-            HirPattern::ResultErr(inner) => NormalizedPattern::ResultErr(Box::new(self.normalize_pattern(inner))),
+            HirPattern::ResultOk(inner) => {
+                NormalizedPattern::ResultOk(Box::new(self.normalize_pattern(inner)))
+            }
+            HirPattern::ResultErr(inner) => {
+                NormalizedPattern::ResultErr(Box::new(self.normalize_pattern(inner)))
+            }
         }
     }
 
@@ -350,18 +521,36 @@ impl<'a> SemanticNormalizer<'a> {
         match pat {
             HirPattern::Var(sym) => self.register_local(*sym),
             HirPattern::Struct { bindings, .. } => {
-                let first = if let Some((_, sub)) = bindings.first() { self.register_pattern_bindings(sub) } else { self.next_local };
-                for (_, sub) in &bindings[1..] { self.register_pattern_bindings(sub); }
+                let first = if let Some((_, sub)) = bindings.first() {
+                    self.register_pattern_bindings(sub)
+                } else {
+                    self.next_local
+                };
+                for (_, sub) in &bindings[1..] {
+                    self.register_pattern_bindings(sub);
+                }
                 first
             }
             HirPattern::Tuple { elements, .. } => {
-                let first = if let Some(sub) = elements.first() { self.register_pattern_bindings(sub) } else { self.next_local };
-                for sub in &elements[1..] { self.register_pattern_bindings(sub); }
+                let first = if let Some(sub) = elements.first() {
+                    self.register_pattern_bindings(sub)
+                } else {
+                    self.next_local
+                };
+                for sub in &elements[1..] {
+                    self.register_pattern_bindings(sub);
+                }
                 first
             }
             HirPattern::EnumVariant { bindings, .. } => {
-                let first = if let Some((_, sub)) = bindings.first() { self.register_pattern_bindings(sub) } else { self.next_local };
-                for (_, sub) in &bindings[1..] { self.register_pattern_bindings(sub); }
+                let first = if let Some((_, sub)) = bindings.first() {
+                    self.register_pattern_bindings(sub)
+                } else {
+                    self.next_local
+                };
+                for (_, sub) in &bindings[1..] {
+                    self.register_pattern_bindings(sub);
+                }
                 first
             }
             HirPattern::OptionSome(inner) => self.register_pattern_bindings(inner),
@@ -374,7 +563,15 @@ impl<'a> SemanticNormalizer<'a> {
 
 impl HirBinOp {
     pub fn is_commutative(&self) -> bool {
-        matches!(self, HirBinOp::Add | HirBinOp::Mul | HirBinOp::Eq | HirBinOp::Neq | HirBinOp::And | HirBinOp::Or)
+        matches!(
+            self,
+            HirBinOp::Add
+                | HirBinOp::Mul
+                | HirBinOp::Eq
+                | HirBinOp::Neq
+                | HirBinOp::And
+                | HirBinOp::Or
+        )
     }
 }
 

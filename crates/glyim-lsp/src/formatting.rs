@@ -1,6 +1,6 @@
 use crate::AnalysisDatabase;
+use glyim_fmt::{FormatConfig, format_source};
 use lsp_types::*;
-use glyim_fmt::{format_source, FormatConfig};
 
 pub fn format_document(
     db: &AnalysisDatabase,
@@ -28,8 +28,14 @@ pub fn format_document(
     let total_lines = original.lines().count() as u32;
     Some(vec![TextEdit {
         range: Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: total_lines, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: total_lines,
+                character: 0,
+            },
         },
         new_text: formatted,
     }])

@@ -1,14 +1,14 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wasmtime::*;
 
 use glyim_macro_vfs::{ContentHash, ContentStore};
-use wasmtime_wasi::p1::WasiP1Ctx;
 use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi::p1::WasiP1Ctx;
 
-use crate::cache::{compute_cache_key, MacroExpansionCache};
+use crate::cache::{MacroExpansionCache, compute_cache_key};
 
 /// Fuel budget for macro execution — 200_000 instructions is generous
 /// but prevents infinite loops. Based on Wasmtime fuel metering where each
@@ -86,9 +86,10 @@ impl MacroExecutor {
         // Check cache first
         if let Some(ref cache) = self.cache
             && let Some(key) = cache_key
-                && let Some(data) = cache.lookup(&key) {
-                    return Ok(data);
-                }
+            && let Some(data) = cache.lookup(&key)
+        {
+            return Ok(data);
+        }
 
         // Cache the compiled module
         let module = {
@@ -176,11 +177,7 @@ impl MacroExecutor {
                         )
                     })
                     .unwrap_or(false);
-                if result {
-                    1
-                } else {
-                    0
-                }
+                if result { 1 } else { 0 }
             }
         })?;
 
@@ -220,12 +217,13 @@ impl MacroExecutor {
             )
             .map_err(|e| {
                 if let Some(trap) = e.downcast_ref::<wasmtime::Trap>()
-                    && *trap == wasmtime::Trap::OutOfFuel {
-                        return anyhow!(
+                    && *trap == wasmtime::Trap::OutOfFuel
+                {
+                    return anyhow!(
                         "macro execution exceeded fuel budget of {} instructions (infinite loop?)",
                         MACRO_FUEL_BUDGET
                     );
-                    }
+                }
                 anyhow!("macro expand call: {e}")
             })?;
 
@@ -246,9 +244,10 @@ impl MacroExecutor {
         // Store in cache
         if let Some(ref cache) = self.cache
             && let Some(key) = cache_key
-                && let Err(e) = cache.store(&key, &out) {
-                    eprintln!("[executor] cache store ERROR: {e}");
-                }
+            && let Err(e) = cache.store(&key, &out)
+        {
+            eprintln!("[executor] cache store ERROR: {e}");
+        }
 
         Ok(out)
     }

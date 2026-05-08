@@ -333,13 +333,17 @@ fn main() {
         Command::IncrementalStatus { input } => cmd_incremental_status(input),
         Command::Lsp => cmd_lsp(),
         Command::Fmt { input, check } => cmd_fmt(input, check),
-        Command::Coverage { input, html, output } => {
+        Command::Coverage {
+            input,
+            html,
+            output,
+        } => {
             if html {
                 cmd_coverage_html(input, output)
             } else {
                 cmd_coverage_report(input)
             }
-        },
+        }
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));

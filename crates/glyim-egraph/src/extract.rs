@@ -1,8 +1,11 @@
 use crate::analysis::GlyimAnalysis;
 use crate::lang::GlyimLang;
-use egg::{Extractor, AstSize};
+use egg::{AstSize, Extractor};
 
-pub fn extract_best(egraph: &egg::EGraph<GlyimLang, GlyimAnalysis>, root: egg::Id) -> egg::RecExpr<GlyimLang> {
+pub fn extract_best(
+    egraph: &egg::EGraph<GlyimLang, GlyimAnalysis>,
+    root: egg::Id,
+) -> egg::RecExpr<GlyimLang> {
     let cost_fn = AstSize;
     let extractor = Extractor::new(egraph, cost_fn);
     let (_, best) = extractor.find_best(root);

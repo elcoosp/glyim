@@ -1,11 +1,11 @@
-use crate::symbol_index::SymbolIndex;
 use crate::reference_graph::ReferenceGraph;
+use crate::symbol_index::SymbolIndex;
 use glyim_diag::{FileId, SourceMap};
 use glyim_hir::Hir;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use parking_lot::RwLock;
 
 pub struct FileMap {
     path_to_id: HashMap<PathBuf, FileId>,
@@ -21,7 +21,11 @@ impl Default for FileMap {
 
 impl FileMap {
     pub fn new() -> Self {
-        Self { path_to_id: HashMap::new(), id_to_path: HashMap::new(), next_id: 0 }
+        Self {
+            path_to_id: HashMap::new(),
+            id_to_path: HashMap::new(),
+            next_id: 0,
+        }
     }
     pub fn get_or_create(&mut self, path: &PathBuf) -> FileId {
         if let Some(id) = self.path_to_id.get(path) {
@@ -77,7 +81,9 @@ impl AnalysisDatabase {
 
     /// Record access to a file (call before LSP reads).
     pub fn touch(&self, file_id: FileId) {
-        self.file_access_times.write().insert(file_id, Instant::now());
+        self.file_access_times
+            .write()
+            .insert(file_id, Instant::now());
     }
 
     /// Evict entries that have not been accessed within `max_age`.

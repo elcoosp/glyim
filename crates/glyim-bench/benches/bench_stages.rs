@@ -1,4 +1,4 @@
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use glyim_bench::fixtures::FixtureGenerator;
 use std::time::Duration;
 
@@ -11,7 +11,9 @@ fn bench_parse(c: &mut Criterion) {
         let fixture = FixtureGenerator::single_file(*n);
         let source = fixture.source.clone();
         group.bench_function(format!("{n}fn"), move |b| {
-            b.iter(|| { let _ = glyim_parse::parse(black_box(&source)); });
+            b.iter(|| {
+                let _ = glyim_parse::parse(black_box(&source));
+            });
         });
     }
     group.finish();
@@ -88,12 +90,22 @@ fn bench_semantic_hash(c: &mut Criterion) {
     group.bench_function("100_items", move |b| {
         b.iter(|| {
             for item in &hir.items {
-                let _ = glyim_hir::semantic_hash::semantic_hash_item(black_box(item), black_box(&interner));
+                let _ = glyim_hir::semantic_hash::semantic_hash_item(
+                    black_box(item),
+                    black_box(&interner),
+                );
             }
         });
     });
     group.finish();
 }
 
-criterion_group!(stages, bench_parse, bench_lower, bench_typecheck, bench_codegen, bench_semantic_hash);
+criterion_group!(
+    stages,
+    bench_parse,
+    bench_lower,
+    bench_typecheck,
+    bench_codegen,
+    bench_semantic_hash
+);
 criterion_main!(stages);

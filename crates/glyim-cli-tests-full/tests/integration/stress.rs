@@ -14,4 +14,3 @@ fn stress_nest_option() {
     let src = include_str!("../../../../tests/stress/nest_option.g");
     assert_eq!(glyim_compiler::pipeline::run_jit(src).unwrap(), 42);
 }
-

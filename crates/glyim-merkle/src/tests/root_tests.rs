@@ -1,4 +1,4 @@
-use crate::root::{MerkleRoot, compute_root_hash, ItemChange};
+use crate::root::{ItemChange, MerkleRoot, compute_root_hash};
 use glyim_macro_vfs::ContentHash;
 
 #[test]

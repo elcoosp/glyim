@@ -639,11 +639,7 @@ impl<'ctx> Codegen<'ctx> {
 
     /// Generate code for only a subset of HIR items, identified by their indices.
     /// Useful for incremental per‑function compilation.
-        pub fn generate_for_items(
-        &mut self,
-        hir: &Hir,
-        item_indices: &[usize],
-    ) -> Result<(), String> {
+    pub fn generate_for_items(&mut self, hir: &Hir, item_indices: &[usize]) -> Result<(), String> {
         // Pass 1: register all types (required for struct/enum references)
         for item in &hir.items {
             match item {
@@ -652,23 +648,39 @@ impl<'ctx> Codegen<'ctx> {
                 HirItem::Extern(ext) => {
                     for f in &ext.functions {
                         let name = self.interner.resolve(f.name);
-                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f.params.iter().map(|pt| match pt {
-                            HirType::Int => self.i64_type.into(),
-                            HirType::Bool => self.i32_type.into(),
-                            HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
-                            _ => self.i64_type.into(),
-                        }).collect();
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f
+                            .params
+                            .iter()
+                            .map(|pt| match pt {
+                                HirType::Int => self.i64_type.into(),
+                                HirType::Bool => self.i32_type.into(),
+                                HirType::RawPtr(_) => self
+                                    .context
+                                    .ptr_type(inkwell::AddressSpace::from(0u16))
+                                    .into(),
+                                _ => self.i64_type.into(),
+                            })
+                            .collect();
                         let ret_type = match &f.ret {
                             HirType::Int => self.i64_type.into(),
                             HirType::Bool => self.i32_type.into(),
-                            HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            HirType::RawPtr(_) => self
+                                .context
+                                .ptr_type(inkwell::AddressSpace::from(0u16))
+                                .into(),
                             _ => self.i64_type.into(),
                         };
                         if self.module.get_function(name).is_none() {
-                            let _fn_val = self.module.add_function(name, match ret_type {
-                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
-                                _ => self.i64_type.fn_type(&param_types, false),
-                            }, None);
+                            let _fn_val = self.module.add_function(
+                                name,
+                                match ret_type {
+                                    inkwell::types::BasicTypeEnum::IntType(t) => {
+                                        t.fn_type(&param_types, false)
+                                    }
+                                    _ => self.i64_type.fn_type(&param_types, false),
+                                },
+                                None,
+                            );
                         }
                         self.extern_methods.insert(f.name, f.name);
                     }
@@ -688,20 +700,30 @@ impl<'ctx> Codegen<'ctx> {
         for &idx in item_indices {
             match &hir.items[idx] {
                 HirItem::Fn(f) => {
-                    function::codegen_fn(self, f).inspect_err(|e| { self.report_error(e.clone()); })?;
+                    function::codegen_fn(self, f).inspect_err(|e| {
+                        self.report_error(e.clone());
+                    })?;
                 }
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        function::codegen_fn(self, m).inspect_err(|e| { self.report_error(e.clone()); })?;
+                        function::codegen_fn(self, m).inspect_err(|e| {
+                            self.report_error(e.clone());
+                        })?;
                     }
                 }
                 _ => {}
             }
         }
 
-        if let Some(ref di) = self.debug_info { di.finalize(); }
+        if let Some(ref di) = self.debug_info {
+            di.finalize();
+        }
         let errors = self.errors.borrow().clone();
-        if !errors.is_empty() { Err(errors.join("\n")) } else { Ok(()) }
+        if !errors.is_empty() {
+            Err(errors.join("\n"))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn generate_for_tests(

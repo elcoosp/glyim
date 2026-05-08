@@ -61,7 +61,11 @@ pub enum TypeError {
         span: (usize, usize),
     },
     #[error("unresolved name `{name}`")]
-    UnresolvedName { name: String, span: (usize, usize), suggestions: Vec<String> },
+    UnresolvedName {
+        name: String,
+        span: (usize, usize),
+        suggestions: Vec<String>,
+    },
 }
 
 impl Diagnostic for TypeError {
@@ -121,7 +125,6 @@ impl Diagnostic for TypeError {
     }
 }
 
-
 impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
     fn from(err: TypeError) -> glyim_diag::diagnostic::Diagnostic {
         let span = match &err {
@@ -136,7 +139,9 @@ impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
             TypeError::InvalidReturnType { .. } => glyim_diag::Span::new(0, 0),
             TypeError::IfConditionMustBeBool { .. } => glyim_diag::Span::new(0, 0),
             TypeError::AssignToImmutable { span, .. } => glyim_diag::Span::new(span.0, span.1),
-            TypeError::AssignThroughNonPointer { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::AssignThroughNonPointer { span, .. } => {
+                glyim_diag::Span::new(span.0, span.1)
+            }
             TypeError::DerefNonPointer { span, .. } => glyim_diag::Span::new(span.0, span.1),
             TypeError::UnresolvedName { span, .. } => glyim_diag::Span::new(span.0, span.1),
         };

@@ -1,8 +1,8 @@
+use crate::codegen::CoverageMode;
+use glyim_coverage::data::{LocationKind, SourceLocation};
+use inkwell::AddressSpace;
 use inkwell::module::Module;
 use inkwell::values::FunctionValue;
-use crate::codegen::CoverageMode;
-use inkwell::AddressSpace;
-use glyim_coverage::data::{LocationKind, SourceLocation};
 use std::collections::HashMap;
 
 pub struct CoverageInstrumenter {
@@ -12,44 +12,49 @@ pub struct CoverageInstrumenter {
 
 impl CoverageInstrumenter {
     pub fn new() -> Self {
-        Self { counter_id: 0, metadata: HashMap::new() }
+        Self {
+            counter_id: 0,
+            metadata: HashMap::new(),
+        }
     }
 
     pub fn record_function_entry(&mut self, file_id: u32, line: u32) -> u64 {
         let id = self.counter_id;
-        self.metadata.insert(id, SourceLocation {
-            file_id,
-            start_line: line,
-            start_col: 0,
-            end_line: line,
-            end_col: 0,
-            kind: LocationKind::FunctionEntry,
-        });
+        self.metadata.insert(
+            id,
+            SourceLocation {
+                file_id,
+                start_line: line,
+                start_col: 0,
+                end_line: line,
+                end_col: 0,
+                kind: LocationKind::FunctionEntry,
+            },
+        );
         self.counter_id += 1;
         id
     }
 
     pub fn record_branch(&mut self, file_id: u32, line: u32, col: u32, _branch_idx: u32) -> u64 {
         let id = self.counter_id;
-        self.metadata.insert(id, SourceLocation {
-            file_id,
-            start_line: line,
-            start_col: col,
-            end_line: line,
-            end_col: col + 1,
-            kind: LocationKind::Branch,
-        });
+        self.metadata.insert(
+            id,
+            SourceLocation {
+                file_id,
+                start_line: line,
+                start_col: col,
+                end_line: line,
+                end_col: col + 1,
+                kind: LocationKind::Branch,
+            },
+        );
         self.counter_id += 1;
         id
     }
 }
 
 /// Emit the global coverage counter array and the runtime dump function.
-pub fn emit_coverage_globals<'ctx>(
-    module: &Module<'ctx>,
-    num_counters: usize,
-    mode: CoverageMode,
-) {
+pub fn emit_coverage_globals<'ctx>(module: &Module<'ctx>, num_counters: usize, mode: CoverageMode) {
     if mode == CoverageMode::Off || num_counters == 0 {
         return;
     }
@@ -110,16 +115,19 @@ fn increment_counter_at_builder(
             indices,
             "cov_ptr",
         )
-    }.unwrap();
-    let current = builder.build_load(i64_type, counter_ptr, "cov_cur").unwrap().into_int_value();
-    let incremented = builder.build_int_add(current, i64_type.const_int(1, false), "cov_inc").unwrap();
+    }
+    .unwrap();
+    let current = builder
+        .build_load(i64_type, counter_ptr, "cov_cur")
+        .unwrap()
+        .into_int_value();
+    let incremented = builder
+        .build_int_add(current, i64_type.const_int(1, false), "cov_inc")
+        .unwrap();
     builder.build_store(counter_ptr, incremented).unwrap();
 }
 
-pub fn emit_branch_counter_increment(
-    cg: &crate::codegen::Codegen,
-    counter_id: u64,
-) {
+pub fn emit_branch_counter_increment(cg: &crate::codegen::Codegen, counter_id: u64) {
     let module = &cg.module;
     let builder = &cg.builder;
     let i64_type = cg.i64_type;
@@ -146,9 +154,12 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
             None => HashMap::new(),
         };
         let mut files = HashMap::new();
-        files.insert(0u32, glyim_coverage::data::FileInfo {
-            path: cg.source_str.as_deref().unwrap_or("unknown").to_string(),
-        });
+        files.insert(
+            0u32,
+            glyim_coverage::data::FileInfo {
+                path: cg.source_str.as_deref().unwrap_or("unknown").to_string(),
+            },
+        );
         let dump = glyim_coverage::data::CoverageDump {
             files,
             counters: HashMap::new(),
@@ -164,27 +175,37 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
             Some(inkwell::AddressSpace::from(0u16)),
             "__glyim_cov_dump",
         );
-        let elems: Vec<_> = json.as_bytes().iter().map(|&b| i8_type.const_int(b as u64, false)).collect();
-        let const_array = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
+        let elems: Vec<_> = json
+            .as_bytes()
+            .iter()
+            .map(|&b| i8_type.const_int(b as u64, false))
+            .collect();
+        let const_array =
+            unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
         g.set_initializer(&const_array);
         g.set_constant(true);
         g.set_linkage(inkwell::module::Linkage::Private);
         g
     };
-    let flush_fn = module.get_function("glyim_cov_flush_impl").unwrap_or_else(|| {
-        let ctx = module.get_context();
-        let void_type = ctx.void_type();
-        let i64_type = ctx.i64_type();
-        let ptr_type = ctx.ptr_type(inkwell::AddressSpace::from(0u16));
-        let fn_type = void_type.fn_type(&[
-            ptr_type.into(),
-            i64_type.into(),
-            ptr_type.into(),
-            i64_type.into(),
-            ptr_type.into(),
-        ], false);
-        module.add_function("glyim_cov_flush_impl", fn_type, None)
-    });
+    let flush_fn = module
+        .get_function("glyim_cov_flush_impl")
+        .unwrap_or_else(|| {
+            let ctx = module.get_context();
+            let void_type = ctx.void_type();
+            let i64_type = ctx.i64_type();
+            let ptr_type = ctx.ptr_type(inkwell::AddressSpace::from(0u16));
+            let fn_type = void_type.fn_type(
+                &[
+                    ptr_type.into(),
+                    i64_type.into(),
+                    ptr_type.into(),
+                    i64_type.into(),
+                    ptr_type.into(),
+                ],
+                false,
+            );
+            module.add_function("glyim_cov_flush_impl", fn_type, None)
+        });
 
     let builder = &cg.builder;
     let i64_type = cg.i64_type;
@@ -204,14 +225,30 @@ pub fn emit_coverage_flush_call(cg: &crate::codegen::Codegen) {
         let bytes = path_bytes.as_bytes();
         let i8_type = cg.context.i8_type();
         let arr_type = i8_type.array_type(bytes.len() as u32);
-        let global = module.add_global(arr_type, Some(inkwell::AddressSpace::from(0u16)), "cov_out_path");
-        let elems: Vec<_> = bytes.iter().map(|&b| i8_type.const_int(b as u64, false)).collect();
-        let const_array = unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
+        let global = module.add_global(
+            arr_type,
+            Some(inkwell::AddressSpace::from(0u16)),
+            "cov_out_path",
+        );
+        let elems: Vec<_> = bytes
+            .iter()
+            .map(|&b| i8_type.const_int(b as u64, false))
+            .collect();
+        let const_array =
+            unsafe { inkwell::values::ArrayValue::new_const_array(&arr_type, &elems) };
         global.set_initializer(&const_array);
         global.set_constant(true);
         global.set_linkage(inkwell::module::Linkage::Private);
         let zero = cg.i32_type.const_int(0, false);
-        unsafe { cg.builder.build_gep(arr_type, global.as_pointer_value(), &[zero, zero], "cov_path_ptr") }.unwrap()
+        unsafe {
+            cg.builder.build_gep(
+                arr_type,
+                global.as_pointer_value(),
+                &[zero, zero],
+                "cov_path_ptr",
+            )
+        }
+        .unwrap()
     };
 
     let _ = builder.build_call(

@@ -1,8 +1,8 @@
-pub mod source_map;
 pub mod diagnostic;
+pub mod source_map;
 pub mod suggest;
-pub use source_map::{FileId, SourceMap, LineCol};
 pub use miette::{self, Diagnostic, LabeledSpan, Report, Severity, SourceSpan};
+pub use source_map::{FileId, LineCol, SourceMap};
 use std::sync::{LazyLock, Mutex};
 
 /// Metadata for a macro expansion that produced a span.

@@ -1,7 +1,7 @@
+use glyim_lint::{LintRegistry, lint};
 use std::env;
 use std::fs;
 use std::process;
-use glyim_lint::{LintRegistry, lint};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -33,10 +33,7 @@ fn main() {
         for diag in &diagnostics {
             eprintln!(
                 "{:?}: {} ({:?}): {}",
-                diag.severity,
-                diag.lint_id.0,
-                diag.span,
-                diag.message
+                diag.severity, diag.lint_id.0, diag.span, diag.message
             );
         }
         process::exit(1);

@@ -3,7 +3,9 @@ use std::fmt;
 
 /// A content-hash fingerprint: SHA-256 of some data.
 /// Used as the cache key for memoized query results.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct Fingerprint([u8; 32]);
 
 impl Fingerprint {

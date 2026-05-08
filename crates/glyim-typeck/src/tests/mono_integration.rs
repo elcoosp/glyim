@@ -1,9 +1,9 @@
+use crate::TypeChecker;
 use glyim_hir::item::HirItem;
 use glyim_hir::lower;
 use glyim_hir::monomorphize::monomorphize;
 use glyim_interner::Interner;
 use glyim_parse::parse;
-use crate::TypeChecker;
 
 fn typecheck_and_monomorphize(source: &str) -> (glyim_hir::monomorphize::MonoResult, Interner) {
     let parse_out = parse(source);

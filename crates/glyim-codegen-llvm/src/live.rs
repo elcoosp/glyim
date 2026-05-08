@@ -14,7 +14,10 @@ pub struct DoubleBufferedJIT {
 
 impl DoubleBufferedJIT {
     pub fn new(dispatch: Arc<DispatchTable>) -> Self {
-        Self { dispatch, staging: StagingArea::default() }
+        Self {
+            dispatch,
+            staging: StagingArea::default(),
+        }
     }
 
     pub fn stage_item(&mut self, sym: Symbol) {

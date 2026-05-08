@@ -441,8 +441,8 @@ pub fn build_incremental(
     target: Option<&str>,
 ) -> Result<(PathBuf, crate::queries::IncrementalReport), PipelineError> {
     use crate::queries::QueryPipeline;
-    use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, compute_root_hash};
     use glyim_macro_vfs::ContentHash;
+    use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, compute_root_hash};
 
     let (source, _) = load_source_with_prelude(input)?;
     let cache_dir = input
@@ -462,30 +462,30 @@ pub fn build_incremental(
 
     // 1. Full compilation to get HIR + type info and per‑function fingerprints
     let compiled = qp.compile(&source, input)?;
-    let fps: Vec<(String, glyim_query::Fingerprint)> = crate::queries::item_fingerprints(
-        &compiled.hir,
-        &compiled.interner,
-    );
+    let fps: Vec<(String, glyim_query::Fingerprint)> =
+        crate::queries::item_fingerprints(&compiled.hir, &compiled.interner);
 
     // 2. Compute Merkle root from fingerprints
-    let merkle_items: Vec<(String, ContentHash)> = fps.iter().map(|(name, fp)| {
-        (name.clone(), ContentHash::from_bytes(*fp.as_bytes()))
-    }).collect();
+    let merkle_items: Vec<(String, ContentHash)> = fps
+        .iter()
+        .map(|(name, fp)| (name.clone(), ContentHash::from_bytes(*fp.as_bytes())))
+        .collect();
     let merkle_root = compute_root_hash(&merkle_items);
 
     // 3. Check for cached full object in Merkle store
     let mut obj_path_opt = None;
     if let Some(ref merkle) = qp.merkle_store
         && let Some(hash) = merkle.resolve_name(&format!("full-obj:{}", merkle_root.to_hex()))
-            && let Some(node) = merkle.get(&hash)
-                && let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
-                    let tmp_dir = tempfile::tempdir()?;
-                    let cached_obj = tmp_dir.path().join("cached.o");
-                    fs::write(&cached_obj, bytes)?;
-                    obj_path_opt = Some(cached_obj);
-                    // Keep tmp_dir alive
-                    Box::leak(Box::new(tmp_dir)); // leak to maintain lifetime (test binary only)
-                }
+        && let Some(node) = merkle.get(&hash)
+        && let MerkleNodeData::ObjectCode { bytes, .. } = &node.data
+    {
+        let tmp_dir = tempfile::tempdir()?;
+        let cached_obj = tmp_dir.path().join("cached.o");
+        fs::write(&cached_obj, bytes)?;
+        obj_path_opt = Some(cached_obj);
+        // Keep tmp_dir alive
+        Box::leak(Box::new(tmp_dir)); // leak to maintain lifetime (test binary only)
+    }
 
     // 4. If no cached object, perform full codegen
     let obj_path = match obj_path_opt {
@@ -887,7 +887,6 @@ pub fn run_package(
     let force_no_std = Some(is_manifest_no_std(&full_manifest));
     run_with_mode(&main_path, mode, target, force_no_std)
 }
-
 
 fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
     let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

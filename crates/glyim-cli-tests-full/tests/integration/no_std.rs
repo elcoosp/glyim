@@ -79,4 +79,3 @@ fn e2e_no_std_undefined_option_fails() {
         result.err()
     );
 }
-

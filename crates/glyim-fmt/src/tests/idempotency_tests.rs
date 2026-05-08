@@ -4,7 +4,11 @@ fn assert_idempotent(source: &str) {
     let config = FormatConfig::default();
     let first = format_source(source, &config).expect("format failed");
     let second = format_source(&first, &config).expect("reformat failed");
-    assert_eq!(first, second, "Not idempotent!\n--- source ---\n{}\n--- first ---\n{}\n--- second ---\n{}", source, first, second);
+    assert_eq!(
+        first, second,
+        "Not idempotent!\n--- source ---\n{}\n--- first ---\n{}\n--- second ---\n{}",
+        source, first, second
+    );
 }
 
 #[test]

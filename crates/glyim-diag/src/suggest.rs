@@ -1,11 +1,7 @@
 use glyim_interner::Interner;
 
 /// Suggest similar symbols for an undefined name, using Levenshtein edit distance.
-pub fn suggest_similar(
-    name: &str,
-    interner: &Interner,
-    max_suggestions: usize,
-) -> Vec<String> {
+pub fn suggest_similar(name: &str, interner: &Interner, max_suggestions: usize) -> Vec<String> {
     let mut candidates: Vec<(usize, String)> = interner
         .all_symbols()
         .into_iter()

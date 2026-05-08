@@ -13,7 +13,10 @@ fn coverage_function_mode_emits_metadata_global() {
     let mut cg = builder.build().unwrap();
     cg.generate(&hir).unwrap();
     let ir = cg.ir_string();
-    assert!(ir.contains("__glyim_cov_dump"), "IR should contain __glyim_cov_dump global, got:\n{ir}");
+    assert!(
+        ir.contains("__glyim_cov_dump"),
+        "IR should contain __glyim_cov_dump global, got:\n{ir}"
+    );
 }
 
 #[test]

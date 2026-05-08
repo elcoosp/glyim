@@ -1,5 +1,5 @@
-use crate::incremental::IncrementalState;
 use crate::fingerprint::Fingerprint;
+use crate::incremental::IncrementalState;
 use std::sync::Arc;
 use tempfile::TempDir;
 

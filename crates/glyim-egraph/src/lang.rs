@@ -1,5 +1,5 @@
-use egg::define_language;
 use egg::Id;
+use egg::define_language;
 
 define_language! {
     pub enum GlyimLang {

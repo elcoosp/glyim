@@ -1,6 +1,6 @@
+use crate::TypeChecker;
 use glyim_hir::lower;
 use glyim_parse::parse;
-use crate::TypeChecker;
 
 fn typecheck_and_format(source: &str) -> (String, String) {
     let parse_out = parse(source);

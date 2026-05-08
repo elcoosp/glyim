@@ -1,7 +1,7 @@
+use glyim_fmt::{FormatConfig, format_source};
 use std::env;
 use std::fs;
 use std::process;
-use glyim_fmt::{format_source, FormatConfig};
 
 fn main() {
     let args: Vec<String> = env::args().collect();

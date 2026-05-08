@@ -1,7 +1,7 @@
-use glyim_hir::lower;
-use glyim_parse::parse;
 use crate::TypeChecker;
 use crate::TypeError;
+use glyim_hir::lower;
+use glyim_parse::parse;
 
 fn typecheck_errors(source: &str) -> Vec<TypeError> {
     let parse_out = parse(source);

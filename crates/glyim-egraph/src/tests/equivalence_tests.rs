@@ -8,12 +8,20 @@ use glyim_interner::Interner;
 fn equivalent_x_plus_zero_equals_x() {
     let mut interner = Interner::new();
     let x_sym = interner.intern("x");
-    let x = HirExpr::Ident { id: ExprId::new(1), name: x_sym, span: Span::new(0, 0) };
+    let x = HirExpr::Ident {
+        id: ExprId::new(1),
+        name: x_sym,
+        span: Span::new(0, 0),
+    };
     let x_plus_0 = HirExpr::Binary {
         id: ExprId::new(2),
         op: HirBinOp::Add,
         lhs: Box::new(x.clone()),
-        rhs: Box::new(HirExpr::IntLit { id: ExprId::new(3), value: 0, span: Span::new(0, 0) }),
+        rhs: Box::new(HirExpr::IntLit {
+            id: ExprId::new(3),
+            value: 0,
+            span: Span::new(0, 0),
+        }),
         span: Span::new(0, 0),
     };
     let types = vec![];
@@ -25,12 +33,20 @@ fn equivalent_x_plus_zero_equals_x() {
 fn not_equivalent_x_plus_1_equals_x() {
     let mut interner = Interner::new();
     let x_sym = interner.intern("x");
-    let x = HirExpr::Ident { id: ExprId::new(1), name: x_sym, span: Span::new(0, 0) };
+    let x = HirExpr::Ident {
+        id: ExprId::new(1),
+        name: x_sym,
+        span: Span::new(0, 0),
+    };
     let x_plus_1 = HirExpr::Binary {
         id: ExprId::new(2),
         op: HirBinOp::Add,
         lhs: Box::new(x.clone()),
-        rhs: Box::new(HirExpr::IntLit { id: ExprId::new(3), value: 1, span: Span::new(0, 0) }),
+        rhs: Box::new(HirExpr::IntLit {
+            id: ExprId::new(3),
+            value: 1,
+            span: Span::new(0, 0),
+        }),
         span: Span::new(0, 0),
     };
     let types = vec![];

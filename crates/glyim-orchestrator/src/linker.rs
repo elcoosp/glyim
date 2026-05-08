@@ -2,8 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Configuration for the multi-object linker.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LinkConfig {
     /// Override the default linker (e.g., `ld`, `mold`, `lld`).
     pub linker: Option<String>,
@@ -18,7 +17,6 @@ pub struct LinkConfig {
     /// Sysroot for the target (for cross-compilation).
     pub sysroot: Option<PathBuf>,
 }
-
 
 /// Errors that can occur during linking.
 #[derive(Debug)]
@@ -50,10 +48,7 @@ pub fn link_multi_object(
         return Err(LinkError::LinkFailed("no object files provided".into()));
     }
 
-    let linker = config
-        .linker
-        .as_deref()
-        .unwrap_or("cc");
+    let linker = config.linker.as_deref().unwrap_or("cc");
 
     let mut cmd = Command::new(linker);
     cmd.arg("-o").arg(output_path);

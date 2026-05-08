@@ -1,4 +1,6 @@
-use crate::profile::{CompilationProfile, StageName, StageProfile, MemoryProfile, IncrementalProfile};
+use crate::profile::{
+    CompilationProfile, IncrementalProfile, MemoryProfile, StageName, StageProfile,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -58,7 +60,9 @@ impl ProfileCollector {
     pub fn enter_stage(stage: StageName) {
         COLLECTOR.with(|c| {
             let mut c = c.borrow_mut();
-            if !c.enabled { return; }
+            if !c.enabled {
+                return;
+            }
             c.stage_starts.insert(stage, Instant::now());
         });
     }
@@ -67,17 +71,22 @@ impl ProfileCollector {
     pub fn exit_stage(stage: StageName, items: usize, hits: usize, misses: usize) {
         COLLECTOR.with(|c| {
             let mut c = c.borrow_mut();
-            if !c.enabled { return; }
+            if !c.enabled {
+                return;
+            }
             if let Some(start) = c.stage_starts.remove(&stage) {
                 let duration: Duration = start.elapsed();
-                c.profile.stages.insert(stage, StageProfile {
-                    duration,
-                    items_processed: items,
-                    cache_hits: hits,
-                    cache_misses: misses,
-                    bytes_allocated: 0,
-                    skipped: false,
-                });
+                c.profile.stages.insert(
+                    stage,
+                    StageProfile {
+                        duration,
+                        items_processed: items,
+                        cache_hits: hits,
+                        cache_misses: misses,
+                        bytes_allocated: 0,
+                        skipped: false,
+                    },
+                );
             }
         });
     }
@@ -85,22 +94,28 @@ impl ProfileCollector {
     pub fn skip_stage(stage: StageName) {
         COLLECTOR.with(|c| {
             let mut c = c.borrow_mut();
-            if !c.enabled { return; }
-            c.profile.stages.insert(stage, StageProfile {
-                duration: Duration::ZERO,
-                items_processed: 0,
-                cache_hits: 0,
-                cache_misses: 0,
-                bytes_allocated: 0,
-                skipped: true,
-            });
+            if !c.enabled {
+                return;
+            }
+            c.profile.stages.insert(
+                stage,
+                StageProfile {
+                    duration: Duration::ZERO,
+                    items_processed: 0,
+                    cache_hits: 0,
+                    cache_misses: 0,
+                    bytes_allocated: 0,
+                    skipped: true,
+                },
+            );
         });
     }
 
     pub fn finish() -> CompilationProfile {
         COLLECTOR.with(|c| {
             let mut c = c.borrow_mut();
-            c.profile.total_duration = Instant::now().duration_since(Instant::now() - c.profile.total_duration);
+            c.profile.total_duration =
+                Instant::now().duration_since(Instant::now() - c.profile.total_duration);
             c.profile.clone()
         })
     }
@@ -112,7 +127,11 @@ impl ProfileCollector {
             c.profile.incremental.red_items = red;
             c.profile.incremental.green_items = green;
             c.profile.incremental.total_items = total;
-            c.profile.incremental.cache_hit_ratio = if total > 0 { green as f64 / total as f64 } else { 0.0 };
+            c.profile.incremental.cache_hit_ratio = if total > 0 {
+                green as f64 / total as f64
+            } else {
+                0.0
+            };
         });
     }
 }

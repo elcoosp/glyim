@@ -90,7 +90,9 @@ impl<'a> MonoContext<'a> {
         sub: &HashMap<Symbol, HirType>,
     ) {
         match expr {
-            HirExpr::EnumVariant { enum_name, args, .. } => {
+            HirExpr::EnumVariant {
+                enum_name, args, ..
+            } => {
                 // If the enum has a definition, use it to compute concrete type args.
                 if let Some(edef) = self.find_enum(*enum_name) {
                     let concrete_args: Vec<HirType> = edef
@@ -107,7 +109,9 @@ impl<'a> MonoContext<'a> {
                         })
                         .collect();
                     if !concrete_args.is_empty()
-                        && concrete_args.iter().all(|a| !self.has_unresolved_type_param(a))
+                        && concrete_args
+                            .iter()
+                            .all(|a| !self.has_unresolved_type_param(a))
                     {
                         *enum_name = self.mangle_name(*enum_name, &concrete_args);
                     }
@@ -128,7 +132,8 @@ impl<'a> MonoContext<'a> {
                             };
                             if !args.is_empty() {
                                 let specialized = self.specialize_enum(&base_def, &args);
-                                self.enum_specs.insert((*enum_name, args.clone()), specialized);
+                                self.enum_specs
+                                    .insert((*enum_name, args.clone()), specialized);
                                 *enum_name = self.mangle_name(*enum_name, &args);
                             }
                         }
@@ -158,14 +163,21 @@ impl<'a> MonoContext<'a> {
                     }
                 }
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.concretize_enum_variant_names(condition, sub);
                 self.concretize_enum_variant_names(then_branch, sub);
                 if let Some(eb) = else_branch {
                     self.concretize_enum_variant_names(eb, sub);
                 }
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 self.concretize_enum_variant_names(scrutinee, sub);
                 for arm in arms {
                     if let Some(g) = &mut arm.guard {
@@ -174,8 +186,14 @@ impl<'a> MonoContext<'a> {
                     self.concretize_enum_variant_names(&mut arm.body, sub);
                 }
             }
-            HirExpr::While { condition, body, .. }
-            | HirExpr::ForIn { iter: condition, body, .. } => {
+            HirExpr::While {
+                condition, body, ..
+            }
+            | HirExpr::ForIn {
+                iter: condition,
+                body,
+                ..
+            } => {
                 self.concretize_enum_variant_names(condition, sub);
                 self.concretize_enum_variant_names(body, sub);
             }
@@ -186,11 +204,16 @@ impl<'a> MonoContext<'a> {
             HirExpr::Unary { operand, .. }
             | HirExpr::Deref { expr: operand, .. }
             | HirExpr::As { expr: operand, .. }
-            | HirExpr::Return { value: Some(operand), .. }
+            | HirExpr::Return {
+                value: Some(operand),
+                ..
+            }
             | HirExpr::Println { arg: operand, .. } => {
                 self.concretize_enum_variant_names(operand, sub);
             }
-            HirExpr::Assert { condition, message, .. } => {
+            HirExpr::Assert {
+                condition, message, ..
+            } => {
                 self.concretize_enum_variant_names(condition, sub);
                 if let Some(m) = message {
                     self.concretize_enum_variant_names(m, sub);

@@ -1,5 +1,5 @@
 use crate::config::MutationConfig;
-use crate::engine::{MutationEngine, Mutation};
+use crate::engine::{Mutation, MutationEngine};
 
 pub struct MutationRunner {
     #[allow(dead_code)]

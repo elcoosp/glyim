@@ -65,7 +65,10 @@ pub fn cmd_test(
             eprintln!("\nSurvived Mutants:");
             for (mutation, _) in &results {
                 if !results.iter().any(|(m, k)| m.id == mutation.id && *k) {
-        eprintln!("  {}. {}::{:?}", mutation.id, mutation.function_name, mutation.operator);
+                    eprintln!(
+                        "  {}. {}::{:?}",
+                        mutation.id, mutation.function_name, mutation.operator
+                    );
                 }
             }
         }
@@ -87,17 +90,23 @@ pub fn cmd_test(
                     })
                 }).collect::<Vec<_>>()
             });
-            if let Err(e) = std::fs::write(&report_path, serde_json::to_string_pretty(&json).unwrap()) {
+            if let Err(e) =
+                std::fs::write(&report_path, serde_json::to_string_pretty(&json).unwrap())
+            {
                 eprintln!("warning: failed to write mutation report: {e}");
             }
         }
 
         // Check score threshold
         if let Some(threshold) = mutation_score
-            && score < threshold {
-                eprintln!("Mutation score {:.1}% is below threshold {:.1}%", score, threshold);
-                return 1;
-            }
+            && score < threshold
+        {
+            eprintln!(
+                "Mutation score {:.1}% is below threshold {:.1}%",
+                score, threshold
+            );
+            return 1;
+        }
 
         return if survived > 0 { 1 } else { 0 };
     }
@@ -172,9 +181,10 @@ fn collect_test_names(source: &str) -> Vec<String> {
     let mut names = Vec::new();
     for item in &parse_out.ast.items {
         if let glyim_parse::Item::FnDef { name, attrs, .. } = item
-            && attrs.iter().any(|a| a.name == "test") {
-                names.push(parse_out.interner.resolve(*name).to_string());
-            }
+            && attrs.iter().any(|a| a.name == "test")
+        {
+            names.push(parse_out.interner.resolve(*name).to_string());
+        }
     }
     names
 }

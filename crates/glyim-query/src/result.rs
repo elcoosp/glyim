@@ -38,7 +38,12 @@ impl QueryResult {
         dependencies: Vec<Dependency>,
         status: QueryStatus,
     ) -> Self {
-        Self { value, fingerprint, dependencies, status }
+        Self {
+            value,
+            fingerprint,
+            dependencies,
+            status,
+        }
     }
 
     /// Mark this result as invalid (Red).

@@ -69,8 +69,9 @@ impl DependencyGraph {
             }
         }
         while let Some(current) = queue.pop() {
-            for neighbor in
-                self.graph.neighbors_directed(current, petgraph::Direction::Incoming)
+            for neighbor in self
+                .graph
+                .neighbors_directed(current, petgraph::Direction::Incoming)
             {
                 let fp = self.graph[neighbor];
                 if affected.insert(fp) {
@@ -88,7 +89,10 @@ impl DependencyGraph {
     }
 
     pub fn nodes(&self) -> Vec<Fingerprint> {
-        self.graph.node_indices().map(|idx| self.graph[idx]).collect()
+        self.graph
+            .node_indices()
+            .map(|idx| self.graph[idx])
+            .collect()
     }
 }
 

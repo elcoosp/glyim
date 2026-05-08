@@ -52,9 +52,9 @@ pub fn generate_lockfile(
                 is_macro: *is_macro,
                 source: source.clone(),
                 deps,
-                        artifact_hash: None,
-            interface_hash: None,
-            target_triple: None,
+                artifact_hash: None,
+                interface_hash: None,
+                target_triple: None,
             }
         })
         .collect();

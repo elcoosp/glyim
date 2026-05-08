@@ -86,4 +86,3 @@ fn e2e_typeck_rejects_non_bool_if_condition() {
     // Just verify no crash
     eprintln!("non-bool if condition result: {:?}", result);
 }
-

@@ -46,19 +46,20 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     let ret_bb = cg.context.append_basic_block(fn_value, "ret");
     // Coverage: instrument function entry if coverage is enabled
     if cg.coverage_mode != crate::codegen::CoverageMode::Off
-        && let Some(ref mut instr) = cg.coverage_instrumenter.borrow_mut().as_mut() {
-            let line = crate::debug::DebugInfoGen::byte_offset_to_line(
-                cg.source_str.as_deref().unwrap_or(""),
-                f.span.start,
-            );
-            let counter_index = instr.record_function_entry(0, line);
-            crate::codegen::coverage::instrument_function_entry(
-                &cg.module,
-                fn_value,
-                counter_index,
-                cg.coverage_mode,
-            );
-        }
+        && let Some(ref mut instr) = cg.coverage_instrumenter.borrow_mut().as_mut()
+    {
+        let line = crate::debug::DebugInfoGen::byte_offset_to_line(
+            cg.source_str.as_deref().unwrap_or(""),
+            f.span.start,
+        );
+        let counter_index = instr.record_function_entry(0, line);
+        crate::codegen::coverage::instrument_function_entry(
+            &cg.module,
+            fn_value,
+            counter_index,
+            cg.coverage_mode,
+        );
+    }
     cg.builder.position_at_end(entry);
     let ret_val_ptr = cg
         .builder

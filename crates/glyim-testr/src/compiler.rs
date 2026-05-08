@@ -9,11 +9,20 @@ impl Compiler {
         Self::compile_with_opts(source, filter, false)
     }
 
-    pub fn compile_with_opts(source: &str, filter: Option<&str>, coverage: bool) -> Result<CompiledArtifact, CompileError> {
+    pub fn compile_with_opts(
+        source: &str,
+        filter: Option<&str>,
+        coverage: bool,
+    ) -> Result<CompiledArtifact, CompileError> {
         let parse_out = glyim_parse::parse(source);
         if !parse_out.errors.is_empty() {
             return Err(CompileError::Parse(
-                parse_out.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+                parse_out
+                    .errors
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ));
         }
         let interner = &parse_out.interner;
@@ -32,8 +41,16 @@ impl Compiler {
             let test_path = tmp_dir.path().join("test.g");
             std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
             let bin = tmp_dir.path().join("test_bin");
-            glyim_compiler::pipeline::build_with_mode(&test_path, Some(&bin), glyim_compiler::BuildMode::Debug, None, None, coverage, false)
-                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            glyim_compiler::pipeline::build_with_mode(
+                &test_path,
+                Some(&bin),
+                glyim_compiler::BuildMode::Debug,
+                None,
+                None,
+                coverage,
+                false,
+            )
+            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             return Ok(CompiledArtifact {
                 test_defs,
                 bin_path: Some(bin),
@@ -49,8 +66,16 @@ impl Compiler {
             let test_path = tmp_dir.path().join(format!("{}.g", test_def.name));
             std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
             let bin = tmp_dir.path().join(&test_def.name);
-            glyim_compiler::pipeline::build_with_mode(&test_path, Some(&bin), glyim_compiler::BuildMode::Debug, None, None, coverage, false)
-                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            glyim_compiler::pipeline::build_with_mode(
+                &test_path,
+                Some(&bin),
+                glyim_compiler::BuildMode::Debug,
+                None,
+                None,
+                coverage,
+                false,
+            )
+            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             per_test_binaries.push((test_def.name.clone(), bin));
         }
 

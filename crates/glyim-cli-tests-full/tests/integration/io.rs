@@ -193,4 +193,3 @@ fn e2e_println_str_var() {
     let result = pipeline::run_jit(src);
     assert!(result.is_ok(), "println str var: {:?}", result.err());
 }
-

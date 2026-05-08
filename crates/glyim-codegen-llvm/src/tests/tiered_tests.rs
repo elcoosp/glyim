@@ -1,5 +1,5 @@
-use crate::tiered::{TieredCompiler, ExecutionTier};
 use crate::dispatch::DispatchTable;
+use crate::tiered::{ExecutionTier, TieredCompiler};
 use glyim_interner::Interner;
 use std::sync::Arc;
 

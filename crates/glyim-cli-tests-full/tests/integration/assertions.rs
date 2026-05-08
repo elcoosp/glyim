@@ -23,4 +23,3 @@ fn e2e_assert_fail_msg() {
     let _ = pipeline::run(&temp_g(r#"main = () => { assert(0, "oops") }"#), None);
     // Can't check result because abort kills the process
 }
-

@@ -1,7 +1,7 @@
+use crate::TypeChecker;
 use glyim_hir::lower;
 use glyim_hir::types::HirType;
 use glyim_parse::parse;
-use crate::TypeChecker;
 
 fn typecheck_and_get_tc(source: &str) -> TypeChecker {
     let parse_out = parse(source);

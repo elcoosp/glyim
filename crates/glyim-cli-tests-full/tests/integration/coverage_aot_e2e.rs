@@ -26,7 +26,8 @@ fn coverage_aot_run_produces_dump() {
         None,
         true,
         false,
-    ).expect("build should succeed");
+    )
+    .expect("build should succeed");
 
     let mut cmd = Command::new(&bin);
     cmd.current_dir(&dir);

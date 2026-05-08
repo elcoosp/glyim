@@ -1,8 +1,8 @@
 use glyim_macro_vfs::{ContentHash, ContentStore};
 use glyim_merkle::MerkleStore;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 
 /// Manages compilation artifacts in the CAS.
 pub struct ArtifactManager {
@@ -58,7 +58,10 @@ impl ArtifactManager {
         self.cas.store(&serialized)
     }
 
-    pub fn retrieve_symbol_table(&self, hash: ContentHash) -> Option<super::symbols::PackageSymbolTable> {
+    pub fn retrieve_symbol_table(
+        &self,
+        hash: ContentHash,
+    ) -> Option<super::symbols::PackageSymbolTable> {
         let data = self.cas.retrieve(hash)?;
         postcard::from_bytes(&data).ok()
     }
@@ -74,7 +77,6 @@ impl ArtifactManager {
         Ok(obj_path)
     }
 
-
     pub fn register_name(&self, name: &str, hash: ContentHash) {
         self.cas.register_name(name, hash);
     }
@@ -83,7 +85,7 @@ impl ArtifactManager {
         self.cas.resolve_name(name)
     }
 
-        pub fn verify_artifact(
+    pub fn verify_artifact(
         artifact: &PackageArtifact,
         target_triple: Option<&str>,
         compiler_version: &str,

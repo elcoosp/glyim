@@ -46,4 +46,3 @@ main = () => { let p = Point { x: 10, y: 20 }; let Point { x, y } = p; x }";
     assert!(result.is_ok(), "let struct pattern: {:?}", result.err());
     assert_eq!(result.unwrap(), 10);
 }
-

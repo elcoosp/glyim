@@ -1,12 +1,12 @@
 use crate::analysis::GlyimAnalysis;
-use crate::convert::{hir_expr_to_egraph, egraph_to_hir_expr};
+use crate::convert::{egraph_to_hir_expr, hir_expr_to_egraph};
 use crate::lang::GlyimLang;
 use crate::rules::core_rewrites;
+use egg::EGraph;
 use egg::Runner;
 use glyim_hir::node::HirFn;
 use glyim_hir::types::HirType;
 use glyim_hir::{Hir, HirItem};
-use egg::EGraph;
 use glyim_interner::Interner;
 use std::collections::HashMap;
 
@@ -19,7 +19,12 @@ pub struct OptimizeConfig {
 
 impl Default for OptimizeConfig {
     fn default() -> Self {
-        Self { iter_limit: 10, node_limit: 50_000, time_limit_ms: 50, memory_budget: 100 * 1024 * 1024 }
+        Self {
+            iter_limit: 10,
+            node_limit: 50_000,
+            time_limit_ms: 50,
+            memory_budget: 100 * 1024 * 1024,
+        }
     }
 }
 
@@ -66,7 +71,8 @@ pub fn optimize_fn(
     }
     let _best = crate::extract::extract_best(&egraph_after, root);
     let mut next_id = 1000;
-    let optimized_body = egraph_to_hir_expr(&egraph_after, root, &mut Interner::new(), &mut next_id);
+    let optimized_body =
+        egraph_to_hir_expr(&egraph_after, root, &mut Interner::new(), &mut next_id);
 
     HirFn {
         body: optimized_body,

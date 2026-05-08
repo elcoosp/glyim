@@ -1,6 +1,6 @@
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::fs;
 
 fn glyim_bin() -> Option<PathBuf> {
     let exe = std::env::current_exe().unwrap();
@@ -40,7 +40,11 @@ fn b() -> i64 { 1 }
     let _stdout = String::from_utf8_lossy(&output.stdout);
 
     // It must at least find and run test 'a'
-    assert!(stderr.contains("test a"), "output should mention test a, got stderr: {}", stderr);
+    assert!(
+        stderr.contains("test a"),
+        "output should mention test a, got stderr: {}",
+        stderr
+    );
 
     // Second run with --incremental (no source change). Should not crash.
     let output2 = Command::new(&bin)
@@ -52,7 +56,10 @@ fn b() -> i64 { 1 }
         .output()
         .expect("second run");
 
-    assert!(output2.status.code().is_some(), "second run should terminate normally");
+    assert!(
+        output2.status.code().is_some(),
+        "second run should terminate normally"
+    );
 
     // Modify the source (only function a)
     let modified_source = source.replace("fn a() -> i64 { 0 }", "fn a() -> i64 { 42 }");
@@ -68,5 +75,8 @@ fn b() -> i64 { 1 }
         .output()
         .expect("third run");
 
-    assert!(output3.status.code().is_some(), "third run after modification should terminate normally");
+    assert!(
+        output3.status.code().is_some(),
+        "third run after modification should terminate normally"
+    );
 }

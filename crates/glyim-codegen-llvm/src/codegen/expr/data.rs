@@ -106,13 +106,23 @@ pub(crate) fn codegen_enum_variant<'ctx>(
             // For prelude enums that weren't registered, use the uniform layout
             // expected by the match codegen: { i32, i64 }.
             let tag = if base_name == "Option" {
-                if cg.interner.resolve(*variant_name) == "Some" { 0 } else { 1 }
+                if cg.interner.resolve(*variant_name) == "Some" {
+                    0
+                } else {
+                    1
+                }
             } else if base_name == "Result" {
-                if cg.interner.resolve(*variant_name) == "Ok" { 0 } else { 1 }
+                if cg.interner.resolve(*variant_name) == "Ok" {
+                    0
+                } else {
+                    1
+                }
             } else {
                 tag
             };
-            let st = cg.context.struct_type(&[cg.i32_type.into(), cg.i64_type.into()], false);
+            let st = cg
+                .context
+                .struct_type(&[cg.i32_type.into(), cg.i64_type.into()], false);
             let size = st.size_of().unwrap_or(cg.i64_type.const_int(16, false));
             let alloc_fn = cg
                 .module

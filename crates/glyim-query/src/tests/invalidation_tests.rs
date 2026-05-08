@@ -1,6 +1,6 @@
-use crate::invalidation::invalidate;
 use crate::dep_graph::DependencyGraph;
 use crate::fingerprint::Fingerprint;
+use crate::invalidation::invalidate;
 
 #[test]
 fn invalidate_nothing_when_no_changes() {

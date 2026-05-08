@@ -4,7 +4,6 @@ use std::path::PathBuf;
 /// Severity level for a diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
-
     Error,
     Warning,
     Note,

@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 #[allow(unused_imports, dead_code)]
 use crate::common::*;
+use std::path::PathBuf;
 use std::process::Command;
 fn glyim_bin() -> Option<PathBuf> {
     let exe = std::env::current_exe().unwrap();
@@ -28,4 +28,3 @@ fn e2e_println_subprocess_stdout() {
     );
     assert!(output.status.success(), "process should exit successfully");
 }
-

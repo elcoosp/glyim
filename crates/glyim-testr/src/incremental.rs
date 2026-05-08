@@ -1,6 +1,6 @@
 use crate::types::TestDef;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use serde::{Serialize, Deserialize};
 
 /// Maps each test to the set of source files it depends on.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -45,7 +45,11 @@ impl TestDependencyGraph {
     }
 
     /// Given a set of changed source files, return the tests that are affected.
-    pub fn affected_tests(&self, changed_files: &HashSet<&str>, all_tests: &[TestDef]) -> Vec<TestDef> {
+    pub fn affected_tests(
+        &self,
+        changed_files: &HashSet<&str>,
+        all_tests: &[TestDef],
+    ) -> Vec<TestDef> {
         // Collect all tests that depend on any of the changed files (via file_to_tests)
         let mut affected_set = HashSet::new();
         for file in changed_files {
@@ -61,7 +65,8 @@ impl TestDependencyGraph {
             return all_tests.to_vec();
         }
         // Filter the all_tests list to only those affected
-        all_tests.iter()
+        all_tests
+            .iter()
             .filter(|t| affected_set.contains(&t.name))
             .cloned()
             .collect()
@@ -87,8 +92,22 @@ mod tests {
         dg.add_dependency("test_a", "src/main.g");
         dg.add_dependency("test_b", "src/lib.g");
         let tests = vec![
-            TestDef { name: "test_a".into(), source_file: "src/main.g".into(), ignored: false, should_panic: false, is_optimize_check: false, tags: vec![] },
-            TestDef { name: "test_b".into(), source_file: "src/lib.g".into(), ignored: false, should_panic: false, is_optimize_check: false, tags: vec![] },
+            TestDef {
+                name: "test_a".into(),
+                source_file: "src/main.g".into(),
+                ignored: false,
+                should_panic: false,
+                is_optimize_check: false,
+                tags: vec![],
+            },
+            TestDef {
+                name: "test_b".into(),
+                source_file: "src/lib.g".into(),
+                ignored: false,
+                should_panic: false,
+                is_optimize_check: false,
+                tags: vec![],
+            },
         ];
         let mut changed = HashSet::new();
         changed.insert("src/main.g");

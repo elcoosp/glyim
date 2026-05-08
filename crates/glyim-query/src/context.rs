@@ -108,8 +108,7 @@ impl QueryContext {
     }
 
     pub fn invalidate_dependencies(&self, changed_deps: &[Dependency]) {
-        let changed_fps: Vec<Fingerprint> =
-            changed_deps.iter().map(|d| d.fingerprint()).collect();
+        let changed_fps: Vec<Fingerprint> = changed_deps.iter().map(|d| d.fingerprint()).collect();
         self.invalidate_fingerprints(&changed_fps);
     }
 
@@ -154,9 +153,10 @@ impl QueryContext {
     ) -> V {
         if let Some(cached) = self.cache.get(&key)
             && cached.is_valid()
-                && let Some(val) = cached.value.downcast_ref::<V>() {
-                    return val.clone();
-                }
+            && let Some(val) = cached.value.downcast_ref::<V>()
+        {
+            return val.clone();
+        }
         drop(self.cache.get(&key));
         let value = compute();
         let result_value = value

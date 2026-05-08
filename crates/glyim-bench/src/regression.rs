@@ -28,7 +28,10 @@ pub enum RegressionSeverity {
 
 impl RegressionDetector {
     pub fn new(baseline: CompilationProfile, threshold: f64) -> Self {
-        Self { baseline, threshold }
+        Self {
+            baseline,
+            threshold,
+        }
     }
 
     pub fn compare(&self, current: &CompilationProfile) -> Vec<Regression> {

@@ -19,10 +19,10 @@ fn hash_dependency() {
     // Compute the expected hash using the same method as MerkleNode::compute_hash()
     let expected_hash = {
         let mut hasher = Sha256::new();
-        hasher.update(&(1u64.to_le_bytes()));  // child count
+        hasher.update(&(1u64.to_le_bytes())); // child count
         hasher.update(child.as_bytes());
         // reconstruct the exact data blob produced by serialize_data()
-        let mut data_blob = vec![0x01u8];       // DATA_TYPE_HIR_FN
+        let mut data_blob = vec![0x01u8]; // DATA_TYPE_HIR_FN
         let name_bytes = b"add";
         data_blob.extend_from_slice(&(name_bytes.len() as u64).to_le_bytes());
         data_blob.extend_from_slice(name_bytes);
@@ -35,7 +35,7 @@ fn hash_dependency() {
     };
 
     let node = MerkleNode {
-        hash: expected_hash,       // the node carries the correct hash
+        hash: expected_hash, // the node carries the correct hash
         children: vec![child],
         data,
         header,
@@ -48,33 +48,79 @@ fn hash_dependency() {
 
 #[test]
 fn compute_hash_deterministic() {
-    let data = MerkleNodeData::HirFn { name: "x".into(), serialized: vec![42] };
-    let header = MerkleNodeHeader { data_type_tag: 1, child_count: 0 };
-    let n1 = MerkleNode { hash: ContentHash::ZERO, children: vec![], data: data.clone(), header: header.clone() };
-    let n2 = MerkleNode { hash: ContentHash::ZERO, children: vec![], data, header };
+    let data = MerkleNodeData::HirFn {
+        name: "x".into(),
+        serialized: vec![42],
+    };
+    let header = MerkleNodeHeader {
+        data_type_tag: 1,
+        child_count: 0,
+    };
+    let n1 = MerkleNode {
+        hash: ContentHash::ZERO,
+        children: vec![],
+        data: data.clone(),
+        header: header.clone(),
+    };
+    let n2 = MerkleNode {
+        hash: ContentHash::ZERO,
+        children: vec![],
+        data,
+        header,
+    };
     assert_eq!(n1.compute_hash(), n2.compute_hash());
 }
 
 #[test]
 fn different_content_different_hash() {
     let a = MerkleNode {
-        hash: ContentHash::ZERO, children: vec![],
-        data: MerkleNodeData::HirFn { name: "a".into(), serialized: vec![1] },
-        header: MerkleNodeHeader { data_type_tag: 1, child_count: 0 },
+        hash: ContentHash::ZERO,
+        children: vec![],
+        data: MerkleNodeData::HirFn {
+            name: "a".into(),
+            serialized: vec![1],
+        },
+        header: MerkleNodeHeader {
+            data_type_tag: 1,
+            child_count: 0,
+        },
     };
     let b = MerkleNode {
-        hash: ContentHash::ZERO, children: vec![],
-        data: MerkleNodeData::HirFn { name: "b".into(), serialized: vec![2] },
-        header: MerkleNodeHeader { data_type_tag: 1, child_count: 0 },
+        hash: ContentHash::ZERO,
+        children: vec![],
+        data: MerkleNodeData::HirFn {
+            name: "b".into(),
+            serialized: vec![2],
+        },
+        header: MerkleNodeHeader {
+            data_type_tag: 1,
+            child_count: 0,
+        },
     };
     assert_ne!(a.compute_hash(), b.compute_hash());
 }
 
 #[test]
 fn children_affect_hash() {
-    let data = MerkleNodeData::HirFn { name: "a".into(), serialized: vec![1] };
-    let header = MerkleNodeHeader { data_type_tag: 1, child_count: 0 };
-    let a = MerkleNode { hash: ContentHash::ZERO, children: vec![], data: data.clone(), header: header.clone() };
-    let b = MerkleNode { hash: ContentHash::ZERO, children: vec![ContentHash::of(b"c")], data, header };
+    let data = MerkleNodeData::HirFn {
+        name: "a".into(),
+        serialized: vec![1],
+    };
+    let header = MerkleNodeHeader {
+        data_type_tag: 1,
+        child_count: 0,
+    };
+    let a = MerkleNode {
+        hash: ContentHash::ZERO,
+        children: vec![],
+        data: data.clone(),
+        header: header.clone(),
+    };
+    let b = MerkleNode {
+        hash: ContentHash::ZERO,
+        children: vec![ContentHash::of(b"c")],
+        data,
+        header,
+    };
     assert_ne!(a.compute_hash(), b.compute_hash());
 }

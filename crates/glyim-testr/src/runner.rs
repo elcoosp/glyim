@@ -15,16 +15,14 @@ impl TestRunner {
         Self { config }
     }
 
-    pub async fn run_all(
-        &self,
-        source: &str,
-        display: &dyn DisplayBackend,
-    ) -> Vec<TestResult> {
+    pub async fn run_all(&self, source: &str, display: &dyn DisplayBackend) -> Vec<TestResult> {
         // If incremental mode, check cache first
         let _cached_results: Vec<crate::types::TestResult> = Vec::new();
         let source_hash = glyim_macro_vfs::ContentHash::of(source.as_bytes());
         let cache = if self.config.incremental {
-            crate::cache::IncrementalTestCache::new(&std::path::PathBuf::from(".glyim/incremental/test-cache"))
+            crate::cache::IncrementalTestCache::new(&std::path::PathBuf::from(
+                ".glyim/incremental/test-cache",
+            ))
         } else {
             None
         };
@@ -87,27 +85,43 @@ impl TestRunner {
             let mut results = Vec::new();
             while let Some(r) = set.join_next().await {
                 match r {
-                    Ok(Ok(tr)) => { display.test_finished(&tr); results.push(tr); }
+                    Ok(Ok(tr)) => {
+                        display.test_finished(&tr);
+                        results.push(tr);
+                    }
                     Ok(Err(e)) => {
-                        let tr = TestResult { name: "error".into(), outcome: crate::types::TestOutcome::CompilationError(e), duration: Duration::ZERO };
+                        let tr = TestResult {
+                            name: "error".into(),
+                            outcome: crate::types::TestOutcome::CompilationError(e),
+                            duration: Duration::ZERO,
+                        };
                         display.test_finished(&tr);
                         results.push(tr);
                     }
                     Err(je) => {
-                        let tr = TestResult { name: "panic".into(), outcome: crate::types::TestOutcome::CompilationError(format!("{je}")), duration: Duration::ZERO };
+                        let tr = TestResult {
+                            name: "panic".into(),
+                            outcome: crate::types::TestOutcome::CompilationError(format!("{je}")),
+                            duration: Duration::ZERO,
+                        };
                         display.test_finished(&tr);
                         results.push(tr);
                     }
                 }
             }
-            let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
+            let passed = results
+                .iter()
+                .filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed))
+                .count();
             let failed = results.len() - passed;
             display.suite_finished(passed, failed, results.len());
             return results;
         }
 
         // Multiple binaries: map test name to binary
-        let binary_map: std::collections::HashMap<&str, &std::path::Path> = artifact.per_test_binaries.iter()
+        let binary_map: std::collections::HashMap<&str, &std::path::Path> = artifact
+            .per_test_binaries
+            .iter()
             .map(|(name, path)| (name.as_str(), path.as_ref()))
             .collect();
         let mut set: JoinSet<Result<TestResult, String>> = JoinSet::new();
@@ -144,14 +158,25 @@ impl TestRunner {
         let mut results = Vec::new();
         while let Some(r) = set.join_next().await {
             match r {
-                Ok(Ok(tr)) => { display.test_finished(&tr); results.push(tr); }
+                Ok(Ok(tr)) => {
+                    display.test_finished(&tr);
+                    results.push(tr);
+                }
                 Ok(Err(e)) => {
-                    let tr = TestResult { name: "error".into(), outcome: crate::types::TestOutcome::CompilationError(e), duration: Duration::ZERO };
+                    let tr = TestResult {
+                        name: "error".into(),
+                        outcome: crate::types::TestOutcome::CompilationError(e),
+                        duration: Duration::ZERO,
+                    };
                     display.test_finished(&tr);
                     results.push(tr);
                 }
                 Err(je) => {
-                    let tr = TestResult { name: "panic".into(), outcome: crate::types::TestOutcome::CompilationError(format!("{je}")), duration: Duration::ZERO };
+                    let tr = TestResult {
+                        name: "panic".into(),
+                        outcome: crate::types::TestOutcome::CompilationError(format!("{je}")),
+                        duration: Duration::ZERO,
+                    };
                     display.test_finished(&tr);
                     results.push(tr);
                 }
@@ -165,7 +190,10 @@ impl TestRunner {
             }
         }
 
-        let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
+        let passed = results
+            .iter()
+            .filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed))
+            .count();
         let failed = results.len() - passed;
         // Coverage: merge per-test dumps if coverage enabled
         if self.config.coverage {
@@ -177,13 +205,20 @@ impl TestRunner {
                 metadata: std::collections::HashMap::new(),
                 version: 1,
             };
-            for entry in std::fs::read_dir(cov_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap_or_else(|_| std::fs::read_dir(".").unwrap())).flatten() {
+            for entry in std::fs::read_dir(cov_dir)
+                .unwrap_or_else(|_| {
+                    std::fs::read_dir(".").unwrap_or_else(|_| std::fs::read_dir(".").unwrap())
+                })
+                .flatten()
+            {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("json")
                     && let Ok(data) = std::fs::read_to_string(&path)
-                        && let Ok(dump) = serde_json::from_str::<glyim_coverage::data::CoverageDump>(&data) {
-                            merged_dump.merge(&dump);
-                        }
+                    && let Ok(dump) =
+                        serde_json::from_str::<glyim_coverage::data::CoverageDump>(&data)
+                {
+                    merged_dump.merge(&dump);
+                }
             }
             let merged_path = cov_dir.join("merged.json");
             if let Ok(json) = serde_json::to_string(&merged_dump) {

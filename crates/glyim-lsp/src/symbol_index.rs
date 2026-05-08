@@ -1,6 +1,6 @@
 use glyim_diag::{FileId, Span};
-use glyim_hir::types::HirType;
 use glyim_hir::HirItem;
+use glyim_hir::types::HirType;
 use glyim_interner::Interner;
 use std::collections::HashMap;
 
@@ -65,12 +65,7 @@ impl SymbolIndex {
     }
 
     /// Build the index from a HIR and interner.
-    pub fn build_from_hir(
-        &mut self,
-        file_id: FileId,
-        hir: &glyim_hir::Hir,
-        interner: &Interner,
-    ) {
+    pub fn build_from_hir(&mut self, file_id: FileId, hir: &glyim_hir::Hir, interner: &Interner) {
         self.clear_file(file_id);
         let mut file_symbols = Vec::new();
 
@@ -80,9 +75,11 @@ impl SymbolIndex {
                     let name = interner.resolve(f.name).to_string();
                     let span = f.span;
                     let type_sig = TypeSignature {
-                        params: f.params.iter().map(|(s, t)| {
-                            (interner.resolve(*s).to_string(), t.clone())
-                        }).collect(),
+                        params: f
+                            .params
+                            .iter()
+                            .map(|(s, t)| (interner.resolve(*s).to_string(), t.clone()))
+                            .collect(),
                         return_type: f.ret.clone(),
                     };
                     let doc = f.doc.clone();
@@ -97,7 +94,8 @@ impl SymbolIndex {
                         documentation: doc,
                     };
                     self.by_name.entry(name).or_default().push(info.clone());
-                    self.by_location.insert((file_id.0, span.start), info.clone());
+                    self.by_location
+                        .insert((file_id.0, span.start), info.clone());
                     if !is_test {
                         file_symbols.push(info);
                     }
@@ -107,13 +105,17 @@ impl SymbolIndex {
                     let info = SymbolInfo {
                         name: name.clone(),
                         kind: SymbolKind::Struct,
-                        definition: DefinitionLocation { file_id, span: s.span },
+                        definition: DefinitionLocation {
+                            file_id,
+                            span: s.span,
+                        },
                         type_signature: None,
                         is_pub: s.is_pub,
                         documentation: s.doc.clone(),
                     };
                     self.by_name.entry(name).or_default().push(info.clone());
-                    self.by_location.insert((file_id.0, s.span.start), info.clone());
+                    self.by_location
+                        .insert((file_id.0, s.span.start), info.clone());
                     file_symbols.push(info);
                 }
                 HirItem::Enum(e) => {
@@ -121,13 +123,17 @@ impl SymbolIndex {
                     let info = SymbolInfo {
                         name: name.clone(),
                         kind: SymbolKind::Enum,
-                        definition: DefinitionLocation { file_id, span: e.span },
+                        definition: DefinitionLocation {
+                            file_id,
+                            span: e.span,
+                        },
                         type_signature: None,
                         is_pub: e.is_pub,
                         documentation: e.doc.clone(),
                     };
                     self.by_name.entry(name).or_default().push(info.clone());
-                    self.by_location.insert((file_id.0, e.span.start), info.clone());
+                    self.by_location
+                        .insert((file_id.0, e.span.start), info.clone());
                     file_symbols.push(info);
                 }
                 _ => {}
@@ -138,7 +144,10 @@ impl SymbolIndex {
 
     /// Look up a symbol by name (returns all symbols with that name).
     pub fn lookup_by_name(&self, name: &str) -> Vec<&SymbolInfo> {
-        self.by_name.get(name).map(|v| v.iter().collect()).unwrap_or_default()
+        self.by_name
+            .get(name)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
     }
 
     /// Look up the symbol at a specific byte offset in a file.
@@ -148,7 +157,10 @@ impl SymbolIndex {
 
     /// Get all symbols in a file (for document symbol request).
     pub fn symbols_in_file(&self, file_id: FileId) -> Vec<&SymbolInfo> {
-        self.by_file.get(&file_id).map(|v| v.iter().collect()).unwrap_or_default()
+        self.by_file
+            .get(&file_id)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
     }
 
     /// Get all symbols matching a query prefix.
@@ -182,9 +194,13 @@ impl SymbolIndex {
     /// Only for testing: insert a symbol directly into all indices.
     #[doc(hidden)]
     pub fn insert_test_symbol(&mut self, file_id: FileId, sym: SymbolInfo) {
-        self.by_name.entry(sym.name.clone()).or_default().push(sym.clone());
+        self.by_name
+            .entry(sym.name.clone())
+            .or_default()
+            .push(sym.clone());
         self.by_file.entry(file_id).or_default().push(sym.clone());
-        self.by_location.insert((file_id.0, sym.definition.span.start), sym);
+        self.by_location
+            .insert((file_id.0, sym.definition.span.start), sym);
     }
 
     pub fn clear_file(&mut self, file_id: FileId) {
@@ -196,7 +212,8 @@ impl SymbolIndex {
                         self.by_name.remove(&sym.name);
                     }
                 }
-                self.by_location.remove(&(file_id.0, sym.definition.span.start));
+                self.by_location
+                    .remove(&(file_id.0, sym.definition.span.start));
             }
         }
     }

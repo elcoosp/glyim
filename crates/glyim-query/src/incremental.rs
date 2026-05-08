@@ -52,8 +52,7 @@ impl IncrementalState {
 
         let source_hashes: HashMap<String, Fingerprint> =
             if !should_reset && source_hashes_path.exists() {
-                let data =
-                    std::fs::read(&source_hashes_path).unwrap_or_default();
+                let data = std::fs::read(&source_hashes_path).unwrap_or_default();
                 postcard::from_bytes(&data).unwrap_or_default()
             } else {
                 HashMap::new()
@@ -88,27 +87,17 @@ impl IncrementalState {
     }
 
     /// Compute which files changed compared to the previous build.
-    pub fn compute_changed_files(
-        &self,
-        current: &[(&str, Fingerprint)],
-    ) -> Vec<String> {
+    pub fn compute_changed_files(&self, current: &[(&str, Fingerprint)]) -> Vec<String> {
         current
             .iter()
-            .filter(|(path, hash)| {
-                self.source_hashes
-                    .get(*path) != Some(hash)
-            })
+            .filter(|(path, hash)| self.source_hashes.get(*path) != Some(hash))
             .map(|(path, _)| path.to_string())
             .collect()
     }
 
     /// Compute which files were deleted.
-    pub fn compute_deleted_files(
-        &self,
-        current_paths: &[&str],
-    ) -> Vec<String> {
-        let current_set: std::collections::HashSet<&str> =
-            current_paths.iter().copied().collect();
+    pub fn compute_deleted_files(&self, current_paths: &[&str]) -> Vec<String> {
+        let current_set: std::collections::HashSet<&str> = current_paths.iter().copied().collect();
         self.source_hashes
             .keys()
             .filter(|path| !current_set.contains(path.as_str()))
@@ -117,10 +106,7 @@ impl IncrementalState {
     }
 
     /// Apply source file changes: update hashes, invalidate affected queries.
-    pub fn apply_changes(
-        &mut self,
-        changes: &[(&str, Fingerprint)],
-    ) -> InvalidationReport {
+    pub fn apply_changes(&mut self, changes: &[(&str, Fingerprint)]) -> InvalidationReport {
         let mut changed_deps = Vec::new();
         for (path, hash) in changes {
             let old_hash = self.source_hashes.get(*path).copied();
@@ -144,8 +130,7 @@ impl IncrementalState {
         }
 
         // Convert dependencies to fingerprints and invalidate
-        let changed_fps: Vec<Fingerprint> =
-            changed_deps.iter().map(|d| d.fingerprint()).collect();
+        let changed_fps: Vec<Fingerprint> = changed_deps.iter().map(|d| d.fingerprint()).collect();
         self.ctx.invalidate_fingerprints(&changed_fps)
     }
 
@@ -161,19 +146,16 @@ impl IncrementalState {
 
     /// Save the incremental state to disk.
     pub fn save(&self) -> Result<(), String> {
-        std::fs::create_dir_all(&self.cache_dir)
-            .map_err(|e| format!("create dir: {e}"))?;
+        std::fs::create_dir_all(&self.cache_dir).map_err(|e| format!("create dir: {e}"))?;
 
         // Save version
         let version_path = self.cache_dir.join("version.bin");
         let version_bytes = postcard::to_allocvec(&CURRENT_VERSION)
             .map_err(|e| format!("serialize version: {e}"))?;
-        std::fs::write(&version_path, version_bytes)
-            .map_err(|e| format!("write version: {e}"))?;
+        std::fs::write(&version_path, version_bytes).map_err(|e| format!("write version: {e}"))?;
 
         // Save source hashes
-        let source_hashes_path =
-            self.cache_dir.join("source-hashes.bin");
+        let source_hashes_path = self.cache_dir.join("source-hashes.bin");
         let data = postcard::to_allocvec(&self.source_hashes)
             .map_err(|e| format!("serialize source hashes: {e}"))?;
         std::fs::write(&source_hashes_path, data)

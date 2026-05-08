@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Build mode for compilation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -108,8 +108,12 @@ fn default_mutation_operators() -> Vec<String> {
         "cond-flip".into(),
     ]
 }
-fn default_max_mutations() -> usize { 50 }
-fn default_skip_tests() -> bool { true }
+fn default_max_mutations() -> usize {
+    50
+}
+fn default_skip_tests() -> bool {
+    true
+}
 
 impl Default for MutationConfig {
     fn default() -> Self {
@@ -135,7 +139,9 @@ pub struct LspConfig {
     pub debounce_ms: u64,
 }
 
-fn default_debounce_ms() -> u64 { 100 }
+fn default_debounce_ms() -> u64 {
+    100
+}
 
 impl Default for LspConfig {
     fn default() -> Self {
@@ -164,10 +170,18 @@ pub struct EGraphConfig {
     pub use_invariant_certificates: bool,
 }
 
-fn default_egraph_max_iterations() -> usize { 50 }
-fn default_egraph_max_nodes() -> usize { 100_000 }
-fn default_egraph_memory_budget() -> usize { 100 * 1024 * 1024 }
-fn default_egraph_use_invariant() -> bool { true }
+fn default_egraph_max_iterations() -> usize {
+    50
+}
+fn default_egraph_max_nodes() -> usize {
+    100_000
+}
+fn default_egraph_memory_budget() -> usize {
+    100 * 1024 * 1024
+}
+fn default_egraph_use_invariant() -> bool {
+    true
+}
 
 impl Default for EGraphConfig {
     fn default() -> Self {
@@ -189,8 +203,7 @@ pub struct RemoteCacheConfig {
 }
 
 /// Configuration for profiling.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProfilingConfig {
     /// Whether profiling is enabled.
     #[serde(default)]
@@ -202,4 +215,3 @@ pub struct ProfilingConfig {
     #[serde(default)]
     pub tree: bool,
 }
-

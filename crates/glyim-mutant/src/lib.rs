@@ -1,8 +1,8 @@
 pub mod config;
-pub mod operators;
 pub mod engine;
+pub mod operators;
 
 pub use config::{MutationConfig, MutationOperator};
-pub use engine::{MutationEngine, Mutation};
+pub use engine::{Mutation, MutationEngine};
 
 pub mod runner;

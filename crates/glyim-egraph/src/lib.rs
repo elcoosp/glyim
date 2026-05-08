@@ -1,11 +1,11 @@
-pub mod lang;
-pub mod convert;
-pub mod rules;
 pub mod analysis;
-pub mod extract;
-pub mod optimize;
-pub mod invariant;
+pub mod convert;
 pub mod equivalence;
+pub mod extract;
+pub mod invariant;
+pub mod lang;
+pub mod optimize;
+pub mod rules;
 
 #[cfg(test)]
 mod tests;

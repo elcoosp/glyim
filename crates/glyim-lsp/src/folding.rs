@@ -22,16 +22,17 @@ pub fn provide_folding_ranges(
             if ch == '{' {
                 stack.push((line_num, col as u32));
             } else if ch == '}'
-                && let Some((start_line, _)) = stack.pop() {
-                    ranges.push(FoldingRange {
-                        start_line,
-                        end_line: line_num,
-                        start_character: None,
-                        end_character: None,
-                        kind: Some(FoldingRangeKind::Region),
-                        collapsed_text: None,
-                    });
-                }
+                && let Some((start_line, _)) = stack.pop()
+            {
+                ranges.push(FoldingRange {
+                    start_line,
+                    end_line: line_num,
+                    start_character: None,
+                    end_character: None,
+                    kind: Some(FoldingRangeKind::Region),
+                    collapsed_text: None,
+                });
+            }
         }
     }
     Some(ranges)

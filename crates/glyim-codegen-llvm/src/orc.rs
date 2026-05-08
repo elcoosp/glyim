@@ -1,6 +1,6 @@
+use llvm_sys::orc2::lljit;
 use std::ffi::CString;
 use std::ptr;
-use llvm_sys::orc2::lljit;
 
 pub struct OrcSession {
     jit: lljit::LLVMOrcLLJITRef,
@@ -17,13 +17,12 @@ impl OrcSession {
         // Initialize native target (required for JIT on host)
         inkwell::targets::Target::initialize_native(
             &inkwell::targets::InitializationConfig::default(),
-        ).expect("failed to initialize native target for JIT");
+        )
+        .expect("failed to initialize native target for JIT");
 
         let triple = target_triple
             .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                inkwell::targets::TargetMachine::get_default_triple().to_string()
-            });
+            .unwrap_or_else(|| inkwell::targets::TargetMachine::get_default_triple().to_string());
 
         let builder = unsafe { lljit::LLVMOrcCreateLLJITBuilder() };
         let mut jit: lljit::LLVMOrcLLJITRef = ptr::null_mut();
@@ -40,17 +39,17 @@ impl OrcSession {
             panic!("Failed to create LLJIT: {}", msg);
         }
 
-        Self { jit, target_triple: triple }
+        Self {
+            jit,
+            target_triple: triple,
+        }
     }
 
     pub fn create_dylib(&mut self, name: &str) -> Result<OrcDylib, String> {
         let session = unsafe { lljit::LLVMOrcLLJITGetExecutionSession(self.jit) };
         let c_name = CString::new(name).map_err(|e| format!("invalid name: {e}"))?;
         let dylib_ref = unsafe {
-            llvm_sys::orc2::LLVMOrcExecutionSessionCreateBareJITDylib(
-                session,
-                c_name.as_ptr(),
-            )
+            llvm_sys::orc2::LLVMOrcExecutionSessionCreateBareJITDylib(session, c_name.as_ptr())
         };
         if dylib_ref.is_null() {
             return Err(format!("failed to create JITDylib '{}'", name));
@@ -69,7 +68,9 @@ impl OrcSession {
 impl Drop for OrcSession {
     fn drop(&mut self) {
         if !self.jit.is_null() {
-            unsafe { lljit::LLVMOrcDisposeLLJIT(self.jit); }
+            unsafe {
+                lljit::LLVMOrcDisposeLLJIT(self.jit);
+            }
         }
     }
 }
@@ -82,10 +83,16 @@ pub struct OrcDylib {
 }
 
 impl OrcDylib {
-    pub fn name(&self) -> &str { &self.name }
-    pub fn raw_dylib(&self) -> llvm_sys::orc2::LLVMOrcJITDylibRef { self.dylib }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn raw_dylib(&self) -> llvm_sys::orc2::LLVMOrcJITDylibRef {
+        self.dylib
+    }
 }
 
 impl Default for OrcSession {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

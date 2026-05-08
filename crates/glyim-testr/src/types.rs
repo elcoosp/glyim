@@ -1,7 +1,6 @@
 use std::time::Duration;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TestOutcome {
     Passed,
     Failed { exit_code: i32, stderr: String },
@@ -12,8 +11,7 @@ pub enum TestOutcome {
     InternalError(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TestDef {
     pub name: String,
     pub source_file: String,
@@ -23,8 +21,7 @@ pub struct TestDef {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TestResult {
     pub name: String,
     pub outcome: TestOutcome,
@@ -37,10 +34,19 @@ mod tests {
 
     #[test]
     fn test_outcome_equality_depends_on_full_payload() {
-        let a = TestOutcome::Failed { exit_code: 1, stderr: "a".into() };
-        let b = TestOutcome::Failed { exit_code: 2, stderr: "a".into() };
+        let a = TestOutcome::Failed {
+            exit_code: 1,
+            stderr: "a".into(),
+        };
+        let b = TestOutcome::Failed {
+            exit_code: 2,
+            stderr: "a".into(),
+        };
         assert_ne!(a, b);
-        let c = TestOutcome::Failed { exit_code: 1, stderr: "a".into() };
+        let c = TestOutcome::Failed {
+            exit_code: 1,
+            stderr: "a".into(),
+        };
         assert_eq!(a, c);
     }
 

@@ -1,6 +1,6 @@
 pub mod data;
-pub mod report;
 pub mod html_report;
+pub mod report;
 
 #[cfg(test)]
 mod tests;

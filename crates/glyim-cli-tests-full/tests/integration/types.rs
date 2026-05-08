@@ -37,4 +37,3 @@ fn e2e_float_cmp() {
     assert!(result.is_ok(), "float cmp: {:?}", result.err());
     assert_eq!(result.unwrap(), 1);
 }
-

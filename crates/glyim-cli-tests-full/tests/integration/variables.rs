@@ -20,4 +20,3 @@ fn e2e_let_mut_assign() {
         15
     );
 }
-

@@ -1,8 +1,8 @@
 use crate::database::AnalysisDatabase;
 use crate::formatting::format_document;
 use glyim_diag::{FileId, SourceMap};
-use std::path::PathBuf;
 use lsp_types::*;
+use std::path::PathBuf;
 
 #[test]
 fn formatting_produces_edits_when_mismatch() {
@@ -15,7 +15,14 @@ fn formatting_produces_edits_when_mismatch() {
     }
     {
         let mut sm = db.source_maps.write();
-        sm.insert(file_id, SourceMap::new(path.clone(), file_id, "fn main() -> i64 { 42 }\n".to_string()));
+        sm.insert(
+            file_id,
+            SourceMap::new(
+                path.clone(),
+                file_id,
+                "fn main() -> i64 { 42 }\n".to_string(),
+            ),
+        );
     }
     let params = DocumentFormattingParams {
         text_document: TextDocumentIdentifier {
@@ -26,7 +33,9 @@ fn formatting_produces_edits_when_mismatch() {
             insert_spaces: true,
             ..Default::default()
         },
-        work_done_progress_params: WorkDoneProgressParams { work_done_token: None },
+        work_done_progress_params: WorkDoneProgressParams {
+            work_done_token: None,
+        },
     };
     let edits = format_document(&db, &params);
     // The source is already clean, may return None (no edits needed)

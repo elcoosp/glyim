@@ -41,7 +41,9 @@ impl CoverageDump {
             *self.counters.entry(*counter_id).or_insert(0) += count;
         }
         for (counter_id, loc) in &other.metadata {
-            self.metadata.entry(*counter_id).or_insert_with(|| loc.clone());
+            self.metadata
+                .entry(*counter_id)
+                .or_insert_with(|| loc.clone());
         }
     }
 }

@@ -61,6 +61,7 @@ pub fn run_tests_sync(source: &str, config: &TestConfig) -> std::vec::Vec<types:
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let rt_local = tokio::runtime::Runtime::new().unwrap();
             rt_local.block_on(run_tests(source, config))
-        })).unwrap_or_default()
+        }))
+        .unwrap_or_default()
     })
 }

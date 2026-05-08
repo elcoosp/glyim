@@ -1,11 +1,14 @@
-use glyim_compiler::pipeline::BuildMode;
-use glyim_merkle::MerkleStore;
-use glyim_macro_vfs::{ContentHash, ContentStore, LocalContentStore, RemoteContentStore, RemoteStoreConfig, ActionResult};
-use crate::graph::{PackageGraph, PackageNode};
 use crate::artifacts::{ArtifactManager, PackageArtifact};
-use crate::interface::DependencyInterface;
+use crate::graph::{PackageGraph, PackageNode};
 use crate::incremental::CrossPackageIncremental;
+use crate::interface::DependencyInterface;
 use crate::linker::{LinkConfig, link_multi_object};
+use glyim_compiler::pipeline::BuildMode;
+use glyim_macro_vfs::{
+    ActionResult, ContentHash, ContentStore, LocalContentStore, RemoteContentStore,
+    RemoteStoreConfig,
+};
+use glyim_merkle::MerkleStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -59,17 +62,16 @@ pub struct PackageGraphOrchestrator {
 
 impl PackageGraphOrchestrator {
     pub fn new(root: &Path, config: OrchestratorConfig) -> Result<Self, String> {
-        let graph = crate::graph::PackageGraph::discover(root)
-            .map_err(|e| e.to_string())?;
+        let graph = crate::graph::PackageGraph::discover(root).map_err(|e| e.to_string())?;
         let cross_state = CrossPackageIncremental::load(root).unwrap_or_default();
 
-        let root_package = graph.build_order()
+        let root_package = graph
+            .build_order()
             .map(|order| order.last().map(|n| n.name.clone()).unwrap_or_default())
             .unwrap_or_default();
 
         let cas_dir = root.join(".glyim/cas");
-        let local_store = LocalContentStore::new(&cas_dir)
-            .map_err(|e| format!("CAS init: {e}"))?;
+        let local_store = LocalContentStore::new(&cas_dir).map_err(|e| format!("CAS init: {e}"))?;
         let store: Arc<dyn ContentStore> = Arc::new(local_store);
         #[allow(clippy::arc_with_non_send_sync)]
         let merkle = Arc::new(MerkleStore::new(store.clone()));
@@ -103,7 +105,10 @@ impl PackageGraphOrchestrator {
 
     pub fn build(&mut self) -> Result<PathBuf, OrchestratorError> {
         let start = Instant::now();
-        let order = self.graph.build_order().map_err(|e| OrchestratorError::Graph(e.to_string()))?;
+        let order = self
+            .graph
+            .build_order()
+            .map_err(|e| OrchestratorError::Graph(e.to_string()))?;
         let root_name = order.last().map(|n| n.name.clone()).unwrap_or_default();
         let mut compiled_objects: Vec<PathBuf> = Vec::new();
         let pkg_names: Vec<String> = order.iter().map(|p| p.name.clone()).collect();
@@ -120,25 +125,32 @@ impl PackageGraphOrchestrator {
                 .ok()
                 .map(|s| ContentHash::of(s.as_bytes()))
                 .unwrap_or(ContentHash::ZERO);
-            let source_changed = artifact_hash.map(|h| h != current_source_hash).unwrap_or(true);
+            let source_changed = artifact_hash
+                .map(|h| h != current_source_hash)
+                .unwrap_or(true);
             // Check if any dependency changed
             let deps_changed = pkg_node.manifest.dependencies.keys().any(|dep_name| {
-                let dep_hash = self.cross_state.get_package_root(dep_name)
+                let dep_hash = self
+                    .cross_state
+                    .get_package_root(dep_name)
                     .unwrap_or(ContentHash::ZERO);
-                self.cross_state.did_dependency_change(&pkg_name, dep_name, dep_hash)
+                self.cross_state
+                    .did_dependency_change(&pkg_name, dep_name, dep_hash)
             });
 
             // Try remote pull if not found locally
             if let Some(hash) = artifact_hash
-                && !self.config.force_rebuild {
-                    let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
-                    if !local_exists
-                        && let Some(ref remote) = self.remote_store
-                            && let Some(remote_data) = remote.retrieve(hash) {
-                                self.artifact_mgr.store_object_code(&remote_data);
-                                self.report.artifacts_pulled += 1;
-                            }
+                && !self.config.force_rebuild
+            {
+                let local_exists = self.artifact_mgr.retrieve_object_code(hash).is_some();
+                if !local_exists
+                    && let Some(ref remote) = self.remote_store
+                    && let Some(remote_data) = remote.retrieve(hash)
+                {
+                    self.artifact_mgr.store_object_code(&remote_data);
+                    self.report.artifacts_pulled += 1;
                 }
+            }
 
             let should_skip = !self.config.force_rebuild
                 && !source_changed
@@ -148,7 +160,9 @@ impl PackageGraphOrchestrator {
                     let hash = artifact_hash.unwrap();
                     let name = format!("artifact:{}", hash);
                     if let Some(art_blob_hash) = self.artifact_mgr.resolve_name(&name) {
-                        self.artifact_mgr.retrieve_object_code(art_blob_hash).is_some()
+                        self.artifact_mgr
+                            .retrieve_object_code(art_blob_hash)
+                            .is_some()
                     } else {
                         false
                     }
@@ -159,13 +173,16 @@ impl PackageGraphOrchestrator {
                 self.report.packages_cached.push(pkg_name.clone());
                 if let Some(art) = {
                     let name = format!("artifact:{}", artifact_hash.unwrap());
-                    self.artifact_mgr.resolve_name(&name)
+                    self.artifact_mgr
+                        .resolve_name(&name)
                         .and_then(|h| self.artifact_mgr.retrieve_package_artifact(h))
                 } {
                     match self.artifact_mgr.extract_object_code(&art) {
                         Ok(path) => {
                             compiled_objects.push(path);
-                            self.report.per_package_timing.push((pkg_name, pkg_start.elapsed()));
+                            self.report
+                                .per_package_timing
+                                .push((pkg_name, pkg_start.elapsed()));
                             continue;
                         }
                         Err(e) => {
@@ -187,13 +204,21 @@ impl PackageGraphOrchestrator {
                     return Err(e);
                 }
             }
-            self.report.per_package_timing.push((pkg_name, pkg_start.elapsed()));
+            self.report
+                .per_package_timing
+                .push((pkg_name, pkg_start.elapsed()));
         }
 
         let output_dir = self.workspace_root.join("target");
         std::fs::create_dir_all(&output_dir).ok();
-        let output_path = output_dir.join(&root_name)
-            .with_extension(if cfg!(target_os = "windows") { "exe" } else { "" });
+        let output_path =
+            output_dir
+                .join(&root_name)
+                .with_extension(if cfg!(target_os = "windows") {
+                    "exe"
+                } else {
+                    ""
+                });
         let linker_config = LinkConfig {
             target_triple: self.config.target.clone(),
             ..Default::default()
@@ -215,7 +240,12 @@ impl PackageGraphOrchestrator {
         let parsed = glyim_parse::parse(&source);
         if !parsed.errors.is_empty() {
             return Err(OrchestratorError::Parse(
-                parsed.errors.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"),
+                parsed
+                    .errors
+                    .into_iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             ));
         }
         let mut interner = parsed.interner;
@@ -223,7 +253,11 @@ impl PackageGraphOrchestrator {
         let mut tc = glyim_typeck::TypeChecker::new(interner.clone());
         tc.check(&hir).map_err(|type_errors| {
             OrchestratorError::TypeCheck(
-                type_errors.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"),
+                type_errors
+                    .into_iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             )
         })?;
 
@@ -242,7 +276,9 @@ impl PackageGraphOrchestrator {
 
         let tmp_dir = tempfile::tempdir().map_err(OrchestratorError::Io)?;
         let obj_path = tmp_dir.path().join("output.o");
-        codegen.write_object_file(&obj_path).map_err(OrchestratorError::Codegen)?;
+        codegen
+            .write_object_file(&obj_path)
+            .map_err(OrchestratorError::Codegen)?;
 
         // Keep temp_dir alive for linking
         let obj_path_clone = obj_path.clone();
@@ -268,33 +304,47 @@ impl PackageGraphOrchestrator {
         let artifact_hash = self.artifact_mgr.store_package_artifact(&artifact);
         self.cross_state.update_package_root(&pkg.name, source_hash);
         // Map source hash to artifact hash for quick cache lookups
-        self.artifact_mgr.register_name(&format!("artifact:{}", source_hash), artifact_hash);
+        self.artifact_mgr
+            .register_name(&format!("artifact:{}", source_hash), artifact_hash);
         self.cross_state.save(&self.workspace_root).ok();
 
         // Compute and store DependencyInterface
-        let dep_iface = DependencyInterface::from_hir(&hir, &pkg.name, &pkg.manifest.package.version, &interner);
+        let dep_iface = DependencyInterface::from_hir(
+            &hir,
+            &pkg.name,
+            &pkg.manifest.package.version,
+            &interner,
+        );
         let iface_bytes = dep_iface.to_bytes();
         let iface_hash = ContentHash::of(&iface_bytes);
         self.artifact_mgr.store_object_code(&iface_bytes);
-        self.cross_state.record_dep_fingerprint(&pkg.name, "interface", iface_hash);
+        self.cross_state
+            .record_dep_fingerprint(&pkg.name, "interface", iface_hash);
 
         // Push to remote if configured
         if let Some(ref remote) = self.remote_store
-            && remote.store(&obj_bytes) == obj_hash {
-                let _ = remote.store_action_result(artifact_hash, ActionResult {
+            && remote.store(&obj_bytes) == obj_hash
+        {
+            let _ = remote.store_action_result(
+                artifact_hash,
+                ActionResult {
                     output_files: vec![],
                     exit_code: 0,
                     stdout_hash: None,
                     stderr_hash: None,
-                });
-                self.report.artifacts_pushed += 1;
-            }
+                },
+            );
+            self.report.artifacts_pushed += 1;
+        }
 
         Ok(obj_path_clone)
     }
 
     pub fn check(&mut self) -> Result<(), OrchestratorError> {
-        let order = self.graph.build_order().map_err(|e| OrchestratorError::Graph(e.to_string()))?;
+        let order = self
+            .graph
+            .build_order()
+            .map_err(|e| OrchestratorError::Graph(e.to_string()))?;
         let pkg_names: Vec<String> = order.iter().map(|p| p.name.clone()).collect();
         for pkg_name in pkg_names {
             let pkg = self.graph.get(&pkg_name).unwrap().clone();
@@ -304,15 +354,22 @@ impl PackageGraphOrchestrator {
     }
 
     pub fn run(&mut self) -> Result<i32, OrchestratorError> {
-        let order = self.graph.build_order().map_err(|e| OrchestratorError::Graph(e.to_string()))?;
-        let main_pkg = order.last().ok_or(OrchestratorError::Graph("no packages".into()))?;
+        let order = self
+            .graph
+            .build_order()
+            .map_err(|e| OrchestratorError::Graph(e.to_string()))?;
+        let main_pkg = order
+            .last()
+            .ok_or(OrchestratorError::Graph("no packages".into()))?;
         let source_path = main_pkg.dir.join("src/main.g");
         let source = std::fs::read_to_string(&source_path).map_err(OrchestratorError::Io)?;
         glyim_compiler::pipeline::run_jit(&source)
             .map_err(|e| OrchestratorError::Pipeline(format!("{e:?}")))
     }
 
-    pub fn report(&self) -> &OrchestratorReport { &self.report }
+    pub fn report(&self) -> &OrchestratorReport {
+        &self.report
+    }
 }
 
 #[derive(Debug)]

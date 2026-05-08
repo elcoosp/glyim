@@ -16,7 +16,10 @@ fn add_zero_identity() {
         .with_time_limit(Duration::from_millis(50))
         .with_expr(&expr)
         .run(&rules);
-    let x_id = runner.egraph.lookup_expr(&"x".parse::<RecExpr<GlyimLang>>().unwrap()).unwrap();
+    let x_id = runner
+        .egraph
+        .lookup_expr(&"x".parse::<RecExpr<GlyimLang>>().unwrap())
+        .unwrap();
     let add_id = runner.egraph.lookup_expr(&expr).unwrap();
     assert_eq!(runner.egraph.find(x_id), runner.egraph.find(add_id));
 }
@@ -31,7 +34,10 @@ fn mul_one_identity() {
         .with_time_limit(Duration::from_millis(50))
         .with_expr(&expr)
         .run(&rules);
-    let x_id = runner.egraph.lookup_expr(&"x".parse::<RecExpr<GlyimLang>>().unwrap()).unwrap();
+    let x_id = runner
+        .egraph
+        .lookup_expr(&"x".parse::<RecExpr<GlyimLang>>().unwrap())
+        .unwrap();
     let mul_id = runner.egraph.lookup_expr(&expr).unwrap();
     assert_eq!(runner.egraph.find(x_id), runner.egraph.find(mul_id));
 }
@@ -46,7 +52,10 @@ fn double_negation() {
         .with_time_limit(Duration::from_millis(50))
         .with_expr(&expr)
         .run(&rules);
-    let x_id = runner.egraph.lookup_expr(&"x".parse::<RecExpr<GlyimLang>>().unwrap()).unwrap();
+    let x_id = runner
+        .egraph
+        .lookup_expr(&"x".parse::<RecExpr<GlyimLang>>().unwrap())
+        .unwrap();
     let neg2_id = runner.egraph.lookup_expr(&expr).unwrap();
     assert_eq!(runner.egraph.find(x_id), runner.egraph.find(neg2_id));
 }

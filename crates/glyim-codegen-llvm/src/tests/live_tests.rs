@@ -1,5 +1,5 @@
-use crate::live::DoubleBufferedJIT;
 use crate::dispatch::DispatchTable;
+use crate::live::DoubleBufferedJIT;
 use glyim_interner::Interner;
 use std::sync::Arc;
 

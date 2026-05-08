@@ -6,7 +6,11 @@ use std::path::PathBuf;
 #[test]
 fn parse_error_converts_to_lsp_diagnostic() {
     let file_id = FileId(0);
-    let sm = SourceMap::new(PathBuf::from("/test/main.g"), file_id, "let x 42".to_string());
+    let sm = SourceMap::new(
+        PathBuf::from("/test/main.g"),
+        file_id,
+        "let x 42".to_string(),
+    );
     let errors = vec![ParseError::Message {
         msg: "expected =".into(),
         span: (5, 7),

@@ -16,4 +16,3 @@ fn e2e_primitive_casts() {
         result.err()
     );
 }
-

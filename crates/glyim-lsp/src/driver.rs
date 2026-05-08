@@ -1,14 +1,20 @@
 use crate::AnalysisDatabase;
-use glyim_compiler::queries::QueryPipeline;
-use glyim_compiler::pipeline::PipelineError;
 use glyim_compiler::pipeline::PipelineConfig;
+use glyim_compiler::pipeline::PipelineError;
+use glyim_compiler::queries::QueryPipeline;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 
 pub enum AnalysisMessage {
-    FileChanged { path: PathBuf, content: String, version: i32 },
-    FileClosed { path: PathBuf },
+    FileChanged {
+        path: PathBuf,
+        content: String,
+        version: i32,
+    },
+    FileClosed {
+        path: PathBuf,
+    },
     Shutdown,
 }
 
@@ -19,14 +25,22 @@ pub struct AnalysisDriver {
 }
 
 impl AnalysisDriver {
-    pub fn new(db: Arc<AnalysisDatabase>, rx: Receiver<AnalysisMessage>, cache_dir: std::path::PathBuf) -> Self {
+    pub fn new(
+        db: Arc<AnalysisDatabase>,
+        rx: Receiver<AnalysisMessage>,
+        cache_dir: std::path::PathBuf,
+    ) -> Self {
         Self { db, rx, cache_dir }
     }
 
     pub async fn run(mut self) {
         while let Some(msg) = self.rx.recv().await {
             match msg {
-                AnalysisMessage::FileChanged { path, content, version: _version } => {
+                AnalysisMessage::FileChanged {
+                    path,
+                    content,
+                    version: _version,
+                } => {
                     self.analyze_file(&path, &content);
                 }
                 AnalysisMessage::FileClosed { path } => {
@@ -54,23 +68,43 @@ impl AnalysisDriver {
                 let hir = compiled.mono_hir.clone();
                 let interner = compiled.interner.clone();
                 self.db.hirs.write().insert(file_id, hir.clone());
-                self.db.symbol_index.write().build_from_hir(file_id, &hir, &interner);
-                self.db.reference_graph.write().build_from_hir(file_id, &hir, &interner);
+                self.db
+                    .symbol_index
+                    .write()
+                    .build_from_hir(file_id, &hir, &interner);
+                self.db
+                    .reference_graph
+                    .write()
+                    .build_from_hir(file_id, &hir, &interner);
             }
             Err(e) => {
                 // If the error contains Diagnostics, convert them directly
                 if let PipelineError::Diagnostics(diags) = &e {
                     for d in diags {
                         let severity = match d.severity {
-                            glyim_diag::diagnostic::Severity::Error => lsp_types::DiagnosticSeverity::ERROR,
-                            glyim_diag::diagnostic::Severity::Warning => lsp_types::DiagnosticSeverity::WARNING,
+                            glyim_diag::diagnostic::Severity::Error => {
+                                lsp_types::DiagnosticSeverity::ERROR
+                            }
+                            glyim_diag::diagnostic::Severity::Warning => {
+                                lsp_types::DiagnosticSeverity::WARNING
+                            }
                             _ => lsp_types::DiagnosticSeverity::INFORMATION,
                         };
                         let range = if let Some(sm) = source_maps.get(&file_id) {
-                            let (start, end) = sm.span_to_position(d.span.start, d.span.end).unwrap_or((glyim_diag::LineCol{line:0,column:0}, glyim_diag::LineCol{line:0,column:0}));
+                            let (start, end) =
+                                sm.span_to_position(d.span.start, d.span.end).unwrap_or((
+                                    glyim_diag::LineCol { line: 0, column: 0 },
+                                    glyim_diag::LineCol { line: 0, column: 0 },
+                                ));
                             lsp_types::Range {
-                                start: lsp_types::Position { line: start.line as u32, character: start.column as u32 },
-                                end: lsp_types::Position { line: end.line as u32, character: end.column as u32 },
+                                start: lsp_types::Position {
+                                    line: start.line as u32,
+                                    character: start.column as u32,
+                                },
+                                end: lsp_types::Position {
+                                    line: end.line as u32,
+                                    character: end.column as u32,
+                                },
                             }
                         } else {
                             lsp_types::Range::default()
@@ -89,15 +123,23 @@ impl AnalysisDriver {
                 if !parse_out.errors.is_empty() {
                     let source_maps = self.db.source_maps.read();
                     if let Some(sm) = source_maps.get(&file_id) {
-                        diagnostics.extend(
-                            crate::diagnostics::convert_parse_errors(file_id, sm, &parse_out.errors),
-                        );
+                        diagnostics.extend(crate::diagnostics::convert_parse_errors(
+                            file_id,
+                            sm,
+                            &parse_out.errors,
+                        ));
                     }
                 } else {
                     let d = lsp_types::Diagnostic {
                         range: lsp_types::Range {
-                            start: lsp_types::Position { line: 0, character: 0 },
-                            end: lsp_types::Position { line: 0, character: 0 },
+                            start: lsp_types::Position {
+                                line: 0,
+                                character: 0,
+                            },
+                            end: lsp_types::Position {
+                                line: 0,
+                                character: 0,
+                            },
                         },
                         severity: Some(lsp_types::DiagnosticSeverity::ERROR),
                         message: err_msg,

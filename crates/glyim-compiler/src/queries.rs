@@ -4,11 +4,11 @@
 //! of its inputs. The QueryPipeline orchestrates the stages and manages
 //! the incremental state, Merkle store, and dependency tracking.
 
-use glyim_query::{QueryContext, Fingerprint, Dependency, IncrementalState};
-use glyim_merkle::{MerkleStore, MerkleNode, MerkleNodeData, MerkleNodeHeader};
-use glyim_macro_vfs::{ContentHash};
-use glyim_interner::Interner;
 use glyim_hir::{Hir, HirItem};
+use glyim_interner::Interner;
+use glyim_macro_vfs::ContentHash;
+use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, MerkleStore};
+use glyim_query::{Dependency, Fingerprint, IncrementalState, QueryContext};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,11 +16,7 @@ use std::time::{Duration, Instant};
 
 use glyim_profiler::ProfileCollector;
 
-use crate::pipeline::{
-    CompiledHir, PipelineConfig, PipelineError,
-    compile_source_to_hir,
-};
-
+use crate::pipeline::{CompiledHir, PipelineConfig, PipelineError, compile_source_to_hir};
 
 /// Compute which items changed since the last compilation.
 pub fn compute_item_diff(
@@ -68,15 +64,10 @@ pub fn store_item_artifact(
 }
 
 /// Load a per-item artifact from the Merkle store.
-pub fn load_item_artifact(
-    merkle: &MerkleStore,
-    hash: &ContentHash,
-) -> Option<Vec<u8>> {
-    merkle.get(hash).map(|node| {
-        match node.data {
-            MerkleNodeData::HirItem { serialized, .. } => serialized,
-            _ => vec![],
-        }
+pub fn load_item_artifact(merkle: &MerkleStore, hash: &ContentHash) -> Option<Vec<u8>> {
+    merkle.get(hash).map(|node| match node.data {
+        MerkleNodeData::HirItem { serialized, .. } => serialized,
+        _ => vec![],
     })
 }
 
@@ -127,25 +118,23 @@ pub struct QueryPipeline {
 }
 
 impl QueryPipeline {
-    pub fn new(
-        cache_dir: &Path,
-        config: PipelineConfig,
-    ) -> Self {
+    pub fn new(cache_dir: &Path, config: PipelineConfig) -> Self {
         let state = IncrementalState::load_or_create(cache_dir);
         let ctx = QueryContext::new();
         #[allow(clippy::arc_with_non_send_sync)]
         let merkle_store = glyim_macro_vfs::LocalContentStore::new(cache_dir.join("artifacts"))
             .ok()
-            .map(|store| { Arc::new(MerkleStore::new(Arc::new(store))) });
+            .map(|store| Arc::new(MerkleStore::new(Arc::new(store))));
         let mut prev = HashMap::new();
         // Load previous fingerprints from the Merkle root if available.
         if let Some(ref m) = merkle_store
             && let Some(root_hash) = m.resolve_name("fingerprints_root")
-                && let Some(node) = m.get(&root_hash)
-                    && let MerkleNodeData::HirItem { serialized, .. } = &node.data
-                        && let Ok(map) = postcard::from_bytes::<HashMap<String, Fingerprint>>(serialized) {
-                            prev = map;
-                        }
+            && let Some(node) = m.get(&root_hash)
+            && let MerkleNodeData::HirItem { serialized, .. } = &node.data
+            && let Ok(map) = postcard::from_bytes::<HashMap<String, Fingerprint>>(serialized)
+        {
+            prev = map;
+        }
         Self {
             ctx,
             cache_dir: cache_dir.to_path_buf(),
@@ -168,10 +157,7 @@ impl QueryPipeline {
 
         let source_fp = Fingerprint::of(source.as_bytes());
         let input_str = input_path.to_string_lossy().to_string();
-        let module_key = Fingerprint::combine(
-            Fingerprint::of_str(&input_str),
-            source_fp,
-        );
+        let module_key = Fingerprint::combine(Fingerprint::of_str(&input_str), source_fp);
 
         if self.ctx.is_green(&module_key) {
             self.report.cache_hits += 1;
@@ -187,11 +173,7 @@ impl QueryPipeline {
         ProfileCollector::exit_stage(glyim_profiler::StageName::Parse, 1, 0, 1);
         ProfileCollector::enter_stage(glyim_profiler::StageName::TypeCheck);
 
-        let compiled = compile_source_to_hir(
-            source.to_string(),
-            input_path,
-            &self.config,
-        )?;
+        let compiled = compile_source_to_hir(source.to_string(), input_path, &self.config)?;
 
         ProfileCollector::exit_stage(glyim_profiler::StageName::TypeCheck, 1, 0, 0);
 
@@ -223,15 +205,13 @@ impl QueryPipeline {
         let compiled = self.compile(source, input_path)?;
 
         // 2. Compute per‑function fingerprints
-        let current_fps: Vec<(String, Fingerprint)> = item_fingerprints(&compiled.hir, &compiled.interner);
+        let current_fps: Vec<(String, Fingerprint)> =
+            item_fingerprints(&compiled.hir, &compiled.interner);
         let current_map: HashMap<String, Fingerprint> = current_fps.iter().cloned().collect();
 
         // 3. Diff with previous
-        let (red_names, green_names) = compute_item_diff(
-            &compiled.hir,
-            &compiled.interner,
-            &self.prev_fingerprints,
-        );
+        let (red_names, green_names) =
+            compute_item_diff(&compiled.hir, &compiled.interner, &self.prev_fingerprints);
 
         let mut per_fn_objects: Vec<(String, Vec<u8>)> = Vec::new();
 
@@ -241,14 +221,18 @@ impl QueryPipeline {
                 let key = format!("obj:{}", name);
                 if let Some(hash) = merkle.resolve_name(&key)
                     && let Some(node) = merkle.get(&hash)
-                        && let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
-                            per_fn_objects.push((name.clone(), bytes.clone()));
-                        }
+                    && let MerkleNodeData::ObjectCode { bytes, .. } = &node.data
+                {
+                    per_fn_objects.push((name.clone(), bytes.clone()));
+                }
             }
         }
 
         // 5. Codegen only red items (indices)
-        let red_indices: Vec<usize> = compiled.hir.items.iter()
+        let red_indices: Vec<usize> = compiled
+            .hir
+            .items
+            .iter()
             .enumerate()
             .filter(|(_, item)| {
                 let name = match item {
@@ -267,7 +251,8 @@ impl QueryPipeline {
                 &compiled.interner,
                 &compiled.merged_types,
                 &red_indices,
-            ).map_err(PipelineError::Codegen)?;
+            )
+            .map_err(PipelineError::Codegen)?;
 
             // Store new objects in Merkle cache
             if let Some(ref merkle) = self.merkle_store {
@@ -330,14 +315,17 @@ impl QueryPipeline {
 /// Compute a per-item fingerprint from the HIR.
 pub fn item_fingerprints(hir: &Hir, interner: &Interner) -> Vec<(String, Fingerprint)> {
     use glyim_hir::semantic_hash::semantic_hash_item;
-    hir.items.iter().filter_map(|item| {
-        let name = match item {
-            HirItem::Fn(f) => interner.resolve(f.name).to_string(),
-            HirItem::Struct(s) => interner.resolve(s.name).to_string(),
-            HirItem::Enum(e) => interner.resolve(e.name).to_string(),
-            _ => return None,
-        };
-        let hash = semantic_hash_item(item, interner);
-        Some((name, Fingerprint::of(hash.as_bytes().as_slice())))
-    }).collect()
+    hir.items
+        .iter()
+        .filter_map(|item| {
+            let name = match item {
+                HirItem::Fn(f) => interner.resolve(f.name).to_string(),
+                HirItem::Struct(s) => interner.resolve(s.name).to_string(),
+                HirItem::Enum(e) => interner.resolve(e.name).to_string(),
+                _ => return None,
+            };
+            let hash = semantic_hash_item(item, interner);
+            Some((name, Fingerprint::of(hash.as_bytes().as_slice())))
+        })
+        .collect()
 }

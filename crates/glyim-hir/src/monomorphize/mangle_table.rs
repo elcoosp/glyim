@@ -35,7 +35,9 @@ impl MangleTable {
 
     /// Number of unique mangled names generated so far.
     #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool { self.map.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
 
     pub fn len(&self) -> usize {
         self.map.len()

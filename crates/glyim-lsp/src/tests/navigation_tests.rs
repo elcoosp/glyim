@@ -1,10 +1,10 @@
 use crate::database::AnalysisDatabase;
-use crate::navigation::{goto_definition, document_symbols};
+use crate::navigation::{document_symbols, goto_definition};
 use crate::reference_graph::{Reference, ReferenceKind};
-use crate::symbol_index::{SymbolInfo, SymbolKind, DefinitionLocation, TypeSignature};
-use glyim_diag::{FileId, Span, SourceMap};
-use std::path::PathBuf;
+use crate::symbol_index::{DefinitionLocation, SymbolInfo, SymbolKind, TypeSignature};
+use glyim_diag::{FileId, SourceMap, Span};
 use lsp_types::*;
+use std::path::PathBuf;
 
 fn make_test_db() -> (AnalysisDatabase, FileId) {
     let db = AnalysisDatabase::new();
@@ -16,31 +16,47 @@ fn make_test_db() -> (AnalysisDatabase, FileId) {
     }
     {
         let mut sm = db.source_maps.write();
-        sm.insert(file_id, SourceMap::new(path.clone(), file_id, "fn add(a: i64) -> i64 { a }\n".to_string()));
+        sm.insert(
+            file_id,
+            SourceMap::new(
+                path.clone(),
+                file_id,
+                "fn add(a: i64) -> i64 { a }\n".to_string(),
+            ),
+        );
     }
     {
         let mut idx = db.symbol_index.write();
-        idx.insert_test_symbol(file_id, SymbolInfo {
-            name: "add".into(),
-            kind: SymbolKind::Function,
-            definition: DefinitionLocation { file_id, span: Span::new(0, 3) },
-            type_signature: Some(TypeSignature {
-                params: vec![("a".into(), glyim_hir::types::HirType::Int)],
-                return_type: Some(glyim_hir::types::HirType::Int),
-            }),
-            is_pub: false,
-            documentation: None,
-        });
+        idx.insert_test_symbol(
+            file_id,
+            SymbolInfo {
+                name: "add".into(),
+                kind: SymbolKind::Function,
+                definition: DefinitionLocation {
+                    file_id,
+                    span: Span::new(0, 3),
+                },
+                type_signature: Some(TypeSignature {
+                    params: vec![("a".into(), glyim_hir::types::HirType::Int)],
+                    return_type: Some(glyim_hir::types::HirType::Int),
+                }),
+                is_pub: false,
+                documentation: None,
+            },
+        );
     }
     {
         let mut refs = db.reference_graph.write();
         let mut graph = crate::reference_graph::ReferenceGraph::new();
-        graph.insert_test_reference("add", Reference {
-            file_id,
-            span: Span::new(0, 3),
-            is_definition: true,
-            kind: ReferenceKind::Call,
-        });
+        graph.insert_test_reference(
+            "add",
+            Reference {
+                file_id,
+                span: Span::new(0, 3),
+                is_definition: true,
+                kind: ReferenceKind::Call,
+            },
+        );
         *refs = graph;
     }
     (db, file_id)
@@ -55,10 +71,17 @@ fn goto_definition_works() {
             text_document: TextDocumentIdentifier {
                 uri: Url::from_file_path("/test/main.g").unwrap(),
             },
-            position: Position { line: 0, character: 0 },
+            position: Position {
+                line: 0,
+                character: 0,
+            },
         },
-        work_done_progress_params: WorkDoneProgressParams { work_done_token: None },
-        partial_result_params: PartialResultParams { partial_result_token: None },
+        work_done_progress_params: WorkDoneProgressParams {
+            work_done_token: None,
+        },
+        partial_result_params: PartialResultParams {
+            partial_result_token: None,
+        },
     };
     let result = goto_definition(&db, &file_map, &params);
     assert!(result.is_some());
@@ -72,8 +95,12 @@ fn document_symbols_works() {
         text_document: TextDocumentIdentifier {
             uri: Url::from_file_path("/test/main.g").unwrap(),
         },
-        work_done_progress_params: WorkDoneProgressParams { work_done_token: None },
-        partial_result_params: PartialResultParams { partial_result_token: None },
+        work_done_progress_params: WorkDoneProgressParams {
+            work_done_token: None,
+        },
+        partial_result_params: PartialResultParams {
+            partial_result_token: None,
+        },
     };
     let result = document_symbols(&db, &file_map, &params);
     assert!(result.is_some());

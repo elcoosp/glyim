@@ -84,9 +84,10 @@ pub fn compile_items_to_objects(
             _ => continue,
         };
         // Build a mini HIR with just this one item
-        let mini_hir = glyim_hir::Hir { items: vec![item.clone()] };
-        let mut cg = CodegenBuilder::new(&ctx, interner.clone(), merged_types.to_vec())
-            .build()?;
+        let mini_hir = glyim_hir::Hir {
+            items: vec![item.clone()],
+        };
+        let mut cg = CodegenBuilder::new(&ctx, interner.clone(), merged_types.to_vec()).build()?;
         cg.generate(&mini_hir)?;
         let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
         let obj_path = tmp.path().join("out.o");

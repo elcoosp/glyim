@@ -11,4 +11,3 @@ fn e2e_macro_identity() {
         99
     );
 }
-

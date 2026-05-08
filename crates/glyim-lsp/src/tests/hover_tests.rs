@@ -1,9 +1,9 @@
 use crate::database::AnalysisDatabase;
 use crate::hover::provide_hover;
-use crate::symbol_index::{SymbolInfo, SymbolKind, DefinitionLocation, TypeSignature};
-use glyim_diag::{FileId, Span, SourceMap};
-use std::path::PathBuf;
+use crate::symbol_index::{DefinitionLocation, SymbolInfo, SymbolKind, TypeSignature};
+use glyim_diag::{FileId, SourceMap, Span};
 use lsp_types::*;
+use std::path::PathBuf;
 
 fn make_test_db() -> (AnalysisDatabase, FileId) {
     let db = AnalysisDatabase::new();
@@ -15,21 +15,34 @@ fn make_test_db() -> (AnalysisDatabase, FileId) {
     }
     {
         let mut sm = db.source_maps.write();
-        sm.insert(file_id, SourceMap::new(path.clone(), file_id, "fn add(a: i64) -> i64 { a }\n".to_string()));
+        sm.insert(
+            file_id,
+            SourceMap::new(
+                path.clone(),
+                file_id,
+                "fn add(a: i64) -> i64 { a }\n".to_string(),
+            ),
+        );
     }
     {
         let mut idx = db.symbol_index.write();
-        idx.insert_test_symbol(file_id, SymbolInfo {
-            name: "add".into(),
-            kind: SymbolKind::Function,
-            definition: DefinitionLocation { file_id, span: Span::new(0, 3) },
-            type_signature: Some(TypeSignature {
-                params: vec![("a".into(), glyim_hir::types::HirType::Int)],
-                return_type: Some(glyim_hir::types::HirType::Int),
-            }),
-            is_pub: false,
-            documentation: Some("Adds one.".into()),
-        });
+        idx.insert_test_symbol(
+            file_id,
+            SymbolInfo {
+                name: "add".into(),
+                kind: SymbolKind::Function,
+                definition: DefinitionLocation {
+                    file_id,
+                    span: Span::new(0, 3),
+                },
+                type_signature: Some(TypeSignature {
+                    params: vec![("a".into(), glyim_hir::types::HirType::Int)],
+                    return_type: Some(glyim_hir::types::HirType::Int),
+                }),
+                is_pub: false,
+                documentation: Some("Adds one.".into()),
+            },
+        );
     }
     (db, file_id)
 }
@@ -40,9 +53,14 @@ fn hover_params() -> HoverParams {
             text_document: TextDocumentIdentifier {
                 uri: Url::from_file_path("/test/main.g").unwrap(),
             },
-            position: Position { line: 0, character: 0 }, // within "fn"
+            position: Position {
+                line: 0,
+                character: 0,
+            }, // within "fn"
         },
-        work_done_progress_params: WorkDoneProgressParams { work_done_token: None },
+        work_done_progress_params: WorkDoneProgressParams {
+            work_done_token: None,
+        },
     }
 }
 

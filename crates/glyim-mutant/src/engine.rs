@@ -1,7 +1,7 @@
-use glyim_hir::{Hir, HirExpr, HirStmt, HirItem};
-use glyim_interner::Symbol;
 use crate::config::{MutationConfig, MutationOperator};
 use crate::operators;
+use glyim_hir::{Hir, HirExpr, HirItem, HirStmt};
+use glyim_interner::Symbol;
 
 #[derive(Debug, Clone)]
 pub struct Mutation {
@@ -50,7 +50,9 @@ impl MutationEngine {
             return;
         }
         for op in &self.config.operators {
-            if *op == MutationOperator::StatementDeletion { continue; }
+            if *op == MutationOperator::StatementDeletion {
+                continue;
+            }
             if let Some(mutated) = operators::apply_operator(expr, *op) {
                 let mutation = Mutation {
                     id: self.next_id,
@@ -70,22 +72,37 @@ impl MutationEngine {
                 self.collect_expr_mutations(lhs, fn_name, mutations, count);
                 self.collect_expr_mutations(rhs, fn_name, mutations, count);
             }
-            HirExpr::Unary { operand, .. } => self.collect_expr_mutations(operand, fn_name, mutations, count),
+            HirExpr::Unary { operand, .. } => {
+                self.collect_expr_mutations(operand, fn_name, mutations, count)
+            }
             HirExpr::Block { stmts, .. } => {
                 for stmt in stmts {
                     match stmt {
-                        HirStmt::Expr(e) => self.collect_expr_mutations(e, fn_name, mutations, count),
-                        HirStmt::Let { value, .. } | HirStmt::Assign { value, .. } => self.collect_expr_mutations(value, fn_name, mutations, count),
+                        HirStmt::Expr(e) => {
+                            self.collect_expr_mutations(e, fn_name, mutations, count)
+                        }
+                        HirStmt::Let { value, .. } | HirStmt::Assign { value, .. } => {
+                            self.collect_expr_mutations(value, fn_name, mutations, count)
+                        }
                         _ => {}
                     }
                 }
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.collect_expr_mutations(condition, fn_name, mutations, count);
                 self.collect_expr_mutations(then_branch, fn_name, mutations, count);
-                if let Some(eb) = else_branch { self.collect_expr_mutations(eb, fn_name, mutations, count); }
+                if let Some(eb) = else_branch {
+                    self.collect_expr_mutations(eb, fn_name, mutations, count);
+                }
             }
-            HirExpr::While { condition, body, .. } => {
+            HirExpr::While {
+                condition, body, ..
+            } => {
                 self.collect_expr_mutations(condition, fn_name, mutations, count);
                 self.collect_expr_mutations(body, fn_name, mutations, count);
             }
@@ -93,21 +110,49 @@ impl MutationEngine {
                 self.collect_expr_mutations(iter, fn_name, mutations, count);
                 self.collect_expr_mutations(body, fn_name, mutations, count);
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 self.collect_expr_mutations(scrutinee, fn_name, mutations, count);
-                for arm in arms { self.collect_expr_mutations(&arm.body, fn_name, mutations, count); }
+                for arm in arms {
+                    self.collect_expr_mutations(&arm.body, fn_name, mutations, count);
+                }
             }
-            HirExpr::Call { args, .. } => for a in args { self.collect_expr_mutations(a, fn_name, mutations, count); }
-            HirExpr::StructLit { fields, .. } => for (_, v) in fields { self.collect_expr_mutations(v, fn_name, mutations, count); }
-            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => for a in args { self.collect_expr_mutations(a, fn_name, mutations, count); }
-            HirExpr::Println { arg, .. } => self.collect_expr_mutations(arg, fn_name, mutations, count),
-            HirExpr::Assert { condition, message, .. } => {
+            HirExpr::Call { args, .. } => {
+                for a in args {
+                    self.collect_expr_mutations(a, fn_name, mutations, count);
+                }
+            }
+            HirExpr::StructLit { fields, .. } => {
+                for (_, v) in fields {
+                    self.collect_expr_mutations(v, fn_name, mutations, count);
+                }
+            }
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    self.collect_expr_mutations(a, fn_name, mutations, count);
+                }
+            }
+            HirExpr::Println { arg, .. } => {
+                self.collect_expr_mutations(arg, fn_name, mutations, count)
+            }
+            HirExpr::Assert {
+                condition, message, ..
+            } => {
                 self.collect_expr_mutations(condition, fn_name, mutations, count);
-                if let Some(m) = message { self.collect_expr_mutations(m, fn_name, mutations, count); }
+                if let Some(m) = message {
+                    self.collect_expr_mutations(m, fn_name, mutations, count);
+                }
             }
-            HirExpr::As { expr, .. } => self.collect_expr_mutations(expr, fn_name, mutations, count),
-            HirExpr::Deref { expr, .. } => self.collect_expr_mutations(expr, fn_name, mutations, count),
-            HirExpr::Return { value: Some(v), .. } => self.collect_expr_mutations(v, fn_name, mutations, count),
+            HirExpr::As { expr, .. } => {
+                self.collect_expr_mutations(expr, fn_name, mutations, count)
+            }
+            HirExpr::Deref { expr, .. } => {
+                self.collect_expr_mutations(expr, fn_name, mutations, count)
+            }
+            HirExpr::Return { value: Some(v), .. } => {
+                self.collect_expr_mutations(v, fn_name, mutations, count)
+            }
             HirExpr::Return { value: None, .. } => {}
             _ => {}
         }
@@ -120,25 +165,33 @@ impl MutationEngine {
         mutations: &mut Vec<Mutation>,
         count: &mut usize,
     ) {
-        if *count >= self.config.max_mutations_per_fn { return; }
-        if self.config.operators.contains(&MutationOperator::StatementDeletion)
-            && let HirExpr::Block { stmts, .. } = expr {
-                for (i, stmt) in stmts.iter().enumerate() {
-                    if *count >= self.config.max_mutations_per_fn { break; }
-                    if matches!(stmt, HirStmt::Expr(_) | HirStmt::Let { .. }) {
-                        // We can mutate by removing this statement
-                        let mutation = Mutation {
-                            id: self.next_id,
-                            function_name: format!("{:?}", fn_name),
-                            operator: MutationOperator::StatementDeletion,
-                            original: format!("stmt {}", i),
-                            replacement: "(removed)".to_string(),
-                        };
-                        self.next_id += 1;
-                        mutations.push(mutation);
-                        *count += 1;
-                    }
+        if *count >= self.config.max_mutations_per_fn {
+            return;
+        }
+        if self
+            .config
+            .operators
+            .contains(&MutationOperator::StatementDeletion)
+            && let HirExpr::Block { stmts, .. } = expr
+        {
+            for (i, stmt) in stmts.iter().enumerate() {
+                if *count >= self.config.max_mutations_per_fn {
+                    break;
+                }
+                if matches!(stmt, HirStmt::Expr(_) | HirStmt::Let { .. }) {
+                    // We can mutate by removing this statement
+                    let mutation = Mutation {
+                        id: self.next_id,
+                        function_name: format!("{:?}", fn_name),
+                        operator: MutationOperator::StatementDeletion,
+                        original: format!("stmt {}", i),
+                        replacement: "(removed)".to_string(),
+                    };
+                    self.next_id += 1;
+                    mutations.push(mutation);
+                    *count += 1;
                 }
             }
+        }
     }
 }

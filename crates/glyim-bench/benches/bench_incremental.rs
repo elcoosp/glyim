@@ -1,7 +1,7 @@
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use glyim_bench::fixtures::FixtureGenerator;
-use glyim_compiler::queries::QueryPipeline;
 use glyim_compiler::pipeline::{PipelineConfig, run_jit};
+use glyim_compiler::queries::QueryPipeline;
 use std::time::Duration;
 
 fn bench_full_build(c: &mut Criterion) {
@@ -125,13 +125,21 @@ fn bench_jit_exec(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     group.bench_function("simple_main", |b| {
-        b.iter(|| { let _ = run_jit(black_box("main = () => 42")); });
+        b.iter(|| {
+            let _ = run_jit(black_box("main = () => 42"));
+        });
     });
     group.bench_function("arithmetic", |b| {
-        b.iter(|| { let _ = run_jit(black_box("main = () => { let x = 10; let y = 20; x + y }")); });
+        b.iter(|| {
+            let _ = run_jit(black_box("main = () => { let x = 10; let y = 20; x + y }"));
+        });
     });
     group.bench_function("loop", |b| {
-        b.iter(|| { let _ = run_jit(black_box("main = () => { let mut i = 0; while i < 100 { i = i + 1 }; i }")); });
+        b.iter(|| {
+            let _ = run_jit(black_box(
+                "main = () => { let mut i = 0; while i < 100 { i = i + 1 }; i }",
+            ));
+        });
     });
     group.finish();
 }

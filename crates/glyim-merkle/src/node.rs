@@ -22,10 +22,23 @@ pub struct MerkleNodeHeader {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MerkleNodeData {
-    HirFn { name: String, serialized: Vec<u8> },
-    HirItem { kind: String, name: String, serialized: Vec<u8> },
-    LlvmFunction { symbol: String, bitcode: Vec<u8> },
-    ObjectCode { symbol_name: String, bytes: Vec<u8> },
+    HirFn {
+        name: String,
+        serialized: Vec<u8>,
+    },
+    HirItem {
+        kind: String,
+        name: String,
+        serialized: Vec<u8>,
+    },
+    LlvmFunction {
+        symbol: String,
+        bitcode: Vec<u8>,
+    },
+    ObjectCode {
+        symbol_name: String,
+        bytes: Vec<u8>,
+    },
 }
 
 impl MerkleNodeData {
@@ -54,8 +67,7 @@ impl MerkleNode {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        let header_bytes =
-            postcard::to_allocvec(&self.header).expect("serialize header");
+        let header_bytes = postcard::to_allocvec(&self.header).expect("serialize header");
         let mut buf = Vec::new();
         buf.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
         buf.extend_from_slice(&header_bytes);
@@ -74,17 +86,15 @@ impl MerkleNode {
         if data.len() < 8 {
             return Err(NodeDeserializeError::TooShort);
         }
-        let header_len =
-            u64::from_le_bytes(data[0..8].try_into().unwrap()) as usize;
+        let header_len = u64::from_le_bytes(data[0..8].try_into().unwrap()) as usize;
         offset = 8;
 
         // Read header bytes
         if data.len() < offset + header_len {
             return Err(NodeDeserializeError::TooShort);
         }
-        let header: MerkleNodeHeader =
-            postcard::from_bytes(&data[offset..offset + header_len])
-                .map_err(|e| NodeDeserializeError::HeaderCorrupt(e.to_string()))?;
+        let header: MerkleNodeHeader = postcard::from_bytes(&data[offset..offset + header_len])
+            .map_err(|e| NodeDeserializeError::HeaderCorrupt(e.to_string()))?;
         offset += header_len;
 
         // Read child hashes
@@ -104,8 +114,7 @@ impl MerkleNode {
 
         // Remaining data is the payload blob
         let data_blob = data[offset..].to_vec();
-        let merkle_data =
-            Self::deserialize_data(header.data_type_tag, &data_blob)?;
+        let merkle_data = Self::deserialize_data(header.data_type_tag, &data_blob)?;
 
         // Recompute hash to verify integrity
         let hash = {
@@ -161,10 +170,7 @@ impl MerkleNode {
                 buf.extend_from_slice(bitcode);
                 buf
             }
-            MerkleNodeData::ObjectCode {
-                symbol_name,
-                bytes,
-            } => {
+            MerkleNodeData::ObjectCode { symbol_name, bytes } => {
                 let mut buf = vec![DATA_TYPE_OBJECT_CODE];
                 buf.extend_from_slice(&(symbol_name.len() as u64).to_le_bytes());
                 buf.extend_from_slice(symbol_name.as_bytes());
@@ -175,10 +181,7 @@ impl MerkleNode {
         }
     }
 
-    fn deserialize_data(
-        tag: u8,
-        data: &[u8],
-    ) -> Result<MerkleNodeData, NodeDeserializeError> {
+    fn deserialize_data(tag: u8, data: &[u8]) -> Result<MerkleNodeData, NodeDeserializeError> {
         let mut offset = 0;
         match tag {
             DATA_TYPE_HIR_FN => {
@@ -194,8 +197,7 @@ impl MerkleNode {
                 let name_len = read_u64(data, &mut offset)? as usize;
                 let name = read_string(data, &mut offset, name_len)?;
                 let serialized_len = read_u64(data, &mut offset)? as usize;
-                let serialized =
-                    read_bytes(data, &mut offset, serialized_len)?;
+                let serialized = read_bytes(data, &mut offset, serialized_len)?;
                 Ok(MerkleNodeData::HirItem {
                     kind,
                     name,
@@ -206,21 +208,15 @@ impl MerkleNode {
                 let symbol_len = read_u64(data, &mut offset)? as usize;
                 let symbol = read_string(data, &mut offset, symbol_len)?;
                 let bitcode_len = read_u64(data, &mut offset)? as usize;
-                let bitcode =
-                    read_bytes(data, &mut offset, bitcode_len)?;
+                let bitcode = read_bytes(data, &mut offset, bitcode_len)?;
                 Ok(MerkleNodeData::LlvmFunction { symbol, bitcode })
             }
             DATA_TYPE_OBJECT_CODE => {
-                let symbol_name_len =
-                    read_u64(data, &mut offset)? as usize;
-                let symbol_name =
-                    read_string(data, &mut offset, symbol_name_len)?;
+                let symbol_name_len = read_u64(data, &mut offset)? as usize;
+                let symbol_name = read_string(data, &mut offset, symbol_name_len)?;
                 let bytes_len = read_u64(data, &mut offset)? as usize;
                 let bytes = read_bytes(data, &mut offset, bytes_len)?;
-                Ok(MerkleNodeData::ObjectCode {
-                    symbol_name,
-                    bytes,
-                })
+                Ok(MerkleNodeData::ObjectCode { symbol_name, bytes })
             }
             _ => Err(NodeDeserializeError::UnknownDataType(tag)),
         }
@@ -232,8 +228,7 @@ fn read_u64(data: &[u8], offset: &mut usize) -> Result<u64, NodeDeserializeError
     if data.len() < *offset + 8 {
         return Err(NodeDeserializeError::TooShort);
     }
-    let val =
-        u64::from_le_bytes(data[*offset..*offset + 8].try_into().unwrap());
+    let val = u64::from_le_bytes(data[*offset..*offset + 8].try_into().unwrap());
     *offset += 8;
     Ok(val)
 }

@@ -2,10 +2,10 @@
 
 use crate::AnalysisDatabase;
 use crate::driver::AnalysisMessage;
-use std::sync::Arc;
-use std::ops::ControlFlow;
-use tokio::sync::mpsc;
 use async_lsp::router::Router;
+use std::ops::ControlFlow;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use async_lsp::ClientSocket;
 use async_lsp::lsp_types::*;
@@ -21,7 +21,9 @@ pub fn build_router(
     router.request::<request::Initialize, _>(|(), _params| async {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                    TextDocumentSyncKind::FULL,
+                )),
                 completion_provider: Some(CompletionOptions::default()),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
@@ -71,14 +73,15 @@ pub fn build_router(
         let client = client.clone();
         router.notification::<notification::DidChangeTextDocument>(move |(), params| {
             if let Ok(path) = params.text_document.uri.to_file_path()
-                && let Some(change) = params.content_changes.into_iter().last() {
-                    let _ = tx.send(AnalysisMessage::FileChanged {
-                        path: path.clone(),
-                        content: change.text,
-                        version: params.text_document.version,
-                    });
-                    publish_diagnostics(&db, &path, &client);
-                }
+                && let Some(change) = params.content_changes.into_iter().last()
+            {
+                let _ = tx.send(AnalysisMessage::FileChanged {
+                    path: path.clone(),
+                    content: change.text,
+                    version: params.text_document.version,
+                });
+                publish_diagnostics(&db, &path, &client);
+            }
             ControlFlow::Continue(())
         });
     }
@@ -169,12 +172,12 @@ pub fn build_router(
 fn publish_diagnostics(db: &AnalysisDatabase, path: &std::path::Path, client: &ClientSocket) {
     let file_id = { db.file_map.read().get_by_path(path) };
     let Some(id) = file_id else { return };
-    let diags: Vec<Diagnostic> = {
-        db.diagnostics.read().get(&id).cloned().unwrap_or_default()
-    };
+    let diags: Vec<Diagnostic> = { db.diagnostics.read().get(&id).cloned().unwrap_or_default() };
     if let Ok(uri) = Url::from_file_path(path) {
-        let _ = client.notify::<notification::PublishDiagnostics>(
-            PublishDiagnosticsParams { uri, diagnostics: diags, version: None }
-        );
+        let _ = client.notify::<notification::PublishDiagnostics>(PublishDiagnosticsParams {
+            uri,
+            diagnostics: diags,
+            version: None,
+        });
     }
 }

@@ -1,8 +1,8 @@
+use crate::executor::MacroExecutor;
+use crate::wasm_interface::{deserialize_expr, serialize_expr};
 use glyim_diag::Span;
 use glyim_hir::HirExpr;
 use glyim_hir::types::ExprId;
-use crate::executor::MacroExecutor;
-use crate::wasm_interface::{deserialize_expr, serialize_expr};
 
 #[test]
 fn typed_executor_identity_roundtrip() {

@@ -29,7 +29,11 @@ impl Default for FormatConfig {
 pub fn format_source(source: &str, config: &FormatConfig) -> Result<String, FormatError> {
     let tokens = tokenize(source);
     if tokens.is_empty() {
-        return Ok(if config.trailing_newline { "\n".to_string() } else { String::new() });
+        return Ok(if config.trailing_newline {
+            "\n".to_string()
+        } else {
+            String::new()
+        });
     }
 
     let mut out = String::new();

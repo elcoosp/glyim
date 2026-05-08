@@ -1,9 +1,9 @@
 use crate::types::{TestOutcome, TestResult};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time;
-use tokio::io::AsyncReadExt;
 
 pub struct Executor {
     bin_path: PathBuf,

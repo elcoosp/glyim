@@ -1,11 +1,11 @@
 use crate::HirFn;
-use crate::node::HirTestConfig;
 use crate::item::{
     EnumDef, ExternBlock, ExternFn, HirImplDef, HirItem, HirVariant, StructDef, StructField,
 };
 use crate::lower::context::LoweringContext;
 use crate::lower::expr::lower_expr;
 use crate::lower::types::lower_type_expr;
+use crate::node::HirTestConfig;
 use crate::types::HirType;
 use glyim_parse::Item;
 
@@ -72,7 +72,9 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 })
                 .unzip();
             let is_test = attrs.iter().any(|a| a.name == "test");
-            let should_panic = attrs.iter().any(|a| a.name == "test" && a.args.iter().any(|arg| arg.key == "should_panic"));
+            let should_panic = attrs
+                .iter()
+                .any(|a| a.name == "test" && a.args.iter().any(|arg| arg.key == "should_panic"));
             let ignored = attrs.iter().any(|a| a.name == "ignore");
             let test_config = if is_test {
                 Some(HirTestConfig {

@@ -56,7 +56,8 @@ impl TypeChecker {
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::Ident { name, span, .. } => self.lookup_binding(name).unwrap_or_else(|| {
                 let resolved_name = self.interner.resolve(*name).to_string();
-                let suggestions = glyim_diag::suggest::suggest_similar(&resolved_name, &self.interner, 3);
+                let suggestions =
+                    glyim_diag::suggest::suggest_similar(&resolved_name, &self.interner, 3);
                 self.errors.push(TypeError::UnresolvedName {
                     name: resolved_name,
                     span: (span.start, span.end),
@@ -562,20 +563,21 @@ impl TypeChecker {
             }
         }
         if let Some(fn_def) = self.fns.iter().find(|f| f.name == callee)
-            && fn_def.type_params.is_empty() {
-                for (i, arg_ty) in arg_types.iter().enumerate() {
-                    if let Some((_, param_ty)) = fn_def.params.get(i)
-                        && param_ty != arg_ty
-                    {
-                        self.errors.push(TypeError::MismatchedTypes {
-                            expected: param_ty.clone(),
-                            found: arg_ty.clone(),
-                            expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
-                            span: (0, 0),
-                        });
-                    }
+            && fn_def.type_params.is_empty()
+        {
+            for (i, arg_ty) in arg_types.iter().enumerate() {
+                if let Some((_, param_ty)) = fn_def.params.get(i)
+                    && param_ty != arg_ty
+                {
+                    self.errors.push(TypeError::MismatchedTypes {
+                        expected: param_ty.clone(),
+                        found: arg_ty.clone(),
+                        expr_id: args.get(i).map(|a| a.get_id()).unwrap_or(ExprId::new(0)),
+                        span: (0, 0),
+                    });
                 }
             }
+        }
         let fn_def = self.fns.iter().find(|f| f.name == callee);
         if let Some(fn_def) = fn_def {
             if !fn_def.type_params.is_empty() {

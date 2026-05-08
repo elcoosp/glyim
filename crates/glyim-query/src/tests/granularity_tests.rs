@@ -1,4 +1,4 @@
-use crate::granularity::{GranularityMonitor, CacheGranularity};
+use crate::granularity::{CacheGranularity, GranularityMonitor};
 use std::path::PathBuf;
 
 #[test]
@@ -17,10 +17,7 @@ fn concentrated_edits_become_fine_grained() {
     for _ in 0..5 {
         monitor.observe_edit(&path, 10..15);
     }
-    assert_eq!(
-        monitor.granularity(&path),
-        CacheGranularity::FineGrained
-    );
+    assert_eq!(monitor.granularity(&path), CacheGranularity::FineGrained);
 }
 
 #[test]
@@ -31,10 +28,7 @@ fn spread_edits_high_count_become_coarse() {
         let start = i * 10;
         monitor.observe_edit(&path, start..(start + 3));
     }
-    assert_eq!(
-        monitor.granularity(&path),
-        CacheGranularity::Module
-    );
+    assert_eq!(monitor.granularity(&path), CacheGranularity::Module);
 }
 
 #[test]
@@ -63,15 +57,9 @@ fn reset_clears_history() {
     for _ in 0..5 {
         monitor.observe_edit(&path, 10..15);
     }
-    assert_ne!(
-        monitor.granularity(&path),
-        CacheGranularity::Module
-    );
+    assert_ne!(monitor.granularity(&path), CacheGranularity::Module);
     monitor.reset(&path);
-    assert_eq!(
-        monitor.granularity(&path),
-        CacheGranularity::Module
-    );
+    assert_eq!(monitor.granularity(&path), CacheGranularity::Module);
 }
 
 #[test]

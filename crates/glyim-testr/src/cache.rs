@@ -1,5 +1,5 @@
-use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, MerkleStore};
 use glyim_macro_vfs::{ContentHash, LocalContentStore};
+use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, MerkleStore};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -18,15 +18,20 @@ impl IncrementalTestCache {
         })
     }
 
-    pub fn load_result(&self, test_name: &str, source_hash: &ContentHash) -> Option<crate::types::TestResult> {
+    pub fn load_result(
+        &self,
+        test_name: &str,
+        source_hash: &ContentHash,
+    ) -> Option<crate::types::TestResult> {
         let key = format!("test-{}", test_name);
         let hash = self.store.resolve_name(&key)?;
         let node = self.store.get(&hash)?;
         if let MerkleNodeData::ObjectCode { symbol_name, bytes } = &node.data
             && symbol_name == &source_hash.to_hex()
-                && let Ok(result) = postcard::from_bytes::<crate::types::TestResult>(bytes) {
-                    return Some(result);
-                }
+            && let Ok(result) = postcard::from_bytes::<crate::types::TestResult>(bytes)
+        {
+            return Some(result);
+        }
         None
     }
 
@@ -45,7 +50,8 @@ impl IncrementalTestCache {
             },
         };
         let hash = self.store.put(node);
-        self.store.register_name(&format!("test-{}", result.name), hash);
+        self.store
+            .register_name(&format!("test-{}", result.name), hash);
         self.store.flush();
     }
 }

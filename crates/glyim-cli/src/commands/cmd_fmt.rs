@@ -1,6 +1,6 @@
-use glyim_fmt::{format_source, FormatConfig};
-use std::path::PathBuf;
+use glyim_fmt::{FormatConfig, format_source};
 use std::fs;
+use std::path::PathBuf;
 
 pub fn cmd_fmt(input: PathBuf, check: bool) -> i32 {
     let source = match fs::read_to_string(&input) {

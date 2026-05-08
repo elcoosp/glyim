@@ -1,8 +1,8 @@
-use std::any::Any;
 use crate::context::QueryContext;
 use crate::fingerprint::Fingerprint;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::any::Any;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[test]
 fn query_caches_result_on_first_call() {
@@ -60,7 +60,12 @@ fn query_invalidate_via_graph() {
     let dep = crate::Dependency::file("main.g", Fingerprint::of(b"src"));
     let dep_fp = dep.fingerprint();
     ctx.dep_graph().write().unwrap().add_node(dep_fp);
-    ctx.insert(query_fp, Arc::new(42i64), Fingerprint::of(b"42"), vec![dep.clone()]);
+    ctx.insert(
+        query_fp,
+        Arc::new(42i64),
+        Fingerprint::of(b"42"),
+        vec![dep.clone()],
+    );
     ctx.record_dependency(query_fp, dep);
     let report = ctx.invalidate_fingerprints(&[dep_fp]);
     assert!(report.red.contains(&query_fp));

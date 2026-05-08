@@ -1,5 +1,5 @@
-use crate::types::TestDef;
 use crate::config::PriorityMode;
+use crate::types::TestDef;
 
 pub fn sort_tests(tests: &mut [TestDef], mode: PriorityMode) {
     match mode {

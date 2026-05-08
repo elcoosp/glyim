@@ -8,11 +8,16 @@ pub struct DispatchTable {
 
 impl DispatchTable {
     pub fn new() -> Self {
-        Self { pointers: DashMap::new() }
+        Self {
+            pointers: DashMap::new(),
+        }
     }
 
     pub fn get_address(&self, name: Symbol) -> usize {
-        self.pointers.get(&name).map(|p| p.load(Ordering::Relaxed)).unwrap_or(0)
+        self.pointers
+            .get(&name)
+            .map(|p| p.load(Ordering::Relaxed))
+            .unwrap_or(0)
     }
 
     pub fn update(&self, name: Symbol, new_address: usize) {

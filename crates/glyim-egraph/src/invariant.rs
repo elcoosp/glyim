@@ -22,11 +22,7 @@ pub struct InvariantCertificate {
 impl InvariantCertificate {
     pub const RULE_SET_VERSION: u32 = 1;
 
-    pub fn compute(
-        hir_fn: &HirFn,
-        interner: &Interner,
-        _types: &[HirType],
-    ) -> Self {
+    pub fn compute(hir_fn: &HirFn, interner: &Interner, _types: &[HirType]) -> Self {
         let name = interner.resolve(hir_fn.name).to_string();
         let mut sig_hasher = Sha256::new();
         sig_hasher.update(name.as_bytes());
@@ -75,7 +71,11 @@ impl InvariantCertificate {
     pub fn content_hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.signature_hash);
-        hasher.update([self.is_pure as u8, self.may_panic as u8, self.may_allocate as u8]);
+        hasher.update([
+            self.is_pure as u8,
+            self.may_panic as u8,
+            self.may_allocate as u8,
+        ]);
         hasher.update(self.complexity.to_le_bytes());
         hasher.update(self.ir_size.to_le_bytes());
         hasher.update(self.canonical_form_hash);
@@ -88,10 +88,16 @@ impl InvariantCertificate {
 }
 
 #[allow(unused_variables)]
-fn collect_callees(expr: &glyim_hir::node::HirExpr, interner: &Interner, callees: &mut Vec<String>) {
+fn collect_callees(
+    expr: &glyim_hir::node::HirExpr,
+    interner: &Interner,
+    callees: &mut Vec<String>,
+) {
     if let glyim_hir::node::HirExpr::Call { callee, .. } = expr {
         let name = interner.resolve(*callee).to_string();
-        if !callees.contains(&name) { callees.push(name); }
+        if !callees.contains(&name) {
+            callees.push(name);
+        }
     }
 }
 

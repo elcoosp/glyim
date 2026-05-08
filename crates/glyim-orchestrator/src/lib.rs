@@ -1,7 +1,7 @@
-pub mod graph;
-pub mod symbols;
-pub mod linker;
 pub mod artifacts;
+pub mod graph;
 pub mod incremental;
-pub mod orchestrator;
 pub mod interface;
+pub mod linker;
+pub mod orchestrator;
+pub mod symbols;

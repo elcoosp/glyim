@@ -13,7 +13,10 @@ pub fn generate_html_report(dump: &CoverageDump, source: &str, file_path: &str) 
         }
     }
 
-    let covered_lines: usize = line_counts.keys().filter(|&&l| l <= total_lines as u32).count();
+    let covered_lines: usize = line_counts
+        .keys()
+        .filter(|&&l| l <= total_lines as u32)
+        .count();
     let percent = if total_lines > 0 {
         (covered_lines as f64 / total_lines as f64) * 100.0
     } else {
@@ -21,7 +24,9 @@ pub fn generate_html_report(dump: &CoverageDump, source: &str, file_path: &str) 
     };
 
     let mut html = String::new();
-    html.push_str("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Coverage Report</title>");
+    html.push_str(
+        "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Coverage Report</title>",
+    );
     html.push_str("<style>
         body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 20px; }
         h1 { border-bottom: 1px solid #444; }
@@ -34,8 +39,14 @@ pub fn generate_html_report(dump: &CoverageDump, source: &str, file_path: &str) 
         .source { display: inline; }
     </style></head><body>");
 
-    html.push_str(&format!("<h1>Coverage Report: {}</h1>", esc_html(file_path)));
-    html.push_str(&format!("<div class=\"header\"><strong>{:.1}%</strong> — {} of {} lines covered</div>", percent, covered_lines, total_lines));
+    html.push_str(&format!(
+        "<h1>Coverage Report: {}</h1>",
+        esc_html(file_path)
+    ));
+    html.push_str(&format!(
+        "<div class=\"header\"><strong>{:.1}%</strong> — {} of {} lines covered</div>",
+        percent, covered_lines, total_lines
+    ));
     html.push_str("<pre>\n");
 
     for (i, line) in lines.iter().enumerate() {
@@ -70,14 +81,17 @@ mod tests {
         let mut counters = HashMap::new();
         counters.insert(0, 1);
         let mut metadata = HashMap::new();
-        metadata.insert(0, SourceLocation {
-            file_id: 0,
-            start_line: 1,
-            start_col: 0,
-            end_line: 1,
-            end_col: 0,
-            kind: LocationKind::FunctionEntry,
-        });
+        metadata.insert(
+            0,
+            SourceLocation {
+                file_id: 0,
+                start_line: 1,
+                start_col: 0,
+                end_line: 1,
+                end_col: 0,
+                kind: LocationKind::FunctionEntry,
+            },
+        );
         let dump = CoverageDump {
             files: HashMap::new(),
             counters,
@@ -86,7 +100,10 @@ mod tests {
         };
         let html = generate_html_report(&dump, "42\n", "test.g");
         assert!(html.contains("100.0%"), "expected 100%, got:\n{}", html);
-        assert!(html.contains("class=\"line covered\""), "expected covered class");
+        assert!(
+            html.contains("class=\"line covered\""),
+            "expected covered class"
+        );
     }
 
     #[test]
@@ -98,6 +115,9 @@ mod tests {
             version: 1,
         };
         let html = generate_html_report(&dump, "let x = 5;\n", "test.g");
-        assert!(html.contains("class=\"line uncovered\""), "expected uncovered class");
+        assert!(
+            html.contains("class=\"line uncovered\""),
+            "expected uncovered class"
+        );
     }
 }

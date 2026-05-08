@@ -33,4 +33,3 @@ main = () => {
     assert!(result.is_ok(), "extern method write: {:?}", result.err());
     assert_eq!(result.unwrap(), 42);
 }
-

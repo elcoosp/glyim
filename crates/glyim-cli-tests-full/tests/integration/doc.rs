@@ -43,4 +43,3 @@ fn e2e_doc_impl_method() {
     let html = std::fs::read_to_string(doc_dir.join("index.html")).unwrap();
     assert!(html.contains("Increments the counter."));
 }
-

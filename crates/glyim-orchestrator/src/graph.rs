@@ -1,6 +1,6 @@
 use glyim_pkg::manifest::PackageManifest;
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
+use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -59,17 +59,16 @@ impl PackageGraph {
             return Err(GraphError::WorkspaceNotFound);
         }
 
-        let root_manifest = glyim_pkg::manifest::load_manifest(&manifest_path)
-            .map_err(GraphError::Manifest)?;
+        let root_manifest =
+            glyim_pkg::manifest::load_manifest(&manifest_path).map_err(GraphError::Manifest)?;
 
         let mut graph = DiGraph::new();
         let mut name_to_idx = HashMap::new();
 
         // If the root has a workspace, discover all members
         if let Some(ws) = &root_manifest.workspace {
-            let members =
-                glyim_pkg::workspace::resolve_member_globs(&root, &ws.members)
-                    .ok_or_else(|| GraphError::MemberNotFound(ws.members.join(", ")))?;
+            let members = glyim_pkg::workspace::resolve_member_globs(&root, &ws.members)
+                .ok_or_else(|| GraphError::MemberNotFound(ws.members.join(", ")))?;
 
             for member_dir in members {
                 Self::add_package_from_dir(&member_dir, &mut graph, &mut name_to_idx)?;
@@ -86,10 +85,14 @@ impl PackageGraph {
             // Dependencies
             for dep_name in node.manifest.dependencies.keys() {
                 if let Some(&dep_idx) = name_to_idx.get(dep_name) {
-                    graph.add_edge(dep_idx, idx, DependencyEdge {
-                        dep_name: dep_name.clone(),
-                        is_macro: false,
-                    });
+                    graph.add_edge(
+                        dep_idx,
+                        idx,
+                        DependencyEdge {
+                            dep_name: dep_name.clone(),
+                            is_macro: false,
+                        },
+                    );
                 } else {
                     // external dependency – ignore (handled by lockfile later)
                     tracing::debug!("external dependency '{}' not a workspace member", dep_name);
@@ -98,10 +101,14 @@ impl PackageGraph {
             // Macro dependencies
             for dep_name in node.manifest.macros.keys() {
                 if let Some(&dep_idx) = name_to_idx.get(dep_name) {
-                    graph.add_edge(dep_idx, idx, DependencyEdge {
-                        dep_name: dep_name.clone(),
-                        is_macro: true,
-                    });
+                    graph.add_edge(
+                        dep_idx,
+                        idx,
+                        DependencyEdge {
+                            dep_name: dep_name.clone(),
+                            is_macro: true,
+                        },
+                    );
                 }
             }
         }
@@ -116,8 +123,8 @@ impl PackageGraph {
         name_to_idx: &mut HashMap<String, NodeIndex>,
     ) -> Result<(), GraphError> {
         let manifest_path = dir.join("glyim.toml");
-        let manifest = glyim_pkg::manifest::load_manifest(&manifest_path)
-            .map_err(GraphError::Manifest)?;
+        let manifest =
+            glyim_pkg::manifest::load_manifest(&manifest_path).map_err(GraphError::Manifest)?;
         let name = manifest.package.name.clone();
         let node = PackageNode {
             name: name.clone(),
@@ -135,7 +142,9 @@ impl PackageGraph {
             Ok(order) => Ok(order.iter().map(|idx| &self.graph[*idx]).collect()),
             Err(cycle) => {
                 let node = self.graph.node_weight(cycle.node_id());
-                let _node_name = node.map(|n| n.name.clone()).unwrap_or_else(|| "unknown".to_string());
+                let _node_name = node
+                    .map(|n| n.name.clone())
+                    .unwrap_or_else(|| "unknown".to_string());
                 Err(GraphError::Cycle)
             }
         }
@@ -144,7 +153,8 @@ impl PackageGraph {
     /// Return all packages that directly depend on the given package.
     pub fn direct_dependents(&self, package_name: &str) -> Vec<&PackageNode> {
         if let Some(&idx) = self.name_to_idx.get(package_name) {
-            self.graph.neighbors_directed(idx, petgraph::Direction::Outgoing)
+            self.graph
+                .neighbors_directed(idx, petgraph::Direction::Outgoing)
                 .map(|n| &self.graph[n])
                 .collect()
         } else {
@@ -163,18 +173,27 @@ impl PackageGraph {
                     continue;
                 }
                 result.push(node);
-                for neighbor in self.graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                for neighbor in self
+                    .graph
+                    .neighbors_directed(node, petgraph::Direction::Outgoing)
+                {
                     stack.push(neighbor);
                 }
             }
-            result.into_iter().filter(|&n| n != start).map(|n| &self.graph[n]).collect()
+            result
+                .into_iter()
+                .filter(|&n| n != start)
+                .map(|n| &self.graph[n])
+                .collect()
         } else {
             Vec::new()
         }
     }
 
     /// Number of packages in the graph.
-    pub fn is_empty(&self) -> bool { self.graph.node_count() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.graph.node_count() == 0
+    }
 
     pub fn len(&self) -> usize {
         self.graph.node_count()
@@ -196,7 +215,9 @@ mod tests {
             r#"[package]
 name = "{}"
 version = "0.1.0"
-"#, name);
+"#,
+            name
+        );
         let mut deps_str = String::new();
         for dep in deps {
             deps_str.push_str(&format!("{} = {{ version = \"*\" }}\n", dep));
@@ -221,8 +242,11 @@ version = "0.1.0"
     #[test]
     fn workspace_with_two_members() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("glyim.toml"),
-            "[workspace]\nmembers = [\"crates/*\"]\n").unwrap();
+        fs::write(
+            dir.path().join("glyim.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
         let a_dir = dir.path().join("crates/a");
         fs::create_dir_all(&a_dir).unwrap();
         write_manifest(&a_dir, "a", &["b"]);
@@ -241,8 +265,11 @@ version = "0.1.0"
     #[test]
     fn workspace_with_circular_dependency() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("glyim.toml"),
-            "[workspace]\nmembers = [\"a\", \"b\"]\n").unwrap();
+        fs::write(
+            dir.path().join("glyim.toml"),
+            "[workspace]\nmembers = [\"a\", \"b\"]\n",
+        )
+        .unwrap();
         let a_dir = dir.path().join("a");
         fs::create_dir_all(&a_dir).unwrap();
         write_manifest(&a_dir, "a", &["b"]);

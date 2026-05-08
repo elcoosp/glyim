@@ -1,4 +1,4 @@
-use glyim_compiler::pipeline::{semantic_source_hash, semantic_hash_of_source};
+use glyim_compiler::pipeline::{semantic_hash_of_source, semantic_source_hash};
 
 #[test]
 fn semantic_source_hash_is_deterministic() {

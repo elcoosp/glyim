@@ -175,10 +175,11 @@ pub(crate) fn codegen_call<'ctx>(
                 let name = f.get_name().to_string_lossy();
                 // Check for both Vec_new__ (double underscore) and Vec_new_ (single underscore)
                 if let Some(rest) = name.strip_prefix(fn_name)
-                    && (rest.is_empty() || rest.starts_with('_')) {
-                        fn_val = Some(f);
-                        break;
-                    }
+                    && (rest.is_empty() || rest.starts_with('_'))
+                {
+                    fn_val = Some(f);
+                    break;
+                }
                 cur = f.get_next_function();
             }
         }

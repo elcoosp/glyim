@@ -48,14 +48,12 @@ impl PersistenceLayer {
         }
 
         let serialized = SerializedCache { entries };
-        let file =
-            fs::File::create(&cache_path).map_err(|e| format!("create file: {e}"))?;
+        let file = fs::File::create(&cache_path).map_err(|e| format!("create file: {e}"))?;
         let mut writer = BufWriter::new(file);
 
         // Serialize to a Vec<u8> first, then write (postcard doesn't have
         // a direct to_writer serializer for serde types).
-        let bytes = postcard::to_allocvec(&serialized)
-            .map_err(|e| format!("serialize: {e}"))?;
+        let bytes = postcard::to_allocvec(&serialized).map_err(|e| format!("serialize: {e}"))?;
         writer
             .write_all(&bytes)
             .map_err(|e| format!("write: {e}"))?;
@@ -75,8 +73,7 @@ impl PersistenceLayer {
             return Ok(QueryContext::new());
         }
 
-        let file =
-            fs::File::open(&cache_path).map_err(|e| format!("open file: {e}"))?;
+        let file = fs::File::open(&cache_path).map_err(|e| format!("open file: {e}"))?;
         let mut reader = BufReader::new(file);
         let mut buf = Vec::new();
         reader

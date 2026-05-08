@@ -18,7 +18,12 @@ pub struct TieredCompiler {
 
 impl TieredCompiler {
     pub fn new(dispatch: Arc<DispatchTable>, promotion_threshold: u64) -> Self {
-        Self { dispatch, execution_counts: DashMap::new(), tiers: DashMap::new(), promotion_threshold }
+        Self {
+            dispatch,
+            execution_counts: DashMap::new(),
+            tiers: DashMap::new(),
+            promotion_threshold,
+        }
     }
 
     pub fn record_execution(&self, sym: Symbol) {
@@ -30,11 +35,17 @@ impl TieredCompiler {
     }
 
     pub fn execution_tier(&self, sym: Symbol) -> ExecutionTier {
-        self.tiers.get(&sym).map(|t| *t.value()).unwrap_or(ExecutionTier::Tier0)
+        self.tiers
+            .get(&sym)
+            .map(|t| *t.value())
+            .unwrap_or(ExecutionTier::Tier0)
     }
 
     pub fn execution_count(&self, sym: Symbol) -> u64 {
-        self.execution_counts.get(&sym).map(|c| *c.value()).unwrap_or(0)
+        self.execution_counts
+            .get(&sym)
+            .map(|c| *c.value())
+            .unwrap_or(0)
     }
 
     pub fn promote(&self, sym: Symbol) {

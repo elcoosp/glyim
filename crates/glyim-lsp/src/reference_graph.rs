@@ -51,12 +51,15 @@ impl ReferenceGraph {
             if let HirItem::Fn(f) = item {
                 let fn_name = interner.resolve(f.name).to_string();
                 // Definition
-                self.references.entry(fn_name.clone()).or_default().push(Reference {
-                    file_id,
-                    span: f.span,
-                    is_definition: true,
-                    kind: ReferenceKind::Call,
-                });
+                self.references
+                    .entry(fn_name.clone())
+                    .or_default()
+                    .push(Reference {
+                        file_id,
+                        span: f.span,
+                        is_definition: true,
+                        kind: ReferenceKind::Call,
+                    });
                 // Walk body for references
                 self.collect_expr_refs(file_id, &f.body, interner);
             }
@@ -65,7 +68,9 @@ impl ReferenceGraph {
 
     fn collect_expr_refs(&mut self, file_id: FileId, expr: &HirExpr, interner: &Interner) {
         match expr {
-            HirExpr::Call { callee, args, span, .. } => {
+            HirExpr::Call {
+                callee, args, span, ..
+            } => {
                 let name = interner.resolve(*callee).to_string();
                 self.references.entry(name).or_default().push(Reference {
                     file_id,
@@ -77,7 +82,12 @@ impl ReferenceGraph {
                     self.collect_expr_refs(file_id, a, interner);
                 }
             }
-            HirExpr::FieldAccess { object, field, span, .. } => {
+            HirExpr::FieldAccess {
+                object,
+                field,
+                span,
+                ..
+            } => {
                 let name = interner.resolve(*field).to_string();
                 self.references.entry(name).or_default().push(Reference {
                     file_id,
@@ -90,14 +100,21 @@ impl ReferenceGraph {
             HirExpr::Block { stmts, .. } => {
                 for stmt in stmts {
                     match stmt {
-                        HirStmt::Expr(e) | HirStmt::Let { value: e, .. } | HirStmt::Assign { value: e, .. } => {
+                        HirStmt::Expr(e)
+                        | HirStmt::Let { value: e, .. }
+                        | HirStmt::Assign { value: e, .. } => {
                             self.collect_expr_refs(file_id, e, interner);
                         }
                         _ => {}
                     }
                 }
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.collect_expr_refs(file_id, condition, interner);
                 self.collect_expr_refs(file_id, then_branch, interner);
                 if let Some(eb) = else_branch {
@@ -112,14 +129,19 @@ impl ReferenceGraph {
         }
     }
 
-    
     /// Only for testing: insert a reference directly.
     #[doc(hidden)]
     pub fn insert_test_reference(&mut self, name: &str, reference: Reference) {
-        self.references.entry(name.to_string()).or_default().push(reference);
+        self.references
+            .entry(name.to_string())
+            .or_default()
+            .push(reference);
     }
 
     pub fn find_references(&self, symbol_name: &str) -> &[Reference] {
-        self.references.get(symbol_name).map(|v| v.as_slice()).unwrap_or(&[])
+        self.references
+            .get(symbol_name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }

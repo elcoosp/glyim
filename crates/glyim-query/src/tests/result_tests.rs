@@ -1,7 +1,7 @@
-use std::any::Any;
-use crate::result::{QueryResult, QueryStatus};
-use crate::fingerprint::Fingerprint;
 use crate::dependency::Dependency;
+use crate::fingerprint::Fingerprint;
+use crate::result::{QueryResult, QueryStatus};
+use std::any::Any;
 use std::sync::Arc;
 
 #[test]
@@ -39,12 +39,7 @@ fn query_result_is_send_sync() {
 #[test]
 fn query_result_downcast() {
     let value: Arc<dyn Any + Send + Sync> = Arc::new(99i64);
-    let result = QueryResult::new(
-        value,
-        Fingerprint::of(b"99"),
-        vec![],
-        QueryStatus::Green,
-    );
+    let result = QueryResult::new(value, Fingerprint::of(b"99"), vec![], QueryStatus::Green);
     let downcast: Option<&i64> = result.value.downcast_ref::<i64>();
     assert_eq!(*downcast.unwrap(), 99i64);
 }
@@ -52,12 +47,7 @@ fn query_result_downcast() {
 #[test]
 fn query_result_downcast_wrong_type_returns_none() {
     let value: Arc<dyn Any + Send + Sync> = Arc::new(99i64);
-    let result = QueryResult::new(
-        value,
-        Fingerprint::of(b"99"),
-        vec![],
-        QueryStatus::Green,
-    );
+    let result = QueryResult::new(value, Fingerprint::of(b"99"), vec![], QueryStatus::Green);
     let downcast: Option<&String> = result.value.downcast_ref::<String>();
     assert!(downcast.is_none());
 }

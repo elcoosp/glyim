@@ -1,7 +1,7 @@
 use crate::AnalysisDatabase;
 use crate::database::FileMap;
-use lsp_types::*;
 use glyim_diag::LineCol;
+use lsp_types::*;
 
 pub fn provide_hover(
     db: &AnalysisDatabase,
@@ -26,9 +26,22 @@ pub fn provide_hover(
 
     let mut markdown = String::new();
     if let Some(ref ts) = symbol.type_signature {
-        let params: Vec<String> = ts.params.iter().map(|(n, t)| format!("{}: {:?}", n, t)).collect();
-        let ret = ts.return_type.as_ref().map(|t| format!(" -> {:?}", t)).unwrap_or_default();
-        markdown.push_str(&format!("```glyim\nfn {}({}){}\n```\n", symbol.name, params.join(", "), ret));
+        let params: Vec<String> = ts
+            .params
+            .iter()
+            .map(|(n, t)| format!("{}: {:?}", n, t))
+            .collect();
+        let ret = ts
+            .return_type
+            .as_ref()
+            .map(|t| format!(" -> {:?}", t))
+            .unwrap_or_default();
+        markdown.push_str(&format!(
+            "```glyim\nfn {}({}){}\n```\n",
+            symbol.name,
+            params.join(", "),
+            ret
+        ));
     }
 
     if let Some(doc) = &symbol.documentation {

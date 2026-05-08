@@ -386,12 +386,15 @@ impl<'a> MonoContext<'a> {
                 // Use the type substitution to compute the concrete enum name
                 // when the enum has type parameters that map to concrete types.
                 let new_enum_name = if let Some(enum_def) = self.find_enum(*enum_name) {
-                    let concrete_args: Vec<HirType> = enum_def.type_params
+                    let concrete_args: Vec<HirType> = enum_def
+                        .type_params
                         .iter()
                         .map(|tp| type_sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
                         .collect();
                     if !concrete_args.is_empty()
-                        && !concrete_args.iter().any(|a| self.has_unresolved_type_param(a))
+                        && !concrete_args
+                            .iter()
+                            .any(|a| self.has_unresolved_type_param(a))
                     {
                         self.mangle_name(*enum_name, &concrete_args)
                     } else {

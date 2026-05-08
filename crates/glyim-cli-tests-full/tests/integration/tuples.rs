@@ -24,4 +24,3 @@ fn e2e_tuple_destructure() {
     assert!(result.is_ok(), "tuple destructure: {:?}", result.err());
     assert_eq!(result.unwrap(), 10);
 }
-

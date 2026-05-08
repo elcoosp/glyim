@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 /// A collection of programmatically-generated Glyim source files.
 pub struct FixtureGenerator;
@@ -9,14 +9,9 @@ impl FixtureGenerator {
     pub fn single_file(function_count: usize) -> Fixture {
         let mut source = String::from("// Auto-generated benchmark fixture\n\n");
         for i in 0..function_count {
-            source.push_str(&format!(
-                "fn fn_{}(x: i64) -> i64 {{ x + {} }}\n",
-                i, i
-            ));
+            source.push_str(&format!("fn fn_{}(x: i64) -> i64 {{ x + {} }}\n", i, i));
         }
-        source.push_str(
-            "fn main() -> i64 {\n    let mut sum = 0;\n"
-        );
+        source.push_str("fn main() -> i64 {\n    let mut sum = 0;\n");
         for i in 0..function_count {
             source.push_str(&format!("    sum = sum + fn_{}({});\n", i, i));
         }
@@ -35,10 +30,7 @@ impl FixtureGenerator {
     pub fn generic_functions(count: usize) -> Fixture {
         let mut source = String::from("// generic fixture\n");
         for i in 0..count {
-            source.push_str(&format!(
-                "fn id_{}<T>(x: T) -> T {{ x }}\n",
-                i
-            ));
+            source.push_str(&format!("fn id_{}<T>(x: T) -> T {{ x }}\n", i));
         }
         source.push_str("fn main() -> i64 {\n");
         for i in 0..count {
@@ -61,12 +53,14 @@ impl FixtureGenerator {
         let root = tmp.path().join("ws");
         fs::create_dir_all(&root).expect("ws dir");
         // write workspace manifest
-        let members: Vec<String> = (0..package_count)
-            .map(|i| format!("pkg{}", i))
-            .collect();
+        let members: Vec<String> = (0..package_count).map(|i| format!("pkg{}", i)).collect();
         let toml = format!(
             "[workspace]\nmembers = [{}]\n",
-            members.iter().map(|m| format!("\"{}\"", m)).collect::<Vec<_>>().join(", ")
+            members
+                .iter()
+                .map(|m| format!("\"{}\"", m))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
         fs::write(root.join("glyim.toml"), &toml).expect("ws toml");
 
@@ -75,21 +69,12 @@ impl FixtureGenerator {
             let pkg_dir = root.join(format!("pkg{}", i));
             let src_dir = pkg_dir.join("src");
             fs::create_dir_all(&src_dir).expect("pkg dir");
-            let pkg_toml = format!(
-                "[package]\nname = \"pkg{}\"\nversion = \"0.1.0\"\n",
-                i
-            );
+            let pkg_toml = format!("[package]\nname = \"pkg{}\"\nversion = \"0.1.0\"\n", i);
             fs::write(pkg_dir.join("glyim.toml"), &pkg_toml).expect("pkg toml");
-            let lib_src = format!(
-                "pub fn add_{}(a: i64, b: i64) -> i64 {{ a + b }}\n",
-                i
-            );
+            let lib_src = format!("pub fn add_{}(a: i64, b: i64) -> i64 {{ a + b }}\n", i);
             fs::write(src_dir.join("lib.g"), &lib_src).expect("lib g");
             all_sources.push_str(&lib_src);
-            let main_src = format!(
-                "fn main() -> i64 {{ let x = add_{}(1, 2); x }}\n",
-                i
-            );
+            let main_src = format!("fn main() -> i64 {{ let x = add_{}(1, 2); x }}\n", i);
             fs::write(src_dir.join("main.g"), &main_src).expect("main g");
             all_sources.push_str(&main_src);
         }

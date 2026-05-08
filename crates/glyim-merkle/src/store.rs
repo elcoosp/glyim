@@ -19,9 +19,7 @@ impl MerkleStore {
     pub fn new(cas: Arc<dyn ContentStore>) -> Self {
         Self {
             cas,
-            cache: Mutex::new(LruCache::new(
-                NonZeroUsize::new(256).unwrap()
-            )),
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(256).unwrap())),
             write_buffer: Mutex::new(Vec::new()),
             write_buffer_capacity: 64,
         }

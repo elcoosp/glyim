@@ -1,5 +1,5 @@
-pub mod profile;
 pub mod collector;
+pub mod profile;
 
-pub use profile::*;
 pub use collector::*;
+pub use profile::*;

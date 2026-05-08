@@ -1,7 +1,7 @@
 use glyim_interner::Symbol;
 use glyim_macro_vfs::ContentHash;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 /// Maps exported symbols to their defining package and artifact hash.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -22,7 +22,8 @@ impl PackageSymbolTable {
 
     /// Register a symbol exported by a package, along with its object code hash.
     pub fn register_export(&mut self, package: &str, symbol: Symbol, artifact_hash: ContentHash) {
-        self.exports.insert(symbol, (package.to_string(), artifact_hash));
+        self.exports
+            .insert(symbol, (package.to_string(), artifact_hash));
         self.package_exports
             .entry(package.to_string())
             .or_default()
@@ -31,7 +32,9 @@ impl PackageSymbolTable {
 
     /// Resolve a symbol to its defining package and artifact hash.
     pub fn resolve(&self, symbol: Symbol) -> Option<(&str, &ContentHash)> {
-        self.exports.get(&symbol).map(|(pkg, hash)| (pkg.as_str(), hash))
+        self.exports
+            .get(&symbol)
+            .map(|(pkg, hash)| (pkg.as_str(), hash))
     }
 
     /// Return all symbols exported by a package.

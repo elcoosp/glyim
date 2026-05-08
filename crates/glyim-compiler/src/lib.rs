@@ -6,4 +6,7 @@ pub mod manifest;
 pub mod pipeline;
 pub mod queries;
 
-pub use pipeline::{build, build_with_mode, run, run_with_mode, print_ir, check, init, run_jit, run_doctests, generate_doc, BuildMode, PipelineConfig, PipelineError};
+pub use pipeline::{
+    BuildMode, PipelineConfig, PipelineError, build, build_with_mode, check, generate_doc, init,
+    print_ir, run, run_doctests, run_jit, run_with_mode,
+};

@@ -1,8 +1,8 @@
+use crate::common::pipeline;
 use glyim_macro_core::executor::MacroExecutor;
 use glyim_macro_core::registry::MacroRegistry;
 use glyim_macro_vfs::LocalContentStore;
 use std::sync::Arc;
-use crate::common::pipeline;
 
 fn identity_wat() -> &'static str {
     r#"

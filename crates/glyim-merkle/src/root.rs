@@ -17,8 +17,10 @@ impl MerkleRoot {
         old: &[(String, ContentHash)],
         new: &[(String, ContentHash)],
     ) -> Vec<(String, ItemChange)> {
-        let old_map: HashMap<&str, ContentHash> = old.iter().map(|(n, h)| (n.as_str(), *h)).collect();
-        let new_map: HashMap<&str, ContentHash> = new.iter().map(|(n, h)| (n.as_str(), *h)).collect();
+        let old_map: HashMap<&str, ContentHash> =
+            old.iter().map(|(n, h)| (n.as_str(), *h)).collect();
+        let new_map: HashMap<&str, ContentHash> =
+            new.iter().map(|(n, h)| (n.as_str(), *h)).collect();
         let mut changed = Vec::new();
         for (name, new_hash) in &new_map {
             match old_map.get(name) {

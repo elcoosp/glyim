@@ -13,7 +13,12 @@ pub struct MicroModuleManager<'ctx> {
 
 impl<'ctx> MicroModuleManager<'ctx> {
     pub fn new(context: &'ctx Context, prefix: &str, dispatch: Arc<DispatchTable>) -> Self {
-        Self { context, prefix: prefix.to_string(), modules: HashMap::new(), dispatch }
+        Self {
+            context,
+            prefix: prefix.to_string(),
+            modules: HashMap::new(),
+            dispatch,
+        }
     }
 
     pub fn create_module_for_item(&mut self, item_name: &str) -> Option<&Module<'ctx>> {
@@ -35,11 +40,15 @@ impl<'ctx> MicroModuleManager<'ctx> {
         self.modules.contains_key(item_name)
     }
 
-    pub fn module_count(&self) -> usize { self.modules.len() }
+    pub fn module_count(&self) -> usize {
+        self.modules.len()
+    }
 
     pub fn item_names(&self) -> Vec<&str> {
         self.modules.keys().map(|s| s.as_str()).collect()
     }
 
-    pub fn dispatch(&self) -> &DispatchTable { &self.dispatch }
+    pub fn dispatch(&self) -> &DispatchTable {
+        &self.dispatch
+    }
 }

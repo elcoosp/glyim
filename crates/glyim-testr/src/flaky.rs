@@ -1,5 +1,5 @@
 use crate::types::TestOutcome;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -54,7 +54,8 @@ impl FlakeTracker {
 
     /// List flaky tests.
     pub fn flaky_tests(&self) -> Vec<String> {
-        self.history.keys()
+        self.history
+            .keys()
             .filter(|name| self.score(name) > 0.0)
             .cloned()
             .collect()
@@ -79,7 +80,13 @@ mod tests {
         // 8 runs, 1 failure => pass rate 7/8 = 0.875 (within flaky range)
         for i in 0..8 {
             if i == 0 {
-                tracker.record(name, &TestOutcome::Failed { exit_code: 1, stderr: String::new() });
+                tracker.record(
+                    name,
+                    &TestOutcome::Failed {
+                        exit_code: 1,
+                        stderr: String::new(),
+                    },
+                );
             } else {
                 tracker.record(name, &TestOutcome::Passed);
             }

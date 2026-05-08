@@ -1,4 +1,4 @@
-use glyim_diag::{Span, Severity};
+use glyim_diag::{Severity, Span};
 use glyim_hir::Hir;
 use glyim_hir::node::{HirExpr, HirStmt};
 use glyim_interner::Interner;
@@ -53,7 +53,9 @@ pub struct LintRegistry {
 
 impl LintRegistry {
     pub fn new() -> Self {
-        let mut registry = Self { lints: HashMap::new() };
+        let mut registry = Self {
+            lints: HashMap::new(),
+        };
 
         registry.register(LintDescriptor {
             id: LintId("unused_function"),
@@ -119,18 +121,17 @@ pub fn lint(hir: &Hir, interner: &Interner, registry: &LintRegistry) -> Vec<Lint
         let called = collect_called_symbols(hir);
         for item in &hir.items {
             if let glyim_hir::item::HirItem::Fn(f) = item
-                && !called.contains(&f.name) && interner.resolve(f.name) != "main" {
-                    diags.push(LintDiagnostic {
-                        lint_id: LintId("unused_function"),
-                        severity: Severity::Warning,
-                        span: f.span,
-                        message: format!(
-                            "function `{}` is never called",
-                            interner.resolve(f.name)
-                        ),
-                        suggestion: None,
-                    });
-                }
+                && !called.contains(&f.name)
+                && interner.resolve(f.name) != "main"
+            {
+                diags.push(LintDiagnostic {
+                    lint_id: LintId("unused_function"),
+                    severity: Severity::Warning,
+                    span: f.span,
+                    message: format!("function `{}` is never called", interner.resolve(f.name)),
+                    suggestion: None,
+                });
+            }
         }
     }
 
@@ -138,7 +139,11 @@ pub fn lint(hir: &Hir, interner: &Interner, registry: &LintRegistry) -> Vec<Lint
     if registry.get(LintId("unused_variable")).is_some() {
         for item in &hir.items {
             if let glyim_hir::item::HirItem::Fn(f) = item {
-                diags.extend(check_unused_variables(&f.body, interner, &f.params.iter().map(|(s,_)| *s).collect::<Vec<_>>()));
+                diags.extend(check_unused_variables(
+                    &f.body,
+                    interner,
+                    &f.params.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
+                ));
             }
         }
     }
@@ -166,7 +171,11 @@ pub fn lint(hir: &Hir, interner: &Interner, registry: &LintRegistry) -> Vec<Lint
 
 // ----- unused_variable helpers -----
 
-fn check_unused_variables(expr: &HirExpr, interner: &Interner, params: &[Symbol]) -> Vec<LintDiagnostic> {
+fn check_unused_variables(
+    expr: &HirExpr,
+    interner: &Interner,
+    params: &[Symbol],
+) -> Vec<LintDiagnostic> {
     let mut used = HashSet::new();
     let mut declared: Vec<(Symbol, Span, bool)> = vec![]; // (sym, span, is_mutable)
     collect_used_symbols(expr, &mut used);
@@ -192,18 +201,30 @@ fn collect_decls(expr: &HirExpr, decls: &mut Vec<(Symbol, Span, bool)>, params: 
         HirExpr::Block { stmts, .. } => {
             for stmt in stmts {
                 match stmt {
-                    HirStmt::Let { name, mutable, value, span } => {
+                    HirStmt::Let {
+                        name,
+                        mutable,
+                        value,
+                        span,
+                    } => {
                         if !params.contains(name) {
                             decls.push((*name, *span, *mutable));
                         }
                         collect_decls(value, decls, params);
                     }
-                    HirStmt::LetPat { pattern, mutable, value, span, .. } => {
+                    HirStmt::LetPat {
+                        pattern,
+                        mutable,
+                        value,
+                        span,
+                        ..
+                    } => {
                         // for simplicity, if pattern is a simple Var, treat like let
                         if let glyim_hir::HirPattern::Var(sym) = pattern
-                            && !params.contains(sym) {
-                                decls.push((*sym, *span, *mutable));
-                            }
+                            && !params.contains(sym)
+                        {
+                            decls.push((*sym, *span, *mutable));
+                        }
                         collect_decls(value, decls, params);
                     }
                     HirStmt::Expr(e) => collect_decls(e, decls, params),
@@ -211,16 +232,29 @@ fn collect_decls(expr: &HirExpr, decls: &mut Vec<(Symbol, Span, bool)>, params: 
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             collect_decls(condition, decls, params);
             collect_decls(then_branch, decls, params);
-            if let Some(e) = else_branch { collect_decls(e, decls, params); }
+            if let Some(e) = else_branch {
+                collect_decls(e, decls, params);
+            }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             collect_decls(scrutinee, decls, params);
-            for arm in arms { collect_decls(&arm.body, decls, params); }
+            for arm in arms {
+                collect_decls(&arm.body, decls, params);
+            }
         }
-        HirExpr::While { condition, body, .. } => {
+        HirExpr::While {
+            condition, body, ..
+        } => {
             collect_decls(condition, decls, params);
             collect_decls(body, decls, params);
         }
@@ -234,29 +268,51 @@ fn collect_decls(expr: &HirExpr, decls: &mut Vec<(Symbol, Span, bool)>, params: 
 
 fn collect_used_symbols(expr: &HirExpr, used: &mut HashSet<Symbol>) {
     match expr {
-        HirExpr::Ident { name, .. } => { used.insert(*name); }
-        HirExpr::Binary { lhs, rhs, .. } => { collect_used_symbols(lhs, used); collect_used_symbols(rhs, used); }
-        HirExpr::Unary { operand, .. } => { collect_used_symbols(operand, used); }
+        HirExpr::Ident { name, .. } => {
+            used.insert(*name);
+        }
+        HirExpr::Binary { lhs, rhs, .. } => {
+            collect_used_symbols(lhs, used);
+            collect_used_symbols(rhs, used);
+        }
+        HirExpr::Unary { operand, .. } => {
+            collect_used_symbols(operand, used);
+        }
         HirExpr::Block { stmts, .. } => {
             for stmt in stmts {
                 match stmt {
                     HirStmt::Expr(e) => collect_used_symbols(e, used),
-                    HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. }
-                    | HirStmt::Assign { value, .. } | HirStmt::AssignDeref { value, .. }
+                    HirStmt::Let { value, .. }
+                    | HirStmt::LetPat { value, .. }
+                    | HirStmt::Assign { value, .. }
+                    | HirStmt::AssignDeref { value, .. }
                     | HirStmt::AssignField { value, .. } => collect_used_symbols(value, used),
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             collect_used_symbols(condition, used);
             collect_used_symbols(then_branch, used);
-            if let Some(e) = else_branch { collect_used_symbols(e, used); }
+            if let Some(e) = else_branch {
+                collect_used_symbols(e, used);
+            }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             collect_used_symbols(scrutinee, used);
-            for arm in arms { collect_used_symbols(&arm.body, used); }
+            for arm in arms {
+                collect_used_symbols(&arm.body, used);
+            }
         }
-        HirExpr::While { condition, body, .. } => {
+        HirExpr::While {
+            condition, body, ..
+        } => {
             collect_used_symbols(condition, used);
             collect_used_symbols(body, used);
         }
@@ -265,19 +321,29 @@ fn collect_used_symbols(expr: &HirExpr, used: &mut HashSet<Symbol>) {
             collect_used_symbols(body, used);
         }
         HirExpr::Call { args, .. } => {
-            for a in args { collect_used_symbols(a, used); }
+            for a in args {
+                collect_used_symbols(a, used);
+            }
         }
         HirExpr::MethodCall { receiver, args, .. } => {
             collect_used_symbols(receiver, used);
-            for a in args { collect_used_symbols(a, used); }
+            for a in args {
+                collect_used_symbols(a, used);
+            }
         }
         HirExpr::StructLit { fields, .. } => {
-            for (_, v) in fields { collect_used_symbols(v, used); }
+            for (_, v) in fields {
+                collect_used_symbols(v, used);
+            }
         }
         HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-            for a in args { collect_used_symbols(a, used); }
+            for a in args {
+                collect_used_symbols(a, used);
+            }
         }
-        HirExpr::Return { value: Some(v), .. } => { collect_used_symbols(v, used); }
+        HirExpr::Return { value: Some(v), .. } => {
+            collect_used_symbols(v, used);
+        }
         _ => {}
     }
 }
@@ -313,11 +379,23 @@ fn collect_mut_decls(expr: &HirExpr, muts: &mut Vec<(Symbol, Span)>) {
         HirExpr::Block { stmts, .. } => {
             for stmt in stmts {
                 match stmt {
-                    HirStmt::Let { name, mutable: true, span, value, .. } => {
+                    HirStmt::Let {
+                        name,
+                        mutable: true,
+                        span,
+                        value,
+                        ..
+                    } => {
                         muts.push((*name, *span));
                         collect_mut_decls(value, muts);
                     }
-                    HirStmt::LetPat { mutable: true, pattern, span, value, .. } => {
+                    HirStmt::LetPat {
+                        mutable: true,
+                        pattern,
+                        span,
+                        value,
+                        ..
+                    } => {
                         if let glyim_hir::HirPattern::Var(sym) = pattern {
                             muts.push((*sym, *span));
                         }
@@ -328,16 +406,29 @@ fn collect_mut_decls(expr: &HirExpr, muts: &mut Vec<(Symbol, Span)>) {
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             collect_mut_decls(condition, muts);
             collect_mut_decls(then_branch, muts);
-            if let Some(e) = else_branch { collect_mut_decls(e, muts); }
+            if let Some(e) = else_branch {
+                collect_mut_decls(e, muts);
+            }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             collect_mut_decls(scrutinee, muts);
-            for arm in arms { collect_mut_decls(&arm.body, muts); }
+            for arm in arms {
+                collect_mut_decls(&arm.body, muts);
+            }
         }
-        HirExpr::While { condition, body, .. } => {
+        HirExpr::While {
+            condition, body, ..
+        } => {
             collect_mut_decls(condition, muts);
             collect_mut_decls(body, muts);
         }
@@ -354,22 +445,37 @@ fn collect_assign_targets(expr: &HirExpr, targets: &mut HashSet<Symbol>) {
         HirExpr::Block { stmts, .. } => {
             for stmt in stmts {
                 match stmt {
-                    HirStmt::Assign { target, .. } => { targets.insert(*target); }
+                    HirStmt::Assign { target, .. } => {
+                        targets.insert(*target);
+                    }
                     HirStmt::Expr(e) => collect_assign_targets(e, targets),
                     _ => {}
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             collect_assign_targets(condition, targets);
             collect_assign_targets(then_branch, targets);
-            if let Some(e) = else_branch { collect_assign_targets(e, targets); }
+            if let Some(e) = else_branch {
+                collect_assign_targets(e, targets);
+            }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             collect_assign_targets(scrutinee, targets);
-            for arm in arms { collect_assign_targets(&arm.body, targets); }
+            for arm in arms {
+                collect_assign_targets(&arm.body, targets);
+            }
         }
-        HirExpr::While { condition, body, .. } => {
+        HirExpr::While {
+            condition, body, ..
+        } => {
             collect_assign_targets(condition, targets);
             collect_assign_targets(body, targets);
         }
@@ -389,28 +495,45 @@ fn collect_called_symbols(hir: &Hir) -> HashSet<Symbol> {
         match expr {
             HirExpr::Call { callee, args, .. } => {
                 called.insert(*callee);
-                for a in args { walk(a, called); }
+                for a in args {
+                    walk(a, called);
+                }
             }
             HirExpr::Block { stmts, .. } => {
                 for s in stmts {
                     match s {
                         HirStmt::Expr(e) => walk(e, called),
-                        HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. }
-                        | HirStmt::Assign { value, .. } | HirStmt::AssignDeref { value, .. }
+                        HirStmt::Let { value, .. }
+                        | HirStmt::LetPat { value, .. }
+                        | HirStmt::Assign { value, .. }
+                        | HirStmt::AssignDeref { value, .. }
                         | HirStmt::AssignField { value, .. } => walk(value, called),
                     }
                 }
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 walk(condition, called);
                 walk(then_branch, called);
-                if let Some(e) = else_branch { walk(e, called); }
+                if let Some(e) = else_branch {
+                    walk(e, called);
+                }
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 walk(scrutinee, called);
-                for arm in arms { walk(&arm.body, called); }
+                for arm in arms {
+                    walk(&arm.body, called);
+                }
             }
-            HirExpr::While { condition, body, .. } => {
+            HirExpr::While {
+                condition, body, ..
+            } => {
                 walk(condition, called);
                 walk(body, called);
             }
@@ -419,20 +542,28 @@ fn collect_called_symbols(hir: &Hir) -> HashSet<Symbol> {
                 walk(body, called);
             }
             HirExpr::Binary { lhs, rhs, .. } => {
-                walk(lhs, called); walk(rhs, called);
+                walk(lhs, called);
+                walk(rhs, called);
             }
-            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. }
+            HirExpr::Unary { operand, .. }
+            | HirExpr::Deref { expr: operand, .. }
             | HirExpr::As { expr: operand, .. } => walk(operand, called),
             HirExpr::Return { value: Some(v), .. } => walk(v, called),
             HirExpr::MethodCall { receiver, args, .. } => {
                 walk(receiver, called);
-                for a in args { walk(a, called); }
+                for a in args {
+                    walk(a, called);
+                }
             }
             HirExpr::StructLit { fields, .. } => {
-                for (_, v) in fields { walk(v, called); }
+                for (_, v) in fields {
+                    walk(v, called);
+                }
             }
             HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-                for a in args { walk(a, called); }
+                for a in args {
+                    walk(a, called);
+                }
             }
             _ => {}
         }
@@ -442,7 +573,9 @@ fn collect_called_symbols(hir: &Hir) -> HashSet<Symbol> {
         match item {
             glyim_hir::item::HirItem::Fn(f) => walk(&f.body, &mut called),
             glyim_hir::item::HirItem::Impl(imp) => {
-                for m in &imp.methods { walk(&m.body, &mut called); }
+                for m in &imp.methods {
+                    walk(&m.body, &mut called);
+                }
             }
             _ => {}
         }
@@ -450,8 +583,6 @@ fn collect_called_symbols(hir: &Hir) -> HashSet<Symbol> {
 
     called
 }
-
-
 
 // ----- dead_code helpers -----
 
@@ -462,7 +593,11 @@ fn check_dead_code(expr: &HirExpr, interner: &Interner) -> Vec<LintDiagnostic> {
 }
 
 #[allow(clippy::only_used_in_recursion)]
-fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut Vec<LintDiagnostic>) {
+fn find_unreachable_after_stmt(
+    expr: &HirExpr,
+    interner: &Interner,
+    diags: &mut Vec<LintDiagnostic>,
+) {
     match expr {
         HirExpr::Block { stmts, span, .. } => {
             let mut found_terminal = false;
@@ -480,30 +615,45 @@ fn find_unreachable_after_stmt(expr: &HirExpr, interner: &Interner, diags: &mut 
                 // Check for terminal in any statement
                 match stmt {
                     HirStmt::Expr(e) => {
-                        if is_terminal(e) { found_terminal = true; }
+                        if is_terminal(e) {
+                            found_terminal = true;
+                        }
                     }
-                    HirStmt::Let { value: e, .. } | HirStmt::LetPat { value: e, .. }
-                    | HirStmt::Assign { value: e, .. } | HirStmt::AssignDeref { value: e, .. }
+                    HirStmt::Let { value: e, .. }
+                    | HirStmt::LetPat { value: e, .. }
+                    | HirStmt::Assign { value: e, .. }
+                    | HirStmt::AssignDeref { value: e, .. }
                     | HirStmt::AssignField { value: e, .. } => {
-                        if is_terminal(e) { found_terminal = true; }
+                        if is_terminal(e) {
+                            found_terminal = true;
+                        }
                     }
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             find_unreachable_after_stmt(condition, interner, diags);
             find_unreachable_after_stmt(then_branch, interner, diags);
             if let Some(e) = else_branch {
                 find_unreachable_after_stmt(e, interner, diags);
             }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             find_unreachable_after_stmt(scrutinee, interner, diags);
             for arm in arms {
                 find_unreachable_after_stmt(&arm.body, interner, diags);
             }
         }
-        HirExpr::While { condition, body, .. } => {
+        HirExpr::While {
+            condition, body, ..
+        } => {
             find_unreachable_after_stmt(condition, interner, diags);
             find_unreachable_after_stmt(body, interner, diags);
         }
@@ -519,7 +669,10 @@ fn is_terminal(expr: &HirExpr) -> bool {
     match expr {
         HirExpr::Return { .. } => true,
         // `return expr` is lowered to Unary(Not, expr) – treat as terminal
-        HirExpr::Unary { op: glyim_hir::HirUnOp::Not, .. } => true,
+        HirExpr::Unary {
+            op: glyim_hir::HirUnOp::Not,
+            ..
+        } => true,
         HirExpr::Block { stmts, .. } => stmts.iter().any(|s| match s {
             HirStmt::Expr(e) => is_terminal(e),
             _ => false,

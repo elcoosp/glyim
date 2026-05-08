@@ -108,7 +108,6 @@ mod tests {
     }
 }
 
-
 impl From<ParseError> for glyim_diag::diagnostic::Diagnostic {
     fn from(err: ParseError) -> glyim_diag::diagnostic::Diagnostic {
         let (start, end, msg) = match &err {

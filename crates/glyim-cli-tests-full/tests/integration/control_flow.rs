@@ -237,4 +237,3 @@ fn e2e_match_guard() {
     assert!(result.is_ok(), "match guard: {:?}", result.err());
     assert_eq!(result.unwrap(), 1);
 }
-

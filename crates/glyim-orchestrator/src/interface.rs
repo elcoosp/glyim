@@ -1,6 +1,6 @@
 use glyim_hir::types::HirType;
 use glyim_interner::Symbol;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// The public interface of a package, used by dependents for type-safe compilation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,9 +64,8 @@ impl DependencyInterface {
                     });
                 }
                 HirItem::Struct(s) if s.is_pub => {
-                    let fields: Vec<(Symbol, HirType)> = s.fields.iter()
-                        .map(|f| (f.name, f.ty.clone()))
-                        .collect();
+                    let fields: Vec<(Symbol, HirType)> =
+                        s.fields.iter().map(|f| (f.name, f.ty.clone())).collect();
                     structs.push(InterfaceStruct {
                         name: s.name,
                         fields,
@@ -74,11 +73,12 @@ impl DependencyInterface {
                     });
                 }
                 HirItem::Enum(e) if e.is_pub => {
-                    let variants: Vec<(Symbol, Vec<(Symbol, HirType)>)> = e.variants.iter()
+                    let variants: Vec<(Symbol, Vec<(Symbol, HirType)>)> = e
+                        .variants
+                        .iter()
                         .map(|v| {
-                            let fields: Vec<(Symbol, HirType)> = v.fields.iter()
-                                .map(|f| (f.name, f.ty.clone()))
-                                .collect();
+                            let fields: Vec<(Symbol, HirType)> =
+                                v.fields.iter().map(|f| (f.name, f.ty.clone())).collect();
                             (v.name, fields)
                         })
                         .collect();
@@ -113,14 +113,16 @@ impl DependencyInterface {
 
     /// Look up a function by its mangled name.
     pub fn find_function(&self, mangled_name: &str) -> Option<&InterfaceFn> {
-        self.functions.iter().find(|f| f.mangled_name == mangled_name)
+        self.functions
+            .iter()
+            .find(|f| f.mangled_name == mangled_name)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn empty_interface_serializes() {
         let iface = DependencyInterface {

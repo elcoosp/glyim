@@ -71,11 +71,8 @@ pub fn cmd_coverage_html(input: PathBuf, output: Option<PathBuf>) -> i32 {
         }
     };
 
-    let html = glyim_coverage::html_report::generate_html_report(
-        &dump,
-        &source,
-        &input.to_string_lossy(),
-    );
+    let html =
+        glyim_coverage::html_report::generate_html_report(&dump, &source, &input.to_string_lossy());
 
     let out_path = output.unwrap_or_else(|| PathBuf::from("coverage.html"));
     if let Err(e) = std::fs::write(&out_path, &html) {
