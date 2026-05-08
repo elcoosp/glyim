@@ -1,5 +1,7 @@
 use crate::ty::{Ty, TyKind, TyArena};
 use crate::diagnostics::TypeError;
+use crate::diagnostics::zippering::zip_diff;
+
 use glyim_diag::Span;
 
 /// A token proving an error was emitted.
@@ -137,12 +139,13 @@ impl UnificationTable {
                 self.unify(arena, *i1, *i2, span, emit_err)
             }
             _ => {
+                let diff_path = zip_diff(arena, a, b, "root".to_string());
                 emit_err(TypeError::MismatchedTypes {
                     expected_span: crate::diagnostics::span_to_src(arena.get_infer_span(a).unwrap_or(span)),
                     found_span: crate::diagnostics::span_to_src(arena.get_infer_span(b).unwrap_or(span)),
                     expected: format!("{:?}", arena.get(a)),
                     found: format!("{:?}", arena.get(b)),
-                    diff_path: None,
+                    diff_path,
                     autofix: None,
                 });
                 Err(ErrorGuaranteed(()))

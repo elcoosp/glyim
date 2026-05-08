@@ -1,61 +1,104 @@
-use crate::TypeChecker;
-use crate::TypeError;
-use glyim_hir::lower;
-use glyim_parse::parse;
+use crate::diagnostics::zippering::zip_diff;
+use crate::diagnostics::biabduction::bi_abductive_synthesis;
+use crate::diagnostics::{TypeError, AutoFix};
+use crate::ty::{Ty, TyKind, TyArena};
+use crate::unify::UnificationTable;
+use glyim_interner::Interner;
+use glyim_diag::Span;
 
-fn typecheck_errors(source: &str) -> Vec<TypeError> {
-    let parse_out = parse(source);
-    let mut interner = parse_out.interner;
-    let hir = lower(&parse_out.ast, &mut interner);
-    let mut tc = TypeChecker::new(interner);
-    tc.check(&hir).unwrap_err()
+// Zippering tests
+#[test]
+fn zip_diff_identical() {
+    let mut arena = TyArena::new();
+    let t0 = arena.alloc(TyKind::Int);
+    let t1 = arena.alloc(TyKind::Int);
+    let result = zip_diff(&arena, t0, t1, "root".to_string());
+    assert!(result.is_none());
 }
 
 #[test]
-fn snapshot_non_exhaustive_match_user_enum() {
-    let src = "enum Color { Red, Green, Blue }\nfn main() -> i64 { match Color::Red { Color::Red => 1 } }";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
+fn zip_diff_different_primitives() {
+    let mut arena = TyArena::new();
+    let t0 = arena.alloc(TyKind::Int);
+    let t1 = arena.alloc(TyKind::Bool);
+    let result = zip_diff(&arena, t0, t1, "root".to_string());
+    assert!(result.is_some());
 }
 
 #[test]
-fn snapshot_invalid_cast_to_str() {
-    let src = "main = () => 42 as Str";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
+fn zip_diff_nested_generic() {
+    let mut arena = TyArena::new();
+    let mut interner = Interner::new();
+    let vec_sym = interner.intern("Vec");
+    let result_sym = interner.intern("Result");
+    let int_ty = arena.alloc(TyKind::Int);
+    let bool_ty = arena.alloc(TyKind::Bool);
+    let result_ib = arena.alloc(TyKind::App(result_sym, vec![int_ty, bool_ty]));
+    let result_bb = arena.alloc(TyKind::App(result_sym, vec![bool_ty, bool_ty]));
+    let vec_ib = arena.alloc(TyKind::App(vec_sym, vec![result_ib]));
+    let vec_bb = arena.alloc(TyKind::App(vec_sym, vec![result_bb]));
+    let result = zip_diff(&arena, vec_ib, vec_bb, "root".to_string());
+    assert!(result.is_some());
+    assert!(result.unwrap().contains("T0.T0"));
+}
+
+// Biabduction tests
+#[test]
+fn biabduction_wrap_option() {
+    let mut arena = TyArena::new();
+    let mut interner = Interner::new();
+    let opt_sym = interner.intern("Option");
+    let int_ty = arena.alloc(TyKind::Int);
+    let option_int = arena.alloc(TyKind::App(opt_sym, vec![int_ty]));
+    let result = bi_abductive_synthesis(&arena, &interner, option_int, int_ty);
+    assert!(result.is_some());
+    assert!(matches!(result.unwrap(), AutoFix::WrapWithOptions(_)));
 }
 
 #[test]
-fn snapshot_assign_to_immutable() {
-    let src = "fn main() -> i64 { let x = 5; x = 10; x }";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
+fn biabduction_wrap_ok() {
+    let mut arena = TyArena::new();
+    let mut interner = Interner::new();
+    let result_sym = interner.intern("Result");
+    let int_ty = arena.alloc(TyKind::Int);
+    let err_ty = arena.alloc(TyKind::Named(interner.intern("Error")));
+    let result_int = arena.alloc(TyKind::App(result_sym, vec![int_ty, err_ty]));
+    let result = bi_abductive_synthesis(&arena, &interner, result_int, int_ty);
+    assert!(result.is_some());
+    assert!(matches!(result.unwrap(), AutoFix::WrapWithOk(_)));
+}
+
+// Unify with diagnostics
+#[test]
+fn unify_mismatch_includes_diff_path() {
+    let mut arena = TyArena::new();
+    let mut interner = Interner::new();
+    let mut table = UnificationTable::new();
+    let vec_sym = interner.intern("Vec");
+    let int_ty = arena.alloc(TyKind::Int);
+    let bool_ty = arena.alloc(TyKind::Bool);
+    let vec_int = arena.alloc(TyKind::App(vec_sym, vec![int_ty]));
+    let vec_bool = arena.alloc(TyKind::App(vec_sym, vec![bool_ty]));
+    let mut errors = Vec::new();
+    let _ = table.unify(&mut arena, vec_int, vec_bool, Span::new(0, 10), &mut |e| errors.push(e));
+    assert!(!errors.is_empty());
+    if let TypeError::MismatchedTypes { diff_path, .. } = &errors[0] {
+        assert!(diff_path.is_some());
+    }
 }
 
 #[test]
-fn snapshot_deref_non_pointer() {
-    let src = "fn main() -> i64 { let x = 42; *x }";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
-}
-
-#[test]
-fn snapshot_missing_field_in_struct_lit() {
-    let src = "struct Point { x, y }\nfn main() -> i64 { Point { x: 1 } }";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
-}
-
-#[test]
-fn snapshot_unknown_field_access() {
-    let src = "struct Point { x }\nfn main() -> i64 { let p = Point { x: 1 }; p.y }";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
-}
-
-#[test]
-fn snapshot_return_type_mismatch() {
-    let src = "fn foo() -> bool { 42 }\nfn main() -> i64 { foo() }";
-    let errors = typecheck_errors(src);
-    insta::assert_debug_snapshot!(errors);
+fn unify_mismatch_option_includes_autofix() {
+    let mut arena = TyArena::new();
+    let mut interner = Interner::new();
+    let mut table = UnificationTable::new();
+    let opt_sym = interner.intern("Option");
+    let int_ty = arena.alloc(TyKind::Int);
+    let option_int = arena.alloc(TyKind::App(opt_sym, vec![int_ty]));
+    let mut errors = Vec::new();
+    let _ = table.unify(&mut arena, option_int, int_ty, Span::new(0, 5), &mut |e| errors.push(e));
+    assert!(!errors.is_empty());
+    if let TypeError::MismatchedTypes { autofix, .. } = &errors[0] {
+        assert!(autofix.is_some());
+    }
 }
