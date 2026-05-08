@@ -91,6 +91,16 @@ impl MerkleStore {
         self.flush_buffer(&mut buffer);
     }
 
+    /// Register a human-readable name for a content hash.
+    pub fn register_name(&self, name: &str, hash: ContentHash) {
+        self.cas.register_name(name, hash);
+    }
+
+    /// Resolve a human-readable name to a content hash.
+    pub fn resolve_name(&self, name: &str) -> Option<ContentHash> {
+        self.cas.resolve_name(name)
+    }
+
     fn flush_buffer(&self, buffer: &mut Vec<(ContentHash, Vec<u8>)>) {
         for (_hash, data) in buffer.drain(..) {
             // Store in CAS; hash is already known but we don't need the
