@@ -1,9 +1,4 @@
-use crate::{TypeCheckOutput};
-
-
-
-#[test]
-
+use crate::TypeCheckOutput;
 
 #[test]
 fn type_check_output_exists() {
