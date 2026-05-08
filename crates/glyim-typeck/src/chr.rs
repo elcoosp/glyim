@@ -128,3 +128,57 @@ impl ChrStore {
         Ok(())
     }
 }
+
+/// A mapping from type variables to concrete types for CHR rule instantiation.
+#[derive(Clone, Debug)]
+pub struct Substitution {
+    pub mappings: Vec<(Ty, Ty)>,
+}
+
+impl Substitution {
+    pub fn new() -> Self {
+        Self { mappings: vec![] }
+    }
+
+    pub fn add(&mut self, from: Ty, to: Ty) {
+        self.mappings.push((from, to));
+    }
+
+    pub fn lookup(&self, ty: Ty) -> Option<Ty> {
+        self.mappings.iter().find_map(|&(from, to)| {
+            if from == ty { Some(to) } else { None }
+        })
+    }
+}
+
+impl Default for Substitution {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Apply a substitution to a type, replacing mapped variables.
+pub fn apply_substitution(arena: &mut crate::ty::TyArena, sub: &Substitution, ty: Ty) -> Ty {
+    if let Some(replacement) = sub.lookup(ty) {
+        return replacement;
+    }
+
+    match arena.get(ty).clone() {
+        crate::ty::TyKind::App(sym, args) => {
+            let new_args: Vec<Ty> = args.iter().map(|&a| apply_substitution(arena, sub, a)).collect();
+            arena.alloc(crate::ty::TyKind::App(sym, new_args))
+        }
+        crate::ty::TyKind::Fn(params, ret) => {
+            let new_params: Vec<Ty> = params.iter().map(|&p| apply_substitution(arena, sub, p)).collect();
+            let new_ret = apply_substitution(arena, sub, ret);
+            arena.alloc(crate::ty::TyKind::Fn(new_params, new_ret))
+        }
+        crate::ty::TyKind::RawPtr(inner) => {
+            let new_inner = apply_substitution(arena, sub, inner);
+            arena.alloc(crate::ty::TyKind::RawPtr(new_inner))
+        }
+        _ => ty,
+    }
+}
+
+

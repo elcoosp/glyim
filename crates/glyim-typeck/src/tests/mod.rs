@@ -15,3 +15,5 @@ mod integration_macro;
 mod error_recovery;
 
 mod phase_consistency;
+
+mod snapshot_typeck;

@@ -1,7 +1,6 @@
-use crate::chr::{Goal, ChrRule, ChrStore};
+use crate::chr::{Goal, ChrRule, ChrStore, Substitution, apply_substitution};
 use crate::ty::{Ty, TyKind, TyArena};
 use glyim_interner::Interner;
-
 
 #[test]
 fn goal_equality() {
@@ -205,4 +204,42 @@ fn chr_solve_has_field() {
     let result = store.solve(&arena);
     assert!(result.is_ok());
     assert!(store.proven_goals().contains(&goal));
+}
+
+#[test]
+fn substitution_apply_simple() {
+    let mut interner = Interner::new();
+    let t_sym = interner.intern("T");
+    let int_sym = interner.intern("Int");
+    let mut arena = TyArena::new();
+
+    let t_ty = arena.alloc(TyKind::Named(t_sym));
+    let int_ty = arena.alloc(TyKind::Named(int_sym));
+
+    let sub = Substitution { mappings: vec![(t_ty, int_ty)] };
+    let result = apply_substitution(&mut arena, &sub, t_ty);
+    assert!(matches!(arena.get(result), TyKind::Named(s) if *s == int_sym));
+}
+
+#[test]
+fn substitution_in_generic() {
+    let mut interner = Interner::new();
+    let vec_sym = interner.intern("Vec");
+    let t_sym = interner.intern("T");
+    let int_sym = interner.intern("Int");
+    let mut arena = TyArena::new();
+
+    let t_ty = arena.alloc(TyKind::Named(t_sym));
+    let int_ty = arena.alloc(TyKind::Named(int_sym));
+    let vec_t = arena.alloc(TyKind::App(vec_sym, vec![t_ty]));
+
+    let sub = Substitution { mappings: vec![(t_ty, int_ty)] };
+    let result = apply_substitution(&mut arena, &sub, vec_t);
+    if let TyKind::App(sym, args) = arena.get(result) {
+        assert_eq!(*sym, vec_sym);
+        assert_eq!(args.len(), 1);
+        assert!(matches!(arena.get(args[0]), TyKind::Named(s) if *s == int_sym));
+    } else {
+        panic!("Expected App after substitution");
+    }
 }

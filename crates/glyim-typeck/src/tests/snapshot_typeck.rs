@@ -1,44 +1,58 @@
-use crate::TypeChecker;
-use glyim_hir::lower;
-use glyim_parse::parse;
+use crate::ty::{Ty, TyKind, TyArena};
+use crate::unify::UnificationTable;
+use crate::diagnostics::TypeError;
+use glyim_diag::Span;
+use glyim_interner::Interner;
 
-fn typecheck_and_format(source: &str) -> (String, String) {
-    let parse_out = parse(source);
-    assert!(
-        parse_out.errors.is_empty(),
-        "parse errors: {:?}",
-        parse_out.errors
-    );
-    let mut interner = parse_out.interner;
-    let hir = lower(&parse_out.ast, &mut interner);
-    let mut tc = TypeChecker::new(interner.clone());
-    let _ = tc.check(&hir);
+#[test]
+fn snapshot_infinite_type_error() {
+    let mut arena = TyArena::new();
+    let mut table = UnificationTable::new();
+    let mut interner = Interner::new();
 
-    let expr_types_fmt = format!("{:?}", tc.expr_types);
-    let call_type_args_fmt = format!("{:?}", tc.call_type_args);
-    (expr_types_fmt, call_type_args_fmt)
+    let t0 = table.new_var(&mut arena, Span::new(10, 20));
+    let vec_sym = interner.intern("Vec");
+    let vec_t0 = arena.alloc(TyKind::App(vec_sym, vec![t0]));
+
+    let mut errors = Vec::new();
+    let _ = table.unify(&mut arena, t0, vec_t0, Span::new(10, 20), &mut |e| errors.push(e));
+
+    insta::assert_debug_snapshot!(errors);
 }
 
 #[test]
-fn snapshot_simple_main() {
-    let (expr_types, call_type_args) = typecheck_and_format("main = () => 42");
-    insta::assert_snapshot!("simple_main__expr_types", expr_types);
-    insta::assert_snapshot!("simple_main__call_type_args", call_type_args);
+fn snapshot_mismatch_with_diff() {
+    let mut arena = TyArena::new();
+    let mut table = UnificationTable::with_interner(Interner::new());
+    let mut interner = Interner::new();
+
+    let vec_sym = interner.intern("Vec");
+    let result_sym = interner.intern("Result");
+    let int_ty = arena.alloc(TyKind::Int);
+    let bool_ty = arena.alloc(TyKind::Bool);
+    let result_ib = arena.alloc(TyKind::App(result_sym, vec![int_ty, bool_ty]));
+    let result_bb = arena.alloc(TyKind::App(result_sym, vec![bool_ty, bool_ty]));
+    let vec_ib = arena.alloc(TyKind::App(vec_sym, vec![result_ib]));
+    let vec_bb = arena.alloc(TyKind::App(vec_sym, vec![result_bb]));
+
+    let mut errors = Vec::new();
+    let _ = table.unify(&mut arena, vec_ib, vec_bb, Span::new(0, 30), &mut |e| errors.push(e));
+
+    insta::assert_debug_snapshot!(errors);
 }
 
 #[test]
-fn snapshot_generic_call() {
-    let (expr_types, call_type_args) =
-        typecheck_and_format("fn id<T>(x: T) -> T { x }\nmain = () => id(42)");
-    insta::assert_snapshot!("generic_call__expr_types", expr_types);
-    insta::assert_snapshot!("generic_call__call_type_args", call_type_args);
-}
+fn snapshot_option_autofix() {
+    let mut arena = TyArena::new();
+    let mut table = UnificationTable::with_interner(Interner::new());
+    let mut interner = Interner::new();
 
-#[test]
-fn snapshot_generic_struct() {
-    let (expr_types, call_type_args) = typecheck_and_format(
-        "struct Container<T> { value: T }\nmain = () => { let c: Container<i64> = Container { value: 42 }; c.value }",
-    );
-    insta::assert_snapshot!("generic_struct__expr_types", expr_types);
-    insta::assert_snapshot!("generic_struct__call_type_args", call_type_args);
+    let opt_sym = interner.intern("Option");
+    let int_ty = arena.alloc(TyKind::Int);
+    let option_int = arena.alloc(TyKind::App(opt_sym, vec![int_ty]));
+
+    let mut errors = Vec::new();
+    let _ = table.unify(&mut arena, option_int, int_ty, Span::new(0, 10), &mut |e| errors.push(e));
+
+    insta::assert_debug_snapshot!(errors);
 }
