@@ -207,6 +207,23 @@ impl TypeChecker {
         }
     }
 
+    /// Returns true if the type contains a generic type parameter (single uppercase letter).
+    fn has_type_parameter(&self, ty: &HirType) -> bool {
+        match ty {
+            HirType::Named(sym) => {
+                let s = self.interner.resolve(*sym);
+                s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
+            }
+            HirType::Generic(_, args) => args.iter().any(|a| self.has_type_parameter(a)),
+            HirType::Tuple(elems) => elems.iter().any(|e| self.has_type_parameter(e)),
+            HirType::RawPtr(inner) | HirType::Option(inner) => self.has_type_parameter(inner),
+            HirType::Result(ok, err) => {
+                self.has_type_parameter(ok) || self.has_type_parameter(err)
+            }
+            _ => false,
+        }
+    }
+
     fn set_type(&mut self, id: ExprId, ty: &HirType) {
         let idx = id.as_usize();
         if idx >= self.expr_types.len() {
@@ -515,6 +532,8 @@ impl TypeChecker {
                             if arg_ty != *param_ty
                                 && arg_ty != HirType::Error
                                 && *param_ty != HirType::Never
+                                && !self.has_type_parameter(param_ty)
+                                && !self.has_type_parameter(&arg_ty)
                             {
                                 self.errors.push(TypeError::MismatchedTypes {
                                     expected: param_ty.clone(),
@@ -886,6 +905,10 @@ impl TypeChecker {
     }
 
     fn is_valid_cast(&self, from: &HirType, to: &HirType) -> bool {
+        // Allow casts involving generic type parameters; they'll be validated during monomorphization.
+        if self.has_type_parameter(from) || self.has_type_parameter(to) {
+            return true;
+        }
         let resolved_from = self.resolve_to_primitive(from).unwrap_or(from.clone());
         let resolved_to = self.resolve_to_primitive(to).unwrap_or(to.clone());
         match (&resolved_from, &resolved_to) {
