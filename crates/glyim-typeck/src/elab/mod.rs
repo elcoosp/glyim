@@ -13,7 +13,7 @@ use glyim_interner::Interner;
 use std::collections::HashMap;
 
 pub struct ElabContext<'a> {
-    pub arena: &'a mut TyArena,
+        pub arena: &'a mut TyArena,
     pub interner: &'a mut Interner,
     pub unification: UnificationTable,
     pub chr_store: ChrStore,
@@ -34,6 +34,7 @@ impl<'a> ElabContext<'a> {
         unification: UnificationTable,
         chr_store: ChrStore,
         hir_items: &'a [HirItem],
+        
     ) -> Self {
         Self {
             arena,

@@ -1,0 +1,12 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+assertion_line: 59
+expression: actual
+---
+  × type mismatch
+   ╭─[tests/ui/struct_missing_field.g:1:1]
+ 1 │ struct Point { x, y }
+   · ▲
+   · ╰── type mismatch
+ 2 │ main = () => Point { x: 1 }
+   ╰────

@@ -91,6 +91,9 @@ impl UnificationTable {
     }
 
     fn union(&mut self, a: Ty, b: Ty) {
+        let max = a.0.max(b.0) + 1;
+        self.parents.resize(self.parents.len().max(max), a);  // self-reference for new slots
+        self.ranks.resize(self.ranks.len().max(max), 0);
         self.parents[a.0] = b;
     }
 
