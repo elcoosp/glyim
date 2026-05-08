@@ -8,6 +8,7 @@ pub fn cmd_test(
     filter: Option<String>,
     nocapture: bool,
     watch: bool,
+    incremental: bool,
     optimize_check: bool,
     _remote_cache: Option<String>,
     ____coverage: bool,
@@ -109,6 +110,7 @@ pub fn cmd_test(
         include_ignored: ignore,
         nocapture,
         watch,
+        incremental,
         optimize_check,
         coverage: ____coverage,
         ..Default::default()

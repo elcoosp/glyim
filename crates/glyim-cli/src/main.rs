@@ -98,6 +98,8 @@ enum Command {
         #[arg(long)]
         watch: bool,
         #[arg(long)]
+        incremental: bool,
+        #[arg(long)]
         optimize: bool,
         #[arg(long)]
         coverage: bool,
@@ -284,6 +286,7 @@ fn main() {
             filter,
             nocapture,
             watch,
+            incremental,
             optimize,
             remote_cache,
             coverage,
@@ -300,6 +303,7 @@ fn main() {
             filter,
             nocapture,
             watch,
+            incremental,
             optimize,
             remote_cache,
             coverage,
