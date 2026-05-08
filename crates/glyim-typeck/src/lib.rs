@@ -304,6 +304,20 @@ impl TypeChecker {
                 scrutinee, arms, ..
             } => {
                 let scrutinee_ty = self.check_expr(scrutinee).unwrap_or(HirType::Never);
+                // Reject `?` on non‑Result types (desugared to Match with Ok/Err patterns)
+                let has_question_mark = arms.iter().any(|arm| {
+                    matches!(arm.pattern, HirPattern::ResultOk(_) | HirPattern::ResultErr(_))
+                });
+                if has_question_mark {
+                    let is_result = match &scrutinee_ty {
+                        HirType::Result(_, _) => true,
+                        HirType::Generic(_, args) => args.len() == 2,
+                        _ => false,
+                    };
+                    if !is_result {
+                        self.errors.push(TypeError::InvalidQuestion { expr_id: scrutinee.get_id() });
+                    }
+                }
                 self.check_match_exhaustiveness(&scrutinee_ty, arms, expr.get_span());
                 let mut arm_types = vec![];
                 for arm in arms {
