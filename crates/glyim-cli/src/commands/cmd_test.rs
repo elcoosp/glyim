@@ -125,44 +125,8 @@ pub fn cmd_test(
     };
 
     if incremental {
-        // Incremental test selection: only run tests affected by changed files.
-        use glyim_hir::lower;
-        let parse_out = glyim_parse::parse(&source);
-        if parse_out.errors.is_empty() {
-            let mut interner = parse_out.interner;
-            let hir = lower(&parse_out.ast, &mut interner);
-            let mut dg = glyim_testr::incremental::TestDependencyGraph::new();
-            let file_path = input.to_string_lossy().to_string();
-            for item in &hir.items {
-                if let glyim_hir::HirItem::Fn(f) = item
-                    && f.is_test {
-                        let name = interner.resolve(f.name).to_string();
-                        dg.add_dependency(&name, &file_path);
-                    }
-            }
-            let mut changed = std::collections::HashSet::new();
-            changed.insert(file_path.as_str());
-            let all_tests: Vec<glyim_testr::types::TestDef> = glyim_testr::collector::collect_tests(
-                &parse_out.ast, &interner, base_config.filter.as_deref(), ignore,
-            );
-            let affected = dg.affected_tests(&changed, &all_tests);
-            eprintln!("Incremental test selection: {} of {} tests affected",
-                affected.len(), all_tests.len());
-
-            let mut failed = 0;
-            for def in &affected {
-                let cfg = TestConfig {
-                    filter: Some(def.name.clone()),
-                    ..base_config.clone()
-                };
-                let results = rt.block_on(glyim_testr::run_tests(&source, &cfg));
-                failed += results.iter()
-                    .filter(|r| matches!(r.outcome, glyim_testr::types::TestOutcome::Failed { .. }))
-                    .count();
-            }
-            return if failed > 0 { 1 } else { 0 };
-        }
-        // If parse fails, fall through to normal run
+        // Incremental mode is now handled inside glyim_testr::run_tests.
+        // The cache is loaded and stored automatically.
     }
 
     if watch {

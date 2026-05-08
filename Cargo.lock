@@ -2459,6 +2459,8 @@ dependencies = [
  "glyim-coverage",
  "glyim-hir",
  "glyim-interner",
+ "glyim-macro-vfs",
+ "glyim-merkle",
  "glyim-parse",
  "glyim-query",
  "notify-debouncer-full",

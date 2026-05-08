@@ -37,5 +37,7 @@ mod macro_e2e;
 mod coverage_e2e;
 mod coverage_aot_e2e;
 mod orchestrator_tests;
+mod incremental_test_cache_e2e;
+
 
 fn main() {}

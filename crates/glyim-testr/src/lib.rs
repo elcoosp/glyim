@@ -1,4 +1,6 @@
 pub mod artifact;
+pub mod cache;
+
 pub mod collector;
 pub mod compiler;
 pub mod config;

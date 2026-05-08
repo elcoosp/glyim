@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum TestOutcome {
     Passed,
     Failed { exit_code: i32, stderr: String },
@@ -12,6 +13,7 @@ pub enum TestOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestDef {
     pub name: String,
     pub source_file: String,
@@ -22,6 +24,7 @@ pub struct TestDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestResult {
     pub name: String,
     pub outcome: TestOutcome,

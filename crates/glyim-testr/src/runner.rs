@@ -20,6 +20,15 @@ impl TestRunner {
         source: &str,
         display: &dyn DisplayBackend,
     ) -> Vec<TestResult> {
+        // If incremental mode, check cache first
+        let mut cached_results: Vec<crate::types::TestResult> = Vec::new();
+        let source_hash = glyim_macro_vfs::ContentHash::of(source.as_bytes());
+        let cache = if self.config.incremental {
+            crate::cache::IncrementalTestCache::new(&std::path::PathBuf::from(".glyim/incremental/test-cache"))
+        } else {
+            None
+        };
+
         let artifact = match if self.config.coverage {
             Compiler::compile_with_opts(source, self.config.filter.as_deref(), true)
         } else {
@@ -146,6 +155,13 @@ impl TestRunner {
                     display.test_finished(&tr);
                     results.push(tr);
                 }
+            }
+        }
+
+        // Store results in cache if incremental mode
+        if let Some(ref c) = cache {
+            for r in &results {
+                c.store_result(r, &source_hash);
             }
         }
 
