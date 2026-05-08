@@ -346,7 +346,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8b8fd1e175c5ee3108095da452e816519de618beccea23aa053c00cf5e344b9"
 dependencies = [
  "futures",
- "lsp-types",
+ "lsp-types 0.95.1",
  "pin-project-lite",
  "rustix 1.1.4",
  "serde",
@@ -1684,6 +1684,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
+name = "fluent-uri"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17c704e9dbe1ddd863da1e6ff3567795087b1eb201ce80d8fa81162e1516500d"
+dependencies = [
+ "bitflags 1.3.2",
+]
+
+[[package]]
 name = "flume"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1951,7 +1960,7 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "glyim-bench"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -1978,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-bytecode"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-diag",
  "glyim-hir",
@@ -1989,7 +1998,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cas-server"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "bazel-remote-apis",
@@ -2009,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap",
  "dirs-next",
@@ -2059,7 +2068,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cli-tests-extra"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-compiler",
  "glyim-testr",
@@ -2071,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cli-tests-full"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dirs-next",
  "glyim-cli",
@@ -2098,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-codegen-llvm"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "crossbeam-channel",
  "dashmap",
@@ -2121,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-compiler"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dirs-next",
  "glyim-bytecode",
@@ -2155,7 +2164,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-config"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-hir",
  "serde",
@@ -2163,7 +2172,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-coverage"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-diag",
  "glyim-interner",
@@ -2176,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-coverage-rt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2184,7 +2193,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-diag"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-interner",
  "miette",
@@ -2196,7 +2205,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-doc"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-hir",
  "glyim-interner",
@@ -2206,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-egraph"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "egg",
  "glyim-diag",
@@ -2222,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-fmt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-lex",
  "glyim-syntax",
@@ -2230,7 +2239,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-hir"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "blake3",
  "glyim-diag",
@@ -2246,14 +2255,14 @@ dependencies = [
 
 [[package]]
 name = "glyim-interner"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "glyim-lex"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-diag",
  "glyim-syntax",
@@ -2261,7 +2270,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-lint"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-diag",
  "glyim-hir",
@@ -2274,7 +2283,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-lsp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "async-lsp",
  "dashmap",
@@ -2288,7 +2297,7 @@ dependencies = [
  "glyim-query",
  "glyim-syntax",
  "glyim-typeck",
- "lsp-types",
+ "lsp-types 0.97.0",
  "parking_lot",
  "serde",
  "serde_json",
@@ -2299,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-macro-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "glyim-diag",
@@ -2317,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-macro-vfs"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "reqwest",
  "serde",
@@ -2328,7 +2337,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-merkle"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dashmap",
  "glyim-interner",
@@ -2343,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-mutant"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-compiler",
  "glyim-diag",
@@ -2361,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-orchestrator"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-codegen-llvm",
  "glyim-compiler",
@@ -2384,7 +2393,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-parse"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "arbitrary",
  "glyim-diag",
@@ -2401,7 +2410,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-pkg"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-codegen-llvm",
  "glyim-interner",
@@ -2421,7 +2430,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-profiler"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chrono",
  "serde",
@@ -2429,7 +2438,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-query"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dashmap",
  "glyim-interner",
@@ -2444,14 +2453,14 @@ dependencies = [
 
 [[package]]
 name = "glyim-syntax"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "rowan",
 ]
 
 [[package]]
 name = "glyim-testr"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chrono",
  "glyim-codegen-llvm",
@@ -2478,7 +2487,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-typeck"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-diag",
  "glyim-hir",
@@ -3406,6 +3415,19 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "url",
+]
+
+[[package]]
+name = "lsp-types"
+version = "0.97.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53353550a17c04ac46c585feb189c2db82154fc84b79c7a66c96c2c644f66071"
+dependencies = [
+ "bitflags 1.3.2",
+ "fluent-uri",
+ "serde",
+ "serde_json",
+ "serde_repr",
 ]
 
 [[package]]
