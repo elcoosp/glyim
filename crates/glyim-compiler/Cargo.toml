@@ -7,6 +7,8 @@ rust-version.workspace = true
 description = "Core compiler pipeline for Glyim"
 
 [dependencies]
+glyim-profiler = { path = "../glyim-profiler" }
+libc = "0.2"
 glyim-lex = { path = "../glyim-lex" }
 glyim-parse = { path = "../glyim-parse" }
 glyim-hir = { path = "../glyim-hir" }
@@ -17,6 +19,11 @@ glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
+glyim-query = { path = "../glyim-query" }
+glyim-egraph = { path = "../glyim-egraph" }
+glyim-bytecode = { path = "../glyim-bytecode" }
+glyim-merkle = { path = "../glyim-merkle" }
+postcard = { version = "1", features = ["alloc"] }
 wat = "1"
 glyim-doc = { path = "../glyim-doc" }
 inkwell = { version = "0.9", features = ["llvm22-1-prefer-dynamic"] }
@@ -29,5 +36,5 @@ serde_json = "1"
 toml = "1.1.2"
 
 [dev-dependencies]
-rstest = "0.24"
+rstest = "0.26"
 tempfile = "3"

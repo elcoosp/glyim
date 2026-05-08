@@ -7,6 +7,8 @@ rust-version.workspace = true
 description = "TODO"
 
 [dependencies]
+glyim-interner = { path = "../glyim-interner" }
+serde = { version = "1", features = ["derive"] }
 miette = { version = "7", features = ["fancy-no-backtrace"] }
 miette-derive = "7"
 thiserror = "2"

@@ -1,0 +1,29 @@
+{
+  "name": "glyim",
+  "displayName": "Glyim Language Support",
+  "description": "Language support for Glyim: syntax highlighting, diagnostics, completion, hover, navigation, formatting, and code actions",
+  "version": "0.1.0",
+  "publisher": "glyim",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages", "Linters", "Formatters"],
+  "activationEvents": ["onLanguage:glyim"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "glyim",
+      "aliases": ["Glyim", "glyim"],
+      "extensions": [".g"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "glyim",
+      "scopeName": "source.glyim",
+      "path": "./syntaxes/glyim.tmLanguage.json"
+    }]
+  },
+  "scripts": {
+    "vscode:prepublish": "echo 'Extension ready'"
+  }
+}

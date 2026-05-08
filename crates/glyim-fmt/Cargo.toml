@@ -12,3 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 glyim-lex = { path = "../glyim-lex" }
+glyim-syntax = { path = "../glyim-syntax" }
+
+[dev-dependencies]

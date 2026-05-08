@@ -7,16 +7,23 @@ rust-version.workspace = true
 description = "Fast, production-grade test runner for Glyim"
 
 [dependencies]
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
 glyim-hir = { path = "../glyim-hir" }
 glyim-parse = { path = "../glyim-parse" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-query = { path = "../glyim-query" }
+glyim-merkle = { path = "../glyim-merkle" }
+glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-compiler = { path = "../glyim-compiler" }
+glyim-coverage = { path = "../glyim-coverage" }
+serde_json = "1"
 sea-orm = { version = "2.0.0-rc", features = ["sqlx-sqlite", "runtime-tokio", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time", "io-util"] }
 notify-debouncer-full = "0.7"
 owo-colors = "4"
-similar = "2"
+similar = "3"
 chrono = "0.4"
 regex = "1"
 tempfile = "3"

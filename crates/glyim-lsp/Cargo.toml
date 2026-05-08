@@ -1,0 +1,30 @@
+[package]
+name = "glyim-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Language Server Protocol implementation for Glyim"
+
+[dependencies]
+glyim-compiler = { path = "../glyim-compiler" }
+glyim-hir = { path = "../glyim-hir" }
+glyim-interner = { path = "../glyim-interner" }
+glyim-diag = { path = "../glyim-diag" }
+glyim-syntax = { path = "../glyim-syntax" }
+glyim-parse = { path = "../glyim-parse" }
+glyim-typeck = { path = "../glyim-typeck" }
+glyim-query = { path = "../glyim-query" }
+glyim-pkg = { path = "../glyim-pkg" }
+async-lsp = { version = "0.2", features = ["omni-trait", "stdio", "tokio"] }
+lsp-types = "0.95"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+dashmap = "6.1"
+parking_lot = "0.12"
+
+glyim-fmt = { path = "../glyim-fmt" }
+[dev-dependencies]
+tempfile = "3"

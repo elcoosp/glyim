@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
+#[command(version)]
 #[command(
     name = "glyim",
     version,
@@ -19,6 +20,14 @@ struct Cli {
     trace: bool,
     #[arg(long = "tree", global = true, help = "Show spans as an indented tree")]
     tree: bool,
+    #[arg(long = "profile", global = true, help = "Print stage timings")]
+    profile: bool,
+    #[arg(
+        long = "coverage",
+        global = true,
+        help = "Enable coverage instrumentation"
+    )]
+    coverage: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -37,6 +46,14 @@ enum Command {
         release: bool,
         #[arg(long)]
         bare: bool,
+        #[arg(long)]
+        coverage: bool,
+        #[arg(long)]
+        incremental: bool,
+        #[arg(long)]
+        library: bool,
+        #[arg(long, help = "URL of remote CAS server for artifact caching")]
+        remote_cache: Option<String>,
     },
     Run {
         input: PathBuf,
@@ -46,12 +63,22 @@ enum Command {
         debug: bool,
         #[arg(long, conflicts_with = "debug")]
         release: bool,
+        #[arg(long)]
+        live: bool,
+        #[arg(long)]
+        coverage: bool,
+        #[arg(long)]
+        incremental: bool,
+        #[arg(long, help = "URL of remote CAS server for artifact caching")]
+        remote_cache: Option<String>,
     },
     Ir {
         input: PathBuf,
     },
     Check {
         input: PathBuf,
+        #[arg(long)]
+        incremental: bool,
     },
     Init {
         name: String,
@@ -71,7 +98,27 @@ enum Command {
         #[arg(long)]
         watch: bool,
         #[arg(long)]
+        incremental: bool,
+        #[arg(long)]
         optimize: bool,
+        #[arg(long)]
+        coverage: bool,
+        #[arg(long)]
+        mutate: bool,
+        #[arg(long)]
+        mutation_score: Option<f64>,
+        #[arg(long)]
+        mutation_operators: Option<String>,
+        #[arg(long)]
+        max_mutants: Option<usize>,
+        #[arg(long)]
+        concurrent_mutants: Option<usize>,
+        #[arg(long)]
+        mutation_report: Option<std::path::PathBuf>,
+        #[arg(long)]
+        coverage_mode: Option<String>,
+        #[arg(long, help = "URL of remote CAS server for artifact caching")]
+        remote_cache: Option<String>,
     },
     Add {
         package: String,
@@ -111,8 +158,27 @@ enum Command {
     MacroInspect {
         input: PathBuf,
     },
+    /// Format a Glyim source file
+    Fmt {
+        input: PathBuf,
+        #[arg(long)]
+        check: bool,
+    },
+    /// Start the Glyim language server
+    Lsp,
+    Coverage {
+        input: PathBuf,
+        #[arg(long)]
+        html: bool,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
     #[command(subcommand)]
     Cache(CacheCommand),
+    /// Show incremental compilation cache statistics.
+    IncrementalStatus {
+        input: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -177,15 +243,42 @@ fn main() {
             debug: _,
             release,
             bare,
-        } => cmd_build(input, output, target, release, bare),
+            coverage,
+            incremental,
+            library,
+            remote_cache,
+        } => cmd_build(
+            input,
+            output,
+            target,
+            release,
+            bare,
+            incremental,
+            remote_cache,
+            coverage,
+            cli.profile,
+            library,
+        ),
         Command::Run {
             input,
             target,
             debug: _,
             release,
-        } => cmd_run(input, target, release),
+            coverage: _,
+            live,
+            incremental,
+            remote_cache,
+        } => cmd_run(
+            input,
+            target,
+            release,
+            live,
+            incremental,
+            remote_cache,
+            cli.coverage,
+        ),
         Command::Ir { input } => cmd_ir(input),
-        Command::Check { input } => cmd_check(input),
+        Command::Check { input, incremental } => cmd_check(input, incremental),
         Command::Init { name } => cmd_init(name),
         Command::Test {
             input,
@@ -193,8 +286,35 @@ fn main() {
             filter,
             nocapture,
             watch,
+            incremental,
             optimize,
-        } => cmd_test(input, ignore, filter, nocapture, watch, optimize),
+            remote_cache,
+            coverage,
+            mutate,
+            mutation_score,
+            mutation_operators,
+            max_mutants,
+            concurrent_mutants,
+            mutation_report,
+            coverage_mode,
+        } => cmd_test(
+            input,
+            ignore,
+            filter,
+            nocapture,
+            watch,
+            incremental,
+            optimize,
+            remote_cache,
+            coverage,
+            mutate,
+            mutation_score,
+            mutation_operators,
+            max_mutants,
+            concurrent_mutants,
+            mutation_report,
+            coverage_mode,
+        ),
         Command::Export { name, dest } => cmd_export(name, dest),
         Command::Add { package, macro_dep } => cmd_add(package, macro_dep),
         Command::Remove { package } => cmd_remove(package),
@@ -212,6 +332,16 @@ fn main() {
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),
         Command::MacroInspect { input } => cmd_macro_inspect(input),
+        Command::IncrementalStatus { input } => cmd_incremental_status(input),
+        Command::Lsp => cmd_lsp(),
+        Command::Fmt { input, check } => cmd_fmt(input, check),
+        Command::Coverage { input, html, output } => {
+            if html {
+                cmd_coverage_html(input, output)
+            } else {
+                cmd_coverage_report(input)
+            }
+        },
         Command::Cache(cmd) => match cmd {
             CacheCommand::Store { path } => (|| -> Result<i32, i32> {
                 let cas_dir = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from(".glyim/cas"));

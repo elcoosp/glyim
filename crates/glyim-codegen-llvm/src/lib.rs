@@ -1,9 +1,14 @@
 mod alloc;
 pub mod codegen;
 mod debug;
+pub mod dispatch;
 mod hash_shims;
 pub mod helpers;
+pub mod live;
+pub mod micro_module;
+pub mod orc;
 pub mod runtime_shims;
+pub mod tiered;
 pub use codegen::Codegen;
 pub use codegen::CodegenBuilder;
 
@@ -38,7 +43,6 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let hir = glyim_hir::lower(&out.ast, &mut interner);
     let ctx = inkwell::context::Context::create();
     let mut cg = CodegenBuilder::new(&ctx, interner, vec![]).build()?;
-    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }
@@ -58,6 +62,41 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
 }
 
 /// Compile source to LLVM IR with debug info enabled.
+/// Compile a list of HIR items (by index) into per-function object code blobs.
+/// Each function is compiled in its own module.
+pub fn compile_items_to_objects(
+    hir: &glyim_hir::Hir,
+    monomorphized_hir: &glyim_hir::Hir,
+    interner: &glyim_interner::Interner,
+    merged_types: &[glyim_hir::types::HirType],
+    item_indices: &[usize],
+) -> Result<Vec<(String, Vec<u8>)>, String> {
+    use glyim_hir::item::HirItem;
+    let ctx = inkwell::context::Context::create();
+    let mut results = Vec::new();
+    for &idx in item_indices {
+        if idx >= hir.items.len() {
+            continue;
+        }
+        let item = &monomorphized_hir.items[idx];
+        let name = match item {
+            HirItem::Fn(f) => interner.resolve(f.name).to_string(),
+            _ => continue,
+        };
+        // Build a mini HIR with just this one item
+        let mini_hir = glyim_hir::Hir { items: vec![item.clone()] };
+        let mut cg = CodegenBuilder::new(&ctx, interner.clone(), merged_types.to_vec())
+            .build()?;
+        cg.generate(&mini_hir)?;
+        let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let obj_path = tmp.path().join("out.o");
+        cg.write_object_file(&obj_path)?;
+        let bytes = std::fs::read(&obj_path).map_err(|e| e.to_string())?;
+        results.push((name, bytes));
+    }
+    Ok(results)
+}
+
 pub fn compile_to_ir_debug(
     source: &str,
     enable_debug: bool,
@@ -75,7 +114,6 @@ pub fn compile_to_ir_debug(
     } else {
         CodegenBuilder::new(&ctx, interner, vec![]).build()?
     };
-    eprintln!("=== HIR BEFORE CODEGEN ===\n{:#?}\n=== END HIR ===", hir);
     cg.generate(&hir)?;
     Ok(cg.ir_string())
 }

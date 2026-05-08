@@ -4,4 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "TODO"
+description = "String interning for Glyim compiler identifiers"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

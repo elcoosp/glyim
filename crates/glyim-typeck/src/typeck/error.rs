@@ -61,7 +61,7 @@ pub enum TypeError {
         span: (usize, usize),
     },
     #[error("unresolved name `{name}`")]
-    UnresolvedName { name: String, span: (usize, usize) },
+    UnresolvedName { name: String, span: (usize, usize), suggestions: Vec<String> },
 }
 
 impl Diagnostic for TypeError {
@@ -118,5 +118,35 @@ impl Diagnostic for TypeError {
             }
         }
         None
+    }
+}
+
+
+impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
+    fn from(err: TypeError) -> glyim_diag::diagnostic::Diagnostic {
+        let span = match &err {
+            TypeError::MismatchedTypes { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::UnknownType { .. } => glyim_diag::Span::new(0, 0),
+            TypeError::UnknownField { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::MissingField { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::ExtraField { .. } => glyim_diag::Span::new(0, 0),
+            TypeError::NonExhaustiveMatch { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::InvalidQuestion { .. } => glyim_diag::Span::new(0, 0),
+            TypeError::ExpectedFunction { .. } => glyim_diag::Span::new(0, 0),
+            TypeError::InvalidReturnType { .. } => glyim_diag::Span::new(0, 0),
+            TypeError::IfConditionMustBeBool { .. } => glyim_diag::Span::new(0, 0),
+            TypeError::AssignToImmutable { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::AssignThroughNonPointer { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::DerefNonPointer { span, .. } => glyim_diag::Span::new(span.0, span.1),
+            TypeError::UnresolvedName { span, .. } => glyim_diag::Span::new(span.0, span.1),
+        };
+        glyim_diag::diagnostic::Diagnostic {
+            severity: glyim_diag::diagnostic::Severity::Error,
+            file: None,
+            span,
+            message: err.to_string(),
+            code: None,
+            suggestion: None,
+        }
     }
 }

@@ -20,13 +20,28 @@ impl TestRunner {
         source: &str,
         display: &dyn DisplayBackend,
     ) -> Vec<TestResult> {
-        let artifact = match Compiler::compile(source) {
+        // If incremental mode, check cache first
+        let mut cached_results: Vec<crate::types::TestResult> = Vec::new();
+        let source_hash = glyim_macro_vfs::ContentHash::of(source.as_bytes());
+        let cache = if self.config.incremental {
+            crate::cache::IncrementalTestCache::new(&std::path::PathBuf::from(".glyim/incremental/test-cache"))
+        } else {
+            None
+        };
+
+        let artifact = match if self.config.coverage {
+            Compiler::compile_with_opts(source, self.config.filter.as_deref(), true)
+        } else {
+            Compiler::compile(source, self.config.filter.as_deref())
+        } {
             Ok(a) => a,
             Err(e) => {
-                let errname = match &e {
-                    crate::compiler::CompileError::NoTests => "no tests".into(),
-                    other => other.to_string(),
-                };
+                if matches!(e, crate::compiler::CompileError::NoTests) {
+                    display.suite_started(0);
+                    display.suite_finished(0, 0, 0);
+                    return vec![];
+                }
+                let errname = e.to_string();
                 display.suite_started(0);
                 display.suite_finished(0, 0, 0);
                 return vec![TestResult {
@@ -37,28 +52,77 @@ impl TestRunner {
             }
         };
 
-        // Filter tests if config has a filter
-        let test_defs: Vec<&crate::types::TestDef> = if let Some(ref filter) = self.config.filter {
-            artifact.test_defs.iter().filter(|t| t.name == *filter).collect()
-        } else {
-            artifact.test_defs.iter().collect()
-        };
+        let num_tests = artifact.test_defs.len();
+        display.suite_started(num_tests);
 
-        display.suite_started(test_defs.len());
+        // If single binary, run each test against that binary
+        if let Some(ref single_bin) = artifact.bin_path {
+            let mut set: JoinSet<Result<TestResult, String>> = JoinSet::new();
+            for test_def in &artifact.test_defs {
+                let name = test_def.name.clone();
+                let bin = single_bin.clone();
+                let timeout = Duration::from_secs(self.config.timeout_secs);
+                let should_panic = test_def.should_panic;
+                display.test_started(&name);
+                set.spawn(async move {
+                    let exec = Executor::new(bin, timeout);
+                    let mut result = exec.run_test(&name).await?;
+                    if should_panic {
+                        match result.outcome {
+                            crate::types::TestOutcome::Failed { .. } => {
+                                result.outcome = crate::types::TestOutcome::Passed;
+                            }
+                            crate::types::TestOutcome::Passed => {
+                                result.outcome = crate::types::TestOutcome::Failed {
+                                    exit_code: 0,
+                                    stderr: String::new(),
+                                };
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(result)
+                });
+            }
+            let mut results = Vec::new();
+            while let Some(r) = set.join_next().await {
+                match r {
+                    Ok(Ok(tr)) => { display.test_finished(&tr); results.push(tr); }
+                    Ok(Err(e)) => {
+                        let tr = TestResult { name: "error".into(), outcome: crate::types::TestOutcome::CompilationError(e), duration: Duration::ZERO };
+                        display.test_finished(&tr);
+                        results.push(tr);
+                    }
+                    Err(je) => {
+                        let tr = TestResult { name: "panic".into(), outcome: crate::types::TestOutcome::CompilationError(format!("{je}")), duration: Duration::ZERO };
+                        display.test_finished(&tr);
+                        results.push(tr);
+                    }
+                }
+            }
+            let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
+            let failed = results.len() - passed;
+            display.suite_finished(passed, failed, results.len());
+            return results;
+        }
 
+        // Multiple binaries: map test name to binary
+        let binary_map: std::collections::HashMap<&str, &std::path::Path> = artifact.per_test_binaries.iter()
+            .map(|(name, path)| (name.as_str(), path.as_ref()))
+            .collect();
         let mut set: JoinSet<Result<TestResult, String>> = JoinSet::new();
-
-        for test_def in &test_defs {
+        for test_def in &artifact.test_defs {
             let name = test_def.name.clone();
-            let bin_path = artifact.bin_path.clone();
-            let timeout = Duration::from_secs(self.config.timeout_secs);
             let should_panic = test_def.should_panic;
+            let timeout = Duration::from_secs(self.config.timeout_secs);
             display.test_started(&name);
-
+            let bin_path = match binary_map.get(name.as_str()) {
+                Some(p) => p.to_path_buf(),
+                None => continue,
+            };
             set.spawn(async move {
                 let exec = Executor::new(bin_path, timeout);
                 let mut result = exec.run_test(&name).await?;
-                // Adjust outcome for should_panic
                 if should_panic {
                     match result.outcome {
                         crate::types::TestOutcome::Failed { .. } => {
@@ -78,42 +142,60 @@ impl TestRunner {
         }
 
         let mut results = Vec::new();
-
-        while let Some(result) = set.join_next().await {
-            match result {
-                Ok(Ok(test_result)) => {
-                    display.test_finished(&test_result);
-                    results.push(test_result);
-                }
+        while let Some(r) = set.join_next().await {
+            match r {
+                Ok(Ok(tr)) => { display.test_finished(&tr); results.push(tr); }
                 Ok(Err(e)) => {
-                    let tr = TestResult {
-                        name: "error".into(),
-                        outcome: crate::types::TestOutcome::CompilationError(e.to_string()),
-                        duration: Duration::ZERO,
-                    };
+                    let tr = TestResult { name: "error".into(), outcome: crate::types::TestOutcome::CompilationError(e), duration: Duration::ZERO };
                     display.test_finished(&tr);
                     results.push(tr);
                 }
-                Err(join_error) => {
-                    let tr = TestResult {
-                        name: "panic".into(),
-                        outcome: crate::types::TestOutcome::CompilationError(format!(
-                            "task panicked: {}",
-                            join_error
-                        )),
-                        duration: Duration::ZERO,
-                    };
+                Err(je) => {
+                    let tr = TestResult { name: "panic".into(), outcome: crate::types::TestOutcome::CompilationError(format!("{je}")), duration: Duration::ZERO };
                     display.test_finished(&tr);
                     results.push(tr);
                 }
             }
         }
 
-        let passed = results
-            .iter()
-            .filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed))
-            .count();
+        // Store results in cache if incremental mode
+        if let Some(ref c) = cache {
+            for r in &results {
+                c.store_result(r, &source_hash);
+            }
+        }
+
+        let passed = results.iter().filter(|r| matches!(r.outcome, crate::types::TestOutcome::Passed)).count();
         let failed = results.len() - passed;
+        // Coverage: merge per-test dumps if coverage enabled
+        if self.config.coverage {
+            let cov_dir = std::path::Path::new("glyim-cov");
+            let _ = std::fs::create_dir_all(cov_dir);
+            let mut merged_dump = glyim_coverage::data::CoverageDump {
+                files: std::collections::HashMap::new(),
+                counters: std::collections::HashMap::new(),
+                metadata: std::collections::HashMap::new(),
+                version: 1,
+            };
+            for entry in std::fs::read_dir(cov_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap_or_else(|_| std::fs::read_dir(".").unwrap())) {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        if let Ok(data) = std::fs::read_to_string(&path) {
+                            if let Ok(dump) = serde_json::from_str::<glyim_coverage::data::CoverageDump>(&data) {
+                                merged_dump.merge(&dump);
+                            }
+                        }
+                    }
+                }
+            }
+            let merged_path = cov_dir.join("merged.json");
+            if let Ok(json) = serde_json::to_string(&merged_dump) {
+                let _ = std::fs::write(&merged_path, &json);
+                eprintln!("Coverage report: {}", merged_path.display());
+            }
+        }
+
         display.suite_finished(passed, failed, results.len());
         results
     }

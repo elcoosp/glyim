@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::process;
+use glyim_lint::{LintRegistry, lint};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,32 +24,23 @@ fn main() {
     let mut interner = parse_out.interner;
     let hir = glyim_hir::lower(&parse_out.ast, &mut interner);
 
-    // Warn on functions with no parameters that are never called
-    let mut fn_counts: HashMap<glyim_interner::Symbol, usize> = HashMap::new();
-    for item in &hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item
-            && f.params.is_empty()
-        {
-            fn_counts.entry(f.name).or_insert(0);
-        }
-    }
+    let registry = LintRegistry::new();
+    let diagnostics = lint(&hir, &interner, &registry);
 
-    let mut found = 0;
-    for item in &hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item
-            && f.params.is_empty()
-            && !fn_counts.contains_key(&f.name)
-        {
-            eprintln!(
-                "warning: function '{}' has no parameters and may be unused",
-                interner.resolve(f.name)
-            );
-            found += 1;
-        }
-    }
-
-    if found == 0 {
+    if diagnostics.is_empty() {
         println!("No lint warnings found.");
+    } else {
+        for diag in &diagnostics {
+            eprintln!(
+                "{:?}: {} ({:?}): {}",
+                diag.severity,
+                diag.lint_id.0,
+                diag.span,
+                diag.message
+            );
+        }
+        process::exit(1);
     }
+
     process::exit(0);
 }

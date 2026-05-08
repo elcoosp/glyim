@@ -15,3 +15,6 @@ glyim-parse = { path = "../glyim-parse" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
+glyim-syntax = { path = "../glyim-syntax" }
+serde = { version = "1", features = ["derive"] }
+toml = "1.1.2"

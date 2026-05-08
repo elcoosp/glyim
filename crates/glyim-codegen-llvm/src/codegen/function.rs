@@ -8,6 +8,9 @@ use std::collections::HashMap;
 #[tracing::instrument(skip_all)]
 pub(crate) fn declare_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) {
     let name = cg.interner.resolve(f.name);
+    if cg.library_mode && name == "main" {
+        return;
+    }
     if cg.module.get_function(name).is_some() {
         return;
     }
@@ -23,6 +26,9 @@ pub(crate) fn declare_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) {
 pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), String> {
     declare_fn(cg, f);
     let name = cg.interner.resolve(f.name);
+    if cg.library_mode && name == "main" {
+        return Ok(());
+    }
     let is_main = name == "main";
     let fn_value = cg.module.get_function(name).ok_or("declare_fn failed")?;
     if let Some(ref di) = cg.debug_info {
@@ -38,6 +44,22 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     let ret_type = if is_main { cg.i32_type } else { cg.i64_type };
     let entry = cg.context.append_basic_block(fn_value, "entry");
     let ret_bb = cg.context.append_basic_block(fn_value, "ret");
+    // Coverage: instrument function entry if coverage is enabled
+    if cg.coverage_mode != crate::codegen::CoverageMode::Off {
+        if let Some(ref mut instr) = cg.coverage_instrumenter.borrow_mut().as_mut() {
+            let line = crate::debug::DebugInfoGen::byte_offset_to_line(
+                cg.source_str.as_deref().unwrap_or(""),
+                f.span.start,
+            );
+            let counter_index = instr.record_function_entry(0, line);
+            crate::codegen::coverage::instrument_function_entry(
+                &cg.module,
+                fn_value,
+                counter_index,
+                cg.coverage_mode,
+            );
+        }
+    }
     cg.builder.position_at_end(entry);
     let ret_val_ptr = cg
         .builder
@@ -89,6 +111,10 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
     } else {
         ret_val
     };
+    // Emit coverage flush if this is main
+    if is_main {
+        crate::codegen::coverage::emit_coverage_flush_call(cg);
+    }
     cg.builder
         .build_return(Some(&final_val))
         .map_err(|e| e.to_string())?;

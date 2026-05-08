@@ -17,6 +17,12 @@ pub struct LockedPackage {
     pub source: LockSource,
     #[serde(default)]
     pub deps: Vec<String>,
+    #[serde(default)]
+    pub artifact_hash: Option<String>,
+    #[serde(default)]
+    pub interface_hash: Option<String>,
+    #[serde(default)]
+    pub target_triple: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,6 +52,9 @@ pub fn generate_lockfile(
                 is_macro: *is_macro,
                 source: source.clone(),
                 deps,
+                        artifact_hash: None,
+            interface_hash: None,
+            target_triple: None,
             }
         })
         .collect();

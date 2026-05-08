@@ -110,7 +110,7 @@ pub fn resolve_and_write_lockfile(
     for (name, pkg) in &resolution.packages {
         let hash = match path_hashes.get(name) {
             Some(real) => real.clone(),
-            None => format!("sha256:{}", hex::encode([0u8; 32])), // placeholder for registry deps
+            None => format!("sha256:{}", hex::encode([0u8; 32])), // registry deps will get real hashes after fetch
         };
         resolved_map.insert(
             name.clone(),

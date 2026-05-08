@@ -6,8 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 description = "Full CLI integration tests (includes codegen / LLVM linkage)"
 
+# LEAVE THIS COMPLETELY EMPTY
 [dependencies]
-glyim-cli = { path = "../glyim-cli" }
+
+# PUT EVERYTHING HERE
+[dev-dependencies]
 glyim-compiler = { path = "../glyim-compiler" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 glyim-testr = { path = "../glyim-testr" }
@@ -15,10 +18,14 @@ glyim-macro-core = { path = "../glyim-macro-core" }
 glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-parse = { path = "../glyim-parse" }
 glyim-hir = { path = "../glyim-hir" }
+glyim-cli = { path = "../glyim-cli" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
+glyim-orchestrator = { path = "../glyim-orchestrator" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-typeck = { path = "../glyim-typeck" }
+glyim-coverage = { path = "../glyim-coverage" }
+serde_json = "1"
 tempfile = "3"
 wat = "1"
 dirs-next = "2"

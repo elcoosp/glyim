@@ -14,7 +14,12 @@ glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
+glyim-coverage = { path = "../glyim-coverage" }
+serde_json = "1"
 inkwell = { version = "0.9", features = ["llvm22-1-prefer-dynamic"] }
+dashmap = "6"
+crossbeam-channel = "0.5"
+postcard = { version = "1", features = ["alloc"] }
 libc = "0.2"
 llvm-sys = "221"
 

@@ -1725,7 +1725,7 @@ async fn e2e_test_should_panic_passes() {
     let source = std::fs::read_to_string(&input).unwrap();
     let results = glyim_testr::run_tests(&source, &glyim_testr::config::TestConfig::default()).await;
     let passed = results.iter().filter(|r| matches!(r.outcome, glyim_testr::types::TestOutcome::Passed)).count();
-    assert_eq!(passed, 1, "should_panic test should pass");
+        assert_eq!(passed, 1, "should_panic test should pass");
 }
 
 #[tokio::test]
@@ -1734,7 +1734,7 @@ async fn e2e_test_should_panic_fails_on_zero() {
     let source = std::fs::read_to_string(&input).unwrap();
     let results = glyim_testr::run_tests(&source, &glyim_testr::config::TestConfig::default()).await;
     let failed = results.iter().filter(|r| matches!(r.outcome, glyim_testr::types::TestOutcome::Failed { .. })).count();
-    assert_eq!(failed, 1, "should_panic test that returns 0 should fail");
+        assert_eq!(failed, 1, "should_panic test that returns 0 should fail");
 }
 
 #[tokio::test]
@@ -1747,7 +1747,7 @@ async fn e2e_test_filter() {
     };
     let results = glyim_testr::run_tests(&source, &config).await;
     assert_eq!(results.len(), 1);
-    assert!(matches!(results[0].outcome, glyim_testr::types::TestOutcome::Failed { .. }));
+        assert!(matches!(results[0].outcome, glyim_testr::types::TestOutcome::Failed { .. }));
 }
 
 #[tokio::test]
@@ -1759,6 +1759,6 @@ async fn e2e_test_filter_no_match() {
         ..Default::default()
     };
     let results = glyim_testr::run_tests(&source, &config).await;
-    assert!(results.is_empty(), "expected no test to match");
+        assert!(results.is_empty(), "expected no test to match");
 }
 

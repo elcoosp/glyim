@@ -15,6 +15,7 @@ name = "glyim"
 path = "src/main.rs"
 
 [dependencies]
+glyim-profiler = { path = "../glyim-profiler" }
 glyim-lex = { path = "../glyim-lex" }
 wat = "1"
 tracing = { version = "0.1", features = ["attributes"] }
@@ -36,11 +37,16 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-compiler = { path = "../glyim-compiler" }
 glyim-testr = { path = "../glyim-testr" }
+glyim-lsp = { path = "../glyim-lsp" }
+glyim-mutant = { path = "../glyim-mutant" }
 tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-pkg = { path = "../glyim-pkg" }
 glyim-doc = { path = "../glyim-doc" }
+glyim-fmt = { path = "../glyim-fmt" }
+glyim-coverage = { path = "../glyim-coverage" }
+glyim-orchestrator = { path = "../glyim-orchestrator" }
 webbrowser = "1.2"
 inkwell = { version = "0.9", features = ["llvm22-1-prefer-dynamic"] }
 clap = { version = "4", features = ["derive"] }
@@ -53,11 +59,13 @@ dirs-next = "2"
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }
 wat = "1"
-rstest = "0.24"
-trycmd = "0.15"
+rstest = "0.26"
+trycmd = "1.2"
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-compiler = { path = "../glyim-compiler" }
 glyim-testr = { path = "../glyim-testr" }
+glyim-lsp = { path = "../glyim-lsp" }
+glyim-mutant = { path = "../glyim-mutant" }
 tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }

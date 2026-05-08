@@ -11,12 +11,14 @@ pub struct TestConfig {
     pub include_ignored: bool,
     pub nocapture: bool,
     pub watch: bool,
+    pub incremental: bool,
     pub priority_mode: PriorityMode,
     pub history_db_path: String,
     pub debounce_ms: u64,
     pub num_jobs: usize,
     pub timeout_secs: u64,
     pub optimize_check: bool,
+    pub coverage: bool,
 }
 
 impl Default for TestConfig {
@@ -26,6 +28,7 @@ impl Default for TestConfig {
             include_ignored: false,
             nocapture: false,
             watch: false,
+            incremental: false,
             priority_mode: PriorityMode::RecentFailuresFirst,
             history_db_path: "target/glyim/test-history.db".into(),
             debounce_ms: 100,
@@ -34,6 +37,7 @@ impl Default for TestConfig {
                 .unwrap_or(4),
             timeout_secs: 30,
             optimize_check: false,
+            coverage: false,
         }
     }
 }

@@ -288,9 +288,10 @@ impl<'a> MonoContext<'a> {
                 let concrete_inner = self.concretize_type(inner);
                 if !self.has_unresolved_type_param(&concrete_inner) {
                     let option_sym = self.interner.intern("Option");
-                    let key = (option_sym, vec![concrete_inner.clone()]);
+                    let key = (option_sym, std::slice::from_ref(&concrete_inner).to_vec());
                     if self.enum_specs.contains_key(&key) {
-                        let mangled = self.mangle_name(option_sym, &[concrete_inner.clone()]);
+                        let mangled =
+                            self.mangle_name(option_sym, std::slice::from_ref(&concrete_inner));
                         return HirType::Named(mangled);
                     }
                 }
@@ -350,15 +351,9 @@ impl<'a> MonoContext<'a> {
                 id, callee, args, ..
             } => {
                 let callee_name = self.interner.resolve(*callee).to_string();
-                eprintln!(
-                    "[mono scan DEBUG] Call callee={} id={}",
-                    callee_name,
-                    id.as_usize()
-                );
                 // For mangled callees (e.g., Vec_get__Entry_i64_i64), extract the base
                 // function name and specialize it with the receiver's concrete type args.
                 if callee_name.contains("__") {
-                    eprintln!("[mono scan DEBUG] mangled callee {}", callee_name);
                     if let Some(base_pos) = callee_name.find("__") {
                         let base_name = &callee_name[..base_pos];
                         // The first arg is the receiver. Get its type.
@@ -368,10 +363,6 @@ impl<'a> MonoContext<'a> {
                                 let concrete = self.substitute_type_args(&type_args, current_sub);
                                 if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
                                     let base_sym = self.interner.intern(base_name);
-                                    eprintln!(
-                                        "[mono scan DEBUG] specializing base fn={} with {:?}",
-                                        base_name, concrete
-                                    );
                                     self.call_type_args_overrides.insert(*id, concrete.clone());
                                     self.queue_fn_specialization(base_sym, concrete);
                                 }
@@ -387,11 +378,6 @@ impl<'a> MonoContext<'a> {
                 if let Some(ref fn_def) = fn_def_opt
                     && !fn_def.type_params.is_empty()
                 {
-                    eprintln!(
-                        "[mono scan] Call callee={} found fn_def with {} type_params",
-                        callee_name,
-                        fn_def.type_params.len()
-                    );
                     if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
                         let substituted = self.substitute_type_args(type_args, current_sub);
                         let concrete_args = self.concretize_type_args(&substituted);
@@ -450,10 +436,6 @@ impl<'a> MonoContext<'a> {
                         {
                             let concrete: Vec<HirType> =
                                 fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                            eprintln!(
-                                "[mono scan] SAFE FALLBACK (inner): queueing {} with [Int]",
-                                callee_name
-                            );
                             self.call_type_args_overrides
                                 .insert(expr.get_id(), concrete.clone());
                             self.queue_fn_specialization(*callee, concrete);
@@ -469,10 +451,6 @@ impl<'a> MonoContext<'a> {
                 {
                     let concrete: Vec<HirType> =
                         fn_def.type_params.iter().map(|_| HirType::Int).collect();
-                    eprintln!(
-                        "[mono scan] SAFE FALLBACK (outer): queueing {} with [Int]",
-                        callee_name
-                    );
                     self.call_type_args_overrides
                         .insert(expr.get_id(), concrete.clone());
                     self.queue_fn_specialization(*callee, concrete);
@@ -859,7 +837,6 @@ impl<'a> MonoContext<'a> {
     /// Enqueue a concrete type for specialization if it contains generic components.
     /// Recursively processes nested Generic types.
     pub(crate) fn enqueue_type_if_generic(&mut self, ty: &HirType) {
-        eprintln!("[enqueue] ty={:?}", ty);
         match ty {
             HirType::Generic(sym, args) => {
                 let concrete_args = self.concretize_type_args(args);
@@ -882,7 +859,7 @@ impl<'a> MonoContext<'a> {
                 let concrete_inner = self.concretize_type(inner);
                 if !self.has_unresolved_type_param(&concrete_inner) {
                     let option_sym = self.interner.intern("Option");
-                    let key = (option_sym, vec![concrete_inner.clone()]);
+                    let key = (option_sym, std::slice::from_ref(&concrete_inner).to_vec());
                     if !self.type_queued.contains(&key) {
                         self.type_queued.insert(key.clone());
                         self.type_work_queue.push(key);
@@ -916,7 +893,11 @@ impl<'a> MonoContext<'a> {
             | HirType::Error
             | HirType::Opaque(_)
             | HirType::RawPtr(_)
-            | HirType::Func(_, _) => if let HirType::RawPtr(inner) = ty { self.enqueue_type_if_generic(inner) },
+            | HirType::Func(_, _) => {
+                if let HirType::RawPtr(inner) = ty {
+                    self.enqueue_type_if_generic(inner)
+                }
+            }
             _ => {}
         }
     }
@@ -1048,16 +1029,7 @@ impl<'a> MonoContext<'a> {
 
     /// Process the type specialization queue recursively.
     pub(crate) fn process_type_specializations(&mut self) {
-        eprintln!(
-            "[process_type_spec] queue length: {}",
-            self.type_work_queue.len()
-        );
         while let Some((name, args)) = self.type_work_queue.pop() {
-            eprintln!(
-                "[process_type_spec] processing {:?} with args {:?}",
-                self.interner.resolve(name),
-                args
-            );
             let key = (name, args.clone());
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;
@@ -1071,11 +1043,6 @@ impl<'a> MonoContext<'a> {
                 self.struct_specs.insert(key, specialized);
             } else if let Some(enum_def) = self.find_enum(name) {
                 let specialized = self.specialize_enum(&enum_def, &args);
-                eprintln!(
-                    "[process_type_spec] specialized enum {} with args {:?}",
-                    self.interner.resolve(name),
-                    args
-                );
                 // Recursively enqueue all types found in the specialized enum's fields
                 for variant in &specialized.variants {
                     for field in &variant.fields {
@@ -1083,15 +1050,10 @@ impl<'a> MonoContext<'a> {
                     }
                 }
                 self.enum_specs.insert(key, specialized);
-                eprintln!(
-                    "[process_type_spec] inserted into enum_specs, count={}",
-                    self.enum_specs.len()
-                );
             }
         }
         // Reprocess newly enqueued types until queue is empty
         while let Some((name, args)) = self.type_work_queue.pop() {
-            
             let key = (name, args.clone());
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;

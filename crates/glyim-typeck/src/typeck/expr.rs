@@ -55,9 +55,12 @@ impl TypeChecker {
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::Ident { name, span, .. } => self.lookup_binding(name).unwrap_or_else(|| {
+                let resolved_name = self.interner.resolve(*name).to_string();
+                let suggestions = glyim_diag::suggest::suggest_similar(&resolved_name, &self.interner, 3);
                 self.errors.push(TypeError::UnresolvedName {
-                    name: self.interner.resolve(*name).to_string(),
+                    name: resolved_name,
                     span: (span.start, span.end),
+                    suggestions,
                 });
                 HirType::Error
             }),
@@ -334,13 +337,7 @@ impl TypeChecker {
         let field_count = fields.len();
         let field_value_types: Vec<HirType> = fields
             .iter()
-            .filter_map(|(_, val)| {
-                let t = self.check_expr(val).unwrap_or(HirType::Error);
-                if t == HirType::Error {
-                    return Some(HirType::Error);
-                }
-                Some(t)
-            })
+            .map(|(_, val)| self.check_expr(val).unwrap_or(HirType::Error))
             .collect();
         if field_value_types.iter().any(|t| t == &HirType::Error) {
             return HirType::Error;

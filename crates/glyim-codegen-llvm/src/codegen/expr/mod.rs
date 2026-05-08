@@ -76,7 +76,7 @@ pub(crate) fn codegen_expr<'ctx>(
             } else {
                 let l = codegen_expr(cg, lhs, fctx)?;
                 let r = codegen_expr(cg, rhs, fctx)?;
-                super::ops::codegen_binop(cg, op.clone(), l, r)
+                super::ops::codegen_binop(cg, *op, l, r)
             }
         }
         HirExpr::Unary { op, operand, .. } => {

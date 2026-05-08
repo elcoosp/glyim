@@ -1,3 +1,4 @@
+mod coverage;
 pub(crate) mod ctx;
 mod expr;
 mod function;
@@ -9,7 +10,7 @@ mod types;
 
 use crate::debug::DebugInfoGen;
 use glyim_diag::Span;
-use glyim_hir::{Hir, HirType};
+use glyim_hir::{Hir, HirItem, HirType};
 use glyim_interner::{Interner, Symbol};
 use inkwell::context::Context;
 use inkwell::debug_info::{DISubprogram, DWARFEmissionKind};
@@ -29,13 +30,29 @@ pub enum DebugMode {
     Full,
 }
 
+/// Controls the level of coverage instrumentation.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum CoverageMode {
+    /// No instrumentation (default).
+    #[default]
+    Off,
+    /// Instrument function entries only.
+    Function,
+    /// Instrument function entries and branch conditions.
+    Branch,
+    /// Instrument function entries, branch conditions, and expression evaluations.
+    Full,
+}
+
 pub struct CodegenBuilder<'ctx> {
+    coverage_mode: CoverageMode,
     context: &'ctx Context,
     interner: Interner,
     expr_types: Vec<HirType>,
     debug_mode: DebugMode,
     source: Option<String>,
     file_name: Option<String>,
+    library_mode: bool,
 }
 
 impl<'ctx> CodegenBuilder<'ctx> {
@@ -45,6 +62,8 @@ impl<'ctx> CodegenBuilder<'ctx> {
             interner,
             expr_types,
             debug_mode: DebugMode::None,
+            coverage_mode: CoverageMode::Off,
+            library_mode: false,
             source: None,
             file_name: None,
         }
@@ -69,6 +88,7 @@ impl<'ctx> CodegenBuilder<'ctx> {
         };
 
         Ok(Codegen {
+            coverage_mode: self.coverage_mode,
             context: self.context,
             module,
             builder,
@@ -91,48 +111,73 @@ impl<'ctx> CodegenBuilder<'ctx> {
             current_subprogram: None,
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
+            effect_analysis: None,
+            coverage_instrumenter: std::cell::RefCell::new(
+                if self.coverage_mode != CoverageMode::Off {
+                    Some(coverage::CoverageInstrumenter::new())
+                } else {
+                    None
+                },
+            ),
             jit_mode: false,
+            library_mode: self.library_mode,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
         })
     }
+
+    /// Set the coverage instrumentation mode.
+    pub fn with_coverage_mode(mut self, mode: CoverageMode) -> Self {
+        self.coverage_mode = mode;
+        self
+    }
+
+    pub fn with_library_mode(mut self) -> Self {
+        self.library_mode = true;
+        self
+    }
 }
 
 pub struct Codegen<'ctx> {
+    coverage_mode: CoverageMode,
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: inkwell::builder::Builder<'ctx>,
     pub(crate) i64_type: IntType<'ctx>,
     pub(crate) i32_type: IntType<'ctx>,
     #[allow(dead_code)]
-    pub(crate) f64_type: inkwell::types::FloatType<'ctx>,
-    pub(crate) interner: Interner,
-    pub(crate) string_counter: RefCell<u32>,
-    pub(crate) expr_types: Vec<HirType>,
+    f64_type: inkwell::types::FloatType<'ctx>,
+    interner: Interner,
+    string_counter: RefCell<u32>,
+    expr_types: Vec<HirType>,
     #[allow(dead_code)]
     pub(crate) mono_cache:
         RefCell<HashMap<(Symbol, Vec<HirType>), inkwell::values::FunctionValue<'ctx>>>,
-    pub(crate) struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
-    pub(crate) struct_field_indices: RefCell<HashMap<(Symbol, Symbol), usize>>,
+    struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
+    struct_field_indices: RefCell<HashMap<(Symbol, Symbol), usize>>,
     pub(crate) enum_types:
         RefCell<HashMap<Symbol, (IntType<'ctx>, inkwell::types::ArrayType<'ctx>)>>,
-    pub(crate) enum_struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
-    pub(crate) enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
+    enum_struct_types: RefCell<HashMap<Symbol, inkwell::types::StructType<'ctx>>>,
+    enum_variant_tags: RefCell<HashMap<(Symbol, Symbol), u32>>,
     #[allow(dead_code)]
-    pub(crate) option_sym: Symbol,
+    option_sym: Symbol,
     #[allow(dead_code)]
-    pub(crate) result_sym: Symbol,
+    result_sym: Symbol,
     debug_info: Option<DebugInfoGen<'ctx>>,
     source_str: Option<String>,
     current_subprogram: Option<DISubprogram<'ctx>>,
-    pub(crate) macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
-    pub(crate) no_std: bool,
+    pub coverage_instrumenter: std::cell::RefCell<Option<coverage::CoverageInstrumenter>>,
+    macro_fn_names: std::cell::RefCell<std::collections::HashSet<Symbol>>,
+    no_std: bool,
     pub(crate) extern_methods:
         std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
-    pub(crate) errors: RefCell<Vec<String>>,
-    pub(crate) jit_mode: bool,
-    pub(crate) target_triple: Option<String>,
+    errors: RefCell<Vec<String>>,
+    jit_mode: bool,
+    library_mode: bool,
+    /// Effect analysis results (Phase 3) – drives LLVM attribute annotation.
+    effect_analysis: Option<glyim_hir::effects::EffectSet>,
+    target_triple: Option<String>,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -151,6 +196,7 @@ impl<'ctx> Codegen<'ctx> {
         let result_sym = interner.intern("Result");
         let debug_info = DebugInfoGen::new(&module, file_name, DWARFEmissionKind::Full).ok();
         Ok(Self {
+            coverage_mode: CoverageMode::Off,
             context,
             module,
             builder,
@@ -171,9 +217,12 @@ impl<'ctx> Codegen<'ctx> {
             debug_info,
             source_str: Some(source_str),
             current_subprogram: None,
+            coverage_instrumenter: std::cell::RefCell::new(None),
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
+            effect_analysis: None,
             jit_mode: false,
+            library_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
@@ -194,6 +243,7 @@ impl<'ctx> Codegen<'ctx> {
         let debug_info =
             DebugInfoGen::new(&module, file_name, DWARFEmissionKind::LineTablesOnly).ok();
         Ok(Self {
+            coverage_mode: CoverageMode::Off,
             context,
             module,
             builder,
@@ -214,9 +264,12 @@ impl<'ctx> Codegen<'ctx> {
             debug_info,
             source_str: Some(source_str),
             current_subprogram: None,
+            coverage_instrumenter: std::cell::RefCell::new(None),
             no_std: false,
             extern_methods: std::collections::HashMap::new(),
+            effect_analysis: None,
             jit_mode: false,
+            library_mode: false,
             target_triple: None,
             macro_fn_names: RefCell::new(std::collections::HashSet::new()),
             errors: RefCell::new(Vec::new()),
@@ -234,7 +287,6 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    /// Report a non-fatal error during codegen.
     /// Report a non-fatal error during codegen.
     pub fn report_error(&self, msg: String) {
         self.errors.borrow_mut().push(msg);
@@ -323,9 +375,15 @@ impl<'ctx> Codegen<'ctx> {
                 _ => {}
             }
         }
-        crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
-        crate::alloc::emit_alloc_shims(&self.module, self.no_std);
-        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        if !self.library_mode {
+            crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
+        }
+        if !self.library_mode {
+            crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        }
+        if !self.library_mode {
+            crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        }
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -424,6 +482,17 @@ impl<'ctx> Codegen<'ctx> {
                 f = func.get_next_function();
             }
         }
+        // Phase 6B: Coverage instrumentation (globals)
+        let num_fns = hir
+            .items
+            .iter()
+            .filter(|i| matches!(i, glyim_hir::HirItem::Fn(_) | glyim_hir::HirItem::Impl(_)))
+            .count();
+        if self.coverage_mode != CoverageMode::Off && num_fns > 0 {
+            // Allocate extra space for branch/probe counters (up to 50 per function)
+            coverage::emit_coverage_globals(&self.module, num_fns * 50, self.coverage_mode);
+        }
+
         // Pass 3 — emit bodies (all forward declarations already present)
         for item in &hir.items {
             match item {
@@ -454,7 +523,10 @@ impl<'ctx> Codegen<'ctx> {
             return Err(errors.join("\n"));
         }
 
-        if self.module.get_function("main").is_none() {
+        if self.library_mode {
+            // In library mode, no main required
+            Ok(())
+        } else if self.module.get_function("main").is_none() {
             Err("no 'main' function".into())
         } else {
             if let Err(msg) = self.module.verify() {
@@ -565,15 +637,88 @@ impl<'ctx> Codegen<'ctx> {
         Ok(())
     }
 
+    /// Generate code for only a subset of HIR items, identified by their indices.
+    /// Useful for incremental per‑function compilation.
+        pub fn generate_for_items(
+        &mut self,
+        hir: &Hir,
+        item_indices: &[usize],
+    ) -> Result<(), String> {
+        // Pass 1: register all types (required for struct/enum references)
+        for item in &hir.items {
+            match item {
+                HirItem::Struct(s) => types::codegen_struct_def(self, s),
+                HirItem::Enum(e) => types::codegen_enum_def(self, e),
+                HirItem::Extern(ext) => {
+                    for f in &ext.functions {
+                        let name = self.interner.resolve(f.name);
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = f.params.iter().map(|pt| match pt {
+                            HirType::Int => self.i64_type.into(),
+                            HirType::Bool => self.i32_type.into(),
+                            HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            _ => self.i64_type.into(),
+                        }).collect();
+                        let ret_type = match &f.ret {
+                            HirType::Int => self.i64_type.into(),
+                            HirType::Bool => self.i32_type.into(),
+                            HirType::RawPtr(_) => self.context.ptr_type(inkwell::AddressSpace::from(0u16)).into(),
+                            _ => self.i64_type.into(),
+                        };
+                        if self.module.get_function(name).is_none() {
+                            let _fn_val = self.module.add_function(name, match ret_type {
+                                inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                                _ => self.i64_type.fn_type(&param_types, false),
+                            }, None);
+                        }
+                        self.extern_methods.insert(f.name, f.name);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Pass 2: forward-declare selected functions
+        for &idx in item_indices {
+            if let HirItem::Fn(f) = &hir.items[idx] {
+                function::declare_fn(self, f);
+            }
+        }
+
+        // Pass 3: emit bodies for selected functions
+        for &idx in item_indices {
+            match &hir.items[idx] {
+                HirItem::Fn(f) => {
+                    function::codegen_fn(self, f).map_err(|e| { self.report_error(e.clone()); e })?;
+                }
+                HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        function::codegen_fn(self, m).map_err(|e| { self.report_error(e.clone()); e })?;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(ref di) = self.debug_info { di.finalize(); }
+        let errors = self.errors.borrow().clone();
+        if !errors.is_empty() { Err(errors.join("\n")) } else { Ok(()) }
+    }
+
     pub fn generate_for_tests(
         &mut self,
         hir: &Hir,
         test_names: &[String],
         should_panic: &std::collections::HashSet<String>,
     ) -> Result<(), String> {
-        crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
-        crate::alloc::emit_alloc_shims(&self.module, self.no_std);
-        crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        if !self.library_mode {
+            crate::runtime_shims::emit_runtime_shims(self.context, &self.module, self.jit_mode);
+        }
+        if !self.library_mode {
+            crate::alloc::emit_alloc_shims(&self.module, self.no_std);
+        }
+        if !self.library_mode {
+            crate::hash_shims::emit_hash_shims(self.context, &self.module, self.no_std);
+        }
 
         // Pass 1 — register all types and extern declarations
         for item in &hir.items {
@@ -801,6 +946,23 @@ impl<'ctx> Codegen<'ctx> {
 
     pub fn with_jit_mode(mut self) -> Self {
         self.jit_mode = true;
+        self
+    }
+    /// Compile in library mode: no runtime shims and no main requirement.
+    /// Set the coverage instrumentation mode.
+    pub fn with_coverage_mode(mut self, mode: CoverageMode) -> Self {
+        self.coverage_mode = mode;
+        self
+    }
+
+    pub fn with_library_mode(mut self) -> Self {
+        self.library_mode = true;
+        self
+    }
+
+    /// Attach effect analysis results for LLVM attribute annotation.
+    pub fn with_effects(mut self, effects: glyim_hir::effects::EffectSet) -> Self {
+        self.effect_analysis = Some(effects);
         self
     }
 

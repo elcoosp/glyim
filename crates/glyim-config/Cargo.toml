@@ -1,0 +1,11 @@
+[package]
+name = "glyim-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Unified compiler configuration for Glyim"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+glyim-hir = { path = "../glyim-hir" }

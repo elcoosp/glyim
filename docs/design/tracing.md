@@ -372,7 +372,7 @@ for change in diff.iter_all_changes() {
 
 **Crate details:**
 ```
-similar = "2"
+similar = "3"
 ```
 
 ---
