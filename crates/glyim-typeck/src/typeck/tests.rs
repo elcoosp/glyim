@@ -813,14 +813,14 @@ fn bind_match_result_err_pattern() {
 fn unify_int_with_type_param() {
     let mut i = Interner::new();
     let t = i.intern("T");
-    let result = unify::unify(&HirType::Int, &HirType::Named(t), &[t]);
+    let result = crate::typeck::unify::unify(&HirType::Int, &HirType::Named(t), &[t]);
     assert!(result.is_ok());
     assert_eq!(result.unwrap()[&t], HirType::Int);
 }
 
 #[test]
 fn unify_int_with_bool_fails() {
-    let result = unify::unify(&HirType::Int, &HirType::Bool, &[]);
+    let result = crate::typeck::unify::unify(&HirType::Int, &HirType::Bool, &[]);
     assert!(result.is_err());
 }
 
@@ -828,7 +828,7 @@ fn unify_int_with_bool_fails() {
 fn unify_rawptr_success() {
     let mut i = Interner::new();
     let t = i.intern("T");
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::RawPtr(Box::new(HirType::Int)),
         &HirType::RawPtr(Box::new(HirType::Named(t))),
         &[t],
@@ -841,7 +841,7 @@ fn unify_rawptr_success() {
 fn unify_option_success() {
     let mut i = Interner::new();
     let t = i.intern("T");
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::Option(Box::new(HirType::Int)),
         &HirType::Option(Box::new(HirType::Named(t))),
         &[t],
@@ -855,7 +855,7 @@ fn unify_result_success() {
     let mut i = Interner::new();
     let t = i.intern("T");
     let e = i.intern("E");
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str)),
         &HirType::Result(Box::new(HirType::Named(t)), Box::new(HirType::Named(e))),
         &[t, e],
@@ -868,7 +868,7 @@ fn unify_result_success() {
 
 #[test]
 fn unify_tuple_mismatched_length_fails() {
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::Tuple(vec![HirType::Int]),
         &HirType::Tuple(vec![HirType::Int, HirType::Bool]),
         &[],
@@ -878,7 +878,7 @@ fn unify_tuple_mismatched_length_fails() {
 
 #[test]
 fn unify_recursive_option_mismatch() {
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::Option(Box::new(HirType::Int)),
         &HirType::Option(Box::new(HirType::Bool)),
         &[],
@@ -888,7 +888,7 @@ fn unify_recursive_option_mismatch() {
 
 #[test]
 fn unify_recursive_result_mismatch() {
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Str)),
         &HirType::Result(Box::new(HirType::Int), Box::new(HirType::Bool)),
         &[],
@@ -1240,7 +1240,7 @@ fn unify_different_named_types_fails() {
     let mut i = Interner::new();
     let s1 = i.intern("Point");
     let s2 = i.intern("Color");
-    let result = unify::unify(&HirType::Named(s1), &HirType::Named(s2), &[]);
+    let result = crate::typeck::unify::unify(&HirType::Named(s1), &HirType::Named(s2), &[]);
     assert!(result.is_err());
 }
 
@@ -1248,7 +1248,7 @@ fn unify_different_named_types_fails() {
 fn unify_generic_same_name_different_args_fails() {
     let mut i = Interner::new();
     let vec_sym = i.intern("Vec");
-    let result = unify::unify(
+    let result = crate::typeck::unify::unify(
         &HirType::Generic(vec_sym, vec![HirType::Int, HirType::Bool]),
         &HirType::Generic(vec_sym, vec![HirType::Int]),
         &[],
