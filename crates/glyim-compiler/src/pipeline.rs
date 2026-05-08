@@ -451,6 +451,10 @@ pub fn build_incremental(
     target: Option<&str>,
 ) -> Result<(PathBuf, crate::queries::IncrementalReport), PipelineError> {
     use crate::queries::QueryPipeline;
+    use glyim_merkle::{MerkleNode, MerkleNodeData, MerkleNodeHeader, MerkleRoot, compute_root_hash};
+    use glyim_macro_vfs::ContentHash;
+    use glyim_query::query_key::QueryKey;
+
     let (source, _) = load_source_with_prelude(input)?;
     let cache_dir = input
         .parent()
@@ -467,8 +471,88 @@ pub fn build_incremental(
         },
     );
 
+    // 1. Full compilation to get HIR + type info and per‑function fingerprints
     let compiled = qp.compile(&source, input)?;
-    let report = qp.report().clone();
+    let fps: Vec<(String, glyim_query::Fingerprint)> = crate::queries::item_fingerprints(
+        &compiled.hir,
+        &compiled.interner,
+    );
+
+    // 2. Compute Merkle root from fingerprints
+    let merkle_items: Vec<(String, ContentHash)> = fps.iter().map(|(name, fp)| {
+        (name.clone(), ContentHash::from_bytes(*fp.as_bytes()))
+    }).collect();
+    let merkle_root = compute_root_hash(&merkle_items);
+
+    // 3. Check for cached full object in Merkle store
+    let mut obj_path_opt = None;
+    if let Some(ref merkle) = qp.merkle_store {
+        if let Some(hash) = merkle.resolve_name(&format!("full-obj:{}", merkle_root.to_hex())) {
+            if let Some(node) = merkle.get(&hash) {
+                if let MerkleNodeData::ObjectCode { bytes, .. } = &node.data {
+                    let tmp_dir = tempfile::tempdir()?;
+                    let cached_obj = tmp_dir.path().join("cached.o");
+                    fs::write(&cached_obj, bytes)?;
+                    obj_path_opt = Some(cached_obj);
+                    // Keep tmp_dir alive
+                    Box::leak(Box::new(tmp_dir)); // leak to maintain lifetime (test binary only)
+                }
+            }
+        }
+    }
+
+    // 4. If no cached object, perform full codegen
+    let obj_path = match obj_path_opt {
+        Some(p) => p,
+        None => {
+            let tmp_dir = tempfile::tempdir()?;
+            let obj_p = tmp_dir.path().join("output.o");
+            let context = inkwell::context::Context::create();
+            let cov_mode = CoverageMode::Off;
+            let mut codegen = CodegenBuilder::new(
+                &context,
+                compiled.interner.clone(),
+                compiled.merged_types.clone(),
+            )
+            .with_coverage_mode(cov_mode)
+            .build()?;
+            if let Some(t) = target {
+                crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
+                codegen = codegen.with_target(t);
+            }
+            if compiled.is_no_std {
+                codegen = codegen.with_no_std();
+            }
+            codegen
+                .generate(&compiled.mono_hir)
+                .map_err(PipelineError::Codegen)?;
+            codegen
+                .write_object_file_with_opt(&obj_p, mode.opt_level())
+                .map_err(PipelineError::Codegen)?;
+
+            // Store full object in Merkle cache
+            if let Some(ref merkle) = qp.merkle_store {
+                let obj_bytes = fs::read(&obj_p)?;
+                let node = MerkleNode {
+                    hash: ContentHash::ZERO,
+                    children: vec![],
+                    data: MerkleNodeData::ObjectCode {
+                        symbol_name: "full-module".to_string(),
+                        bytes: obj_bytes,
+                    },
+                    header: MerkleNodeHeader {
+                        data_type_tag: 0x04,
+                        child_count: 0,
+                    },
+                };
+                let hash = merkle.put(node);
+                merkle.register_name(&format!("full-obj:{}", merkle_root.to_hex()), hash);
+                merkle.flush();
+            }
+            Box::leak(Box::new(tmp_dir)); // keep alive
+            obj_p
+        }
+    };
 
     let output_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         let stem = input
@@ -478,35 +562,12 @@ pub fn build_incremental(
             .to_string();
         PathBuf::from(stem)
     });
-    let tmp_dir = tempfile::tempdir()?;
-    let obj_path = tmp_dir.path().join("output.o");
-    let context = inkwell::context::Context::create();
-    let cov_mode = CoverageMode::Off;
-    let mut codegen = CodegenBuilder::new(
-        &context,
-        compiled.interner.clone(),
-        compiled.merged_types.clone(),
-    )
-    .with_coverage_mode(cov_mode)
-    .build()?;
-    if let Some(t) = target {
-        crate::cross::validate_target(t).map_err(PipelineError::Codegen)?;
-        codegen = codegen.with_target(t);
-    }
-    if compiled.is_no_std {
-        codegen = codegen.with_no_std();
-    }
-    codegen
-        .generate(&compiled.mono_hir)
-        .map_err(PipelineError::Codegen)?;
-    codegen
-        .write_object_file_with_opt(&obj_path, mode.opt_level())
-        .map_err(PipelineError::Codegen)?;
+
     link_object(&obj_path, &output_path, mode == BuildMode::Release)?;
+
+    let report = qp.report().clone();
     Ok((output_path, report))
 }
-
-/// Compute a semantic hash of source code (uses full HIR normalization).
 pub fn semantic_source_hash(source: &str) -> glyim_macro_vfs::ContentHash {
     semantic_hash_of_source(source)
 }
