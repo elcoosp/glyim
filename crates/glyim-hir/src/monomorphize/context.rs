@@ -1,7 +1,6 @@
 use crate::monomorphize::mangle_table::MangleTable;
 // crates/glyim-hir/src/monomorphize/context.rs
 use super::*;
-use crate::HirPattern;
 use crate::item::{EnumDef, HirItem};
 use crate::node::MatchArm;
 use crate::node::{HirExpr, HirFn, HirStmt};
@@ -31,6 +30,7 @@ impl<'a> MonoContext<'a> {
             enum_specs: HashMap::new(),
             type_work_queue: Vec::new(),
             type_queued: HashSet::new(),
+            method_map: HashMap::new(),
         }
     }
 
@@ -46,33 +46,9 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
 
-        // First check if there's already a specialization with no type params
-        // (e.g., Vec_new__i64 for Vec_new called with [Int])
+        // Handle mangled specializations (e.g., Vec_new__i64)
         if let Some(pos) = name_str.find("__") {
             let base_name = self.interner.intern(&name_str[..pos]);
-            // Check if the fully-specialized function exists in any impl
-            let base_str = self.interner.resolve(base_name).to_string();
-            if let Some(us_pos) = base_str.rfind('_') {
-                let type_name = &base_str[..us_pos];
-                let method_name = &base_str[us_pos + 1..];
-                if type_name.starts_with(|c: char| c.is_uppercase()) {
-                    let type_sym = self.interner.intern(type_name);
-                    let method_sym = self.interner.intern(method_name);
-                    for item in &self.hir.items {
-                        if let HirItem::Impl(imp) = item
-                            && imp.target_name == type_sym
-                        {
-                            for m in &imp.methods {
-                                if m.name == method_sym && m.type_params.is_empty() {
-                                    // The method is already fully specialized
-                                    return Some(m.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Fall back to the generic version
             return self.find_fn(base_name);
         }
 
@@ -85,7 +61,7 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        // Search impl methods with exact name match
+        // Search impl methods by exact name match (mangled name, like Vec_new)
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
@@ -96,43 +72,15 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        // Search impl methods by demangled name (e.g., Vec_new -> Vec::new)
-        // The HIR stores impl methods with their original short names (new, inc_len),
-        // but call sites use mangled names (Vec_new, Vec_inc_len).
-        for item in &self.hir.items {
-            if let HirItem::Impl(imp) = item {
-                let type_name = self.interner.resolve(imp.target_name);
-                for m in &imp.methods {
-                    let method_name = self.interner.resolve(m.name);
-                    let mangled_form = format!("{}_{}", type_name, method_name);
-                    if mangled_form == name_str {
-                        return Some(m.clone());
-                    }
-                }
-            }
-        }
-
-        // Try to parse as impl method name (e.g., "Vec_new", "HashMap_hash")
-        // Use rfind to get the last underscore
+        // Try to parse as impl method name (e.g., "Vec_new") and look up in method_map
         if let Some(underscore_pos) = name_str.rfind('_') {
             let potential_type_name = &name_str[..underscore_pos];
             let potential_method_name = &name_str[underscore_pos + 1..];
 
-            // Try looking up in impl methods for the type
-            if potential_type_name.starts_with(|c: char| c.is_uppercase()) {
-                let type_sym = self.interner.intern(potential_type_name);
+            if let Some(type_sym) = self.interner.resolve_symbol(potential_type_name) {
                 let method_sym = self.interner.intern(potential_method_name);
-
-                for item in &self.hir.items {
-                    if let HirItem::Impl(imp) = item
-                        && imp.target_name == type_sym
-                    {
-                        for m in &imp.methods {
-                            if m.name == method_sym {
-                                return Some(m.clone());
-                            }
-                        }
-                    }
+                if let Some(method) = self.method_map.get(&(type_sym, method_sym)) {
+                    return Some(method.clone());
                 }
             }
         }
@@ -168,247 +116,6 @@ impl<'a> MonoContext<'a> {
     /// Check if a type contains any unresolved type parameters (single uppercase letters)
     /// Check whether the body of a function depends on the given type parameters
     /// in a size-critical way (e.g., SizeOf, field access with unknown layout).
-    pub(crate) fn body_depends_on_type_params(
-        &self,
-        body: &crate::node::HirExpr,
-        type_params: &[glyim_interner::Symbol],
-    ) -> bool {
-        use crate::node::{HirExpr, HirStmt};
-        fn expr_depends(
-            expr: &HirExpr,
-            type_params: &[glyim_interner::Symbol],
-            interner: &glyim_interner::Interner,
-        ) -> bool {
-            match expr {
-                HirExpr::SizeOf { target_type, .. } => {
-                    MonoContext::type_refers_to_params(target_type, type_params, interner)
-                }
-                HirExpr::As { target_type, .. } => {
-                    MonoContext::type_refers_to_params(target_type, type_params, interner)
-                }
-                HirExpr::Block { stmts, .. } => {
-                    stmts.iter().any(|s| stmt_depends(s, type_params, interner))
-                }
-                HirExpr::If {
-                    condition,
-                    then_branch,
-                    else_branch,
-                    ..
-                } => {
-                    expr_depends(condition, type_params, interner)
-                        || expr_depends(then_branch, type_params, interner)
-                        || else_branch
-                            .as_ref()
-                            .is_some_and(|e| expr_depends(e, type_params, interner))
-                }
-                HirExpr::While {
-                    condition, body, ..
-                } => {
-                    expr_depends(condition, type_params, interner)
-                        || expr_depends(body, type_params, interner)
-                }
-                HirExpr::Match {
-                    scrutinee, arms, ..
-                } => {
-                    expr_depends(scrutinee, type_params, interner)
-                        || arms.iter().any(|arm| {
-                            arm.guard
-                                .as_ref()
-                                .is_some_and(|g| expr_depends(g, type_params, interner))
-                                || expr_depends(&arm.body, type_params, interner)
-                        })
-                }
-                HirExpr::FieldAccess {
-                    object, field: _, ..
-                } => expr_depends(object, type_params, interner),
-                HirExpr::Call {
-                    callee: _, args, ..
-                } => args.iter().any(|a| expr_depends(a, type_params, interner)),
-                HirExpr::MethodCall {
-                    receiver,
-                    method_name: _,
-                    args,
-                    ..
-                } => {
-                    expr_depends(receiver, type_params, interner)
-                        || args.iter().any(|a| expr_depends(a, type_params, interner))
-                }
-                HirExpr::Binary { lhs, rhs, .. } => {
-                    expr_depends(lhs, type_params, interner)
-                        || expr_depends(rhs, type_params, interner)
-                }
-                HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
-                    expr_depends(operand, type_params, interner)
-                }
-                HirExpr::Return { value, .. } => value
-                    .as_ref()
-                    .is_some_and(|v| expr_depends(v, type_params, interner)),
-                HirExpr::StructLit { fields, .. } => fields
-                    .iter()
-                    .any(|(_, e)| expr_depends(e, type_params, interner)),
-                HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-                    args.iter().any(|a| expr_depends(a, type_params, interner))
-                }
-                HirExpr::ForIn { iter, body, .. } => {
-                    expr_depends(iter, type_params, interner)
-                        || expr_depends(body, type_params, interner)
-                }
-                _ => false,
-            }
-        }
-        fn stmt_depends(
-            stmt: &HirStmt,
-            type_params: &[glyim_interner::Symbol],
-            interner: &glyim_interner::Interner,
-        ) -> bool {
-            match stmt {
-                HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. } => {
-                    expr_depends(value, type_params, interner)
-                }
-                HirStmt::Assign { value, .. } => expr_depends(value, type_params, interner),
-                HirStmt::AssignField { object, value, .. } => {
-                    expr_depends(object, type_params, interner)
-                        || expr_depends(value, type_params, interner)
-                }
-                HirStmt::AssignDeref { target, value, .. } => {
-                    expr_depends(target, type_params, interner)
-                        || expr_depends(value, type_params, interner)
-                }
-                HirStmt::Expr(e) => expr_depends(e, type_params, interner),
-            }
-        }
-        expr_depends(body, type_params, self.interner)
-    }
-
-    /// Check if a type references any of the given type parameter symbols.
-    pub(crate) fn type_refers_to_params(
-        ty: &HirType,
-        type_params: &[glyim_interner::Symbol],
-        _interner: &glyim_interner::Interner,
-    ) -> bool {
-        match ty {
-            HirType::Named(sym) => type_params.contains(sym),
-            HirType::Generic(sym, args) => {
-                type_params.contains(sym)
-                    || args
-                        .iter()
-                        .any(|a| MonoContext::type_refers_to_params(a, type_params, _interner))
-            }
-            HirType::Tuple(elems) => elems
-                .iter()
-                .any(|e| MonoContext::type_refers_to_params(e, type_params, _interner)),
-            HirType::RawPtr(inner) => {
-                MonoContext::type_refers_to_params(inner, type_params, _interner)
-            }
-            HirType::Option(inner) => {
-                MonoContext::type_refers_to_params(inner, type_params, _interner)
-            }
-            HirType::Result(ok, err) => {
-                MonoContext::type_refers_to_params(ok, type_params, _interner)
-                    || MonoContext::type_refers_to_params(err, type_params, _interner)
-            }
-            _ => false,
-        }
-    }
-
-    pub(crate) fn has_unresolved_type_param(&self, ty: &HirType) -> bool {
-        match ty {
-            HirType::Named(sym) => {
-                let s = self.interner.resolve(*sym);
-                s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
-            }
-            HirType::Generic(_, args) => args.iter().any(|a| self.has_unresolved_type_param(a)),
-            HirType::RawPtr(inner) => self.has_unresolved_type_param(inner.as_ref()),
-            HirType::Option(inner) => self.has_unresolved_type_param(inner.as_ref()),
-            HirType::Result(ok, err) => {
-                self.has_unresolved_type_param(ok) || self.has_unresolved_type_param(err)
-            }
-            HirType::Tuple(elems) => elems.iter().any(|e| self.has_unresolved_type_param(e)),
-            _ => false,
-        }
-    }
-
-    /// Attempt to infer type args for a zero-argument generic call by looking
-    /// at later calls on the same variable within the enclosing block.
-    pub(crate) fn infer_from_same_var_in_block(
-        &self,
-        callee: &Symbol,
-        call_id: ExprId,
-        type_params: &[Symbol],
-    ) -> Option<Vec<HirType>> {
-        for item in &self.hir.items {
-            if let HirItem::Fn(fn_def) = item
-                && let Some(result) = self.find_in_block(&fn_def.body, callee, call_id, type_params)
-            {
-                return Some(result);
-            }
-        }
-        None
-    }
-
-    fn find_in_block(
-        &self,
-        expr: &HirExpr,
-        callee: &Symbol,
-        target_call_id: ExprId,
-        type_params: &[Symbol],
-    ) -> Option<Vec<HirType>> {
-        match expr {
-            HirExpr::Block { stmts, .. } => {
-                let mut found = false;
-                let mut target_var: Option<Symbol> = None;
-                for stmt in stmts {
-                    match stmt {
-                        HirStmt::Let { name, value, .. } if value.get_id() == target_call_id => {
-                            found = true;
-                            target_var = Some(*name);
-                            continue;
-                        }
-                        HirStmt::LetPat {
-                            pattern: HirPattern::Var(name),
-                            value,
-                            ..
-                        } if value.get_id() == target_call_id => {
-                            found = true;
-                            target_var = Some(*name);
-                            continue;
-                        }
-                        _ => {
-                            if found
-                                && let Some(var_sym) = target_var
-                                && let HirStmt::Expr(inner) = stmt
-                                && let Some(args) = self.extract_type_args_from_call_on_var(
-                                    inner,
-                                    *callee,
-                                    var_sym,
-                                    type_params,
-                                )
-                            {
-                                return Some(args);
-                            }
-                        }
-                    }
-                }
-                None
-            }
-            HirExpr::If {
-                then_branch,
-                else_branch,
-                ..
-            } => self
-                .find_in_block(then_branch, callee, target_call_id, type_params)
-                .or_else(|| {
-                    else_branch
-                        .as_ref()
-                        .and_then(|e| self.find_in_block(e, callee, target_call_id, type_params))
-                }),
-            HirExpr::While { body, .. } | HirExpr::ForIn { body, .. } => {
-                self.find_in_block(body, callee, target_call_id, type_params)
-            }
-            _ => None,
-        }
-    }
-
     fn extract_type_args_from_call_on_var(
         &self,
         expr: &HirExpr,
@@ -802,4 +509,50 @@ impl<'a> MonoContext<'a> {
             HirStmt::Expr(e) => HirStmt::Expr(self.substitute_expr_types(e, sub)),
         }
     }
+
+    /// Check if a type contains any unresolved type parameters (single uppercase letters)
+    pub(crate) fn has_unresolved_type_param(&self, ty: &HirType) -> bool {
+        match ty {
+            HirType::Named(sym) => {
+                let s = self.interner.resolve(*sym);
+                s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
+            }
+            HirType::Generic(_, args) => args.iter().any(|a| self.has_unresolved_type_param(a)),
+            HirType::RawPtr(inner) => self.has_unresolved_type_param(inner.as_ref()),
+            HirType::Option(inner) => self.has_unresolved_type_param(inner.as_ref()),
+            HirType::Result(ok, err) => {
+                self.has_unresolved_type_param(ok) || self.has_unresolved_type_param(err)
+            }
+            HirType::Tuple(elems) => elems.iter().any(|e| self.has_unresolved_type_param(e)),
+            _ => false,
+        }
+    }
+
+
+    /// Build the method_map from impl blocks in the HIR.
+    pub(crate) fn init_method_map(&mut self) {
+        // Collect entries to insert, avoiding borrow conflicts
+        let mut entries: Vec<(Symbol, Symbol, HirFn)> = Vec::new();
+        for item in &self.hir.items {
+            if let HirItem::Impl(imp) = item {
+                let type_sym = imp.target_name;
+                let type_name = self.interner.resolve(type_sym).to_string();
+                for method in &imp.methods {
+                    let mangled = self.interner.resolve(method.name).to_string();
+                    if let Some(pos) = mangled.rfind('_') {
+                        let type_part = &mangled[..pos];
+                        if type_part == type_name {
+                            let method_part = &mangled[pos+1..];
+                            let method_sym = self.interner.intern(method_part);
+                            entries.push((type_sym, method_sym, method.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        for (type_sym, method_sym, fn_def) in entries {
+            self.method_map.insert((type_sym, method_sym), fn_def);
+        }
+    }
+
 }

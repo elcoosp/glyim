@@ -99,4 +99,6 @@ pub(crate) struct MonoContext<'a> {
     pub(crate) enum_specs: HashMap<(Symbol, Vec<HirType>), EnumDef>,
     pub(crate) type_work_queue: Vec<(Symbol, Vec<HirType>)>,
     pub(crate) type_queued: HashSet<(Symbol, Vec<HirType>)>,
+    /// Map from (type_symbol, method_symbol) to the corresponding HirFn (non-mangled).
+    pub(crate) method_map: HashMap<(Symbol, Symbol), HirFn>,
 }
