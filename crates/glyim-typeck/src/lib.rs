@@ -778,7 +778,7 @@ impl TypeChecker {
         .collect();
 
     // Resolve the receiver's base type
-    let (type_name, type_args) = match &recv_ty {
+    let (type_name, _type_args) = match &recv_ty {
         HirType::Named(name) => (*name, vec![]),
         HirType::Generic(name, args) => (*name, args.clone()),
         HirType::RawPtr(inner) => match inner.as_ref() {
