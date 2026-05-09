@@ -170,7 +170,7 @@ impl TypeChecker {
         }
         let struct_names: Vec<String> = self.structs.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
         let enum_names: Vec<String> = self.enums.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
-        tracing::warn!(
+        eprintln!(
             "[typeck] register_items complete: {} structs {:?}, {} enums {:?}, {} fns, {} extern_fns, {} impl_methods",
             self.structs.len(),
             struct_names,
@@ -606,7 +606,7 @@ impl TypeChecker {
                 } else {
                     let resolved_name = self.interner.resolve(*struct_name).to_string();
                     let available: Vec<String> = self.structs.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
-                    tracing::warn!(
+                    eprintln!(
                         "[typeck] unknown struct type: {:?}, available structs: {:?}",
                         resolved_name,
                         available
@@ -655,7 +655,7 @@ impl TypeChecker {
                 } else {
                     let resolved_name = self.interner.resolve(*enum_name).to_string();
                     let available: Vec<String> = self.enums.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
-                    tracing::warn!(
+                    eprintln!(
                         "[typeck] unknown enum type: {:?}, available enums: {:?}",
                         resolved_name,
                         available
@@ -782,7 +782,7 @@ impl TypeChecker {
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!(
+                                eprintln!(
                                     "[typeck] unify_generics failed for call to {:?}: arg_types={:?}, error={:?}",
                                     self.interner.resolve(callee_sym),
                                     arg_types,
@@ -797,7 +797,7 @@ impl TypeChecker {
                                     ) {
                                         Ok(sub) => sub,
                                         Err(e2) => {
-                                            tracing::warn!(
+                                            eprintln!(
                                                 "[typeck] infer_generics_from_expected also failed for {:?}: {:?}",
                                                 self.interner.resolve(callee_sym),
                                                 e2
@@ -807,7 +807,7 @@ impl TypeChecker {
                                         }
                                     }
                                 } else {
-                                    tracing::warn!(
+                                    eprintln!(
                                         "[typeck] no expected type for bidirectional inference of call to {:?}",
                                         self.interner.resolve(callee_sym)
                                     );
@@ -965,7 +965,7 @@ impl TypeChecker {
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!(
+                                eprintln!(
                                     "[typeck] unify_generics failed for method call {}.{}: all_arg_types={:?}, error={:?}",
                                     self.interner.resolve(type_name),
                                     self.interner.resolve(*method_name),
@@ -981,7 +981,7 @@ impl TypeChecker {
                                     ) {
                                         Ok(sub) => sub,
                                         Err(e2) => {
-                                            tracing::warn!(
+                                            eprintln!(
                                                 "[typeck] infer_generics_from_expected also failed for {}.{}: {:?}",
                                                 self.interner.resolve(type_name),
                                                 self.interner.resolve(*method_name),
@@ -992,7 +992,7 @@ impl TypeChecker {
                                         }
                                     }
                                 } else {
-                                    tracing::warn!(
+                                    eprintln!(
                                         "[typeck] no expected type for bidirectional inference of method {}.{}",
                                         self.interner.resolve(type_name),
                                         self.interner.resolve(*method_name)
@@ -1024,7 +1024,7 @@ impl TypeChecker {
                         });
 
                         if has_unresolved {
-                            tracing::warn!(
+                            eprintln!(
                                 "[typeck] cannot infer generic args for {}.{}: concrete_args={:?}, fn_type_params={:?}",
                                 self.interner.resolve(type_name),
                                 self.interner.resolve(*method_name),
@@ -1059,7 +1059,7 @@ impl TypeChecker {
                         recv_ty
                     } else {
                         let available_fns: Vec<String> = self.fns.iter().map(|f| self.interner.resolve(f.name).to_string()).collect();
-                        tracing::warn!(
+                        eprintln!(
                             "[typeck] unresolved method: {}.{} (mangled={}), available fns: {:?}",
                             self.interner.resolve(type_name),
                             self.interner.resolve(*method_name),
