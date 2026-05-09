@@ -146,12 +146,14 @@ pub(crate) fn merge_mono_types(
     let mono_result =
         glyim_hir::monomorphize::monomorphize(hir, interner, expr_types, call_type_args);
     let mut merged = expr_types.to_vec();
-    for (id, ty) in &mono_result.type_overrides {
-        if id.as_usize() < merged.len() {
-            merged[id.as_usize()] = ty.clone();
-        } else {
-            merged.resize(id.as_usize() + 1, HirType::Never);
-            merged[id.as_usize()] = ty.clone();
+    // mono_result.expr_types already contains the concrete types, keyed by output ExprId.
+    // Extend `merged` with any entries from mono_result that are beyond the current length.
+    if mono_result.expr_types.len() > merged.len() {
+        merged.resize(mono_result.expr_types.len(), HirType::Never);
+    }
+    for (idx, ty) in mono_result.expr_types.iter().enumerate() {
+        if idx < merged.len() && *ty != HirType::Error {
+            merged[idx] = ty.clone();
         }
     }
     // Generic → Named fallback

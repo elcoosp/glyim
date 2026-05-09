@@ -70,6 +70,44 @@ pub enum TypeError {
         receiver_type: String,
         span: (usize, usize),
     },
+
+    /// A type could not be inferred for an expression.
+    #[error("cannot infer type for {expr_kind}")]
+    CannotInferType {
+        expr_kind: String,
+        span: (usize, usize),
+    },
+
+    /// Cannot infer type arguments for a generic function call.
+    #[error("cannot infer type arguments for generic function '{name}'")]
+    CannotInferGenericArgs {
+        name: String,
+        span: (usize, usize),
+    },
+
+    /// A function call references an unknown function.
+    #[error("unknown function '{name}'")]
+    UnknownFunction {
+        name: String,
+        span: (usize, usize),
+    },
+
+    /// Wrong number of arguments in a call.
+    #[error("argument count mismatch: expected {expected}, got {actual}")]
+    ArgumentCountMismatch {
+        expected: usize,
+        actual: usize,
+        span: (usize, usize),
+    },
+
+    /// An enum variant doesn't exist in the given enum.
+    #[error("enum '{enum_name}' has no variant '{variant_name}'")]
+    UnknownVariant {
+        enum_name: String,
+        variant_name: String,
+        span: (usize, usize),
+    },
+
 }
 
 impl Diagnostic for TypeError {
@@ -77,7 +115,7 @@ impl Diagnostic for TypeError {
         Some(miette::Severity::Error)
     }
 
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + 'static>> {
         match self {
             TypeError::MismatchedTypes { span, .. } => Some(Box::new(std::iter::once(
                 miette::LabeledSpan::new(Some(format!("type mismatch")), span.0, span.1 - span.0),
@@ -88,34 +126,27 @@ impl Diagnostic for TypeError {
             TypeError::MissingField { span, .. } => Some(Box::new(std::iter::once(
                 miette::LabeledSpan::new(Some("missing field".into()), span.0, span.1 - span.0),
             ))),
-            TypeError::NonExhaustiveMatch { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("non-exhaustive match".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
-            TypeError::InvalidReturnType { .. } => None,
-            TypeError::AssignToImmutable { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("cannot assign to immutable".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
-            TypeError::DerefNonPointer { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("cannot dereference non-pointer".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
+            TypeError::NonExhaustiveMatch { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("non-exhaustive match".into()), span.0, span.1 - span.0),
+            ))),
+            TypeError::AssignToImmutable { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("cannot assign to immutable".into()), span.0, span.1 - span.0),
+            ))),
+            TypeError::DerefNonPointer { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("cannot dereference non-pointer".into()), span.0, span.1 - span.0),
+            ))),
             TypeError::UnresolvedMethod { span, .. } => Some(Box::new(std::iter::once(
                 miette::LabeledSpan::new(Some("unresolved method".into()), span.0, span.1 - span.0),
             ))),
             TypeError::UnresolvedName { span, .. } => Some(Box::new(std::iter::once(
                 miette::LabeledSpan::new(Some("unresolved name".into()), span.0, span.1 - span.0),
             ))),
+            // New variants: no labels
+            TypeError::CannotInferType { .. } => None,
+            TypeError::CannotInferGenericArgs { .. } => None,
+            TypeError::UnknownFunction { .. } => None,
+            TypeError::ArgumentCountMismatch { .. } => None,
+            TypeError::UnknownVariant { .. } => None,
             _ => None,
         }
     }
@@ -124,6 +155,11 @@ impl Diagnostic for TypeError {
 impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
     fn from(err: TypeError) -> glyim_diag::diagnostic::Diagnostic {
         let (start, end, msg) = match &err {
+            TypeError::CannotInferType { span, .. } => (span.0, span.1, err.to_string()),
+            TypeError::CannotInferGenericArgs { span, .. } => (span.0, span.1, err.to_string()),
+            TypeError::UnknownFunction { span, .. } => (span.0, span.1, err.to_string()),
+            TypeError::ArgumentCountMismatch { span, .. } => (span.0, span.1, err.to_string()),
+            TypeError::UnknownVariant { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::MismatchedTypes { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::UnknownType { .. } => (0, 0, err.to_string()),
             TypeError::UnknownField { span, .. } => (span.0, span.1, err.to_string()),

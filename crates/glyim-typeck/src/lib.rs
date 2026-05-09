@@ -350,7 +350,7 @@ impl TypeChecker {
             }
             HirExpr::Unary { operand, .. } => {
                 self.check_expr(operand, None);
-                HirType::Int
+                HirType::Error
             }
             HirExpr::Block { stmts, .. } => {
                 let mut last = HirType::Unit;
@@ -742,7 +742,7 @@ impl TypeChecker {
                             }
                         }
                     }
-                    return fn_def.ret.clone().unwrap_or(HirType::Int);
+                    return fn_def.ret.clone().unwrap_or(HirType::Error);
                 }
                 let callee_name = self.interner.resolve(*callee).to_string();
                 self.errors.push(TypeError::UnresolvedName {
@@ -757,127 +757,95 @@ impl TypeChecker {
                 HirType::Error
             }
             HirExpr::MethodCall {
-                id,
-                receiver,
-                method_name,
-                args,
-                ..
-            } => {
-                let recv_ty = self.check_expr(receiver, None).unwrap_or(HirType::Error);
-                for a in args {
-                    self.check_expr(a, None);
-                }
-                let type_sym = match &recv_ty {
-                    HirType::Named(s) | HirType::Generic(s, _) => Some(*s),
-                    _ => None,
-                };
-                if let Some(type_name) = type_sym {
-                    if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
-                        if !fn_def.type_params.is_empty() {
-                            let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
-                                .chain(
-                                    args.iter()
-                                        .map(|a| self.expr_types[a.get_id().as_usize()].clone()),
-                                )
-                                .collect();
-                            let arg_sub =
-                                self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span());
-                            let sub = match arg_sub {
-                                Ok(sub) => {
-                                    let has_unresolved = fn_def.type_params.iter().any(|tp| {
-                                        sub.get(tp).map_or(true, |ty| {
-                                            matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
-                                        })
-                                    });
-                                    if has_unresolved {
-                                        if let Some(exp) = expected {
-                                            if let Ok(bidir_sub) = self
-                                                .infer_generics_from_expected(
-                                                    &fn_def,
-                                                    exp,
-                                                    *id,
-                                                    expr.get_span(),
-                                                )
-                                            {
-                                                let mut merged = bidir_sub;
-                                                for tp in &fn_def.type_params {
-                                                    if let Some(ty) = sub.get(tp) {
-                                                        if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
-                                                        {
-                                                            merged.insert(*tp, ty.clone());
-                                                        }
-                                                    }
-                                                }
-                                                merged
-                                            } else {
-                                                sub
-                                            }
-                                        } else {
-                                            sub
-                                        }
-                                    } else {
-                                        sub
-                                    }
-                                }
-                                Err(e) => {
-                                    if let Some(exp) = expected {
-                                        match self.infer_generics_from_expected(
-                                            &fn_def,
-                                            exp,
-                                            *id,
-                                            expr.get_span(),
-                                        ) {
-                                            Ok(sub) => sub,
-                                            Err(_) => {
-                                                self.errors.push(e);
-                                                return HirType::Error;
-                                            }
-                                        }
-                                    } else {
-                                        self.errors.push(e);
-                                        return HirType::Error;
-                                    }
-                                }
-                            };
-                            let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
-                            let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
-                            let concrete_args: Vec<HirType> = fn_def
-                                .type_params
-                                .iter()
-                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
-                                .collect();
-                            self.maybe_record_call_type_args(*id, concrete_args);
-                            return concrete_ret;
-                        } else {
-                            if let HirType::Generic(struct_sym, ref type_args) = recv_ty {
-                                self.maybe_record_call_type_args(*id, type_args.clone());
-                                if let Some(struct_info) = self.structs.get(&struct_sym) {
-                                    if struct_info.type_params.len() == type_args.len() {
-                                        let sub: HashMap<Symbol, HirType> = struct_info
-                                            .type_params
-                                            .iter()
-                                            .zip(type_args.iter())
-                                            .map(|(tp, ty)| (*tp, ty.clone()))
-                                            .collect();
-                                        return glyim_hir::types::substitute_type(
-                                            &fn_def.ret.clone().unwrap_or(HirType::Unit),
-                                            &sub,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        return fn_def.ret.clone().unwrap_or(HirType::Unit);
-                    }
-                }
-                let recv_str = format!("{:?}", recv_ty);
+    id,
+    receiver,
+    method_name,
+    args,
+    ..
+} => {
+    let recv_ty = self.check_expr(receiver, None).unwrap_or(HirType::Error);
+    for a in args {
+        self.check_expr(a, None);
+    }
+    let arg_types: Vec<HirType> = args.iter()
+        .map(|a| self.expr_types[a.get_id().as_usize()].clone())
+        .collect();
+
+    // Resolve the receiver's base type
+    let (type_name, type_args) = match &recv_ty {
+        HirType::Named(name) => (*name, vec![]),
+        HirType::Generic(name, args) => (*name, args.clone()),
+        HirType::RawPtr(inner) => match inner.as_ref() {
+            HirType::Named(name) => (*name, vec![]),
+            HirType::Generic(name, args) => (*name, args.clone()),
+            _ => {
                 self.errors.push(TypeError::UnresolvedMethod {
                     method_name: self.interner.resolve(*method_name).to_string(),
-                    receiver_type: recv_str,
+                    receiver_type: format!("{:?}", recv_ty),
                     span: (expr.get_span().start, expr.get_span().end),
                 });
+                return HirType::Error;
+            }
+        },
+        _ => {
+            self.errors.push(TypeError::UnresolvedMethod {
+                method_name: self.interner.resolve(*method_name).to_string(),
+                receiver_type: format!("{:?}", recv_ty),
+                span: (expr.get_span().start, expr.get_span().end),
+            });
+            return HirType::Error;
+        }
+    };
+
+    // Build the mangled method name
+    let mangled_str = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
+    let mangled = self.interner.intern(&mangled_str);
+
+    // Look up the method
+    if let Some(fn_def) = self.fns.iter().find(|f| f.name == mangled).cloned() {
+        if !fn_def.type_params.is_empty() {
+            // Generic method — unify to get type args
+            let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
+                .chain(arg_types.iter().cloned())
+                .collect();
+
+            if let Ok(sub) = self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span()) {
+                let concrete_args: Vec<HirType> = fn_def.type_params.iter()
+                    .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
+                    .collect();
+                if concrete_args.iter().any(|t| matches!(t, HirType::Error)) {
+                    self.errors.push(TypeError::CannotInferGenericArgs {
+                        name: format!("{}.{}", self.interner.resolve(type_name), self.interner.resolve(*method_name)),
+                        span: (expr.get_span().start, expr.get_span().end),
+                    });
+                } else {
+                    self.call_type_args.insert(*id, concrete_args);
+                }
+                let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
+                glyim_hir::types::substitute_type(&ret, &sub)
+            } else {
+                // unification failed; error already reported by unify_generics
                 HirType::Error
             }
+        } else {
+            // Non-generic method
+            fn_def.ret.clone().unwrap_or(HirType::Unit)
+        }
+    } else {
+        // Method not found; check extern
+        if self.extern_fns.contains_key(method_name) {
+            recv_ty
+        } else {
+            self.errors.push(TypeError::UnresolvedMethod {
+                method_name: self.interner.resolve(*method_name).to_string(),
+                receiver_type: self.interner.resolve(type_name).to_string(),
+                span: (expr.get_span().start, expr.get_span().end),
+            });
+            HirType::Error
+        }
+    }
+}
+
             HirExpr::While {
                 condition, body, ..
             }
@@ -929,7 +897,7 @@ impl TypeChecker {
                 value,
                 ..
             } => {
-                let ty = self.check_expr(value, None).unwrap_or(HirType::Int);
+                let ty = self.check_expr(value, None).unwrap_or(HirType::Error);
                 if let HirExpr::Call {
                     id: call_id,
                     callee,
@@ -961,7 +929,7 @@ impl TypeChecker {
             } => {
                 let inferred = self
                     .check_expr(value, annotation.as_ref())
-                    .unwrap_or(HirType::Int);
+                    .unwrap_or(HirType::Error);
                 let ty = if let Some(annotated) = annotation {
                     let compat = Self::types_compatible(&annotated, &inferred);
                     if !compat && inferred != HirType::Error {
@@ -1008,7 +976,7 @@ impl TypeChecker {
                         });
                     }
                 }
-                let ty = self.check_expr(value, None).unwrap_or(HirType::Int);
+                let ty = self.check_expr(value, None).unwrap_or(HirType::Error);
                 self.scopes
                     .last_mut()
                     .unwrap()
@@ -1021,7 +989,7 @@ impl TypeChecker {
                 } else {
                     self.check_expr(target, None).unwrap_or(HirType::Never)
                 };
-                let ty = self.check_expr(value, None).unwrap_or(HirType::Int);
+                let ty = self.check_expr(value, None).unwrap_or(HirType::Error);
                 match pointer_ty {
                     HirType::RawPtr(_) => {}
                     _ => {
@@ -1036,7 +1004,7 @@ impl TypeChecker {
             }
             HirStmt::AssignField { object, value, .. } => {
                 self.check_expr(object, None);
-                let ty = self.check_expr(value, None).unwrap_or(HirType::Int);
+                let ty = self.check_expr(value, None).unwrap_or(HirType::Error);
                 Some(ty)
             }
             HirStmt::Expr(e) => self.check_expr(e, None),
