@@ -79,6 +79,7 @@ pub struct TypeChecker {
     call_type_args: HashMap<ExprId, Vec<HirType>>,
     errors: Vec<TypeError>,
     fns: Vec<HirFn>,
+    current_fn_type_params: Vec<Symbol>,
 }
 
 impl TypeChecker {
@@ -127,6 +128,7 @@ impl TypeChecker {
             call_type_args: HashMap::new(),
             errors: Vec::new(),
             fns: Vec::new(),
+            current_fn_type_params: Vec::new(),
         }
     }
 
@@ -237,7 +239,8 @@ impl TypeChecker {
 
     fn check_fn(&mut self, f: &HirFn) {
         self.scopes = vec![Scope::new()];
-        // REMOVED: in_generic_fn save/restore — no longer needed
+        let prev_type_params = std::mem::take(&mut self.current_fn_type_params);
+        self.current_fn_type_params = f.type_params.clone();
 
         for (i, &(sym, ref ty)) in f.params.iter().enumerate() {
             let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
@@ -256,8 +259,12 @@ impl TypeChecker {
                 }
             }
         }
-        // REMOVED: self.in_generic_fn = prev_generic;
+        self.current_fn_type_params = prev_type_params;
     }
+    fn is_own_type_param(&self, ty: &HirType) -> bool {
+        matches!(ty, HirType::Named(sym) if self.current_fn_type_params.contains(sym))
+    }
+
     // --- Helper to conditionally insert into call_type_args ---
     fn maybe_record_call_type_args(&mut self, id: ExprId, args: Vec<HirType>) {
         // FIX: Removed the `in_generic_fn` early return. The `contains_type_param`
@@ -1024,21 +1031,26 @@ impl TypeChecker {
                         });
 
                         if has_unresolved {
-                            eprintln!(
-                                "[typeck] cannot infer generic args for {}.{}: concrete_args={:?}, fn_type_params={:?}",
-                                self.interner.resolve(type_name),
-                                self.interner.resolve(*method_name),
-                                concrete_args,
-                                fn_def.type_params
-                            );
-                            self.errors.push(TypeError::CannotInferGenericArgs {
-                                name: format!(
-                                    "{}.{}",
+                            let all_own = concrete_args.iter().all(|t| self.is_own_type_param(t));
+                            if all_own {
+                                self.call_type_args.insert(*id, concrete_args);
+                            } else {
+                                eprintln!(
+                                    "[typeck] cannot infer generic args for {}.{}: concrete_args={:?}, fn_type_params={:?}",
                                     self.interner.resolve(type_name),
-                                    self.interner.resolve(*method_name)
-                                ),
-                                span: (expr.get_span().start, expr.get_span().end),
-                            });
+                                    self.interner.resolve(*method_name),
+                                    concrete_args,
+                                    fn_def.type_params
+                                );
+                                self.errors.push(TypeError::CannotInferGenericArgs {
+                                    name: format!(
+                                        "{}.{}",
+                                        self.interner.resolve(type_name),
+                                        self.interner.resolve(*method_name)
+                                    ),
+                                    span: (expr.get_span().start, expr.get_span().end),
+                                });
+                            }
                         } else {
                             self.call_type_args.insert(*id, concrete_args);
                         }
