@@ -81,7 +81,6 @@ impl TyArena {
         self.kinds[ty.0] = TyKind::Error;
     }
 
-
     pub fn get(&self, ty: Ty) -> &TyKind {
         &self.kinds[ty.0]
     }

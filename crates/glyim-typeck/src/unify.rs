@@ -1,7 +1,7 @@
-use crate::ty::{Ty, TyKind, TyArena};
 use crate::diagnostics::TypeError;
-use crate::diagnostics::zippering::zip_diff;
 use crate::diagnostics::biabduction::bi_abductive_synthesis;
+use crate::diagnostics::zippering::zip_diff;
+use crate::ty::{Ty, TyArena, TyKind};
 use glyim_diag::Span;
 use glyim_interner::Interner;
 
@@ -70,10 +70,13 @@ impl UnificationTable {
         }
 
         if self.occurs(arena, a, b) || self.occurs(arena, b, a) {
-            let origin = arena.get_infer_span(a)
+            let origin = arena
+                .get_infer_span(a)
                 .or_else(|| arena.get_infer_span(b))
                 .unwrap_or(span);
-            emit_err(TypeError::InfiniteType { span: crate::diagnostics::span_to_src(origin) });
+            emit_err(TypeError::InfiniteType {
+                span: crate::diagnostics::span_to_src(origin),
+            });
             arena.poison(a);
             return Err(ErrorGuaranteed(()));
         }
@@ -92,7 +95,7 @@ impl UnificationTable {
 
     fn union(&mut self, a: Ty, b: Ty) {
         let max = a.0.max(b.0) + 1;
-        self.parents.resize(self.parents.len().max(max), a);  // self-reference for new slots
+        self.parents.resize(self.parents.len().max(max), a); // self-reference for new slots
         self.ranks.resize(self.ranks.len().max(max), 0);
         self.parents[a.0] = b;
     }
@@ -145,16 +148,20 @@ impl UnificationTable {
                 }
                 self.unify(arena, ret1, ret2, span, emit_err)
             }
-            (TyKind::RawPtr(i1), TyKind::RawPtr(i2)) => {
-                self.unify(arena, *i1, *i2, span, emit_err)
-            }
+            (TyKind::RawPtr(i1), TyKind::RawPtr(i2)) => self.unify(arena, *i1, *i2, span, emit_err),
             _ => {
                 let diff_path = zip_diff(arena, a, b, "root".to_string());
-                let autofix = self.interner.as_ref()
+                let autofix = self
+                    .interner
+                    .as_ref()
                     .and_then(|i| bi_abductive_synthesis(arena, i, a, b));
                 emit_err(TypeError::MismatchedTypes {
-                    expected_span: crate::diagnostics::span_to_src(arena.get_infer_span(a).unwrap_or(span)),
-                    found_span: crate::diagnostics::span_to_src(arena.get_infer_span(b).unwrap_or(span)),
+                    expected_span: crate::diagnostics::span_to_src(
+                        arena.get_infer_span(a).unwrap_or(span),
+                    ),
+                    found_span: crate::diagnostics::span_to_src(
+                        arena.get_infer_span(b).unwrap_or(span),
+                    ),
                     expected: format!("{:?}", arena.get(a)),
                     found: format!("{:?}", arena.get(b)),
                     diff_path,

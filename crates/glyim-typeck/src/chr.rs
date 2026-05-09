@@ -21,10 +21,7 @@ pub enum Goal {
 #[derive(Clone, Debug)]
 pub enum ChrRule {
     /// If we need `Goal`, AND we have `Premises`, THEN `Goal` is proven.
-    Simplify {
-        goal: Goal,
-        premises: Vec<Goal>,
-    },
+    Simplify { goal: Goal, premises: Vec<Goal> },
     /// If we need `Goal`, AND we have `Premises`, THEN emit `NewGoals`.
     Propagate {
         goal: Goal,
@@ -37,8 +34,12 @@ impl ChrRule {
     /// Check if this rule matches the given goal.
     pub fn matches(&self, goal: &Goal) -> bool {
         match self {
-            ChrRule::Simplify { goal: rule_goal, .. } => rule_goal == goal,
-            ChrRule::Propagate { goal: rule_goal, .. } => rule_goal == goal,
+            ChrRule::Simplify {
+                goal: rule_goal, ..
+            } => rule_goal == goal,
+            ChrRule::Propagate {
+                goal: rule_goal, ..
+            } => rule_goal == goal,
         }
     }
 }
@@ -99,7 +100,11 @@ impl ChrStore {
                                 }
                             }
                         }
-                        ChrRule::Propagate { premises, new_goals, .. } => {
+                        ChrRule::Propagate {
+                            premises,
+                            new_goals,
+                            ..
+                        } => {
                             if premises.iter().all(|p| self.proven_goals.contains(p)) {
                                 self.proven_goals.insert(goal.clone());
                                 for ng in new_goals {
@@ -145,9 +150,9 @@ impl Substitution {
     }
 
     pub fn lookup(&self, ty: Ty) -> Option<Ty> {
-        self.mappings.iter().find_map(|&(from, to)| {
-            if from == ty { Some(to) } else { None }
-        })
+        self.mappings
+            .iter()
+            .find_map(|&(from, to)| if from == ty { Some(to) } else { None })
     }
 }
 
@@ -165,11 +170,17 @@ pub fn apply_substitution(arena: &mut crate::ty::TyArena, sub: &Substitution, ty
 
     match arena.get(ty).clone() {
         crate::ty::TyKind::App(sym, args) => {
-            let new_args: Vec<Ty> = args.iter().map(|&a| apply_substitution(arena, sub, a)).collect();
+            let new_args: Vec<Ty> = args
+                .iter()
+                .map(|&a| apply_substitution(arena, sub, a))
+                .collect();
             arena.alloc(crate::ty::TyKind::App(sym, new_args))
         }
         crate::ty::TyKind::Fn(params, ret) => {
-            let new_params: Vec<Ty> = params.iter().map(|&p| apply_substitution(arena, sub, p)).collect();
+            let new_params: Vec<Ty> = params
+                .iter()
+                .map(|&p| apply_substitution(arena, sub, p))
+                .collect();
             let new_ret = apply_substitution(arena, sub, ret);
             arena.alloc(crate::ty::TyKind::Fn(new_params, new_ret))
         }
@@ -180,5 +191,3 @@ pub fn apply_substitution(arena: &mut crate::ty::TyArena, sub: &Substitution, ty
         _ => ty,
     }
 }
-
-

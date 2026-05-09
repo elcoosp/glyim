@@ -1,15 +1,11 @@
-use crate::ty::{Ty, TyKind, TyArena};
+use crate::ty::{Ty, TyArena, TyKind};
 use crate::unify::UnificationTable;
+use glyim_hir::types::ExprId;
 use glyim_hir::types::HirType;
 use std::collections::HashMap;
-use glyim_hir::types::ExprId;
 
 /// Resolve a Ty to a concrete HirType, following unification chains.
-pub fn resolve_ty(
-    arena: &TyArena,
-    unification: &UnificationTable,
-    ty: Ty,
-) -> HirType {
+pub fn resolve_ty(arena: &TyArena, unification: &UnificationTable, ty: Ty) -> HirType {
     let ty = unification.find(arena, ty);
     match arena.get(ty) {
         TyKind::Int => HirType::Int,
@@ -23,19 +19,25 @@ pub fn resolve_ty(
         TyKind::Named(sym) => HirType::Named(*sym),
         TyKind::App(sym, args) => HirType::Generic(
             *sym,
-            args.iter().map(|&a| resolve_ty(arena, unification, a)).collect(),
+            args.iter()
+                .map(|&a| resolve_ty(arena, unification, a))
+                .collect(),
         ),
         TyKind::Fn(params, ret) => HirType::Func(
-            params.iter().map(|&p| resolve_ty(arena, unification, p)).collect(),
+            params
+                .iter()
+                .map(|&p| resolve_ty(arena, unification, p))
+                .collect(),
             Box::new(resolve_ty(arena, unification, *ret)),
         ),
-        TyKind::RawPtr(inner) => {
-            HirType::RawPtr(Box::new(resolve_ty(arena, unification, *inner)))
-        }
+        TyKind::RawPtr(inner) => HirType::RawPtr(Box::new(resolve_ty(arena, unification, *inner))),
         TyKind::Code(_) => HirType::Error,
         TyKind::Const(_, _) => HirType::Error,
         TyKind::EffectFn(params, ret, _) => HirType::Func(
-            params.iter().map(|&p| resolve_ty(arena, unification, p)).collect(),
+            params
+                .iter()
+                .map(|&p| resolve_ty(arena, unification, p))
+                .collect(),
             Box::new(resolve_ty(arena, unification, *ret)),
         ),
         TyKind::Any => HirType::Error,

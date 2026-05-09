@@ -1,5 +1,5 @@
-use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// A fingerprint (content hash) for query keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -28,7 +28,13 @@ impl Fingerprint {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QueryKey {
     ItemType(glyim_hir::types::ExprId),
-    TraitImpl { trait_name: String, type_name: String },
-    MacroExpansion { macro_name: String, input_hash: Fingerprint },
+    TraitImpl {
+        trait_name: String,
+        type_name: String,
+    },
+    MacroExpansion {
+        macro_name: String,
+        input_hash: Fingerprint,
+    },
     ReflectMeta(String),
 }

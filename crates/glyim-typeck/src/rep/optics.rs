@@ -49,12 +49,15 @@ fn collect_fields(rep: &Rep, path: &mut Vec<usize>) -> Vec<(Symbol, Ty, Vec<usiz
 /// Generate a Lens for each field in a struct-like Rep.
 pub fn generate_lenses(rep: &Rep) -> Vec<Lens> {
     let fields = collect_fields(rep, &mut vec![]);
-    fields.into_iter().map(|(name, ty, path)| Lens {
-        field_name: name,
-        source_ty: Ty(0),
-        target_ty: ty,
-        path,
-    }).collect()
+    fields
+        .into_iter()
+        .map(|(name, ty, path)| Lens {
+            field_name: name,
+            source_ty: Ty(0),
+            target_ty: ty,
+            path,
+        })
+        .collect()
 }
 
 /// Collect all constructors from a Rep tree.
@@ -68,7 +71,10 @@ fn collect_constructors(rep: &Rep) -> Vec<(Symbol, Vec<(Symbol, Ty)>)> {
         }
         Rep::Constructor(meta, inner) => {
             let fields = collect_fields(inner, &mut vec![]);
-            vec![(meta.name, fields.into_iter().map(|(n, t, _)| (n, t)).collect())]
+            vec![(
+                meta.name,
+                fields.into_iter().map(|(n, t, _)| (n, t)).collect(),
+            )]
         }
         _ => vec![],
     }
@@ -77,11 +83,16 @@ fn collect_constructors(rep: &Rep) -> Vec<(Symbol, Vec<(Symbol, Ty)>)> {
 /// Generate a Prism for each single-field constructor in an enum-like Rep.
 pub fn generate_prisms(rep: &Rep) -> Vec<Prism> {
     let ctors = collect_constructors(rep);
-    ctors.into_iter()
+    ctors
+        .into_iter()
         .filter_map(|(name, fields)| {
             if fields.len() == 1 {
                 let (_, target_ty) = fields[0];
-                Some(Prism { ctor_name: name, source_ty: Ty(0), target_ty })
+                Some(Prism {
+                    ctor_name: name,
+                    source_ty: Ty(0),
+                    target_ty,
+                })
             } else {
                 None
             }

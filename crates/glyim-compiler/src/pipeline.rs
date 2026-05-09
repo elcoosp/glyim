@@ -317,13 +317,11 @@ pub(crate) fn compile_source_to_hir(
 
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-    let output = typeck.check(&hir).map_err(|errs| {
-        PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        )
-    })?;
+    let output = typeck
+        .check(&hir)
+        .map_err(|errs| PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()))?;
     interner = output.interner;
-glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
 
     let expr_types = output.expr_types.clone();
     let call_type_args = output.call_type_args.clone();
@@ -1105,13 +1103,11 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-    let output = typeck.check(&hir).map_err(|errs| {
-        PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        )
-    })?;
+    let output = typeck
+        .check(&hir)
+        .map_err(|errs| PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()))?;
     interner = output.interner;
-glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
     let expr_types = output.expr_types.clone();
     let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
@@ -1178,13 +1174,11 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     let mut typeck = TypeChecker::new(interner.clone());
-    let output = typeck.check(&hir).map_err(|errs| {
-        PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        )
-    })?;
+    let output = typeck
+        .check(&hir)
+        .map_err(|errs| PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()))?;
     interner = output.interner;
-glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
     let expr_types = output.expr_types.clone();
     let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =

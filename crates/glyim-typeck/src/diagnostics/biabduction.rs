@@ -1,5 +1,5 @@
 use crate::diagnostics::AutoFix;
-use crate::ty::{Ty, TyKind, TyArena};
+use crate::ty::{Ty, TyArena, TyKind};
 use glyim_interner::Interner;
 
 /// Ask "What wrapper makes this compile?"
@@ -45,7 +45,9 @@ fn types_match(arena: &TyArena, a: Ty, b: Ty) -> bool {
         (TyKind::Infer, _) | (_, TyKind::Infer) => true,
         (TyKind::Named(s1), TyKind::Named(s2)) => s1 == s2,
         (TyKind::App(s1, a1), TyKind::App(s2, a2)) => {
-            s1 == s2 && a1.len() == a2.len() && a1.iter().zip(a2).all(|(&x, &y)| types_match(arena, x, y))
+            s1 == s2
+                && a1.len() == a2.len()
+                && a1.iter().zip(a2).all(|(&x, &y)| types_match(arena, x, y))
         }
         (TyKind::RawPtr(i1), TyKind::RawPtr(i2)) => types_match(arena, *i1, *i2),
         (TyKind::Fn(p1, r1), TyKind::Fn(p2, r2)) => {

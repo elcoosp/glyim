@@ -39,10 +39,7 @@ pub enum TypeError {
     #[error("invalid return type: expected {expected:?}, found {found:?}")]
     InvalidReturnType { expected: HirType, found: HirType },
     #[error("if condition must be `bool`, found `{found:?}`")]
-    IfConditionMustBeBool {
-        found: HirType,
-        expr_id: ExprId,
-    },
+    IfConditionMustBeBool { found: HirType, expr_id: ExprId },
     #[error("cannot assign to immutable `{name}`")]
     AssignToImmutable {
         name: String,
@@ -82,27 +79,15 @@ impl Diagnostic for TypeError {
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
         match self {
-            TypeError::MismatchedTypes { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some(format!("type mismatch")),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
-            TypeError::UnknownField { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("unknown field".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
-            TypeError::MissingField { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("missing field".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
+            TypeError::MismatchedTypes { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some(format!("type mismatch")), span.0, span.1 - span.0),
+            ))),
+            TypeError::UnknownField { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("unknown field".into()), span.0, span.1 - span.0),
+            ))),
+            TypeError::MissingField { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("missing field".into()), span.0, span.1 - span.0),
+            ))),
             TypeError::NonExhaustiveMatch { span, .. } => {
                 Some(Box::new(std::iter::once(miette::LabeledSpan::new(
                     Some("non-exhaustive match".into()),
@@ -110,7 +95,7 @@ impl Diagnostic for TypeError {
                     span.1 - span.0,
                 ))))
             }
-            TypeError::InvalidReturnType { .. } => { None }
+            TypeError::InvalidReturnType { .. } => None,
             TypeError::AssignToImmutable { span, .. } => {
                 Some(Box::new(std::iter::once(miette::LabeledSpan::new(
                     Some("cannot assign to immutable".into()),
@@ -125,20 +110,12 @@ impl Diagnostic for TypeError {
                     span.1 - span.0,
                 ))))
             }
-            TypeError::UnresolvedMethod { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("unresolved method".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
-            TypeError::UnresolvedName { span, .. } => {
-                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
-                    Some("unresolved name".into()),
-                    span.0,
-                    span.1 - span.0,
-                ))))
-            }
+            TypeError::UnresolvedMethod { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("unresolved method".into()), span.0, span.1 - span.0),
+            ))),
+            TypeError::UnresolvedName { span, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new(Some("unresolved name".into()), span.0, span.1 - span.0),
+            ))),
             _ => None,
         }
     }

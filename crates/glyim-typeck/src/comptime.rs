@@ -59,18 +59,20 @@ impl<'a> ComptimeContext<'a> {
     /// Check if a trait is implemented for a type.
     pub fn trait_is_implemented(&mut self, _trait_name: &str, _type_name: &str) -> bool {
         // Record dependency for invalidation
-        self.dependencies.push(crate::queries::Dependency::TraitImpl(
-            _trait_name.to_string(),
-            _type_name.to_string(),
-        ));
+        self.dependencies
+            .push(crate::queries::Dependency::TraitImpl(
+                _trait_name.to_string(),
+                _type_name.to_string(),
+            ));
         false // Stub – real resolution would query the CHR store
     }
 
     /// Get the fields of a type.
     pub fn get_fields(&mut self, _type_name: &str) -> Vec<FieldInfo> {
-        self.dependencies.push(crate::queries::Dependency::TypeFields(
-            _type_name.to_string(),
-        ));
+        self.dependencies
+            .push(crate::queries::Dependency::TypeFields(
+                _type_name.to_string(),
+            ));
         vec![]
     }
 

@@ -19,14 +19,17 @@ pub fn generate_type_meta(
     field_names: &[String],
     field_types: &[u32],
 ) -> TypeMetaSoA {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
-    let name_hashes: Vec<u64> = field_names.iter().map(|name| {
-        let mut hasher = DefaultHasher::new();
-        name.hash(&mut hasher);
-        hasher.finish()
-    }).collect();
+    let name_hashes: Vec<u64> = field_names
+        .iter()
+        .map(|name| {
+            let mut hasher = DefaultHasher::new();
+            name.hash(&mut hasher);
+            hasher.finish()
+        })
+        .collect();
 
     TypeMetaSoA {
         type_id,

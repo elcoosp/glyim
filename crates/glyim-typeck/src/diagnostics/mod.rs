@@ -1,5 +1,5 @@
-pub mod zippering;
 pub mod biabduction;
+pub mod zippering;
 
 use miette::SourceSpan;
 
@@ -11,9 +11,7 @@ pub fn span_to_src(s: glyim_diag::Span) -> SourceSpan {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum TypeError {
     #[error("infinite type detected")]
-    InfiniteType {
-        span: SourceSpan,
-    },
+    InfiniteType { span: SourceSpan },
 
     #[error("type mismatch")]
     MismatchedTypes {
@@ -57,7 +55,10 @@ impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
             ),
             TypeError::MismatchedTypes { expected_span, .. } => (
                 glyim_diag::diagnostic::Severity::Error,
-                glyim_diag::Span::new(expected_span.offset(), expected_span.offset() + expected_span.len()),
+                glyim_diag::Span::new(
+                    expected_span.offset(),
+                    expected_span.offset() + expected_span.len(),
+                ),
                 err.to_string(),
             ),
             TypeError::PhaseViolation { span, .. } => (
@@ -88,7 +89,9 @@ mod tests {
 
     #[test]
     fn type_error_can_be_converted_to_diagnostic() {
-        let err = TypeError::InfiniteType { span: (10..20).into() };
+        let err = TypeError::InfiniteType {
+            span: (10..20).into(),
+        };
         let diag: glyim_diag::diagnostic::Diagnostic = err.into();
         assert!(diag.message.contains("infinite"));
     }

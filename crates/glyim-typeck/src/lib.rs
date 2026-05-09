@@ -239,12 +239,9 @@ impl TypeChecker {
         let body_type = self.check_expr(&f.body, None);
         if let Some(expected) = &f.ret {
             if let Some(actual) = body_type {
-                let both_concrete = !self.contains_type_param(expected) &&
-                                    !self.contains_type_param(&actual);
-                if f.type_params.is_empty()
-                    && *expected != actual
-                    && both_concrete
-                {
+                let both_concrete =
+                    !self.contains_type_param(expected) && !self.contains_type_param(&actual);
+                if f.type_params.is_empty() && *expected != actual && both_concrete {
                     self.errors.push(TypeError::InvalidReturnType {
                         expected: expected.clone(),
                         found: actual.clone(),
@@ -257,7 +254,10 @@ impl TypeChecker {
 
     // --- Helper to conditionally insert into call_type_args ---
     fn maybe_record_call_type_args(&mut self, id: ExprId, args: Vec<HirType>) {
-        eprintln!("[typeck maybe_record] id={:?} args={:?} in_generic_fn={}", id, args, self.in_generic_fn);
+        eprintln!(
+            "[typeck maybe_record] id={:?} args={:?} in_generic_fn={}",
+            id, args, self.in_generic_fn
+        );
         if self.in_generic_fn {
             eprintln!("[typeck maybe_record] SKIPPED (in generic fn)");
             return;
@@ -291,7 +291,9 @@ impl TypeChecker {
             HirType::Generic(_, args) => args.iter().any(|a| self.contains_type_param(a)),
             HirType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(e)),
             HirType::RawPtr(inner) | HirType::Option(inner) => self.contains_type_param(inner),
-            HirType::Result(ok, err) => self.contains_type_param(ok) || self.contains_type_param(err),
+            HirType::Result(ok, err) => {
+                self.contains_type_param(ok) || self.contains_type_param(err)
+            }
             _ => false,
         }
     }
@@ -461,9 +463,8 @@ impl TypeChecker {
                         HirType::Named(*struct_name)
                     } else {
                         // Extract field types and names upfront to avoid borrow conflicts
-                        let field_infos: Vec<(Symbol, HirType)> = info.fields.iter()
-                            .map(|f| (f.name, f.ty.clone()))
-                            .collect();
+                        let field_infos: Vec<(Symbol, HirType)> =
+                            info.fields.iter().map(|f| (f.name, f.ty.clone())).collect();
                         let type_params = info.type_params.clone();
                         let field_value_types: Vec<(Symbol, HirType)> = fields
                             .iter()
@@ -473,7 +474,11 @@ impl TypeChecker {
                             })
                             .collect();
                         match self.infer_struct_type_args(
-                            &StructInfo { fields: info.fields.clone(), field_map: info.field_map.clone(), type_params: type_params.clone() },
+                            &StructInfo {
+                                fields: info.fields.clone(),
+                                field_map: info.field_map.clone(),
+                                type_params: type_params.clone(),
+                            },
                             &field_value_types,
                             expr.get_id(),
                             expr.get_span(),
@@ -484,7 +489,8 @@ impl TypeChecker {
                                     .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                     .collect();
                                 for (fname, fexpr) in fields {
-                                    if let Some(field_ty) = field_infos.iter()
+                                    if let Some(field_ty) = field_infos
+                                        .iter()
                                         .find(|(n, _)| n == fname)
                                         .map(|(_, t)| t.clone())
                                     {
@@ -504,7 +510,9 @@ impl TypeChecker {
                                                         }
                                                     }
                                                     if !type_args.is_empty() {
-                                                        self.maybe_record_call_type_args(call_id, type_args);
+                                                        self.maybe_record_call_type_args(
+                                                            call_id, type_args,
+                                                        );
                                                     }
                                                 }
                                             }
@@ -515,10 +523,7 @@ impl TypeChecker {
                             }
                             Err(_) => HirType::Generic(
                                 *struct_name,
-                                type_params
-                                    .iter()
-                                    .map(|tp| HirType::Named(*tp))
-                                    .collect(),
+                                type_params.iter().map(|tp| HirType::Named(*tp)).collect(),
                             ),
                         }
                     }
@@ -657,12 +662,16 @@ impl TypeChecker {
                                 if has_unresolved {
                                     if let Some(exp) = expected {
                                         if let Ok(bidir_sub) = self.infer_generics_from_expected(
-                                            fn_def, exp, *id, expr.get_span(),
+                                            fn_def,
+                                            exp,
+                                            *id,
+                                            expr.get_span(),
                                         ) {
                                             let mut merged = bidir_sub;
                                             for tp in &fn_def.type_params {
                                                 if let Some(ty) = sub.get(tp) {
-                                                    if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n)) {
+                                                    if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                                    {
                                                         merged.insert(*tp, ty.clone());
                                                     }
                                                 }
@@ -681,7 +690,10 @@ impl TypeChecker {
                             Err(_) => {
                                 if let Some(exp) = expected {
                                     match self.infer_generics_from_expected(
-                                        fn_def, exp, *id, expr.get_span(),
+                                        fn_def,
+                                        exp,
+                                        *id,
+                                        expr.get_span(),
                                     ) {
                                         Ok(sub) => sub,
                                         Err(e) => {
@@ -768,7 +780,8 @@ impl TypeChecker {
                                         .map(|a| self.expr_types[a.get_id().as_usize()].clone()),
                                 )
                                 .collect();
-                            let arg_sub = self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span());
+                            let arg_sub =
+                                self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span());
                             let sub = match arg_sub {
                                 Ok(sub) => {
                                     let has_unresolved = fn_def.type_params.iter().any(|tp| {
@@ -778,13 +791,19 @@ impl TypeChecker {
                                     });
                                     if has_unresolved {
                                         if let Some(exp) = expected {
-                                            if let Ok(bidir_sub) = self.infer_generics_from_expected(
-                                                &fn_def, exp, *id, expr.get_span(),
-                                            ) {
+                                            if let Ok(bidir_sub) = self
+                                                .infer_generics_from_expected(
+                                                    &fn_def,
+                                                    exp,
+                                                    *id,
+                                                    expr.get_span(),
+                                                )
+                                            {
                                                 let mut merged = bidir_sub;
                                                 for tp in &fn_def.type_params {
                                                     if let Some(ty) = sub.get(tp) {
-                                                        if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n)) {
+                                                        if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                                        {
                                                             merged.insert(*tp, ty.clone());
                                                         }
                                                     }
@@ -803,7 +822,10 @@ impl TypeChecker {
                                 Err(e) => {
                                     if let Some(exp) = expected {
                                         match self.infer_generics_from_expected(
-                                            &fn_def, exp, *id, expr.get_span(),
+                                            &fn_def,
+                                            exp,
+                                            *id,
+                                            expr.get_span(),
                                         ) {
                                             Ok(sub) => sub,
                                             Err(_) => {
@@ -874,11 +896,16 @@ impl TypeChecker {
                 }
                 HirType::Never
             }
-            HirExpr::SizeOf { id, target_type, .. } => {
-                eprintln!("[typeck SizeOf] id={:?} target_type={:?} in_generic_fn={}", id, target_type, self.in_generic_fn);
+            HirExpr::SizeOf {
+                id, target_type, ..
+            } => {
+                eprintln!(
+                    "[typeck SizeOf] id={:?} target_type={:?} in_generic_fn={}",
+                    id, target_type, self.in_generic_fn
+                );
                 self.maybe_record_call_type_args(*id, vec![target_type.clone()]);
                 HirType::Int
-            },
+            }
             HirExpr::AddrOf { .. } => HirType::Int,
             HirExpr::TupleLit { elements, .. } => {
                 let types: Vec<HirType> = elements
@@ -903,7 +930,12 @@ impl TypeChecker {
                 ..
             } => {
                 let ty = self.check_expr(value, None).unwrap_or(HirType::Int);
-                if let HirExpr::Call { id: call_id, callee, .. } = value {
+                if let HirExpr::Call {
+                    id: call_id,
+                    callee,
+                    ..
+                } = value
+                {
                     if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
                         if !fn_def.type_params.is_empty() && !self.contains_type_param(&ty) {
                             if let HirType::Generic(_, ref type_args) = ty {
@@ -950,7 +982,10 @@ impl TypeChecker {
                             if !fn_def.type_params.is_empty() {
                                 if let HirType::Generic(_, type_args) = annotated {
                                     if type_args.len() == fn_def.type_params.len() {
-                                        self.maybe_record_call_type_args(*call_id, type_args.clone());
+                                        self.maybe_record_call_type_args(
+                                            *call_id,
+                                            type_args.clone(),
+                                        );
                                     }
                                 }
                             }
@@ -1254,14 +1289,7 @@ impl TypeChecker {
             .collect();
         let args: Vec<ty::Ty> = arg_types
             .iter()
-            .map(|a| {
-                TypeChecker::hir_type_to_ty(
-                    &mut arena,
-                    &mut unify_table,
-                    &HashMap::new(),
-                    a,
-                )
-            })
+            .map(|a| TypeChecker::hir_type_to_ty(&mut arena, &mut unify_table, &HashMap::new(), a))
             .collect();
         for (i, (p, a)) in params.iter().zip(args.iter()).enumerate() {
             let mut errs = Vec::new();
@@ -1374,12 +1402,8 @@ impl TypeChecker {
         for tp in &fn_def.type_params {
             param_vars.insert(*tp, unify_table.new_var(&mut arena, call_span));
         }
-        let expected_ty = TypeChecker::hir_type_to_ty(
-            &mut arena,
-            &mut unify_table,
-            &HashMap::new(),
-            expected,
-        );
+        let expected_ty =
+            TypeChecker::hir_type_to_ty(&mut arena, &mut unify_table, &HashMap::new(), expected);
         let ret_ty = fn_def.ret.as_ref().unwrap_or(&HirType::Unit);
         let fn_ret_ty =
             TypeChecker::hir_type_to_ty(&mut arena, &mut unify_table, &param_vars, ret_ty);

@@ -39,13 +39,19 @@ pub fn build_rep_struct(
         let mut iter = fields.iter().rev();
         let (last_name, last_ty) = iter.next().unwrap();
         let mut rep = Rep::Field(
-            RepMeta { name: *last_name, annotations: vec![] },
+            RepMeta {
+                name: *last_name,
+                annotations: vec![],
+            },
             *last_ty,
         );
         for &(name, ty) in iter {
             rep = Rep::Product(
                 Box::new(Rep::Field(
-                    RepMeta { name, annotations: vec![] },
+                    RepMeta {
+                        name,
+                        annotations: vec![],
+                    },
                     ty,
                 )),
                 Box::new(rep),
@@ -54,9 +60,15 @@ pub fn build_rep_struct(
         rep
     };
     Rep::Meta(
-        RepMeta { name: type_name, annotations },
+        RepMeta {
+            name: type_name,
+            annotations,
+        },
         Box::new(Rep::Constructor(
-            RepMeta { name: type_name, annotations: vec![] },
+            RepMeta {
+                name: type_name,
+                annotations: vec![],
+            },
             Box::new(inner),
         )),
     )
@@ -71,7 +83,10 @@ pub fn build_rep_enum(
     // If no constructors, return a unit-like meta
     if constructors.is_empty() {
         return Rep::Meta(
-            RepMeta { name: type_name, annotations },
+            RepMeta {
+                name: type_name,
+                annotations,
+            },
             Box::new(Rep::Unit),
         );
     }
@@ -79,20 +94,29 @@ pub fn build_rep_enum(
     let mut iter = constructors.iter().rev();
     let &(first_ctor, ref first_fields) = iter.next().unwrap();
     let mut rep = Rep::Constructor(
-        RepMeta { name: first_ctor, annotations: vec![] },
+        RepMeta {
+            name: first_ctor,
+            annotations: vec![],
+        },
         Box::new(build_ctor_fields(first_fields)),
     );
     for &(ctor_name, ref fields) in iter {
         rep = Rep::Sum(
             Box::new(Rep::Constructor(
-                RepMeta { name: ctor_name, annotations: vec![] },
+                RepMeta {
+                    name: ctor_name,
+                    annotations: vec![],
+                },
                 Box::new(build_ctor_fields(fields)),
             )),
             Box::new(rep),
         );
     }
     Rep::Meta(
-        RepMeta { name: type_name, annotations },
+        RepMeta {
+            name: type_name,
+            annotations,
+        },
         Box::new(rep),
     )
 }
@@ -103,10 +127,22 @@ fn build_ctor_fields(fields: &[(Symbol, Ty)]) -> Rep {
     } else {
         let mut iter = fields.iter().rev();
         let (last_name, last_ty) = iter.next().unwrap();
-        let mut rep = Rep::Field(RepMeta { name: *last_name, annotations: vec![] }, *last_ty);
+        let mut rep = Rep::Field(
+            RepMeta {
+                name: *last_name,
+                annotations: vec![],
+            },
+            *last_ty,
+        );
         for &(name, ty) in iter {
             rep = Rep::Product(
-                Box::new(Rep::Field(RepMeta { name, annotations: vec![] }, ty)),
+                Box::new(Rep::Field(
+                    RepMeta {
+                        name,
+                        annotations: vec![],
+                    },
+                    ty,
+                )),
                 Box::new(rep),
             );
         }
