@@ -79,8 +79,6 @@ pub struct TypeChecker {
     call_type_args: HashMap<ExprId, Vec<HirType>>,
     errors: Vec<TypeError>,
     fns: Vec<HirFn>,
-    /// When true, we are inside a generic function body — skip call_type_args recording.
-    in_generic_fn: bool,
 }
 
 impl TypeChecker {
@@ -129,7 +127,6 @@ impl TypeChecker {
             call_type_args: HashMap::new(),
             errors: Vec::new(),
             fns: Vec::new(),
-            in_generic_fn: false,
         }
     }
 
@@ -228,9 +225,7 @@ impl TypeChecker {
 
     fn check_fn(&mut self, f: &HirFn) {
         self.scopes = vec![Scope::new()];
-        // Set in_generic_fn flag — suppresses call_type_args recording for generic functions
-        let prev_generic = self.in_generic_fn;
-        self.in_generic_fn = !f.type_params.is_empty();
+        // REMOVED: in_generic_fn save/restore — no longer needed
 
         for (i, &(sym, ref ty)) in f.params.iter().enumerate() {
             let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
@@ -249,28 +244,25 @@ impl TypeChecker {
                 }
             }
         }
-        self.in_generic_fn = prev_generic;
+        // REMOVED: self.in_generic_fn = prev_generic;
     }
-
     // --- Helper to conditionally insert into call_type_args ---
     fn maybe_record_call_type_args(&mut self, id: ExprId, args: Vec<HirType>) {
-        eprintln!(
-            "[typeck maybe_record] id={:?} args={:?} in_generic_fn={}",
-            id, args, self.in_generic_fn
-        );
-        if self.in_generic_fn {
-            eprintln!("[typeck maybe_record] SKIPPED (in generic fn)");
-            return;
-        }
+        // FIX: Removed the `in_generic_fn` early return. The `contains_type_param`
+        // check below is sufficient to skip truly unresolved type params.
+        //
+        // The old `in_generic_fn` check was too broad — it prevented recording
+        // concrete type args (like [Int]) inside generic function bodies, which
+        // the monomorphizer needs to discover specializations transitively.
+        // For example, inside HashMap<K,V>::new(), a call like Some(42) produces
+        // concrete type args [Int] that must be recorded so the monomorphizer
+        // knows Option<i64> is needed when instantiating HashMap<i64,i64>.
         let has_unresolved = args.iter().any(|a| self.contains_type_param(a));
         if has_unresolved {
-            eprintln!("[typeck maybe_record] SKIPPED (unresolved type param in args)");
             return;
         }
-        eprintln!("[typeck maybe_record] INSERTED");
         self.call_type_args.insert(id, args);
     }
-
     fn has_type_parameter(&self, ty: &HirType) -> bool {
         match ty {
             HirType::Named(sym) => {
