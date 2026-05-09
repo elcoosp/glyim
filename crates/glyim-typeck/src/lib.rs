@@ -528,7 +528,10 @@ impl TypeChecker {
                         }
                     }
                 } else {
-                    HirType::Named(*struct_name)
+                    self.errors.push(TypeError::UnknownType {
+                        name: *struct_name,
+                    });
+                    HirType::Error
                 }
             }
             HirExpr::EnumVariant {
@@ -568,7 +571,10 @@ impl TypeChecker {
                         HirType::Generic(*enum_name, concrete_args)
                     }
                 } else {
-                    HirType::Named(*enum_name)
+                    self.errors.push(TypeError::UnknownType {
+                        name: *enum_name,
+                    });
+                    HirType::Error
                 }
             }
             HirExpr::FieldAccess { object, field, .. } => {
