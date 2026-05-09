@@ -724,7 +724,7 @@ impl TypeChecker {
                 ty: annotation,
                 ..
             } => {
-                let inferred = self.check_expr(value, None).unwrap_or(HirType::Int);
+                let inferred = self.check_expr(value, annotation.as_ref()).unwrap_or(HirType::Int);
                 let ty = if let Some(annotated) = annotation {
                     // annotation compatibility check
                     // Compatibility check: accept generic vs. concrete with same base name
