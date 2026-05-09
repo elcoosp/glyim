@@ -83,7 +83,6 @@ pub struct TypeChecker {
 
 impl TypeChecker {
     pub fn new(mut interner: Interner) -> Self {
-        // Register built-in intrinsics before building the TypeChecker.
         let ptr_u8 = HirType::RawPtr(Box::new(HirType::Int));
         let i64_type = HirType::Int;
         let void_type = HirType::Unit;
@@ -233,10 +232,6 @@ impl TypeChecker {
         let body_type = self.check_expr(&f.body, None);
         if let Some(expected) = &f.ret {
             if let Some(actual) = body_type {
-                let _is_type_param =
-                    |ty: &HirType| matches!(ty, HirType::Named(s) if f.type_params.contains(s));
-                // Only report the error if both the return type
-                // and the actual type are fully concrete (no type parameters).
                 let both_concrete = !self.contains_type_param(expected) &&
                                     !self.contains_type_param(&actual);
                 if f.type_params.is_empty()
@@ -266,7 +261,6 @@ impl TypeChecker {
         }
     }
 
-    /// Returns true if the type or any nested type contains an unresolved type parameter.
     fn contains_type_param(&self, ty: &HirType) -> bool {
         match ty {
             HirType::Named(_) => self.has_type_parameter(ty),
@@ -573,7 +567,7 @@ impl TypeChecker {
                             span: (0, 0),
                         });
                     }
-                    _ => { /* ignore */ }
+                    _ => {}
                 }
                 HirType::Error
             }
@@ -605,7 +599,6 @@ impl TypeChecker {
                     }
                 }
             }
-            // ── CHANGED: Call handling with strengthened bidirectional inference ──
             HirExpr::Call {
                 id, callee, args, ..
             } => {
@@ -622,23 +615,19 @@ impl TypeChecker {
                             .iter()
                             .map(|a| self.expr_types[a.get_id().as_usize()].clone())
                             .collect();
-                        // Primary unification from arguments
                         let arg_sub = self.unify_generics(fn_def, &arg_types, *id, expr.get_span());
                         let sub = match arg_sub {
                             Ok(sub) => {
-                                // Check if any type parameters are still unresolved (mapped to their own name)
                                 let has_unresolved = fn_def.type_params.iter().any(|tp| {
                                     sub.get(tp).map_or(true, |ty| {
                                         matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
                                     })
                                 });
                                 if has_unresolved {
-                                    // Try bidirectional inference from expected return type
                                     if let Some(exp) = expected {
                                         if let Ok(bidir_sub) = self.infer_generics_from_expected(
                                             fn_def, exp, *id, expr.get_span(),
                                         ) {
-                                            // Merge: prefer resolved types from arg-based sub, fill gaps from bidirectional
                                             let mut merged = bidir_sub;
                                             for tp in &fn_def.type_params {
                                                 if let Some(ty) = sub.get(tp) {
@@ -659,7 +648,6 @@ impl TypeChecker {
                                 }
                             }
                             Err(_) => {
-                                // unify_generics failed, try bidirectional inference as fallback
                                 if let Some(exp) = expected {
                                     match self.infer_generics_from_expected(
                                         fn_def, exp, *id, expr.get_span(),
@@ -688,12 +676,8 @@ impl TypeChecker {
                             .iter()
                             .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                             .collect();
-                        let has_unresolved = fn_def.type_params.iter().any(|tp| {
-                            sub.get(tp).map_or(true, |ty| {
-                                matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
-                            })
-                        });
-                        if !has_unresolved {
+                        let all_concrete = concrete_args.iter().all(|a| !self.contains_type_param(a));
+                        if all_concrete {
                             self.call_type_args.insert(*id, concrete_args);
                         }
                         return concrete_ret;
@@ -732,7 +716,6 @@ impl TypeChecker {
                 });
                 HirType::Error
             }
-            // ── CHANGED: MethodCall handling with the same logic ──
             HirExpr::MethodCall {
                 id,
                 receiver,
@@ -813,23 +796,20 @@ impl TypeChecker {
                                 .iter()
                                 .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                 .collect();
-                            let has_unresolved = fn_def.type_params.iter().any(|tp| {
-                                sub.get(tp).map_or(true, |ty| {
-                                    matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
-                                })
-                            });
-                            if !has_unresolved {
+                            let all_concrete = concrete_args.iter().all(|a| !self.contains_type_param(a));
+                            if all_concrete {
                                 self.call_type_args.insert(*id, concrete_args);
                             }
                             return concrete_ret;
                         } else {
-                            // Method has no own type params, but the struct may be generic.
                             if let HirType::Generic(struct_sym, ref type_args) = recv_ty {
-                                self.call_type_args.insert(*id, type_args.clone());
-                                // Build a substitution from the struct's type params to concrete args
+                                let all_concrete = type_args.iter().all(|a| !self.contains_type_param(a));
+                                if all_concrete {
+                                    self.call_type_args.insert(*id, type_args.clone());
+                                }
                                 if let Some(struct_info) = self.structs.get(&struct_sym) {
                                     if struct_info.type_params.len() == type_args.len() {
-                                        let sub: std::collections::HashMap<Symbol, HirType> = struct_info
+                                        let sub: HashMap<Symbol, HirType> = struct_info
                                             .type_params
                                             .iter()
                                             .zip(type_args.iter())
@@ -900,6 +880,20 @@ impl TypeChecker {
                 ..
             } => {
                 let ty = self.check_expr(value, None).unwrap_or(HirType::Int);
+                if let HirExpr::Call { id: call_id, callee, .. } = value {
+                    if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
+                        if !fn_def.type_params.is_empty() && !self.contains_type_param(&ty) {
+                            if let HirType::Generic(_, ref type_args) = ty {
+                                if type_args.len() == fn_def.type_params.len() {
+                                    let all_concrete = type_args.iter().all(|a| !self.contains_type_param(a));
+                                    if all_concrete {
+                                        self.call_type_args.insert(*call_id, type_args.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 self.scopes
                     .last_mut()
                     .unwrap()
@@ -936,7 +930,10 @@ impl TypeChecker {
                             if !fn_def.type_params.is_empty() {
                                 if let HirType::Generic(_, type_args) = annotated {
                                     if type_args.len() == fn_def.type_params.len() {
-                                        self.call_type_args.insert(*call_id, type_args.clone());
+                                        let all_concrete = type_args.iter().all(|a| !self.contains_type_param(a));
+                                        if all_concrete {
+                                            self.call_type_args.insert(*call_id, type_args.clone());
+                                        }
                                     }
                                 }
                             }
@@ -1344,8 +1341,6 @@ impl TypeChecker {
         Ok(sub)
     }
 
-    /// Bidirectional inference: use the expected type (return type context) to deduce
-    /// generic parameters for functions with zero arguments.
     fn infer_generics_from_expected(
         &self,
         fn_def: &glyim_hir::HirFn,
@@ -1362,14 +1357,12 @@ impl TypeChecker {
         for tp in &fn_def.type_params {
             param_vars.insert(*tp, unify_table.new_var(&mut arena, call_span));
         }
-        // Convert expected type (return context) to internal Ty
         let expected_ty = TypeChecker::hir_type_to_ty(
             &mut arena,
             &mut unify_table,
             &std::collections::HashMap::new(),
             expected,
         );
-        // Get the function's return type (with type params as unification variables)
         let ret_ty = fn_def.ret.as_ref().unwrap_or(&HirType::Unit);
         let fn_ret_ty =
             TypeChecker::hir_type_to_ty(&mut arena, &mut unify_table, &param_vars, ret_ty);
