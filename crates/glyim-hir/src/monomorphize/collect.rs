@@ -262,25 +262,27 @@ impl<'a> MonoContext<'a> {
                 HirType::Generic(*sym, inner)
             }
             HirType::Named(sym) => {
-                // First try substitution from current_subst
-                if let Some(ref subst) = self.current_subst {
-                    if let Some(concrete) = subst.get(&sym) {
-                        // Recursively concretize the concrete type
-                        return self.concretize_type(concrete);
-                    }
-                }
                 // Fallback: check if it's a single uppercase letter (unresolved type param)
                 let s = self.interner.resolve(*sym);
                 if s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase()) {
                     // This should have been substituted; for debugging we warn and return Int
-                    tracing::warn!("Unresolved type parameter {} in concretize_type, falling back to Int", s);
+                    tracing::warn!(
+                        "Unresolved type parameter {} in concretize_type, falling back to Int",
+                        s
+                    );
                     HirType::Int
                 } else {
                     ty.clone()
                 }
             }
-            HirType::Int | HirType::Bool | HirType::Float | HirType::Str
-            | HirType::Unit | HirType::Never | HirType::Error | HirType::Opaque(_) => ty.clone(),
+            HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Error
+            | HirType::Opaque(_) => ty.clone(),
             HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
             HirType::Option(inner) => {
                 let inner = self.concretize_type(inner);
@@ -310,11 +312,9 @@ impl<'a> MonoContext<'a> {
             HirType::Func(params, ret) => HirType::Func(
                 params.iter().map(|p| self.concretize_type(p)).collect(),
                 Box::new(self.concretize_type(ret)),
-            )
+            ),
         }
     }
-    }
-
 
     pub(crate) fn queue_fn_specialization(&mut self, name: Symbol, args: Vec<HirType>) {
         let args = self.concretize_type_args(&args);

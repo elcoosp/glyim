@@ -28,7 +28,6 @@ impl<'a> MonoContext<'a> {
             type_work_queue: Vec::new(),
             type_queued: HashSet::new(),
             method_map: HashMap::new(),
-            current_subst: None,
         }
     }
 
@@ -116,8 +115,6 @@ impl<'a> MonoContext<'a> {
             _ => false,
         }
     }
-
-
 
     pub(crate) fn substitute_type_args(
         &self,
@@ -227,9 +224,7 @@ impl<'a> MonoContext<'a> {
         if let Some(rt) = &mut mono.ret {
             *rt = crate::types::substitute_type(rt, &sub);
         }
-        self.current_subst = Some(sub.clone());
         mono.body = self.substitute_expr_types(&mono.body, &sub);
-        self.current_subst = None;
         self.concretize_enum_variant_names(&mut mono.body, &sub);
         if !sub.is_empty() {
             mono.body = force_substitute_as_targets(mono.body, &sub);
