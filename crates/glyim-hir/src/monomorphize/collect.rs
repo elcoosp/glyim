@@ -154,6 +154,12 @@ impl<'a> MonoContext<'a> {
         match expr {
             HirExpr::Call { id, callee, .. } => {
                 if *id == search_id {
+                    // Strip monomorphization suffix (e.g., Vec_push__i64 → Vec_push)
+                    let callee_str = ctx.interner.resolve(*callee).to_string();
+                    if let Some(pos) = callee_str.find("__") {
+                        let base = ctx.interner.intern(&callee_str[..pos]);
+                        return Some(base);
+                    }
                     return Some(*callee);
                 }
                 None

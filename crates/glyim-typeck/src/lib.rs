@@ -605,6 +605,7 @@ impl TypeChecker {
                     }
                 }
             }
+            // ── CHANGED: Call handling with strengthened bidirectional inference ──
             HirExpr::Call {
                 id, callee, args, ..
             } => {
@@ -621,43 +622,74 @@ impl TypeChecker {
                             .iter()
                             .map(|a| self.expr_types[a.get_id().as_usize()].clone())
                             .collect();
-                        let sub = self
-                            .unify_generics(fn_def, &arg_types, *id, expr.get_span())
-                            .or_else(|_| {
-                                // If couldn't infer from args, try expected return type (bidirectional)
-                                if let Some(exp) = expected {
-                                    self.infer_generics_from_expected(
-                                        fn_def,
-                                        exp,
-                                        *id,
-                                        expr.get_span(),
-                                    )
+                        // Primary unification from arguments
+                        let arg_sub = self.unify_generics(fn_def, &arg_types, *id, expr.get_span());
+                        let sub = match arg_sub {
+                            Ok(sub) => {
+                                // Check if any type parameters are still unresolved (mapped to their own name)
+                                let has_unresolved = fn_def.type_params.iter().any(|tp| {
+                                    sub.get(tp).map_or(true, |ty| {
+                                        matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                    })
+                                });
+                                if has_unresolved {
+                                    // Try bidirectional inference from expected return type
+                                    if let Some(exp) = expected {
+                                        if let Ok(bidir_sub) = self.infer_generics_from_expected(
+                                            fn_def, exp, *id, expr.get_span(),
+                                        ) {
+                                            // Merge: prefer resolved types from arg-based sub, fill gaps from bidirectional
+                                            let mut merged = bidir_sub;
+                                            for tp in &fn_def.type_params {
+                                                if let Some(ty) = sub.get(tp) {
+                                                    if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n)) {
+                                                        merged.insert(*tp, ty.clone());
+                                                    }
+                                                }
+                                            }
+                                            merged
+                                        } else {
+                                            sub
+                                        }
+                                    } else {
+                                        sub
+                                    }
                                 } else {
-                                    Err(TypeError::MismatchedTypes {
+                                    sub
+                                }
+                            }
+                            Err(_) => {
+                                // unify_generics failed, try bidirectional inference as fallback
+                                if let Some(exp) = expected {
+                                    match self.infer_generics_from_expected(
+                                        fn_def, exp, *id, expr.get_span(),
+                                    ) {
+                                        Ok(sub) => sub,
+                                        Err(e) => {
+                                            self.errors.push(e);
+                                            return HirType::Error;
+                                        }
+                                    }
+                                } else {
+                                    self.errors.push(TypeError::MismatchedTypes {
                                         expected: HirType::Error,
                                         found: HirType::Error,
                                         expr_id: *id,
                                         span: (expr.get_span().start, expr.get_span().end),
-                                    })
+                                    });
+                                    return HirType::Error;
                                 }
-                            });
-                        match sub {
-                            Ok(sub) => {
-                                let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
-                                let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
-                                let concrete_args: Vec<HirType> = fn_def
-                                    .type_params
-                                    .iter()
-                                    .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
-                                    .collect();
-self.call_type_args.insert(*id, concrete_args);
-                                return concrete_ret;
                             }
-                            Err(e) => {
-                                self.errors.push(e);
-                                return HirType::Error;
-                            }
-                        }
+                        };
+                        let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
+                        let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
+                        let concrete_args: Vec<HirType> = fn_def
+                            .type_params
+                            .iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
+                            .collect();
+                        self.call_type_args.insert(*id, concrete_args);
+                        return concrete_ret;
                     }
                     if fn_def.type_params.is_empty() {
                         for (_, ((_, param_ty), arg_expr)) in
@@ -693,6 +725,7 @@ self.call_type_args.insert(*id, concrete_args);
                 });
                 HirType::Error
             }
+            // ── CHANGED: MethodCall handling with the same logic ──
             HirExpr::MethodCall {
                 id,
                 receiver,
@@ -709,7 +742,7 @@ self.call_type_args.insert(*id, concrete_args);
                     _ => None,
                 };
                 if let Some(type_name) = type_sym {
-if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
+                    if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
                         if !fn_def.type_params.is_empty() {
                             let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
                                 .chain(
@@ -717,25 +750,64 @@ if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
                                         .map(|a| self.expr_types[a.get_id().as_usize()].clone()),
                                 )
                                 .collect();
-                            match self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span())
-                            {
+                            let arg_sub = self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span());
+                            let sub = match arg_sub {
                                 Ok(sub) => {
-                                    let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
-                                    let concrete_ret =
-                                        glyim_hir::types::substitute_type(&ret, &sub);
-                                    let concrete_args: Vec<HirType> = fn_def
-                                        .type_params
-                                        .iter()
-                                        .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
-                                        .collect();
-self.call_type_args.insert(*id, concrete_args);
-                                    return concrete_ret;
+                                    let has_unresolved = fn_def.type_params.iter().any(|tp| {
+                                        sub.get(tp).map_or(true, |ty| {
+                                            matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                        })
+                                    });
+                                    if has_unresolved {
+                                        if let Some(exp) = expected {
+                                            if let Ok(bidir_sub) = self.infer_generics_from_expected(
+                                                &fn_def, exp, *id, expr.get_span(),
+                                            ) {
+                                                let mut merged = bidir_sub;
+                                                for tp in &fn_def.type_params {
+                                                    if let Some(ty) = sub.get(tp) {
+                                                        if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n)) {
+                                                            merged.insert(*tp, ty.clone());
+                                                        }
+                                                    }
+                                                }
+                                                merged
+                                            } else {
+                                                sub
+                                            }
+                                        } else {
+                                            sub
+                                        }
+                                    } else {
+                                        sub
+                                    }
                                 }
                                 Err(e) => {
-                                    self.errors.push(e);
-                                    return HirType::Error;
+                                    if let Some(exp) = expected {
+                                        match self.infer_generics_from_expected(
+                                            &fn_def, exp, *id, expr.get_span(),
+                                        ) {
+                                            Ok(sub) => sub,
+                                            Err(_) => {
+                                                self.errors.push(e);
+                                                return HirType::Error;
+                                            }
+                                        }
+                                    } else {
+                                        self.errors.push(e);
+                                        return HirType::Error;
+                                    }
                                 }
-                            }
+                            };
+                            let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
+                            let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
+                            let concrete_args: Vec<HirType> = fn_def
+                                .type_params
+                                .iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
+                                .collect();
+                            self.call_type_args.insert(*id, concrete_args);
+                            return concrete_ret;
                         } else {
                             // Record concrete type args for monomorphization even if method has no own type params
                             if let HirType::Generic(_, ref type_args) = recv_ty {
