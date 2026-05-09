@@ -181,7 +181,7 @@ impl TypeChecker {
             let mangled = self.interner.resolve(m.name).to_string();
             if let Some(pos) = mangled.rfind('_') {
                 let type_part = &mangled[..pos];
-                let method_part = &mangled[pos+1..];
+                let method_part = &mangled[pos + 1..];
                 if let Some(type_sym) = self.interner.resolve_symbol(type_part) {
                     let method_sym = self.interner.intern(method_part);
                     self.method_map.insert((type_sym, method_sym), m.clone());
@@ -225,9 +225,7 @@ impl TypeChecker {
             HirType::Generic(_, args) => args.iter().any(|a| self.has_type_parameter(a)),
             HirType::Tuple(elems) => elems.iter().any(|e| self.has_type_parameter(e)),
             HirType::RawPtr(inner) | HirType::Option(inner) => self.has_type_parameter(inner),
-            HirType::Result(ok, err) => {
-                self.has_type_parameter(ok) || self.has_type_parameter(err)
-            }
+            HirType::Result(ok, err) => self.has_type_parameter(ok) || self.has_type_parameter(err),
             _ => false,
         }
     }
@@ -313,7 +311,10 @@ impl TypeChecker {
             } => {
                 let scrutinee_ty = self.check_expr(scrutinee, None).unwrap_or(HirType::Never);
                 let has_question_mark = arms.iter().any(|arm| {
-                    matches!(arm.pattern, HirPattern::ResultOk(_) | HirPattern::ResultErr(_))
+                    matches!(
+                        arm.pattern,
+                        HirPattern::ResultOk(_) | HirPattern::ResultErr(_)
+                    )
                 });
                 if has_question_mark {
                     let is_result = match &scrutinee_ty {
@@ -322,7 +323,9 @@ impl TypeChecker {
                         _ => false,
                     };
                     if !is_result {
-                        self.errors.push(TypeError::InvalidQuestion { expr_id: scrutinee.get_id() });
+                        self.errors.push(TypeError::InvalidQuestion {
+                            expr_id: scrutinee.get_id(),
+                        });
                     }
                 }
                 self.check_match_exhaustiveness(&scrutinee_ty, arms, expr.get_span());
@@ -409,10 +412,15 @@ impl TypeChecker {
                                     .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                     .collect();
                                 for (fname, fexpr) in fields {
-                                    if let Some(field_def) = info.fields.iter().find(|f| f.name == *fname) {
-                                        let _field_ty = glyim_hir::types::substitute_type(&field_def.ty, &sub);
+                                    if let Some(field_def) =
+                                        info.fields.iter().find(|f| f.name == *fname)
+                                    {
+                                        let _field_ty =
+                                            glyim_hir::types::substitute_type(&field_def.ty, &sub);
                                         if let HirExpr::Call { id, callee, .. } = fexpr {
-                                            if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
+                                            if let Some(fn_def) =
+                                                self.fns.iter().find(|f| f.name == *callee)
+                                            {
                                                 if !fn_def.type_params.is_empty() {
                                                     let mut type_args = Vec::new();
                                                     for tp in &fn_def.type_params {
@@ -444,7 +452,11 @@ impl TypeChecker {
                 }
             }
             HirExpr::EnumVariant {
-                id, enum_name, variant_name, args, ..
+                id,
+                enum_name,
+                variant_name,
+                args,
+                ..
             } => {
                 for a in args {
                     self.check_expr(a, None);
@@ -458,7 +470,8 @@ impl TypeChecker {
                         if let Some(variant) = variant {
                             for (field_idx, field) in variant.fields.iter().enumerate() {
                                 if let Some(arg_expr) = args.get(field_idx) {
-                                    let arg_ty = self.expr_types[arg_expr.get_id().as_usize()].clone();
+                                    let arg_ty =
+                                        self.expr_types[arg_expr.get_id().as_usize()].clone();
                                     if let HirType::Named(sym) = &field.ty {
                                         if info.type_params.contains(sym) {
                                             sub.insert(*sym, arg_ty.clone());
@@ -467,9 +480,11 @@ impl TypeChecker {
                                 }
                             }
                         }
-                        let concrete_args: Vec<HirType> = info.type_params.iter().map(|tp| {
-                            sub.get(tp).cloned().unwrap_or(HirType::Named(*tp))
-                        }).collect();
+                        let concrete_args: Vec<HirType> = info
+                            .type_params
+                            .iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                            .collect();
                         HirType::Generic(*enum_name, concrete_args)
                     }
                 } else {
@@ -556,7 +571,27 @@ impl TypeChecker {
                             .iter()
                             .map(|a| self.expr_types[a.get_id().as_usize()].clone())
                             .collect();
-                        match self.unify_generics(fn_def, &arg_types, *id, expr.get_span()) {
+                        let sub = self
+                            .unify_generics(fn_def, &arg_types, *id, expr.get_span())
+                            .or_else(|_| {
+                                // If couldn't infer from args, try expected return type (bidirectional)
+                                if let Some(exp) = expected {
+                                    self.infer_generics_from_expected(
+                                        fn_def,
+                                        exp,
+                                        *id,
+                                        expr.get_span(),
+                                    )
+                                } else {
+                                    Err(TypeError::MismatchedTypes {
+                                        expected: HirType::Error,
+                                        found: HirType::Error,
+                                        expr_id: *id,
+                                        span: (expr.get_span().start, expr.get_span().end),
+                                    })
+                                }
+                            });
+                        match sub {
                             Ok(sub) => {
                                 let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
                                 let concrete_ret = glyim_hir::types::substitute_type(&ret, &sub);
@@ -600,7 +635,11 @@ impl TypeChecker {
                 self.errors.push(TypeError::UnresolvedName {
                     name: callee_name.clone(),
                     span: (expr.get_span().start, expr.get_span().end),
-                    suggestions: glyim_diag::suggest::suggest_similar(&callee_name, &self.interner, 3),
+                    suggestions: glyim_diag::suggest::suggest_similar(
+                        &callee_name,
+                        &self.interner,
+                        3,
+                    ),
                 });
                 HirType::Error
             }
@@ -622,18 +661,14 @@ impl TypeChecker {
                 if let Some(type_name) = type_sym {
                     if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
                         if !fn_def.type_params.is_empty() {
-                            let all_arg_types: Vec<HirType> =
-                                std::iter::once(recv_ty.clone())
-                                    .chain(args.iter().map(|a| {
-                                        self.expr_types[a.get_id().as_usize()].clone()
-                                    }))
-                                    .collect();
-                            match self.unify_generics(
-                                &fn_def,
-                                &all_arg_types,
-                                *id,
-                                expr.get_span(),
-                            ) {
+                            let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
+                                .chain(
+                                    args.iter()
+                                        .map(|a| self.expr_types[a.get_id().as_usize()].clone()),
+                                )
+                                .collect();
+                            match self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span())
+                            {
                                 Ok(sub) => {
                                     let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
                                     let concrete_ret =
@@ -641,9 +676,7 @@ impl TypeChecker {
                                     let concrete_args: Vec<HirType> = fn_def
                                         .type_params
                                         .iter()
-                                        .map(|tp| {
-                                            sub.get(tp).cloned().unwrap_or(HirType::Error)
-                                        })
+                                        .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                         .collect();
                                     self.call_type_args.insert(*id, concrete_args);
                                     return concrete_ret;
@@ -721,7 +754,9 @@ impl TypeChecker {
                 ty: annotation,
                 ..
             } => {
-                let inferred = self.check_expr(value, annotation.as_ref()).unwrap_or(HirType::Int);
+                let inferred = self
+                    .check_expr(value, annotation.as_ref())
+                    .unwrap_or(HirType::Int);
                 let ty = if let Some(annotated) = annotation {
                     let compat = Self::types_compatible(&annotated, &inferred);
                     if !compat && inferred != HirType::Error {
@@ -1021,39 +1056,6 @@ impl TypeChecker {
         }
     }
 
-    fn extract_type_param_bindings(
-        &mut self,
-        field_ty: &HirType,
-        arg_ty: &HirType,
-        type_params: &[Symbol],
-        sub: &mut std::collections::HashMap<Symbol, HirType>,
-        span: glyim_diag::Span,
-    ) {
-        match (field_ty, arg_ty) {
-            (HirType::Named(param_sym), _) if type_params.contains(param_sym) => {
-                sub.insert(*param_sym, arg_ty.clone());
-            }
-            (HirType::Generic(f_sym, f_args), HirType::Generic(a_sym, a_args))
-                if f_sym == a_sym && f_args.len() == a_args.len() =>
-            {
-                for (f, a) in f_args.iter().zip(a_args.iter()) {
-                    self.extract_type_param_bindings(f, a, type_params, sub, span);
-                }
-            }
-            (HirType::RawPtr(f_inner), HirType::RawPtr(a_inner)) => {
-                self.extract_type_param_bindings(f_inner, a_inner, type_params, sub, span);
-            }
-            (HirType::Tuple(f_elems), HirType::Tuple(a_elems))
-                if f_elems.len() == a_elems.len() =>
-            {
-                for (f, a) in f_elems.iter().zip(a_elems.iter()) {
-                    self.extract_type_param_bindings(f, a, type_params, sub, span);
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn unify_generics(
         &self,
         fn_def: &glyim_hir::HirFn,
@@ -1171,6 +1173,61 @@ impl TypeChecker {
         }
         let mut sub = HashMap::new();
         for tp in &struct_info.type_params {
+            let var = param_vars[tp];
+            let resolved = unify_table.find(&arena, var);
+            let hir_ty = resolve_ty(&arena, &unify_table, resolved);
+            if hir_ty == HirType::Error {
+                sub.insert(*tp, HirType::Named(*tp));
+            } else {
+                sub.insert(*tp, hir_ty);
+            }
+        }
+        Ok(sub)
+    }
+
+    /// Bidirectional inference: use the expected type (return type context) to deduce
+    /// generic parameters for functions with zero arguments.
+    fn infer_generics_from_expected(
+        &self,
+        fn_def: &glyim_hir::HirFn,
+        expected: &HirType,
+        call_expr_id: ExprId,
+        call_span: glyim_diag::Span,
+    ) -> Result<std::collections::HashMap<glyim_interner::Symbol, HirType>, TypeError> {
+        use freeze::resolve_ty;
+        use ty::TyArena;
+        use unify::UnificationTable;
+        let mut arena = TyArena::new();
+        let mut unify_table = UnificationTable::with_interner(self.interner.clone());
+        let mut param_vars = std::collections::HashMap::new();
+        for tp in &fn_def.type_params {
+            param_vars.insert(*tp, unify_table.new_var(&mut arena, call_span));
+        }
+        // Convert expected type (return context) to internal Ty
+        let expected_ty = TypeChecker::hir_type_to_ty(
+            &mut arena,
+            &mut unify_table,
+            &std::collections::HashMap::new(),
+            expected,
+        );
+        // Get the function's return type (with type params as unification variables)
+        let ret_ty = fn_def.ret.as_ref().unwrap_or(&HirType::Unit);
+        let fn_ret_ty =
+            TypeChecker::hir_type_to_ty(&mut arena, &mut unify_table, &param_vars, ret_ty);
+        let mut errs = Vec::new();
+        let _ = unify_table.unify(&mut arena, fn_ret_ty, expected_ty, call_span, &mut |e| {
+            errs.push(e)
+        });
+        if !errs.is_empty() {
+            return Err(TypeError::MismatchedTypes {
+                expected: expected.clone(),
+                found: ret_ty.clone(),
+                expr_id: call_expr_id,
+                span: (call_span.start, call_span.end),
+            });
+        }
+        let mut sub = std::collections::HashMap::new();
+        for tp in &fn_def.type_params {
             let var = param_vars[tp];
             let resolved = unify_table.find(&arena, var);
             let hir_ty = resolve_ty(&arena, &unify_table, resolved);
