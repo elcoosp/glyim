@@ -828,7 +828,12 @@ impl TypeChecker {
                 HirType::Error
             }
         } else {
-            // Non-generic method
+            // Non-generic method – still record type args if receiver is generic
+            if let HirType::Generic(_, ref type_args) = recv_ty {
+                if !type_args.is_empty() {
+                    self.maybe_record_call_type_args(*id, type_args.clone());
+                }
+            }
             fn_def.ret.clone().unwrap_or(HirType::Unit)
         }
     } else {
