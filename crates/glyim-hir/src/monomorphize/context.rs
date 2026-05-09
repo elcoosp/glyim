@@ -57,6 +57,27 @@ impl<'a> MonoContext<'a> {
             Some(f) => f,
             None => return,
         };
+
+        // Skip if type args don't cover all type params
+        if type_args.len() < generic_fn.type_params.len() {
+            tracing::warn!(
+                "Skipping specialization of {:?}: need {} type args, got {}",
+                self.interner.resolve(name),
+                generic_fn.type_params.len(),
+                type_args.len()
+            );
+            return;
+        }
+
+        // Check for unresolved type params in the type args
+        if type_args.iter().any(|t| concretize::has_unresolved_type_param(t, self.interner)) {
+            tracing::warn!(
+                "Skipping specialization of {:?}: unresolved type params in args",
+                self.interner.resolve(name)
+            );
+            return;
+        }
+
         let sub = specialize::build_fn_subst(&generic_fn, &type_args, &self.index, self.interner);
         let mangled_name = self.mangle_table.mangle_fn(name, &type_args, self.interner);
 
@@ -70,6 +91,20 @@ impl<'a> MonoContext<'a> {
         let concrete_ret = generic_fn.ret.as_ref().map(|ty| {
             concretize::substitute_and_concretize(ty, &sub, &self.index, &mut self.mangle_table, self.interner)
         });
+
+        // Discover struct/enum specializations from the SUBSTITUTED (pre-concretization)
+        // parameter and return types. After concretization, Generic types become Named
+        // and won't trigger discovery, so we must discover before concretization.
+        for (_, ty) in &generic_fn.params {
+            let substituted = crate::types::substitute_type(ty, &sub);
+            let disc = discover::discover_type_specializations(&substituted, &self.index, self.interner);
+            self.work_queue.extend(disc);
+        }
+        if let Some(ret) = &generic_fn.ret {
+            let substituted = crate::types::substitute_type(ret, &sub);
+            let disc = discover::discover_type_specializations(&substituted, &self.index, self.interner);
+            self.work_queue.extend(disc);
+        }
 
         let start_id = self.global_next_expr_id;
         let (new_body, local_expr_types, new_next_id, discoveries) = {
@@ -99,6 +134,8 @@ impl<'a> MonoContext<'a> {
         concrete_fn.ret = concrete_ret;
         concrete_fn.body = new_body;
 
+        // Also discover from concretized param/return types (these are now Named,
+        // so they won't add duplicates — the WorkQueue deduplicates)
         for (_, param_ty) in &concrete_fn.params {
             let disc = discover::discover_type_specializations(param_ty, &self.index, self.interner);
             self.work_queue.extend(disc);
@@ -107,7 +144,7 @@ impl<'a> MonoContext<'a> {
             let disc = discover::discover_type_specializations(ret, &self.index, self.interner);
             self.work_queue.extend(disc);
         }
-        // After building the specialized function, discover calls inside its body
+
         // After specialization, scan the concrete body for newly-exposed
         // generic calls that need further specialization.
         let extra_items = discover::discover_calls_in_body(
@@ -158,9 +195,27 @@ impl<'a> MonoContext<'a> {
             Some(s) => s,
             None => return,
         };
+
+        // Skip if type args don't cover all type params or have unresolved params
+        if type_args.len() < generic.type_params.len()
+            || type_args.iter().any(|t| concretize::has_unresolved_type_param(t, self.interner))
+        {
+            return;
+        }
+
         let concrete = specialize::specialize_struct(
             &generic, &type_args, &self.index, &mut self.mangle_table, self.interner,
         );
+
+        // Discover from substituted (pre-concretization) field types
+        let sub = concretize::build_subst(&generic.type_params, &type_args);
+        for field in &generic.fields {
+            let substituted = crate::types::substitute_type(&field.ty, &sub);
+            let disc = discover::discover_type_specializations(&substituted, &self.index, self.interner);
+            self.work_queue.extend(disc);
+        }
+
+        // Also from concrete field types (Named won't duplicate)
         for field in &concrete.fields {
             let disc = discover::discover_type_specializations(&field.ty, &self.index, self.interner);
             self.work_queue.extend(disc);
@@ -179,9 +234,29 @@ impl<'a> MonoContext<'a> {
             Some(e) => e,
             None => return,
         };
+
+        // Skip if type args don't cover all type params or have unresolved params
+        if type_args.len() < generic.type_params.len()
+            || type_args.iter().any(|t| concretize::has_unresolved_type_param(t, self.interner))
+        {
+            return;
+        }
+
         let concrete = specialize::specialize_enum(
             &generic, &type_args, &self.index, &mut self.mangle_table, self.interner,
         );
+
+        // Discover from substituted (pre-concretization) variant field types
+        let sub = concretize::build_subst(&generic.type_params, &type_args);
+        for variant in &generic.variants {
+            for field in &variant.fields {
+                let substituted = crate::types::substitute_type(&field.ty, &sub);
+                let disc = discover::discover_type_specializations(&substituted, &self.index, self.interner);
+                self.work_queue.extend(disc);
+            }
+        }
+
+        // Also from concrete field types
         for variant in &concrete.variants {
             for field in &variant.fields {
                 let disc = discover::discover_type_specializations(&field.ty, &self.index, self.interner);

@@ -1,9 +1,9 @@
 //! Single-pass type substitution and expression walker.
 //!
 //! This is the core of the new monomorphizer. For each expression it:
-//! 1. Computes the concrete type (substitute + concretize)
-//! 2. Assigns a fresh, globally-unique ExprId
-//! 3. Stores the concrete type in output_expr_types
+//! 1. Computes the substituted type (before concretization) and discovers specializations
+//! 2. Concretizes the type and stores it
+//! 3. Assigns a fresh, globally-unique ExprId
 //! 4. Rewrites names (callee, struct_name, enum_name) to mangled forms
 //! 5. Discovers new specializations and adds to `discovered`
 //!
@@ -28,7 +28,6 @@ pub struct SubstContext<'a> {
     pub index: &'a MonoIndex,
     pub mangle_table: &'a mut MangleTable,
     next_expr_id: u32,
-    start_id: u32,
     pub output_expr_types: Vec<HirType>,
     pub discovered: Vec<WorkItem>,
 }
@@ -49,7 +48,6 @@ impl<'a> SubstContext<'a> {
             index,
             mangle_table,
             next_expr_id: start_id,
-            start_id,
             output_expr_types: Vec::new(),
             discovered: Vec::new(),
         }
@@ -73,8 +71,20 @@ impl<'a> SubstContext<'a> {
         self.output_expr_types[idx] = ty;
     }
 
-    fn concrete_type_for(
-        &mut self,
+    /// Look up the concrete type for an already-substituted expression
+    /// (identified by its NEW ExprId) from the output_expr_types buffer.
+    fn concrete_type_for_new_id(&self, new_id: ExprId) -> HirType {
+        self.output_expr_types
+            .get(new_id.as_usize())
+            .cloned()
+            .unwrap_or(HirType::Error)
+    }
+
+    /// Compute the substituted type for an original expression, apply substitution
+    /// but NOT concretization. This preserves Generic types so that
+    /// discover_type_specializations can find them.
+    fn substituted_type_for(
+        &self,
         original_id: ExprId,
         sub: &HashMap<Symbol, HirType>,
     ) -> HirType {
@@ -83,13 +93,7 @@ impl<'a> SubstContext<'a> {
             .get(original_id.as_usize())
             .cloned()
             .unwrap_or(HirType::Error);
-        concretize::substitute_and_concretize(
-            &orig_ty,
-            sub,
-            self.index,
-            self.mangle_table,
-            self.interner,
-        )
+        crate::types::substitute_type(&orig_ty, sub)
     }
 
     fn discover_from_type(&mut self, ty: &HirType) {
@@ -104,9 +108,24 @@ impl<'a> SubstContext<'a> {
     ) -> HirExpr {
         let original_id = expr.get_id();
         let new_id = self.fresh_id();
-        let concrete_ty = self.concrete_type_for(original_id, sub);
+
+        // Step 1: Compute the substituted type (BEFORE concretization).
+        // This preserves Generic types like Generic("Vec", [Int]) so that
+        // discover_type_specializations can find struct/enum specializations.
+        // After concretization, these become Named("Vec__i64") which would
+        // not trigger discovery.
+        let substituted_ty = self.substituted_type_for(original_id, sub);
+        self.discover_from_type(&substituted_ty);
+
+        // Step 2: Concretize the type for storage.
+        let concrete_ty = concretize::concretize_type(
+            substituted_ty,
+            self.index,
+            self.mangle_table,
+            self.interner,
+        );
         self.store_type(new_id, concrete_ty.clone());
-        self.discover_from_type(&concrete_ty);
+
         let span = expr.get_span();
 
         match expr {
@@ -225,7 +244,7 @@ impl<'a> SubstContext<'a> {
         );
         // If no specialization found, try inferring from concrete argument types
         if discovered.is_empty() && self.index.is_generic_fn(callee) {
-            if let Some(inferred_args) = self.infer_concrete_call_type_args(callee, &new_arg_ids, sub) {
+            if let Some(inferred_args) = self.infer_concrete_call_type_args(callee, &new_arg_ids) {
                 let (inferred_callee, inferred_items) = discover::discover_call_specialization(
                     original_id, callee,
                     &std::collections::HashMap::from([(original_id, inferred_args)]),
@@ -236,8 +255,6 @@ impl<'a> SubstContext<'a> {
                 discovered = inferred_items;
             }
         }
-        // If still no specialization and we are in a generic function, force a passthrough
-        // (this is handled by process_fn_passthrough walking the body later)
         self.discovered.extend(discovered);
         HirExpr::Call { id: new_id, callee: new_callee, args: new_args, span }
     }
@@ -426,16 +443,22 @@ impl<'a> SubstContext<'a> {
     }
 
     /// Infer the concrete type arguments for a call to a generic function,
-    /// using the already-substituted concrete argument types.
+    /// using the already-substituted concrete argument types from output_expr_types.
     fn infer_concrete_call_type_args(
         &mut self,
         callee: Symbol,
-        arg_orig_ids: &[ExprId],
-        sub: &HashMap<Symbol, HirType>,
+        arg_new_ids: &[ExprId],
     ) -> Option<Vec<HirType>> {
         let generic_fn = self.index.find_fn(callee)?;
         if generic_fn.type_params.is_empty() { return None; }
-        let arg_concrete_tys: Vec<HirType> = arg_orig_ids.iter().map(|&id| self.concrete_type_for(id, sub)).collect();
+
+        // Look up concrete types from output_expr_types using the NEW expression IDs
+        // (these were assigned during substitution and their types are already stored).
+        let arg_concrete_tys: Vec<HirType> = arg_new_ids
+            .iter()
+            .map(|&id| self.concrete_type_for_new_id(id))
+            .collect();
+
         // Simple unify: match each param to argument type
         let mut subst = HashMap::new();
         for (param_ty, arg_ty) in generic_fn.params.iter().zip(arg_concrete_tys.iter()) {
@@ -444,8 +467,15 @@ impl<'a> SubstContext<'a> {
                 return None;
             }
         }
-        let concrete_args: Vec<HirType> = generic_fn.type_params.iter().map(|tp| subst.get(tp).cloned().unwrap_or(HirType::Error)).collect();
-        if concrete_args.iter().any(|t| *t == HirType::Error) { None } else { Some(concrete_args) }
+        let concrete_args: Vec<HirType> = generic_fn.type_params
+            .iter()
+            .map(|tp| subst.get(tp).cloned().unwrap_or(HirType::Error))
+            .collect();
+        if concrete_args.iter().any(|t| *t == HirType::Error) {
+            None
+        } else {
+            Some(concrete_args)
+        }
     }
 }
 
@@ -458,6 +488,32 @@ impl<'a> pattern::MangleContext for SubstContext<'a> {
     }
     fn intern_str(&mut self, s: &str) -> Symbol {
         self.interner.intern(s)
+    }
+}
+
+/// Simple unification of a type pattern with a concrete type to extract substitutions.
+fn unify_type_param(
+    pattern: &HirType,
+    concrete: &HirType,
+    subst: &mut HashMap<Symbol, HirType>,
+) -> bool {
+    match (pattern, concrete) {
+        (HirType::Named(sym), _) => {
+            if let Some(existing) = subst.get(sym) {
+                existing == concrete
+            } else {
+                subst.insert(*sym, concrete.clone());
+                true
+            }
+        }
+        (HirType::Generic(psym, pargs), HirType::Generic(csym, cargs)) if psym == csym && pargs.len() == cargs.len() => {
+            pargs.iter().zip(cargs).all(|(p, c)| unify_type_param(p, c, subst))
+        }
+        (HirType::Tuple(pelems), HirType::Tuple(celems)) if pelems.len() == celems.len() => {
+            pelems.iter().zip(celems).all(|(p, c)| unify_type_param(p, c, subst))
+        }
+        (HirType::RawPtr(pinner), HirType::RawPtr(cinner)) => unify_type_param(pinner, cinner, subst),
+        _ => pattern == concrete,
     }
 }
 
@@ -581,31 +637,5 @@ mod tests {
         if let HirExpr::SizeOf { target_type, .. } = result {
             match &target_type { HirType::Named(sym) => { let name = interner.resolve(*sym); assert!(name.contains("Vec") && name.contains("i64")); } other => panic!("Expected Named (mangled), got {:?}", other) }
         } else { panic!("Expected SizeOf"); }
-    }
-}
-
-/// Simple unification of a type pattern with a concrete type to extract substitutions.
-fn unify_type_param(
-    pattern: &HirType,
-    concrete: &HirType,
-    subst: &mut HashMap<Symbol, HirType>,
-) -> bool {
-    match (pattern, concrete) {
-        (HirType::Named(sym), _) => {
-            if let Some(existing) = subst.get(sym) {
-                existing == concrete
-            } else {
-                subst.insert(*sym, concrete.clone());
-                true
-            }
-        }
-        (HirType::Generic(psym, pargs), HirType::Generic(csym, cargs)) if psym == csym && pargs.len() == cargs.len() => {
-            pargs.iter().zip(cargs).all(|(p, c)| unify_type_param(p, c, subst))
-        }
-        (HirType::Tuple(pelems), HirType::Tuple(celems)) if pelems.len() == celems.len() => {
-            pelems.iter().zip(celems).all(|(p, c)| unify_type_param(p, c, subst))
-        }
-        (HirType::RawPtr(pinner), HirType::RawPtr(cinner)) => unify_type_param(pinner, cinner, subst),
-        _ => pattern == concrete,
     }
 }
