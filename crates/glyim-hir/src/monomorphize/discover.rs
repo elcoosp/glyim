@@ -595,3 +595,4 @@ mod tests {
         assert_eq!(items[0].def_id, base_push, "Should use demangled base name");
     }
 }
+

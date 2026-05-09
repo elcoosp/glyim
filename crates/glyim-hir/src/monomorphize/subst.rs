@@ -212,12 +212,33 @@ impl<'a> SubstContext<'a> {
         span: glyim_diag::Span,
         sub: &HashMap<Symbol, HirType>,
     ) -> HirExpr {
-        let (new_callee, discovered) = discover::discover_call_specialization(
+        let mut new_args: Vec<HirExpr> = Vec::new();
+        let mut new_arg_ids: Vec<ExprId> = Vec::new();
+        for a in args {
+            let substituted = self.substitute_expr(a, sub);
+            new_arg_ids.push(substituted.get_id());
+            new_args.push(substituted);
+        }
+        let (mut new_callee, mut discovered) = discover::discover_call_specialization(
             original_id, callee, self.call_type_args, sub,
             self.index, self.mangle_table, self.interner,
         );
+        // If no specialization found, try inferring from concrete argument types
+        if discovered.is_empty() && self.index.is_generic_fn(callee) {
+            if let Some(inferred_args) = self.infer_concrete_call_type_args(callee, &new_arg_ids, sub) {
+                let (inferred_callee, inferred_items) = discover::discover_call_specialization(
+                    original_id, callee,
+                    &std::collections::HashMap::from([(original_id, inferred_args)]),
+                    sub,
+                    self.index, self.mangle_table, self.interner,
+                );
+                new_callee = inferred_callee;
+                discovered = inferred_items;
+            }
+        }
+        // If still no specialization and we are in a generic function, force a passthrough
+        // (this is handled by process_fn_passthrough walking the body later)
         self.discovered.extend(discovered);
-        let new_args: Vec<_> = args.iter().map(|a| self.substitute_expr(a, sub)).collect();
         HirExpr::Call { id: new_id, callee: new_callee, args: new_args, span }
     }
 
@@ -403,6 +424,29 @@ impl<'a> SubstContext<'a> {
             HirStmt::Expr(e) => HirStmt::Expr(self.substitute_expr(e, sub)),
         }
     }
+
+    /// Infer the concrete type arguments for a call to a generic function,
+    /// using the already-substituted concrete argument types.
+    fn infer_concrete_call_type_args(
+        &mut self,
+        callee: Symbol,
+        arg_orig_ids: &[ExprId],
+        sub: &HashMap<Symbol, HirType>,
+    ) -> Option<Vec<HirType>> {
+        let generic_fn = self.index.find_fn(callee)?;
+        if generic_fn.type_params.is_empty() { return None; }
+        let arg_concrete_tys: Vec<HirType> = arg_orig_ids.iter().map(|&id| self.concrete_type_for(id, sub)).collect();
+        // Simple unify: match each param to argument type
+        let mut subst = HashMap::new();
+        for (param_ty, arg_ty) in generic_fn.params.iter().zip(arg_concrete_tys.iter()) {
+            let param_hir = &param_ty.1; // (symbol, HirType)
+            if !unify_type_param(param_hir, arg_ty, &mut subst) {
+                return None;
+            }
+        }
+        let concrete_args: Vec<HirType> = generic_fn.type_params.iter().map(|tp| subst.get(tp).cloned().unwrap_or(HirType::Error)).collect();
+        if concrete_args.iter().any(|t| *t == HirType::Error) { None } else { Some(concrete_args) }
+    }
 }
 
 impl<'a> pattern::MangleContext for SubstContext<'a> {
@@ -537,5 +581,31 @@ mod tests {
         if let HirExpr::SizeOf { target_type, .. } = result {
             match &target_type { HirType::Named(sym) => { let name = interner.resolve(*sym); assert!(name.contains("Vec") && name.contains("i64")); } other => panic!("Expected Named (mangled), got {:?}", other) }
         } else { panic!("Expected SizeOf"); }
+    }
+}
+
+/// Simple unification of a type pattern with a concrete type to extract substitutions.
+fn unify_type_param(
+    pattern: &HirType,
+    concrete: &HirType,
+    subst: &mut HashMap<Symbol, HirType>,
+) -> bool {
+    match (pattern, concrete) {
+        (HirType::Named(sym), _) => {
+            if let Some(existing) = subst.get(sym) {
+                existing == concrete
+            } else {
+                subst.insert(*sym, concrete.clone());
+                true
+            }
+        }
+        (HirType::Generic(psym, pargs), HirType::Generic(csym, cargs)) if psym == csym && pargs.len() == cargs.len() => {
+            pargs.iter().zip(cargs).all(|(p, c)| unify_type_param(p, c, subst))
+        }
+        (HirType::Tuple(pelems), HirType::Tuple(celems)) if pelems.len() == celems.len() => {
+            pelems.iter().zip(celems).all(|(p, c)| unify_type_param(p, c, subst))
+        }
+        (HirType::RawPtr(pinner), HirType::RawPtr(cinner)) => unify_type_param(pinner, cinner, subst),
+        _ => pattern == concrete,
     }
 }

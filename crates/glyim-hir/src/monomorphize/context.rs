@@ -107,6 +107,7 @@ impl<'a> MonoContext<'a> {
             let disc = discover::discover_type_specializations(ret, &self.index, self.interner);
             self.work_queue.extend(disc);
         }
+        // After building the specialized function, discover calls inside its body
         self.output_items.push(HirItem::Fn(concrete_fn));
     }
 
