@@ -453,8 +453,21 @@ impl TypeChecker {
             } => {
                 let field_names: Vec<Symbol> = fields.iter().map(|(n, _)| *n).collect();
                 let field_count = fields.len();
+
+                // FIX: Build expected field types map so we can propagate them
+                // as expected types for bidirectional inference on field values.
+                let expected_field_types: std::collections::HashMap<Symbol, HirType> = self
+                    .structs
+                    .get(struct_name)
+                    .map(|info| info.fields.iter().map(|f| (f.name, f.ty.clone())).collect())
+                    .unwrap_or_default();
+
+                // FIX: Pass the declared field type as the expected type when checking
+                // each field value expression. This enables bidirectional type inference
+                // for generic function calls inside struct literals (e.g. Vec::new()).
                 for (field_name, v) in fields {
-                    self.check_expr(v, None);
+                    let expected_field_ty = expected_field_types.get(field_name);
+                    self.check_expr(v, expected_field_ty);
                     if let Some(info) = self.structs.get(struct_name) {
                         if !info.field_map.contains_key(field_name) {
                             self.errors.push(TypeError::UnknownField {
@@ -465,6 +478,46 @@ impl TypeChecker {
                         }
                     }
                 }
+
+                // FIX: Validate that each field value's inferred type is compatible
+                // with the declared field type for non-generic structs.
+                let field_type_mismatches: Vec<TypeError> = self
+                    .structs
+                    .get(struct_name)
+                    .map(|info| {
+                        fields
+                            .iter()
+                            .filter_map(|(field_name, fexpr)| {
+                                let declared_field =
+                                    info.fields.iter().find(|f| f.name == *field_name)?;
+                                let value_idx = fexpr.get_id().as_usize();
+                                if value_idx < self.expr_types.len() {
+                                    let value_ty = self.expr_types[value_idx].clone();
+                                    let declared_ty = declared_field.ty.clone();
+                                    if value_ty != declared_ty
+                                        && value_ty != HirType::Error
+                                        && declared_ty != HirType::Error
+                                        && !self.has_type_parameter(&declared_ty)
+                                        && !self.has_type_parameter(&value_ty)
+                                        && !Self::types_compatible(&declared_ty, &value_ty)
+                                    {
+                                        return Some(TypeError::MismatchedTypes {
+                                            expected: declared_ty,
+                                            found: value_ty,
+                                            expr_id: fexpr.get_id(),
+                                            span: (0, 0),
+                                        });
+                                    }
+                                }
+                                None
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for err in field_type_mismatches {
+                    self.errors.push(err);
+                }
+
                 if let Some(info) = self.structs.get(struct_name) {
                     if field_count != info.fields.len() {
                         for field in &info.fields {
@@ -482,7 +535,6 @@ impl TypeChecker {
                     if info.type_params.is_empty() {
                         HirType::Named(*struct_name)
                     } else {
-                        // Extract field types and names upfront to avoid borrow conflicts
                         let field_infos: Vec<(Symbol, HirType)> =
                             info.fields.iter().map(|f| (f.name, f.ty.clone())).collect();
                         let type_params = info.type_params.clone();
@@ -838,32 +890,104 @@ impl TypeChecker {
                             .chain(arg_types.iter().cloned())
                             .collect();
 
-                        if let Ok(sub) =
-                            self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span())
-                        {
-                            let concrete_args: Vec<HirType> = fn_def
-                                .type_params
-                                .iter()
-                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
-                                .collect();
-                            if concrete_args.iter().any(|t| matches!(t, HirType::Error)) {
-                                self.errors.push(TypeError::CannotInferGenericArgs {
-                                    name: format!(
-                                        "{}.{}",
-                                        self.interner.resolve(type_name),
-                                        self.interner.resolve(*method_name)
-                                    ),
-                                    span: (expr.get_span().start, expr.get_span().end),
+                        let arg_sub =
+                            self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span());
+
+                        // FIX: Mirror the Call handler's bidirectional inference logic.
+                        // When argument-based unification leaves type params unresolved,
+                        // try to infer them from the expected return type.
+                        let sub = match arg_sub {
+                            Ok(sub) => {
+                                let has_unresolved = fn_def.type_params.iter().any(|tp| {
+                                    sub.get(tp).map_or(true, |ty| {
+                                        matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                    })
                                 });
-                            } else {
-                                self.call_type_args.insert(*id, concrete_args);
+                                if has_unresolved {
+                                    if let Some(exp) = expected {
+                                        if let Ok(bidir_sub) = self.infer_generics_from_expected(
+                                            &fn_def,
+                                            exp,
+                                            *id,
+                                            expr.get_span(),
+                                        ) {
+                                            let mut merged = bidir_sub;
+                                            for tp in &fn_def.type_params {
+                                                if let Some(ty) = sub.get(tp) {
+                                                    if !matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                                    {
+                                                        merged.insert(*tp, ty.clone());
+                                                    }
+                                                }
+                                            }
+                                            merged
+                                        } else {
+                                            sub
+                                        }
+                                    } else {
+                                        sub
+                                    }
+                                } else {
+                                    sub
+                                }
                             }
-                            let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
-                            glyim_hir::types::substitute_type(&ret, &sub)
+                            Err(_) => {
+                                // FIX: When argument-based unification fails entirely,
+                                // still try bidirectional inference from the expected type.
+                                if let Some(exp) = expected {
+                                    match self.infer_generics_from_expected(
+                                        &fn_def,
+                                        exp,
+                                        *id,
+                                        expr.get_span(),
+                                    ) {
+                                        Ok(sub) => sub,
+                                        Err(e) => {
+                                            self.errors.push(e);
+                                            return HirType::Error;
+                                        }
+                                    }
+                                } else {
+                                    self.errors.push(TypeError::CannotInferGenericArgs {
+                                        name: format!(
+                                            "{}.{}",
+                                            self.interner.resolve(type_name),
+                                            self.interner.resolve(*method_name)
+                                        ),
+                                        span: (expr.get_span().start, expr.get_span().end),
+                                    });
+                                    return HirType::Error;
+                                }
+                            }
+                        };
+
+                        let concrete_args: Vec<HirType> = fn_def
+                            .type_params
+                            .iter()
+                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
+                            .collect();
+
+                        // FIX: Also detect unresolved type params (not just Error)
+                        // that survived bidirectional inference.
+                        let has_unresolved = concrete_args.iter().any(|t| {
+                            matches!(t, HirType::Error)
+                                || matches!(t, HirType::Named(n) if fn_def.type_params.contains(n))
+                        });
+
+                        if has_unresolved {
+                            self.errors.push(TypeError::CannotInferGenericArgs {
+                                name: format!(
+                                    "{}.{}",
+                                    self.interner.resolve(type_name),
+                                    self.interner.resolve(*method_name)
+                                ),
+                                span: (expr.get_span().start, expr.get_span().end),
+                            });
                         } else {
-                            // unification failed; error already reported by unify_generics
-                            HirType::Error
+                            self.call_type_args.insert(*id, concrete_args);
                         }
+                        let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
+                        glyim_hir::types::substitute_type(&ret, &sub)
                     } else {
                         // Non-generic method – still record type args if receiver is generic
                         if let HirType::Generic(_, ref type_args) = recv_ty {
@@ -918,10 +1042,7 @@ impl TypeChecker {
             HirExpr::SizeOf {
                 id, target_type, ..
             } => {
-                eprintln!(
-                    "[typeck SizeOf] id={:?} target_type={:?} in_generic_fn={}",
-                    id, target_type, self.in_generic_fn
-                );
+                // FIX: Removed debug eprintln; recording is still needed for monomorphization
                 self.maybe_record_call_type_args(*id, vec![target_type.clone()]);
                 HirType::Int
             }
@@ -939,7 +1060,6 @@ impl TypeChecker {
             }
         }
     }
-
     fn check_stmt(&mut self, stmt: &HirStmt) -> Option<HirType> {
         match stmt {
             HirStmt::Let {
