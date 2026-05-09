@@ -1,9 +1,7 @@
-use crate::monomorphize::mangle_table::MangleTable;
-// crates/glyim-hir/src/monomorphize/context.rs
 use super::*;
-use crate::item::{EnumDef, HirItem};
-use crate::node::MatchArm;
+use crate::item::{EnumDef, HirItem, StructDef};
 use crate::node::{HirExpr, HirFn, HirStmt};
+use crate::MatchArm;
 use crate::types::HirType;
 use glyim_interner::Symbol;
 use std::collections::HashMap;
@@ -25,8 +23,7 @@ impl<'a> MonoContext<'a> {
             type_overrides: HashMap::new(),
             fn_work_queue: Vec::new(),
             fn_queued: HashSet::new(),
-            call_type_args_overrides: HashMap::new(),
-            mangle_table: MangleTable::new(),
+            mangle_table: mangle_table::MangleTable::new(),
             enum_specs: HashMap::new(),
             type_work_queue: Vec::new(),
             type_queued: HashSet::new(),
@@ -34,8 +31,8 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    /// Get the type for an expression, checking type_overrides first (specialized types)
-    /// then falling back to expr_types (original types from typeck).
+    // ── type lookups ──
+
     pub(crate) fn get_expr_type(&self, id: ExprId) -> Option<HirType> {
         self.type_overrides
             .get(&id)
@@ -46,22 +43,20 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
 
-        // Handle mangled specializations (e.g., Vec_new__i64)
+        // Mangled specialisation → demangle and retry
         if let Some(pos) = name_str.find("__") {
-            let base_name = self.interner.intern(&name_str[..pos]);
-            return self.find_fn(base_name);
+            let base = self.interner.intern(&name_str[..pos]);
+            return self.find_fn(base);
         }
 
-        // Search top-level functions
+        // Top‑level functions
         for item in &self.hir.items {
-            if let HirItem::Fn(f) = item
-                && f.name == name
-            {
+            if let HirItem::Fn(f) = item && f.name == name {
                 return Some(f.clone());
             }
         }
 
-        // Search impl methods by exact name match (mangled name, like Vec_new)
+        // Impl methods with exact mangled name
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
@@ -72,13 +67,12 @@ impl<'a> MonoContext<'a> {
             }
         }
 
-        // Try to parse as impl method name (e.g., "Vec_new") and look up in method_map
-        if let Some(underscore_pos) = name_str.rfind('_') {
-            let potential_type_name = &name_str[..underscore_pos];
-            let potential_method_name = &name_str[underscore_pos + 1..];
-
-            if let Some(type_sym) = self.interner.resolve_symbol(potential_type_name) {
-                let method_sym = self.interner.intern(potential_method_name);
+        // Look up by (type, method) using method_map
+        if let Some(uscore) = name_str.rfind('_') {
+            let type_name = &name_str[..uscore];
+            let method_name = &name_str[uscore + 1..];
+            if let Some(type_sym) = self.interner.resolve_symbol(type_name) {
+                let method_sym = self.interner.intern(method_name);
                 if let Some(method) = self.method_map.get(&(type_sym, method_sym)) {
                     return Some(method.clone());
                 }
@@ -87,11 +81,10 @@ impl<'a> MonoContext<'a> {
 
         None
     }
+
     pub(crate) fn find_struct(&self, name: Symbol) -> Option<StructDef> {
         for item in &self.hir.items {
-            if let HirItem::Struct(s) = item
-                && s.name == name
-            {
+            if let HirItem::Struct(s) = item && s.name == name {
                 return Some(s.clone());
             }
         }
@@ -100,50 +93,34 @@ impl<'a> MonoContext<'a> {
 
     pub(crate) fn find_enum(&self, name: Symbol) -> Option<EnumDef> {
         for item in &self.hir.items {
-            if let HirItem::Enum(e) = item
-                && e.name == name
-            {
+            if let HirItem::Enum(e) = item && e.name == name {
                 return Some(e.clone());
             }
         }
         None
     }
 
-    pub(crate) fn mangle_name(&mut self, base: Symbol, type_args: &[HirType]) -> Symbol {
-        self.mangle_table.mangle(base, type_args, self.interner)
+    pub(crate) fn mangle_name(&mut self, base: Symbol, args: &[HirType]) -> Symbol {
+        self.mangle_table.mangle(base, args, self.interner)
     }
 
-    /// Check if a type contains any unresolved type parameters (single uppercase letters)
-    /// Check whether the body of a function depends on the given type parameters
-    /// in a size-critical way (e.g., SizeOf, field access with unknown layout).
-    fn extract_type_args_from_call_on_var(
-        &self,
-        expr: &HirExpr,
-        _callee: Symbol,
-        var_sym: Symbol,
-        _type_params: &[Symbol],
-    ) -> Option<Vec<HirType>> {
-        match expr {
-            HirExpr::Call { args, .. } => {
-                if !args.is_empty()
-                    && {
-                        match &args[0] {
-                            HirExpr::Ident { name, .. } => *name == var_sym,
-                            _ => false,
-                        }
-                    }
-                    && let Some(cached) = self.call_type_args.get(&expr.get_id())
-                    && !cached.is_empty()
-                {
-                    return Some(cached.clone());
-                }
-                None
+    pub(crate) fn has_unresolved_type_param(&self, ty: &HirType) -> bool {
+        match ty {
+            HirType::Named(sym) => {
+                let s = self.interner.resolve(*sym);
+                s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
             }
-            _ => None,
+            HirType::Generic(_, args) => args.iter().any(|a| self.has_unresolved_type_param(a)),
+            HirType::RawPtr(inner) => self.has_unresolved_type_param(inner),
+            HirType::Option(inner) => self.has_unresolved_type_param(inner),
+            HirType::Result(ok, err) => {
+                self.has_unresolved_type_param(ok) || self.has_unresolved_type_param(err)
+            }
+            HirType::Tuple(elems) => elems.iter().any(|e| self.has_unresolved_type_param(e)),
+            _ => false,
         }
     }
 
-    /// Substitute unresolved type params in a type list using the given substitution
     pub(crate) fn substitute_type_args(
         &self,
         args: &[HirType],
@@ -158,36 +135,207 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    pub(crate) fn specialize_enum(&mut self, e: &EnumDef, concrete: &[HirType]) -> EnumDef {
+    // ── method_map initialisation ──
+
+    pub(crate) fn init_method_map(&mut self) {
+        let mut entries: Vec<(Symbol, Symbol, HirFn)> = Vec::new();
+        for item in &self.hir.items {
+            if let HirItem::Impl(imp) = item {
+                let type_sym = imp.target_name;
+                let type_name = self.interner.resolve(type_sym).to_string();
+                for method in &imp.methods {
+                    let mangled = self.interner.resolve(method.name).to_string();
+                    if let Some(pos) = mangled.rfind('_') {
+                        let type_part = &mangled[..pos];
+                        if type_part == type_name {
+                            let method_part = &mangled[pos + 1..];
+                            let method_sym = self.interner.intern(method_part);
+                            entries.push((type_sym, method_sym, method.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        for (type_sym, method_sym, fn_def) in entries {
+            self.method_map.insert((type_sym, method_sym), fn_def);
+        }
+    }
+
+    // ── specialisation helpers (no inference hacks) ──
+
+    pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
-        for (i, tp) in e.type_params.iter().enumerate() {
+        for (i, tp) in f.type_params.iter().enumerate() {
             if let Some(ct) = concrete.get(i) {
                 sub.insert(*tp, ct.clone());
             }
         }
-        let mut mono = e.clone();
-        mono.type_params.clear();
-        for variant in &mut mono.variants {
-            for field in &mut variant.fields {
-                field.ty = crate::types::substitute_type(&field.ty, &sub);
+        // For struct methods where type params are on the self parameter
+        if sub.is_empty()
+            && !f.params.is_empty()
+            && let (_, HirType::Generic(_, param_args)) = &f.params[0]
+        {
+            for (i, formal) in param_args.iter().enumerate() {
+                if let HirType::Named(fname) = formal
+                    && let Some(ct) = concrete.get(i)
+                {
+                    sub.insert(*fname, ct.clone());
+                }
             }
         }
+        if sub.is_empty() && !concrete.is_empty() && !f.type_params.is_empty() {
+            for (i, tp) in f.type_params.iter().enumerate() {
+                if let Some(ct) = concrete.get(i) {
+                    sub.insert(*tp, ct.clone());
+                }
+            }
+        }
+        if f.type_params.is_empty() && sub.is_empty() {
+            return f.clone();
+        }
+
+        for ct in concrete {
+            ensure_struct_specialized(self, ct);
+        }
+        self.collect_type_overrides_for_expr(&f.body, &sub);
+        self.scan_expr_for_generic_calls(&f.body, &sub);
+        self.scan_expr_for_struct_instantiations(&f.body, &sub);
+
+        let mut mono = f.clone();
+        mono.type_params.clear();
+        for (_, pt) in &mut mono.params {
+            *pt = crate::types::substitute_type(pt, &sub);
+        }
+        if let Some(rt) = &mut mono.ret {
+            *rt = crate::types::substitute_type(rt, &sub);
+        }
+        mono.body = self.substitute_expr_types(&mono.body, &sub);
+        self.concretize_enum_variant_names(&mut mono.body, &sub);
+        if !sub.is_empty() {
+            mono.body = force_substitute_as_targets(mono.body, &sub);
+        }
+        self.scan_expr_for_generic_calls(&mono.body, &sub);
+        self.scan_expr_for_struct_instantiations(&mono.body, &sub);
+
         mono
     }
 
-    pub(crate) fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {
-        let mut sub = HashMap::new();
-        for (i, tp) in s.type_params.iter().enumerate() {
-            if let Some(ct) = concrete.get(i) {
-                sub.insert(*tp, ct.clone());
+    pub(crate) fn collect_type_overrides_for_expr(
+        &mut self,
+        expr: &HirExpr,
+        sub: &HashMap<Symbol, HirType>,
+    ) {
+        let id = expr.get_id();
+        if let Some(orig) = self.expr_types.get(id.as_usize()) {
+            let new_ty = crate::types::substitute_type(orig, sub);
+            if &new_ty != orig {
+                self.type_overrides.insert(id, new_ty);
             }
         }
-        let mut mono = s.clone();
-        mono.type_params.clear();
-        for field in &mut mono.fields {
-            field.ty = crate::types::substitute_type(&field.ty, &sub);
+        match expr {
+            HirExpr::Block { stmts, .. } => stmts
+                .iter()
+                .for_each(|s| self.collect_type_overrides_for_stmt(s, sub)),
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.collect_type_overrides_for_expr(condition, sub);
+                self.collect_type_overrides_for_expr(then_branch, sub);
+                if let Some(e) = else_branch {
+                    self.collect_type_overrides_for_expr(e, sub);
+                }
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                self.collect_type_overrides_for_expr(scrutinee, sub);
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.collect_type_overrides_for_expr(g, sub);
+                    }
+                    self.collect_type_overrides_for_expr(&arm.body, sub);
+                }
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.collect_type_overrides_for_expr(lhs, sub);
+                self.collect_type_overrides_for_expr(rhs, sub);
+            }
+            HirExpr::Unary { operand, .. }
+            | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::FieldAccess {
+                object: operand, ..
+            }
+            | HirExpr::As { expr: operand, .. } => self.collect_type_overrides_for_expr(operand, sub),
+            HirExpr::Return { value: Some(v), .. } => {
+                self.collect_type_overrides_for_expr(v, sub)
+            }
+            HirExpr::While {
+                condition, body, ..
+            }
+            | HirExpr::ForIn {
+                iter: condition,
+                body,
+                ..
+            } => {
+                self.collect_type_overrides_for_expr(condition, sub);
+                self.collect_type_overrides_for_expr(body, sub);
+            }
+            HirExpr::MethodCall { receiver, args, .. } => {
+                self.collect_type_overrides_for_expr(receiver, sub);
+                for a in args {
+                    self.collect_type_overrides_for_expr(a, sub);
+                }
+            }
+            HirExpr::Call { args, .. } => {
+                for a in args {
+                    self.collect_type_overrides_for_expr(a, sub);
+                }
+            }
+            HirExpr::StructLit { fields, .. } => {
+                for (_, f) in fields {
+                    self.collect_type_overrides_for_expr(f, sub);
+                }
+            }
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    self.collect_type_overrides_for_expr(a, sub);
+                }
+            }
+            HirExpr::Println { arg, .. } => self.collect_type_overrides_for_expr(arg, sub),
+            HirExpr::Assert {
+                condition, message, ..
+            } => {
+                self.collect_type_overrides_for_expr(condition, sub);
+                if let Some(m) = message {
+                    self.collect_type_overrides_for_expr(m, sub);
+                }
+            }
+            _ => {}
         }
-        mono
+    }
+
+    pub(crate) fn collect_type_overrides_for_stmt(
+        &mut self,
+        stmt: &HirStmt,
+        sub: &HashMap<Symbol, HirType>,
+    ) {
+        match stmt {
+            HirStmt::Let { value, .. }
+            | HirStmt::LetPat { value, .. }
+            | HirStmt::Assign { value, .. } => self.collect_type_overrides_for_expr(value, sub),
+            HirStmt::AssignField { object, value, .. } => {
+                self.collect_type_overrides_for_expr(object, sub);
+                self.collect_type_overrides_for_expr(value, sub);
+            }
+            HirStmt::AssignDeref { target, value, .. } => {
+                self.collect_type_overrides_for_expr(target, sub);
+                self.collect_type_overrides_for_expr(value, sub);
+            }
+            HirStmt::Expr(e) => self.collect_type_overrides_for_expr(e, sub),
+        }
     }
 
     pub(crate) fn substitute_expr_types(
@@ -224,19 +372,6 @@ impl<'a> MonoContext<'a> {
                     .collect(),
                 span: *span,
             },
-            HirExpr::Binary {
-                id,
-                op,
-                lhs,
-                rhs,
-                span,
-            } => HirExpr::Binary {
-                id: *id,
-                op: *op,
-                lhs: Box::new(self.substitute_expr_types(lhs, sub)),
-                rhs: Box::new(self.substitute_expr_types(rhs, sub)),
-                span: *span,
-            },
             HirExpr::If {
                 id,
                 condition,
@@ -247,9 +382,7 @@ impl<'a> MonoContext<'a> {
                 id: *id,
                 condition: Box::new(self.substitute_expr_types(condition, sub)),
                 then_branch: Box::new(self.substitute_expr_types(then_branch, sub)),
-                else_branch: else_branch
-                    .as_ref()
-                    .map(|e| Box::new(self.substitute_expr_types(e, sub))),
+                else_branch: else_branch.as_ref().map(|e| Box::new(self.substitute_expr_types(e, sub))),
                 span: *span,
             },
             HirExpr::Match {
@@ -262,15 +395,13 @@ impl<'a> MonoContext<'a> {
                 scrutinee: Box::new(self.substitute_expr_types(scrutinee, sub)),
                 arms: arms
                     .iter()
-                    .map(|arm| {
-                        let pat = &arm.pattern;
-                        let guard = &arm.guard;
-                        let body = &arm.body;
-                        MatchArm {
-                            pattern: pat.clone(),
-                            guard: guard.as_ref().map(|g| self.substitute_expr_types(g, sub)),
-                            body: self.substitute_expr_types(body, sub),
-                        }
+                    .map(|arm| MatchArm {
+                        pattern: arm.pattern.clone(),
+                        guard: arm
+                            .guard
+                            .as_ref()
+                            .map(|g| self.substitute_expr_types(g, sub)),
+                        body: self.substitute_expr_types(&arm.body, sub),
                     })
                     .collect(),
                 span: *span,
@@ -320,9 +451,7 @@ impl<'a> MonoContext<'a> {
             },
             HirExpr::Return { id, value, span } => HirExpr::Return {
                 id: *id,
-                value: value
-                    .as_ref()
-                    .map(|v| Box::new(self.substitute_expr_types(v, sub))),
+                value: value.as_ref().map(|v| Box::new(self.substitute_expr_types(v, sub))),
                 span: *span,
             },
             HirExpr::StructLit {
@@ -331,29 +460,10 @@ impl<'a> MonoContext<'a> {
                 fields,
                 span,
             } => {
-                let new_name = if let Some(struct_def) = self.find_struct(*struct_name) {
-                    if !struct_def.type_params.is_empty() && !sub.is_empty() {
-                        let concrete: Vec<HirType> = struct_def
-                            .type_params
-                            .iter()
-                            .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
-                            .collect();
-                        let all_concrete =
-                            concrete.iter().all(|a| !self.has_unresolved_type_param(a));
-                        if all_concrete {
-                            self.mangle_name(*struct_name, &concrete)
-                        } else {
-                            *struct_name
-                        }
-                    } else {
-                        *struct_name
-                    }
-                } else {
-                    *struct_name
-                };
+                let new_name = struct_name; // type_overrides will be handled by rewrite
                 HirExpr::StructLit {
                     id: *id,
-                    struct_name: new_name,
+                    struct_name: *new_name,
                     fields: fields
                         .iter()
                         .map(|(s, e)| (*s, self.substitute_expr_types(e, sub)))
@@ -438,12 +548,10 @@ impl<'a> MonoContext<'a> {
             } => HirExpr::Assert {
                 id: *id,
                 condition: Box::new(self.substitute_expr_types(condition, sub)),
-                message: message
-                    .as_ref()
-                    .map(|m| Box::new(self.substitute_expr_types(m, sub))),
+                message: message.as_ref().map(|m| Box::new(self.substitute_expr_types(m, sub))),
                 span: *span,
             },
-            _ => expr.clone(),
+            other => other.clone(),
         }
     }
 
@@ -510,49 +618,190 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    /// Check if a type contains any unresolved type parameters (single uppercase letters)
-    pub(crate) fn has_unresolved_type_param(&self, ty: &HirType) -> bool {
-        match ty {
-            HirType::Named(sym) => {
-                let s = self.interner.resolve(*sym);
-                s.len() == 1 && s.chars().next().is_some_and(|c| c.is_uppercase())
+    pub(crate) fn concretize_enum_variant_names(
+        &mut self,
+        expr: &mut HirExpr,
+        sub: &HashMap<Symbol, HirType>,
+    ) {
+        match expr {
+            HirExpr::EnumVariant {
+                enum_name, args, ..
+            } => {
+                if let Some(edef) = self.find_enum(*enum_name) {
+                    let concrete: Vec<HirType> = edef
+                        .type_params
+                        .iter()
+                        .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
+                        .collect();
+                    if !concrete.is_empty()
+                        && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
+                    {
+                        *enum_name = self.mangle_name(*enum_name, &concrete);
+                    }
+                }
+                for a in args {
+                    self.concretize_enum_variant_names(a, sub);
+                }
             }
-            HirType::Generic(_, args) => args.iter().any(|a| self.has_unresolved_type_param(a)),
-            HirType::RawPtr(inner) => self.has_unresolved_type_param(inner.as_ref()),
-            HirType::Option(inner) => self.has_unresolved_type_param(inner.as_ref()),
-            HirType::Result(ok, err) => {
-                self.has_unresolved_type_param(ok) || self.has_unresolved_type_param(err)
-            }
-            HirType::Tuple(elems) => elems.iter().any(|e| self.has_unresolved_type_param(e)),
-            _ => false,
-        }
-    }
-
-
-    /// Build the method_map from impl blocks in the HIR.
-    pub(crate) fn init_method_map(&mut self) {
-        // Collect entries to insert, avoiding borrow conflicts
-        let mut entries: Vec<(Symbol, Symbol, HirFn)> = Vec::new();
-        for item in &self.hir.items {
-            if let HirItem::Impl(imp) = item {
-                let type_sym = imp.target_name;
-                let type_name = self.interner.resolve(type_sym).to_string();
-                for method in &imp.methods {
-                    let mangled = self.interner.resolve(method.name).to_string();
-                    if let Some(pos) = mangled.rfind('_') {
-                        let type_part = &mangled[..pos];
-                        if type_part == type_name {
-                            let method_part = &mangled[pos+1..];
-                            let method_sym = self.interner.intern(method_part);
-                            entries.push((type_sym, method_sym, method.clone()));
+            HirExpr::Block { stmts, .. } => {
+                for s in stmts {
+                    match s {
+                        HirStmt::Expr(e)
+                        | HirStmt::Let { value: e, .. }
+                        | HirStmt::LetPat { value: e, .. }
+                        | HirStmt::Assign { value: e, .. } => {
+                            self.concretize_enum_variant_names(e, sub);
+                        }
+                        HirStmt::AssignField { object, value, .. } => {
+                            self.concretize_enum_variant_names(object, sub);
+                            self.concretize_enum_variant_names(value, sub);
+                        }
+                        HirStmt::AssignDeref { target, value, .. } => {
+                            self.concretize_enum_variant_names(target, sub);
+                            self.concretize_enum_variant_names(value, sub);
                         }
                     }
                 }
             }
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.concretize_enum_variant_names(condition, sub);
+                self.concretize_enum_variant_names(then_branch, sub);
+                if let Some(eb) = else_branch {
+                    self.concretize_enum_variant_names(eb, sub);
+                }
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                self.concretize_enum_variant_names(scrutinee, sub);
+                for arm in arms {
+                    if let Some(g) = &mut arm.guard {
+                        self.concretize_enum_variant_names(g, sub);
+                    }
+                    self.concretize_enum_variant_names(&mut arm.body, sub);
+                }
+            }
+            HirExpr::While {
+                condition, body, ..
+            }
+            | HirExpr::ForIn {
+                iter: condition,
+                body,
+                ..
+            } => {
+                self.concretize_enum_variant_names(condition, sub);
+                self.concretize_enum_variant_names(body, sub);
+            }
+            HirExpr::Binary { lhs, rhs, .. } => {
+                self.concretize_enum_variant_names(lhs, sub);
+                self.concretize_enum_variant_names(rhs, sub);
+            }
+            HirExpr::Unary { operand, .. }
+            | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::As { expr: operand, .. }
+            | HirExpr::Return {
+                value: Some(operand),
+                ..
+            }
+            | HirExpr::Println { arg: operand, .. } => {
+                self.concretize_enum_variant_names(operand, sub);
+            }
+            HirExpr::Assert {
+                condition, message, ..
+            } => {
+                self.concretize_enum_variant_names(condition, sub);
+                if let Some(m) = message {
+                    self.concretize_enum_variant_names(m, sub);
+                }
+            }
+            HirExpr::Call { args, .. }
+            | HirExpr::MethodCall { args, .. }
+            | HirExpr::TupleLit { elements: args, .. } => {
+                for a in args {
+                    self.concretize_enum_variant_names(a, sub);
+                }
+            }
+            HirExpr::StructLit { fields, .. } => {
+                for (_, val) in fields {
+                    self.concretize_enum_variant_names(val, sub);
+                }
+            }
+            _ => {}
         }
-        for (type_sym, method_sym, fn_def) in entries {
-            self.method_map.insert((type_sym, method_sym), fn_def);
+    }
+
+
+    pub(crate) fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {
+        let mut sub = HashMap::new();
+        for (i, tp) in s.type_params.iter().enumerate() {
+            if let Some(ct) = concrete.get(i) { sub.insert(*tp, ct.clone()); }
         }
+        let mut mono = s.clone();
+        mono.type_params.clear();
+        for field in &mut mono.fields {
+            field.ty = crate::types::substitute_type(&field.ty, &sub);
+        }
+        mono
+    }
+
+    pub(crate) fn specialize_enum(&mut self, e: &EnumDef, concrete: &[HirType]) -> EnumDef {
+        let mut sub = HashMap::new();
+        for (i, tp) in e.type_params.iter().enumerate() {
+            if let Some(ct) = concrete.get(i) { sub.insert(*tp, ct.clone()); }
+        }
+        let mut mono = e.clone();
+        mono.type_params.clear();
+        for variant in &mut mono.variants {
+            for field in &mut variant.fields {
+                field.ty = crate::types::substitute_type(&field.ty, &sub);
+            }
+        }
+        mono
+    }
+}
+
+// ── free functions for specialisation helpers (no self hacks) ──
+
+fn ensure_struct_specialized(ctx: &mut MonoContext<'_>, ty: &HirType) {
+    if let HirType::Generic(sym, args) = ty {
+        if ctx.find_struct(*sym).is_some() {
+            let concrete = args.clone();
+            let key = (*sym, concrete.clone());
+            if !ctx.struct_specs.contains_key(&key)
+                && let Some(s) = ctx.find_struct(*sym)
+            {
+                let specialized = ctx.specialize_struct(&s, &concrete);
+                ctx.struct_specs.insert(key, specialized);
+            }
+        }
+        for arg in args {
+            ensure_struct_specialized(ctx, arg);
+        }
+    }
+
+
+}
+
+/// Only substitutes As target types – used after initial specialisation.
+fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
+    return match expr {
+        HirExpr::As {
+            id,
+            expr: inner,
+            target_type,
+            span,
+        } => HirExpr::As {
+            id,
+            expr: Box::new(force_substitute_as_targets(*inner, sub)),
+            target_type: crate::types::substitute_type(&target_type, sub),
+            span,
+        },
+        other => other,
     }
 
 }

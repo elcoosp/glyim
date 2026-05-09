@@ -9,71 +9,38 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn collect_and_specialize(&mut self) {
         self.init_method_map();
-        // Phase 1: collect function specializations from call_type_args
+
+        // Phase 1: function specializations from call_type_args
         for (expr_id, type_args) in self.call_type_args.iter() {
             if type_args.iter().any(|a| self.has_unresolved_type_param(a)) {
                 continue;
             }
             if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
-                let callee_name = self.interner.resolve(callee);
-                if callee_name.contains("__") {
-                    continue; // mangled callees are already specialized
+                if self.interner.resolve(callee).contains("__") {
+                    continue;
                 }
                 self.queue_fn_specialization(callee, type_args.clone());
             }
         }
 
-        // Phase 2: enqueue all concrete types from expression types and type overrides
+        // Phase 2: concrete types from expr_types and type_overrides
         for ty in self.expr_types.iter() {
             self.enqueue_type_if_generic(ty);
         }
-        let type_override_values: Vec<HirType> = self.type_overrides.values().cloned().collect();
-        for ty in &type_override_values {
+        let overrides: Vec<HirType> = self.type_overrides.values().cloned().collect();
+        for ty in &overrides {
             self.enqueue_type_if_generic(ty);
         }
 
-        // Process type queue (struct/enum specializations)
         self.process_type_specializations();
 
-        // Phase 3: process function specialization work queue
+        // Phase 3: work queue
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
                 continue;
             }
             if let Some(generic_fn) = self.find_fn(fn_name) {
-                // For mangled function names, use overrides
-                let fn_name_str = self.interner.resolve(fn_name).to_string();
-                if fn_name_str.contains("__") {
-                    let overrides: Vec<_> = self
-                        .call_type_args_overrides
-                        .iter()
-                        .map(|(k, v)| (*k, v.clone()))
-                        .collect();
-                    let mut found_override = false;
-                    for (expr_id, concrete_args) in &overrides {
-                        if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id)
-                            && callee == fn_name
-                        {
-                            let specialized = self.specialize_fn(&generic_fn, concrete_args);
-                            let sub: HashMap<Symbol, HirType> = generic_fn
-                                .type_params
-                                .iter()
-                                .zip(concrete_args.iter())
-                                .map(|(tp, ct)| (*tp, ct.clone()))
-                                .collect();
-                            self.scan_expr_for_generic_calls(&specialized.body, &sub);
-                            self.scan_expr_for_struct_instantiations(&specialized.body, &sub);
-                            self.fn_specs
-                                .insert((fn_name, concrete_args.clone()), specialized);
-                            found_override = true;
-                            break;
-                        }
-                    }
-                    if found_override {
-                        continue;
-                    }
-                }
                 let specialized = self.specialize_fn(&generic_fn, &type_args);
                 let sub: HashMap<Symbol, HirType> = generic_fn
                     .type_params
@@ -86,34 +53,35 @@ impl<'a> MonoContext<'a> {
                 self.collect_type_overrides_for_expr(&specialized.body, &sub);
                 self.fn_specs.insert(key, specialized);
                 for (_, param_ty) in &generic_fn.params {
-                    let concrete_param = crate::types::substitute_type(param_ty, &sub);
-                    self.enqueue_type_if_generic(&concrete_param);
+                    let c = crate::types::substitute_type(param_ty, &sub);
+                    self.enqueue_type_if_generic(&c);
                 }
                 if let Some(ret_ty) = &generic_fn.ret {
-                    let concrete_ret = crate::types::substitute_type(ret_ty, &sub);
-                    self.enqueue_type_if_generic(&concrete_ret);
+                    let c = crate::types::substitute_type(ret_ty, &sub);
+                    self.enqueue_type_if_generic(&c);
                 }
             }
         }
 
-        // Run type specialization to fixpoint
         while !self.type_work_queue.is_empty() {
             self.process_type_specializations();
         }
     }
 
+    // ── find_callee helpers ──
+
     fn find_callee_by_id_from_hir(&mut self, search_id: ExprId) -> Option<Symbol> {
         for item in &self.hir.items {
             match item {
                 HirItem::Fn(f) => {
-                    if let Some(callee) = Self::find_callee_in_expr(&f.body, search_id, self) {
-                        return Some(callee);
+                    if let Some(c) = Self::find_callee_in_expr(&f.body, search_id, self) {
+                        return Some(c);
                     }
                 }
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        if let Some(callee) = Self::find_callee_in_expr(&m.body, search_id, self) {
-                            return Some(callee);
+                        if let Some(c) = Self::find_callee_in_expr(&m.body, search_id, self) {
+                            return Some(c);
                         }
                     }
                 }
@@ -137,27 +105,21 @@ impl<'a> MonoContext<'a> {
                 ..
             } if *id == search_id => {
                 let receiver_ty = ctx.get_expr_type(receiver.get_id());
-                let inner_ty = match receiver_ty {
-                    Some(HirType::RawPtr(inner)) => Some(inner.as_ref().clone()),
+                let inner = match receiver_ty {
+                    Some(HirType::RawPtr(i)) => Some(i.as_ref().clone()),
                     other => other,
                 };
-                match inner_ty {
-                    Some(HirType::Named(type_name)) => {
-                        let mangled = format!(
-                            "{}_{}",
-                            ctx.interner.resolve(type_name),
-                            ctx.interner.resolve(*method_name)
-                        );
-                        Some(ctx.interner.intern(&mangled))
-                    }
-                    Some(HirType::Generic(type_name, _)) => {
-                        let mangled = format!(
-                            "{}_{}",
-                            ctx.interner.resolve(type_name),
-                            ctx.interner.resolve(*method_name)
-                        );
-                        Some(ctx.interner.intern(&mangled))
-                    }
+                match inner {
+                    Some(HirType::Named(n)) => Some(ctx.interner.intern(&format!(
+                        "{}_{}",
+                        ctx.interner.resolve(n),
+                        ctx.interner.resolve(*method_name)
+                    ))),
+                    Some(HirType::Generic(n, _)) => Some(ctx.interner.intern(&format!(
+                        "{}_{}",
+                        ctx.interner.resolve(n),
+                        ctx.interner.resolve(*method_name)
+                    ))),
                     _ => None,
                 }
             }
@@ -211,26 +173,25 @@ impl<'a> MonoContext<'a> {
         }
     }
 
+    // ── concretisation ──
+
     pub(crate) fn concretize_type_args(&mut self, args: &[HirType]) -> Vec<HirType> {
         args.iter().map(|ty| self.concretize_type(ty)).collect()
     }
 
     pub(crate) fn concretize_type(&mut self, ty: &HirType) -> HirType {
         match ty {
-            HirType::Generic(sym, inner_args) => {
-                let concrete_inner: Vec<HirType> =
-                    inner_args.iter().map(|a| self.concretize_type(a)).collect();
-                let all_concrete = concrete_inner
-                    .iter()
-                    .all(|a| !self.has_unresolved_type_param(a));
+            HirType::Generic(sym, inner) => {
+                let inner: Vec<HirType> =
+                    inner.iter().map(|a| self.concretize_type(a)).collect();
+                let all_concrete = inner.iter().all(|a| !self.has_unresolved_type_param(a));
                 if all_concrete {
-                    let key = (*sym, concrete_inner.clone());
+                    let key = (*sym, inner.clone());
                     if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
-                        let mangled = self.mangle_name(*sym, &concrete_inner);
-                        return HirType::Named(mangled);
+                        return HirType::Named(self.mangle_name(*sym, &inner));
                     }
                 }
-                HirType::Generic(*sym, concrete_inner)
+                HirType::Generic(*sym, inner)
             }
             HirType::Named(_)
             | HirType::Int
@@ -243,32 +204,26 @@ impl<'a> MonoContext<'a> {
             | HirType::Opaque(_) => ty.clone(),
             HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
             HirType::Option(inner) => {
-                let concrete_inner = self.concretize_type(inner);
-                if !self.has_unresolved_type_param(&concrete_inner) {
-                    let option_sym = self.interner.intern("Option");
-                    let key = (option_sym, std::slice::from_ref(&concrete_inner).to_vec());
-                    if self.enum_specs.contains_key(&key) {
-                        let mangled =
-                            self.mangle_name(option_sym, std::slice::from_ref(&concrete_inner));
-                        return HirType::Named(mangled);
+                let inner = self.concretize_type(inner);
+                if !self.has_unresolved_type_param(&inner) {
+                    let opt = self.interner.intern("Option");
+                    if self.enum_specs.contains_key(&(opt, vec![inner.clone()])) {
+                        return HirType::Named(self.mangle_name(opt, &[inner]));
                     }
                 }
-                HirType::Option(Box::new(concrete_inner))
+                HirType::Option(Box::new(inner))
             }
             HirType::Result(ok, err) => {
-                let concrete_ok = self.concretize_type(ok);
-                let concrete_err = self.concretize_type(err);
-                if !self.has_unresolved_type_param(&concrete_ok)
-                    && !self.has_unresolved_type_param(&concrete_err)
-                {
-                    let result_sym = self.interner.intern("Result");
-                    let key = (result_sym, vec![concrete_ok.clone(), concrete_err.clone()]);
+                let ok = self.concretize_type(ok);
+                let err = self.concretize_type(err);
+                if !self.has_unresolved_type_param(&ok) && !self.has_unresolved_type_param(&err) {
+                    let res = self.interner.intern("Result");
+                    let key = (res, vec![ok.clone(), err.clone()]);
                     if self.enum_specs.contains_key(&key) {
-                        let mangled = self.mangle_name(result_sym, &[concrete_ok, concrete_err]);
-                        return HirType::Named(mangled);
+                        return HirType::Named(self.mangle_name(res, &[ok, err]));
                     }
                 }
-                HirType::Result(Box::new(concrete_ok), Box::new(concrete_err))
+                HirType::Result(Box::new(ok), Box::new(err))
             }
             HirType::Tuple(elems) => {
                 HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect())
@@ -293,6 +248,8 @@ impl<'a> MonoContext<'a> {
         self.fn_work_queue.push(key);
     }
 
+    // ── scanning for further specialisations (needed by specialize_fn) ──
+
     #[tracing::instrument(skip_all)]
     pub(crate) fn scan_expr_for_generic_calls(
         &mut self,
@@ -300,43 +257,23 @@ impl<'a> MonoContext<'a> {
         current_sub: &HashMap<Symbol, HirType>,
     ) {
         match expr {
-            HirExpr::Call {
-                id, callee, args, ..
-            } => {
-                let callee_name = self.interner.resolve(*callee).to_string();
-                if callee_name.contains("__") {
-                    if let Some(base_pos) = callee_name.find("__") {
-                        let base_name = &callee_name[..base_pos];
-                        if let Some(receiver_arg) = args.first() {
-                            let receiver_ty = self.get_expr_type(receiver_arg.get_id());
-                            if let Some(HirType::Generic(_, type_args)) = receiver_ty {
-                                let concrete = self.substitute_type_args(&type_args, current_sub);
-                                if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
-                                    let base_sym = self.interner.intern(base_name);
-                                    self.call_type_args_overrides.insert(*id, concrete.clone());
-                                    self.queue_fn_specialization(base_sym, concrete);
-                                }
-                            }
-                        }
-                    }
+            HirExpr::Call { callee, args, .. } => {
+                // Mangled names: just walk args (typechecker handles them now)
+                if self.interner.resolve(*callee).contains("__") {
                     for a in args {
                         self.scan_expr_for_generic_calls(a, current_sub);
                     }
                     return;
                 }
-                let fn_def_opt = self.find_fn(*callee);
-                if let Some(ref fn_def) = fn_def_opt
-                    && !fn_def.type_params.is_empty()
+                if let Some(ref _fn_def) = self.find_fn(*callee).filter(|f| !f.type_params.is_empty())
                 {
                     if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
                         let substituted = self.substitute_type_args(type_args, current_sub);
-                        let concrete_args = self.concretize_type_args(&substituted);
-                        if !concrete_args.is_empty()
-                            && !concrete_args
-                                .iter()
-                                .any(|a| self.has_unresolved_type_param(a))
+                        let concrete = self.concretize_type_args(&substituted);
+                        if !concrete.is_empty()
+                            && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
                         {
-                            self.queue_fn_specialization(*callee, concrete_args);
+                            self.queue_fn_specialization(*callee, concrete);
                         }
                     }
                 }
@@ -351,48 +288,41 @@ impl<'a> MonoContext<'a> {
                 args,
                 ..
             } => {
-                if let Some(type_args) = self.call_type_args.get(id) {
-                    let concrete_args = self.substitute_type_args(type_args, current_sub);
-                    if !concrete_args.is_empty()
-                        && !concrete_args.iter().any(|a| self.has_unresolved_type_param(a))
+                if let Some(concrete) = self.call_type_args.get(id).cloned() {
+                    let concrete = self.substitute_type_args(&concrete, current_sub);
+                    if !concrete.is_empty()
+                        && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
                     {
-                        let receiver_ty = self.get_expr_type(receiver.get_id());
-                        let base_type = match receiver_ty.as_ref() {
-                            Some(HirType::Named(name)) => *name,
-                            Some(HirType::Generic(name, _)) => *name,
-                            _ => {
-                                self.scan_expr_for_generic_calls(receiver, current_sub);
-                                for a in args {
-                                    self.scan_expr_for_generic_calls(a, current_sub);
-                                }
-                                return;
+                        if let Some(base) = match self.get_expr_type(receiver.get_id()) {
+                            Some(HirType::Named(n) | HirType::Generic(n, _)) => Some(n),
+                            _ => None,
+                        } {
+                            let mangled = self.interner.intern(&format!(
+                                "{}_{}",
+                                self.interner.resolve(base),
+                                self.interner.resolve(*method_name)
+                            ));
+                            if self.find_fn(mangled).is_some() {
+                                self.queue_fn_specialization(mangled, concrete);
                             }
-                        };
-                        let mangled = format!(
-                            "{}_{}",
-                            self.interner.resolve(base_type),
-                            self.interner.resolve(*method_name)
-                        );
-                        let mangled_sym = self.interner.intern(&mangled);
-                        if self.find_fn(mangled_sym).is_some() {
-                            self.queue_fn_specialization(mangled_sym, concrete_args);
                         }
                     }
                 }
-                let receiver_ty = self.get_expr_type(receiver.get_id());
-                if let Some(HirType::Generic(type_name, type_args)) = receiver_ty {
-                    let mangled = format!(
+                // fallback: infer from receiver generic type
+                if let Some(HirType::Generic(type_name, type_args)) =
+                    self.get_expr_type(receiver.get_id())
+                {
+                    let concrete = self.substitute_type_args(&type_args, current_sub);
+                    let mangled = self.interner.intern(&format!(
                         "{}_{}",
                         self.interner.resolve(type_name),
                         self.interner.resolve(*method_name)
-                    );
-                    let mangled_sym = self.interner.intern(&mangled);
-                    let concrete_args = self.substitute_type_args(&type_args, current_sub);
-                    if self.find_fn(mangled_sym).is_some()
-                        && !concrete_args.is_empty()
-                        && !concrete_args.iter().any(|a| self.has_unresolved_type_param(a))
+                    ));
+                    if self.find_fn(mangled).is_some()
+                        && !concrete.is_empty()
+                        && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
                     {
-                        self.queue_fn_specialization(mangled_sym, concrete_args);
+                        self.queue_fn_specialization(mangled, concrete);
                     }
                 }
                 self.scan_expr_for_generic_calls(receiver, current_sub);
@@ -406,24 +336,8 @@ impl<'a> MonoContext<'a> {
                         HirStmt::Expr(e) => self.scan_expr_for_generic_calls(e, current_sub),
                         HirStmt::Let { value, .. }
                         | HirStmt::Assign { value, .. }
-                        | HirStmt::AssignField { value, .. } => {
-                            self.scan_expr_for_generic_calls(value, current_sub)
-                        }
-                        HirStmt::LetPat {
-                            pattern: _,
-                            mutable: _,
-                            value,
-                            ty,
-                            ..
-                        } => {
-                            if let Some(HirType::Generic(_, type_args)) = ty
-                                && let HirExpr::Call { id, .. } = value
-                            {
-                                let concrete = self.substitute_type_args(type_args, current_sub);
-                                if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
-                                    self.call_type_args_overrides.insert(*id, concrete);
-                                }
-                            }
+                        | HirStmt::AssignField { value, .. }
+                        | HirStmt::LetPat { value, .. } => {
                             self.scan_expr_for_generic_calls(value, current_sub)
                         }
                         HirStmt::AssignDeref { target, value, .. } => {
@@ -478,19 +392,12 @@ impl<'a> MonoContext<'a> {
             HirExpr::Return { value: Some(v), .. } => {
                 self.scan_expr_for_generic_calls(v, current_sub)
             }
-            HirExpr::StructLit {
-                fields,
-                ..
-            } => {
-                for (_, f) in fields {
-                    self.scan_expr_for_generic_calls(f, current_sub);
-                }
-            }
-            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-                for a in args {
-                    self.scan_expr_for_generic_calls(a, current_sub);
-                }
-            }
+            HirExpr::StructLit { fields, .. } => fields
+                .iter()
+                .for_each(|(_, f)| self.scan_expr_for_generic_calls(f, current_sub)),
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => args
+                .iter()
+                .for_each(|a| self.scan_expr_for_generic_calls(a, current_sub)),
             _ => {}
         }
     }
@@ -508,52 +415,41 @@ impl<'a> MonoContext<'a> {
                 ..
             } => {
                 if let Some(struct_def) = self.find_struct(*struct_name)
-                    && !struct_def.type_params.is_empty()
+                    .filter(|s| !s.type_params.is_empty())
                 {
-                    let struct_ty = self.get_expr_type(*id);
-                    let concrete_args = match struct_ty.as_ref() {
-                        Some(HirType::Generic(_, type_args)) => {
-                            self.substitute_type_args(type_args, current_sub)
+                    if let Some(HirType::Generic(_, type_args)) = self.get_expr_type(*id) {
+                        let concrete = self.substitute_type_args(&type_args, current_sub);
+                        if concrete.len() == struct_def.type_params.len()
+                            && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
+                        {
+                            let key = (*struct_name, concrete.clone());
+                            if !self.struct_specs.contains_key(&key) {
+                                let specialized =
+                                    self.specialize_struct(&struct_def, &concrete);
+                                self.struct_specs.insert(key, specialized);
+                            }
+                            let mangled = self.mangle_name(*struct_name, &concrete);
+                            self.type_overrides.insert(*id, HirType::Named(mangled));
                         }
-                        _ => vec![],
-                    };
-                    if concrete_args.len() == struct_def.type_params.len()
-                        && !concrete_args
-                            .iter()
-                            .any(|a| self.has_unresolved_type_param(a))
-                    {
-                        let key = (*struct_name, concrete_args.clone());
-                        if !self.struct_specs.contains_key(&key) {
-                            let specialized = self.specialize_struct(&struct_def, &concrete_args);
-                            self.struct_specs.insert(key, specialized);
-                        }
-                        let mangled = self.mangle_name(*struct_name, &concrete_args);
-                        self.type_overrides.insert(*id, HirType::Named(mangled));
                     }
                 }
                 for (_, f) in fields {
                     self.scan_expr_for_struct_instantiations(f, current_sub);
                 }
             }
-            HirExpr::Block { stmts, .. } => {
-                for s in stmts {
-                    match s {
-                        HirStmt::Expr(e) => {
-                            self.scan_expr_for_struct_instantiations(e, current_sub)
-                        }
-                        HirStmt::Let { value, .. }
-                        | HirStmt::LetPat { value, .. }
-                        | HirStmt::Assign { value, .. }
-                        | HirStmt::AssignField { value, .. } => {
-                            self.scan_expr_for_struct_instantiations(value, current_sub)
-                        }
-                        HirStmt::AssignDeref { target, value, .. } => {
-                            self.scan_expr_for_struct_instantiations(target, current_sub);
-                            self.scan_expr_for_struct_instantiations(value, current_sub);
-                        }
-                    }
+            HirExpr::Block { stmts, .. } => stmts.iter().for_each(|s| match s {
+                HirStmt::Expr(e) => self.scan_expr_for_struct_instantiations(e, current_sub),
+                HirStmt::Let { value, .. }
+                | HirStmt::LetPat { value, .. }
+                | HirStmt::Assign { value, .. }
+                | HirStmt::AssignField { value, .. } => {
+                    self.scan_expr_for_struct_instantiations(value, current_sub)
                 }
-            }
+                HirStmt::AssignDeref { target, value, .. } => {
+                    self.scan_expr_for_struct_instantiations(target, current_sub);
+                    self.scan_expr_for_struct_instantiations(value, current_sub);
+                }
+            }),
             HirExpr::If {
                 condition,
                 then_branch,
@@ -601,28 +497,23 @@ impl<'a> MonoContext<'a> {
             }
             HirExpr::MethodCall { receiver, args, .. } => {
                 self.scan_expr_for_struct_instantiations(receiver, current_sub);
-                for a in args {
-                    self.scan_expr_for_struct_instantiations(a, current_sub);
-                }
+                args.iter()
+                    .for_each(|a| self.scan_expr_for_struct_instantiations(a, current_sub));
             }
-            HirExpr::Call { args, .. } => {
-                for a in args {
-                    self.scan_expr_for_struct_instantiations(a, current_sub);
-                }
-            }
-            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-                for a in args {
-                    self.scan_expr_for_struct_instantiations(a, current_sub);
-                }
-            }
+            HirExpr::Call { args, .. } => args
+                .iter()
+                .for_each(|a| self.scan_expr_for_struct_instantiations(a, current_sub)),
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => args
+                .iter()
+                .for_each(|a| self.scan_expr_for_struct_instantiations(a, current_sub)),
             HirExpr::SizeOf { target_type, .. } => {
                 if let HirType::Generic(sym, args) = target_type
                     && let Some(s) = self.find_struct(*sym)
                 {
-                    let concrete_args = self.substitute_type_args(args, current_sub);
-                    let key = (*sym, concrete_args.clone());
+                    let concrete = self.substitute_type_args(args, current_sub);
+                    let key = (*sym, concrete.clone());
                     if !self.struct_specs.contains_key(&key) {
-                        let specialized = self.specialize_struct(&s, &concrete_args);
+                        let specialized = self.specialize_struct(&s, &concrete);
                         self.struct_specs.insert(key, specialized);
                     }
                 }
@@ -631,51 +522,46 @@ impl<'a> MonoContext<'a> {
         }
     }
 
+    // ── type enqueuing ──
+
     pub(crate) fn enqueue_type_if_generic(&mut self, ty: &HirType) {
         match ty {
             HirType::Generic(sym, args) => {
-                let concrete_args = self.concretize_type_args(args);
-                if !concrete_args
-                    .iter()
-                    .any(|a| self.has_unresolved_type_param(a))
-                {
-                    let key = (*sym, concrete_args.clone());
+                let concrete = self.concretize_type_args(args);
+                if !concrete.iter().any(|a| self.has_unresolved_type_param(a)) {
+                    let key = (*sym, concrete.clone());
                     if !self.type_queued.contains(&key) {
                         self.type_queued.insert(key.clone());
                         self.type_work_queue.push(key);
                     }
                 }
-                for a in args {
-                    self.enqueue_type_if_generic(a);
-                }
+                args.iter().for_each(|a| self.enqueue_type_if_generic(a));
             }
             HirType::Option(inner) => {
-                let concrete_inner = self.concretize_type(inner);
-                if !self.has_unresolved_type_param(&concrete_inner) {
-                    let option_sym = self.interner.intern("Option");
-                    let key = (option_sym, std::slice::from_ref(&concrete_inner).to_vec());
+                let inner = self.concretize_type(inner);
+                if !self.has_unresolved_type_param(&inner) {
+                    let opt = self.interner.intern("Option");
+                    let key = (opt, vec![inner.clone()]);
                     if !self.type_queued.contains(&key) {
                         self.type_queued.insert(key.clone());
                         self.type_work_queue.push(key);
                     }
                 }
-                self.enqueue_type_if_generic(inner);
+                self.enqueue_type_if_generic(&inner);
             }
             HirType::Result(ok, err) => {
-                let concrete_ok = self.concretize_type(ok);
-                let concrete_err = self.concretize_type(err);
-                if !self.has_unresolved_type_param(&concrete_ok)
-                    && !self.has_unresolved_type_param(&concrete_err)
-                {
-                    let result_sym = self.interner.intern("Result");
-                    let key = (result_sym, vec![concrete_ok.clone(), concrete_err.clone()]);
+                let ok = self.concretize_type(ok);
+                let err = self.concretize_type(err);
+                if !self.has_unresolved_type_param(&ok) && !self.has_unresolved_type_param(&err) {
+                    let res = self.interner.intern("Result");
+                    let key = (res, vec![ok.clone(), err.clone()]);
                     if !self.type_queued.contains(&key) {
                         self.type_queued.insert(key.clone());
                         self.type_work_queue.push(key);
                     }
                 }
-                self.enqueue_type_if_generic(ok);
-                self.enqueue_type_if_generic(err);
+                self.enqueue_type_if_generic(&ok);
+                self.enqueue_type_if_generic(&err);
             }
             HirType::Named(_)
             | HirType::Int
@@ -689,125 +575,8 @@ impl<'a> MonoContext<'a> {
             | HirType::RawPtr(_)
             | HirType::Func(_, _) => {
                 if let HirType::RawPtr(inner) = ty {
-                    self.enqueue_type_if_generic(inner)
+                    self.enqueue_type_if_generic(&inner);
                 }
-            }
-            _ => {}
-        }
-    }
-
-    pub(crate) fn scan_hir_for_type_instantiations(&mut self) {
-        for item in &self.hir.items {
-            match item {
-                HirItem::Fn(f) => {
-                    self.scan_expr_for_type_instantiations(&f.body);
-                }
-                HirItem::Impl(imp) => {
-                    for m in &imp.methods {
-                        self.scan_expr_for_type_instantiations(&m.body);
-                    }
-                }
-                _ => {}
-            }
-        }
-        let call_type_args_vals: Vec<Vec<HirType>> =
-            self.call_type_args.values().cloned().collect();
-        for type_args in &call_type_args_vals {
-            for ty in type_args {
-                self.enqueue_type_if_generic(ty);
-            }
-        }
-        let override_types: Vec<HirType> = self.type_overrides.values().cloned().collect();
-        for ty in override_types {
-            self.enqueue_type_if_generic(&ty);
-        }
-    }
-
-    fn scan_expr_for_type_instantiations(&mut self, expr: &HirExpr) {
-        match expr {
-            HirExpr::EnumVariant { id, args, .. } => {
-                let expr_type = self.get_expr_type(*id);
-                if let Some(ty) = expr_type {
-                    self.enqueue_type_if_generic(&ty);
-                }
-                for a in args {
-                    self.scan_expr_for_type_instantiations(a);
-                }
-            }
-            HirExpr::StructLit { id, fields, .. } => {
-                let expr_type = self.get_expr_type(*id);
-                if let Some(ty) = expr_type {
-                    self.enqueue_type_if_generic(&ty);
-                }
-                for (_, val) in fields {
-                    self.scan_expr_for_type_instantiations(val);
-                }
-            }
-            HirExpr::Call { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
-                for a in args {
-                    self.scan_expr_for_type_instantiations(a);
-                }
-            }
-            HirExpr::Block { stmts, .. } => {
-                for stmt in stmts {
-                    match stmt {
-                        HirStmt::Expr(e)
-                        | HirStmt::Let { value: e, .. }
-                        | HirStmt::LetPat { value: e, .. }
-                        | HirStmt::Assign { value: e, .. }
-                        | HirStmt::AssignField { value: e, .. } => {
-                            self.scan_expr_for_type_instantiations(e);
-                        }
-                        HirStmt::AssignDeref { target, value, .. } => {
-                            self.scan_expr_for_type_instantiations(target);
-                            self.scan_expr_for_type_instantiations(value);
-                        }
-                    }
-                }
-            }
-            HirExpr::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                self.scan_expr_for_type_instantiations(condition);
-                self.scan_expr_for_type_instantiations(then_branch);
-                if let Some(e) = else_branch {
-                    self.scan_expr_for_type_instantiations(e);
-                }
-            }
-            HirExpr::Match {
-                scrutinee, arms, ..
-            } => {
-                self.scan_expr_for_type_instantiations(scrutinee);
-                for arm in arms {
-                    if let Some(g) = &arm.guard {
-                        self.scan_expr_for_type_instantiations(g);
-                    }
-                    self.scan_expr_for_type_instantiations(&arm.body);
-                }
-            }
-            HirExpr::While {
-                condition, body, ..
-            }
-            | HirExpr::ForIn {
-                iter: condition,
-                body,
-                ..
-            } => {
-                self.scan_expr_for_type_instantiations(condition);
-                self.scan_expr_for_type_instantiations(body);
-            }
-            HirExpr::Binary { lhs, rhs, .. } => {
-                self.scan_expr_for_type_instantiations(lhs);
-                self.scan_expr_for_type_instantiations(rhs);
-            }
-            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
-                self.scan_expr_for_type_instantiations(operand);
-            }
-            HirExpr::Return { value: Some(v), .. } => {
-                self.scan_expr_for_type_instantiations(v);
             }
             _ => {}
         }
@@ -819,14 +588,14 @@ impl<'a> MonoContext<'a> {
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;
             }
-            if let Some(struct_def) = self.find_struct(name) {
-                let specialized = self.specialize_struct(&struct_def, &args);
+            if let Some(s) = self.find_struct(name) {
+                let specialized = self.specialize_struct(&s, &args);
                 for field in &specialized.fields {
                     self.enqueue_type_if_generic(&field.ty);
                 }
                 self.struct_specs.insert(key, specialized);
-            } else if let Some(enum_def) = self.find_enum(name) {
-                let specialized = self.specialize_enum(&enum_def, &args);
+            } else if let Some(e) = self.find_enum(name) {
+                let specialized = self.specialize_enum(&e, &args);
                 for variant in &specialized.variants {
                     for field in &variant.fields {
                         self.enqueue_type_if_generic(&field.ty);
@@ -840,14 +609,14 @@ impl<'a> MonoContext<'a> {
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
                 continue;
             }
-            if let Some(struct_def) = self.find_struct(name) {
-                let specialized = self.specialize_struct(&struct_def, &args);
+            if let Some(s) = self.find_struct(name) {
+                let specialized = self.specialize_struct(&s, &args);
                 for field in &specialized.fields {
                     self.enqueue_type_if_generic(&field.ty);
                 }
                 self.struct_specs.insert(key, specialized);
-            } else if let Some(enum_def) = self.find_enum(name) {
-                let specialized = self.specialize_enum(&enum_def, &args);
+            } else if let Some(e) = self.find_enum(name) {
+                let specialized = self.specialize_enum(&e, &args);
                 for variant in &specialized.variants {
                     for field in &variant.fields {
                         self.enqueue_type_if_generic(&field.ty);

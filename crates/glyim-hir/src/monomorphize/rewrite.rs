@@ -1,4 +1,3 @@
-// crates/glyim-hir/src/monomorphize/rewrite.rs
 use super::*;
 use crate::HirPattern;
 use crate::MatchArm;
@@ -28,7 +27,6 @@ impl<'a> MonoContext<'a> {
                     .call_type_args
                     .get(id)
                     .map(|args| self.substitute_type_args(args, type_sub))
-                    .or_else(|| self.call_type_args_overrides.get(id).cloned())
                     .unwrap_or_default();
 
                 let new_callee = if !type_args.is_empty() {
@@ -37,14 +35,7 @@ impl<'a> MonoContext<'a> {
                     fn_map.get(&(*callee, vec![])).copied()
                 };
 
-                // Fallback 1: check call_type_args_overrides
-                let new_callee = new_callee.or_else(|| {
-                    self.call_type_args_overrides
-                        .get(id)
-                        .and_then(|concrete| fn_map.get(&(*callee, concrete.clone())).copied())
-                });
-
-                // Fallback 2: if exactly one specialization exists for this callee, use it
+                // Fallback: if exactly one specialization exists for this callee, use it
                 let new_callee = new_callee.unwrap_or_else(|| {
                     let matches: Vec<_> = fn_map
                         .iter()
@@ -145,6 +136,7 @@ impl<'a> MonoContext<'a> {
                 }
             }
 
+            // ... (remaining rewrite arms unchanged)
             HirExpr::Match {
                 id,
                 scrutinee,
@@ -383,8 +375,6 @@ impl<'a> MonoContext<'a> {
                 args,
                 span,
             } => {
-                // Use the type substitution to compute the concrete enum name
-                // when the enum has type parameters that map to concrete types.
                 let new_enum_name = if let Some(enum_def) = self.find_enum(*enum_name) {
                     let concrete_args: Vec<HirType> = enum_def
                         .type_params
@@ -451,15 +441,9 @@ impl<'a> MonoContext<'a> {
                 ty: ty.as_ref().map(|t| {
                     let substituted = crate::types::substitute_type(t, type_sub);
                     let mut concretized = self.concretize_type(&substituted);
-                    // Repeat until fully concretized (handles outer Generic)
                     let mut prev = concretized.clone();
                     loop {
                         concretized = self.concretize_type(&prev);
-                        tracing::debug!(
-                            "[rewrite_stmt LetPat] repeat concretize: {:?} -> {:?}",
-                            prev,
-                            concretized
-                        );
                         if concretized == prev {
                             break;
                         }
