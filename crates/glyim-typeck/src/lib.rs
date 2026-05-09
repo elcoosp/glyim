@@ -736,6 +736,11 @@ self.call_type_args.insert(*id, concrete_args);
                                     return HirType::Error;
                                 }
                             }
+                        } else {
+                            // Record concrete type args for monomorphization even if method has no own type params
+                            if let HirType::Generic(_, ref type_args) = recv_ty {
+                                self.call_type_args.insert(*id, type_args.clone());
+                            }
                         }
                         return fn_def.ret.clone().unwrap_or(HirType::Unit);
                     }

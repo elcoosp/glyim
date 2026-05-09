@@ -62,6 +62,27 @@ impl<'a> MonoContext<'a> {
 
         self.process_type_specializations();
 
+        // Scan non-generic function bodies for generic method calls
+        // (important for method calls on generic receivers without own type params)
+        {
+            let empty_sub = std::collections::HashMap::new();
+            for item in &self.hir.items {
+                match item {
+                    HirItem::Fn(f) if f.type_params.is_empty() => {
+                        self.scan_expr_for_generic_calls(&f.body, &empty_sub);
+                    }
+                    HirItem::Impl(imp) if imp.type_params.is_empty() => {
+                        for m in &imp.methods {
+                            if m.type_params.is_empty() {
+                                self.scan_expr_for_generic_calls(&m.body, &empty_sub);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Phase 3: work queue
         eprintln!(
             "[mono] processing work queue, size={}",
@@ -130,19 +151,8 @@ impl<'a> MonoContext<'a> {
         search_id: ExprId,
         ctx: &mut MonoContext<'a>,
     ) -> Option<Symbol> {
-        eprintln!(
-            "[find_callee_in_expr] searching for id={:?} in expr={:?}",
-            search_id, expr
-        );
-
         match expr {
             HirExpr::Call { id, callee, .. } => {
-                eprintln!(
-                    "[find_callee_in_expr] Call id={:?} callee={} (search_id={:?})",
-                    id,
-                    ctx.interner.resolve(*callee),
-                    search_id
-                );
                 if *id == search_id {
                     return Some(*callee);
                 }
@@ -154,10 +164,6 @@ impl<'a> MonoContext<'a> {
                 method_name,
                 ..
             } => {
-                eprintln!(
-                    "[find_callee_in_expr] MethodCall id={:?} (search_id={:?})",
-                    id, search_id
-                );
                 if *id != search_id {
                     return None;
                 }
@@ -440,6 +446,53 @@ impl<'a> MonoContext<'a> {
                 self.scan_expr_for_generic_calls(body, current_sub);
             }
             HirExpr::ForIn { iter, body, .. } => {
+                // Discover implicit iter() and next() from the iterable type
+                if let Some(HirType::Generic(type_name, type_args)) =
+                    self.get_expr_type(iter.get_id())
+                {
+                    let concrete = self.substitute_type_args(&type_args, current_sub);
+                    if !concrete.is_empty()
+                        && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
+                    {
+                        let iter_method = self
+                            .interner
+                            .intern(&format!("{}_iter", self.interner.resolve(type_name)));
+                        if let Some(iter_fn) = self.find_fn(iter_method) {
+                            self.queue_fn_specialization(iter_method, concrete.clone());
+                            // Discover next() on the iterator return type
+                            let sub: std::collections::HashMap<glyim_interner::Symbol, HirType> =
+                                iter_fn
+                                    .type_params
+                                    .iter()
+                                    .zip(concrete.iter())
+                                    .map(|(tp, ct)| (*tp, ct.clone()))
+                                    .collect();
+                            if let Some(ret) = &iter_fn.ret {
+                                let ret_ty = crate::types::substitute_type(ret, &sub);
+                                if let HirType::Generic(iter_name, iter_args) = &ret_ty {
+                                    let next_method = self.interner.intern(&format!(
+                                        "{}_next",
+                                        self.interner.resolve(*iter_name)
+                                    ));
+                                    if self.find_fn(next_method).is_some() {
+                                        let next_concrete =
+                                            self.substitute_type_args(iter_args, current_sub);
+                                        if !next_concrete.is_empty()
+                                            && next_concrete
+                                                .iter()
+                                                .all(|a| !self.has_unresolved_type_param(a))
+                                        {
+                                            self.queue_fn_specialization(
+                                                next_method,
+                                                next_concrete,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 self.scan_expr_for_generic_calls(iter, current_sub);
                 self.scan_expr_for_generic_calls(body, current_sub);
             }
