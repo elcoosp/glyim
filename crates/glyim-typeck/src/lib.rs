@@ -82,13 +82,46 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
-    pub fn new(interner: Interner) -> Self {
+    pub fn new(mut interner: Interner) -> Self {
+        // Register built-in intrinsics before building the TypeChecker.
+        let ptr_u8 = HirType::RawPtr(Box::new(HirType::Int));
+        let i64_type = HirType::Int;
+        let void_type = HirType::Unit;
+        let intrinsics = vec![
+            (
+                "__ptr_offset",
+                vec![ptr_u8.clone(), i64_type.clone()],
+                ptr_u8.clone(),
+            ),
+            ("__glyim_alloc", vec![i64_type.clone()], ptr_u8.clone()),
+            ("__glyim_free", vec![ptr_u8.clone()], void_type.clone()),
+            (
+                "__glyim_hash_bytes",
+                vec![ptr_u8.clone(), i64_type.clone()],
+                i64_type.clone(),
+            ),
+            ("__glyim_hash_seed", vec![], i64_type.clone()),
+            ("abort", vec![], void_type.clone()),
+        ];
+        let mut extern_fns = HashMap::new();
+        for (name, params, ret) in intrinsics {
+            let sym = interner.intern(name);
+            extern_fns.insert(
+                sym,
+                ExternFn {
+                    name: sym,
+                    params,
+                    ret,
+                },
+            );
+        }
+
         TypeChecker {
             interner,
             scopes: vec![Scope::new()],
             structs: HashMap::new(),
             enums: HashMap::new(),
-            extern_fns: HashMap::new(),
+            extern_fns,
             impl_methods: HashMap::new(),
             method_map: HashMap::new(),
             expr_types: Vec::new(),
@@ -202,10 +235,13 @@ impl TypeChecker {
             if let Some(actual) = body_type {
                 let is_type_param =
                     |ty: &HirType| matches!(ty, HirType::Named(s) if f.type_params.contains(s));
+                // Only report the error if both the return type
+                // and the actual type are fully concrete (no type parameters).
+                let both_concrete = !self.contains_type_param(expected) &&
+                                    !self.contains_type_param(&actual);
                 if f.type_params.is_empty()
                     && *expected != actual
-                    && !is_type_param(&actual)
-                    && !is_type_param(expected)
+                    && both_concrete
                 {
                     self.errors.push(TypeError::InvalidReturnType {
                         expected: expected.clone(),
@@ -226,6 +262,18 @@ impl TypeChecker {
             HirType::Tuple(elems) => elems.iter().any(|e| self.has_type_parameter(e)),
             HirType::RawPtr(inner) | HirType::Option(inner) => self.has_type_parameter(inner),
             HirType::Result(ok, err) => self.has_type_parameter(ok) || self.has_type_parameter(err),
+            _ => false,
+        }
+    }
+
+    /// Returns true if the type or any nested type contains an unresolved type parameter.
+    fn contains_type_param(&self, ty: &HirType) -> bool {
+        match ty {
+            HirType::Named(_) => self.has_type_parameter(ty),
+            HirType::Generic(_, args) => args.iter().any(|a| self.contains_type_param(a)),
+            HirType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(e)),
+            HirType::RawPtr(inner) | HirType::Option(inner) => self.contains_type_param(inner),
+            HirType::Result(ok, err) => self.contains_type_param(ok) || self.contains_type_param(err),
             _ => false,
         }
     }
@@ -286,8 +334,10 @@ impl TypeChecker {
             }
             HirExpr::Block { stmts, .. } => {
                 let mut last = HirType::Unit;
-                for stmt in stmts {
-                    if let Some(t) = self.check_stmt(stmt) {
+                let len = stmts.len();
+                for (i, stmt) in stmts.iter().enumerate() {
+                    let exp = if i == len - 1 { expected } else { None };
+                    if let Some(t) = self.check_stmt_with_expected(stmt, exp) {
                         last = t;
                     }
                 }
@@ -336,7 +386,7 @@ impl TypeChecker {
                     if let Some(ref g) = arm.guard {
                         self.check_expr(g, None);
                     }
-                    if let Some(t) = self.check_expr(&arm.body, None) {
+                    if let Some(t) = self.check_expr(&arm.body, expected) {
                         arm_types.push(t);
                     }
                     self.scopes.pop();
@@ -452,7 +502,7 @@ impl TypeChecker {
                 }
             }
             HirExpr::EnumVariant {
-                id,
+                id: _,
                 enum_name,
                 variant_name,
                 args,
@@ -712,7 +762,7 @@ impl TypeChecker {
             }
             HirExpr::Return { value, .. } => {
                 if let Some(v) = value {
-                    self.check_expr(v, None);
+                    self.check_expr(v, expected);
                 }
                 HirType::Never
             }
@@ -1238,5 +1288,16 @@ impl TypeChecker {
             }
         }
         Ok(sub)
+    }
+
+    fn check_stmt_with_expected(
+        &mut self,
+        stmt: &HirStmt,
+        expected: Option<&HirType>,
+    ) -> Option<HirType> {
+        match stmt {
+            HirStmt::Expr(e) => self.check_expr(e, expected),
+            other => self.check_stmt(other),
+        }
     }
 }
