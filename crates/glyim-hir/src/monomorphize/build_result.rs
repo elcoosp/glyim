@@ -55,8 +55,7 @@ impl<'a> MonoContext<'a> {
             let mut mono_e = e;
             mono_e.name = mangled;
             eprintln!(
-                "[build_result] emitting enum {}",
-                self.interner.resolve(mangled)
+
             );
             items.push(HirItem::Enum(mono_e));
         }
@@ -141,6 +140,7 @@ impl<'a> MonoContext<'a> {
         }
 
         // Emit specialized functions
+        for ((name, args), _) in &self.fn_specs { eprintln!("  {:?} :: {:?}", name, args); }
         for (orig_name, args, f) in fn_specs {
             let mangled = self.mangle_name(orig_name, &args);
             let mut mono_f = f;

@@ -9,12 +9,20 @@ impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn collect_and_specialize(&mut self) {
         self.init_method_map();
-
+        eprintln!("[mono] call_type_args count: {}", self.call_type_args.len());
+        for (k, v) in self.call_type_args.iter() {
+            eprintln!("  id={:?} args={:?}", k, v);
+        }
         // Phase 1: function specializations from call_type_args
         for (expr_id, type_args) in self.call_type_args.iter() {
             if type_args.iter().any(|a| self.has_unresolved_type_param(a)) {
                 continue;
             }
+            eprintln!(
+                "[mono Phase1] expr_id={:?} type_args={:?}",
+                expr_id, type_args
+            );
+
             if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
                 if self.interner.resolve(callee).contains("__") {
                     continue;
@@ -96,14 +104,17 @@ impl<'a> MonoContext<'a> {
         search_id: ExprId,
         ctx: &mut MonoContext<'a>,
     ) -> Option<Symbol> {
+        eprintln!("[find_callee_in_expr] searching for id={:?} in expr={:?}", search_id, expr);
+
         match expr {
-            HirExpr::Call { id, callee, .. } if *id == search_id => Some(*callee),
-            HirExpr::MethodCall {
-                id,
-                receiver,
-                method_name,
-                ..
-            } if *id == search_id => {
+            HirExpr::Call { id, callee, .. } => {
+                eprintln!("[find_callee_in_expr] Call id={:?} callee={} (search_id={:?})", id, ctx.interner.resolve(*callee), search_id);
+                if *id == search_id { return Some(*callee); }
+                None
+            }
+            HirExpr::MethodCall { id, receiver, method_name, .. } => {
+                eprintln!("[find_callee_in_expr] MethodCall id={:?} (search_id={:?})", id, search_id);
+                if *id != search_id { return None; }
                 let receiver_ty = ctx.get_expr_type(receiver.get_id());
                 let inner = match receiver_ty {
                     Some(HirType::RawPtr(i)) => Some(i.as_ref().clone()),
@@ -182,8 +193,7 @@ impl<'a> MonoContext<'a> {
     pub(crate) fn concretize_type(&mut self, ty: &HirType) -> HirType {
         match ty {
             HirType::Generic(sym, inner) => {
-                let inner: Vec<HirType> =
-                    inner.iter().map(|a| self.concretize_type(a)).collect();
+                let inner: Vec<HirType> = inner.iter().map(|a| self.concretize_type(a)).collect();
                 let all_concrete = inner.iter().all(|a| !self.has_unresolved_type_param(a));
                 if all_concrete {
                     let key = (*sym, inner.clone());
@@ -245,9 +255,9 @@ impl<'a> MonoContext<'a> {
             return;
         }
         self.fn_queued.insert(key.clone());
+
         self.fn_work_queue.push(key);
     }
-
     // ── scanning for further specialisations (needed by specialize_fn) ──
 
     #[tracing::instrument(skip_all)]
@@ -265,7 +275,8 @@ impl<'a> MonoContext<'a> {
                     }
                     return;
                 }
-                if let Some(ref _fn_def) = self.find_fn(*callee).filter(|f| !f.type_params.is_empty())
+                if let Some(ref _fn_def) =
+                    self.find_fn(*callee).filter(|f| !f.type_params.is_empty())
                 {
                     if let Some(type_args) = self.call_type_args.get(&expr.get_id()) {
                         let substituted = self.substitute_type_args(type_args, current_sub);
@@ -288,6 +299,12 @@ impl<'a> MonoContext<'a> {
                 args,
                 ..
             } => {
+                eprintln!(
+                    "[mono scan MethodCall] id={:?} call_type_args.get(id)={:?}",
+                    id,
+                    self.call_type_args.get(id)
+                );
+
                 if let Some(concrete) = self.call_type_args.get(id).cloned() {
                     let concrete = self.substitute_type_args(&concrete, current_sub);
                     if !concrete.is_empty()
@@ -414,7 +431,8 @@ impl<'a> MonoContext<'a> {
                 fields,
                 ..
             } => {
-                if let Some(struct_def) = self.find_struct(*struct_name)
+                if let Some(struct_def) = self
+                    .find_struct(*struct_name)
                     .filter(|s| !s.type_params.is_empty())
                 {
                     if let Some(HirType::Generic(_, type_args)) = self.get_expr_type(*id) {
@@ -424,8 +442,7 @@ impl<'a> MonoContext<'a> {
                         {
                             let key = (*struct_name, concrete.clone());
                             if !self.struct_specs.contains_key(&key) {
-                                let specialized =
-                                    self.specialize_struct(&struct_def, &concrete);
+                                let specialized = self.specialize_struct(&struct_def, &concrete);
                                 self.struct_specs.insert(key, specialized);
                             }
                             let mangled = self.mangle_name(*struct_name, &concrete);

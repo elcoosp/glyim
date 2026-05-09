@@ -233,7 +233,7 @@ impl TypeChecker {
         let body_type = self.check_expr(&f.body, None);
         if let Some(expected) = &f.ret {
             if let Some(actual) = body_type {
-                let is_type_param =
+                let _is_type_param =
                     |ty: &HirType| matches!(ty, HirType::Named(s) if f.type_params.contains(s));
                 // Only report the error if both the return type
                 // and the actual type are fully concrete (no type parameters).
@@ -650,7 +650,7 @@ impl TypeChecker {
                                     .iter()
                                     .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                     .collect();
-                                self.call_type_args.insert(*id, concrete_args);
+self.call_type_args.insert(*id, concrete_args);
                                 return concrete_ret;
                             }
                             Err(e) => {
@@ -709,7 +709,7 @@ impl TypeChecker {
                     _ => None,
                 };
                 if let Some(type_name) = type_sym {
-                    if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
+if let Some(fn_def) = self.method_map.get(&(type_name, *method_name)).cloned() {
                         if !fn_def.type_params.is_empty() {
                             let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
                                 .chain(
@@ -728,7 +728,7 @@ impl TypeChecker {
                                         .iter()
                                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                         .collect();
-                                    self.call_type_args.insert(*id, concrete_args);
+self.call_type_args.insert(*id, concrete_args);
                                     return concrete_ret;
                                 }
                                 Err(e) => {
