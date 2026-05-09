@@ -31,8 +31,6 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    // ── type lookups ──
-
     pub(crate) fn get_expr_type(&self, id: ExprId) -> Option<HirType> {
         self.type_overrides
             .get(&id)
@@ -42,21 +40,15 @@ impl<'a> MonoContext<'a> {
 
     pub(crate) fn find_fn(&mut self, name: Symbol) -> Option<HirFn> {
         let name_str = self.interner.resolve(name).to_string();
-
-        // Mangled specialisation → demangle and retry
         if let Some(pos) = name_str.find("__") {
             let base = self.interner.intern(&name_str[..pos]);
             return self.find_fn(base);
         }
-
-        // Top‑level functions
         for item in &self.hir.items {
             if let HirItem::Fn(f) = item && f.name == name {
                 return Some(f.clone());
             }
         }
-
-        // Impl methods with exact mangled name
         for item in &self.hir.items {
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
@@ -66,8 +58,6 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-
-        // Look up by (type, method) using method_map
         if let Some(uscore) = name_str.rfind('_') {
             let type_name = &name_str[..uscore];
             let method_name = &name_str[uscore + 1..];
@@ -78,7 +68,6 @@ impl<'a> MonoContext<'a> {
                 }
             }
         }
-
         None
     }
 
@@ -135,8 +124,6 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    // ── method_map initialisation ──
-
     pub(crate) fn init_method_map(&mut self) {
         let mut entries: Vec<(Symbol, Symbol, HirFn)> = Vec::new();
         for item in &self.hir.items {
@@ -161,35 +148,57 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-    // ── specialisation helpers (no inference hacks) ──
-
     pub(crate) fn specialize_fn(&mut self, f: &HirFn, concrete: &[HirType]) -> HirFn {
         let mut sub = HashMap::new();
+
+        // Map the function's own type parameters
+        eprintln!("[specialize_fn debug] f.name={:?} f.type_params={:?} concrete={:?}", f.name, f.type_params, concrete);
         for (i, tp) in f.type_params.iter().enumerate() {
             if let Some(ct) = concrete.get(i) {
                 sub.insert(*tp, ct.clone());
             }
         }
-        // For struct methods where type params are on the self parameter
-        if sub.is_empty()
-            && !f.params.is_empty()
-            && let (_, HirType::Generic(_, param_args)) = &f.params[0]
-        {
-            for (i, formal) in param_args.iter().enumerate() {
-                if let HirType::Named(fname) = formal
-                    && let Some(ct) = concrete.get(i)
-                {
-                    sub.insert(*fname, ct.clone());
+
+        // Map type params inferred from self parameter's generic type args
+        if !f.params.is_empty() {
+            if let (_, HirType::Generic(_, param_args)) = &f.params[0] {
+                for (i, formal) in param_args.iter().enumerate() {
+                    if let HirType::Named(fname) = formal
+                        && let Some(ct) = concrete.get(i)
+                    {
+                        sub.insert(*fname, ct.clone());
+                    }
                 }
             }
         }
-        if sub.is_empty() && !concrete.is_empty() && !f.type_params.is_empty() {
-            for (i, tp) in f.type_params.iter().enumerate() {
-                if let Some(ct) = concrete.get(i) {
-                    sub.insert(*tp, ct.clone());
+
+        // Also map the struct's own type params (may differ from impl's type params)
+        if !f.params.is_empty() {
+            eprintln!("[specialize_fn debug] f.name={:?} f.params[0].1={:?}", f.name, f.params[0].1);
+            // Check if self is directly a generic type
+            if let HirType::Generic(struct_sym, _) = f.params[0].1 {
+                if let Some(struct_info) = self.find_struct(struct_sym) {
+                    for (i, tp) in struct_info.type_params.iter().enumerate() {
+                        if let Some(ct) = concrete.get(i) {
+                            sub.insert(*tp, ct.clone());
+                        }
+                    }
+                }
+            }
+            // Check if self is wrapped in RawPtr (e.g., *mut Iter<T>)
+            else if let HirType::RawPtr(ref inner) = f.params[0].1 {
+                if let HirType::Generic(struct_sym, _) = inner.as_ref() {
+                    if let Some(struct_info) = self.find_struct(*struct_sym) {
+                        for (i, tp) in struct_info.type_params.iter().enumerate() {
+                            if let Some(ct) = concrete.get(i) {
+                                sub.insert(*tp, ct.clone());
+                            }
+                        }
+                    }
                 }
             }
         }
+
         if f.type_params.is_empty() && sub.is_empty() {
             return f.clone();
         }
@@ -236,21 +245,14 @@ impl<'a> MonoContext<'a> {
             HirExpr::Block { stmts, .. } => stmts
                 .iter()
                 .for_each(|s| self.collect_type_overrides_for_stmt(s, sub)),
-            HirExpr::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
                 self.collect_type_overrides_for_expr(condition, sub);
                 self.collect_type_overrides_for_expr(then_branch, sub);
                 if let Some(e) = else_branch {
                     self.collect_type_overrides_for_expr(e, sub);
                 }
             }
-            HirExpr::Match {
-                scrutinee, arms, ..
-            } => {
+            HirExpr::Match { scrutinee, arms, .. } => {
                 self.collect_type_overrides_for_expr(scrutinee, sub);
                 for arm in arms {
                     if let Some(g) = &arm.guard {
@@ -265,21 +267,13 @@ impl<'a> MonoContext<'a> {
             }
             HirExpr::Unary { operand, .. }
             | HirExpr::Deref { expr: operand, .. }
-            | HirExpr::FieldAccess {
-                object: operand, ..
-            }
+            | HirExpr::FieldAccess { object: operand, .. }
             | HirExpr::As { expr: operand, .. } => self.collect_type_overrides_for_expr(operand, sub),
             HirExpr::Return { value: Some(v), .. } => {
                 self.collect_type_overrides_for_expr(v, sub)
             }
-            HirExpr::While {
-                condition, body, ..
-            }
-            | HirExpr::ForIn {
-                iter: condition,
-                body,
-                ..
-            } => {
+            HirExpr::While { condition, body, .. }
+            | HirExpr::ForIn { iter: condition, body, .. } => {
                 self.collect_type_overrides_for_expr(condition, sub);
                 self.collect_type_overrides_for_expr(body, sub);
             }
@@ -305,9 +299,7 @@ impl<'a> MonoContext<'a> {
                 }
             }
             HirExpr::Println { arg, .. } => self.collect_type_overrides_for_expr(arg, sub),
-            HirExpr::Assert {
-                condition, message, ..
-            } => {
+            HirExpr::Assert { condition, message, .. } => {
                 self.collect_type_overrides_for_expr(condition, sub);
                 if let Some(m) = message {
                     self.collect_type_overrides_for_expr(m, sub);
@@ -344,21 +336,12 @@ impl<'a> MonoContext<'a> {
         sub: &HashMap<Symbol, HirType>,
     ) -> HirExpr {
         match expr {
-            HirExpr::SizeOf {
-                id,
-                target_type,
-                span,
-            } => HirExpr::SizeOf {
+            HirExpr::SizeOf { id, target_type, span } => HirExpr::SizeOf {
                 id: *id,
                 target_type: crate::types::substitute_type(target_type, sub),
                 span: *span,
             },
-            HirExpr::As {
-                id,
-                expr: inner,
-                target_type,
-                span,
-            } => HirExpr::As {
+            HirExpr::As { id, expr: inner, target_type, span } => HirExpr::As {
                 id: *id,
                 expr: Box::new(self.substitute_expr_types(inner, sub)),
                 target_type: crate::types::substitute_type(target_type, sub),
@@ -366,84 +349,41 @@ impl<'a> MonoContext<'a> {
             },
             HirExpr::Block { id, stmts, span } => HirExpr::Block {
                 id: *id,
-                stmts: stmts
-                    .iter()
-                    .map(|s| self.substitute_stmt_types(s, sub))
-                    .collect(),
+                stmts: stmts.iter().map(|s| self.substitute_stmt_types(s, sub)).collect(),
                 span: *span,
             },
-            HirExpr::If {
-                id,
-                condition,
-                then_branch,
-                else_branch,
-                span,
-            } => HirExpr::If {
+            HirExpr::If { id, condition, then_branch, else_branch, span } => HirExpr::If {
                 id: *id,
                 condition: Box::new(self.substitute_expr_types(condition, sub)),
                 then_branch: Box::new(self.substitute_expr_types(then_branch, sub)),
                 else_branch: else_branch.as_ref().map(|e| Box::new(self.substitute_expr_types(e, sub))),
                 span: *span,
             },
-            HirExpr::Match {
-                id,
-                scrutinee,
-                arms,
-                span,
-            } => HirExpr::Match {
+            HirExpr::Match { id, scrutinee, arms, span } => HirExpr::Match {
                 id: *id,
                 scrutinee: Box::new(self.substitute_expr_types(scrutinee, sub)),
-                arms: arms
-                    .iter()
-                    .map(|arm| MatchArm {
-                        pattern: arm.pattern.clone(),
-                        guard: arm
-                            .guard
-                            .as_ref()
-                            .map(|g| self.substitute_expr_types(g, sub)),
-                        body: self.substitute_expr_types(&arm.body, sub),
-                    })
-                    .collect(),
+                arms: arms.iter().map(|arm| MatchArm {
+                    pattern: arm.pattern.clone(),
+                    guard: arm.guard.as_ref().map(|g| self.substitute_expr_types(g, sub)),
+                    body: self.substitute_expr_types(&arm.body, sub),
+                }).collect(),
                 span: *span,
             },
-            HirExpr::Call {
-                id,
-                callee,
-                args,
-                span,
-            } => HirExpr::Call {
+            HirExpr::Call { id, callee, args, span } => HirExpr::Call {
                 id: *id,
                 callee: *callee,
-                args: args
-                    .iter()
-                    .map(|a| self.substitute_expr_types(a, sub))
-                    .collect(),
+                args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
                 span: *span,
             },
-            HirExpr::MethodCall {
-                id,
-                receiver,
-                method_name,
-                args,
-                span,
-                ..
-            } => HirExpr::MethodCall {
+            HirExpr::MethodCall { id, receiver, method_name, args, span, .. } => HirExpr::MethodCall {
                 id: *id,
                 receiver: Box::new(self.substitute_expr_types(receiver, sub)),
                 method_name: *method_name,
                 resolved_callee: None,
-                args: args
-                    .iter()
-                    .map(|a| self.substitute_expr_types(a, sub))
-                    .collect(),
+                args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
                 span: *span,
             },
-            HirExpr::Unary {
-                id,
-                op,
-                operand,
-                span,
-            } => HirExpr::Unary {
+            HirExpr::Unary { id, op, operand, span } => HirExpr::Unary {
                 id: *id,
                 op: *op,
                 operand: Box::new(self.substitute_expr_types(operand, sub)),
@@ -454,57 +394,26 @@ impl<'a> MonoContext<'a> {
                 value: value.as_ref().map(|v| Box::new(self.substitute_expr_types(v, sub))),
                 span: *span,
             },
-            HirExpr::StructLit {
-                id,
-                struct_name,
-                fields,
-                span,
-            } => {
-                let new_name = struct_name; // type_overrides will be handled by rewrite
-                HirExpr::StructLit {
-                    id: *id,
-                    struct_name: *new_name,
-                    fields: fields
-                        .iter()
-                        .map(|(s, e)| (*s, self.substitute_expr_types(e, sub)))
-                        .collect(),
-                    span: *span,
-                }
-            }
-            HirExpr::EnumVariant {
-                id,
-                enum_name,
-                variant_name,
-                args,
-                span,
-            } => HirExpr::EnumVariant {
+            HirExpr::StructLit { id, struct_name, fields, span } => HirExpr::StructLit {
+                id: *id,
+                struct_name: *struct_name,
+                fields: fields.iter().map(|(s, e)| (*s, self.substitute_expr_types(e, sub))).collect(),
+                span: *span,
+            },
+            HirExpr::EnumVariant { id, enum_name, variant_name, args, span } => HirExpr::EnumVariant {
                 id: *id,
                 enum_name: *enum_name,
                 variant_name: *variant_name,
-                args: args
-                    .iter()
-                    .map(|a| self.substitute_expr_types(a, sub))
-                    .collect(),
+                args: args.iter().map(|a| self.substitute_expr_types(a, sub)).collect(),
                 span: *span,
             },
-            HirExpr::While {
-                id,
-                condition,
-                body,
-                span,
-            } => HirExpr::While {
+            HirExpr::While { id, condition, body, span } => HirExpr::While {
                 id: *id,
                 condition: Box::new(self.substitute_expr_types(condition, sub)),
                 body: Box::new(self.substitute_expr_types(body, sub)),
                 span: *span,
             },
-            HirExpr::ForIn {
-                id,
-                pattern,
-                iter,
-                body,
-                span,
-            } => HirExpr::ForIn {
+            HirExpr::ForIn { id, pattern, iter, body, span } => HirExpr::ForIn {
                 id: *id,
                 pattern: pattern.clone(),
                 iter: Box::new(self.substitute_expr_types(iter, sub)),
@@ -516,12 +425,7 @@ impl<'a> MonoContext<'a> {
                 expr: Box::new(self.substitute_expr_types(expr, sub)),
                 span: *span,
             },
-            HirExpr::FieldAccess {
-                id,
-                object,
-                field,
-                span,
-            } => HirExpr::FieldAccess {
+            HirExpr::FieldAccess { id, object, field, span } => HirExpr::FieldAccess {
                 id: *id,
                 object: Box::new(self.substitute_expr_types(object, sub)),
                 field: *field,
@@ -529,10 +433,7 @@ impl<'a> MonoContext<'a> {
             },
             HirExpr::TupleLit { id, elements, span } => HirExpr::TupleLit {
                 id: *id,
-                elements: elements
-                    .iter()
-                    .map(|e| self.substitute_expr_types(e, sub))
-                    .collect(),
+                elements: elements.iter().map(|e| self.substitute_expr_types(e, sub)).collect(),
                 span: *span,
             },
             HirExpr::Println { id, arg, span } => HirExpr::Println {
@@ -540,12 +441,7 @@ impl<'a> MonoContext<'a> {
                 arg: Box::new(self.substitute_expr_types(arg, sub)),
                 span: *span,
             },
-            HirExpr::Assert {
-                id,
-                condition,
-                message,
-                span,
-            } => HirExpr::Assert {
+            HirExpr::Assert { id, condition, message, span } => HirExpr::Assert {
                 id: *id,
                 condition: Box::new(self.substitute_expr_types(condition, sub)),
                 message: message.as_ref().map(|m| Box::new(self.substitute_expr_types(m, sub))),
@@ -561,55 +457,31 @@ impl<'a> MonoContext<'a> {
         sub: &HashMap<Symbol, HirType>,
     ) -> HirStmt {
         match stmt {
-            HirStmt::Let {
-                name,
-                mutable,
-                value,
-                span,
-            } => HirStmt::Let {
+            HirStmt::Let { name, mutable, value, span } => HirStmt::Let {
                 name: *name,
                 mutable: *mutable,
                 value: self.substitute_expr_types(value, sub),
                 span: *span,
             },
-            HirStmt::LetPat {
-                pattern,
-                mutable,
-                value,
-                span,
-                ty,
-            } => HirStmt::LetPat {
+            HirStmt::LetPat { pattern, mutable, value, span, ty } => HirStmt::LetPat {
                 pattern: pattern.clone(),
                 mutable: *mutable,
                 value: self.substitute_expr_types(value, sub),
                 ty: ty.clone(),
                 span: *span,
             },
-            HirStmt::Assign {
-                target,
-                value,
-                span,
-            } => HirStmt::Assign {
+            HirStmt::Assign { target, value, span } => HirStmt::Assign {
                 target: *target,
                 value: self.substitute_expr_types(value, sub),
                 span: *span,
             },
-            HirStmt::AssignField {
-                object,
-                field,
-                value,
-                span,
-            } => HirStmt::AssignField {
+            HirStmt::AssignField { object, field, value, span } => HirStmt::AssignField {
                 object: Box::new(self.substitute_expr_types(object, sub)),
                 field: *field,
                 value: self.substitute_expr_types(value, sub),
                 span: *span,
             },
-            HirStmt::AssignDeref {
-                target,
-                value,
-                span,
-            } => HirStmt::AssignDeref {
+            HirStmt::AssignDeref { target, value, span } => HirStmt::AssignDeref {
                 target: Box::new(self.substitute_expr_types(target, sub)),
                 value: self.substitute_expr_types(value, sub),
                 span: *span,
@@ -624,18 +496,12 @@ impl<'a> MonoContext<'a> {
         sub: &HashMap<Symbol, HirType>,
     ) {
         match expr {
-            HirExpr::EnumVariant {
-                enum_name, args, ..
-            } => {
+            HirExpr::EnumVariant { enum_name, args, .. } => {
                 if let Some(edef) = self.find_enum(*enum_name) {
-                    let concrete: Vec<HirType> = edef
-                        .type_params
-                        .iter()
+                    let concrete: Vec<HirType> = edef.type_params.iter()
                         .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Named(*tp)))
                         .collect();
-                    if !concrete.is_empty()
-                        && concrete.iter().all(|a| !self.has_unresolved_type_param(a))
-                    {
+                    if !concrete.is_empty() && concrete.iter().all(|a| !self.has_unresolved_type_param(a)) {
                         *enum_name = self.mangle_name(*enum_name, &concrete);
                     }
                 }
@@ -646,10 +512,8 @@ impl<'a> MonoContext<'a> {
             HirExpr::Block { stmts, .. } => {
                 for s in stmts {
                     match s {
-                        HirStmt::Expr(e)
-                        | HirStmt::Let { value: e, .. }
-                        | HirStmt::LetPat { value: e, .. }
-                        | HirStmt::Assign { value: e, .. } => {
+                        HirStmt::Expr(e) | HirStmt::Let { value: e, .. }
+                        | HirStmt::LetPat { value: e, .. } | HirStmt::Assign { value: e, .. } => {
                             self.concretize_enum_variant_names(e, sub);
                         }
                         HirStmt::AssignField { object, value, .. } => {
@@ -663,21 +527,14 @@ impl<'a> MonoContext<'a> {
                     }
                 }
             }
-            HirExpr::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
+            HirExpr::If { condition, then_branch, else_branch, .. } => {
                 self.concretize_enum_variant_names(condition, sub);
                 self.concretize_enum_variant_names(then_branch, sub);
                 if let Some(eb) = else_branch {
                     self.concretize_enum_variant_names(eb, sub);
                 }
             }
-            HirExpr::Match {
-                scrutinee, arms, ..
-            } => {
+            HirExpr::Match { scrutinee, arms, .. } => {
                 self.concretize_enum_variant_names(scrutinee, sub);
                 for arm in arms {
                     if let Some(g) = &mut arm.guard {
@@ -686,14 +543,8 @@ impl<'a> MonoContext<'a> {
                     self.concretize_enum_variant_names(&mut arm.body, sub);
                 }
             }
-            HirExpr::While {
-                condition, body, ..
-            }
-            | HirExpr::ForIn {
-                iter: condition,
-                body,
-                ..
-            } => {
+            HirExpr::While { condition, body, .. }
+            | HirExpr::ForIn { iter: condition, body, .. } => {
                 self.concretize_enum_variant_names(condition, sub);
                 self.concretize_enum_variant_names(body, sub);
             }
@@ -701,26 +552,18 @@ impl<'a> MonoContext<'a> {
                 self.concretize_enum_variant_names(lhs, sub);
                 self.concretize_enum_variant_names(rhs, sub);
             }
-            HirExpr::Unary { operand, .. }
-            | HirExpr::Deref { expr: operand, .. }
-            | HirExpr::As { expr: operand, .. }
-            | HirExpr::Return {
-                value: Some(operand),
-                ..
-            }
+            HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. }
+            | HirExpr::As { expr: operand, .. } | HirExpr::Return { value: Some(operand), .. }
             | HirExpr::Println { arg: operand, .. } => {
                 self.concretize_enum_variant_names(operand, sub);
             }
-            HirExpr::Assert {
-                condition, message, ..
-            } => {
+            HirExpr::Assert { condition, message, .. } => {
                 self.concretize_enum_variant_names(condition, sub);
                 if let Some(m) = message {
                     self.concretize_enum_variant_names(m, sub);
                 }
             }
-            HirExpr::Call { args, .. }
-            | HirExpr::MethodCall { args, .. }
+            HirExpr::Call { args, .. } | HirExpr::MethodCall { args, .. }
             | HirExpr::TupleLit { elements: args, .. } => {
                 for a in args {
                     self.concretize_enum_variant_names(a, sub);
@@ -734,7 +577,6 @@ impl<'a> MonoContext<'a> {
             _ => {}
         }
     }
-
 
     pub(crate) fn specialize_struct(&mut self, s: &StructDef, concrete: &[HirType]) -> StructDef {
         let mut sub = HashMap::new();
@@ -763,9 +605,9 @@ impl<'a> MonoContext<'a> {
         }
         mono
     }
-}
 
-// ── free functions for specialisation helpers (no self hacks) ──
+
+}
 
 fn ensure_struct_specialized(ctx: &mut MonoContext<'_>, ty: &HirType) {
     if let HirType::Generic(sym, args) = ty {
@@ -783,19 +625,11 @@ fn ensure_struct_specialized(ctx: &mut MonoContext<'_>, ty: &HirType) {
             ensure_struct_specialized(ctx, arg);
         }
     }
-
-
 }
 
-/// Only substitutes As target types – used after initial specialisation.
 fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) -> HirExpr {
-    return match expr {
-        HirExpr::As {
-            id,
-            expr: inner,
-            target_type,
-            span,
-        } => HirExpr::As {
+    match expr {
+        HirExpr::As { id, expr: inner, target_type, span } => HirExpr::As {
             id,
             expr: Box::new(force_substitute_as_targets(*inner, sub)),
             target_type: crate::types::substitute_type(&target_type, sub),
@@ -803,5 +637,4 @@ fn force_substitute_as_targets(expr: HirExpr, sub: &HashMap<Symbol, HirType>) ->
         },
         other => other,
     }
-
 }

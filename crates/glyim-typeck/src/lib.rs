@@ -79,6 +79,8 @@ pub struct TypeChecker {
     call_type_args: HashMap<ExprId, Vec<HirType>>,
     errors: Vec<TypeError>,
     fns: Vec<HirFn>,
+    /// When true, we are inside a generic function body — skip call_type_args recording.
+    in_generic_fn: bool,
 }
 
 impl TypeChecker {
@@ -127,6 +129,7 @@ impl TypeChecker {
             call_type_args: HashMap::new(),
             errors: Vec::new(),
             fns: Vec::new(),
+            in_generic_fn: false,
         }
     }
 
@@ -225,6 +228,10 @@ impl TypeChecker {
 
     fn check_fn(&mut self, f: &HirFn) {
         self.scopes = vec![Scope::new()];
+        // Set in_generic_fn flag — suppresses call_type_args recording for generic functions
+        let prev_generic = self.in_generic_fn;
+        self.in_generic_fn = !f.type_params.is_empty();
+
         for (i, &(sym, ref ty)) in f.params.iter().enumerate() {
             let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
             self.scopes[0].insert(sym, ty.clone(), mutable);
@@ -245,6 +252,23 @@ impl TypeChecker {
                 }
             }
         }
+        self.in_generic_fn = prev_generic;
+    }
+
+    // --- Helper to conditionally insert into call_type_args ---
+    fn maybe_record_call_type_args(&mut self, id: ExprId, args: Vec<HirType>) {
+        eprintln!("[typeck maybe_record] id={:?} args={:?} in_generic_fn={}", id, args, self.in_generic_fn);
+        if self.in_generic_fn {
+            eprintln!("[typeck maybe_record] SKIPPED (in generic fn)");
+            return;
+        }
+        let has_unresolved = args.iter().any(|a| self.contains_type_param(a));
+        if has_unresolved {
+            eprintln!("[typeck maybe_record] SKIPPED (unresolved type param in args)");
+            return;
+        }
+        eprintln!("[typeck maybe_record] INSERTED");
+        self.call_type_args.insert(id, args);
     }
 
     fn has_type_parameter(&self, ty: &HirType) -> bool {
@@ -432,10 +456,15 @@ impl TypeChecker {
                         }
                     }
                 }
-                if let Some(info) = self.structs.get(struct_name) {
+                if let Some(info) = self.structs.get(struct_name).cloned() {
                     if info.type_params.is_empty() {
                         HirType::Named(*struct_name)
                     } else {
+                        // Extract field types and names upfront to avoid borrow conflicts
+                        let field_infos: Vec<(Symbol, HirType)> = info.fields.iter()
+                            .map(|f| (f.name, f.ty.clone()))
+                            .collect();
+                        let type_params = info.type_params.clone();
                         let field_value_types: Vec<(Symbol, HirType)> = fields
                             .iter()
                             .map(|(fname, fexpr)| {
@@ -444,26 +473,28 @@ impl TypeChecker {
                             })
                             .collect();
                         match self.infer_struct_type_args(
-                            info,
+                            &StructInfo { fields: info.fields.clone(), field_map: info.field_map.clone(), type_params: type_params.clone() },
                             &field_value_types,
                             expr.get_id(),
                             expr.get_span(),
                         ) {
                             Ok(sub) => {
-                                let concrete_args: Vec<HirType> = info
-                                    .type_params
+                                let concrete_args: Vec<HirType> = type_params
                                     .iter()
                                     .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                     .collect();
                                 for (fname, fexpr) in fields {
-                                    if let Some(field_def) =
-                                        info.fields.iter().find(|f| f.name == *fname)
+                                    if let Some(field_ty) = field_infos.iter()
+                                        .find(|(n, _)| n == fname)
+                                        .map(|(_, t)| t.clone())
                                     {
                                         let _field_ty =
-                                            glyim_hir::types::substitute_type(&field_def.ty, &sub);
+                                            glyim_hir::types::substitute_type(&field_ty, &sub);
                                         if let HirExpr::Call { id, callee, .. } = fexpr {
+                                            let call_id = *id;
+                                            let callee_sym = *callee;
                                             if let Some(fn_def) =
-                                                self.fns.iter().find(|f| f.name == *callee)
+                                                self.fns.iter().find(|f| f.name == callee_sym)
                                             {
                                                 if !fn_def.type_params.is_empty() {
                                                     let mut type_args = Vec::new();
@@ -473,7 +504,7 @@ impl TypeChecker {
                                                         }
                                                     }
                                                     if !type_args.is_empty() {
-                                                        self.call_type_args.insert(*id, type_args);
+                                                        self.maybe_record_call_type_args(call_id, type_args);
                                                     }
                                                 }
                                             }
@@ -484,7 +515,7 @@ impl TypeChecker {
                             }
                             Err(_) => HirType::Generic(
                                 *struct_name,
-                                info.type_params
+                                type_params
                                     .iter()
                                     .map(|tp| HirType::Named(*tp))
                                     .collect(),
@@ -676,10 +707,7 @@ impl TypeChecker {
                             .iter()
                             .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                             .collect();
-                        let all_concrete = concrete_args.iter().all(|a| !self.contains_type_param(a));
-                        if all_concrete {
-                            self.call_type_args.insert(*id, concrete_args);
-                        }
+                        self.maybe_record_call_type_args(*id, concrete_args);
                         return concrete_ret;
                     }
                     if fn_def.type_params.is_empty() {
@@ -796,17 +824,11 @@ impl TypeChecker {
                                 .iter()
                                 .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                 .collect();
-                            let all_concrete = concrete_args.iter().all(|a| !self.contains_type_param(a));
-                            if all_concrete {
-                                self.call_type_args.insert(*id, concrete_args);
-                            }
+                            self.maybe_record_call_type_args(*id, concrete_args);
                             return concrete_ret;
                         } else {
                             if let HirType::Generic(struct_sym, ref type_args) = recv_ty {
-                                let all_concrete = type_args.iter().all(|a| !self.contains_type_param(a));
-                                if all_concrete {
-                                    self.call_type_args.insert(*id, type_args.clone());
-                                }
+                                self.maybe_record_call_type_args(*id, type_args.clone());
                                 if let Some(struct_info) = self.structs.get(&struct_sym) {
                                     if struct_info.type_params.len() == type_args.len() {
                                         let sub: HashMap<Symbol, HirType> = struct_info
@@ -853,7 +875,8 @@ impl TypeChecker {
                 HirType::Never
             }
             HirExpr::SizeOf { id, target_type, .. } => {
-                self.call_type_args.insert(*id, vec![target_type.clone()]);
+                eprintln!("[typeck SizeOf] id={:?} target_type={:?} in_generic_fn={}", id, target_type, self.in_generic_fn);
+                self.maybe_record_call_type_args(*id, vec![target_type.clone()]);
                 HirType::Int
             },
             HirExpr::AddrOf { .. } => HirType::Int,
@@ -885,10 +908,7 @@ impl TypeChecker {
                         if !fn_def.type_params.is_empty() && !self.contains_type_param(&ty) {
                             if let HirType::Generic(_, ref type_args) = ty {
                                 if type_args.len() == fn_def.type_params.len() {
-                                    let all_concrete = type_args.iter().all(|a| !self.contains_type_param(a));
-                                    if all_concrete {
-                                        self.call_type_args.insert(*call_id, type_args.clone());
-                                    }
+                                    self.maybe_record_call_type_args(*call_id, type_args.clone());
                                 }
                             }
                         }
@@ -930,10 +950,7 @@ impl TypeChecker {
                             if !fn_def.type_params.is_empty() {
                                 if let HirType::Generic(_, type_args) = annotated {
                                     if type_args.len() == fn_def.type_params.len() {
-                                        let all_concrete = type_args.iter().all(|a| !self.contains_type_param(a));
-                                        if all_concrete {
-                                            self.call_type_args.insert(*call_id, type_args.clone());
-                                        }
+                                        self.maybe_record_call_type_args(*call_id, type_args.clone());
                                     }
                                 }
                             }
@@ -1178,7 +1195,7 @@ impl TypeChecker {
     fn hir_type_to_ty(
         arena: &mut ty::TyArena,
         unify: &mut unify::UnificationTable,
-        param_vars: &std::collections::HashMap<glyim_interner::Symbol, ty::Ty>,
+        param_vars: &HashMap<Symbol, ty::Ty>,
         hir: &HirType,
     ) -> ty::Ty {
         use ty::TyKind;
@@ -1218,13 +1235,13 @@ impl TypeChecker {
         arg_types: &[HirType],
         call_expr_id: ExprId,
         call_span: glyim_diag::Span,
-    ) -> Result<std::collections::HashMap<glyim_interner::Symbol, HirType>, TypeError> {
+    ) -> Result<HashMap<Symbol, HirType>, TypeError> {
         use freeze::resolve_ty;
         use ty::TyArena;
         use unify::UnificationTable;
         let mut arena = TyArena::new();
         let mut unify_table = UnificationTable::with_interner(self.interner.clone());
-        let mut param_vars = std::collections::HashMap::new();
+        let mut param_vars = HashMap::new();
         for tp in &fn_def.type_params {
             param_vars.insert(*tp, unify_table.new_var(&mut arena, call_span));
         }
@@ -1241,7 +1258,7 @@ impl TypeChecker {
                 TypeChecker::hir_type_to_ty(
                     &mut arena,
                     &mut unify_table,
-                    &std::collections::HashMap::new(),
+                    &HashMap::new(),
                     a,
                 )
             })
@@ -1258,7 +1275,7 @@ impl TypeChecker {
                 });
             }
         }
-        let mut sub = std::collections::HashMap::new();
+        let mut sub = HashMap::new();
         for tp in &fn_def.type_params {
             let var = param_vars[tp];
             let resolved = unify_table.find(&arena, var);
@@ -1347,20 +1364,20 @@ impl TypeChecker {
         expected: &HirType,
         call_expr_id: ExprId,
         call_span: glyim_diag::Span,
-    ) -> Result<std::collections::HashMap<glyim_interner::Symbol, HirType>, TypeError> {
+    ) -> Result<HashMap<Symbol, HirType>, TypeError> {
         use freeze::resolve_ty;
         use ty::TyArena;
         use unify::UnificationTable;
         let mut arena = TyArena::new();
         let mut unify_table = UnificationTable::with_interner(self.interner.clone());
-        let mut param_vars = std::collections::HashMap::new();
+        let mut param_vars = HashMap::new();
         for tp in &fn_def.type_params {
             param_vars.insert(*tp, unify_table.new_var(&mut arena, call_span));
         }
         let expected_ty = TypeChecker::hir_type_to_ty(
             &mut arena,
             &mut unify_table,
-            &std::collections::HashMap::new(),
+            &HashMap::new(),
             expected,
         );
         let ret_ty = fn_def.ret.as_ref().unwrap_or(&HirType::Unit);
@@ -1378,7 +1395,7 @@ impl TypeChecker {
                 span: (call_span.start, call_span.end),
             });
         }
-        let mut sub = std::collections::HashMap::new();
+        let mut sub = HashMap::new();
         for tp in &fn_def.type_params {
             let var = param_vars[tp];
             let resolved = unify_table.find(&arena, var);

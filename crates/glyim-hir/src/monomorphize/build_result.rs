@@ -54,9 +54,6 @@ impl<'a> MonoContext<'a> {
             let mangled = self.mangle_name(e.name, &args);
             let mut mono_e = e;
             mono_e.name = mangled;
-            eprintln!(
-
-            );
             items.push(HirItem::Enum(mono_e));
         }
 
@@ -173,6 +170,7 @@ impl<'a> MonoContext<'a> {
                     if let Some(ret) = &mut f.ret {
                         *ret = self.concretize_type(ret);
                     }
+                    concretize_expr_body(&mut f.body, &mut self);
                 }
                 crate::item::HirItem::Struct(s) => {
                     for field in &mut s.fields {
@@ -194,6 +192,7 @@ impl<'a> MonoContext<'a> {
                         if let Some(ret) = &mut m.ret {
                             *ret = self.concretize_type(ret);
                         }
+                        concretize_expr_body(&mut m.body, &mut self);
                     }
                 }
                 _ => {}
@@ -204,6 +203,8 @@ impl<'a> MonoContext<'a> {
         for item in &items {
             match item {
                 crate::item::HirItem::Fn(f) => {
+                    eprintln!("[mono assert] checking fn: {}", self.interner.resolve(f.name));
+                    eprintln!("[mono assert] full body dump:\n{:#?}", f.body);
                     crate::passes::no_type_params::assert_no_type_params(&f.body, self.interner);
                 }
                 crate::item::HirItem::Impl(imp) => {
@@ -223,5 +224,110 @@ impl<'a> MonoContext<'a> {
             hir: crate::Hir { items },
             type_overrides: self.type_overrides,
         }
+    }
+}
+
+/// Walk every expression and concretize types in place (RawPtr, SizeOf, As, etc.)
+fn concretize_expr_body(
+    expr: &mut crate::node::HirExpr,
+    ctx: &mut MonoContext<'_>,
+) {
+    eprintln!("[concretize_expr_body] expr variant: {}", match expr {
+        crate::node::HirExpr::IntLit {..} => "IntLit",
+        crate::node::HirExpr::Ident {..} => "Ident",
+        crate::node::HirExpr::Block {..} => "Block",
+        crate::node::HirExpr::Call {..} => "Call",
+        crate::node::HirExpr::MethodCall {..} => "MethodCall",
+        crate::node::HirExpr::StructLit {..} => "StructLit",
+        crate::node::HirExpr::EnumVariant {..} => "EnumVariant",
+        crate::node::HirExpr::If {..} => "If",
+        crate::node::HirExpr::Match {..} => "Match",
+        crate::node::HirExpr::While {..} => "While",
+        crate::node::HirExpr::ForIn {..} => "ForIn",
+        crate::node::HirExpr::Return {..} => "Return",
+        crate::node::HirExpr::SizeOf {..} => "SizeOf",
+        crate::node::HirExpr::Deref {..} => "Deref",
+        crate::node::HirExpr::As {..} => "As",
+        crate::node::HirExpr::TupleLit {..} => "TupleLit",
+        crate::node::HirExpr::FieldAccess {..} => "FieldAccess",
+        _ => "Other",
+    });
+    match expr {
+        crate::node::HirExpr::Block { stmts, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    crate::node::HirStmt::Let { value: e, .. }
+                    | crate::node::HirStmt::LetPat { value: e, .. }
+                    | crate::node::HirStmt::Assign { value: e, .. }
+                    | crate::node::HirStmt::Expr(e) => concretize_expr_body(e, ctx),
+                    crate::node::HirStmt::AssignField { object: o, value: v, .. } => {
+                        concretize_expr_body(o, ctx);
+                        concretize_expr_body(v, ctx);
+                    }
+                    crate::node::HirStmt::AssignDeref { target: t, value: v, .. } => {
+                        concretize_expr_body(t, ctx);
+                        concretize_expr_body(v, ctx);
+                    }
+                }
+            }
+        }
+        crate::node::HirExpr::Binary { lhs, rhs, .. } => {
+            concretize_expr_body(lhs, ctx);
+            concretize_expr_body(rhs, ctx);
+        }
+        crate::node::HirExpr::Unary { operand, .. }
+        | crate::node::HirExpr::Deref { expr: operand, .. }
+        | crate::node::HirExpr::As { expr: operand, .. } => concretize_expr_body(operand, ctx),
+        crate::node::HirExpr::If { condition, then_branch, else_branch, .. } => {
+            concretize_expr_body(condition, ctx);
+            concretize_expr_body(then_branch, ctx);
+            if let Some(eb) = else_branch {
+                concretize_expr_body(eb, ctx);
+            }
+        }
+        crate::node::HirExpr::Match { scrutinee, arms, .. } => {
+            concretize_expr_body(scrutinee, ctx);
+            for arm in arms {
+                if let Some(ref mut g) = arm.guard {
+                    concretize_expr_body(g, ctx);
+                }
+                concretize_expr_body(&mut arm.body, ctx);
+            }
+        }
+        crate::node::HirExpr::While { condition, body, .. } => {
+            concretize_expr_body(condition, ctx);
+            concretize_expr_body(body, ctx);
+        }
+        crate::node::HirExpr::ForIn { iter, body, .. } => {
+            concretize_expr_body(iter, ctx);
+            concretize_expr_body(body, ctx);
+        }
+        crate::node::HirExpr::Call { args, .. }
+        | crate::node::HirExpr::MethodCall { args, .. }
+        | crate::node::HirExpr::EnumVariant { args, .. }
+        | crate::node::HirExpr::TupleLit { elements: args, .. } => {
+            for a in args {
+                concretize_expr_body(a, ctx);
+            }
+        }
+        crate::node::HirExpr::StructLit { struct_name, fields, id, span } => {
+            // Concretize the struct name (may still be generic)
+            *struct_name = ctx.mangle_table.mangle(*struct_name, &[], ctx.interner);
+            for (_, v) in fields {
+                concretize_expr_body(v, ctx);
+            }
+        }
+        crate::node::HirExpr::Println { arg, .. } => concretize_expr_body(arg, ctx),
+        crate::node::HirExpr::Assert { condition, message, .. } => {
+            concretize_expr_body(condition, ctx);
+            if let Some(m) = message {
+                concretize_expr_body(m, ctx);
+            }
+        }
+        crate::node::HirExpr::Return { value: Some(v), .. } => concretize_expr_body(v, ctx),
+        crate::node::HirExpr::SizeOf { target_type, .. } => {
+            *target_type = ctx.concretize_type(target_type);
+        }
+        _ => {}
     }
 }
