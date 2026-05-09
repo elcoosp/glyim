@@ -212,7 +212,7 @@ impl TypeChecker {
         for m in &methods {
             self.fns.push(m.clone());
             let mangled = self.interner.resolve(m.name).to_string();
-            if let Some(pos) = mangled.rfind('_') {
+            if let Some(pos) = mangled.find('_') {
                 let type_part = &mangled[..pos];
                 let method_part = &mangled[pos + 1..];
                 if let Some(type_sym) = self.interner.resolve_symbol(type_part) {
@@ -688,7 +688,14 @@ impl TypeChecker {
                             .iter()
                             .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                             .collect();
-                        self.call_type_args.insert(*id, concrete_args);
+                        let has_unresolved = fn_def.type_params.iter().any(|tp| {
+                            sub.get(tp).map_or(true, |ty| {
+                                matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                            })
+                        });
+                        if !has_unresolved {
+                            self.call_type_args.insert(*id, concrete_args);
+                        }
                         return concrete_ret;
                     }
                     if fn_def.type_params.is_empty() {
@@ -806,12 +813,34 @@ impl TypeChecker {
                                 .iter()
                                 .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                                 .collect();
-                            self.call_type_args.insert(*id, concrete_args);
+                            let has_unresolved = fn_def.type_params.iter().any(|tp| {
+                                sub.get(tp).map_or(true, |ty| {
+                                    matches!(ty, HirType::Named(n) if fn_def.type_params.contains(n))
+                                })
+                            });
+                            if !has_unresolved {
+                                self.call_type_args.insert(*id, concrete_args);
+                            }
                             return concrete_ret;
                         } else {
-                            // Record concrete type args for monomorphization even if method has no own type params
-                            if let HirType::Generic(_, ref type_args) = recv_ty {
+                            // Method has no own type params, but the struct may be generic.
+                            if let HirType::Generic(struct_sym, ref type_args) = recv_ty {
                                 self.call_type_args.insert(*id, type_args.clone());
+                                // Build a substitution from the struct's type params to concrete args
+                                if let Some(struct_info) = self.structs.get(&struct_sym) {
+                                    if struct_info.type_params.len() == type_args.len() {
+                                        let sub: std::collections::HashMap<Symbol, HirType> = struct_info
+                                            .type_params
+                                            .iter()
+                                            .zip(type_args.iter())
+                                            .map(|(tp, ty)| (*tp, ty.clone()))
+                                            .collect();
+                                        return glyim_hir::types::substitute_type(
+                                            &fn_def.ret.clone().unwrap_or(HirType::Unit),
+                                            &sub,
+                                        );
+                                    }
+                                }
                             }
                         }
                         return fn_def.ret.clone().unwrap_or(HirType::Unit);
@@ -843,7 +872,10 @@ impl TypeChecker {
                 }
                 HirType::Never
             }
-            HirExpr::SizeOf { .. } => HirType::Int,
+            HirExpr::SizeOf { id, target_type, .. } => {
+                self.call_type_args.insert(*id, vec![target_type.clone()]);
+                HirType::Int
+            },
             HirExpr::AddrOf { .. } => HirType::Int,
             HirExpr::TupleLit { elements, .. } => {
                 let types: Vec<HirType> = elements
