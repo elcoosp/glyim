@@ -168,6 +168,18 @@ impl TypeChecker {
                 }
             }
         }
+        let struct_names: Vec<String> = self.structs.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
+        let enum_names: Vec<String> = self.enums.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
+        tracing::warn!(
+            "[typeck] register_items complete: {} structs {:?}, {} enums {:?}, {} fns, {} extern_fns, {} impl_methods",
+            self.structs.len(),
+            struct_names,
+            self.enums.len(),
+            enum_names,
+            self.fns.len(),
+            self.extern_fns.len(),
+            self.impl_methods.len()
+        );
     }
 
     fn register_struct(&mut self, s: &StructDef) {
@@ -592,6 +604,13 @@ impl TypeChecker {
                         }
                     }
                 } else {
+                    let resolved_name = self.interner.resolve(*struct_name).to_string();
+                    let available: Vec<String> = self.structs.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
+                    tracing::warn!(
+                        "[typeck] unknown struct type: {:?}, available structs: {:?}",
+                        resolved_name,
+                        available
+                    );
                     self.errors
                         .push(TypeError::UnknownType { name: *struct_name });
                     HirType::Error
@@ -634,6 +653,13 @@ impl TypeChecker {
                         HirType::Generic(*enum_name, concrete_args)
                     }
                 } else {
+                    let resolved_name = self.interner.resolve(*enum_name).to_string();
+                    let available: Vec<String> = self.enums.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
+                    tracing::warn!(
+                        "[typeck] unknown enum type: {:?}, available enums: {:?}",
+                        resolved_name,
+                        available
+                    );
                     self.errors
                         .push(TypeError::UnknownType { name: *enum_name });
                     HirType::Error
@@ -755,7 +781,13 @@ impl TypeChecker {
                                     sub
                                 }
                             }
-                            Err(_) => {
+                            Err(e) => {
+                                tracing::warn!(
+                                    "[typeck] unify_generics failed for call to {:?}: arg_types={:?}, error={:?}",
+                                    self.interner.resolve(callee_sym),
+                                    arg_types,
+                                    e
+                                );
                                 if let Some(exp) = expected {
                                     match self.infer_generics_from_expected(
                                         fn_def,
@@ -764,12 +796,21 @@ impl TypeChecker {
                                         expr.get_span(),
                                     ) {
                                         Ok(sub) => sub,
-                                        Err(e) => {
-                                            self.errors.push(e);
+                                        Err(e2) => {
+                                            tracing::warn!(
+                                                "[typeck] infer_generics_from_expected also failed for {:?}: {:?}",
+                                                self.interner.resolve(callee_sym),
+                                                e2
+                                            );
+                                            self.errors.push(e2);
                                             return HirType::Error;
                                         }
                                     }
                                 } else {
+                                    tracing::warn!(
+                                        "[typeck] no expected type for bidirectional inference of call to {:?}",
+                                        self.interner.resolve(callee_sym)
+                                    );
                                     self.errors.push(TypeError::MismatchedTypes {
                                         expected: HirType::Error,
                                         found: HirType::Error,
@@ -923,9 +964,14 @@ impl TypeChecker {
                                     sub
                                 }
                             }
-                            Err(_) => {
-                                // FIX: When argument-based unification fails entirely,
-                                // still try bidirectional inference from the expected type.
+                            Err(e) => {
+                                tracing::warn!(
+                                    "[typeck] unify_generics failed for method call {}.{}: all_arg_types={:?}, error={:?}",
+                                    self.interner.resolve(type_name),
+                                    self.interner.resolve(*method_name),
+                                    all_arg_types,
+                                    e
+                                );
                                 if let Some(exp) = expected {
                                     match self.infer_generics_from_expected(
                                         &fn_def,
@@ -934,12 +980,23 @@ impl TypeChecker {
                                         expr.get_span(),
                                     ) {
                                         Ok(sub) => sub,
-                                        Err(e) => {
-                                            self.errors.push(e);
+                                        Err(e2) => {
+                                            tracing::warn!(
+                                                "[typeck] infer_generics_from_expected also failed for {}.{}: {:?}",
+                                                self.interner.resolve(type_name),
+                                                self.interner.resolve(*method_name),
+                                                e2
+                                            );
+                                            self.errors.push(e2);
                                             return HirType::Error;
                                         }
                                     }
                                 } else {
+                                    tracing::warn!(
+                                        "[typeck] no expected type for bidirectional inference of method {}.{}",
+                                        self.interner.resolve(type_name),
+                                        self.interner.resolve(*method_name)
+                                    );
                                     self.errors.push(TypeError::CannotInferGenericArgs {
                                         name: format!(
                                             "{}.{}",
@@ -967,6 +1024,13 @@ impl TypeChecker {
                         });
 
                         if has_unresolved {
+                            tracing::warn!(
+                                "[typeck] cannot infer generic args for {}.{}: concrete_args={:?}, fn_type_params={:?}",
+                                self.interner.resolve(type_name),
+                                self.interner.resolve(*method_name),
+                                concrete_args,
+                                fn_def.type_params
+                            );
                             self.errors.push(TypeError::CannotInferGenericArgs {
                                 name: format!(
                                     "{}.{}",
@@ -994,6 +1058,14 @@ impl TypeChecker {
                     if self.extern_fns.contains_key(method_name) {
                         recv_ty
                     } else {
+                        let available_fns: Vec<String> = self.fns.iter().map(|f| self.interner.resolve(f.name).to_string()).collect();
+                        tracing::warn!(
+                            "[typeck] unresolved method: {}.{} (mangled={}), available fns: {:?}",
+                            self.interner.resolve(type_name),
+                            self.interner.resolve(*method_name),
+                            mangled_str,
+                            available_fns
+                        );
                         self.errors.push(TypeError::UnresolvedMethod {
                             method_name: self.interner.resolve(*method_name).to_string(),
                             receiver_type: self.interner.resolve(type_name).to_string(),
