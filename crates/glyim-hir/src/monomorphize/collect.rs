@@ -8,11 +8,17 @@ use std::collections::HashMap;
 impl<'a> MonoContext<'a> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn collect_and_specialize(&mut self) {
+        eprintln!(
+            "[mono] collect_and_specialize START (call_type_args count={})",
+            self.call_type_args.len()
+        );
+
         self.init_method_map();
         eprintln!("[mono] call_type_args count: {}", self.call_type_args.len());
         for (k, v) in self.call_type_args.iter() {
             eprintln!("  id={:?} args={:?}", k, v);
         }
+
         // Phase 1: function specializations from call_type_args
         for (expr_id, type_args) in self.call_type_args.iter() {
             if type_args.iter().any(|a| self.has_unresolved_type_param(a)) {
@@ -24,9 +30,23 @@ impl<'a> MonoContext<'a> {
             );
 
             if let Some(callee) = self.find_callee_by_id_from_hir(*expr_id) {
-                if self.interner.resolve(callee).contains("__") {
+                let callee_resolved = self.interner.resolve(callee).to_string();
+                // Intrinsic helpers (__glyim_*) are never generic – skip them.
+                if callee_resolved.starts_with("__glyim") {
                     continue;
                 }
+                // If the name contains "__", it's likely pre‑mangled (e.g. Vec_push__i64).
+                // Demangle it and enqueue the original generic function with its type args.
+                if callee_resolved.contains("__") {
+                    if let Some(pos) = callee_resolved.find("__") {
+                        let base_name = self.interner.intern(&callee_resolved[..pos]);
+                        if self.find_fn(base_name).is_some() {
+                            self.queue_fn_specialization(base_name, type_args.clone());
+                        }
+                    }
+                    continue;
+                }
+                // Normal, non‑mangled generic function – enqueue directly.
                 self.queue_fn_specialization(callee, type_args.clone());
             }
         }
@@ -43,7 +63,14 @@ impl<'a> MonoContext<'a> {
         self.process_type_specializations();
 
         // Phase 3: work queue
+        eprintln!(
+            "[mono] processing work queue, size={}",
+            self.fn_work_queue.len()
+        );
+
         while let Some((fn_name, type_args)) = self.fn_work_queue.pop() {
+            eprintln!("[mono] specialising fn={:?} args={:?}", fn_name, type_args);
+
             let key = (fn_name, type_args.clone());
             if self.fn_specs.contains_key(&key) {
                 continue;
@@ -75,7 +102,6 @@ impl<'a> MonoContext<'a> {
             self.process_type_specializations();
         }
     }
-
     // ── find_callee helpers ──
 
     fn find_callee_by_id_from_hir(&mut self, search_id: ExprId) -> Option<Symbol> {
@@ -104,17 +130,37 @@ impl<'a> MonoContext<'a> {
         search_id: ExprId,
         ctx: &mut MonoContext<'a>,
     ) -> Option<Symbol> {
-        eprintln!("[find_callee_in_expr] searching for id={:?} in expr={:?}", search_id, expr);
+        eprintln!(
+            "[find_callee_in_expr] searching for id={:?} in expr={:?}",
+            search_id, expr
+        );
 
         match expr {
             HirExpr::Call { id, callee, .. } => {
-                eprintln!("[find_callee_in_expr] Call id={:?} callee={} (search_id={:?})", id, ctx.interner.resolve(*callee), search_id);
-                if *id == search_id { return Some(*callee); }
+                eprintln!(
+                    "[find_callee_in_expr] Call id={:?} callee={} (search_id={:?})",
+                    id,
+                    ctx.interner.resolve(*callee),
+                    search_id
+                );
+                if *id == search_id {
+                    return Some(*callee);
+                }
                 None
             }
-            HirExpr::MethodCall { id, receiver, method_name, .. } => {
-                eprintln!("[find_callee_in_expr] MethodCall id={:?} (search_id={:?})", id, search_id);
-                if *id != search_id { return None; }
+            HirExpr::MethodCall {
+                id,
+                receiver,
+                method_name,
+                ..
+            } => {
+                eprintln!(
+                    "[find_callee_in_expr] MethodCall id={:?} (search_id={:?})",
+                    id, search_id
+                );
+                if *id != search_id {
+                    return None;
+                }
                 let receiver_ty = ctx.get_expr_type(receiver.get_id());
                 let inner = match receiver_ty {
                     Some(HirType::RawPtr(i)) => Some(i.as_ref().clone()),
@@ -600,6 +646,8 @@ impl<'a> MonoContext<'a> {
     }
 
     pub(crate) fn process_type_specializations(&mut self) {
+        eprintln!("[mono] process_type_specializations START");
+
         while let Some((name, args)) = self.type_work_queue.pop() {
             let key = (name, args.clone());
             if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
