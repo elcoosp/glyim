@@ -42,7 +42,10 @@ fn discover_type_specializations_into(
 ) {
     match ty {
         HirType::Generic(sym, args) => {
-            if args.iter().any(|a| concretize::has_unresolved_type_param(a, interner)) {
+            if args
+                .iter()
+                .any(|a| concretize::has_unresolved_type_param(a, interner))
+            {
                 for a in args {
                     discover_type_specializations_into(a, index, interner, items);
                 }
@@ -64,7 +67,10 @@ fn discover_type_specializations_into(
             if !concretize::has_unresolved_type_param(inner, interner) {
                 let opt_sym = interner.intern("Option");
                 if index.find_enum(opt_sym).is_some() {
-                    items.push(WorkItem::enum_specialize(opt_sym, vec![inner.as_ref().clone()]));
+                    items.push(WorkItem::enum_specialize(
+                        opt_sym,
+                        vec![inner.as_ref().clone()],
+                    ));
                 }
             }
             discover_type_specializations_into(inner, index, interner, items);
@@ -163,7 +169,10 @@ pub fn discover_call_specialization(
 
     // Step 5: Only enqueue specialization if the function is actually generic.
     if index.is_generic_fn(base_callee) {
-        items.push(WorkItem::fn_specialize(base_callee, concrete_type_args.clone()));
+        items.push(WorkItem::fn_specialize(
+            base_callee,
+            concrete_type_args.clone(),
+        ));
     }
 
     // Step 6: Compute the mangled callee name for the output HIR.
@@ -226,7 +235,9 @@ pub fn discover_method_call_specialization(
         match &inner_ty {
             HirType::Generic(_, type_args) => type_args
                 .iter()
-                .map(|t| concretize::substitute_and_concretize(t, sub, index, mangle_table, interner))
+                .map(|t| {
+                    concretize::substitute_and_concretize(t, sub, index, mangle_table, interner)
+                })
                 .collect(),
             _ => return None,
         }
@@ -241,7 +252,10 @@ pub fn discover_method_call_specialization(
     }
 
     if index.is_generic_fn(base_method_name) {
-        items.push(WorkItem::fn_specialize(base_method_name, concrete_type_args.clone()));
+        items.push(WorkItem::fn_specialize(
+            base_method_name,
+            concrete_type_args.clone(),
+        ));
     }
 
     let new_callee = mangle_table.mangle_fn(base_method_name, &concrete_type_args, interner);
@@ -284,10 +298,7 @@ pub fn discover_forin_specializations(
             return items;
         }
 
-        let iter_method = interner.intern(&format!(
-            "{}_iter",
-            interner.resolve(*type_name)
-        ));
+        let iter_method = interner.intern(&format!("{}_iter", interner.resolve(*type_name)));
 
         if let Some(iter_fn) = index.find_fn(iter_method) {
             items.push(WorkItem::fn_specialize(iter_method, concrete_args.clone()));
@@ -296,16 +307,18 @@ pub fn discover_forin_specializations(
             if let Some(ret) = &iter_fn.ret {
                 let ret_ty = crate::types::substitute_type(ret, &iter_sub);
                 if let HirType::Generic(iter_name, iter_args) = &ret_ty {
-                    let next_method = interner.intern(&format!(
-                        "{}_next",
-                        interner.resolve(*iter_name)
-                    ));
+                    let next_method =
+                        interner.intern(&format!("{}_next", interner.resolve(*iter_name)));
                     if index.find_fn(next_method).is_some() {
                         let next_concrete: Vec<HirType> = iter_args
                             .iter()
                             .map(|a| {
                                 concretize::substitute_and_concretize(
-                                    a, &iter_sub, index, mangle_table, interner,
+                                    a,
+                                    &iter_sub,
+                                    index,
+                                    mangle_table,
+                                    interner,
                                 )
                             })
                             .collect();
@@ -332,9 +345,9 @@ mod tests {
     use crate::monomorphize::index::MonoIndex;
     use crate::monomorphize::mangle_table::MangleTable;
     use crate::monomorphize::work::ItemKind;
-    use crate::types::HirType;
     use crate::node::HirFn;
     use crate::types::ExprId;
+    use crate::types::HirType;
     use glyim_diag::Span;
     use glyim_interner::Interner;
 
@@ -395,7 +408,10 @@ mod tests {
         let ty = HirType::Generic(vec_sym, vec![HirType::Named(t_sym)]);
         let items = discover_type_specializations(&ty, &index, &mut interner);
 
-        assert!(items.is_empty(), "Should not specialize with unresolved type param");
+        assert!(
+            items.is_empty(),
+            "Should not specialize with unresolved type param"
+        );
     }
 
     #[test]
@@ -469,8 +485,16 @@ mod tests {
         );
 
         let name = interner.resolve(new_callee);
-        assert!(name.contains("id"), "Callee should contain 'id', got {}", name);
-        assert!(name.contains("i64"), "Callee should contain 'i64', got {}", name);
+        assert!(
+            name.contains("id"),
+            "Callee should contain 'id', got {}",
+            name
+        );
+        assert!(
+            name.contains("i64"),
+            "Callee should contain 'i64', got {}",
+            name
+        );
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].kind, ItemKind::FnSpecialize);
@@ -589,7 +613,16 @@ pub fn discover_calls_in_body(
     sub: &HashMap<Symbol, HirType>,
 ) -> Vec<WorkItem> {
     let mut items = Vec::new();
-    discover_calls_in_expr(expr, index, interner, mangle_table, expr_types, call_type_args, sub, &mut items);
+    discover_calls_in_expr(
+        expr,
+        index,
+        interner,
+        mangle_table,
+        expr_types,
+        call_type_args,
+        sub,
+        &mut items,
+    );
     items
 }
 
@@ -605,7 +638,9 @@ fn discover_calls_in_expr(
 ) {
     use crate::node::{HirExpr, HirStmt};
     match expr {
-        HirExpr::Call { id, callee, args, .. } => {
+        HirExpr::Call {
+            id, callee, args, ..
+        } => {
             let callee_str = interner.resolve(*callee).to_string();
             let base = if let Some(pos) = callee_str.find("__") {
                 interner.intern(&callee_str[..pos])
@@ -617,109 +652,430 @@ fn discover_calls_in_expr(
                 if let Some(type_args) = call_type_args.get(id) {
                     let concrete_args: Vec<HirType> = type_args
                         .iter()
-                        .map(|t| concretize::substitute_and_concretize(t, sub, index, mangle_table, interner))
+                        .map(|t| {
+                            concretize::substitute_and_concretize(
+                                t,
+                                sub,
+                                index,
+                                mangle_table,
+                                interner,
+                            )
+                        })
                         .collect();
-                    if !concrete_args.is_empty()
-                        && concrete_args.iter().all(|a| !concretize::has_unresolved_type_param(a, interner))
-                    {
+                    let all_concrete = concrete_args
+                        .iter()
+                        .all(|a| !concretize::has_unresolved_type_param(a, interner));
+                    if !concrete_args.is_empty() && all_concrete {
                         items.push(WorkItem::fn_specialize(base, concrete_args));
                     }
                 } else {
                     // Try inferring from the call's return type
-                    if let Some(HirType::Generic(_, type_args)) = expr_types.get(id.as_usize()) {
-                        let concrete_args: Vec<HirType> = type_args
-                            .iter()
-                            .map(|a| concretize::substitute_and_concretize(a, sub, index, mangle_table, interner))
-                            .collect();
-                        if !concrete_args.is_empty()
-                            && concrete_args.iter().all(|a| !concretize::has_unresolved_type_param(a, interner))
-                        {
-                            items.push(WorkItem::fn_specialize(base, concrete_args));
+                    if let Some(return_ty) = expr_types.get(id.as_usize()) {
+                        if let HirType::Generic(_, type_args) = return_ty {
+                            let concrete_args: Vec<HirType> = type_args
+                                .iter()
+                                .map(|a| {
+                                    concretize::substitute_and_concretize(
+                                        a,
+                                        sub,
+                                        index,
+                                        mangle_table,
+                                        interner,
+                                    )
+                                })
+                                .collect();
+                            if !concrete_args.is_empty()
+                                && concrete_args
+                                    .iter()
+                                    .all(|a| !concretize::has_unresolved_type_param(a, interner))
+                            {
+                                items.push(WorkItem::fn_specialize(base, concrete_args));
+                            }
                         }
                     }
-                    // If we can't infer concrete type args, DON'T enqueue —
-                    // enqueuing with empty args would produce broken output
-                    // with unresolved type parameters.
                 }
             }
             for a in args {
-                discover_calls_in_expr(a, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    a,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
         HirExpr::Block { stmts, .. } => {
             for s in stmts {
                 match s {
-                    HirStmt::Expr(e) | HirStmt::Let { value: e, .. } | HirStmt::LetPat { value: e, .. }
-                    | HirStmt::Assign { value: e, .. } | HirStmt::AssignField { value: e, .. }
+                    HirStmt::Expr(e)
+                    | HirStmt::Let { value: e, .. }
+                    | HirStmt::LetPat { value: e, .. }
+                    | HirStmt::Assign { value: e, .. }
+                    | HirStmt::AssignField { value: e, .. }
                     | HirStmt::AssignDeref { value: e, .. } => {
-                        discover_calls_in_expr(e, index, interner, mangle_table, expr_types, call_type_args, sub, items);
-                    }
-                    _ => {}
+                        discover_calls_in_expr(
+                            e,
+                            index,
+                            interner,
+                            mangle_table,
+                            expr_types,
+                            call_type_args,
+                            sub,
+                            items,
+                        );
+                    } // All HirStmt variants are covered above; no unreachable wildcard needed
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
-            discover_calls_in_expr(condition, index, interner, mangle_table, expr_types, call_type_args, sub, items);
-            discover_calls_in_expr(then_branch, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            discover_calls_in_expr(
+                condition,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
+            discover_calls_in_expr(
+                then_branch,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
             if let Some(e) = else_branch {
-                discover_calls_in_expr(e, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    e,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
-        HirExpr::While { condition, body, .. } | HirExpr::ForIn { iter: condition, body, .. } => {
-            discover_calls_in_expr(condition, index, interner, mangle_table, expr_types, call_type_args, sub, items);
-            discover_calls_in_expr(body, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+        HirExpr::While {
+            condition, body, ..
+        } => {
+            discover_calls_in_expr(
+                condition,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
+            discover_calls_in_expr(
+                body,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
-            discover_calls_in_expr(scrutinee, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+        HirExpr::ForIn { iter, body, .. } => {
+            // Discover iterator/next specializations
+            let forin_items = discover_forin_specializations(
+                iter.get_id(),
+                expr_types,
+                sub,
+                index,
+                mangle_table,
+                interner,
+            );
+            items.extend(forin_items);
+            // Also discover type specializations from the iterator's type
+            if let Some(iter_ty) = expr_types.get(iter.get_id().as_usize()) {
+                discover_type_specializations_into(iter_ty, index, interner, items);
+            }
+            discover_calls_in_expr(
+                iter,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
+            discover_calls_in_expr(
+                body,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
+        }
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            discover_calls_in_expr(
+                scrutinee,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
             for arm in arms {
                 if let Some(ref g) = arm.guard {
-                    discover_calls_in_expr(g, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                    discover_calls_in_expr(
+                        g,
+                        index,
+                        interner,
+                        mangle_table,
+                        expr_types,
+                        call_type_args,
+                        sub,
+                        items,
+                    );
                 }
-                discover_calls_in_expr(&arm.body, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    &arm.body,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
         HirExpr::Return { value: Some(v), .. } => {
-            discover_calls_in_expr(v, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                v,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
+        HirExpr::Return { value: None, .. } => {}
         HirExpr::MethodCall { receiver, args, .. } => {
-            discover_calls_in_expr(receiver, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                receiver,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
             for a in args {
-                discover_calls_in_expr(a, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    a,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
         HirExpr::Binary { lhs, rhs, .. } => {
-            discover_calls_in_expr(lhs, index, interner, mangle_table, expr_types, call_type_args, sub, items);
-            discover_calls_in_expr(rhs, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                lhs,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
+            discover_calls_in_expr(
+                rhs,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
         HirExpr::Unary { operand, .. } | HirExpr::Deref { expr: operand, .. } => {
-            discover_calls_in_expr(operand, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                operand,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
-        HirExpr::StructLit { fields, .. } => {
+        HirExpr::StructLit {
+            id,
+            struct_name: _,
+            fields,
+            ..
+        } => {
+            // Discover struct specialization from the expression's inferred type
+            if let Some(expr_ty) = expr_types.get(id.as_usize()) {
+                discover_type_specializations_into(expr_ty, index, interner, items);
+            }
             for (_, val) in fields {
-                discover_calls_in_expr(val, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    val,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
-        HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+        HirExpr::EnumVariant {
+            id,
+            enum_name: _,
+            variant_name: _,
+            args,
+            ..
+        } => {
+            // Discover enum specialization from the expression's inferred type
+            if let Some(expr_ty) = expr_types.get(id.as_usize()) {
+                discover_type_specializations_into(expr_ty, index, interner, items);
+            }
             for a in args {
-                discover_calls_in_expr(a, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    a,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
+            }
+        }
+        HirExpr::TupleLit { elements, .. } => {
+            for a in elements {
+                discover_calls_in_expr(
+                    a,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
         HirExpr::Println { arg, .. } => {
-            discover_calls_in_expr(arg, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                arg,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
-        HirExpr::Assert { condition, message, .. } => {
-            discover_calls_in_expr(condition, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+        HirExpr::Assert {
+            condition, message, ..
+        } => {
+            discover_calls_in_expr(
+                condition,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
             if let Some(m) = message {
-                discover_calls_in_expr(m, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                discover_calls_in_expr(
+                    m,
+                    index,
+                    interner,
+                    mangle_table,
+                    expr_types,
+                    call_type_args,
+                    sub,
+                    items,
+                );
             }
         }
         HirExpr::As { expr: inner, .. } => {
-            discover_calls_in_expr(inner, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                inner,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
         HirExpr::FieldAccess { object, .. } => {
-            discover_calls_in_expr(object, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(
+                object,
+                index,
+                interner,
+                mangle_table,
+                expr_types,
+                call_type_args,
+                sub,
+                items,
+            );
         }
-        // Leaf nodes: no calls to discover
+        HirExpr::SizeOf {
+            id, target_type, ..
+        } => {
+            // Discover type specializations from the target type.
+            // The type checker records the target_type in call_type_args for SizeOf.
+            if let Some(type_args) = call_type_args.get(id) {
+                for ta in type_args {
+                    discover_type_specializations_into(ta, index, interner, items);
+                }
+            }
+            // Also discover from the target_type directly (in case call_type_args is empty)
+            discover_type_specializations_into(target_type, index, interner, items);
+        }
+        // Leaf nodes: IntLit, FloatLit, BoolLit, StrLit, UnitLit, Ident, AddrOf
         _ => {}
     }
 }

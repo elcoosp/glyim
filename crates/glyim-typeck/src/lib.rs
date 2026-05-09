@@ -311,7 +311,27 @@ impl TypeChecker {
         self.set_type(expr.get_id(), &ty);
         Some(ty)
     }
-
+    fn element_type_for_iter(&self, iter_ty: &HirType) -> HirType {
+        match iter_ty {
+            HirType::Generic(name, args) => {
+                let name_str = self.interner.resolve(*name);
+                match name_str.as_ref() {
+                    "Range" => args.first().cloned().unwrap_or(HirType::Int),
+                    _ => args.first().cloned().unwrap_or(HirType::Error),
+                }
+            }
+            HirType::Named(name) => {
+                let name_str = self.interner.resolve(*name);
+                if name_str == "Range" {
+                    HirType::Int
+                } else {
+                    HirType::Error
+                }
+            }
+            HirType::RawPtr(inner) => self.element_type_for_iter(inner),
+            _ => HirType::Error,
+        }
+    }
     fn infer_expr(&mut self, expr: &HirExpr, expected: Option<&HirType>) -> HirType {
         match expr {
             HirExpr::IntLit { .. } => HirType::Int,
@@ -528,9 +548,8 @@ impl TypeChecker {
                         }
                     }
                 } else {
-                    self.errors.push(TypeError::UnknownType {
-                        name: *struct_name,
-                    });
+                    self.errors
+                        .push(TypeError::UnknownType { name: *struct_name });
                     HirType::Error
                 }
             }
@@ -571,9 +590,8 @@ impl TypeChecker {
                         HirType::Generic(*enum_name, concrete_args)
                     }
                 } else {
-                    self.errors.push(TypeError::UnknownType {
-                        name: *enum_name,
-                    });
+                    self.errors
+                        .push(TypeError::UnknownType { name: *enum_name });
                     HirType::Error
                 }
             }
@@ -763,110 +781,132 @@ impl TypeChecker {
                 HirType::Error
             }
             HirExpr::MethodCall {
-    id,
-    receiver,
-    method_name,
-    args,
-    ..
-} => {
-    let recv_ty = self.check_expr(receiver, None).unwrap_or(HirType::Error);
-    for a in args {
-        self.check_expr(a, None);
-    }
-    let arg_types: Vec<HirType> = args.iter()
-        .map(|a| self.expr_types[a.get_id().as_usize()].clone())
-        .collect();
-
-    // Resolve the receiver's base type
-    let (type_name, _type_args) = match &recv_ty {
-        HirType::Named(name) => (*name, vec![]),
-        HirType::Generic(name, args) => (*name, args.clone()),
-        HirType::RawPtr(inner) => match inner.as_ref() {
-            HirType::Named(name) => (*name, vec![]),
-            HirType::Generic(name, args) => (*name, args.clone()),
-            _ => {
-                self.errors.push(TypeError::UnresolvedMethod {
-                    method_name: self.interner.resolve(*method_name).to_string(),
-                    receiver_type: format!("{:?}", recv_ty),
-                    span: (expr.get_span().start, expr.get_span().end),
-                });
-                return HirType::Error;
-            }
-        },
-        _ => {
-            self.errors.push(TypeError::UnresolvedMethod {
-                method_name: self.interner.resolve(*method_name).to_string(),
-                receiver_type: format!("{:?}", recv_ty),
-                span: (expr.get_span().start, expr.get_span().end),
-            });
-            return HirType::Error;
-        }
-    };
-
-    // Build the mangled method name
-    let mangled_str = format!("{}_{}", self.interner.resolve(type_name), self.interner.resolve(*method_name));
-    let mangled = self.interner.intern(&mangled_str);
-
-    // Look up the method
-    if let Some(fn_def) = self.fns.iter().find(|f| f.name == mangled).cloned() {
-        if !fn_def.type_params.is_empty() {
-            // Generic method — unify to get type args
-            let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
-                .chain(arg_types.iter().cloned())
-                .collect();
-
-            if let Ok(sub) = self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span()) {
-                let concrete_args: Vec<HirType> = fn_def.type_params.iter()
-                    .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
+                id,
+                receiver,
+                method_name,
+                args,
+                ..
+            } => {
+                let recv_ty = self.check_expr(receiver, None).unwrap_or(HirType::Error);
+                for a in args {
+                    self.check_expr(a, None);
+                }
+                let arg_types: Vec<HirType> = args
+                    .iter()
+                    .map(|a| self.expr_types[a.get_id().as_usize()].clone())
                     .collect();
-                if concrete_args.iter().any(|t| matches!(t, HirType::Error)) {
-                    self.errors.push(TypeError::CannotInferGenericArgs {
-                        name: format!("{}.{}", self.interner.resolve(type_name), self.interner.resolve(*method_name)),
-                        span: (expr.get_span().start, expr.get_span().end),
-                    });
+
+                // Resolve the receiver's base type
+                let (type_name, _type_args) = match &recv_ty {
+                    HirType::Named(name) => (*name, vec![]),
+                    HirType::Generic(name, args) => (*name, args.clone()),
+                    HirType::RawPtr(inner) => match inner.as_ref() {
+                        HirType::Named(name) => (*name, vec![]),
+                        HirType::Generic(name, args) => (*name, args.clone()),
+                        _ => {
+                            self.errors.push(TypeError::UnresolvedMethod {
+                                method_name: self.interner.resolve(*method_name).to_string(),
+                                receiver_type: format!("{:?}", recv_ty),
+                                span: (expr.get_span().start, expr.get_span().end),
+                            });
+                            return HirType::Error;
+                        }
+                    },
+                    _ => {
+                        self.errors.push(TypeError::UnresolvedMethod {
+                            method_name: self.interner.resolve(*method_name).to_string(),
+                            receiver_type: format!("{:?}", recv_ty),
+                            span: (expr.get_span().start, expr.get_span().end),
+                        });
+                        return HirType::Error;
+                    }
+                };
+
+                // Build the mangled method name
+                let mangled_str = format!(
+                    "{}_{}",
+                    self.interner.resolve(type_name),
+                    self.interner.resolve(*method_name)
+                );
+                let mangled = self.interner.intern(&mangled_str);
+
+                // Look up the method
+                if let Some(fn_def) = self.fns.iter().find(|f| f.name == mangled).cloned() {
+                    if !fn_def.type_params.is_empty() {
+                        // Generic method — unify to get type args
+                        let all_arg_types: Vec<HirType> = std::iter::once(recv_ty.clone())
+                            .chain(arg_types.iter().cloned())
+                            .collect();
+
+                        if let Ok(sub) =
+                            self.unify_generics(&fn_def, &all_arg_types, *id, expr.get_span())
+                        {
+                            let concrete_args: Vec<HirType> = fn_def
+                                .type_params
+                                .iter()
+                                .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
+                                .collect();
+                            if concrete_args.iter().any(|t| matches!(t, HirType::Error)) {
+                                self.errors.push(TypeError::CannotInferGenericArgs {
+                                    name: format!(
+                                        "{}.{}",
+                                        self.interner.resolve(type_name),
+                                        self.interner.resolve(*method_name)
+                                    ),
+                                    span: (expr.get_span().start, expr.get_span().end),
+                                });
+                            } else {
+                                self.call_type_args.insert(*id, concrete_args);
+                            }
+                            let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
+                            glyim_hir::types::substitute_type(&ret, &sub)
+                        } else {
+                            // unification failed; error already reported by unify_generics
+                            HirType::Error
+                        }
+                    } else {
+                        // Non-generic method – still record type args if receiver is generic
+                        if let HirType::Generic(_, ref type_args) = recv_ty {
+                            if !type_args.is_empty() {
+                                self.maybe_record_call_type_args(*id, type_args.clone());
+                            }
+                        }
+                        fn_def.ret.clone().unwrap_or(HirType::Unit)
+                    }
                 } else {
-                    self.call_type_args.insert(*id, concrete_args);
-                }
-                let ret = fn_def.ret.clone().unwrap_or(HirType::Unit);
-                glyim_hir::types::substitute_type(&ret, &sub)
-            } else {
-                // unification failed; error already reported by unify_generics
-                HirType::Error
-            }
-        } else {
-            // Non-generic method – still record type args if receiver is generic
-            if let HirType::Generic(_, ref type_args) = recv_ty {
-                if !type_args.is_empty() {
-                    self.maybe_record_call_type_args(*id, type_args.clone());
+                    // Method not found; check extern
+                    if self.extern_fns.contains_key(method_name) {
+                        recv_ty
+                    } else {
+                        self.errors.push(TypeError::UnresolvedMethod {
+                            method_name: self.interner.resolve(*method_name).to_string(),
+                            receiver_type: self.interner.resolve(type_name).to_string(),
+                            span: (expr.get_span().start, expr.get_span().end),
+                        });
+                        HirType::Error
+                    }
                 }
             }
-            fn_def.ret.clone().unwrap_or(HirType::Unit)
-        }
-    } else {
-        // Method not found; check extern
-        if self.extern_fns.contains_key(method_name) {
-            recv_ty
-        } else {
-            self.errors.push(TypeError::UnresolvedMethod {
-                method_name: self.interner.resolve(*method_name).to_string(),
-                receiver_type: self.interner.resolve(type_name).to_string(),
-                span: (expr.get_span().start, expr.get_span().end),
-            });
-            HirType::Error
-        }
-    }
-}
 
             HirExpr::While {
                 condition, body, ..
-            }
-            | HirExpr::ForIn {
-                iter: condition,
-                body,
-                ..
             } => {
                 self.check_expr(condition, None);
                 self.check_expr(body, None);
+                HirType::Unit
+            }
+            HirExpr::ForIn {
+                pattern,
+                iter,
+                body,
+                ..
+            } => {
+                let iter_ty = self.check_expr(iter, None).unwrap_or(HirType::Error);
+                let elem_ty = self.element_type_for_iter(&iter_ty);
+                self.scopes.push(Scope::new());
+                self.bind_match_pattern(pattern, &elem_ty);
+                self.check_expr(body, None);
+                self.scopes.pop();
                 HirType::Unit
             }
             HirExpr::Return { value, .. } => {
