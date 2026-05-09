@@ -67,6 +67,12 @@ pub enum TypeError {
         span: (usize, usize),
         suggestions: Vec<String>,
     },
+    #[error("unresolved method `{method_name}` on type `{receiver_type}`")]
+    UnresolvedMethod {
+        method_name: String,
+        receiver_type: String,
+        span: (usize, usize),
+    },
 }
 
 impl Diagnostic for TypeError {
@@ -119,6 +125,13 @@ impl Diagnostic for TypeError {
                     span.1 - span.0,
                 ))))
             }
+            TypeError::UnresolvedMethod { span, .. } => {
+                Some(Box::new(std::iter::once(miette::LabeledSpan::new(
+                    Some("unresolved method".into()),
+                    span.0,
+                    span.1 - span.0,
+                ))))
+            }
             TypeError::UnresolvedName { span, .. } => {
                 Some(Box::new(std::iter::once(miette::LabeledSpan::new(
                     Some("unresolved name".into()),
@@ -147,6 +160,7 @@ impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
             TypeError::AssignToImmutable { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::AssignThroughNonPointer { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::DerefNonPointer { span, .. } => (span.0, span.1, err.to_string()),
+            TypeError::UnresolvedMethod { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::UnresolvedName { span, .. } => (span.0, span.1, err.to_string()),
         };
         glyim_diag::diagnostic::Diagnostic {

@@ -404,7 +404,7 @@ impl TypeChecker {
                                 // Propagate generic args to field call expressions
                                 for (fname, fexpr) in fields {
                                     if let Some(field_def) = info.fields.iter().find(|f| f.name == *fname) {
-                                        let field_ty = glyim_hir::types::substitute_type(&field_def.ty, &sub);
+                                        let _field_ty = glyim_hir::types::substitute_type(&field_def.ty, &sub);
                                         if let HirExpr::Call { id, callee, .. } = fexpr {
                                             if let Some(fn_def) = self.fns.iter().find(|f| f.name == *callee) {
                                                 if !fn_def.type_params.is_empty() {
@@ -800,7 +800,7 @@ impl TypeChecker {
             HirPattern::Wild => {}
             HirPattern::Struct { name, bindings, .. } => {
                 if let Some(info) = self.structs.get(name) {
-                    let field_tys: Vec<(HirPattern, HirType)> = bindings
+                    let _field_tys: Vec<(HirPattern, HirType)> = bindings
                         .iter()
                         .filter_map(|(field_sym, field_pat)| {
                             info.field_map.get(field_sym).and_then(|&idx| {
@@ -810,8 +810,8 @@ impl TypeChecker {
                             })
                         })
                         .collect();
-                    for (field_pat, field_ty) in field_tys {
-                        self.bind_pattern(&field_pat, &field_ty, mutable);
+                    for (field_pat, _field_ty) in _field_tys {
+                        self.bind_pattern(&field_pat, &_field_ty, mutable);
                     }
                 }
             }
@@ -841,7 +841,7 @@ impl TypeChecker {
             }
             HirPattern::Wild => {}
             HirPattern::Struct { name, bindings, .. } => {
-                let field_tys: Vec<(HirPattern, HirType)> =
+                let _field_tys: Vec<(HirPattern, HirType)> =
                     if let Some(info) = self.structs.get(name) {
                         bindings
                             .iter()
@@ -856,8 +856,8 @@ impl TypeChecker {
                     } else {
                         vec![]
                     };
-                for (field_pat, field_ty) in field_tys {
-                    self.bind_match_pattern(&field_pat, &field_ty);
+                for (field_pat, _field_ty) in _field_tys {
+                    self.bind_match_pattern(&field_pat, &_field_ty);
                 }
             }
             HirPattern::OptionSome(inner) => {
