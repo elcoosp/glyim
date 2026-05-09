@@ -596,3 +596,88 @@ mod tests {
     }
 }
 
+/// After a function has been substituted, walk the concrete body to find
+/// generic calls that still need specialisation (e.g. Iter_new inside Vec_iter).
+pub fn discover_calls_in_body(
+    expr: &crate::node::HirExpr,
+    index: &MonoIndex,
+    interner: &mut Interner,
+    mangle_table: &mut MangleTable,
+    expr_types: &[HirType],
+    call_type_args: &HashMap<ExprId, Vec<HirType>>,
+    sub: &HashMap<Symbol, HirType>,
+) -> Vec<WorkItem> {
+    let mut items = Vec::new();
+    discover_calls_in_expr(expr, index, interner, mangle_table, expr_types, call_type_args, sub, &mut items);
+    items
+}
+
+fn discover_calls_in_expr(
+    expr: &crate::node::HirExpr,
+    index: &MonoIndex,
+    interner: &mut Interner,
+    mangle_table: &mut MangleTable,
+    expr_types: &[HirType],
+    call_type_args: &HashMap<ExprId, Vec<HirType>>,
+    sub: &HashMap<Symbol, HirType>,
+    items: &mut Vec<WorkItem>,
+) {
+    use crate::node::{HirExpr, HirStmt};
+    match expr {
+        HirExpr::Call { id, callee, .. } => {
+            let callee_str = interner.resolve(*callee).to_string();
+            // Demangle if pre-mangled
+            let base = if let Some(pos) = callee_str.find("__") {
+                interner.intern(&callee_str[..pos])
+            } else {
+                *callee
+            };
+            if index.is_generic_fn(base) {
+                // Try to infer concrete type args from argument types
+                // (already substituted)
+                let concrete_ty = expr_types.get(id.as_usize()).cloned();
+                if let Some(HirType::Generic(_, type_args)) = concrete_ty {
+                    items.push(WorkItem::fn_specialize(base, type_args));
+                } else {
+                    // Fallback: push with empty args to force the BFS driver
+                    // to re-process the function; actual specialization
+                    // will be done when call_type_args is discovered later.
+                    items.push(WorkItem::fn_specialize(base, vec![]));
+                }
+            }
+        }
+        HirExpr::Block { stmts, .. } => {
+            for s in stmts {
+                match s {
+                    HirStmt::Expr(e) | HirStmt::Let { value: e, .. } | HirStmt::LetPat { value: e, .. }
+                    | HirStmt::Assign { value: e, .. } | HirStmt::AssignField { value: e, .. }
+                    | HirStmt::AssignDeref { value: e, .. } => {
+                        discover_calls_in_expr(e, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        HirExpr::If { condition, then_branch, else_branch, .. } => {
+            discover_calls_in_expr(condition, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(then_branch, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            if let Some(e) = else_branch {
+                discover_calls_in_expr(e, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            }
+        }
+        HirExpr::While { condition, body, .. } | HirExpr::ForIn { iter: condition, body, .. } => {
+            discover_calls_in_expr(condition, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            discover_calls_in_expr(body, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+        }
+        HirExpr::Match { scrutinee, arms, .. } => {
+            discover_calls_in_expr(scrutinee, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            for arm in arms {
+                discover_calls_in_expr(&arm.body, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+            }
+        }
+        HirExpr::Return { value: Some(v), .. } => {
+            discover_calls_in_expr(v, index, interner, mangle_table, expr_types, call_type_args, sub, items);
+        }
+        _ => {}
+    }
+}

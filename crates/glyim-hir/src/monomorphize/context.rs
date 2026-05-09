@@ -108,6 +108,13 @@ impl<'a> MonoContext<'a> {
             self.work_queue.extend(disc);
         }
         // After building the specialized function, discover calls inside its body
+        // After specialization, scan the concrete body for newly-exposed
+        // generic calls that need further specialization.
+        let extra_items = discover::discover_calls_in_body(
+            &concrete_fn.body, &self.index, self.interner, &mut self.mangle_table,
+            &self.output_expr_types, self.call_type_args, &sub,
+        );
+        self.work_queue.extend(extra_items);
         self.output_items.push(HirItem::Fn(concrete_fn));
     }
 
@@ -138,6 +145,11 @@ impl<'a> MonoContext<'a> {
 
         let mut rewritten = fn_def.clone();
         rewritten.body = rewritten_body;
+        let extra_items = discover::discover_calls_in_body(
+            &rewritten.body, &self.index, self.interner, &mut self.mangle_table,
+            &self.output_expr_types, self.call_type_args, &HashMap::new(),
+        );
+        self.work_queue.extend(extra_items);
         self.output_items.push(HirItem::Fn(rewritten));
     }
 
