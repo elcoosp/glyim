@@ -79,7 +79,6 @@ pub struct TypeChecker {
     call_type_args: HashMap<ExprId, Vec<HirType>>,
     errors: Vec<TypeError>,
     fns: Vec<HirFn>,
-    current_fn_type_params: Vec<Symbol>,
 }
 
 impl TypeChecker {
@@ -128,7 +127,6 @@ impl TypeChecker {
             call_type_args: HashMap::new(),
             errors: Vec::new(),
             fns: Vec::new(),
-            current_fn_type_params: Vec::new(),
         }
     }
 
@@ -239,8 +237,6 @@ impl TypeChecker {
 
     fn check_fn(&mut self, f: &HirFn) {
         self.scopes = vec![Scope::new()];
-        let prev_type_params = std::mem::take(&mut self.current_fn_type_params);
-        self.current_fn_type_params = f.type_params.clone();
 
         for (i, &(sym, ref ty)) in f.params.iter().enumerate() {
             let mutable = f.param_mutability.get(i).copied().unwrap_or(false);
@@ -259,10 +255,6 @@ impl TypeChecker {
                 }
             }
         }
-        self.current_fn_type_params = prev_type_params;
-    }
-    fn is_own_type_param(&self, ty: &HirType) -> bool {
-        matches!(ty, HirType::Named(sym) if self.current_fn_type_params.contains(sym))
     }
 
     // --- Helper to conditionally insert into call_type_args ---
@@ -1031,8 +1023,19 @@ impl TypeChecker {
                         });
 
                         if has_unresolved {
-                            let all_own = concrete_args.iter().all(|t| self.is_own_type_param(t));
-                            if all_own {
+                            let struct_type_params: Vec<Symbol> = self
+                                .structs
+                                .get(&type_name)
+                                .map(|info| info.type_params.clone())
+                                .unwrap_or_default();
+                            let has_error = concrete_args.iter().any(|t| matches!(t, HirType::Error));
+                            let has_unresolved_non_receiver = concrete_args.iter().any(|t| {
+                                matches!(t, HirType::Named(n)
+                                    if fn_def.type_params.contains(n)
+                                        && !struct_type_params.contains(n))
+                            });
+
+                            if !has_error && !has_unresolved_non_receiver {
                                 self.call_type_args.insert(*id, concrete_args);
                             } else {
                                 eprintln!(
