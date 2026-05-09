@@ -390,9 +390,7 @@ impl<'a> MonoContext<'a> {
                     } else {
                         *enum_name
                     }
-                } else {
-                    *enum_name
-                };
+                } else { *enum_name };
                 HirExpr::EnumVariant {
                     id: *id,
                     enum_name: new_enum_name,

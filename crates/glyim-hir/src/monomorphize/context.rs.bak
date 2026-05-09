@@ -28,7 +28,6 @@ impl<'a> MonoContext<'a> {
             type_work_queue: Vec::new(),
             type_queued: HashSet::new(),
             method_map: HashMap::new(),
-            current_subst: None,
         }
     }
 
@@ -117,7 +116,67 @@ impl<'a> MonoContext<'a> {
         }
     }
 
-
+    pub(crate) fn concretize_type(&mut self, ty: &HirType) -> HirType {
+        match ty {
+            HirType::Generic(sym, inner) => {
+                let inner: Vec<HirType> = inner.iter().map(|a| self.concretize_type(a)).collect();
+                let all_concrete = inner.iter().all(|a| !self.has_unresolved_type_param(a));
+                if all_concrete {
+                    let key = (*sym, inner.clone());
+                    if self.struct_specs.contains_key(&key) || self.enum_specs.contains_key(&key) {
+                        return HirType::Named(self.mangle_name(*sym, &inner));
+                    }
+                }
+                HirType::Generic(*sym, inner)
+            }
+            HirType::Named(sym) => {
+                let s = self.interner.resolve(*sym);
+                if s.len() == 1 && s.chars().next().is_some_and(|c: char| c.is_uppercase()) {
+                    ty.clone()
+                } else {
+                    ty.clone()
+                }
+            }
+            HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Error
+            | HirType::Opaque(_) => ty.clone(),
+            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.concretize_type(inner))),
+            HirType::Option(inner) => {
+                let inner = self.concretize_type(inner);
+                if !self.has_unresolved_type_param(&inner) {
+                    let opt = self.interner.intern("Option");
+                    if self.enum_specs.contains_key(&(opt, vec![inner.clone()])) {
+                        return HirType::Named(self.mangle_name(opt, &[inner]));
+                    }
+                }
+                HirType::Option(Box::new(inner))
+            }
+            HirType::Result(ok, err) => {
+                let ok = self.concretize_type(ok);
+                let err = self.concretize_type(err);
+                if !self.has_unresolved_type_param(&ok) && !self.has_unresolved_type_param(&err) {
+                    let res = self.interner.intern("Result");
+                    let key = (res, vec![ok.clone(), err.clone()]);
+                    if self.enum_specs.contains_key(&key) {
+                        return HirType::Named(self.mangle_name(res, &[ok, err]));
+                    }
+                }
+                HirType::Result(Box::new(ok), Box::new(err))
+            }
+            HirType::Tuple(elems) => {
+                HirType::Tuple(elems.iter().map(|e| self.concretize_type(e)).collect())
+            }
+            HirType::Func(params, ret) => HirType::Func(
+                params.iter().map(|p| self.concretize_type(p)).collect(),
+                Box::new(self.concretize_type(ret)),
+            )
+        }
+    }
 
     pub(crate) fn substitute_type_args(
         &self,
@@ -227,9 +286,7 @@ impl<'a> MonoContext<'a> {
         if let Some(rt) = &mut mono.ret {
             *rt = crate::types::substitute_type(rt, &sub);
         }
-        self.current_subst = Some(sub.clone());
         mono.body = self.substitute_expr_types(&mono.body, &sub);
-        self.current_subst = None;
         self.concretize_enum_variant_names(&mut mono.body, &sub);
         if !sub.is_empty() {
             mono.body = force_substitute_as_targets(mono.body, &sub);
