@@ -5,4 +5,13 @@ description: The Glyim programming language
 
 # Glyim Documentation
 
-Welcome to the Glyim documentation site. Browse modules using the sidebar or search with `⌘K`.
+<div id="search"></div>
+<script>
+  // Pagefind search box – injected at build time
+  window.addEventListener('DOMContentLoaded', () => {
+    if (window.Pagefind) {
+      new PagefindUI({ element: '#search', showSubResults: true });
+    }
+  });
+</script>
+<link href="/pagefind/pagefind-ui.css" rel="stylesheet">

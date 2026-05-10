@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "rspress dev",
-    "build": "rspress build",
+    "build": "rspress build && pagefind --site doc_build",
     "preview": "rspress preview"
   },
   "dependencies": {
     "@rspress/core": "^2.0.0",
+    "pagefind": "^1.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
