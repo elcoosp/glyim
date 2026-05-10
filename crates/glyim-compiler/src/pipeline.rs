@@ -1164,14 +1164,19 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     // existing run_jit code but using provided config
     ProfileCollector::enter_stage(StageName::Parse);
     ProfileCollector::enter_stage(StageName::Codegen);
-    let parse_out = glyim_parse::parse(source);
+    let expanded_source = if config.force_no_std.unwrap_or(false) {
+        source.to_string()
+    } else {
+        format!("{}\n{}", PRELUDE, source)
+    };
+    let parse_out = glyim_parse::parse(&expanded_source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             parse_out.errors.into_iter().map(|e| e.into()).collect(),
         ));
     }
     let mut interner = parse_out.interner;
-    let decl_output = glyim_parse::declarations::parse_declarations(source);
+    let decl_output = glyim_parse::declarations::parse_declarations(&expanded_source);
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
