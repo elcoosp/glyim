@@ -404,6 +404,38 @@ impl<'a> SubstContext<'a> {
         // Fallback 2: infer from the call expression's return type
         // This handles zero-argument generic impl methods like Vec_new() -> Vec<T>
         if discovered.is_empty() && self.index.is_generic_fn(callee) {
+            // Fallback 3: infer from sibling method call_type_args on the same generic type
+            let callee_str = self.interner.resolve(callee).to_string();
+            if let Some(us) = callee_str.rfind('_') {
+                let type_prefix = &callee_str[..us];
+                let type_sym = self.interner.intern(type_prefix);
+                for (_, sibling_args) in self.call_type_args.iter() {
+                    if !sibling_args.is_empty()
+                        && sibling_args.iter().all(|t| !concretize::has_unresolved_type_param(t, self.interner))
+                    {
+                        if let Some(imp) = self.index.find_impl(type_sym) {
+                            if sibling_args.len() == imp.type_params.len() {
+                                let (ic, ii) = discover::discover_call_specialization(
+                                    original_id,
+                                    callee,
+                                    &std::collections::HashMap::from([(original_id, sibling_args.clone())]),
+                                    sub,
+                                    self.index,
+                                    self.mangle_table,
+                                    self.interner,
+                                );
+                                if !ii.is_empty() {
+                                    new_callee = ic;
+                                    discovered = ii;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if discovered.is_empty() && self.index.is_generic_fn(callee) {
             // Try the SUBSTITUTED type (pre-concretization) which preserves Generic structure
             let substituted_caller_ty = self.substituted_type_for(original_id, sub);
             if let HirType::Generic(_base, type_args) = &substituted_caller_ty {
@@ -486,6 +518,33 @@ impl<'a> SubstContext<'a> {
                 args: call_args,
                 span,
             };
+        }
+
+        // Non-generic method: resolve receiver type and emit direct Call
+        {
+            let recv_ty = self.input_expr_types
+                .get(receiver.get_id().as_usize())
+                .cloned()
+                .unwrap_or(HirType::Error);
+            let inner_ty = match &recv_ty {
+                HirType::RawPtr(i) => i.as_ref().clone(),
+                other => other.clone(),
+            };
+            if let HirType::Named(type_sym) | HirType::Generic(type_sym, _) = &inner_ty {
+                let mangled = self.interner.intern(&format!(
+                    "{}_{}", self.interner.resolve(*type_sym), self.interner.resolve(method_name)
+                ));
+                if self.index.find_fn(mangled).is_some() {
+                    let mut call_args = vec![*new_receiver];
+                    call_args.extend(new_args);
+                    return HirExpr::Call {
+                        id: new_id,
+                        callee: mangled,
+                        args: call_args,
+                        span,
+                    };
+                }
+            }
         }
 
         HirExpr::MethodCall {

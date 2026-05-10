@@ -20,7 +20,6 @@ impl Executor {
         let start = Instant::now();
 
         let mut child = Command::new(&self.bin_path)
-            .env("GLYIM_TEST", name)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
