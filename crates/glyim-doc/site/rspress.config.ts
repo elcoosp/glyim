@@ -13,11 +13,12 @@ export default defineConfig({
   globalStyles: path.join(__dirname, 'tailwind.css'),
   themeConfig: {
     socialLinks: [
-      { icon: 'github', mode: 'link', content: 'https://github.com/your-repo' }
+      { icon: 'github', mode: 'link', content: 'https://github.com/elcoosp/glyim' }
     ],
     footer: {
       message: 'Built with Glyim and Rspress',
     },
+    enableScrollToTop: true,
   },
   builderConfig: {
     source: {
@@ -27,5 +28,9 @@ export default defineConfig({
         '@': path.join(__dirname),
       },
     },
+  },
+  // Ensure clean URLs without .html in navigation
+  route: {
+    cleanUrls: true,
   },
 });
