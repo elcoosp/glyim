@@ -34,7 +34,7 @@ pub fn discover_type_specializations(
     items
 }
 
-fn discover_type_specializations_into(
+pub fn discover_type_specializations_into(
     ty: &HirType,
     index: &MonoIndex,
     interner: &mut Interner,
@@ -888,7 +888,45 @@ fn discover_calls_in_expr(
             );
         }
         HirExpr::Return { value: None, .. } => {}
-        HirExpr::MethodCall { receiver, args, .. } => {
+        HirExpr::MethodCall {
+            id,
+            receiver,
+            method_name,
+            args,
+            ..
+        } => {
+            // Primary: attempt method call specialization discovery via
+            // discover_method_call_specialization (uses call_type_args when available).
+            let resolved = discover_method_call_specialization(
+                *id,
+                receiver.get_id(),
+                *method_name,
+                expr_types,
+                call_type_args,
+                sub,
+                index,
+                mangle_table,
+                interner,
+            );
+            if let Some((_mangled_callee, discovered_items)) = resolved {
+                items.extend(discovered_items);
+            } else {
+                // Fallback: infer from the receiver's type when call_type_args
+                // is unavailable (common for synthetic ExprIds generated during
+                // for-in desugaring, e.g. __iter.next()).
+                discover_method_call_fallback(
+                    receiver,
+                    *method_name,
+                    expr_types,
+                    sub,
+                    index,
+                    mangle_table,
+                    interner,
+                    items,
+                );
+            }
+
+            // Walk into sub-expressions
             discover_calls_in_expr(
                 receiver,
                 index,
@@ -1084,5 +1122,73 @@ fn discover_calls_in_expr(
         }
         // Leaf nodes: IntLit, FloatLit, BoolLit, StrLit, UnitLit, Ident, AddrOf
         _ => {}
+    }
+}
+/// Fallback discovery for method calls when `discover_method_call_specialization`
+/// returns `None` (typically because `call_type_args` is missing for synthetic
+/// ExprIds generated during for-in desugaring).
+///
+/// Infers the concrete type arguments from the receiver's type and enqueues
+/// a `FnSpecialize` work item for the method if all type args are concrete.
+fn discover_method_call_fallback(
+    receiver: &crate::node::HirExpr,
+    method_name: Symbol,
+    expr_types: &[HirType],
+    sub: &HashMap<Symbol, HirType>,
+    index: &MonoIndex,
+    mangle_table: &mut MangleTable,
+    interner: &mut Interner,
+    items: &mut Vec<WorkItem>,
+) {
+    let receiver_ty = match expr_types.get(receiver.get_id().as_usize()) {
+        Some(ty) => ty.clone(),
+        None => return,
+    };
+
+    // Peel off RawPtr wrapper (e.g. &mut Vec<T>)
+    let inner_ty = match &receiver_ty {
+        HirType::RawPtr(inner) => inner.as_ref().clone(),
+        other => other.clone(),
+    };
+
+    // Always discover type specializations from the receiver type
+    discover_type_specializations_into(&receiver_ty, index, interner, items);
+
+    let type_name = match &inner_ty {
+        HirType::Named(name) => *name,
+        HirType::Generic(name, _) => *name,
+        _ => return,
+    };
+
+    let method_str = interner.resolve(method_name).to_string();
+    let base_method_name =
+        interner.intern(&format!("{}_{}", interner.resolve(type_name), method_str));
+
+    if !index.is_generic_fn(base_method_name) {
+        return;
+    }
+
+    // Infer concrete type args from the receiver's generic type
+    let concrete_type_args: Vec<HirType> = match &inner_ty {
+        HirType::Generic(_, type_args) => type_args
+            .iter()
+            .map(|a| concretize::substitute_and_concretize(a, sub, index, mangle_table, interner))
+            .collect(),
+        HirType::Named(_) => {
+            // Non-generic receiver — no type args needed for the method
+            return;
+        }
+        _ => return,
+    };
+
+    if !concrete_type_args.is_empty()
+        && concrete_type_args
+            .iter()
+            .all(|a| !concretize::has_unresolved_type_param(a, interner))
+    {
+        items.push(WorkItem::fn_specialize(
+            base_method_name,
+            concrete_type_args,
+        ));
     }
 }

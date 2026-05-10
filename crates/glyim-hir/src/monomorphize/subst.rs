@@ -9,6 +9,7 @@
 //!
 //! No post-hoc concretization pass is needed. The output is fully concrete.
 
+use crate::HirUnOp;
 use crate::monomorphize::concretize;
 use crate::monomorphize::discover;
 use crate::monomorphize::index::MonoIndex;
@@ -403,57 +404,45 @@ impl<'a> SubstContext<'a> {
         // Fallback 2: infer from the call expression's return type
         // This handles zero-argument generic impl methods like Vec_new() -> Vec<T>
         if discovered.is_empty() && self.index.is_generic_fn(callee) {
-            if let Some(caller_ty) = self.output_expr_types.get(new_id.as_usize()) {
-                let concrete_caller_ty = concretize::substitute_and_concretize(
-                    caller_ty,
-                    sub,
-                    self.index,
-                    self.mangle_table,
-                    self.interner,
-                );
-                if let HirType::Generic(_base, type_args) = &concrete_caller_ty {
-                    let concrete_type_args: Vec<HirType> = type_args
+            // Try the SUBSTITUTED type (pre-concretization) which preserves Generic structure
+            let substituted_caller_ty = self.substituted_type_for(original_id, sub);
+            if let HirType::Generic(_base, type_args) = &substituted_caller_ty {
+                let concrete_type_args: Vec<HirType> = type_args
+                    .iter()
+                    .map(|a| {
+                        concretize::substitute_and_concretize(
+                            a,
+                            sub,
+                            self.index,
+                            self.mangle_table,
+                            self.interner,
+                        )
+                    })
+                    .collect();
+                if !concrete_type_args.is_empty()
+                    && concrete_type_args
                         .iter()
-                        .map(|a| {
-                            concretize::substitute_and_concretize(
-                                a,
-                                sub,
-                                self.index,
-                                self.mangle_table,
-                                self.interner,
-                            )
-                        })
-                        .collect();
-                    if !concrete_type_args.is_empty()
-                        && concrete_type_args
-                            .iter()
-                            .all(|a| !concretize::has_unresolved_type_param(a, self.interner))
-                    {
-                        // Check that this is indeed an impl method of this generic type
-                        if self.index.is_generic_fn(callee) {
-                            let (inferred_callee, inferred_items) =
-                                discover::discover_call_specialization(
-                                    original_id,
-                                    callee,
-                                    &std::collections::HashMap::from([(
-                                        original_id,
-                                        concrete_type_args.clone(),
-                                    )]),
-                                    sub,
-                                    self.index,
-                                    self.mangle_table,
-                                    self.interner,
-                                );
-                            if !inferred_items.is_empty() {
-                                new_callee = inferred_callee;
-                                discovered = inferred_items;
-                            }
-                        }
+                        .all(|a| !concretize::has_unresolved_type_param(a, self.interner))
+                {
+                    let (inferred_callee, inferred_items) = discover::discover_call_specialization(
+                        original_id,
+                        callee,
+                        &std::collections::HashMap::from([(
+                            original_id,
+                            concrete_type_args.clone(),
+                        )]),
+                        sub,
+                        self.index,
+                        self.mangle_table,
+                        self.interner,
+                    );
+                    if !inferred_items.is_empty() {
+                        new_callee = inferred_callee;
+                        discovered = inferred_items;
                     }
                 }
             }
         }
-
         self.discovered.extend(discovered);
         HirExpr::Call {
             id: new_id,
@@ -681,8 +670,11 @@ impl<'a> SubstContext<'a> {
         span: glyim_diag::Span,
         sub: &HashMap<Symbol, HirType>,
     ) -> HirExpr {
+        // Substitute the iterator and body first
         let new_iter = Box::new(self.substitute_expr(iter, sub));
         let new_body = Box::new(self.substitute_expr(body, sub));
+
+        // Discover iterator specializations using the original iter ExprId
         let forin_discoveries = discover::discover_forin_specializations(
             iter.get_id(),
             self.input_expr_types,
@@ -692,11 +684,134 @@ impl<'a> SubstContext<'a> {
             self.interner,
         );
         self.discovered.extend(forin_discoveries);
-        HirExpr::ForIn {
+
+        // Desugar ForIn into while-loop pattern, matching the lowering desugaring:
+        //   let mut __iter = iter;
+        //   let mut __done = false;
+        //   while !__done {
+        //       match __iter.next() {
+        //           Some(pattern) => { body },
+        //           None => { __done = true; },
+        //       }
+        //   }
+        let iter_sym = self.interner.intern("__iter");
+        let done_sym = self.interner.intern("__done");
+        let next_sym = self.interner.intern("next");
+
+        let iter_ty = self
+            .input_expr_types
+            .get(iter.get_id().as_usize())
+            .cloned()
+            .unwrap_or(HirType::Error);
+
+        let let_iter = HirStmt::LetPat {
+            pattern: HirPattern::Var(iter_sym),
+            mutable: true,
+            value: *new_iter,
+            ty: Some(iter_ty.clone()),
+            span,
+        };
+
+        let done_val_id = self.fresh_id();
+        self.store_type(done_val_id, HirType::Bool);
+        let let_done = HirStmt::LetPat {
+            pattern: HirPattern::Var(done_sym),
+            mutable: true,
+            value: HirExpr::BoolLit {
+                id: done_val_id,
+                value: false,
+                span,
+            },
+            ty: Some(HirType::Bool),
+            span,
+        };
+
+        // __iter.next()
+        let receiver_id = self.fresh_id();
+        self.store_type(receiver_id, iter_ty.clone());
+        let method_call_id = self.fresh_id();
+        // Type of .next() is Option<T> — we may not know T precisely, store Error as placeholder
+        self.store_type(method_call_id, HirType::Error);
+
+        let match_expr = HirExpr::Match {
+            id: self.fresh_id(),
+            scrutinee: Box::new(HirExpr::MethodCall {
+                id: method_call_id,
+                receiver: Box::new(HirExpr::Ident {
+                    id: receiver_id,
+                    name: iter_sym,
+                    span,
+                }),
+                method_name: next_sym,
+                resolved_callee: None,
+                args: vec![],
+                span,
+            }),
+            arms: vec![
+                MatchArm {
+                    pattern: HirPattern::OptionSome(Box::new(for_pattern.clone())),
+                    guard: None,
+                    body: *new_body,
+                },
+                MatchArm {
+                    pattern: HirPattern::OptionNone,
+                    guard: None,
+                    body: HirExpr::Block {
+                        id: self.fresh_id(),
+                        stmts: vec![HirStmt::Assign {
+                            target: done_sym,
+                            value: HirExpr::BoolLit {
+                                id: self.fresh_id(),
+                                value: true,
+                                span,
+                            },
+                            span,
+                        }],
+                        span,
+                    },
+                },
+            ],
+            span,
+        };
+
+        // while !__done { ... }
+        // Uses Unary Not instead of Binary Eq with 0 to avoid bool/int type mismatch
+        let done_ident_id = self.fresh_id();
+        self.store_type(done_ident_id, HirType::Bool);
+        let not_id = self.fresh_id();
+        self.store_type(not_id, HirType::Bool);
+
+        let while_expr = HirExpr::While {
+            id: self.fresh_id(),
+            condition: Box::new(HirExpr::Unary {
+                id: not_id,
+                op: HirUnOp::Not,
+                operand: Box::new(HirExpr::Ident {
+                    id: done_ident_id,
+                    name: done_sym,
+                    span,
+                }),
+                span,
+            }),
+            body: Box::new(HirExpr::Block {
+                id: self.fresh_id(),
+                stmts: vec![HirStmt::Expr(match_expr)],
+                span,
+            }),
+            span,
+        };
+
+        // Also discover type specializations from the iterator's type
+        discover::discover_type_specializations_into(
+            &iter_ty,
+            self.index,
+            self.interner,
+            &mut self.discovered,
+        );
+
+        HirExpr::Block {
             id: new_id,
-            pattern: for_pattern.clone(),
-            iter: new_iter,
-            body: new_body,
+            stmts: vec![let_iter, let_done, HirStmt::Expr(while_expr)],
             span,
         }
     }
