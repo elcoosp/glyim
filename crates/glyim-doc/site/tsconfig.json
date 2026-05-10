@@ -24,6 +24,6 @@
     },
     "baseUrl": "."
   },
-  "include": ["docs", "components", "lib", "rspress.config.ts"],
+  "include": ["docs", "src", "components", "lib", "rspress.config.ts"],
   "mdx": { "checkMdx": true }
 }

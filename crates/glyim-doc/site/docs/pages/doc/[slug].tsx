@@ -1,7 +1,8 @@
-import '@/docs/styles/tailwind.css'
 import React, { useEffect, useState } from 'react';
 import type { DocManifest, DocItem } from '@lib/api';
 import { HighlightedCode } from '@components/HighlightedCode';
+import { SearchModal } from '@components/SearchModal';
+import { DocTestBadge } from '@components/DocTestBadge';
 
 export default function DocPage() {
   const [item, setItem] = useState<DocItem | null>(null);
@@ -24,6 +25,7 @@ export default function DocPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-8">
+      <SearchModal />
       <h1 className="text-3xl font-bold mb-6">{item.name}</h1>
       <div dangerouslySetInnerHTML={{ __html: item.signature_html }} className="mb-6" />
       {item.doc && (
@@ -32,7 +34,12 @@ export default function DocPage() {
       )}
       <div className="space-y-6">
         {item.highlighted_examples.map((ex, idx) => (
-          <HighlightedCode key={idx} code={ex.code} html={ex.html} />
+          <div key={idx}>
+            <HighlightedCode code={ex.code} html={ex.html} />
+            {item.doc_test_results[idx] && (
+              <DocTestBadge result={item.doc_test_results[idx]} />
+            )}
+          </div>
         ))}
       </div>
       <p className="mt-8 text-sm text-muted-foreground">

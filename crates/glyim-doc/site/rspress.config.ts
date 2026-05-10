@@ -1,5 +1,4 @@
 import { defineConfig } from '@rspress/core';
-import { pluginTailwindCSS } from '@rsbuild/plugin-tailwindcss';
 import path from 'path';
 
 export default defineConfig({
@@ -11,6 +10,7 @@ export default defineConfig({
     light: '/favicon.ico',
     dark: '/favicon.ico',
   },
+  globalStyles: path.join(__dirname, 'tailwind.css'),
   themeConfig: {
     socialLinks: [
       { icon: 'github', mode: 'link', content: 'https://github.com/your-repo' }
@@ -20,7 +20,6 @@ export default defineConfig({
     },
   },
   builderConfig: {
-    plugins: [pluginTailwindCSS()],
     source: {
       alias: {
         '@components': path.join(__dirname, 'components'),

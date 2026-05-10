@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@components/ui/button';
 import { Search } from 'lucide-react';
 
 export const SearchModal: React.FC = () => {
