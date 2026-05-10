@@ -50,12 +50,18 @@ pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
     fn attach_doc_for_span(span: glyim_diag::Span, tokens: &[glyim_lex::Token]) -> Option<String> {
         // Find the item keyword token (fn/struct/enum/impl/extern) using its text.
         // Skip any preceding 'pub' keyword.
-        let item_keyword_texts = ["fn", "struct", "enum", "impl", "extern"];
-        let search_index = tokens.iter()
-            .filter(|t| t.start >= span.start) // tokens after the span start (rough)
-            .find(|t| t.kind.is_keyword() && item_keyword_texts.contains(&t.text))
-            .and_then(|kw_tok| tokens.iter().position(|t| t.start == kw_tok.start));
+        let name_token_index = tokens
+            .iter()
+            .position(|t| t.start == span.start && !t.kind.is_trivia());
 
+        let keyword_index = name_token_index.and_then(|idx| {
+            (0..idx).rev().find(|&i| {
+                let t = &tokens[i];
+                !t.kind.is_trivia() && t.kind.is_keyword()
+            })
+        });
+
+        let search_index = keyword_index.or(name_token_index);
         search_index.and_then(|idx| glyim_parse::doc_comment::collect_doc_comments(tokens, idx))
     }
 

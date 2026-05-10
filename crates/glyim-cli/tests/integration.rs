@@ -1287,7 +1287,7 @@ fn e2e_doc_generator_func() {
 // let result = add(1, 2)
 // assert(result == 3)
 // ```
-pub fn add(a: i64, b: i64) -> i64 { a + b }
+fn add(a: i64, b: i64) -> i64 { a + b }
 main = () => add(1, 2)
 "#;
     let dir = tempfile::tempdir().unwrap();
