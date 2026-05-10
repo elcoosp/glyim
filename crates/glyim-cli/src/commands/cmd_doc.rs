@@ -10,25 +10,28 @@ pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool, test: bool, 
             Err(e) => { eprintln!("error running doc-tests: {e}"); 1 }
         }
     } else {
-        // Default output to crates/glyim-doc/site (relative to workspace root)
-        let out_dir = output.unwrap_or_else(|| {
-            let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            workspace_root.join("crates/glyim-doc/site")
-        });
-        let version_ref = version.as_deref();
-        let result = if input.is_dir() {
-            pipeline::generate_doc(&input, Some(&out_dir), version_ref)
+        // Like 'cargo doc', default to the current package (where glyim.toml is)
+        let package_dir = if input.join("glyim.toml").exists() {
+            input
+        } else if input.join("src/main.g").exists() {
+            // Single file: use its parent as the package root
+            input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf()
         } else {
-            let package_dir = input.parent().unwrap_or_else(|| std::path::Path::new("."));
-            pipeline::generate_doc(package_dir, Some(&out_dir), version_ref)
+            // Default to current directory
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         };
-        match result {
+
+        let out_dir = output.unwrap_or_else(|| PathBuf::from("target/doc"));
+        let version_ref = version.as_deref();
+
+        match pipeline::generate_doc(&package_dir, Some(&out_dir), version_ref) {
             Ok(()) => {
+                eprintln!("Documentation generated in {}", out_dir.display());
                 if open {
                     let index_html = out_dir.join("index.html");
                     if index_html.exists() {
                         let _ = webbrowser::open(&format!("file://{}", index_html.display()));
-                    } else { eprintln!("error: generated file not found"); return 1; }
+                    }
                 }
                 0
             }
