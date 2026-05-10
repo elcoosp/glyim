@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { DocManifest, DocItem } from '@lib/api';
 import { HighlightedCode } from '@components/HighlightedCode';
-import { SearchModal } from '@components/SearchModal';
 
 export default function DocPage() {
   const [item, setItem] = useState<DocItem | null>(null);
@@ -18,42 +17,39 @@ export default function DocPage() {
         setItem(found || null);
       })
       .catch(() => setItem(null));
-
-    // ⌘K keyboard shortcut
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        document.querySelector<HTMLElement>('pagefind-modal-trigger')?.click();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [slug]);
 
   if (!item) return <div>Loading...</div>;
 
+  const anyFailed = item.doc_test_results.some(r => !r.passed);
+
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-      <SearchModal />
-      <h1>{item.name}</h1>
+      <h1>
+        {item.name}
+        {item.doc_test_results.length > 0 && (
+          <span style={{ fontSize: '0.8rem', marginLeft: '1rem' }}>
+            {anyFailed ? '❌' : '✅'} {item.doc_test_results.filter(r => r.passed).length}/{item.doc_test_results.length} doc tests
+          </span>
+        )}
+      </h1>
       <div dangerouslySetInnerHTML={{ __html: item.signature_html }} />
       {item.doc && (
-        <div style={{
-          marginTop: '1rem',
-          background: 'var(--rp-c-bg-soft)',
-          padding: '1rem',
-          borderRadius: '8px'
-        }} dangerouslySetInnerHTML={{ __html: item.doc }} />
+        <div style={{ marginTop: '1rem', background: 'var(--rp-c-bg-soft)', padding: '1rem', borderRadius: '8px' }}
+             dangerouslySetInnerHTML={{ __html: item.doc }} />
       )}
       <div style={{ marginTop: '2rem' }}>
         {item.highlighted_examples.map((ex, idx) => (
-          <HighlightedCode key={idx} code={ex.code} html={ex.html} />
+          <HighlightedCode
+            key={idx}
+            code={ex.code}
+            html={ex.html}
+            testResult={item.doc_test_results[idx]}
+          />
         ))}
       </div>
       <p style={{ marginTop: '2rem', color: 'var(--rp-c-text-3)' }}>
-        <a href={`https://github.com/your-repo/blob/main/${item.source_file}#L${item.source_line}`}>
-          [src]
-        </a>
+        <a href={`https://github.com/your-repo/blob/main/${item.source_file}#L${item.source_line}`}>[src]</a>
       </p>
     </div>
   );
