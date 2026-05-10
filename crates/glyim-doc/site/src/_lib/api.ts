@@ -28,3 +28,6 @@ export interface DocTestResult {
   passed: boolean;
   output: string;
 }
+
+// Dummy default export to satisfy Rspress page routing
+export default {};
