@@ -145,16 +145,14 @@ pub(crate) fn merge_mono_types(
 ) -> (Vec<HirType>, glyim_hir::Hir) {
     let mono_result =
         glyim_hir::monomorphize::monomorphize(hir, interner, expr_types, call_type_args);
-    let mut merged = expr_types.to_vec();
-    for (id, ty) in &mono_result.type_overrides {
-        if id.as_usize() < merged.len() {
-            merged[id.as_usize()] = ty.clone();
-        } else {
-            merged.resize(id.as_usize() + 1, HirType::Never);
-            merged[id.as_usize()] = ty.clone();
-        }
-    }
-    // Generic → Named fallback
+
+    // The monomorphized HIR uses NEW ExprIds (assigned by SubstContext::fresh_id()
+    // starting from 0). mono_result.expr_types is indexed by these new ExprIds,
+    // so we use it directly as the type map — no merge with the original expr_types
+    // is needed (or correct, since the old and new ExprId namespaces don't overlap).
+    let mut merged = mono_result.expr_types;
+
+    // Generic → Named fallback for any remaining Generic types
     for ty in &mut merged {
         if let HirType::Generic(sym, args) = ty {
             let all_concrete = args.iter().all(|a| match a {
@@ -230,7 +228,7 @@ pub fn build(
     ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
     Ok(output_path)
 }
-const PRELUDE: &str = "\
+pub const PRELUDE: &str = "\
 pub enum Option<T> {
     Some(T),
     None,
@@ -316,16 +314,17 @@ pub(crate) fn compile_source_to_hir(
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
+    let output = typeck
+        .check(&hir)
+        .map_err(|errs| PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()))?;
+    interner = output.interner;
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
 
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let expr_types = output.expr_types.clone();
+    let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
 
@@ -613,6 +612,7 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
             errs.into_iter().map(|e| e.into()).collect(),
         ));
     }
+    let interner = typeck.interner.clone();
     let mut compiler = BytecodeCompiler::new(&interner);
     let mut interpreter = BytecodeInterpreter::new();
     for item in &hir.items {
@@ -660,7 +660,7 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
-    let mut typeck = TypeChecker::new(interner);
+    let mut typeck = TypeChecker::new(interner.clone());
     if let Err(errs) = typeck.check(&hir) {
         return Err(PipelineError::Diagnostics(
             errs.into_iter().map(|e| e.into()).collect(),
@@ -785,6 +785,38 @@ pub fn build_with_mode(
     )?;
     Ok(output_path)
 }
+
+/// Build a binary from complete source (prelude already included).
+/// Used by the test runner to avoid double-injecting PRELUDE.
+pub fn build_raw(source: &str, output: &Path, mode: BuildMode) -> Result<PathBuf, PipelineError> {
+    let config = PipelineConfig {
+        mode,
+        ..Default::default()
+    };
+    let compiled = compile_source_to_hir(source.to_string(), Path::new("<test>"), &config)?;
+    let output_path = output.to_path_buf();
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    let context = Context::create();
+    let mut codegen = CodegenBuilder::new(
+        &context,
+        compiled.interner.clone(),
+        compiled.merged_types.clone(),
+    )
+    .build()?;
+    if compiled.is_no_std {
+        codegen = codegen.with_no_std();
+    }
+    codegen
+        .generate(&compiled.mono_hir)
+        .map_err(PipelineError::Codegen)?;
+    codegen
+        .write_object_file_with_opt(&obj_path, mode.opt_level())
+        .map_err(PipelineError::Codegen)?;
+    link_object(&obj_path, &output_path, mode == BuildMode::Release)?;
+    Ok(output_path)
+}
+
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     let mut current = if start.is_file() {
         start.parent()?.to_path_buf()
@@ -895,13 +927,21 @@ fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
         .map(|p| p.to_path_buf());
     if let Some(workspace_root) = workspace_root {
         let target_dir = workspace_root.join("target");
+        eprintln!("[coverage] searching runtime lib in: {:?}", target_dir);
+        let mut checked = Vec::new();
         for profile in &["debug", "release"] {
             let path = target_dir.join(profile).join("libglyim_coverage_rt.a");
+            checked.push(path.clone());
             if path.exists() {
+                eprintln!("[coverage] found runtime lib: {:?}", path);
                 return Some(path);
             }
         }
+        eprintln!("[coverage] checked paths: {:?}", checked);
+    } else {
+        eprintln!("[coverage] could not determine workspace root");
     }
+    eprintln!("[coverage] runtime lib not found");
     None
 }
 
@@ -1063,22 +1103,18 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
     Ok(failed)
 }
 
-pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
-    let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
-    let parse_out = glyim_parse::parse(&source);
-    if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(
-            parse_out.errors.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    let mut interner = parse_out.interner;
-    let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
-    let html = glyim_doc::generate_html(&hir, &interner);
-    let out_dir = output_dir.unwrap_or_else(|| Path::new("doc"));
-    std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;
-    std::fs::write(out_dir.join("index.html"), html).map_err(PipelineError::Io)?;
-    Ok(())
+pub fn generate_doc(
+    input: &Path,
+    output_dir: Option<&Path>,
+    version: Option<&str>,
+) -> Result<(), PipelineError> {
+    let package_dir = if input.join("glyim.toml").exists() {
+        input.to_path_buf()
+    } else {
+        find_package_root(input).unwrap_or_else(|| input.to_path_buf())
+    };
+    let out_dir = output_dir.unwrap_or_else(|| Path::new("docs/public"));
+    generate_doc_site(&package_dir, out_dir, version)
 }
 
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
@@ -1102,15 +1138,16 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let output = typeck
+        .check(&hir)
+        .map_err(|errs| PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()))?;
+    interner = output.interner;
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    let expr_types = output.expr_types.clone();
+    let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = inkwell::context::Context::create();
@@ -1163,26 +1200,32 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     // existing run_jit code but using provided config
     ProfileCollector::enter_stage(StageName::Parse);
     ProfileCollector::enter_stage(StageName::Codegen);
-    let parse_out = glyim_parse::parse(source);
+    let expanded_source = if config.force_no_std.unwrap_or(false) {
+        source.to_string()
+    } else {
+        format!("{}\n{}", PRELUDE, source)
+    };
+    let parse_out = glyim_parse::parse(&expanded_source);
     if !parse_out.errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             parse_out.errors.into_iter().map(|e| e.into()).collect(),
         ));
     }
     let mut interner = parse_out.interner;
-    let decl_output = glyim_parse::declarations::parse_declarations(source);
+    let decl_output = glyim_parse::declarations::parse_declarations(&expanded_source);
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let mut typeck = TypeChecker::new(interner.clone());
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    glyim_hir::desugar_method_calls(&mut hir, &typeck.expr_types, &mut interner);
-    let expr_types = typeck.expr_types.clone();
-    let call_type_args = std::mem::take(&mut typeck.call_type_args);
+    let output = typeck
+        .check(&hir)
+        .map_err(|errs| PipelineError::Diagnostics(errs.into_iter().map(|e| e.into()).collect()))?;
+    interner = output.interner;
+    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
+    let expr_types = output.expr_types.clone();
+    let call_type_args = output.call_type_args.clone();
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
@@ -1216,6 +1259,37 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
         ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
         Ok(exit_code)
     }
+}
+
+pub fn generate_doc_site(
+    package_dir: &std::path::Path,
+    output_dir: &std::path::Path,
+    version: Option<&str>,
+) -> Result<(), PipelineError> {
+    let manifest = match crate::docgen::generate_manifest(package_dir) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[docgen] manifest error: {}", e);
+            return Err(PipelineError::Codegen(e));
+        }
+    };
+    let api_dir = if let Some(v) = version {
+        output_dir.join(v).join("public/api")
+    } else {
+        output_dir.join("public/api")
+    };
+    std::fs::create_dir_all(&api_dir).map_err(PipelineError::Io)?;
+    let json = serde_json::to_string_pretty(&manifest).unwrap();
+    std::fs::write(api_dir.join("api.json"), json).map_err(PipelineError::Io)?;
+    let highlighted_dir = api_dir.join("highlighted");
+    std::fs::create_dir_all(&highlighted_dir).map_err(PipelineError::Io)?;
+    for item in &manifest.items {
+        for example in &item.highlighted_examples {
+            let path = highlighted_dir.join(format!("{}.html", example.hash));
+            std::fs::write(path, &example.html).map_err(PipelineError::Io)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {

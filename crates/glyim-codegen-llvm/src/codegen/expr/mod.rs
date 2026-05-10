@@ -467,6 +467,13 @@ pub(crate) fn codegen_expr<'ctx>(
 
             // FALLBACK: Search for any function starting with the prefix when expr_types didn't have the type
             let prefix = format!("{}_", type_name);
+            eprintln!(
+                "[codegen MethodCall] type_name={}, method_name={}, building prefix={}",
+                type_name,
+                cg.interner.resolve(*method_name),
+                prefix
+            );
+
             for func in cg.module.get_functions() {
                 let name = func.get_name().to_string_lossy().to_string();
                 // Match "Vec_push__..." but not "Vec_push" itself
@@ -498,6 +505,11 @@ pub(crate) fn codegen_expr<'ctx>(
                 "[codegen MethodCall] WARNING: no function found for prefix '{}'",
                 prefix
             );
+            eprintln!(
+                "[codegen MethodCall] NO function found for prefix={}",
+                prefix
+            );
+
             Some(cg.i64_type.const_int(0, false))
         }
     }

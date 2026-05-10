@@ -137,6 +137,8 @@ enum Command {
     Verify,
     Doc {
         input: PathBuf,
+        #[arg(long)]
+        version: Option<String>,
         #[arg(short, long)]
         output: Option<PathBuf>,
         #[arg(long)]
@@ -325,7 +327,8 @@ fn main() {
             output,
             open,
             test,
-        } => cmd_doc(input, output, open, test),
+            version,
+        } => cmd_doc(input, output, open, test, version),
         Command::DumpTokens { input } => cmd_dump_tokens(input),
         Command::DumpAst { input } => cmd_dump_ast(input),
         Command::DumpHir { input } => cmd_dump_hir(input),

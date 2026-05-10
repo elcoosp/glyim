@@ -65,29 +65,20 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
 /// Compile a list of HIR items (by index) into per-function object code blobs.
 /// Each function is compiled in its own module.
 pub fn compile_items_to_objects(
-    hir: &glyim_hir::Hir,
-    monomorphized_hir: &glyim_hir::Hir,
+    _hir: &glyim_hir::Hir,
+    mono_result: &glyim_hir::monomorphize::MonoResult,
     interner: &glyim_interner::Interner,
-    merged_types: &[glyim_hir::types::HirType],
     item_indices: &[usize],
 ) -> Result<Vec<(String, Vec<u8>)>, String> {
     use glyim_hir::item::HirItem;
     let ctx = inkwell::context::Context::create();
     let mut results = Vec::new();
     for &idx in item_indices {
-        if idx >= hir.items.len() {
-            continue;
-        }
-        let item = &monomorphized_hir.items[idx];
-        let name = match item {
-            HirItem::Fn(f) => interner.resolve(f.name).to_string(),
-            _ => continue,
-        };
-        // Build a mini HIR with just this one item
-        let mini_hir = glyim_hir::Hir {
-            items: vec![item.clone()],
-        };
-        let mut cg = CodegenBuilder::new(&ctx, interner.clone(), merged_types.to_vec()).build()?;
+        if idx >= mono_result.hir.items.len() { continue; }
+        let item = &mono_result.hir.items[idx];
+        let name = match item { HirItem::Fn(f) => interner.resolve(f.name).to_string(), _ => continue };
+        let mini_hir = glyim_hir::Hir { items: vec![item.clone()] };
+        let mut cg = CodegenBuilder::new(&ctx, interner.clone(), mono_result.expr_types.clone()).build()?;
         cg.generate(&mini_hir)?;
         let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
         let obj_path = tmp.path().join("out.o");

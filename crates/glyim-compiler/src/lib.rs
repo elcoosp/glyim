@@ -4,6 +4,7 @@ pub mod lockfile_integration;
 pub mod macro_expand;
 pub mod manifest;
 pub mod pipeline;
+pub mod docgen;
 pub mod queries;
 
 pub use pipeline::{

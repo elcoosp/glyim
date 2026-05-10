@@ -9,7 +9,7 @@ impl Range {
         Range { start, end, current: start }
     }
 
-    pub fn next(mut self: Range) -> Option<i64> {
+    pub fn next(&mut self) -> Option<i64> {
         if self.current >= self.end {
             None
         } else {

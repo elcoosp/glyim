@@ -70,3 +70,4 @@ tokio = { version = "1", features = ["full"] }
 glyim-diag = { path = "../glyim-diag" }
 glyim-parse = { path = "../glyim-parse" }
 proptest = "1"
+tracing-test = "0.2"

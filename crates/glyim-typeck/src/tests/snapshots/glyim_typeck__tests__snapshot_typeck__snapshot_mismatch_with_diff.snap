@@ -1,0 +1,26 @@
+---
+source: crates/glyim-typeck/src/tests/snapshot_typeck.rs
+expression: errors
+---
+[
+    MismatchedTypes {
+        expected_span: SourceSpan {
+            offset: SourceOffset(
+                0,
+            ),
+            length: 30,
+        },
+        found_span: SourceSpan {
+            offset: SourceOffset(
+                0,
+            ),
+            length: 30,
+        },
+        expected: "Int",
+        found: "Bool",
+        diff_path: Some(
+            "Diverged at root: expected Int, found Bool",
+        ),
+        autofix: None,
+    },
+]

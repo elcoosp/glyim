@@ -245,11 +245,15 @@ impl QueryPipeline {
             .collect();
 
         if !red_indices.is_empty() {
+            // Build a temporary MonoResult from the existing compiled data
+            let mono_result = glyim_hir::monomorphize::MonoResult {
+                hir: compiled.mono_hir.clone(),
+                expr_types: compiled.merged_types.clone(),
+            };
             let new_objects = glyim_codegen_llvm::compile_items_to_objects(
                 &compiled.hir,
-                &compiled.mono_hir,
+                &mono_result,
                 &compiled.interner,
-                &compiled.merged_types,
                 &red_indices,
             )
             .map_err(PipelineError::Codegen)?;

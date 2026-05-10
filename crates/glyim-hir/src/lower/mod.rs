@@ -48,20 +48,28 @@ pub fn lower_with_declarations(
 /// to items based on source position (Go‑style).
 pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
     fn attach_doc_for_span(span: glyim_diag::Span, tokens: &[glyim_lex::Token]) -> Option<String> {
+        // Find the item keyword token (fn/struct/enum/impl/extern) using its text.
+        // Skip any preceding 'pub' keyword.
         let name_token_index = tokens
             .iter()
             .position(|t| t.start == span.start && !t.kind.is_trivia());
 
-        let keyword_index = name_token_index.and_then(|idx| {
-            (0..idx).rev().find(|&i| {
-                let t = &tokens[i];
-                !t.kind.is_trivia() && t.kind.is_keyword()
-            })
+        // Search backwards from the span start for the very first keyword
+        // of this item declaration. It could be 'pub', 'fn', 'struct', 'enum', 'impl', or 'extern'.
+        // Doc comments are attached to that first keyword, so use it as the search anchor.
+        let first_keyword = tokens[0..name_token_index.unwrap_or(0)]
+            .iter()
+            .rposition(|t| t.kind.is_keyword() && !t.kind.is_trivia())
+            .or(name_token_index);
+
+        let search_index = first_keyword;
+        eprintln!("[attach_doc] span={:?} search_index={:?}", span, search_index);
+        let result = search_index.and_then(|idx| {
+            eprintln!("[attach_doc] trying collect at idx={} token={:?}", idx, tokens.get(idx));
+            glyim_parse::doc_comment::collect_doc_comments(tokens, idx)
         });
-
-        let search_index = keyword_index.or(name_token_index);
-
-        search_index.and_then(|idx| glyim_parse::doc_comment::collect_doc_comments(tokens, idx))
+        eprintln!("[attach_doc] result={:?}", result);
+        result
     }
 
     for item in &mut hir.items {

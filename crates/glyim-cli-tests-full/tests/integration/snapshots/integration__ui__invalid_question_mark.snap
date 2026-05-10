@@ -2,9 +2,9 @@
 source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 expression: actual
 ---
-  × unresolved name `v`
+  × ? operator used outside of Result-returning function
    ╭─[tests/ui/invalid_question_mark.g:1:1]
  1 │ main = () => { let x = 42?; x }
    · ▲
-   · ╰── unresolved name `v`
+   · ╰── ? operator used outside of Result-returning function
    ╰────

@@ -3,3 +3,6 @@ wr*.sh
 corpus
 mutants.out*
 cas_store
+*.diff
+node_modules
+doc_build

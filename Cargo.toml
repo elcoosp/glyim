@@ -50,7 +50,8 @@ opt-level = 2
 
 [profile.dev.package.llvm-sys]
 opt-level = 2
-# [profile.test]
-# codegen-units = 16
+[profile.test]
+debug = "line-tables-only"
+split-debuginfo = "off"
 # # SIGSEV on 1
-# opt-level = 0
+opt-level = 0

@@ -40,6 +40,10 @@ pub fn collect_tests(
                 continue;
             }
             let test_name = interner.resolve(*name).to_string();
+            eprintln!(
+                "[test collector] function '{}': is_test={}, should_panic={}, ignored={}",
+                test_name, is_test, should_panic, is_ignored
+            );
             if let Some(f) = filter
                 && test_name != f
             {

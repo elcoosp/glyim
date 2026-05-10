@@ -129,8 +129,9 @@ pub fn assert_no_type_params(expr: &HirExpr, interner: &Interner) {
         HirExpr::SizeOf { target_type, .. } | HirExpr::As { target_type, .. } => {
             assert!(
                 !has_unresolved_param(target_type, interner),
-                "Unresolved type parameter in type: {:?}",
-                target_type
+                "Unresolved type parameter in type: {:?}\nBacktrace:\n{}",
+                target_type,
+                std::backtrace::Backtrace::force_capture()
             );
         }
         _ => {}

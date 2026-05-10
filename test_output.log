@@ -1,0 +1,1063 @@
+   Compiling glyim-hir v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-hir)
+   Compiling glyim-codegen-llvm v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-codegen-llvm)
+   Compiling glyim-typeck v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-typeck)
+   Compiling glyim-doc v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-doc)
+   Compiling glyim-egraph v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-egraph)
+   Compiling glyim-bytecode v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-bytecode)
+   Compiling glyim-macro-core v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-macro-core)
+   Compiling glyim-lint v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-lint)
+   Compiling glyim-config v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-config)
+   Compiling glyim-pkg v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-pkg)
+   Compiling glyim-cas-server v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-cas-server)
+   Compiling glyim-compiler v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-compiler)
+   Compiling glyim-mutant v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-mutant)
+   Compiling glyim-lsp v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-lsp)
+   Compiling glyim-orchestrator v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-orchestrator)
+   Compiling glyim-testr v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-testr)
+   Compiling glyim-cli-tests-extra v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-cli-tests-extra)
+   Compiling glyim-cli v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-cli)
+   Compiling glyim-bench v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-bench)
+   Compiling glyim-cli-tests-full v0.5.0 (/Users/adm/Documents/Repos/glyim/crates/glyim-cli-tests-full)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.91s
+────────────
+ Nextest run ID 17f163a3-ca43-4677-846a-c6a793ea198d with nextest profile: default
+    Starting 914 tests across 41 binaries (20 tests skipped)
+        PASS [   0.014s] (  1/914) glyim-bytecode tests::compiler_tests::ends_with_return
+        PASS [   0.015s] (  2/914) glyim-bytecode tests::compiler_tests::compile_bool
+        PASS [   0.015s] (  3/914) glyim-bytecode tests::compiler_tests::compile_int_literal
+        PASS [   0.015s] (  4/914) glyim-bytecode tests::compiler_tests::compile_add
+        PASS [   0.015s] (  5/914) glyim-bytecode tests::compiler_tests::compile_if_else
+        PASS [   0.016s] (  6/914) glyim-bytecode tests::compiler_tests::compile_let_and_load
+        PASS [   0.021s] (  7/914) glyim-bytecode tests::compiler_tests::compile_param_count
+        PASS [   0.021s] (  8/914) glyim-bytecode tests::compiler_tests::compile_call
+        PASS [   0.015s] (  9/914) glyim-bytecode tests::interpreter_tests::interpret_mul
+        PASS [   0.015s] ( 10/914) glyim-bytecode tests::interpreter_tests::interpret_int_literal
+        PASS [   0.017s] ( 11/914) glyim-bytecode tests::interpreter_tests::interpret_manual_add
+        PASS [   0.017s] ( 12/914) glyim-bytecode tests::interpreter_tests::interpret_bool
+        PASS [   0.017s] ( 13/914) glyim-bytecode tests::interpreter_tests::interpret_eq
+        PASS [   0.020s] ( 14/914) glyim-bytecode tests::interpreter_tests::interpret_add
+        PASS [   0.014s] ( 15/914) glyim-bytecode tests::interpreter_tests::interpret_param
+        PASS [   0.016s] ( 16/914) glyim-bytecode tests::interpreter_tests::interpret_neg
+        PASS [   0.012s] ( 17/914) glyim-bytecode tests::op_tests::call_roundtrip
+        PASS [   0.012s] ( 18/914) glyim-bytecode tests::op_tests::debug_contains_value
+        PASS [   0.014s] ( 19/914) glyim-bytecode tests::op_tests::binop_roundtrip
+        PASS [   0.015s] ( 20/914) glyim-bytecode tests::interpreter_tests::interpret_sub
+        PASS [   0.012s] ( 21/914) glyim-bytecode tests::op_tests::is_send_sync
+        PASS [   0.012s] ( 22/914) glyim-bytecode tests::op_tests::jump_roundtrip
+        PASS [   0.012s] ( 23/914) glyim-bytecode tests::op_tests::push_f64_roundtrip
+        PASS [   0.017s] ( 24/914) glyim-bytecode tests::op_tests::load_local_roundtrip
+        PASS [   0.014s] ( 25/914) glyim-bytecode tests::op_tests::push_i64_roundtrip
+        PASS [   0.031s] ( 26/914) glyim-cas-server::bin/glyim-cas-server grpc::capabilities::tests::capabilities_reports_sha256
+        PASS [   0.033s] ( 27/914) glyim-cas-server::bin/glyim-cas-server grpc::capabilities::tests::capabilities_reports_api_version_2
+        PASS [   0.030s] ( 28/914) glyim-cli test_runner::tests::collect_ignores_by_default
+        PASS [   0.033s] ( 29/914) glyim-cas-server::bin/glyim-cas-server grpc::cas::tests::find_missing_returns_empty_after_store
+        PASS [   0.034s] ( 30/914) glyim-cas-server::bin/glyim-cas-server grpc::cas::tests::batch_update_and_read_roundtrip
+        PASS [   0.028s] ( 31/914) glyim-cli test_runner::tests::collect_single_test
+        PASS [   0.034s] ( 32/914) glyim-cli test_runner::tests::collect_includes_ignored_when_flagged
+        PASS [   0.030s] ( 33/914) glyim-cli test_runner::tests::summary_format
+        PASS [   0.039s] ( 34/914) glyim-cli::integration e2e_add
+        PASS [   0.038s] ( 35/914) glyim-cli::integration e2e_arithmetic_param::case_1
+        PASS [   0.042s] ( 36/914) glyim-cli::integration e2e_arithmetic_param::case_2
+        PASS [   0.048s] ( 37/914) glyim-cli::integration e2e_arithmetic_param::case_3
+        PASS [   0.038s] ( 38/914) glyim-cli::integration e2e_arithmetic_param::case_4
+        PASS [   0.033s] ( 39/914) glyim-cli::integration e2e_arrow
+        PASS [   0.043s] ( 40/914) glyim-cli::integration e2e_arithmetic_param::case_5
+        PASS [   0.043s] ( 41/914) glyim-cli::integration e2e_assert_pass
+        PASS [   0.033s] ( 42/914) glyim-cli::integration e2e_block_last
+        PASS [   0.036s] ( 43/914) glyim-cli::integration e2e_assign_to_immutable_is_error
+        PASS [   0.034s] ( 44/914) glyim-cli::integration e2e_bool
+        PASS [   0.041s] ( 45/914) glyim-cli::integration e2e_cast_int_to_float
+        PASS [   0.034s] ( 46/914) glyim-cli::integration e2e_conditional_param::case_1
+        PASS [   0.035s] ( 47/914) glyim-cli::integration e2e_conditional_param::case_2
+        PASS [   0.040s] ( 48/914) glyim-cli::integration e2e_conditional_param::case_3
+        PASS [   0.037s] ( 49/914) glyim-cli::integration e2e_deref_generic_ptr
+        PASS [   0.031s] ( 50/914) glyim-cli::integration e2e_doc_impl_method
+        PASS [   0.036s] ( 51/914) glyim-cli::integration e2e_doc_generator_func
+        PASS [   0.034s] ( 52/914) glyim-cli::integration e2e_else_if_chain
+        PASS [   0.035s] ( 53/914) glyim-cli::integration e2e_extern_block_with_ptr_param
+        PASS [   0.038s] ( 54/914) glyim-cli::integration e2e_enum
+        PASS [   0.042s] ( 55/914) glyim-cli::integration e2e_enum_match_prelude
+        PASS [   0.035s] ( 56/914) glyim-cli::integration e2e_extern_method_write
+        PASS [   0.033s] ( 57/914) glyim-cli::integration e2e_float
+        PASS [   0.038s] ( 58/914) glyim-cli::integration e2e_extern_write_i32_fd
+        PASS [   0.036s] ( 59/914) glyim-cli::integration e2e_float_arithmetic_no_crash
+        PASS [   0.042s] ( 60/914) glyim-cli::integration e2e_float_add
+        PASS [   0.033s] ( 61/914) glyim-cli::integration e2e_float_cmp
+        PASS [   0.045s] ( 62/914) glyim-cli::integration e2e_for_in_range
+        PASS [   0.321s] ( 63/914) glyim-cli::integration arithmetic_proptests::add
+        PASS [   0.334s] ( 64/914) glyim-cli::integration arithmetic_proptests::mul
+        PASS [   0.048s] ( 65/914) glyim-cli::integration e2e_for_loop_range
+        PASS [   0.365s] ( 66/914) glyim-cli::integration arithmetic_proptests::div
+        FAIL [   0.106s] ( 67/914) glyim-cli::integration e2e_for_loop_iter_simple
+  stdout ───
+
+    running 1 test
+    test e2e_for_loop_iter_simple ... FAILED
+
+    failures:
+
+    failures:
+        e2e_for_loop_iter_simple
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 148 filtered out; finished in 0.08s
+
+  stderr ───
+    [typeck SizeOf] id=ExprId(27) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(27) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(70) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(70) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(136) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(136) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(160) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(160) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(189) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(189) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(210) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(232) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(232) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(251) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(254) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(256) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [mono] collect_and_specialize START (call_type_args count=4)
+    [mono] call_type_args count: 4
+      id=ExprId(251) args=[Int]
+      id=ExprId(254) args=[Int]
+      id=ExprId(250) args=[Int]
+      id=ExprId(256) args=[Int]
+    [mono Phase1] expr_id=ExprId(251) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(254) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(250) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(256) type_args=[Int]
+    [mono] process_type_specializations START
+    [mono] processing work queue, size=4
+    [mono] specialising fn=Symbol(48) args=[Int]
+    [specialize_fn debug] f.name=Symbol(48) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(48) f.params[0].1=Generic(Symbol(19), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(57) args=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.type_params=[Symbol(1)] concrete=[Int]
+    [mono] specialising fn=Symbol(62) args=[Int]
+    [specialize_fn debug] f.name=Symbol(62) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(62) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(58) args=[Int]
+    [specialize_fn debug] f.name=Symbol(58) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(58) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+      Symbol(57) :: [Int]
+      Symbol(62) :: [Int]
+      Symbol(58) :: [Int]
+      Symbol(48) :: [Int]
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Int
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Int
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [mono assert] checking fn: main
+    [mono assert] checking fn: Vec_new__i64
+    [mono assert] checking fn: Vec_iter__i64
+    [mono assert] checking fn: Vec_push__i64
+
+    thread 'e2e_for_loop_iter_simple' (1415883) panicked at crates/glyim-hir/src/passes/no_type_params.rs:130:13:
+    Unresolved type parameter in type: RawPtr(Named(Symbol(1)))
+    Backtrace:
+       0: std::backtrace_rs::backtrace::libunwind::trace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+       1: std::backtrace_rs::backtrace::trace_unsynchronized
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+       2: std::backtrace::Backtrace::create
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/backtrace.rs:331:13
+       3: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:134:17
+       4: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:39:13
+       5: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:67:13
+       6: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       7: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:68:13
+       8: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       9: build_result
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/build_result.rs:213:21
+      10: apply_specializations
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:65:9
+      11: monomorphize
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:75:5
+      12: merge_mono_types
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:147:9
+      13: compile_source_to_hir
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:329:9
+      14: run_with_mode
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:713:20
+      15: run
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:398:5
+      16: integration::e2e_for_loop_iter_simple
+      17: integration::e2e_for_loop_iter_simple::{{closure}}
+      18: core::ops::function::FnOnce::call_once
+      19: core::ops::function::FnOnce::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      20: test::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:663:18
+      21: test::run_test_in_process::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:74
+      22: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      23: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      24: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      25: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      26: test::run_test_in_process
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:27
+      27: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:607:43
+      28: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:637:41
+      29: std::sys::backtrace::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/backtrace.rs:166:18
+      30: std::thread::lifecycle::spawn_unchecked::{{closure}}::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:91:13
+      31: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      32: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      33: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      34: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      35: std::thread::lifecycle::spawn_unchecked::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:89:26
+      36: core::ops::function::FnOnce::call_once{{vtable.shim}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      37: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/alloc/src/boxed.rs:2206:9
+      38: std::sys::thread::unix::Thread::new::thread_start
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/thread/unix.rs:130:17
+      39: __pthread_cond_wait
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  Cancelling due to test failure: 7 tests still running
+        PASS [   0.039s] ( 68/914) glyim-cli::integration e2e_generic_edge
+        FAIL [   0.117s] ( 69/914) glyim-cli::integration e2e_for_in_vec
+  stdout ───
+
+    running 1 test
+    test e2e_for_in_vec ... FAILED
+
+    failures:
+
+    failures:
+        e2e_for_in_vec
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 148 filtered out; finished in 0.07s
+
+  stderr ───
+    [typeck SizeOf] id=ExprId(27) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(27) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(70) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(70) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(136) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(136) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(160) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(160) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(189) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(189) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(210) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(232) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(232) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(251) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(254) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(257) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(262) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(271) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [mono] collect_and_specialize START (call_type_args count=6)
+    [mono] call_type_args count: 6
+      id=ExprId(257) args=[Int]
+      id=ExprId(254) args=[Int]
+      id=ExprId(262) args=[Int]
+      id=ExprId(271) args=[Int]
+      id=ExprId(250) args=[Int]
+      id=ExprId(251) args=[Int]
+    [mono Phase1] expr_id=ExprId(257) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(254) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(262) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(271) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(250) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(251) type_args=[Int]
+    [mono] process_type_specializations START
+    [mono] processing work queue, size=4
+    [mono] specialising fn=Symbol(56) args=[Int]
+    [specialize_fn debug] f.name=Symbol(56) f.type_params=[Symbol(1)] concrete=[Int]
+    [mono] specialising fn=Symbol(47) args=[Int]
+    [specialize_fn debug] f.name=Symbol(47) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(47) f.params[0].1=Generic(Symbol(19), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(61) args=[Int]
+    [specialize_fn debug] f.name=Symbol(61) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(61) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(57) args=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+      Symbol(47) :: [Int]
+      Symbol(61) :: [Int]
+      Symbol(56) :: [Int]
+      Symbol(57) :: [Int]
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Int
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Int
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [mono assert] checking fn: main
+    [mono assert] checking fn: Iter_next__i64
+    [mono assert] checking fn: Vec_iter__i64
+    [mono assert] checking fn: Vec_new__i64
+    [mono assert] checking fn: Vec_push__i64
+
+    thread 'e2e_for_in_vec' (1415889) panicked at crates/glyim-hir/src/passes/no_type_params.rs:130:13:
+    Unresolved type parameter in type: RawPtr(Named(Symbol(1)))
+    Backtrace:
+       0: std::backtrace_rs::backtrace::libunwind::trace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+       1: std::backtrace_rs::backtrace::trace_unsynchronized
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+       2: std::backtrace::Backtrace::create
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/backtrace.rs:331:13
+       3: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:134:17
+       4: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:39:13
+       5: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:67:13
+       6: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       7: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:68:13
+       8: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       9: build_result
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/build_result.rs:213:21
+      10: apply_specializations
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:65:9
+      11: monomorphize
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:75:5
+      12: merge_mono_types
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:147:9
+      13: compile_source_to_hir
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:329:9
+      14: run_with_mode
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:713:20
+      15: run
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:398:5
+      16: integration::e2e_for_in_vec
+      17: integration::e2e_for_in_vec::{{closure}}
+      18: core::ops::function::FnOnce::call_once
+      19: core::ops::function::FnOnce::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      20: test::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:663:18
+      21: test::run_test_in_process::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:74
+      22: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      23: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      24: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      25: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      26: test::run_test_in_process
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:27
+      27: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:607:43
+      28: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:637:41
+      29: std::sys::backtrace::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/backtrace.rs:166:18
+      30: std::thread::lifecycle::spawn_unchecked::{{closure}}::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:91:13
+      31: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      32: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      33: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      34: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      35: std::thread::lifecycle::spawn_unchecked::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:89:26
+      36: core::ops::function::FnOnce::call_once{{vtable.shim}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      37: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/alloc/src/boxed.rs:2206:9
+      38: std::sys::thread::unix::Thread::new::thread_start
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/thread/unix.rs:130:17
+      39: __pthread_cond_wait
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.087s] ( 70/914) glyim-cli::integration e2e_for_loop_vec
+  stdout ───
+
+    running 1 test
+    test e2e_for_loop_vec ... FAILED
+
+    failures:
+
+    failures:
+        e2e_for_loop_vec
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 148 filtered out; finished in 0.06s
+
+  stderr ───
+    [typeck SizeOf] id=ExprId(27) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(27) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(70) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(70) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(136) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(136) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(160) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(160) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(189) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(189) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(210) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(232) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(232) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(251) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(254) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(257) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(262) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(271) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [mono] collect_and_specialize START (call_type_args count=6)
+    [mono] call_type_args count: 6
+      id=ExprId(250) args=[Int]
+      id=ExprId(251) args=[Int]
+      id=ExprId(254) args=[Int]
+      id=ExprId(257) args=[Int]
+      id=ExprId(262) args=[Int]
+      id=ExprId(271) args=[Int]
+    [mono Phase1] expr_id=ExprId(250) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(251) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(254) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(257) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(262) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(271) type_args=[Int]
+    [mono] process_type_specializations START
+    [mono] processing work queue, size=4
+    [mono] specialising fn=Symbol(47) args=[Int]
+    [specialize_fn debug] f.name=Symbol(47) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(47) f.params[0].1=Generic(Symbol(19), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(61) args=[Int]
+    [specialize_fn debug] f.name=Symbol(61) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(61) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(57) args=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(56) args=[Int]
+    [specialize_fn debug] f.name=Symbol(56) f.type_params=[Symbol(1)] concrete=[Int]
+      Symbol(57) :: [Int]
+      Symbol(56) :: [Int]
+      Symbol(61) :: [Int]
+      Symbol(47) :: [Int]
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Int
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Int
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [mono assert] checking fn: main
+    [mono assert] checking fn: Vec_push__i64
+
+    thread 'e2e_for_loop_vec' (1415895) panicked at crates/glyim-hir/src/passes/no_type_params.rs:130:13:
+    Unresolved type parameter in type: RawPtr(Named(Symbol(1)))
+    Backtrace:
+       0: std::backtrace_rs::backtrace::libunwind::trace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+       1: std::backtrace_rs::backtrace::trace_unsynchronized
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+       2: std::backtrace::Backtrace::create
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/backtrace.rs:331:13
+       3: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:134:17
+       4: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:39:13
+       5: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:67:13
+       6: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       7: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:68:13
+       8: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       9: build_result
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/build_result.rs:213:21
+      10: apply_specializations
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:65:9
+      11: monomorphize
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:75:5
+      12: merge_mono_types
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:147:9
+      13: compile_source_to_hir
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:329:9
+      14: run_with_mode
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:713:20
+      15: run
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:398:5
+      16: integration::e2e_for_loop_vec
+      17: integration::e2e_for_loop_vec::{{closure}}
+      18: core::ops::function::FnOnce::call_once
+      19: core::ops::function::FnOnce::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      20: test::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:663:18
+      21: test::run_test_in_process::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:74
+      22: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      23: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      24: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      25: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      26: test::run_test_in_process
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:27
+      27: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:607:43
+      28: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:637:41
+      29: std::sys::backtrace::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/backtrace.rs:166:18
+      30: std::thread::lifecycle::spawn_unchecked::{{closure}}::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:91:13
+      31: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      32: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      33: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      34: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      35: std::thread::lifecycle::spawn_unchecked::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:89:26
+      36: core::ops::function::FnOnce::call_once{{vtable.shim}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      37: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/alloc/src/boxed.rs:2206:9
+      38: std::sys::thread::unix::Thread::new::thread_start
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/thread/unix.rs:130:17
+      39: __pthread_cond_wait
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.396s] ( 71/914) glyim-cli::integration arithmetic_proptests::sub
+        PASS [   0.036s] ( 72/914) glyim-cli::integration e2e_generic_equality
+        FAIL [   0.082s] ( 73/914) glyim-cli::integration e2e_forward_reference_for_loop_vec
+  stdout ───
+
+    running 1 test
+    test e2e_forward_reference_for_loop_vec ... FAILED
+
+    failures:
+
+    failures:
+        e2e_forward_reference_for_loop_vec
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 148 filtered out; finished in 0.05s
+
+  stderr ───
+    [typeck SizeOf] id=ExprId(27) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(27) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(70) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(70) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(136) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(136) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(160) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(160) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(189) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(189) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(210) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(232) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(232) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(251) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(254) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(257) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(262) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(271) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [mono] collect_and_specialize START (call_type_args count=6)
+    [mono] call_type_args count: 6
+      id=ExprId(251) args=[Int]
+      id=ExprId(254) args=[Int]
+      id=ExprId(250) args=[Int]
+      id=ExprId(257) args=[Int]
+      id=ExprId(262) args=[Int]
+      id=ExprId(271) args=[Int]
+    [mono Phase1] expr_id=ExprId(251) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(254) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(250) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(257) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(262) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(271) type_args=[Int]
+    [mono] process_type_specializations START
+    [mono] processing work queue, size=4
+    [mono] specialising fn=Symbol(47) args=[Int]
+    [specialize_fn debug] f.name=Symbol(47) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(47) f.params[0].1=Generic(Symbol(19), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(61) args=[Int]
+    [specialize_fn debug] f.name=Symbol(61) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(61) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(56) args=[Int]
+    [specialize_fn debug] f.name=Symbol(56) f.type_params=[Symbol(1)] concrete=[Int]
+    [mono] specialising fn=Symbol(57) args=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+      Symbol(47) :: [Int]
+      Symbol(57) :: [Int]
+      Symbol(56) :: [Int]
+      Symbol(61) :: [Int]
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Int
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Int
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [mono assert] checking fn: main
+    [mono assert] checking fn: Iter_next__i64
+    [mono assert] checking fn: Vec_push__i64
+
+    thread 'e2e_forward_reference_for_loop_vec' (1415902) panicked at crates/glyim-hir/src/passes/no_type_params.rs:130:13:
+    Unresolved type parameter in type: RawPtr(Named(Symbol(1)))
+    Backtrace:
+       0: std::backtrace_rs::backtrace::libunwind::trace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+       1: std::backtrace_rs::backtrace::trace_unsynchronized
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+       2: std::backtrace::Backtrace::create
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/backtrace.rs:331:13
+       3: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:134:17
+       4: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:39:13
+       5: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:67:13
+       6: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       7: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:68:13
+       8: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       9: build_result
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/build_result.rs:213:21
+      10: apply_specializations
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:65:9
+      11: monomorphize
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:75:5
+      12: merge_mono_types
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:147:9
+      13: compile_source_to_hir
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:329:9
+      14: run_with_mode
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:713:20
+      15: run
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:398:5
+      16: integration::e2e_forward_reference_for_loop_vec
+      17: integration::e2e_forward_reference_for_loop_vec::{{closure}}
+      18: core::ops::function::FnOnce::call_once
+      19: core::ops::function::FnOnce::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      20: test::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:663:18
+      21: test::run_test_in_process::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:74
+      22: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      23: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      24: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      25: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      26: test::run_test_in_process
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:27
+      27: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:607:43
+      28: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:637:41
+      29: std::sys::backtrace::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/backtrace.rs:166:18
+      30: std::thread::lifecycle::spawn_unchecked::{{closure}}::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:91:13
+      31: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      32: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      33: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      34: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      35: std::thread::lifecycle::spawn_unchecked::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:89:26
+      36: core::ops::function::FnOnce::call_once{{vtable.shim}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      37: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/alloc/src/boxed.rs:2206:9
+      38: std::sys::thread::unix::Thread::new::thread_start
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/thread/unix.rs:130:17
+      39: __pthread_cond_wait
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.083s] ( 74/914) glyim-cli::integration e2e_forward_reference_struct_and_impl
+  stdout ───
+
+    running 1 test
+    test e2e_forward_reference_struct_and_impl ... FAILED
+
+    failures:
+
+    failures:
+        e2e_forward_reference_struct_and_impl
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 148 filtered out; finished in 0.04s
+
+  stderr ───
+    [typeck SizeOf] id=ExprId(27) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(27) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(70) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(70) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(136) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(136) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(160) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(160) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(189) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(189) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(210) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck SizeOf] id=ExprId(232) target_type=Named(Symbol(1)) in_generic_fn=true
+    [typeck maybe_record] id=ExprId(232) args=[Named(Symbol(1))] in_generic_fn=true
+    [typeck maybe_record] SKIPPED (in generic fn)
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(250) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(251) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(254) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [typeck maybe_record] id=ExprId(256) args=[Int] in_generic_fn=false
+    [typeck maybe_record] INSERTED
+    [mono] collect_and_specialize START (call_type_args count=4)
+    [mono] call_type_args count: 4
+      id=ExprId(251) args=[Int]
+      id=ExprId(254) args=[Int]
+      id=ExprId(250) args=[Int]
+      id=ExprId(256) args=[Int]
+    [mono Phase1] expr_id=ExprId(251) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(254) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(250) type_args=[Int]
+    [mono Phase1] expr_id=ExprId(256) type_args=[Int]
+    [mono] process_type_specializations START
+    [mono] processing work queue, size=4
+    [mono] specialising fn=Symbol(48) args=[Int]
+    [specialize_fn debug] f.name=Symbol(48) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(48) f.params[0].1=Generic(Symbol(19), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(57) args=[Int]
+    [specialize_fn debug] f.name=Symbol(57) f.type_params=[Symbol(1)] concrete=[Int]
+    [mono] specialising fn=Symbol(62) args=[Int]
+    [specialize_fn debug] f.name=Symbol(62) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(62) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+    [mono] specialising fn=Symbol(58) args=[Int]
+    [specialize_fn debug] f.name=Symbol(58) f.type_params=[Symbol(1)] concrete=[Int]
+    [specialize_fn debug] f.name=Symbol(58) f.params[0].1=Generic(Symbol(27), [Named(Symbol(1))])
+      Symbol(58) :: [Int]
+      Symbol(57) :: [Int]
+      Symbol(62) :: [Int]
+      Symbol(48) :: [Int]
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Int
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Int
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(1)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Int)
+    [DEBUG concretize_expr_body] As before: target_type = RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Named(Symbol(11)))
+    [DEBUG concretize_expr_body] SizeOf before: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] SizeOf after: target_type = Named(Symbol(1))
+    [DEBUG concretize_expr_body] As after concretize_type: RawPtr(Int)
+    [mono assert] checking fn: main
+    [mono assert] checking fn: Vec_push__i64
+
+    thread 'e2e_forward_reference_struct_and_impl' (1415907) panicked at crates/glyim-hir/src/passes/no_type_params.rs:130:13:
+    Unresolved type parameter in type: RawPtr(Named(Symbol(1)))
+    Backtrace:
+       0: std::backtrace_rs::backtrace::libunwind::trace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+       1: std::backtrace_rs::backtrace::trace_unsynchronized
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+       2: std::backtrace::Backtrace::create
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/backtrace.rs:331:13
+       3: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:134:17
+       4: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:39:13
+       5: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:67:13
+       6: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       7: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:68:13
+       8: assert_no_type_params
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/passes/no_type_params.rs:57:41
+       9: build_result
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/build_result.rs:213:21
+      10: apply_specializations
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:65:9
+      11: monomorphize
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-hir/src/monomorphize/mod.rs:75:5
+      12: merge_mono_types
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:147:9
+      13: compile_source_to_hir
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:329:9
+      14: run_with_mode
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:713:20
+      15: run
+                 at /Users/adm/Documents/Repos/glyim/crates/glyim-compiler/src/pipeline.rs:398:5
+      16: integration::e2e_forward_reference_struct_and_impl
+      17: integration::e2e_forward_reference_struct_and_impl::{{closure}}
+      18: core::ops::function::FnOnce::call_once
+      19: core::ops::function::FnOnce::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      20: test::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:663:18
+      21: test::run_test_in_process::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:74
+      22: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      23: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      24: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      25: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      26: test::run_test_in_process
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:686:27
+      27: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:607:43
+      28: test::run_test::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/test/src/lib.rs:637:41
+      29: std::sys::backtrace::__rust_begin_short_backtrace
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/backtrace.rs:166:18
+      30: std::thread::lifecycle::spawn_unchecked::{{closure}}::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:91:13
+      31: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/panic/unwind_safe.rs:274:9
+      32: std::panicking::catch_unwind::do_call
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:581:40
+      33: std::panicking::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panicking.rs:544:19
+      34: std::panic::catch_unwind
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/panic.rs:359:14
+      35: std::thread::lifecycle::spawn_unchecked::{{closure}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/thread/lifecycle.rs:89:26
+      36: core::ops::function::FnOnce::call_once{{vtable.shim}}
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/core/src/ops/function.rs:250:5
+      37: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/alloc/src/boxed.rs:2206:9
+      38: std::sys::thread::unix::Thread::new::thread_start
+                 at /rustc/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/std/src/sys/thread/unix.rs:130:17
+      39: __pthread_cond_wait
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   0.496s] 74/914 tests run: 69 passed, 5 failed, 20 skipped
+        FAIL [   0.106s] ( 67/914) glyim-cli::integration e2e_for_loop_iter_simple
+        FAIL [   0.117s] ( 69/914) glyim-cli::integration e2e_for_in_vec
+        FAIL [   0.087s] ( 70/914) glyim-cli::integration e2e_for_loop_vec
+        FAIL [   0.082s] ( 73/914) glyim-cli::integration e2e_forward_reference_for_loop_vec
+        FAIL [   0.083s] ( 74/914) glyim-cli::integration e2e_forward_reference_struct_and_impl
+warning: 840/914 tests were not run due to test failure (run with --no-fail-fast to run all tests, or run with --max-fail)
+error: test run failed

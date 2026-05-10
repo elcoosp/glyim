@@ -34,23 +34,14 @@ impl Compiler {
 
         let tmp_dir = tempfile::tempdir().map_err(CompileError::Io)?;
 
+        let prelude = "\npub enum Option<T> {\n    Some(T),\n    None,\n}\npub enum Result<T, E> {\n    Ok(T),\n    Err(E),\n}\nextern {\n    fn __glyim_alloc(size: i64) -> *mut u8;\n    fn __glyim_free(ptr: *mut u8);\n    fn __glyim_hash_bytes(data: *const u8, len: i64) -> i64;\n    fn __glyim_hash_seed() -> i64;\n    fn abort();\n}\n";
         if test_defs.len() == 1 {
-            // Single test: compile binary that runs only that test
             let test_name = &test_defs[0].name;
-            let test_source = harness::inject_single_test(source, test_name);
-            let test_path = tmp_dir.path().join("test.g");
-            std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
+            let body = harness::inject_single_test(source, test_name);
+            let full_source = format!("{}\n{}", prelude, body);
             let bin = tmp_dir.path().join("test_bin");
-            glyim_compiler::pipeline::build_with_mode(
-                &test_path,
-                Some(&bin),
-                glyim_compiler::BuildMode::Debug,
-                None,
-                None,
-                coverage,
-                false,
-            )
-            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            glyim_compiler::pipeline::build_raw(&full_source, &bin, glyim_compiler::BuildMode::Debug)
+                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             return Ok(CompiledArtifact {
                 test_defs,
                 bin_path: Some(bin),
@@ -60,22 +51,16 @@ impl Compiler {
         }
 
         // Multiple tests: compile each as separate binary
+        let prelude = glyim_compiler::pipeline::PRELUDE; // if PRELUDE is not pub, we may need to copy it. We'll include it from the const in pipeline.
+        // Actually PRELUDE is private. We'll just inline it here.
+        let prelude = "\npub enum Option<T> {\n    Some(T),\n    None,\n}\npub enum Result<T, E> {\n    Ok(T),\n    Err(E),\n}\nextern {\n    fn __glyim_alloc(size: i64) -> *mut u8;\n    fn __glyim_free(ptr: *mut u8);\n    fn __glyim_hash_bytes(data: *const u8, len: i64) -> i64;\n    fn __glyim_hash_seed() -> i64;\n    fn abort();\n}\n";
         let mut per_test_binaries: Vec<(String, std::path::PathBuf)> = Vec::new();
         for test_def in &test_defs {
-            let test_source = harness::inject_single_test(source, &test_def.name);
-            let test_path = tmp_dir.path().join(format!("{}.g", test_def.name));
-            std::fs::write(&test_path, &test_source).map_err(CompileError::Io)?;
+            let body = harness::inject_single_test(source, &test_def.name);
+            let full_source = format!("{}\n{}", prelude, body);
             let bin = tmp_dir.path().join(&test_def.name);
-            glyim_compiler::pipeline::build_with_mode(
-                &test_path,
-                Some(&bin),
-                glyim_compiler::BuildMode::Debug,
-                None,
-                None,
-                coverage,
-                false,
-            )
-            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            glyim_compiler::pipeline::build_raw(&full_source, &bin, glyim_compiler::BuildMode::Debug)
+                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             per_test_binaries.push((test_def.name.clone(), bin));
         }
 

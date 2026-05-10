@@ -1,0 +1,4 @@
+[
+  { "type": "dir", "name": "doc", "label": "API Documentation" },
+  { "type": "file", "name": "index", "label": "Home" }
+]

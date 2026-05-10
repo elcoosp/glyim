@@ -18,6 +18,7 @@ glyim-macro-vfs = { path = "../glyim-macro-vfs" }
 glyim-codegen-llvm = { path = "../glyim-codegen-llvm" }
 glyim-diag = { path = "../glyim-diag" }
 glyim-interner = { path = "../glyim-interner" }
+walkdir = "2"
 glyim-pkg = { path = "../glyim-pkg" }
 glyim-query = { path = "../glyim-query" }
 glyim-egraph = { path = "../glyim-egraph" }
