@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import type { DocManifest, DocItem } from '@lib/api';
 import { HighlightedCode } from '@components/HighlightedCode';
 import { SearchModal } from '@components/SearchModal';
-import { DocTestBadge } from '@components/DocTestBadge';
+import { Playground } from '@components/Playground';
+import { Button } from '@components/ui/button';
+import { Code2 } from 'lucide-react';
 
 export default function DocPage() {
   const [item, setItem] = useState<DocItem | null>(null);
+  const [showPlayground, setShowPlayground] = useState(false);
   const slug = typeof window !== 'undefined'
     ? window.location.pathname.split('/doc/').pop()?.replace(/\/$/, '') || ''
     : '';
@@ -26,22 +29,35 @@ export default function DocPage() {
   return (
     <div className="max-w-4xl mx-auto p-8">
       <SearchModal />
-      <h1 className="text-3xl font-bold mb-6">{item.name}</h1>
+
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold">{item.name}</h1>
+        <Button variant="outline" size="sm" onClick={() => setShowPlayground(!showPlayground)}>
+          <Code2 className="size-4" />
+          {showPlayground ? 'Hide Playground' : 'Try in Playground'}
+        </Button>
+      </div>
+
+      {showPlayground && (
+        <div className="mb-8 p-4 border rounded-lg">
+          <h2 className="text-lg font-semibold mb-4">Interactive Playground</h2>
+          <Playground defaultCode={item.highlighted_examples[0]?.code || 'main = () => 42'} />
+        </div>
+      )}
+
       <div dangerouslySetInnerHTML={{ __html: item.signature_html }} className="mb-6" />
+
       {item.doc && (
         <div className="bg-muted p-6 rounded-lg mb-8"
              dangerouslySetInnerHTML={{ __html: item.doc }} />
       )}
+
       <div className="space-y-6">
         {item.highlighted_examples.map((ex, idx) => (
-          <div key={idx}>
-            <HighlightedCode code={ex.code} html={ex.html} />
-            {item.doc_test_results[idx] && (
-              <DocTestBadge result={item.doc_test_results[idx]} />
-            )}
-          </div>
+          <HighlightedCode key={idx} code={ex.code} html={ex.html} />
         ))}
       </div>
+
       <p className="mt-8 text-sm text-muted-foreground">
         <a href={`https://github.com/your-repo/blob/main/${item.source_file}#L${item.source_line}`}
            className="text-primary hover:underline">
