@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { DocManifest, DocItem } from '@lib/api';
 import { HighlightedCode } from '@components/HighlightedCode';
+import { SearchModal } from '@components/SearchModal';
 
 export default function DocPage() {
   const [item, setItem] = useState<DocItem | null>(null);
@@ -17,12 +18,23 @@ export default function DocPage() {
         setItem(found || null);
       })
       .catch(() => setItem(null));
+
+    // ⌘K keyboard shortcut
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        document.querySelector<HTMLElement>('pagefind-modal-trigger')?.click();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [slug]);
 
   if (!item) return <div>Loading...</div>;
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
+      <SearchModal />
       <h1>{item.name}</h1>
       <div dangerouslySetInnerHTML={{ __html: item.signature_html }} />
       {item.doc && (

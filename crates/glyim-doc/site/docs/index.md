@@ -6,12 +6,11 @@ description: The Glyim programming language
 # Glyim Documentation
 
 <div id="search"></div>
-<script>
-  // Pagefind search box – injected at build time
+<script type="module">
+  import { PagefindUI } from '@pagefind/component-ui/ui.js';
   window.addEventListener('DOMContentLoaded', () => {
-    if (window.Pagefind) {
-      new PagefindUI({ element: '#search', showSubResults: true });
-    }
+    new PagefindUI({ element: '#search', showSubResults: true });
   });
 </script>
-<link href="/pagefind/pagefind-ui.css" rel="stylesheet">
+
+Press **⌘K** anywhere to open search.

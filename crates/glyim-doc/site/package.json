@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "rspress dev",
-    "build": "rspress build && pagefind --site doc_build",
+    "build": "rspress build && pagefind --site doc_build --output-subdir pagefind",
     "preview": "rspress preview"
   },
   "dependencies": {
+    "@pagefind/component-ui": "^1.5.2",
     "@rspress/core": "^2.0.0",
     "pagefind": "^1.5.2",
     "react": "^19.0.0",
