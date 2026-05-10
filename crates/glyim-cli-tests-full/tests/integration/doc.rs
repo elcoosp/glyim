@@ -20,7 +20,7 @@ main = () => add(1, 2)
     std::fs::write(&source_path, src).unwrap();
 
     let doc_dir = dir.path().join("doc");
-    let result = pipeline::generate_doc(&source_path, Some(&doc_dir));
+    let result = pipeline::generate_doc(&source_path, Some(&doc_dir), None);
     assert!(result.is_ok());
 
     let index_html = doc_dir.join("index.html");
@@ -38,7 +38,7 @@ fn e2e_doc_impl_method() {
     let source_path = dir.path().join("test.g");
     std::fs::write(&source_path, src).unwrap();
     let doc_dir = dir.path().join("doc");
-    let result = pipeline::generate_doc(&source_path, Some(&doc_dir));
+    let result = pipeline::generate_doc(&source_path, Some(&doc_dir), None);
     assert!(result.is_ok());
     let html = std::fs::read_to_string(doc_dir.join("index.html")).unwrap();
     assert!(html.contains("Increments the counter."));

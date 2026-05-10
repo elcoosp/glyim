@@ -1071,7 +1071,7 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
     Ok(failed)
 }
 
-pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
+pub fn generate_doc(input: &Path, output_dir: Option<&Path>, version: Option<&str>) -> Result<(), PipelineError> {
     let package_dir = if input.join("glyim.toml").exists() {
         input.to_path_buf()
     } else {
@@ -1079,7 +1079,7 @@ pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), Pipel
             .unwrap_or_else(|| input.to_path_buf())
     };
     let out_dir = output_dir.unwrap_or_else(|| Path::new("docs/public"));
-    generate_doc_site(&package_dir, out_dir)
+    generate_doc_site(&package_dir, out_dir, version)
 }
 
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
@@ -1226,7 +1226,7 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     }
 }
 
-pub fn generate_doc_site(package_dir: &std::path::Path, output_dir: &std::path::Path) -> Result<(), PipelineError> {
+pub fn generate_doc_site(package_dir: &std::path::Path, output_dir: &std::path::Path, version: Option<&str>) -> Result<(), PipelineError> {
     let manifest = match crate::docgen::generate_manifest(package_dir) {
         Ok(m) => m,
         Err(e) => {
@@ -1234,7 +1234,11 @@ pub fn generate_doc_site(package_dir: &std::path::Path, output_dir: &std::path::
             return Err(PipelineError::Codegen(e));
         }
     };
-    let api_dir = output_dir.join("public/api");
+    let api_dir = if let Some(v) = version {
+        output_dir.join(v).join("public/api")
+    } else {
+        output_dir.join("public/api")
+    };
     std::fs::create_dir_all(&api_dir).map_err(PipelineError::Io)?;
     let json = serde_json::to_string_pretty(&manifest).unwrap();
     std::fs::write(api_dir.join("api.json"), json).map_err(PipelineError::Io)?;

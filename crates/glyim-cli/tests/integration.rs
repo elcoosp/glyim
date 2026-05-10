@@ -1297,7 +1297,7 @@ main = () => add(1, 2)
     std::fs::write(pkg_dir.join("src").join("main.g"), src).unwrap();
 
     let doc_dir = dir.path().join("site");
-    let result = pipeline::generate_doc(&pkg_dir, Some(&doc_dir));
+    let result = pipeline::generate_doc(&pkg_dir, Some(&doc_dir), None);
     assert!(result.is_ok());
 
     let api_json = doc_dir.join("public/api/api.json");
@@ -1316,7 +1316,7 @@ fn e2e_doc_impl_method() {
     std::fs::write(pkg_dir.join("glyim.toml"), "[package]\nname = \"docpkg2\"\nversion = \"0.1.0\"\n").unwrap();
     std::fs::write(pkg_dir.join("src").join("main.g"), src).unwrap();
     let doc_dir = dir.path().join("site");
-    let result = pipeline::generate_doc(&pkg_dir, Some(&doc_dir));
+    let result = pipeline::generate_doc(&pkg_dir, Some(&doc_dir), None);
     assert!(result.is_ok());
     let api_json = doc_dir.join("public/api/api.json");
     let json_str = std::fs::read_to_string(api_json).unwrap();

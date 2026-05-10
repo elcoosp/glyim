@@ -36,6 +36,8 @@ jobs:
 
       - run: cargo check --workspace
       - run: cargo test --workspace
+      - name: Doc tests (fail on broken examples)
+        run: cargo run -p glyim-cli -- doc --test stdlib/
       - run: cargo clippy --workspace -- -D warnings
       - run: cargo fmt --all -- --check
       - run: python3 scripts/check_file_sizes.py
