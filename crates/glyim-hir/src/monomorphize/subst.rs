@@ -392,7 +392,7 @@ impl<'a> SubstContext<'a> {
     fn substitute_forin(
         &mut self,
         new_id: ExprId,
-        original_id: ExprId,
+        _original_id: ExprId,
         for_pattern: &HirPattern,
         iter: &HirExpr,
         body: &HirExpr,
@@ -444,37 +444,97 @@ impl<'a> SubstContext<'a> {
 
     /// Infer the concrete type arguments for a call to a generic function,
     /// using the already-substituted concrete argument types from output_expr_types.
+    ///
+    /// Handles two cases:
+    /// 1. Functions with their own type_params (e.g., `fn id<T>(x: T) -> T`)
+    /// 2. Impl methods of generic structs with no own type_params (e.g., `fn Vec_new() -> Vec<T>`)
+    ///    For case 2, we infer T from the first parameter's type (the self parameter),
+    ///    which carries the concrete struct type like `Vec__i64`.
     fn infer_concrete_call_type_args(
         &mut self,
         callee: Symbol,
         arg_new_ids: &[ExprId],
     ) -> Option<Vec<HirType>> {
         let generic_fn = self.index.find_fn(callee)?;
-        if generic_fn.type_params.is_empty() { return None; }
 
-        // Look up concrete types from output_expr_types using the NEW expression IDs
-        // (these were assigned during substitution and their types are already stored).
-        let arg_concrete_tys: Vec<HirType> = arg_new_ids
-            .iter()
-            .map(|&id| self.concrete_type_for_new_id(id))
-            .collect();
+        // Case 1: function has its own type params — use standard unification
+        if !generic_fn.type_params.is_empty() {
+            let arg_concrete_tys: Vec<HirType> = arg_new_ids
+                .iter()
+                .map(|&id| self.concrete_type_for_new_id(id))
+                .collect();
 
-        // Simple unify: match each param to argument type
-        let mut subst = HashMap::new();
-        for (param_ty, arg_ty) in generic_fn.params.iter().zip(arg_concrete_tys.iter()) {
-            let param_hir = &param_ty.1; // (symbol, HirType)
-            if !unify_type_param(param_hir, arg_ty, &mut subst) {
+            let mut subst = HashMap::new();
+            for (param_ty, arg_ty) in generic_fn.params.iter().zip(arg_concrete_tys.iter()) {
+                let param_hir = &param_ty.1; // (symbol, HirType)
+                if !unify_type_param(param_hir, arg_ty, &mut subst) {
+                    return None;
+                }
+            }
+            let concrete_args: Vec<HirType> = generic_fn.type_params
+                .iter()
+                .map(|tp| subst.get(tp).cloned().unwrap_or(HirType::Error))
+                .collect();
+            if concrete_args.iter().any(|t| *t == HirType::Error) {
+                None
+            } else {
+                Some(concrete_args)
+            }
+        } else {
+            // Case 2: impl method of generic struct with no own type_params.
+            // Try to infer type args from the first parameter's type (the self param),
+            // which should be a Generic or Named type carrying the struct's type args.
+            // E.g., for Vec_push(self: Vec<T>, item: T), the self param is Vec<T>,
+            // and if the concrete type is Vec__i64, we can infer T = i64.
+            if generic_fn.params.is_empty() {
                 return None;
             }
-        }
-        let concrete_args: Vec<HirType> = generic_fn.type_params
-            .iter()
-            .map(|tp| subst.get(tp).cloned().unwrap_or(HirType::Error))
-            .collect();
-        if concrete_args.iter().any(|t| *t == HirType::Error) {
-            None
-        } else {
-            Some(concrete_args)
+            let first_param_ty = &generic_fn.params[0].1;
+            let first_arg_id = arg_new_ids.first()?;
+            let first_arg_concrete = self.concrete_type_for_new_id(*first_arg_id);
+
+            // Extract type args from a Generic or Named struct type
+            let (base_name, type_args) = match &first_arg_concrete {
+                HirType::Generic(base, args) => (*base, args.clone()),
+                HirType::Named(mangled) => {
+                    // Demangle: Vec__i64 → (Vec, [i64])
+                    let name_str = self.interner.resolve(*mangled).to_string();
+                    if let Some(pos) = name_str.find("__") {
+                        let base_str = &name_str[..pos];
+                        let base_sym = self.interner.intern(base_str);
+                        // Parse the mangled suffix back into types
+                        // This is a best-effort inference; full demangling
+                        // happens in discover_call_specialization
+                        (base_sym, vec![])
+                    } else {
+                        return None;
+                    }
+                }
+                _ => return None,
+            };
+
+            // Unify the first param's Generic type with the concrete argument type
+            let mut subst = HashMap::new();
+            if !unify_type_param(first_param_ty, &first_arg_concrete, &mut subst) {
+                return None;
+            }
+
+            // Look up the impl's type_params to extract the concrete args in order
+            if let Some(imp) = self.index.find_impl(base_name) {
+                let concrete_args: Vec<HirType> = imp.type_params
+                    .iter()
+                    .map(|tp| subst.get(tp).cloned().unwrap_or(HirType::Error))
+                    .collect();
+                if concrete_args.iter().any(|t| *t == HirType::Error) {
+                    None
+                } else {
+                    Some(concrete_args)
+                }
+            } else if !type_args.is_empty() {
+                Some(type_args)
+            } else {
+                None
+            }
         }
     }
 }

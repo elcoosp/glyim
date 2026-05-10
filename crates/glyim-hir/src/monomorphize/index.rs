@@ -8,7 +8,7 @@ use crate::node::HirFn;
 use crate::Hir;
 use crate::HirItem;
 use glyim_interner::Symbol;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Pre-built index over a Hir for O(1) lookups during monomorphization.
 ///
@@ -31,6 +31,12 @@ pub struct MonoIndex {
 
     /// All impl blocks, indexed by target type name.
     impls: HashMap<Symbol, HirImplDef>,
+
+    /// Pre-computed set of method names that need specialization because
+    /// they belong to a generic struct or enum impl block.
+    /// E.g., `Vec_new` has type_params=[] but belongs to impl Vec<T>,
+    /// so it needs specialization with concrete type args for T.
+    needs_specialization: HashSet<Symbol>,
 }
 
 impl MonoIndex {
@@ -42,6 +48,7 @@ impl MonoIndex {
             fns: HashMap::new(),
             impl_methods: HashMap::new(),
             impls: HashMap::new(),
+            needs_specialization: HashSet::new(),
         };
 
         for item in &hir.items {
@@ -56,10 +63,29 @@ impl MonoIndex {
                     index.fns.insert(f.name, f.clone());
                 }
                 HirItem::Impl(imp) => {
+                    // Check if this impl's target type is generic.
+                    // Methods on generic structs/enums need specialization
+                    // even when the method itself has no type_params.
+                    let is_generic_target = index.find_struct(imp.target_name)
+                        .map(|s| !s.type_params.is_empty())
+                        .unwrap_or(false)
+                        || index.find_enum(imp.target_name)
+                            .map(|e| !e.type_params.is_empty())
+                            .unwrap_or(false)
+                        || !imp.type_params.is_empty();
+
                     for m in &imp.methods {
                         // Impl methods are already mangled by the lower pass
                         // (e.g., `Vec_push`). Index them by that mangled name.
                         index.impl_methods.insert(m.name, m.clone());
+
+                        // If the impl target is generic, mark this method as
+                        // needing specialization. For example, Vec_new has
+                        // type_params=[] but belongs to impl Vec<T>, so it
+                        // must be specialized with concrete type args for T.
+                        if is_generic_target {
+                            index.needs_specialization.insert(m.name);
+                        }
                     }
                     index.impls.insert(imp.target_name, imp.clone());
                 }
@@ -101,9 +127,15 @@ impl MonoIndex {
 
     // ── Generic queries ─────────────────────────────────────────────
 
-    /// Returns true if the named function has type parameters.
+    /// Returns true if the named function needs specialization.
+    ///
+    /// A function needs specialization if it has its own type parameters,
+    /// OR if it is an impl method of a generic struct/enum. For example,
+    /// `Vec_new` has `type_params: []` but belongs to `impl Vec<T>`,
+    /// so it must be specialized with concrete type args for `T`.
     pub fn is_generic_fn(&self, name: Symbol) -> bool {
         self.find_fn(name).map(|f| !f.type_params.is_empty()).unwrap_or(false)
+            || self.needs_specialization.contains(&name)
     }
 
     /// Returns true if the named struct has type parameters.

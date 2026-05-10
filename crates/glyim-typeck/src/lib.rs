@@ -603,16 +603,44 @@ impl TypeChecker {
                         }
                     }
                 } else {
+                    // Struct not in registry — could be a stdlib type not yet registered,
+                    // or a forward reference. Instead of erroring, infer a Generic type
+                    // from the field values and let the monomorphizer resolve it later.
+                    // Only emit UnknownType for single-uppercase-letter names (type variables).
                     let resolved_name = self.interner.resolve(*struct_name).to_string();
-                    let available: Vec<String> = self.structs.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
-                    eprintln!(
-                        "[typeck] unknown struct type: {:?}, available structs: {:?}",
-                        resolved_name,
-                        available
-                    );
-                    self.errors
-                        .push(TypeError::UnknownType { name: *struct_name });
-                    HirType::Error
+                    let is_likely_type_var = resolved_name.len() == 1
+                        && resolved_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                    if is_likely_type_var {
+                        self.errors
+                            .push(TypeError::UnknownType { name: *struct_name });
+                        HirType::Error
+                    } else {
+                        eprintln!(
+                            "[typeck] struct {:?} not in registry, inferring Generic from field values (available: {:?})",
+                            resolved_name,
+                            self.structs.keys().map(|s| self.interner.resolve(*s).to_string()).collect::<Vec<_>>()
+                        );
+                        // Infer type args from field value types
+                        let field_types: Vec<HirType> = fields
+                            .iter()
+                            .map(|(_, fexpr)| self.expr_types.get(fexpr.get_id().as_usize()).cloned().unwrap_or(HirType::Error))
+                            .collect();
+                        // Use Generic with placeholder type args derived from field types
+                        let type_args: Vec<HirType> = if field_types.is_empty() {
+                            vec![]
+                        } else {
+                            // Collect unique non-Error types as type args
+                            let mut seen = std::collections::HashSet::new();
+                            field_types.into_iter().filter(|t| {
+                                *t != HirType::Error && seen.insert(t.clone())
+                            }).collect()
+                        };
+                        if type_args.is_empty() {
+                            HirType::Named(*struct_name)
+                        } else {
+                            HirType::Generic(*struct_name, type_args)
+                        }
+                    }
                 }
             }
             HirExpr::EnumVariant {
@@ -652,16 +680,42 @@ impl TypeChecker {
                         HirType::Generic(*enum_name, concrete_args)
                     }
                 } else {
+                    // Enum not in registry — could be a stdlib type not yet registered.
+                    // Instead of erroring, infer a Generic type from the variant args
+                    // and let the monomorphizer resolve it later.
+                    // Only emit UnknownType for single-uppercase-letter names (type variables).
                     let resolved_name = self.interner.resolve(*enum_name).to_string();
-                    let available: Vec<String> = self.enums.keys().map(|s| self.interner.resolve(*s).to_string()).collect();
-                    eprintln!(
-                        "[typeck] unknown enum type: {:?}, available enums: {:?}",
-                        resolved_name,
-                        available
-                    );
-                    self.errors
-                        .push(TypeError::UnknownType { name: *enum_name });
-                    HirType::Error
+                    let is_likely_type_var = resolved_name.len() == 1
+                        && resolved_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                    if is_likely_type_var {
+                        self.errors
+                            .push(TypeError::UnknownType { name: *enum_name });
+                        HirType::Error
+                    } else {
+                        eprintln!(
+                            "[typeck] enum {:?} not in registry, inferring Generic from variant args (available: {:?})",
+                            resolved_name,
+                            self.enums.keys().map(|s| self.interner.resolve(*s).to_string()).collect::<Vec<_>>()
+                        );
+                        // Infer type args from argument types
+                        let arg_types: Vec<HirType> = args
+                            .iter()
+                            .map(|a| self.expr_types.get(a.get_id().as_usize()).cloned().unwrap_or(HirType::Error))
+                            .collect();
+                        let type_args: Vec<HirType> = if arg_types.is_empty() {
+                            vec![]
+                        } else {
+                            let mut seen = std::collections::HashSet::new();
+                            arg_types.into_iter().filter(|t| {
+                                *t != HirType::Error && seen.insert(t.clone())
+                            }).collect()
+                        };
+                        if type_args.is_empty() {
+                            HirType::Named(*enum_name)
+                        } else {
+                            HirType::Generic(*enum_name, type_args)
+                        }
+                    }
                 }
             }
             HirExpr::FieldAccess { object, field, .. } => {

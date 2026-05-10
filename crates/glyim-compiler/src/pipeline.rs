@@ -145,18 +145,14 @@ pub(crate) fn merge_mono_types(
 ) -> (Vec<HirType>, glyim_hir::Hir) {
     let mono_result =
         glyim_hir::monomorphize::monomorphize(hir, interner, expr_types, call_type_args);
-    let mut merged = expr_types.to_vec();
-    // mono_result.expr_types already contains the concrete types, keyed by output ExprId.
-    // Extend `merged` with any entries from mono_result that are beyond the current length.
-    if mono_result.expr_types.len() > merged.len() {
-        merged.resize(mono_result.expr_types.len(), HirType::Never);
-    }
-    for (idx, ty) in mono_result.expr_types.iter().enumerate() {
-        if idx < merged.len() && *ty != HirType::Error {
-            merged[idx] = ty.clone();
-        }
-    }
-    // Generic → Named fallback
+
+    // The monomorphized HIR uses NEW ExprIds (assigned by SubstContext::fresh_id()
+    // starting from 0). mono_result.expr_types is indexed by these new ExprIds,
+    // so we use it directly as the type map — no merge with the original expr_types
+    // is needed (or correct, since the old and new ExprId namespaces don't overlap).
+    let mut merged = mono_result.expr_types;
+
+    // Generic → Named fallback for any remaining Generic types
     for ty in &mut merged {
         if let HirType::Generic(sym, args) = ty {
             let all_concrete = args.iter().all(|a| match a {
