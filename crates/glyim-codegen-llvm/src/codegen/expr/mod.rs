@@ -441,7 +441,6 @@ pub(crate) fn codegen_expr<'ctx>(
                 "[codegen MethodCall] looking for function: {}",
                 mangled_name
             );
-            eprintln!("[codegen MethodCall] mangled_name={}", mangled_name);
 
             // Try exact lookup first
             if let Some(fn_val) = cg.module.get_function(&mangled_name) {

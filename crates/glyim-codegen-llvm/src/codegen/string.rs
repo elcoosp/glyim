@@ -165,14 +165,8 @@ pub(crate) fn codegen_call<'ctx>(
     }
 
     let mut fn_val = cg.module.get_function(fn_name);
-    eprintln!("[codegen] call to fn_name={} (lookup in module)", fn_name);
-    eprintln!("[codegen] module functions:");
     for f in cg.module.get_functions() {
         let name = f.get_name().to_string_lossy();
-        if true {
-            // always log
-            eprintln!("[codegen]   {}", name);
-        }
     }
 
     if fn_val.is_none() {
@@ -185,8 +179,6 @@ pub(crate) fn codegen_call<'ctx>(
         // like Vec_new when only Vec_new__i64 is registered, or Vec_get__Entry_i64_i64 when
         // only Vec_get__Entry_i64_i64__i64_i64 exists)
         if let Some(first) = cg.module.get_first_function() {
-            eprintln!("[codegen] entering fallback scan for fn_name={}", fn_name);
-
             let mut cur = Some(first);
             while let Some(f) = cur {
                 let name = f.get_name().to_string_lossy();

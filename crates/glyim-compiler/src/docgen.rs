@@ -1,13 +1,13 @@
-use glyim_doc::manifest::{DocManifest, DocItem, HighlightedExample};
+use crate::pipeline::{PipelineConfig, compile_source_to_hir};
+use glyim_doc::manifest::{DocItem, DocManifest, HighlightedExample};
 use glyim_doc::{extract_code_blocks, highlight_code};
-use crate::pipeline::{compile_source_to_hir, PipelineConfig};
-use glyim_hir::{HirItem, HirFn};
+use glyim_hir::{HirFn, HirItem};
 use glyim_interner::Interner;
 use glyim_pkg::manifest::load_manifest;
+use hex;
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use walkdir::WalkDir;
-use sha2::{Digest, Sha256};
-use hex;
 
 pub fn generate_manifest(package_dir: &Path) -> Result<DocManifest, String> {
     if !package_dir.is_dir() {
@@ -33,8 +33,8 @@ pub fn generate_manifest(package_dir: &Path) -> Result<DocManifest, String> {
     let config = PipelineConfig::default();
 
     for file_path in &file_paths {
-        let source = std::fs::read_to_string(file_path)
-            .map_err(|e| format!("read {:?}: {e}", file_path))?;
+        let source =
+            std::fs::read_to_string(file_path).map_err(|e| format!("read {:?}: {e}", file_path))?;
         let compiled = compile_source_to_hir(source, file_path, &config)
             .map_err(|e| format!("compile {:?}: {e}", file_path))?;
 
@@ -47,11 +47,9 @@ pub fn generate_manifest(package_dir: &Path) -> Result<DocManifest, String> {
         }
 
         let file_name = file_path.to_string_lossy().to_string();
-        eprintln!("[docgen] HIR items count: {}", compiled.hir.items.len());
         for (idx, hir_item) in compiled.hir.items.iter().enumerate() {
             if let HirItem::Fn(f) = hir_item {
                 let name = compiled.interner.resolve(f.name);
-                eprintln!("[docgen] item {}: Fn '{}' doc={:?}", idx, name, f.doc);
             }
             let doc_item = hir_item_to_doc_item(
                 hir_item,
@@ -117,7 +115,11 @@ fn hir_item_to_doc_item(
             let mut hasher = Sha256::new();
             hasher.update(code.as_bytes());
             let hash = hex::encode(hasher.finalize());
-            examples.push(HighlightedExample { code, html: highlighted, hash });
+            examples.push(HighlightedExample {
+                code,
+                html: highlighted,
+                hash,
+            });
         }
     }
 
@@ -136,9 +138,16 @@ fn hir_item_to_doc_item(
 }
 
 fn format_fn_signature(f: &HirFn, interner: &Interner) -> String {
-    let params: Vec<String> = f.params.iter().map(|(sym, _ty)| {
-        format!("{}: ...", interner.resolve(*sym))
-    }).collect();
+    let params: Vec<String> = f
+        .params
+        .iter()
+        .map(|(sym, _ty)| format!("{}: ...", interner.resolve(*sym)))
+        .collect();
     let ret = f.ret.as_ref().map(|_| " -> ...").unwrap_or("");
-    format!("fn {}({}){}", interner.resolve(f.name), params.join(", "), ret)
+    format!(
+        "fn {}({}){}",
+        interner.resolve(f.name),
+        params.join(", "),
+        ret
+    )
 }
