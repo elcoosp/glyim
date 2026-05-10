@@ -41,7 +41,12 @@ pub fn generate_manifest(package_dir: &Path) -> Result<DocManifest, String> {
         }
 
         let file_name = file_path.to_string_lossy().to_string();
-        for hir_item in &compiled.hir.items {
+        eprintln!("[docgen] HIR items count: {}", compiled.hir.items.len());
+        for (idx, hir_item) in compiled.hir.items.iter().enumerate() {
+            if let HirItem::Fn(f) = hir_item {
+                let name = compiled.interner.resolve(f.name);
+                eprintln!("[docgen] item {}: Fn '{}' doc={:?}", idx, name, f.doc);
+            }
             let doc_item = hir_item_to_doc_item(
                 hir_item,
                 &compiled.interner,

@@ -62,7 +62,13 @@ pub fn attach_doc_comments(hir: &mut Hir, tokens: &[glyim_lex::Token]) {
         });
 
         let search_index = keyword_index.or(name_token_index);
-        search_index.and_then(|idx| glyim_parse::doc_comment::collect_doc_comments(tokens, idx))
+        eprintln!("[attach_doc] span={:?} search_index={:?}", span, search_index);
+        let result = search_index.and_then(|idx| {
+            eprintln!("[attach_doc] trying collect at idx={} token={:?}", idx, tokens.get(idx));
+            glyim_parse::doc_comment::collect_doc_comments(tokens, idx)
+        });
+        eprintln!("[attach_doc] result={:?}", result);
+        result
     }
 
     for item in &mut hir.items {
