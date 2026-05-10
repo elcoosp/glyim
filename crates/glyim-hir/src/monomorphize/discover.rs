@@ -140,7 +140,14 @@ pub fn discover_call_specialization(
     // Step 1: Look up type args from the typechecker.
     let raw_type_args = match call_type_args.get(&original_id) {
         Some(args) => args.clone(),
-        None => return (callee, items),
+        None => {
+            eprintln!(
+                "[mono] discover_call_specialization for {} – no call_type_args for original_id={:?}",
+                interner.resolve(callee),
+                original_id
+            );
+            return (callee, items);
+        }
     };
 
     // Step 2: Apply substitution to type args, then concretize.
@@ -582,7 +589,7 @@ mod tests {
         let call_type_args = HashMap::from([(ExprId::new(42), vec![HirType::Int])]);
         let sub = HashMap::new();
 
-        let (new_callee, items) = discover_call_specialization(
+        let (_new_callee, items) = discover_call_specialization(
             ExprId::new(42),
             mangled_callee,
             &call_type_args,

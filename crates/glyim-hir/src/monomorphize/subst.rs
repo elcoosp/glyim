@@ -411,7 +411,7 @@ impl<'a> SubstContext<'a> {
                     self.mangle_table,
                     self.interner,
                 );
-                if let HirType::Generic(base, type_args) = &concrete_caller_ty {
+                if let HirType::Generic(_base, type_args) = &concrete_caller_ty {
                     let concrete_type_args: Vec<HirType> = type_args
                         .iter()
                         .map(|a| {

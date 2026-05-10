@@ -259,17 +259,11 @@ impl TypeChecker {
 
     // --- Helper to conditionally insert into call_type_args ---
     fn maybe_record_call_type_args(&mut self, id: ExprId, args: Vec<HirType>) {
-        // FIX: Removed the `in_generic_fn` early return. The `contains_type_param`
-        // check below is sufficient to skip truly unresolved type params.
-        //
-        // The old `in_generic_fn` check was too broad — it prevented recording
-        // concrete type args (like [Int]) inside generic function bodies, which
-        // the monomorphizer needs to discover specializations transitively.
-        // For example, inside HashMap<K,V>::new(), a call like Some(42) produces
-        // concrete type args [Int] that must be recorded so the monomorphizer
-        // knows Option<i64> is needed when instantiating HashMap<i64,i64>.
-        let has_unresolved = args.iter().any(|a| self.contains_type_param(a));
-        if has_unresolved {
+        // Always record call_type_args if there are any type arguments
+        // (even if they still contain type parameters). The monomorphiser
+        // will substitute them later. This is needed for zero-argument
+        // generic calls like Vec::new() inside generic functions.
+        if args.is_empty() {
             return;
         }
         self.call_type_args.insert(id, args);
@@ -881,6 +875,10 @@ impl TypeChecker {
                             .iter()
                             .map(|tp| sub.get(tp).cloned().unwrap_or(HirType::Error))
                             .collect();
+                        eprintln!(
+                            "[typeck] call to {} – recording call_type_args: {:?}",
+                            self.interner.resolve(callee_sym), concrete_args
+                        );
                         self.maybe_record_call_type_args(*id, concrete_args);
                         return concrete_ret;
                     }

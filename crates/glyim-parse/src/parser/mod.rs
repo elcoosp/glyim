@@ -99,6 +99,7 @@ impl<'a> Parser<'a> {
                 .expect(glyim_syntax::SyntaxKind::CloseBracket, &mut self.errors)
                 .ok();
             let end = self.tokens.peek().map_or(start, |t| t.start);
+            eprintln!("[parser attribute] name={:?} args={:?}", name, args);
             attrs.push(crate::ast::Attribute {
                 name,
                 args,

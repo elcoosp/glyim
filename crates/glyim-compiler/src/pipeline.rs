@@ -895,13 +895,21 @@ fn find_coverage_rt_lib() -> Option<std::path::PathBuf> {
         .map(|p| p.to_path_buf());
     if let Some(workspace_root) = workspace_root {
         let target_dir = workspace_root.join("target");
+        eprintln!("[coverage] searching runtime lib in: {:?}", target_dir);
+        let mut checked = Vec::new();
         for profile in &["debug", "release"] {
             let path = target_dir.join(profile).join("libglyim_coverage_rt.a");
+            checked.push(path.clone());
             if path.exists() {
+                eprintln!("[coverage] found runtime lib: {:?}", path);
                 return Some(path);
             }
         }
+        eprintln!("[coverage] checked paths: {:?}", checked);
+    } else {
+        eprintln!("[coverage] could not determine workspace root");
     }
+    eprintln!("[coverage] runtime lib not found");
     None
 }
 
@@ -1219,8 +1227,13 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
 }
 
 pub fn generate_doc_site(package_dir: &std::path::Path, output_dir: &std::path::Path) -> Result<(), PipelineError> {
-    let manifest = crate::docgen::generate_manifest(package_dir)
-        .map_err(|e| PipelineError::Codegen(e))?;
+    let manifest = match crate::docgen::generate_manifest(package_dir) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[docgen] manifest error: {}", e);
+            return Err(PipelineError::Codegen(e));
+        }
+    };
     let api_dir = output_dir.join("public/api");
     std::fs::create_dir_all(&api_dir).map_err(PipelineError::Io)?;
     let json = serde_json::to_string_pretty(&manifest).unwrap();

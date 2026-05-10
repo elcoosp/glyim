@@ -1,4 +1,5 @@
 import { defineConfig } from '@rspress/core';
+import { pluginTailwindCSS } from '@rsbuild/plugin-tailwindcss';
 import path from 'path';
 
 export default defineConfig({
@@ -19,10 +20,12 @@ export default defineConfig({
     },
   },
   builderConfig: {
+    plugins: [pluginTailwindCSS()],
     source: {
       alias: {
         '@components': path.join(__dirname, 'components'),
         '@lib': path.join(__dirname, 'lib'),
+        '@': path.join(__dirname),
       },
     },
   },

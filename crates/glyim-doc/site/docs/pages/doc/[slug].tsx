@@ -1,3 +1,4 @@
+import '@/docs/styles/tailwind.css'
 import React, { useEffect, useState } from 'react';
 import type { DocManifest, DocItem } from '@lib/api';
 import { HighlightedCode } from '@components/HighlightedCode';
@@ -19,37 +20,26 @@ export default function DocPage() {
       .catch(() => setItem(null));
   }, [slug]);
 
-  if (!item) return <div>Loading...</div>;
-
-  const anyFailed = item.doc_test_results.some(r => !r.passed);
+  if (!item) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-      <h1>
-        {item.name}
-        {item.doc_test_results.length > 0 && (
-          <span style={{ fontSize: '0.8rem', marginLeft: '1rem' }}>
-            {anyFailed ? '❌' : '✅'} {item.doc_test_results.filter(r => r.passed).length}/{item.doc_test_results.length} doc tests
-          </span>
-        )}
-      </h1>
-      <div dangerouslySetInnerHTML={{ __html: item.signature_html }} />
+    <div className="max-w-4xl mx-auto p-8">
+      <h1 className="text-3xl font-bold mb-6">{item.name}</h1>
+      <div dangerouslySetInnerHTML={{ __html: item.signature_html }} className="mb-6" />
       {item.doc && (
-        <div style={{ marginTop: '1rem', background: 'var(--rp-c-bg-soft)', padding: '1rem', borderRadius: '8px' }}
+        <div className="bg-muted p-6 rounded-lg mb-8"
              dangerouslySetInnerHTML={{ __html: item.doc }} />
       )}
-      <div style={{ marginTop: '2rem' }}>
+      <div className="space-y-6">
         {item.highlighted_examples.map((ex, idx) => (
-          <HighlightedCode
-            key={idx}
-            code={ex.code}
-            html={ex.html}
-            testResult={item.doc_test_results[idx]}
-          />
+          <HighlightedCode key={idx} code={ex.code} html={ex.html} />
         ))}
       </div>
-      <p style={{ marginTop: '2rem', color: 'var(--rp-c-text-3)' }}>
-        <a href={`https://github.com/your-repo/blob/main/${item.source_file}#L${item.source_line}`}>[src]</a>
+      <p className="mt-8 text-sm text-muted-foreground">
+        <a href={`https://github.com/your-repo/blob/main/${item.source_file}#L${item.source_line}`}
+           className="text-primary hover:underline">
+          [src]
+        </a>
       </p>
     </div>
   );
