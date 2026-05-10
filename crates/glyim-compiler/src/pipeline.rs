@@ -314,6 +314,8 @@ pub(crate) fn compile_source_to_hir(
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
 
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     let output = typeck
         .check(&hir)
@@ -1062,21 +1064,10 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
 }
 
 pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
-    let source = std::fs::read_to_string(input).map_err(PipelineError::Io)?;
-    let parse_out = glyim_parse::parse(&source);
-    if !parse_out.errors.is_empty() {
-        return Err(PipelineError::Diagnostics(
-            parse_out.errors.into_iter().map(|e| e.into()).collect(),
-        ));
-    }
-    let mut interner = parse_out.interner;
-    let mut hir = glyim_hir::lower(&parse_out.ast, &mut interner);
-    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
-    let html = glyim_doc::generate_html(&hir, &interner);
-    let out_dir = output_dir.unwrap_or_else(|| Path::new("doc"));
-    std::fs::create_dir_all(out_dir).map_err(PipelineError::Io)?;
-    std::fs::write(out_dir.join("index.html"), html).map_err(PipelineError::Io)?;
-    Ok(())
+    let package_dir = find_package_root(input)
+        .ok_or_else(|| PipelineError::Codegen("no package root found for doc generation".into()))?;
+    let out_dir = output_dir.unwrap_or_else(|| Path::new("docs/public"));
+    generate_doc_site(&package_dir, out_dir)
 }
 
 /// Print generated LLVM IR to stderr when GLYIM_DEBUG_IR is set.
@@ -1100,6 +1091,8 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let mut typeck = glyim_typeck::TypeChecker::new(interner.clone());
     let output = typeck
         .check(&hir)
@@ -1176,6 +1169,8 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
+    // Attach doc comments from the original source
+    glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
     let mut typeck = TypeChecker::new(interner.clone());
     let output = typeck
         .check(&hir)
@@ -1217,6 +1212,24 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
         ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
         Ok(exit_code)
     }
+}
+
+pub fn generate_doc_site(package_dir: &std::path::Path, output_dir: &std::path::Path) -> Result<(), PipelineError> {
+    let manifest = crate::docgen::generate_manifest(package_dir)
+        .map_err(|e| PipelineError::Codegen(e))?;
+    let api_dir = output_dir.join("public/api");
+    std::fs::create_dir_all(&api_dir).map_err(PipelineError::Io)?;
+    let json = serde_json::to_string_pretty(&manifest).unwrap();
+    std::fs::write(api_dir.join("api.json"), json).map_err(PipelineError::Io)?;
+    let highlighted_dir = api_dir.join("highlighted");
+    std::fs::create_dir_all(&highlighted_dir).map_err(PipelineError::Io)?;
+    for item in &manifest.items {
+        for example in &item.highlighted_examples {
+            let path = highlighted_dir.join(format!("{}.html", example.hash));
+            std::fs::write(path, &example.html).map_err(PipelineError::Io)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn run_jit(source: &str) -> Result<i32, PipelineError> {
