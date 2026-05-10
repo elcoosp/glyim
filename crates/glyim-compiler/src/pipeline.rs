@@ -1064,8 +1064,12 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
 }
 
 pub fn generate_doc(input: &Path, output_dir: Option<&Path>) -> Result<(), PipelineError> {
-    let package_dir = find_package_root(input)
-        .ok_or_else(|| PipelineError::Codegen("no package root found for doc generation".into()))?;
+    let package_dir = if input.join("glyim.toml").exists() {
+        input.to_path_buf()
+    } else {
+        find_package_root(input)
+            .unwrap_or_else(|| input.to_path_buf())
+    };
     let out_dir = output_dir.unwrap_or_else(|| Path::new("docs/public"));
     generate_doc_site(&package_dir, out_dir)
 }
