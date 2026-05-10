@@ -1,0 +1,18 @@
+{
+  "package_name": "demo",
+  "version": "0.1.0",
+  "items": [
+    {
+      "kind": "fn",
+      "name": "hello",
+      "qualified_name": "demo::hello",
+      "doc": null,
+      "signature_html": "fn hello() -> ...",
+      "source_file": "/var/folders/qp/g5sz59qd7pd7dd9ghwn91h7r0000gn/T/tmp.sqSaV2HCkY/pkg/src/main.g",
+      "source_line": 0,
+      "highlighted_examples": [],
+      "doc_test_results": [],
+      "is_pub": true
+    }
+  ]
+}
