@@ -386,7 +386,7 @@ impl<'a> SubstContext<'a> {
 
         // Fallback 1: infer from argument types (existing code)
         if discovered.is_empty() && self.index.is_generic_fn(callee) {
-            if let Some(inferred_args) = self.infer_concrete_call_type_args(callee, &new_arg_ids) {
+            if let Some(inferred_args) = self.infer_concrete_call_type_args(callee, &new_arg_ids, sub) {
                 let (inferred_callee, inferred_items) = discover::discover_call_specialization(
                     original_id,
                     callee,
@@ -726,27 +726,26 @@ impl<'a> SubstContext<'a> {
             span,
         };
 
-        // __iter.next()
-        let receiver_id = self.fresh_id();
+        // __iter.next() – use the original iter ExprId so discover_method_call_specialization
+        // can find the receiver type in input_expr_types.
+        let receiver_id = iter.get_id();
         self.store_type(receiver_id, iter_ty.clone());
         let method_call_id = self.fresh_id();
-        // Type of .next() is Option<T> — we may not know T precisely, store Error as placeholder
         self.store_type(method_call_id, HirType::Error);
+
+        let scrutinee = self.substitute_method_call(
+            method_call_id,
+            method_call_id,
+            &HirExpr::Ident { id: receiver_id, name: iter_sym, span },
+            next_sym,
+            &[],
+            span,
+            sub,
+        );
 
         let match_expr = HirExpr::Match {
             id: self.fresh_id(),
-            scrutinee: Box::new(HirExpr::MethodCall {
-                id: method_call_id,
-                receiver: Box::new(HirExpr::Ident {
-                    id: receiver_id,
-                    name: iter_sym,
-                    span,
-                }),
-                method_name: next_sym,
-                resolved_callee: None,
-                args: vec![],
-                span,
-            }),
+            scrutinee: Box::new(scrutinee),
             arms: vec![
                 MatchArm {
                     pattern: HirPattern::OptionSome(Box::new(for_pattern.clone())),
@@ -917,6 +916,7 @@ impl<'a> SubstContext<'a> {
         &mut self,
         callee: Symbol,
         arg_new_ids: &[ExprId],
+        sub: &HashMap<Symbol, HirType>,
     ) -> Option<Vec<HirType>> {
         let generic_fn = self.index.find_fn(callee)?;
 
@@ -974,7 +974,7 @@ impl<'a> SubstContext<'a> {
                                         .and_then(|t| {
                                             let c = concretize::substitute_and_concretize(
                                                 t,
-                                                &HashMap::new(),
+                                                sub,
                                                 self.index,
                                                 self.mangle_table,
                                                 self.interner,

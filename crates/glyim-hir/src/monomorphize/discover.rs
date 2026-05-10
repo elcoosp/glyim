@@ -1175,7 +1175,13 @@ fn discover_method_call_fallback(
             .map(|a| concretize::substitute_and_concretize(a, sub, index, mangle_table, interner))
             .collect(),
         HirType::Named(_) => {
-            // Non-generic receiver — no type args needed for the method
+            // Non-generic receiver — ensure method is emitted as a passthrough
+            let tname = interner.resolve(type_name);
+            let mname = interner.resolve(method_name);
+            let full_method_name = interner.intern(&format!("{}_{}", tname, mname));
+            if index.find_fn(full_method_name).is_some() {
+                items.push(WorkItem::fn_passthrough(full_method_name));
+            }
             return;
         }
         _ => return,

@@ -228,7 +228,7 @@ pub fn build(
     ProfileCollector::exit_stage(StageName::Parse, 1, 0, 0);
     Ok(output_path)
 }
-const PRELUDE: &str = "\
+pub const PRELUDE: &str = "\
 pub enum Option<T> {
     Some(T),
     None,
@@ -785,6 +785,38 @@ pub fn build_with_mode(
     )?;
     Ok(output_path)
 }
+
+/// Build a binary from complete source (prelude already included).
+/// Used by the test runner to avoid double-injecting PRELUDE.
+pub fn build_raw(source: &str, output: &Path, mode: BuildMode) -> Result<PathBuf, PipelineError> {
+    let config = PipelineConfig {
+        mode,
+        ..Default::default()
+    };
+    let compiled = compile_source_to_hir(source.to_string(), Path::new("<test>"), &config)?;
+    let output_path = output.to_path_buf();
+    let tmp_dir = tempfile::tempdir()?;
+    let obj_path = tmp_dir.path().join("output.o");
+    let context = Context::create();
+    let mut codegen = CodegenBuilder::new(
+        &context,
+        compiled.interner.clone(),
+        compiled.merged_types.clone(),
+    )
+    .build()?;
+    if compiled.is_no_std {
+        codegen = codegen.with_no_std();
+    }
+    codegen
+        .generate(&compiled.mono_hir)
+        .map_err(PipelineError::Codegen)?;
+    codegen
+        .write_object_file_with_opt(&obj_path, mode.opt_level())
+        .map_err(PipelineError::Codegen)?;
+    link_object(&obj_path, &output_path, mode == BuildMode::Release)?;
+    Ok(output_path)
+}
+
 pub fn find_package_root(start: &Path) -> Option<PathBuf> {
     let mut current = if start.is_file() {
         start.parent()?.to_path_buf()
@@ -1071,12 +1103,15 @@ pub fn run_doctests(input: &Path) -> Result<usize, PipelineError> {
     Ok(failed)
 }
 
-pub fn generate_doc(input: &Path, output_dir: Option<&Path>, version: Option<&str>) -> Result<(), PipelineError> {
+pub fn generate_doc(
+    input: &Path,
+    output_dir: Option<&Path>,
+    version: Option<&str>,
+) -> Result<(), PipelineError> {
     let package_dir = if input.join("glyim.toml").exists() {
         input.to_path_buf()
     } else {
-        find_package_root(input)
-            .unwrap_or_else(|| input.to_path_buf())
+        find_package_root(input).unwrap_or_else(|| input.to_path_buf())
     };
     let out_dir = output_dir.unwrap_or_else(|| Path::new("docs/public"));
     generate_doc_site(&package_dir, out_dir, version)
@@ -1226,7 +1261,11 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     }
 }
 
-pub fn generate_doc_site(package_dir: &std::path::Path, output_dir: &std::path::Path, version: Option<&str>) -> Result<(), PipelineError> {
+pub fn generate_doc_site(
+    package_dir: &std::path::Path,
+    output_dir: &std::path::Path,
+    version: Option<&str>,
+) -> Result<(), PipelineError> {
     let manifest = match crate::docgen::generate_manifest(package_dir) {
         Ok(m) => m,
         Err(e) => {

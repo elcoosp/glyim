@@ -259,13 +259,10 @@ impl TypeChecker {
 
     // --- Helper to conditionally insert into call_type_args ---
     fn maybe_record_call_type_args(&mut self, id: ExprId, args: Vec<HirType>) {
-        // Always record call_type_args if there are any type arguments
-        // (even if they still contain type parameters). The monomorphiser
-        // will substitute them later. This is needed for zero-argument
-        // generic calls like Vec::new() inside generic functions.
-        if args.is_empty() {
-            return;
-        }
+        if args.is_empty() { return; }
+        // Only skip if ALL args are still generic — if we have concrete args, record them.
+        let all_unresolved = args.iter().all(|t| self.contains_type_param(t));
+        if all_unresolved { return; }
         self.call_type_args.insert(id, args);
     }
     fn has_type_parameter(&self, ty: &HirType) -> bool {

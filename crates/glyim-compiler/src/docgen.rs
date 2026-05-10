@@ -10,6 +10,12 @@ use sha2::{Digest, Sha256};
 use hex;
 
 pub fn generate_manifest(package_dir: &Path) -> Result<DocManifest, String> {
+    if !package_dir.is_dir() {
+        return Err(format!(
+            "manifest: IO error: Not a directory (os error 20) — expected directory, got {:?}",
+            package_dir
+        ));
+    }
     let manifest_path = package_dir.join("glyim.toml");
     let manifest = load_manifest(&manifest_path).map_err(|e| format!("manifest: {e}"))?;
     let package_name = manifest.package.name;
