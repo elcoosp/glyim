@@ -275,7 +275,29 @@ impl TypeChecker {
         self.call_type_args.clear();
         self.sizeof_types.clear();
 
-        let is_generic = !f.type_params.is_empty();
+        // Check if this function is a method on a non-generic struct
+        let fn_name = self.interner.resolve(f.name).to_string();
+        let is_method = fn_name.contains("_");
+        let mut is_generic = !f.type_params.is_empty();
+
+        // If it's a method and the struct has no type parameters, mark as non-generic
+        if is_method && is_generic {
+            // Extract struct name from method name (e.g., "Range_new" -> "Range")
+            if let Some(struct_name) = fn_name.split('_').next() {
+                let struct_sym = self.interner.intern(struct_name);
+                if let Some(ref idx) = self.hir_index {
+                    if let Some(si) = idx.find_struct(struct_sym) {
+                        if si.type_params.is_empty() {
+                            eprintln!(
+                                "[FIX] Method {} on non-generic struct {} marked as non-generic",
+                                fn_name, struct_name
+                            );
+                            is_generic = false;
+                        }
+                    }
+                }
+            }
+        }
         let mut type_param_sub = HashMap::new();
         let mut type_param_map = HashMap::new();
 
@@ -781,6 +803,7 @@ impl TypeChecker {
                 return HirType::Error;
             }
         };
+        eprintln!("[TRACE] infer_method_call: rt={:?}", rt);
 
         let type_str = self.interner.resolve(type_name);
         let method_str = self.interner.resolve(meth);
@@ -860,6 +883,16 @@ impl TypeChecker {
         for (_, f_expr) in fields {
             self.infer_dispatch(f_expr, None);
         }
+
+        // FIX: Early return for non-generic structs
+        if let Some(ref idx) = self.hir_index {
+            if let Some(si) = idx.find_struct(struct_name) {
+                if si.type_params.is_empty() {
+                    return HirType::Named(struct_name);
+                }
+            }
+        }
+
         // Extract type param info before mutable borrow
         let generic_info = self.hir_index.as_ref().and_then(|idx| {
             idx.find_struct(struct_name).and_then(|si| {
@@ -890,6 +923,10 @@ impl TypeChecker {
         actual_exprs: &[HirExpr],
         span: Span,
     ) -> Vec<HirType> {
+        eprintln!(
+            "[TRACE] infer_generic_args called for type_params={:?}",
+            type_params
+        );
         let actual_types: Vec<HirType> = actual_exprs
             .iter()
             .map(|a| self.infer_dispatch(a, None))
@@ -943,6 +980,10 @@ impl TypeChecker {
         });
         if let Some((type_params, field_types)) = generic_info {
             let type_args = self.infer_generic_args(&type_params, &field_types, args, span);
+            eprintln!(
+                "[TRACE] Returning Generic for enum: {:?} with args {:?}",
+                enum_name, type_args
+            );
             return HirType::Generic(enum_name, type_args);
         }
         // Not generic: return Named if the enum exists, else Named fallback
@@ -971,7 +1012,12 @@ impl TypeChecker {
                                     && !type_args.is_empty()
                                     && !si.type_params.is_empty()
                                 {
-                                    let sub: std::collections::HashMap<_, _> = si.type_params.iter().zip(type_args.iter()).map(|(&p, a)| (p, a.clone())).collect();
+                                    let sub: std::collections::HashMap<_, _> = si
+                                        .type_params
+                                        .iter()
+                                        .zip(type_args.iter())
+                                        .map(|(&p, a)| (p, a.clone()))
+                                        .collect();
                                     return glyim_hir::types::substitute_type(&field_ty, &sub);
                                 }
                                 return field_ty;
@@ -1026,12 +1072,15 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let scrut_ty = self.infer_dispatch(scrut, None);
+        eprintln!("[FIX] infer_match: scrut_ty={:?}", scrut_ty);
+
         // For each arm, bind pattern variables
         let mut result_ty = None;
         for arm in arms {
             self.env.push_scope();
             self.bind_pattern(&arm.pattern, &scrut_ty, false);
             let arm_ty = self.infer_dispatch(&arm.body, None);
+            eprintln!("[FIX] arm pattern={:?}, arm_ty={:?}", arm.pattern, arm_ty);
             self.env.pop_scope();
             if result_ty.is_none() {
                 result_ty = Some(arm_ty);
@@ -1125,3 +1174,4 @@ impl TypeChecker {
         }
     }
 }
+
