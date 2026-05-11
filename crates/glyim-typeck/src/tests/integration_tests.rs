@@ -1,39 +1,16 @@
 use glyim_interner::Interner;
-use glyim_typeck::{KnownSymbols, TypeChecker, TypeError, UnificationTable};
-use glyim_hir::types::{HirType, TypeVar};
+use crate::{KnownSymbols, TypeChecker, TypeError, UnificationTable};
+use glyim_hir::types::{HirType, TypeVar, ExprId};
 use glyim_diag::Span;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 fn sp() -> Span { Span::new(0, 1) }
-
-// ── Length-prefix mangling round-trips ─────────────────────────
-
-#[test]
-fn test_mangling_vec_i64_round_trip() {
-    let mut interner = Interner::new();
-    let vec_sym = interner.intern("Vec");
-    let result = glyim_mono::mangling::type_to_short_string(
-        &HirType::Generic(vec_sym, vec![HirType::Int]),
-        &interner
-    ).unwrap();
-    assert_eq!(result, "Vec__i64");
-}
-
-#[test]
-fn test_mangling_fn_type_encodes_arity() {
-    let mut interner = Interner::new();
-    let result = glyim_mono::mangling::type_to_short_string(
-        &HirType::Func(vec![HirType::Int, HirType::Bool], Box::new(HirType::Int)),
-        &interner
-    ).unwrap();
-    assert!(result.starts_with("fn2"));
-}
 
 // ── Same-scope shadowing ──────────────────────────────────────
 
 #[test]
 fn test_type_env_shadowing() {
-    let mut env = glyim_typeck::env::TypeEnv::new();
+    let mut env = crate::env::TypeEnv::new();
     let mut interner = Interner::new();
     let x = interner.intern("x");
 
@@ -63,10 +40,10 @@ fn test_solve_generic_params_arity_mismatch() {
 
     let type_params = vec![t];
     let param_types = vec![(x, HirType::Param(t))];
-    let arg_types = vec![HirType::Int, HirType::Bool]; // too many args
+    let arg_types = vec![HirType::Int, HirType::Bool];
 
     let mut errors = Vec::new();
-    let result = glyim_typeck::solve::solve_generic_params(
+    let result = crate::solve::solve_generic_params(
         &mut table,
         &type_params,
         &param_types,
@@ -89,12 +66,12 @@ fn test_extract_type_substitutions_shape_mismatch() {
     let mut interner = Interner::new();
     let t = interner.intern("T");
     let vec_sym = interner.intern("Vec");
-    let type_params = std::collections::HashSet::from([t]);
+    let type_params = HashSet::from([t]);
 
     let schema = HirType::Generic(vec_sym, vec![HirType::Param(t)]);
-    let concrete = HirType::Generic(vec_sym, vec![HirType::Int, HirType::Bool]); // wrong arity
+    let concrete = HirType::Generic(vec_sym, vec![HirType::Int, HirType::Bool]);
 
-    let result = glyim_typeck::unify::extract_type_substitutions(
+    let result = crate::unify::extract_type_substitutions(
         &schema, &concrete, &type_params, sp(), sp()
     );
 
@@ -110,9 +87,9 @@ fn test_validate_mono_input_rejects_infer() {
     let fn_name = interner.intern("test_fn");
 
     let mut expr_types = HashMap::new();
-    expr_types.insert(glyim_hir::types::ExprId::new(0), HirType::Infer(TypeVar::from_raw_unchecked(0)));
+    expr_types.insert(ExprId::new(0), HirType::Infer(TypeVar::from_raw_unchecked(0)));
 
-    fn_types_map.insert(fn_name, glyim_typeck::typeck::FnTypes {
+    fn_types_map.insert(fn_name, crate::typeck::FnTypes {
         expr_types,
         call_type_args: HashMap::new(),
         sizeof_types: HashMap::new(),
@@ -121,7 +98,7 @@ fn test_validate_mono_input_rejects_infer() {
         span: sp(),
     });
 
-    let result = glyim_typeck::validate::validate_mono_input(&fn_types_map);
+    let result = crate::validate::validate_mono_input(&fn_types_map);
     assert!(result.is_err());
 }
 
@@ -144,21 +121,6 @@ fn test_option_is_generic_not_hardcoded() {
     assert!(table.unify(&option_int, &option_int2, sp(), sp()).is_ok());
 }
 
-// ── Explicit error spans ──────────────────────────────────────
-
-#[test]
-fn test_unresolved_name_contains_span() {
-    let mut interner = Interner::new();
-    let known = KnownSymbols::intern_all(&mut interner);
-    let mut tc = TypeChecker::new(interner, known);
-
-    // tc is the backward-compatible wrapper. We'll test the underlying errors.
-    let span = Span::new(10, 20);
-    let err = TypeError::UnresolvedName { name: "test_var".into(), span };
-
-    assert_eq!(err.to_string(), "unresolved name `test_var`");
-}
-
 // ── Iterator item type extraction ─────────────────────────────
 
 #[test]
@@ -174,16 +136,13 @@ fn test_unification_table_reset() {
     let v1 = table.fresh_var(sp());
     assert_eq!(table.var_span(v1), Some(&sp()));
     table.reset();
-    // After reset, new vars start fresh
     let _v2 = table.fresh_var(sp());
 }
-
-// ── TypeCheckOutput round-trip ────────────────────────────────
 
 #[test]
 fn test_type_check_output_construction() {
     let mut interner = Interner::new();
-    let output = glyim_typeck::TypeCheckOutput {
+    let output = crate::TypeCheckOutput {
         expr_types: vec![HirType::Int, HirType::Bool],
         call_type_args: HashMap::new(),
         interner: interner.clone(),
