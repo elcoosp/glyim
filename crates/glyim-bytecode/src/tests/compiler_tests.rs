@@ -228,7 +228,7 @@ fn compile_call() {
     let callee = i.intern("helper");
     let body = HirExpr::Call {
         id: ExprId::new(0),
-        callee,
+        callee: Box::new(HirExpr::Ident { id: ExprId::new(0), name: callee, span: s() }),
         args: vec![int(1), int(2)],
         span: s(),
     };
