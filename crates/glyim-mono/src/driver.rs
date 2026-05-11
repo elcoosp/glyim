@@ -90,6 +90,99 @@ impl<'a> MonoDriver<'a> {
         }
     }
 
+    /// Run monomorphization on an HIR and return a new HIR with specialized functions added.
+    /// This is a free function (not a method) to avoid lifetime issues with &mut Interner.
+    pub fn run_on_hir(
+        hir: &glyim_hir::Hir,
+        interner: &mut Interner,
+        call_type_args: &std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>,
+    ) -> (glyim_hir::Hir, MonoResult) {
+        // Build fn_types_map
+        let mut fn_types_map: std::collections::HashMap<Symbol, glyim_typeck::typeck::FnTypes> = std::collections::HashMap::new();
+        for item in &hir.items {
+            if let glyim_hir::HirItem::Fn(f) = item {
+                fn_types_map.insert(f.name, glyim_typeck::typeck::FnTypes {
+                    expr_types: std::collections::HashMap::new(),
+                    call_type_args: call_type_args.clone(),
+                    sizeof_types: std::collections::HashMap::new(),
+                    is_generic: !f.type_params.is_empty(),
+                    type_params: f.type_params.clone(),
+                    span: f.span,
+                });
+            }
+            if let glyim_hir::HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    fn_types_map.insert(m.name, glyim_typeck::typeck::FnTypes {
+                        expr_types: std::collections::HashMap::new(),
+                        call_type_args: call_type_args.clone(),
+                        sizeof_types: std::collections::HashMap::new(),
+                        is_generic: !m.type_params.is_empty(),
+                        type_params: m.type_params.clone(),
+                        span: m.span,
+                    });
+                }
+            }
+        }
+
+        // Run the driver (this takes &mut interner)
+        let driver = MonoDriver::new(interner, &fn_types_map);
+        let result = driver.run();
+        // driver dropped here - interner borrow released
+
+        // Now build the monomorphized HIR
+        let mut mono_hir = hir.clone();
+        for item in &hir.items {
+            if let glyim_hir::HirItem::Fn(f) = item {
+                if !f.type_params.is_empty() {
+                    if let Some(ft) = fn_types_map.get(&f.name) {
+                        for type_args in ft.call_type_args.values() {
+                            if !type_args.is_empty() {
+                                if let Ok(mangled) = crate::mangling::mangle_name(interner, f.name, type_args) {
+                                    let mut mono_fn = f.clone();
+                                    mono_fn.name = mangled;
+                                    mono_fn.type_params.clear();
+                                    let sub: std::collections::HashMap<_, _> = f.type_params.iter()
+                                        .zip(type_args.iter())
+                                        .map(|(p, a)| (*p, a.clone()))
+                                        .collect();
+                                    for (_, pt) in &mut mono_fn.params { *pt = glyim_hir::types::substitute_type(pt, &sub); }
+                                    if let Some(ref mut r) = mono_fn.ret { *r = glyim_hir::types::substitute_type(r, &sub); }
+                                    mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if let glyim_hir::HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    if !m.type_params.is_empty() {
+                        if let Some(ft) = fn_types_map.get(&m.name) {
+                            for type_args in ft.call_type_args.values() {
+                                if !type_args.is_empty() {
+                                    if let Ok(mangled) = crate::mangling::mangle_name(interner, m.name, type_args) {
+                                        let mut mono_fn = m.clone();
+                                        mono_fn.name = mangled;
+                                        mono_fn.type_params.clear();
+                                        let sub: std::collections::HashMap<_, _> = m.type_params.iter()
+                                            .zip(type_args.iter())
+                                            .map(|(p, a)| (*p, a.clone()))
+                                            .collect();
+                                        for (_, pt) in &mut mono_fn.params { *pt = glyim_hir::types::substitute_type(pt, &sub); }
+                                        if let Some(ref mut r) = mono_fn.ret { *r = glyim_hir::types::substitute_type(r, &sub); }
+                                        mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (mono_hir, result)
+    }
+
     fn seed_queue(&mut self) {
         for (&fn_name, fn_types) in self.input_fn_types {
             if !fn_types.is_generic {
@@ -98,6 +191,19 @@ impl<'a> MonoDriver<'a> {
                     WorkItemContext { discovered_from: None, discovery_span: Span::new(0, 0) },
                     fn_name,
                 );
+            } else {
+                // Check if this generic function/method is called with concrete type args
+                for (_, type_args) in &fn_types.call_type_args {
+                    if !type_args.is_empty() {
+                        eprintln!("[DEBUG] mono seed: discovered generic call of {:?} with args {:?}", fn_name, type_args);
+                        self.queue.push(
+                            WorkItem { kind: ItemKind::FnSpecialize, def_id: fn_name, type_args: type_args.clone() },
+                            WorkItemContext { discovered_from: Some(fn_name), discovery_span: Span::new(0, 0) },
+                            fn_name,
+                        );
+                        break; // one specialization per call type args set is enough
+                    }
+                }
             }
         }
     }

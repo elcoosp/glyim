@@ -2,7 +2,7 @@ use crate::errors::{InferKind, TypeError};
 use crate::unify::UnificationTable;
 use glyim_hir::types::{substitute_type_with, HirType, TypeVar};
 use glyim_diag::Span;
-use glyim_interner::Symbol;
+use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
 
 pub struct SolveResult {
@@ -45,6 +45,7 @@ fn collect_type_params(ty: &HirType, set: &mut std::collections::HashSet<Symbol>
 
 pub fn solve_generic_params<E>(
     table: &mut UnificationTable,
+    interner: &Interner,
     type_params: &[Symbol],
     param_types: &[(Symbol, HirType)],
     ret_type: Option<&HirType>,

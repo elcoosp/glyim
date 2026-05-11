@@ -447,9 +447,7 @@ impl TypeChecker {
         expected_span: Span,
         found_span: Span,
     ) -> bool {
-        let exp = self.normalize_type(expected);
-        let found = self.normalize_type(found);
-        match self.table.unify(&exp, &found, expected_span, found_span) {
+        match self.table.unify(expected, found, expected_span, found_span) {
             Ok(_) => true,
             Err(e) => {
                 self.errors.push(e.into_type_error());
@@ -715,6 +713,7 @@ impl TypeChecker {
                         // Run the generic solver — let it handle all fresh variable creation
                         let solve_result = crate::solve::solve_generic_params(
                             &mut self.table,
+                            &self.interner,
                             &fn_type_params,
                             &formal_params,
                             Some(&ret),
@@ -850,8 +849,7 @@ impl TypeChecker {
 
         // Look up mangled function in environment
         if let Some(fty_orig) = self.env.lookup(mangled).cloned() {
-            let fty = self.normalize_type(&fty_orig);
-            if let HirType::Func(params, ret) = fty {
+            if let HirType::Func(params, ret) = fty_orig {
                 let is_generic = self
                     .fn_types_map
                     .get(&mangled)
@@ -881,6 +879,7 @@ impl TypeChecker {
                     eprintln!("[DEBUG] infer_method_call: type_params={:?}", type_params);
                     let solve_result = crate::solve::solve_generic_params(
                         &mut self.table,
+                        &self.interner,
                         &type_params,
                         &formal_params,
                         Some(&ret),
@@ -987,6 +986,7 @@ impl TypeChecker {
             .collect();
         let solve_result = crate::solve::solve_generic_params(
             &mut self.table,
+            &self.interner,
             type_params,
             &params,
             None,

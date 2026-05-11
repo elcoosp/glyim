@@ -23,6 +23,7 @@ glyim-pkg = { path = "../glyim-pkg" }
 glyim-query = { path = "../glyim-query" }
 glyim-egraph = { path = "../glyim-egraph" }
 glyim-bytecode = { path = "../glyim-bytecode" }
+glyim-mono = { path = "../glyim-mono" }
 glyim-merkle = { path = "../glyim-merkle" }
 postcard = { version = "1", features = ["alloc"] }
 wat = "1"

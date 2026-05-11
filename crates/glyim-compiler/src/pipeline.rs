@@ -9,8 +9,8 @@ use glyim_profiler::ProfileCollector;
 use glyim_profiler::StageName;
 use glyim_query::fingerprint::Fingerprint;
 use glyim_query::incremental::IncrementalState;
-use glyim_typeck::{KnownSymbols, TypeChecker};
 use glyim_typeck::TypeError;
+use glyim_typeck::{KnownSymbols, TypeChecker};
 use inkwell::OptimizationLevel;
 use inkwell::context::Context;
 use std::path::{Path, PathBuf};
@@ -141,7 +141,10 @@ fn load_source_with_prelude_opt(
 /// Extract flat expr_types and call_type_args from the new TypeCheckResult
 pub fn extract_types_from_result(
     result: &glyim_typeck::typeck::TypeCheckResult,
-) -> (Vec<glyim_hir::types::HirType>, std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>) {
+) -> (
+    Vec<glyim_hir::types::HirType>,
+    std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>,
+) {
     let mut expr_types = Vec::new();
     let mut call_type_args = std::collections::HashMap::new();
     for (_, fn_types) in &result.fn_types_map {
@@ -161,14 +164,90 @@ pub fn extract_types_from_result(
 
 pub(crate) fn merge_mono_types(
     hir: &glyim_hir::Hir,
-    _interner: &mut Interner,
+    interner: &mut Interner,
     expr_types: &[HirType],
-    _call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
+    call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
 ) -> (Vec<HirType>, glyim_hir::Hir) {
-    // Type concretization happens in TypeChecker::freeze_ty during check().
-    // glyim-mono provides the infrastructure for future HIR-level specialization,
-    // but currently the pipeline passes through the original HIR.
-    (expr_types.to_vec(), hir.clone())
+    // Run the monomorphizer to generate specialized function variants
+    let (mono_hir, _result) = glyim_mono::MonoDriver::run_on_hir(hir, interner, call_type_args);
+    (expr_types.to_vec(), mono_hir)
+}
+
+fn collect_fn_expr_ids(
+    expr: &glyim_hir::HirExpr,
+    fn_exprs: &mut std::collections::HashMap<glyim_hir::types::ExprId, HirType>,
+    all_exprs: &[HirType],
+    all_calls: &std::collections::HashMap<ExprId, Vec<HirType>>,
+    fn_calls: &mut std::collections::HashMap<ExprId, Vec<HirType>>,
+) {
+    let id = expr.get_id();
+    if let Some(ty) = all_exprs.get(id.as_usize()) {
+        fn_exprs.insert(id, ty.clone());
+    }
+    if let Some(args) = all_calls.get(&id) {
+        fn_calls.insert(id, args.clone());
+    }
+    match expr {
+        glyim_hir::HirExpr::Binary { lhs, rhs, .. } => {
+            collect_fn_expr_ids(lhs, fn_exprs, all_exprs, all_calls, fn_calls);
+            collect_fn_expr_ids(rhs, fn_exprs, all_exprs, all_calls, fn_calls);
+        }
+        glyim_hir::HirExpr::Unary { operand, .. }
+        | glyim_hir::HirExpr::Deref { expr: operand, .. } => {
+            collect_fn_expr_ids(operand, fn_exprs, all_exprs, all_calls, fn_calls);
+        }
+        glyim_hir::HirExpr::Block { stmts, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    glyim_hir::HirStmt::Expr(e)
+                    | glyim_hir::HirStmt::Let { value: e, .. }
+                    | glyim_hir::HirStmt::Assign { value: e, .. }
+                    | glyim_hir::HirStmt::AssignDeref { value: e, .. }
+                    | glyim_hir::HirStmt::AssignField { value: e, .. } => {
+                        collect_fn_expr_ids(e, fn_exprs, all_exprs, all_calls, fn_calls);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        glyim_hir::HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_fn_expr_ids(condition, fn_exprs, all_exprs, all_calls, fn_calls);
+            collect_fn_expr_ids(then_branch, fn_exprs, all_exprs, all_calls, fn_calls);
+            if let Some(e) = else_branch {
+                collect_fn_expr_ids(e, fn_exprs, all_exprs, all_calls, fn_calls);
+            }
+        }
+        glyim_hir::HirExpr::Call { args, .. } | glyim_hir::HirExpr::MethodCall { args, .. } => {
+            for a in args {
+                collect_fn_expr_ids(a, fn_exprs, all_exprs, all_calls, fn_calls);
+            }
+        }
+        glyim_hir::HirExpr::While {
+            condition, body, ..
+        }
+        | glyim_hir::HirExpr::ForIn {
+            iter: condition,
+            body,
+            ..
+        } => {
+            collect_fn_expr_ids(condition, fn_exprs, all_exprs, all_calls, fn_calls);
+            collect_fn_expr_ids(body, fn_exprs, all_exprs, all_calls, fn_calls);
+        }
+        glyim_hir::HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            collect_fn_expr_ids(scrutinee, fn_exprs, all_exprs, all_calls, fn_calls);
+            for arm in arms {
+                collect_fn_expr_ids(&arm.body, fn_exprs, all_exprs, all_calls, fn_calls);
+            }
+        }
+        _ => {}
+    }
 }
 /// Compile a Glyim source file into an executable binary.
 ///
@@ -213,6 +292,16 @@ pub fn build(
     }
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
+    }
+    // Debug: list all functions in mono_hir before codegen
+    for item in &compiled.mono_hir.items {
+        if let glyim_hir::HirItem::Fn(f) = item {
+            eprintln!(
+                "[DEBUG] mono_hir fn: {} (type_params={:?})",
+                compiled.interner.resolve(f.name),
+                f.type_params
+            );
+        }
     }
     codegen
         .generate(&compiled.mono_hir)
@@ -317,7 +406,13 @@ pub(crate) fn compile_source_to_hir(
     let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
     if !check_result.type_errors.is_empty() {
-        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            check_result
+                .type_errors
+                .into_iter()
+                .map(|e| e.into())
+                .collect(),
+        ));
     }
     let output = check_result;
     interner = typeck.interner;
@@ -367,6 +462,16 @@ fn execute_jit(
         codegen = codegen.with_no_std();
     }
     codegen = codegen.with_jit_mode();
+    // Debug: list all functions in mono_hir before codegen
+    for item in &compiled.mono_hir.items {
+        if let glyim_hir::HirItem::Fn(f) = item {
+            eprintln!(
+                "[DEBUG] mono_hir fn: {} (type_params={:?})",
+                compiled.interner.resolve(f.name),
+                f.type_params
+            );
+        }
+    }
     codegen
         .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -609,7 +714,13 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
     if !check_result.type_errors.is_empty() {
-        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            check_result
+                .type_errors
+                .into_iter()
+                .map(|e| e.into())
+                .collect(),
+        ));
     }
     let interner = typeck.interner;
     let mut compiler = BytecodeCompiler::new(&interner);
@@ -663,7 +774,13 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let mut typeck = TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
     if !check_result.type_errors.is_empty() {
-        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            check_result
+                .type_errors
+                .into_iter()
+                .map(|e| e.into())
+                .collect(),
+        ));
     }
     Ok(())
 }
@@ -764,6 +881,16 @@ pub fn build_with_mode(
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
     }
+    // Debug: list all functions in mono_hir before codegen
+    for item in &compiled.mono_hir.items {
+        if let glyim_hir::HirItem::Fn(f) = item {
+            eprintln!(
+                "[DEBUG] mono_hir fn: {} (type_params={:?})",
+                compiled.interner.resolve(f.name),
+                f.type_params
+            );
+        }
+    }
     codegen
         .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -805,6 +932,16 @@ pub fn build_raw(source: &str, output: &Path, mode: BuildMode) -> Result<PathBuf
     .build()?;
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
+    }
+    // Debug: list all functions in mono_hir before codegen
+    for item in &compiled.mono_hir.items {
+        if let glyim_hir::HirItem::Fn(f) = item {
+            eprintln!(
+                "[DEBUG] mono_hir fn: {} (type_params={:?})",
+                compiled.interner.resolve(f.name),
+                f.type_params
+            );
+        }
     }
     codegen
         .generate(&compiled.mono_hir)
@@ -1143,7 +1280,13 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
     if !check_result.type_errors.is_empty() {
-        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            check_result
+                .type_errors
+                .into_iter()
+                .map(|e| e.into())
+                .collect(),
+        ));
     }
     let output = check_result;
     interner = typeck.interner;
@@ -1224,7 +1367,13 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     let mut typeck = TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
     if !check_result.type_errors.is_empty() {
-        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+        return Err(PipelineError::Diagnostics(
+            check_result
+                .type_errors
+                .into_iter()
+                .map(|e| e.into())
+                .collect(),
+        ));
     }
     let output = check_result;
     interner = typeck.interner;

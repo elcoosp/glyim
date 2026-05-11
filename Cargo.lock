@@ -2161,6 +2161,7 @@ dependencies = [
  "glyim-macro-core",
  "glyim-macro-vfs",
  "glyim-merkle",
+ "glyim-mono",
  "glyim-parse",
  "glyim-pkg",
  "glyim-profiler",
