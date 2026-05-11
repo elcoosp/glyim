@@ -127,6 +127,22 @@ impl UnificationTable {
         }
     }
 
+    fn normalize(&mut self, ty: &HirType) -> HirType {
+        match ty {
+            HirType::Infer(var) => {
+                let root = self.find(*var);
+                let bound = self.bindings
+                    .get(root.raw_index() as usize)
+                    .and_then(|b| b.clone());
+                match bound {
+                    Some(bound) => self.normalize(&bound),
+                    None => HirType::Infer(root),
+                }
+            }
+            other => other.clone(),
+        }
+    }
+
     pub fn unify(
         &mut self,
         a: &HirType,

@@ -128,29 +128,29 @@ impl TypeChecker {
         // Register built-in primitive types as global names
         self.env.insert_global(
             self.known.i64_type,
-            HirType::Named(self.known.i64_type),
+            HirType::Int,
             false,
         );
         self.env.insert_global(
             self.known.bool_type,
-            HirType::Named(self.known.bool_type),
+            HirType::Bool,
             false,
         );
         self.env.insert_global(
             self.known.f64_type,
-            HirType::Named(self.known.f64_type),
+            HirType::Float,
             false,
         );
         self.env.insert_global(
             self.known.str_type,
-            HirType::Named(self.known.str_type),
+            HirType::Str,
             false,
         );
         self.env
             .insert_global(self.known.unit_type, HirType::Unit, false);
 
         // Register built-in intrinsics that the prelude extern block provides
-        let i64_t = HirType::Named(self.known.i64_type);
+        let i64_t = HirType::Int;
         let ptr_u8 = HirType::RawPtr(Box::new(HirType::Named(self.interner.intern("u8"))));
         let void_t = HirType::Unit;
 
@@ -855,9 +855,6 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let rt = self.infer_dispatch(recv, None);
-        let at: Vec<HirType> = std::iter::once(rt.clone())
-            .chain(args.iter().map(|a| self.infer_dispatch(a, None)))
-            .collect();
 
         let type_name = match &rt {
             HirType::Named(s) | HirType::Generic(s, _) => *s,
@@ -885,23 +882,43 @@ impl TypeChecker {
 
         let type_str = self.interner.resolve(type_name);
         let method_str = self.interner.resolve(meth);
-        let mangled = self
+        let mangled_sym = self
             .interner
             .intern(&format!("{}_{}", type_str, method_str));
 
+        // Check if the method has a self parameter by inspecting the registered type
+        let has_self_param = self.env.lookup(mangled_sym)
+            .map(|fty| {
+                if let HirType::Func(params, _) = fty {
+                    !params.is_empty()
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+
+        // Build actual argument types, skipping receiver for static methods
+        let at: Vec<HirType> = if has_self_param {
+            std::iter::once(rt.clone())
+                .chain(args.iter().map(|a| self.infer_dispatch(a, None)))
+                .collect()
+        } else {
+            args.iter().map(|a| self.infer_dispatch(a, None)).collect()
+        };
+
         // Look up mangled function in environment
-        if let Some(fty_orig) = self.env.lookup(mangled).cloned() {
+        if let Some(fty_orig) = self.env.lookup(mangled_sym).cloned() {
             if let HirType::Func(params, ret) = fty_orig {
                 let is_generic = self
                     .fn_types_map
-                    .get(&mangled)
+                    .get(&mangled_sym)
                     .map(|ft| ft.is_generic)
                     .unwrap_or(false);
 
                 if is_generic {
                     let type_params = self
                         .fn_types_map
-                        .get(&mangled)
+                        .get(&mangled_sym)
                         .map(|ft| ft.type_params.clone())
                         .unwrap_or_default();
                     // Let solve_generic_params create its own fresh variables.
@@ -1205,9 +1222,7 @@ impl TypeChecker {
         body: &HirExpr,
         span: Span,
     ) -> HirType {
-        self.infer_dispatch(iter, None);
-        // Bind the loop variable to a fresh type variable, which will be
-        // constrained by usage inside the body.
+        let iter_ty = self.infer_dispatch(iter, None);
         let item_ty = HirType::Infer(self.table.fresh_var(span));
         self.env.push_scope();
         self.bind_pattern(pat, &item_ty, false);
