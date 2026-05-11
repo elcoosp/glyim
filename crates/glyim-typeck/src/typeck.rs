@@ -138,6 +138,23 @@ impl TypeChecker {
         let sizeof = self.interner.intern("__size_of");
         self.env.insert_global(sizeof, HirType::Func(vec![], Box::new(i64_t.clone())), false);
 
+        // Pre‑seed fn_types_map with generic functions so that calls to
+        // them are correctly recognised as generic even before their
+        // bodies have been type‑checked.
+        for item in &hir.items {
+            if let HirItem::Fn(f) = item {
+                if !f.type_params.is_empty() {
+                    self.fn_types_map.insert(f.name, FnTypes {
+                        expr_types: HashMap::new(),
+                        call_type_args: HashMap::new(),
+                        sizeof_types: HashMap::new(),
+                        is_generic: true,
+                        type_params: f.type_params.clone(),
+                        span: f.span,
+                    });
+                }
+            }
+        }
         // Register all HIR items in the global environment
         for item in &hir.items {
             match item {
@@ -708,9 +725,15 @@ impl TypeChecker {
         HirType::Unit
     }
 
-    fn infer_for_in(&mut self, _pat: &HirPat, iter: &HirExpr, body: &HirExpr, _span: Span) -> HirType {
+    fn infer_for_in(&mut self, pat: &HirPat, iter: &HirExpr, body: &HirExpr, span: Span) -> HirType {
         self.infer_dispatch(iter, None);
-        self.infer_dispatch(body, None);
+        // Bind the loop variable to a fresh type variable, which will be
+        // constrained by usage inside the body.
+        let item_ty = HirType::Infer(self.table.fresh_var(span));
+        self.env.push_scope();
+        self.bind_pattern(pat, &item_ty, false);
+        let body_ty = self.infer_dispatch(body, None);
+        self.env.pop_scope();
         HirType::Unit
     }
 
