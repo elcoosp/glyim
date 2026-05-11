@@ -966,7 +966,15 @@ impl TypeChecker {
                     if let Some(si) = idx.find_struct(*s) {
                         if let Some(&fi) = si.field_map.get(&field) {
                             if fi < si.fields.len() {
-                                return si.fields[fi].1.clone();
+                                let field_ty = si.fields[fi].1.clone();
+                                if let HirType::Generic(_, type_args) = &obj_ty
+                                    && !type_args.is_empty()
+                                    && !si.type_params.is_empty()
+                                {
+                                    let sub: std::collections::HashMap<_, _> = si.type_params.iter().zip(type_args.iter()).map(|(&p, a)| (p, a.clone())).collect();
+                                    return glyim_hir::types::substitute_type(&field_ty, &sub);
+                                }
+                                return field_ty;
                             }
                         } else {
                             let resolved = self.interner.resolve(field).to_string();
