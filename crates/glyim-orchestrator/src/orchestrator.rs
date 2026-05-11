@@ -250,23 +250,24 @@ impl PackageGraphOrchestrator {
         }
         let mut interner = parsed.interner;
         let hir = glyim_hir::lower(&parsed.ast, &mut interner);
-        let mut tc = glyim_typeck::TypeChecker::new(interner.clone());
-        let output = tc.check(&hir).map_err(|type_errors| {
-            OrchestratorError::TypeCheck(
-                type_errors
-                    .into_iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-        })?;
+        use glyim_typeck::KnownSymbols;
+        let known = KnownSymbols::intern_all(&mut interner);
+        let mut tc = glyim_typeck::TypeChecker::new(interner, known);
+        let result = tc.check(&hir);
+        if !result.type_errors.is_empty() {
+            return Err(OrchestratorError::TypeCheck(
+                result.type_errors.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"),
+            ));
+        }
+        interner = tc.interner;
+        let output = result;
 
         let context = inkwell::context::Context::create();
         let is_root = pkg.name == self.root_package;
         let mut builder = glyim_codegen_llvm::CodegenBuilder::new(
             &context,
             interner.clone(),
-            output.expr_types.clone(),
+            glyim_compiler::extract_types_from_result(&output).0,
         );
         if !is_root {
             builder = builder.with_library_mode();

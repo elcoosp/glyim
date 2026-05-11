@@ -139,7 +139,7 @@ fn load_source_with_prelude_opt(
 // ── shared monomorphize→merged_types helper ──────────────────────
 
 /// Extract flat expr_types and call_type_args from the new TypeCheckResult
-fn extract_types_from_result(
+pub fn extract_types_from_result(
     result: &glyim_typeck::typeck::TypeCheckResult,
 ) -> (Vec<glyim_hir::types::HirType>, std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>) {
     let mut expr_types = Vec::new();
@@ -312,16 +312,16 @@ pub(crate) fn compile_source_to_hir(
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     // Attach doc comments from the original source
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
-    let mut typeck = glyim_typeck::TypeChecker::new(&mut interner, KnownSymbols::intern_all(&mut interner));
+    let known = KnownSymbols::intern_all(&mut interner);
+    let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
-        if !check_result.type_errors.is_empty() {
-            return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
-        }
-        let output = check_result;
-    interner = typeck.interner.clone();
-    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
-
-    let (expr_types, call_type_args) = extract_types_from_result(&check_result);
+    if !check_result.type_errors.is_empty() {
+        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+    }
+    let output = check_result;
+    interner = typeck.interner;
+    let (expr_types, call_type_args) = extract_types_from_result(&output);
+    glyim_hir::desugar_method_calls(&mut hir, &expr_types, &mut interner);
     let call_type_args = call_type_args;
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
@@ -604,13 +604,13 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let decl_table =
         glyim_hir::decl_table::DeclTable::from_declarations(&decl_output.ast, &mut interner);
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
-    let mut typeck = glyim_typeck::TypeChecker::new(&mut interner, KnownSymbols::intern_all(&mut interner));
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        ));
+    let known = KnownSymbols::intern_all(&mut interner);
+    let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
+    let check_result = typeck.check(&hir);
+    if !check_result.type_errors.is_empty() {
+        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
     }
-    let interner = typeck.interner.clone();
+    let interner = typeck.interner;
     let mut compiler = BytecodeCompiler::new(&interner);
     let mut interpreter = BytecodeInterpreter::new();
     for item in &hir.items {
@@ -658,14 +658,11 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
 
     // Phase 2: full lowering with pre-resolved symbols
     let hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
-    let mut typeck = {
-    let mut known = KnownSymbols::intern_all(&mut interner);
-    TypeChecker::new(&mut interner, known)
-};
-    if let Err(errs) = typeck.check(&hir) {
-        return Err(PipelineError::Diagnostics(
-            errs.into_iter().map(|e| e.into()).collect(),
-        ));
+    let known = KnownSymbols::intern_all(&mut interner);
+    let mut typeck = TypeChecker::new(interner, known);
+    let check_result = typeck.check(&hir);
+    if !check_result.type_errors.is_empty() {
+        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
     }
     Ok(())
 }
@@ -1141,15 +1138,16 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     // Attach doc comments from the original source
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
-    let mut typeck = glyim_typeck::TypeChecker::new(&mut interner, KnownSymbols::intern_all(&mut interner));
+    let known = KnownSymbols::intern_all(&mut interner);
+    let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
-        if !check_result.type_errors.is_empty() {
-            return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
-        }
-        let output = check_result;
-    interner = typeck.interner.clone();
-    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
-    let (expr_types, call_type_args) = extract_types_from_result(&check_result);
+    if !check_result.type_errors.is_empty() {
+        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+    }
+    let output = check_result;
+    interner = typeck.interner;
+    let (expr_types, call_type_args) = extract_types_from_result(&output);
+    glyim_hir::desugar_method_calls(&mut hir, &expr_types, &mut interner);
     let call_type_args = call_type_args;
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
@@ -1221,19 +1219,16 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     let mut hir = glyim_hir::lower_with_declarations(&parse_out.ast, &mut interner, &decl_table);
     // Attach doc comments from the original source
     glyim_hir::attach_doc_comments(&mut hir, &glyim_lex::tokenize(&source));
-    let mut typeck = {
-    let mut known = KnownSymbols::intern_all(&mut interner);
-    TypeChecker::new(&mut interner, known)
-};
+    let known = KnownSymbols::intern_all(&mut interner);
+    let mut typeck = TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
-        if !check_result.type_errors.is_empty() {
-            return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
-        }
-        let output = check_result;
-    interner = typeck.interner.clone();
-    glyim_hir::desugar_method_calls(&mut hir, &output.expr_types, &mut interner);
-    let (expr_types, call_type_args) = extract_types_from_result(&check_result);
-    let call_type_args = call_type_args;
+    if !check_result.type_errors.is_empty() {
+        return Err(PipelineError::Diagnostics(check_result.type_errors.into_iter().map(|e| e.into()).collect()));
+    }
+    let output = check_result;
+    interner = typeck.interner;
+    let (expr_types, call_type_args) = extract_types_from_result(&output);
+    glyim_hir::desugar_method_calls(&mut hir, &expr_types, &mut interner);
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
