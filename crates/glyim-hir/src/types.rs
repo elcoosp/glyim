@@ -24,7 +24,7 @@ pub struct TypeVar(u32);
 
 impl TypeVar {
     #[inline]
-    pub(crate) fn from_raw_unchecked(index: u32) -> Self { Self(index) }
+    pub fn from_raw_unchecked(index: u32) -> Self { Self(index) }
     #[inline]
     pub fn raw_index(self) -> u32 { self.0 }
 }
