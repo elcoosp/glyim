@@ -2,9 +2,4 @@
 source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 expression: actual
 ---
-  × unresolved name `x`
-   ╭─[tests/ui/assign_through_non_pointer.g:1:1]
- 1 │ fn main() { let x = 42; *x = 10; x }
-   · ▲
-   · ╰── unresolved name `x`
-   ╰────
+

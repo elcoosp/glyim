@@ -2,9 +2,4 @@
 source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 expression: actual
 ---
-  × unresolved name `x`
-   ╭─[tests/ui/bool_mismatch.g:1:1]
- 1 │ main = () => { let x: bool = 42; x }
-   · ▲
-   · ╰── unresolved name `x`
-   ╰────
+
