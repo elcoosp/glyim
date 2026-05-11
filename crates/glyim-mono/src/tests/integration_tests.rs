@@ -1,6 +1,6 @@
 use glyim_interner::Interner;
 use glyim_hir::types::HirType;
-use glyim_mono::*;
+use crate::*;
 use glyim_diag::Span;
 
 fn sp() -> Span { Span::new(0, 1) }
