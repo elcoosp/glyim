@@ -622,7 +622,7 @@ impl TypeChecker {
             &mut self.table, type_params, &params, None, &actual_types, None, span, span,
             &mut |e| self.errors.push(e),
         );
-        if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
+        if !solve_result.had_errors {
             solve_result.concrete_args
         } else {
             type_params.iter().map(|_| HirType::Infer(self.table.fresh_var(span))).collect()
