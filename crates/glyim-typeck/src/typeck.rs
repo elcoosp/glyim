@@ -3,7 +3,7 @@ use crate::errors::TypeError;
 use crate::symbols::KnownSymbols;
 use crate::unify::UnificationTable;
 use glyim_diag::Span;
-use glyim_hir::index::{EnumInfo, FnInfo, HirIndex, StructInfo};
+use glyim_hir::index::HirIndex;
 use glyim_hir::types::HirPattern as HirPat;
 use glyim_hir::types::{HirType, TypeVar, substitute_type_safe as substitute_type};
 use glyim_hir::{HirExpr, HirItem, HirStmt};
@@ -77,6 +77,16 @@ impl TypeChecker {
             sizeof_types: HashMap::new(),
             errors: Vec::new(),
             fn_types_map: HashMap::new(),
+        }
+    }
+
+    fn normalize_type(&self, ty: &HirType) -> HirType {
+        match ty {
+            HirType::Named(s) if *s == self.known.i64_type => HirType::Int,
+            HirType::Named(s) if *s == self.known.f64_type => HirType::Float,
+            HirType::Named(s) if *s == self.known.bool_type => HirType::Bool,
+            HirType::Named(s) if *s == self.known.str_type => HirType::Str,
+            _ => ty.clone(),
         }
     }
 
@@ -618,6 +628,7 @@ impl TypeChecker {
             }
             _ => HirType::Error,
         };
+        eprintln!("[DEBUG] infer_dispatch: expr_id {:?}, ty={:?}", expr.get_id(), ty);
         self.record_expr_type(expr.get_id(), ty.clone());
         ty
     }
@@ -826,7 +837,8 @@ impl TypeChecker {
             .intern(&format!("{}_{}", type_str, method_str));
 
         // Look up mangled function in environment
-        if let Some(fty) = self.env.lookup(mangled).cloned() {
+        if let Some(fty_orig) = self.env.lookup(mangled).cloned() {
+            let fty = self.normalize_type(&fty_orig);
             if let HirType::Func(params, ret) = fty {
                 let is_generic = self
                     .fn_types_map
@@ -851,6 +863,10 @@ impl TypeChecker {
                             (sym, ty.clone())
                         })
                         .collect();
+                    eprintln!("[DEBUG] infer_method_call: formal_params={:?}", formal_params);
+                    eprintln!("[DEBUG] infer_method_call: ret={:?}", ret);
+                    eprintln!("[DEBUG] infer_method_call: at (actual args)={:?}", at);
+                    eprintln!("[DEBUG] infer_method_call: type_params={:?}", type_params);
                     let solve_result = crate::solve::solve_generic_params(
                         &mut self.table,
                         &type_params,
@@ -864,10 +880,17 @@ impl TypeChecker {
                             self.errors.push(e);
                         },
                     );
+                    eprintln!("[DEBUG] solve_generic_params result:");
+                    eprintln!("[DEBUG]   subst={:?}", solve_result.subst);
+                    eprintln!("[DEBUG]   concrete_args={:?}", solve_result.concrete_args);
+                    eprintln!("[DEBUG]   fully_resolved={:?}", solve_result.fully_resolved);
+                    eprintln!("[DEBUG]   had_errors={:?}", solve_result.had_errors);
                     if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
                         self.record_call_type_args(id, solve_result.concrete_args);
                     }
                     let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                    eprintln!("[DEBUG] ret_subst (after substitution)={:?}", ret_subst);
+                    eprintln!("[DEBUG] infer_method_call: returning type for expr_id {:?} = {:?}", id, ret_subst);
                     return ret_subst;
                 }
 
@@ -1023,6 +1046,7 @@ impl TypeChecker {
 
     fn infer_field_access(&mut self, obj: &HirExpr, field: Symbol, span: Span) -> HirType {
         let obj_ty = self.infer_dispatch(obj, None);
+        eprintln!("[DEBUG] infer_field_access: field={:?}, obj_ty={:?}", field, obj_ty);
         match &obj_ty {
             HirType::Named(s) | HirType::Generic(s, _) => {
                 if let Some(ref idx) = self.hir_index {
@@ -1030,6 +1054,7 @@ impl TypeChecker {
                         if let Some(&fi) = si.field_map.get(&field) {
                             if fi < si.fields.len() {
                                 let field_ty = si.fields[fi].1.clone();
+                                let norm_ty = self.normalize_type(&field_ty);
                                 if let HirType::Generic(_, type_args) = &obj_ty
                                     && !type_args.is_empty()
                                     && !si.type_params.is_empty()
@@ -1040,9 +1065,9 @@ impl TypeChecker {
                                         .zip(type_args.iter())
                                         .map(|(&p, a)| (p, a.clone()))
                                         .collect();
-                                    return glyim_hir::types::substitute_type(&field_ty, &sub);
+                                    return glyim_hir::types::substitute_type(&norm_ty, &sub);
                                 }
-                                return field_ty;
+                                return norm_ty;
                             }
                         } else {
                             let resolved = self.interner.resolve(field).to_string();

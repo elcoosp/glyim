@@ -94,9 +94,16 @@ impl UnificationTable {
             HirType::Generic(sym, args) => {
                 let args: Vec<HirType> = args
                     .iter()
-                    .map(|a| self.resolve_infer_depth(a, depth))
+                    .enumerate()
+                    .map(|(i, a)| {
+                        let r = self.resolve_infer_depth(a, depth);
+                        eprintln!("[DEBUG] resolve_infer_depth: Generic{:?} arg[{}] {:?} -> {:?}", sym, i, a, r);
+                        r
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(HirType::Generic(*sym, args))
+                let resolved = HirType::Generic(*sym, args);
+                eprintln!("[DEBUG] resolve_infer_depth: Generic{:?} fully resolved to {:?}", sym, resolved);
+                Ok(resolved)
             }
             HirType::Tuple(elems) => {
                 let elems: Vec<HirType> = elems
