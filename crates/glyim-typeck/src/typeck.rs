@@ -570,6 +570,20 @@ impl TypeChecker {
             HirExpr::As {
                 expr, target_type, ..
             } => {
+                // Special case: 0 as struct type should return the struct type directly
+                if let HirExpr::IntLit { value: 0, .. } = expr.as_ref() {
+                    match target_type {
+                        HirType::Named(sym) | HirType::Generic(sym, _) => {
+                            if let Some(ref idx) = self.hir_index {
+                                if idx.find_struct(*sym).is_some() || idx.find_enum(*sym).is_some()
+                                {
+                                    return target_type.clone();
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 self.infer_dispatch(expr, None);
                 target_type.clone()
             }
@@ -984,7 +998,10 @@ impl TypeChecker {
                 "[TRACE] Returning Generic for enum: {:?} with args {:?}",
                 enum_name, type_args
             );
-                        if enum_name == self.known.option && variant_name == self.known.none && type_args.is_empty() {
+            if enum_name == self.known.option
+                && variant_name == self.known.none
+                && type_args.is_empty()
+            {
                 let tv = self.table.fresh_var(span);
                 eprintln!("[FIX] Option::None created with fresh type variable");
                 return HirType::Generic(enum_name, vec![HirType::Infer(tv)]);
@@ -1179,4 +1196,3 @@ impl TypeChecker {
         }
     }
 }
-
