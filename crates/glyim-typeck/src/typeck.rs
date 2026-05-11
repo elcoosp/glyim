@@ -281,6 +281,29 @@ impl TypeChecker {
             glyim_hir::types::HirPattern::Var(name) => {
                 self.env.insert(*name, ty.clone(), mutable);
             }
+            glyim_hir::types::HirPattern::OptionSome(inner) => {
+                // For `Some(x)`, bind `x` to the inner type of the Option
+                if let HirType::Generic(_, type_args) = ty {
+                    if let Some(inner_ty) = type_args.first() {
+                        self.bind_pattern(inner, inner_ty, mutable);
+                    }
+                }
+            }
+            glyim_hir::types::HirPattern::OptionNone => {}
+            glyim_hir::types::HirPattern::ResultOk(inner) => {
+                if let HirType::Generic(_, type_args) = ty {
+                    if let Some(inner_ty) = type_args.first() {
+                        self.bind_pattern(inner, inner_ty, mutable);
+                    }
+                }
+            }
+            glyim_hir::types::HirPattern::ResultErr(inner) => {
+                if let HirType::Generic(_, type_args) = ty {
+                    if type_args.len() >= 2 {
+                        self.bind_pattern(inner, &type_args[1], mutable);
+                    }
+                }
+            }
             glyim_hir::types::HirPattern::Struct { bindings, .. } => {
                 for (_, sub_pat) in bindings {
                     self.bind_pattern(sub_pat, ty, mutable);
@@ -468,11 +491,10 @@ impl TypeChecker {
         }
     }
 
-    fn infer_method_call(&mut self, _id: glyim_hir::types::ExprId, recv: &HirExpr, meth: Symbol, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
+    fn infer_method_call(&mut self, id: glyim_hir::types::ExprId, recv: &HirExpr, meth: Symbol, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
         let rt = self.infer_dispatch(recv, None);
         let at: Vec<HirType> = std::iter::once(rt.clone()).chain(args.iter().map(|a| self.infer_dispatch(a, None))).collect();
 
-        // Try to look up method by mangled name: TypeName_methodName
         let type_name = match &rt {
             HirType::Named(s) | HirType::Generic(s, _) => *s,
             HirType::RawPtr(inner) => match inner.as_ref() {
@@ -495,6 +517,39 @@ impl TypeChecker {
         // Look up mangled function in environment
         if let Some(fty) = self.env.lookup(mangled).cloned() {
             if let HirType::Func(params, ret) = fty {
+                let is_generic = self.fn_types_map.get(&mangled)
+                    .map(|ft| ft.is_generic)
+                    .unwrap_or(false);
+
+                if is_generic {
+                    let type_params = self.fn_types_map.get(&mangled)
+                        .map(|ft| ft.type_params.clone())
+                        .unwrap_or_default();
+                    let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
+                        .map(|(i, ty)| {
+                            let sym = self.interner.intern(&format!("_p{}", i));
+                            (sym, ty.clone())
+                        })
+                        .collect();
+                    let solve_result = crate::solve::solve_generic_params(
+                        &mut self.table,
+                        &type_params,
+                        &formal_params,
+                        Some(&*ret),
+                        &at,
+                        None,
+                        span,
+                        span,
+                        &mut |e| { self.errors.push(e); },
+                    );
+                    if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
+                        self.record_call_type_args(id, solve_result.concrete_args);
+                    }
+                    let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                    return ret_subst;
+                }
+
+                // Non-generic
                 for (f, a) in params.iter().zip(at.iter()) {
                     self.unify_and_record(f, a, span, span);
                 }
