@@ -3,18 +3,16 @@ source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 assertion_line: 59
 expression: actual
 ---
-  × UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 23,
-  │ end: 29, expansion_id: None } }
+  × unresolved name `Symbol(1)`
    ╭─[tests/ui/assign_to_immutable_pattern.g:1:1]
  1 │ fn main() { let x = 5; x = 10; x }
    · ▲
-   · ╰── UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 23, end: 29, expansion_id: None } }
+   · ╰── unresolved name `Symbol(1)`
    ╰────
 
-  × UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 31,
-  │ end: 32, expansion_id: None } }
+  × unresolved name `Symbol(1)`
    ╭─[tests/ui/assign_to_immutable_pattern.g:1:1]
  1 │ fn main() { let x = 5; x = 10; x }
    · ▲
-   · ╰── UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 31, end: 32, expansion_id: None } }
+   · ╰── unresolved name `Symbol(1)`
    ╰────

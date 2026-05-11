@@ -26,7 +26,7 @@ pub enum TypeError {
         expected_span: Span,
         found_span: Span,
     },
-    UnresolvedName { name: Symbol, span: Span },
+    UnresolvedName { name: String, span: Span },
     UnresolvedMethod {
         method_name: Symbol,
         receiver_type: Box<HirType>,
@@ -101,7 +101,7 @@ impl std::fmt::Display for TypeError {
                 write!(f, "type mismatch: expected {:?}, found {:?}", expected, found)
             }
             TypeError::UnresolvedName { name, .. } => {
-                write!(f, "unresolved name `{:?}`", name)
+                write!(f, "unresolved name `{}`", name)
             }
             TypeError::UnresolvedMethod { method_name, receiver_type, .. } => {
                 write!(f, "unresolved method `{:?}` on type `{:?}`", method_name, receiver_type)

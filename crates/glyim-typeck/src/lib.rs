@@ -88,7 +88,7 @@ impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
             TypeError::AssignToImmutable { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::AssignThroughNonPointer { span, .. } => (span.0, span.1, err.to_string()),
             TypeError::DerefNonPointer { span, .. } => (span.0, span.1, err.to_string()),
-            TypeError::UnresolvedName { span, .. } => (span.start, span.end, err.to_string()),
+            TypeError::UnresolvedName { span, name } => (span.start, span.end, format!("unresolved name `{}`", name)),
             TypeError::MismatchedTypes { expected_span, .. } => (expected_span.start, expected_span.end, err.to_string()),
             _ => (0, 0, err.to_string()),
         };

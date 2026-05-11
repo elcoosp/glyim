@@ -3,18 +3,16 @@ source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 assertion_line: 59
 expression: actual
 ---
-  × UnresolvedName { name: Symbol(3), span: Span { file_id: None, start: 23,
-  │ end: 25, expansion_id: None } }
+  × unresolved name `Symbol(3)`
    ╭─[tests/ui/invalid_question.g:1:1]
  1 │ main = () => { let x = 42?; x }
    · ▲
-   · ╰── UnresolvedName { name: Symbol(3), span: Span { file_id: None, start: 23, end: 25, expansion_id: None } }
+   · ╰── unresolved name `Symbol(3)`
    ╰────
 
-  × UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 28,
-  │ end: 29, expansion_id: None } }
+  × unresolved name `Symbol(1)`
    ╭─[tests/ui/invalid_question.g:1:1]
  1 │ main = () => { let x = 42?; x }
    · ▲
-   · ╰── UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 28, end: 29, expansion_id: None } }
+   · ╰── unresolved name `Symbol(1)`
    ╰────

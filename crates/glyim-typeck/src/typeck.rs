@@ -217,7 +217,7 @@ impl TypeChecker {
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::AddrOf { .. } => HirType::RawPtr(Box::new(HirType::Int)),
             HirExpr::Ident { name, span, .. } => self.env.lookup(*name).cloned().unwrap_or_else(|| {
-                self.errors.push(TypeError::UnresolvedName { name: *name, span: *span });
+                self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*name).to_string(), span: *span });
                 HirType::Error
             }),
             HirExpr::Return { value, .. } => {
@@ -297,7 +297,7 @@ impl TypeChecker {
                 }
             }
             // Fallback: unknown function, return Error
-            self.errors.push(TypeError::UnresolvedName { name: *name, span });
+            self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*name).to_string(), span });
             return HirType::Error;
         }
         // First-class function call
@@ -360,7 +360,7 @@ impl TypeChecker {
 
     fn infer_field_access(&mut self, obj: &HirExpr, field: Symbol, span: Span) -> HirType {
         let _ot = self.infer_dispatch(obj, None);
-        self.errors.push(TypeError::UnresolvedName { name: field, span });
+        self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(field).to_string(), span });
         HirType::Error
     }
 
@@ -410,7 +410,7 @@ impl TypeChecker {
                 if let Some(_e) = self.env.lookup(*target).cloned() {
                     self.infer_dispatch(value, None);
                 } else {
-                    self.errors.push(TypeError::UnresolvedName { name: *target, span: *span });
+                    self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*target).to_string(), span: *span });
                 }
                 HirType::Unit
             }

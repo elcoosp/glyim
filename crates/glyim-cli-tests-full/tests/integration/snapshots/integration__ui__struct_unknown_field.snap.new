@@ -3,20 +3,18 @@ source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 assertion_line: 59
 expression: actual
 ---
-  × UnresolvedName { name: Symbol(4), span: Span { file_id: None, start: 67,
-  │ end: 68, expansion_id: None } }
+  × unresolved name `Symbol(4)`
    ╭─[tests/ui/struct_unknown_field.g:1:1]
  1 │ struct Point { x, y }
    · ▲
-   · ╰── UnresolvedName { name: Symbol(4), span: Span { file_id: None, start: 67, end: 68, expansion_id: None } }
+   · ╰── unresolved name `Symbol(4)`
  2 │ main = () => { let p = Point { x: 1, y: 2 }; p.z }
    ╰────
 
-  × UnresolvedName { name: Symbol(5), span: Span { file_id: None, start: 67,
-  │ end: 70, expansion_id: None } }
+  × unresolved name `Symbol(5)`
    ╭─[tests/ui/struct_unknown_field.g:1:1]
  1 │ struct Point { x, y }
    · ▲
-   · ╰── UnresolvedName { name: Symbol(5), span: Span { file_id: None, start: 67, end: 70, expansion_id: None } }
+   · ╰── unresolved name `Symbol(5)`
  2 │ main = () => { let p = Point { x: 1, y: 2 }; p.z }
    ╰────

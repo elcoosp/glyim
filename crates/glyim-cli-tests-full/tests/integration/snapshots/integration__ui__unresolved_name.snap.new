@@ -3,10 +3,9 @@ source: crates/glyim-cli-tests-full/tests/integration/ui.rs
 assertion_line: 59
 expression: actual
 ---
-  × UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 13,
-  │ end: 16, expansion_id: None } }
+  × unresolved name `Symbol(1)`
    ╭─[tests/ui/unresolved_name.g:1:1]
  1 │ main = () => foo
    · ▲
-   · ╰── UnresolvedName { name: Symbol(1), span: Span { file_id: None, start: 13, end: 16, expansion_id: None } }
+   · ╰── unresolved name `Symbol(1)`
    ╰────
