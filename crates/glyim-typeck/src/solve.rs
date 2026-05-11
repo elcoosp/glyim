@@ -25,6 +25,9 @@ pub fn solve_generic_params<E>(
 ) -> SolveResult
 where E: FnMut(TypeError)
 {
+    eprintln!("[solve_generic_params] type_params={:?}", type_params);
+    eprintln!("[solve_generic_params] param_types={:?}", param_types);
+    eprintln!("[solve_generic_params] arg_types={:?}", arg_types);
     let mut param_vars: HashMap<Symbol, TypeVar> = HashMap::new();
     let mut had_errors = false;
 
@@ -44,6 +47,17 @@ where E: FnMut(TypeError)
             concrete_args: arg_types.to_vec(),
             fully_resolved: false,
             had_errors: true,
+        };
+    }
+
+    // Zero-argument generic call with zero arguments: nothing to infer.
+    // Leave type parameters unresolved; the caller context must provide them.
+    if param_types.is_empty() && arg_types.is_empty() {
+        return SolveResult {
+            subst: HashMap::new(),
+            concrete_args: vec![],
+            fully_resolved: false,
+            had_errors: false,
         };
     }
 

@@ -116,6 +116,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             // Register this struct's name so we can later recognise
             // calls like Point::zero() as struct associated functions.
             ctx.struct_names.insert(*name);
+            ctx.push_type_params(type_params);
             let end = fields.last().map_or(name_span.end, |(_, s, _)| s.end);
             let hir_fields: Vec<StructField> = fields
                 .iter()
@@ -128,6 +129,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     doc: None,
                 })
                 .collect();
+            ctx.pop_type_params();
             Some(HirItem::Struct(StructDef {
                 doc: None,
                 name: *name,
@@ -145,6 +147,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             variants,
             ..
         } => {
+            ctx.push_type_params(type_params);
             let end = variants.last().map_or(name_span.end, |v| v.name_span.end);
             let hir_variants: Vec<HirVariant> = variants
                 .iter()
@@ -194,6 +197,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     doc: None,
                 })
                 .collect();
+            ctx.pop_type_params();
             Some(HirItem::Enum(EnumDef {
                 doc: None,
                 name: *name,
@@ -264,14 +268,16 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     }
                 })
                 .collect();
-            Some(HirItem::Impl(HirImplDef {
+            let result = Some(HirItem::Impl(HirImplDef {
                 doc: None,
                 target_name: *target,
                 type_params: type_params.clone(),
                 methods: hir_methods,
                 is_pub: *is_pub,
                 span: *span,
-            }))
+            }));
+            ctx.pop_type_params();
+            result
         }
         Item::MacroDef {
             name,

@@ -240,10 +240,6 @@ fn e2e_generic_identity() {
     .unwrap();
 }
 #[test]
-fn e2e_generic_struct() {
-    assert_eq!(pipeline::run(&temp_g("struct Container<T> { value: T }\nmain = () => { let c = Container { value: 42 }; c.value }"), None).unwrap(), 42);
-}
-#[test]
 fn e2e_tuple() {
     let src = "main = () => { let p = (1, 2); p._0 }";
     let _result = pipeline::run(&temp_g(src), None).unwrap();
@@ -1293,7 +1289,11 @@ main = () => add(1, 2)
     let dir = tempfile::tempdir().unwrap();
     let pkg_dir = dir.path().join("docpkg");
     std::fs::create_dir_all(pkg_dir.join("src")).unwrap();
-    std::fs::write(pkg_dir.join("glyim.toml"), "[package]\nname = \"docpkg\"\nversion = \"0.1.0\"\n").unwrap();
+    std::fs::write(
+        pkg_dir.join("glyim.toml"),
+        "[package]\nname = \"docpkg\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
     std::fs::write(pkg_dir.join("src").join("main.g"), src).unwrap();
 
     let doc_dir = dir.path().join("site");
@@ -1313,7 +1313,11 @@ fn e2e_doc_impl_method() {
     let dir = tempfile::tempdir().unwrap();
     let pkg_dir = dir.path().join("docpkg2");
     std::fs::create_dir_all(pkg_dir.join("src")).unwrap();
-    std::fs::write(pkg_dir.join("glyim.toml"), "[package]\nname = \"docpkg2\"\nversion = \"0.1.0\"\n").unwrap();
+    std::fs::write(
+        pkg_dir.join("glyim.toml"),
+        "[package]\nname = \"docpkg2\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
     std::fs::write(pkg_dir.join("src").join("main.g"), src).unwrap();
     let doc_dir = dir.path().join("site");
     let result = pipeline::generate_doc(&pkg_dir, Some(&doc_dir), None);

@@ -153,7 +153,7 @@ impl HirType {
 /// `sub` maps type parameter symbols to their concrete types.
 pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType {
     match ty {
-        HirType::Named(sym) => sub.get(sym).cloned().unwrap_or_else(|| ty.clone()),
+        HirType::Param(sym) | HirType::Named(sym) => sub.get(sym).cloned().unwrap_or_else(|| ty.clone()),
         HirType::Generic(sym, args) => {
             let new_args: Vec<HirType> = args.iter().map(|a| substitute_type(a, sub)).collect();
             // If all args are now concrete (no type params remain), just return Named

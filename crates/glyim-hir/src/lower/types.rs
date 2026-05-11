@@ -4,6 +4,7 @@ use glyim_parse::TypeExpr;
 
 #[allow(clippy::only_used_in_recursion)]
 pub fn lower_type_expr(ty: &TypeExpr, ctx: &mut LoweringContext) -> HirType {
+    eprintln!("[lower_type_expr] ty={:?}", ty);
     match ty {
         TypeExpr::Int => HirType::Int,
         TypeExpr::Float => HirType::Float,

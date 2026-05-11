@@ -422,28 +422,46 @@ impl TypeChecker {
     fn infer_call(&mut self, id: glyim_hir::types::ExprId, callee: &HirExpr, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
         let at: Vec<HirType> = args.iter().map(|a| self.infer_dispatch(a, None)).collect();
         if let HirExpr::Ident { name, .. } = callee {
+            eprintln!("[infer_call] callee={} is_generic={}", self.interner.resolve(*name), self.fn_types_map.get(name).map(|ft| ft.is_generic).unwrap_or(false));
             if let Some(fty) = self.env.lookup(*name).cloned() {
                 if let HirType::Func(params, ret) = fty {
                     let fn_types_opt = self.fn_types_map.get(name);
                     let is_generic = fn_types_opt.map(|ft| ft.is_generic).unwrap_or(false);
 
                     if is_generic {
+                        // Substitute callee's type params with fresh Infer variables
+                        let fn_type_params = fn_types_opt.map(|ft| ft.type_params.clone()).unwrap_or_default();
+                        let mut callee_param_sub: HashMap<Symbol, HirType> = HashMap::new();
+                        for tp in &fn_type_params {
+                            let fresh = HirType::Infer(self.table.fresh_var(span));
+                            callee_param_sub.insert(*tp, fresh);
+                        }
+                        // Substitute in formal parameter types
+                        let substituted_params: Vec<HirType> = params.iter()
+                            .map(|ty| glyim_hir::types::substitute_type(ty, &callee_param_sub))
+                            .collect();
+                        let substituted_ret = glyim_hir::types::substitute_type(&ret, &callee_param_sub);
+
                         // Build the formal parameter types: (Symbol, HirType) pairs
-                        let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
+                        let formal_params: Vec<(Symbol, HirType)> = substituted_params.iter().enumerate()
                             .map(|(i, ty)| {
-                                // Use synthetic symbol like _p0, _p1
                                 let sym = self.interner.intern(&format!("_p{}", i));
                                 (sym, ty.clone())
                             })
                             .collect();
-                        let type_params = fn_types_opt.map(|ft| ft.type_params.clone()).unwrap_or_default();
 
                         // Run the generic solver
+                        eprintln!("[infer_call::generic] fn_type_params={:?}", fn_type_params);
+                        eprintln!("[infer_call::generic] formal_params={:?}", formal_params);
+                        eprintln!("[infer_call::generic] arg_types={:?}", at);
+                        eprintln!("[infer_call::generic] subst_map={:?}", callee_param_sub.iter().map(|(k,v)| (self.interner.resolve(*k), format!("{:?}",v))).collect::<Vec<_>>());
+                        eprintln!("[infer_call::generic] substituted_params={:?}", substituted_params);
+                        eprintln!("[infer_call::generic] substituted_ret={:?}", substituted_ret);
                         let solve_result = crate::solve::solve_generic_params(
                             &mut self.table,
-                            &type_params,
+                            &fn_type_params,
                             &formal_params,
-                            Some(&*ret),
+                            Some(&substituted_ret),
                             &at,
                             None,
                             span,
@@ -542,7 +560,18 @@ impl TypeChecker {
                     let type_params = self.fn_types_map.get(&mangled)
                         .map(|ft| ft.type_params.clone())
                         .unwrap_or_default();
-                    let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
+                    // Substitute callee's type params with fresh Infer variables
+                    let mut callee_param_sub: HashMap<Symbol, HirType> = HashMap::new();
+                    for tp in &type_params {
+                        let fresh = HirType::Infer(self.table.fresh_var(span));
+                        callee_param_sub.insert(*tp, fresh);
+                    }
+                    let substituted_params: Vec<HirType> = params.iter()
+                        .map(|ty| glyim_hir::types::substitute_type(ty, &callee_param_sub))
+                        .collect();
+                    let substituted_ret = glyim_hir::types::substitute_type(&ret, &callee_param_sub);
+
+                    let formal_params: Vec<(Symbol, HirType)> = substituted_params.iter().enumerate()
                         .map(|(i, ty)| {
                             let sym = self.interner.intern(&format!("_p{}", i));
                             (sym, ty.clone())
@@ -552,7 +581,7 @@ impl TypeChecker {
                         &mut self.table,
                         &type_params,
                         &formal_params,
-                        Some(&*ret),
+                        Some(&substituted_ret),
                         &at,
                         None,
                         span,
