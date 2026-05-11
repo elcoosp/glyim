@@ -232,6 +232,23 @@ impl TypeChecker {
                     );
                 }
             }
+            if let HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    if !m.type_params.is_empty() {
+                        self.fn_types_map.insert(
+                            m.name,
+                            FnTypes {
+                                expr_types: HashMap::new(),
+                                call_type_args: HashMap::new(),
+                                sizeof_types: HashMap::new(),
+                                is_generic: true,
+                                type_params: m.type_params.clone(),
+                                span: m.span,
+                            },
+                        );
+                    }
+                }
+            }
         }
         // Register all HIR items in the global environment
         for item in &hir.items {
@@ -447,7 +464,9 @@ impl TypeChecker {
         expected_span: Span,
         found_span: Span,
     ) -> bool {
-        match self.table.unify(expected, found, expected_span, found_span) {
+        let exp = self.normalize_type(expected);
+        let found = self.normalize_type(found);
+        match self.table.unify(&exp, &found, expected_span, found_span) {
             Ok(_) => true,
             Err(e) => {
                 self.errors.push(e.into_type_error());
@@ -553,7 +572,10 @@ impl TypeChecker {
                 args,
                 span,
                 ..
-            } => self.infer_call(*id, callee, args, expected, *span),
+            } => {
+                eprintln!("[DEBUG] infer_dispatch Call: id={:?}, expected={:?}", id, expected);
+                self.infer_call(*id, callee, args, expected, *span)
+            },
             HirExpr::Binary {
                 op, lhs, rhs, span, ..
             } => self.infer_binary(*op, lhs, rhs, *span),
@@ -682,6 +704,7 @@ impl TypeChecker {
         _exp: Option<&HirType>,
         span: Span,
     ) -> HirType {
+        eprintln!("[DEBUG] infer_call: id={:?}, callee={:?}, _exp={:?}", id, callee, _exp);
         let at: Vec<HirType> = args.iter().map(|a| self.infer_dispatch(a, None)).collect();
         if let HirExpr::Ident { name, .. } = callee {
             if let Some(fty) = self.env.lookup(*name).cloned() {
@@ -690,10 +713,29 @@ impl TypeChecker {
                     let is_generic = fn_types_opt.map(|ft| ft.is_generic).unwrap_or(false);
 
                     if is_generic {
-                        // Substitute callee's type params with fresh Infer variables
+                        eprintln!("[DEBUG] infer_call generic: fn_type_params={:?}, _exp={:?}, params={:?}, ret={:?}, at={:?}",
+                            fn_types_opt.map(|ft| ft.type_params.clone()), _exp, params, ret, at);
+
                         let fn_type_params = fn_types_opt
                             .map(|ft| ft.type_params.clone())
                             .unwrap_or_default();
+
+                        // Handle zero-arg generic calls with expected type directly
+                        if at.is_empty() && params.is_empty() {
+                            if let Some(expected) = _exp {
+                                eprintln!("[DEBUG] infer_call: direct zero-arg inference, ret={:?}, expected={:?}", ret, expected);
+                                let ret_subst = glyim_hir::types::substitute_type(&ret,
+                                    &fn_type_params.iter().map(|tp| {
+                                        let fresh = self.table.fresh_var(span);
+                                        (*tp, HirType::Infer(fresh))
+                                    }).collect());
+                                self.table.unify(&ret_subst, expected, span, span).ok();
+                                // Extract the resolved type args
+                                // For now, just return the expected type directly
+                                return expected.clone();
+                            }
+                        }
+
                         for tp in &fn_type_params {
                             let fresh = HirType::Infer(self.table.fresh_var(span));
                         }
@@ -1204,6 +1246,7 @@ impl TypeChecker {
                 ..
             } => {
                 let expected = ty.as_ref();
+                eprintln!("[DEBUG] infer_stmt LetPat: ty={:?}, expected={:?}", ty, expected);
                 let mut t = self.infer_dispatch(value, expected);
                 // Resolve through unification to get concrete type
                 if let Ok(resolved) = self.table.resolve(&t) {

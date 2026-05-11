@@ -79,9 +79,12 @@ where E: FnMut(TypeError)
     }
 
     // Zero-argument generic call: infer from expected return type.
+    eprintln!("[DEBUG] solve: zero-arg path check: param_empty={}, arg_empty={}, expected={:?}, ret={:?}",
+        param_types.is_empty(), arg_types.is_empty(), expected_return, ret_type);
     if param_types.is_empty() && arg_types.is_empty() {
         if let Some(expected) = expected_return {
             if let Some(ret) = ret_type {
+                eprintln!("[DEBUG] solve: ENTERING zero-arg unify: ret={:?}, expected={:?}", ret, expected);
                 // Substitute param_vars (our local fresh variables) into ret_type,
                 // then unify with the expected type.  This causes the fresh variables
                 // to be resolved inside the table so that the extraction loop below
