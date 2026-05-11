@@ -6,6 +6,7 @@ use glyim_hir::types::{substitute_type_safe as substitute_type, HirType, TypeVar
 use glyim_diag::Span;
 use glyim_hir::{HirExpr, HirStmt, HirItem};
 use glyim_hir::types::HirPattern as HirPat;
+use glyim_hir::index::{HirIndex, StructInfo, EnumInfo, FnInfo};
 use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
 
@@ -53,6 +54,7 @@ impl TypeCheckResult {
 pub struct TypeChecker {
     pub interner: Interner,
     known: KnownSymbols,
+    hir_index: Option<HirIndex>,
     env: TypeEnv,
     table: UnificationTable,
     expr_types: HashMap<glyim_hir::types::ExprId, HirType>,
@@ -65,7 +67,7 @@ pub struct TypeChecker {
 impl TypeChecker {
     pub fn new(interner: Interner, known: KnownSymbols) -> Self {
         Self {
-            interner, known, env: TypeEnv::new(), table: UnificationTable::new(),
+            interner, known, env: TypeEnv::new(), table: UnificationTable::new(), hir_index: None,
             expr_types: HashMap::new(), call_type_args: HashMap::new(),
             sizeof_types: HashMap::new(), errors: Vec::new(), fn_types_map: HashMap::new(),
         }
@@ -91,12 +93,64 @@ impl TypeChecker {
     }
 
     fn seed_environment(&mut self, hir: &glyim_hir::Hir) {
+        // Build the HIR index for name resolution
+        if let Ok(idx) = HirIndex::build(hir) {
+            self.hir_index = Some(idx);
+        }
+
+        // Register built-in primitive types as global names
+        self.env.insert_global(self.known.i64_type, HirType::Named(self.known.i64_type), false);
+        self.env.insert_global(self.known.bool_type, HirType::Named(self.known.bool_type), false);
+        self.env.insert_global(self.known.f64_type, HirType::Named(self.known.f64_type), false);
+        self.env.insert_global(self.known.str_type, HirType::Named(self.known.str_type), false);
+        self.env.insert_global(self.known.unit_type, HirType::Unit, false);
+
+        // Register built-in intrinsics that the prelude extern block provides
+        let i64_t = HirType::Named(self.known.i64_type);
+        let ptr_u8 = HirType::RawPtr(Box::new(HirType::Named(self.interner.intern("u8"))));
+        let void_t = HirType::Unit;
+
+        // __ptr_offset(ptr: *mut u8, offset: i64) -> *mut u8
+        let ptr_offset = self.interner.intern("__ptr_offset");
+        self.env.insert_global(ptr_offset, HirType::Func(vec![ptr_u8.clone(), i64_t.clone()], Box::new(ptr_u8.clone())), false);
+
+        // __glyim_alloc(size: i64) -> *mut u8
+        let alloc = self.interner.intern("__glyim_alloc");
+        self.env.insert_global(alloc, HirType::Func(vec![i64_t.clone()], Box::new(ptr_u8.clone())), false);
+
+        // __glyim_free(ptr: *mut u8) -> ()
+        let free = self.interner.intern("__glyim_free");
+        self.env.insert_global(free, HirType::Func(vec![ptr_u8.clone()], Box::new(void_t.clone())), false);
+
+        // __glyim_hash_bytes(data: *const u8, len: i64) -> i64
+        let hash_bytes = self.interner.intern("__glyim_hash_bytes");
+        self.env.insert_global(hash_bytes, HirType::Func(vec![ptr_u8.clone(), i64_t.clone()], Box::new(i64_t.clone())), false);
+
+        // __glyim_hash_seed() -> i64
+        let hash_seed = self.interner.intern("__glyim_hash_seed");
+        self.env.insert_global(hash_seed, HirType::Func(vec![], Box::new(i64_t.clone())), false);
+
+        // abort() -> !
+        let abort = self.interner.intern("abort");
+        self.env.insert_global(abort, HirType::Func(vec![], Box::new(HirType::Never)), false);
+
+        // __size_of<T>() -> i64 (simplified)
+        let sizeof = self.interner.intern("__size_of");
+        self.env.insert_global(sizeof, HirType::Func(vec![], Box::new(i64_t.clone())), false);
+
+        // Register all HIR items in the global environment
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) => {
                     let param_tys: Vec<HirType> = f.params.iter().map(|(_, t)| t.clone()).collect();
                     let ret_ty = if let Some(r) = &f.ret { r.clone() } else { HirType::Unit };
                     self.env.insert_global(f.name, HirType::Func(param_tys, Box::new(ret_ty)), false);
+                }
+                HirItem::Struct(s) => {
+                    self.env.insert_global(s.name, HirType::Named(s.name), false);
+                }
+                HirItem::Enum(e) => {
+                    self.env.insert_global(e.name, HirType::Named(e.name), false);
                 }
                 HirItem::Extern(ext) => {
                     for ef in &ext.functions {
@@ -105,12 +159,17 @@ impl TypeChecker {
                         self.env.insert_global(ef.name, HirType::Func(param_tys, Box::new(ret_ty)), false);
                     }
                 }
-                _ => {}
+                HirItem::Impl(imp) => {
+                    // Register each impl method by its mangled name (already in HIR)
+                    for m in &imp.methods {
+                        let param_tys: Vec<HirType> = m.params.iter().map(|(_, t)| t.clone()).collect();
+                        let ret_ty = if let Some(r) = &m.ret { r.clone() } else { HirType::Unit };
+                        self.env.insert_global(m.name, HirType::Func(param_tys, Box::new(ret_ty)), false);
+                    }
+                }
             }
         }
-    }
-
-    fn check_fn(&mut self, f: &glyim_hir::HirFn) {
+    }fn check_fn(&mut self, f: &glyim_hir::HirFn) {
         self.env.clear_locals();
         self.table.reset();
         self.expr_types.clear();
@@ -340,7 +399,39 @@ impl TypeChecker {
 
     fn infer_method_call(&mut self, _id: glyim_hir::types::ExprId, recv: &HirExpr, meth: Symbol, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
         let rt = self.infer_dispatch(recv, None);
-        let _at: Vec<HirType> = std::iter::once(rt.clone()).chain(args.iter().map(|a| self.infer_dispatch(a, None))).collect();
+        let at: Vec<HirType> = std::iter::once(rt.clone()).chain(args.iter().map(|a| self.infer_dispatch(a, None))).collect();
+
+        // Try to look up method by mangled name: TypeName_methodName
+        let type_name = match &rt {
+            HirType::Named(s) | HirType::Generic(s, _) => *s,
+            HirType::RawPtr(inner) => match inner.as_ref() {
+                HirType::Named(s) | HirType::Generic(s, _) => *s,
+                _ => {
+                    self.errors.push(TypeError::UnresolvedMethod { method_name: meth, receiver_type: Box::new(rt.clone()), span });
+                    return HirType::Error;
+                }
+            },
+            _ => {
+                self.errors.push(TypeError::UnresolvedMethod { method_name: meth, receiver_type: Box::new(rt.clone()), span });
+                return HirType::Error;
+            }
+        };
+
+        let type_str = self.interner.resolve(type_name);
+        let method_str = self.interner.resolve(meth);
+        let mangled = self.interner.intern(&format!("{}_{}", type_str, method_str));
+
+        // Look up mangled function in environment
+        if let Some(fty) = self.env.lookup(mangled).cloned() {
+            if let HirType::Func(params, ret) = fty {
+                for (f, a) in params.iter().zip(at.iter()) {
+                    self.unify_and_record(f, a, span, span);
+                }
+                return *ret;
+            }
+        }
+
+        // Not found
         self.errors.push(TypeError::UnresolvedMethod {
             method_name: meth,
             receiver_type: Box::new(rt),
