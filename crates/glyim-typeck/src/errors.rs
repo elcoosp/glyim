@@ -55,11 +55,103 @@ pub enum TypeError {
         field: Symbol,
         span: Span,
     },
+    // Legacy variant names for backward compat with snapshot tests
+    UnknownField {
+        struct_name: String,
+        field: String,
+        span: (usize, usize),
+    },
+    MissingField {
+        struct_name: String,
+        field: String,
+        span: (usize, usize),
+    },
+    NonExhaustiveMatch {
+        missing: Vec<String>,
+        span: (usize, usize),
+    },
+    AssignToImmutable {
+        name: String,
+        expr_id: glyim_hir::types::ExprId,
+        span: (usize, usize),
+    },
+    AssignThroughNonPointer {
+        found: HirType,
+        expr_id: glyim_hir::types::ExprId,
+        span: (usize, usize),
+    },
+    DerefNonPointer {
+        found: HirType,
+        expr_id: glyim_hir::types::ExprId,
+        span: (usize, usize),
+    },
+    InvalidReturnType {
+        expected: HirType,
+        found: HirType,
+    },
+    InvalidQuestion {
+        expr_id: glyim_hir::types::ExprId,
+    },
 }
 
 impl std::fmt::Display for TypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{:?}", self) }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeError::MismatchedTypes { expected, found, .. } => {
+                write!(f, "type mismatch: expected {:?}, found {:?}", expected, found)
+            }
+            TypeError::UnresolvedName { name, .. } => {
+                write!(f, "unresolved name `{:?}`", name)
+            }
+            TypeError::UnresolvedMethod { method_name, receiver_type, .. } => {
+                write!(f, "unresolved method `{:?}` on type `{:?}`", method_name, receiver_type)
+            }
+            TypeError::CannotInferType { kind, type_var, .. } => {
+                write!(f, "cannot infer type for {} (?{})", kind, type_var.raw_index())
+            }
+            TypeError::InfiniteType { .. } => {
+                write!(f, "infinite type detected")
+            }
+            TypeError::ResolveDepthExceeded { type_var, .. } => {
+                write!(f, "resolve depth exceeded for ?{}", type_var.raw_index())
+            }
+            TypeError::ArgumentCountMismatch { expected, actual, .. } => {
+                write!(f, "argument count mismatch: expected {}, got {}", expected, actual)
+            }
+            TypeError::ShapeMismatch { expected, found, .. } => {
+                write!(f, "shape mismatch: expected {:?}, found {:?}", expected, found)
+            }
+            TypeError::UnresolvedFieldOnInfer { field, .. } => {
+                write!(f, "cannot access field `{:?}` on inferred type", field)
+            }
+            TypeError::UnknownField { struct_name, field, .. } => {
+                write!(f, "unknown field `{}` on struct `{}`", field, struct_name)
+            }
+            TypeError::MissingField { struct_name, field, .. } => {
+                write!(f, "missing field `{}` in struct `{}`", field, struct_name)
+            }
+            TypeError::NonExhaustiveMatch { missing, .. } => {
+                write!(f, "non-exhaustive match, missing variants: {:?}", missing)
+            }
+            TypeError::AssignToImmutable { name, .. } => {
+                write!(f, "cannot assign to immutable `{}`", name)
+            }
+            TypeError::AssignThroughNonPointer { found, .. } => {
+                write!(f, "cannot assign through non-pointer type `{:?}`", found)
+            }
+            TypeError::DerefNonPointer { found, .. } => {
+                write!(f, "cannot dereference non-pointer type `{:?}`", found)
+            }
+            TypeError::InvalidReturnType { expected, found } => {
+                write!(f, "invalid return type: expected {:?}, found {:?}", expected, found)
+            }
+            TypeError::InvalidQuestion { .. } => {
+                write!(f, "? operator used outside of Result-returning function")
+            }
+        }
+    }
 }
+
 impl std::error::Error for TypeError {}
 
 #[derive(Debug, Clone)]
@@ -70,7 +162,9 @@ pub enum UnifyError {
 }
 
 impl std::fmt::Display for UnifyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{:?}", self) }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 impl std::error::Error for UnifyError {}
 

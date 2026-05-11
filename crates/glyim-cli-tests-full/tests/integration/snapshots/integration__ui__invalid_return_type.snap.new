@@ -1,0 +1,24 @@
+---
+source: crates/glyim-cli-tests-full/tests/integration/ui.rs
+assertion_line: 59
+expression: actual
+---
+  × MismatchedTypes { expected: Bool, found: Int, expected_span: Span
+  │ { file_id: None, start: 17, end: 23, expansion_id: None }, found_span:
+  │ Span { file_id: None, start: 17, end: 23, expansion_id: None } }
+   ╭─[tests/ui/invalid_return_type.g:1:1]
+ 1 │ fn foo() -> bool { 42 }
+   · ▲
+   · ╰── MismatchedTypes { expected: Bool, found: Int, expected_span: Span { file_id: None, start: 17, end: 23, expansion_id: None }, found_span: Span { file_id: None, start: 17, end: 23, expansion_id: None } }
+ 2 │ fn main() -> i64 { foo() }
+   ╰────
+
+  × MismatchedTypes { expected: Int, found: Bool, expected_span: Span
+  │ { file_id: None, start: 41, end: 50, expansion_id: None }, found_span:
+  │ Span { file_id: None, start: 41, end: 50, expansion_id: None } }
+   ╭─[tests/ui/invalid_return_type.g:1:1]
+ 1 │ fn foo() -> bool { 42 }
+   · ▲
+   · ╰── MismatchedTypes { expected: Int, found: Bool, expected_span: Span { file_id: None, start: 41, end: 50, expansion_id: None }, found_span: Span { file_id: None, start: 41, end: 50, expansion_id: None } }
+ 2 │ fn main() -> i64 { foo() }
+   ╰────
