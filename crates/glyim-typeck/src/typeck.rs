@@ -2,11 +2,11 @@ use crate::env::TypeEnv;
 use crate::errors::TypeError;
 use crate::symbols::KnownSymbols;
 use crate::unify::UnificationTable;
-use glyim_hir::types::{substitute_type_safe as substitute_type, HirType, TypeVar};
 use glyim_diag::Span;
-use glyim_hir::{HirExpr, HirStmt, HirItem};
+use glyim_hir::index::{EnumInfo, FnInfo, HirIndex, StructInfo};
 use glyim_hir::types::HirPattern as HirPat;
-use glyim_hir::index::{HirIndex, StructInfo, EnumInfo, FnInfo};
+use glyim_hir::types::{HirType, TypeVar, substitute_type_safe as substitute_type};
+use glyim_hir::{HirExpr, HirItem, HirStmt};
 use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
 
@@ -33,10 +33,10 @@ impl Default for FnTypes {
     }
 }
 
-
 pub struct TypeCheckOutput {
     pub expr_types: Vec<glyim_hir::types::HirType>,
-    pub call_type_args: std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>,
+    pub call_type_args:
+        std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>,
     pub interner: glyim_interner::Interner,
 }
 
@@ -67,9 +67,16 @@ pub struct TypeChecker {
 impl TypeChecker {
     pub fn new(interner: Interner, known: KnownSymbols) -> Self {
         Self {
-            interner, known, env: TypeEnv::new(), table: UnificationTable::new(), hir_index: None,
-            expr_types: HashMap::new(), call_type_args: HashMap::new(),
-            sizeof_types: HashMap::new(), errors: Vec::new(), fn_types_map: HashMap::new(),
+            interner,
+            known,
+            env: TypeEnv::new(),
+            table: UnificationTable::new(),
+            hir_index: None,
+            expr_types: HashMap::new(),
+            call_type_args: HashMap::new(),
+            sizeof_types: HashMap::new(),
+            errors: Vec::new(),
+            fn_types_map: HashMap::new(),
         }
     }
 
@@ -99,11 +106,28 @@ impl TypeChecker {
         }
 
         // Register built-in primitive types as global names
-        self.env.insert_global(self.known.i64_type, HirType::Named(self.known.i64_type), false);
-        self.env.insert_global(self.known.bool_type, HirType::Named(self.known.bool_type), false);
-        self.env.insert_global(self.known.f64_type, HirType::Named(self.known.f64_type), false);
-        self.env.insert_global(self.known.str_type, HirType::Named(self.known.str_type), false);
-        self.env.insert_global(self.known.unit_type, HirType::Unit, false);
+        self.env.insert_global(
+            self.known.i64_type,
+            HirType::Named(self.known.i64_type),
+            false,
+        );
+        self.env.insert_global(
+            self.known.bool_type,
+            HirType::Named(self.known.bool_type),
+            false,
+        );
+        self.env.insert_global(
+            self.known.f64_type,
+            HirType::Named(self.known.f64_type),
+            false,
+        );
+        self.env.insert_global(
+            self.known.str_type,
+            HirType::Named(self.known.str_type),
+            false,
+        );
+        self.env
+            .insert_global(self.known.unit_type, HirType::Unit, false);
 
         // Register built-in intrinsics that the prelude extern block provides
         let i64_t = HirType::Named(self.known.i64_type);
@@ -112,31 +136,62 @@ impl TypeChecker {
 
         // __ptr_offset(ptr: *mut u8, offset: i64) -> *mut u8
         let ptr_offset = self.interner.intern("__ptr_offset");
-        self.env.insert_global(ptr_offset, HirType::Func(vec![ptr_u8.clone(), i64_t.clone()], Box::new(ptr_u8.clone())), false);
+        self.env.insert_global(
+            ptr_offset,
+            HirType::Func(
+                vec![ptr_u8.clone(), i64_t.clone()],
+                Box::new(ptr_u8.clone()),
+            ),
+            false,
+        );
 
         // __glyim_alloc(size: i64) -> *mut u8
         let alloc = self.interner.intern("__glyim_alloc");
-        self.env.insert_global(alloc, HirType::Func(vec![i64_t.clone()], Box::new(ptr_u8.clone())), false);
+        self.env.insert_global(
+            alloc,
+            HirType::Func(vec![i64_t.clone()], Box::new(ptr_u8.clone())),
+            false,
+        );
 
         // __glyim_free(ptr: *mut u8) -> ()
         let free = self.interner.intern("__glyim_free");
-        self.env.insert_global(free, HirType::Func(vec![ptr_u8.clone()], Box::new(void_t.clone())), false);
+        self.env.insert_global(
+            free,
+            HirType::Func(vec![ptr_u8.clone()], Box::new(void_t.clone())),
+            false,
+        );
 
         // __glyim_hash_bytes(data: *const u8, len: i64) -> i64
         let hash_bytes = self.interner.intern("__glyim_hash_bytes");
-        self.env.insert_global(hash_bytes, HirType::Func(vec![ptr_u8.clone(), i64_t.clone()], Box::new(i64_t.clone())), false);
+        self.env.insert_global(
+            hash_bytes,
+            HirType::Func(vec![ptr_u8.clone(), i64_t.clone()], Box::new(i64_t.clone())),
+            false,
+        );
 
         // __glyim_hash_seed() -> i64
         let hash_seed = self.interner.intern("__glyim_hash_seed");
-        self.env.insert_global(hash_seed, HirType::Func(vec![], Box::new(i64_t.clone())), false);
+        self.env.insert_global(
+            hash_seed,
+            HirType::Func(vec![], Box::new(i64_t.clone())),
+            false,
+        );
 
         // abort() -> !
         let abort = self.interner.intern("abort");
-        self.env.insert_global(abort, HirType::Func(vec![], Box::new(HirType::Never)), false);
+        self.env.insert_global(
+            abort,
+            HirType::Func(vec![], Box::new(HirType::Never)),
+            false,
+        );
 
         // __size_of<T>() -> i64 (simplified)
         let sizeof = self.interner.intern("__size_of");
-        self.env.insert_global(sizeof, HirType::Func(vec![], Box::new(i64_t.clone())), false);
+        self.env.insert_global(
+            sizeof,
+            HirType::Func(vec![], Box::new(i64_t.clone())),
+            false,
+        );
 
         // Pre‑seed fn_types_map with generic functions so that calls to
         // them are correctly recognised as generic even before their
@@ -144,14 +199,17 @@ impl TypeChecker {
         for item in &hir.items {
             if let HirItem::Fn(f) = item {
                 if !f.type_params.is_empty() {
-                    self.fn_types_map.insert(f.name, FnTypes {
-                        expr_types: HashMap::new(),
-                        call_type_args: HashMap::new(),
-                        sizeof_types: HashMap::new(),
-                        is_generic: true,
-                        type_params: f.type_params.clone(),
-                        span: f.span,
-                    });
+                    self.fn_types_map.insert(
+                        f.name,
+                        FnTypes {
+                            expr_types: HashMap::new(),
+                            call_type_args: HashMap::new(),
+                            sizeof_types: HashMap::new(),
+                            is_generic: true,
+                            type_params: f.type_params.clone(),
+                            span: f.span,
+                        },
+                    );
                 }
             }
         }
@@ -160,33 +218,57 @@ impl TypeChecker {
             match item {
                 HirItem::Fn(f) => {
                     let param_tys: Vec<HirType> = f.params.iter().map(|(_, t)| t.clone()).collect();
-                    let ret_ty = if let Some(r) = &f.ret { r.clone() } else { HirType::Unit };
-                    self.env.insert_global(f.name, HirType::Func(param_tys, Box::new(ret_ty)), false);
+                    let ret_ty = if let Some(r) = &f.ret {
+                        r.clone()
+                    } else {
+                        HirType::Unit
+                    };
+                    self.env.insert_global(
+                        f.name,
+                        HirType::Func(param_tys, Box::new(ret_ty)),
+                        false,
+                    );
                 }
                 HirItem::Struct(s) => {
-                    self.env.insert_global(s.name, HirType::Named(s.name), false);
+                    self.env
+                        .insert_global(s.name, HirType::Named(s.name), false);
                 }
                 HirItem::Enum(e) => {
-                    self.env.insert_global(e.name, HirType::Named(e.name), false);
+                    self.env
+                        .insert_global(e.name, HirType::Named(e.name), false);
                 }
                 HirItem::Extern(ext) => {
                     for ef in &ext.functions {
                         let param_tys: Vec<HirType> = ef.params.to_vec();
                         let ret_ty = ef.ret.clone();
-                        self.env.insert_global(ef.name, HirType::Func(param_tys, Box::new(ret_ty)), false);
+                        self.env.insert_global(
+                            ef.name,
+                            HirType::Func(param_tys, Box::new(ret_ty)),
+                            false,
+                        );
                     }
                 }
                 HirItem::Impl(imp) => {
                     // Register each impl method by its mangled name (already in HIR)
                     for m in &imp.methods {
-                        let param_tys: Vec<HirType> = m.params.iter().map(|(_, t)| t.clone()).collect();
-                        let ret_ty = if let Some(r) = &m.ret { r.clone() } else { HirType::Unit };
-                        self.env.insert_global(m.name, HirType::Func(param_tys, Box::new(ret_ty)), false);
+                        let param_tys: Vec<HirType> =
+                            m.params.iter().map(|(_, t)| t.clone()).collect();
+                        let ret_ty = if let Some(r) = &m.ret {
+                            r.clone()
+                        } else {
+                            HirType::Unit
+                        };
+                        self.env.insert_global(
+                            m.name,
+                            HirType::Func(param_tys, Box::new(ret_ty)),
+                            false,
+                        );
                     }
                 }
             }
         }
-    }fn check_fn(&mut self, f: &glyim_hir::HirFn) {
+    }
+    fn check_fn(&mut self, f: &glyim_hir::HirFn) {
         self.env.clear_locals();
         self.table.reset();
         self.expr_types.clear();
@@ -206,10 +288,17 @@ impl TypeChecker {
         self.env.push_scope();
         for (i, (sym, ty)) in f.params.iter().enumerate() {
             let concrete = substitute_type(ty, &type_param_sub).unwrap_or(HirType::Error);
-            self.env.insert(*sym, concrete, f.param_mutability.get(i).copied().unwrap_or(false));
+            self.env.insert(
+                *sym,
+                concrete,
+                f.param_mutability.get(i).copied().unwrap_or(false),
+            );
         }
 
-        let concrete_ret = f.ret.as_ref().map(|r| substitute_type(r, &type_param_sub).unwrap_or(HirType::Error));
+        let concrete_ret = f
+            .ret
+            .as_ref()
+            .map(|r| substitute_type(r, &type_param_sub).unwrap_or(HirType::Error));
 
         self.env.push_scope();
         let body_ty = self.infer_dispatch(&f.body, concrete_ret.as_ref());
@@ -222,12 +311,18 @@ impl TypeChecker {
         self.finalize_fn(f, is_generic, &type_param_map);
     }
 
-    fn freeze_ty(ty: HirType, tp_map: &HashMap<TypeVar, Symbol>, tbl: &mut UnificationTable) -> HirType {
+    fn freeze_ty(
+        ty: HirType,
+        tp_map: &HashMap<TypeVar, Symbol>,
+        tbl: &mut UnificationTable,
+    ) -> HirType {
         // First resolve through the unification table
         let resolved = match ty {
-            HirType::Infer(_) | HirType::Generic(..) | HirType::Tuple(_) | HirType::RawPtr(_) | HirType::Func(..) => {
-                tbl.resolve(&ty).unwrap_or(ty)
-            }
+            HirType::Infer(_)
+            | HirType::Generic(..)
+            | HirType::Tuple(_)
+            | HirType::RawPtr(_)
+            | HirType::Func(..) => tbl.resolve(&ty).unwrap_or(ty),
             other => other,
         };
         match resolved {
@@ -238,46 +333,84 @@ impl TypeChecker {
                     HirType::Error
                 }
             }
-            HirType::Generic(s, a) => HirType::Generic(s, a.into_iter().map(|x| Self::freeze_ty(x, tp_map, tbl)).collect()),
-            HirType::Tuple(e) => HirType::Tuple(e.into_iter().map(|x| Self::freeze_ty(x, tp_map, tbl)).collect()),
+            HirType::Generic(s, a) => HirType::Generic(
+                s,
+                a.into_iter()
+                    .map(|x| Self::freeze_ty(x, tp_map, tbl))
+                    .collect(),
+            ),
+            HirType::Tuple(e) => HirType::Tuple(
+                e.into_iter()
+                    .map(|x| Self::freeze_ty(x, tp_map, tbl))
+                    .collect(),
+            ),
             HirType::RawPtr(i) => HirType::RawPtr(Box::new(Self::freeze_ty(*i, tp_map, tbl))),
             HirType::Func(p, r) => HirType::Func(
-                p.into_iter().map(|x| Self::freeze_ty(x, tp_map, tbl)).collect(),
-                Box::new(Self::freeze_ty(*r, tp_map, tbl))
+                p.into_iter()
+                    .map(|x| Self::freeze_ty(x, tp_map, tbl))
+                    .collect(),
+                Box::new(Self::freeze_ty(*r, tp_map, tbl)),
             ),
             o => o,
         }
     }
 
-    fn finalize_fn(&mut self, f: &glyim_hir::HirFn, is_generic: bool, type_param_map: &HashMap<TypeVar, Symbol>) {
-
+    fn finalize_fn(
+        &mut self,
+        f: &glyim_hir::HirFn,
+        is_generic: bool,
+        type_param_map: &HashMap<TypeVar, Symbol>,
+    ) {
         let mut new_expr = HashMap::new();
         for (&id, ty) in &self.expr_types {
-            new_expr.insert(id, Self::freeze_ty(ty.clone(), type_param_map, &mut self.table));
+            new_expr.insert(
+                id,
+                Self::freeze_ty(ty.clone(), type_param_map, &mut self.table),
+            );
         }
         let mut new_call = HashMap::new();
         for (&id, args) in &self.call_type_args {
-            new_call.insert(id, args.iter().map(|a| Self::freeze_ty(a.clone(), type_param_map, &mut self.table)).collect());
+            new_call.insert(
+                id,
+                args.iter()
+                    .map(|a| Self::freeze_ty(a.clone(), type_param_map, &mut self.table))
+                    .collect(),
+            );
         }
         let mut new_sizeof = HashMap::new();
         for (&id, ty) in &self.sizeof_types {
-            new_sizeof.insert(id, Self::freeze_ty(ty.clone(), type_param_map, &mut self.table));
+            new_sizeof.insert(
+                id,
+                Self::freeze_ty(ty.clone(), type_param_map, &mut self.table),
+            );
         }
 
-        self.fn_types_map.insert(f.name, FnTypes {
-            expr_types: new_expr,
-            call_type_args: new_call,
-            sizeof_types: new_sizeof,
-            is_generic,
-            type_params: f.type_params.clone(),
-            span: f.span,
-        });
+        self.fn_types_map.insert(
+            f.name,
+            FnTypes {
+                expr_types: new_expr,
+                call_type_args: new_call,
+                sizeof_types: new_sizeof,
+                is_generic,
+                type_params: f.type_params.clone(),
+                span: f.span,
+            },
+        );
     }
 
-    fn unify_and_record(&mut self, expected: &HirType, found: &HirType, expected_span: Span, found_span: Span) -> bool {
+    fn unify_and_record(
+        &mut self,
+        expected: &HirType,
+        found: &HirType,
+        expected_span: Span,
+        found_span: Span,
+    ) -> bool {
         match self.table.unify(expected, found, expected_span, found_span) {
             Ok(_) => true,
-            Err(e) => { self.errors.push(e.into_type_error()); false }
+            Err(e) => {
+                self.errors.push(e.into_type_error());
+                false
+            }
         }
     }
 
@@ -291,7 +424,6 @@ impl TypeChecker {
         }
     }
 
-    
     fn bind_pattern(&mut self, pat: &HirPat, ty: &HirType, mutable: bool) {
         match pat {
             glyim_hir::types::HirPattern::Wild => {}
@@ -350,45 +482,104 @@ impl TypeChecker {
             HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::AddrOf { .. } => HirType::RawPtr(Box::new(HirType::Int)),
-            HirExpr::Ident { name, span, .. } => self.env.lookup(*name).cloned().unwrap_or_else(|| {
-                self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*name).to_string(), span: *span });
-                HirType::Error
-            }),
+            HirExpr::Ident { name, span, .. } => {
+                self.env.lookup(*name).cloned().unwrap_or_else(|| {
+                    self.errors.push(TypeError::UnresolvedName {
+                        name: self.interner.resolve(*name).to_string(),
+                        span: *span,
+                    });
+                    HirType::Error
+                })
+            }
             HirExpr::Return { value, .. } => {
-                if let Some(v) = value { self.infer_dispatch(v, expected); }
+                if let Some(v) = value {
+                    self.infer_dispatch(v, expected);
+                }
                 HirType::Never
             }
             HirExpr::Block { stmts, .. } => self.infer_block(stmts),
-            HirExpr::If { condition, then_branch, else_branch, span, .. } => {
-                self.infer_if(condition, then_branch, else_branch, expected, *span)
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                span,
+                ..
+            } => self.infer_if(condition, then_branch, else_branch, expected, *span),
+            HirExpr::Call {
+                id,
+                callee,
+                args,
+                span,
+                ..
+            } => self.infer_call(*id, callee, args, expected, *span),
+            HirExpr::Binary {
+                op, lhs, rhs, span, ..
+            } => self.infer_binary(*op, lhs, rhs, *span),
+            HirExpr::Unary {
+                op, operand, span, ..
+            } => self.infer_unary(*op, operand, *span),
+            HirExpr::MethodCall {
+                id,
+                receiver,
+                method_name,
+                args,
+                span,
+                ..
+            } => self.infer_method_call(*id, receiver, *method_name, args, expected, *span),
+            HirExpr::StructLit {
+                struct_name,
+                fields,
+                span,
+                ..
+            } => self.infer_struct_lit(*struct_name, fields, *span),
+            HirExpr::EnumVariant {
+                enum_name,
+                variant_name,
+                args,
+                span,
+                ..
+            } => self.infer_enum_variant(*enum_name, *variant_name, args, *span),
+            HirExpr::FieldAccess {
+                object,
+                field,
+                span,
+                ..
+            } => self.infer_field_access(object, *field, *span),
+            HirExpr::As {
+                expr, target_type, ..
+            } => {
+                self.infer_dispatch(expr, None);
+                target_type.clone()
             }
-            HirExpr::Call { id, callee, args, span, .. } => {
-                self.infer_call(*id, callee, args, expected, *span)
-            }
-            HirExpr::Binary { op, lhs, rhs, span, .. } => self.infer_binary(*op, lhs, rhs, *span),
-            HirExpr::Unary { op, operand, span, .. } => self.infer_unary(*op, operand, *span),
-            HirExpr::MethodCall { id, receiver, method_name, args, span, .. } => {
-                self.infer_method_call(*id, receiver, *method_name, args, expected, *span)
-            }
-            HirExpr::StructLit { struct_name, fields, span, .. } => {
-                self.infer_struct_lit(*struct_name, fields, *span)
-            }
-            HirExpr::EnumVariant { enum_name, variant_name, args, span, .. } => {
-                self.infer_enum_variant(*enum_name, *variant_name, args, *span)
-            }
-            HirExpr::FieldAccess { object, field, span, .. } => {
-                self.infer_field_access(object, *field, *span)
-            }
-            HirExpr::As { expr, target_type, .. } => { self.infer_dispatch(expr, None); target_type.clone() }
             HirExpr::Deref { expr, span, .. } => self.infer_deref(expr, *span),
-            HirExpr::Match { scrutinee, arms, span, .. } => self.infer_match(scrutinee, arms, expected, *span),
-            HirExpr::While { condition, body, span, .. } => self.infer_while(condition, body, *span),
-            HirExpr::ForIn { pattern, iter, body, span, .. } => self.infer_for_in(pattern, iter, body, *span),
-            HirExpr::SizeOf { id, target_type, .. } => {
+            HirExpr::Match {
+                scrutinee,
+                arms,
+                span,
+                ..
+            } => self.infer_match(scrutinee, arms, expected, *span),
+            HirExpr::While {
+                condition,
+                body,
+                span,
+                ..
+            } => self.infer_while(condition, body, *span),
+            HirExpr::ForIn {
+                pattern,
+                iter,
+                body,
+                span,
+                ..
+            } => self.infer_for_in(pattern, iter, body, *span),
+            HirExpr::SizeOf {
+                id, target_type, ..
+            } => {
                 self.sizeof_types.insert(*id, target_type.clone());
                 HirType::Int
             }
-            HirExpr::TupleLit { elements, span, .. } => self.infer_tuple_lit(elements, expected, *span),
+            HirExpr::TupleLit { elements, span, .. } => {
+                self.infer_tuple_lit(elements, expected, *span)
+            }
             _ => HirType::Error,
         };
         self.record_expr_type(expr.get_id(), ty.clone());
@@ -405,7 +596,14 @@ impl TypeChecker {
         last
     }
 
-    fn infer_if(&mut self, cond: &HirExpr, then: &HirExpr, els: &Option<Box<HirExpr>>, exp: Option<&HirType>, span: Span) -> HirType {
+    fn infer_if(
+        &mut self,
+        cond: &HirExpr,
+        then: &HirExpr,
+        els: &Option<Box<HirExpr>>,
+        exp: Option<&HirType>,
+        span: Span,
+    ) -> HirType {
         let ct = self.infer_dispatch(cond, None);
         self.unify_and_record(&HirType::Bool, &ct, span, cond.get_span());
         let tt = self.infer_dispatch(then, exp);
@@ -419,7 +617,14 @@ impl TypeChecker {
         }
     }
 
-    fn infer_call(&mut self, id: glyim_hir::types::ExprId, callee: &HirExpr, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
+    fn infer_call(
+        &mut self,
+        id: glyim_hir::types::ExprId,
+        callee: &HirExpr,
+        args: &[HirExpr],
+        _exp: Option<&HirType>,
+        span: Span,
+    ) -> HirType {
         let at: Vec<HirType> = args.iter().map(|a| self.infer_dispatch(a, None)).collect();
         if let HirExpr::Ident { name, .. } = callee {
             if let Some(fty) = self.env.lookup(*name).cloned() {
@@ -429,22 +634,19 @@ impl TypeChecker {
 
                     if is_generic {
                         // Substitute callee's type params with fresh Infer variables
-                        let fn_type_params = fn_types_opt.map(|ft| ft.type_params.clone()).unwrap_or_default();
-                        let mut callee_param_sub: HashMap<Symbol, HirType> = HashMap::new();
+                        let fn_type_params = fn_types_opt
+                            .map(|ft| ft.type_params.clone())
+                            .unwrap_or_default();
                         for tp in &fn_type_params {
                             let fresh = HirType::Infer(self.table.fresh_var(span));
-                            callee_param_sub.insert(*tp, fresh);
                         }
-                        // Substitute in formal parameter types
-                        let substituted_params: Vec<HirType> = params.iter()
-                            .map(|ty| glyim_hir::types::substitute_type(ty, &callee_param_sub))
-                            .collect();
-                        let substituted_ret = glyim_hir::types::substitute_type(&ret, &callee_param_sub);
 
                         // Build the formal parameter types: the solver will create its own
                         // fresh type variables, so pass the original types (still with type
                         // params), not our pre-substituted versions.
-                        let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
+                        let formal_params: Vec<(Symbol, HirType)> = params
+                            .iter()
+                            .enumerate()
                             .map(|(i, ty)| {
                                 let sym = self.interner.intern(&format!("_p{}", i));
                                 (sym, ty.clone())
@@ -452,7 +654,6 @@ impl TypeChecker {
                             .collect();
 
                         // Run the generic solver — let it handle all fresh variable creation
-                        eprintln!("[infer_call::solver] callee={} fn_type_params={:?} formal_params={:?} at={:?} ret={:?} _exp={:?}", self.interner.resolve(*name), fn_type_params, formal_params, at, ret, _exp);
                         let solve_result = crate::solve::solve_generic_params(
                             &mut self.table,
                             &fn_type_params,
@@ -462,7 +663,9 @@ impl TypeChecker {
                             _exp,
                             span,
                             span,
-                            &mut |e| { self.errors.push(e); },
+                            &mut |e| {
+                                self.errors.push(e);
+                            },
                         );
 
                         // Record the discovered type arguments
@@ -471,7 +674,8 @@ impl TypeChecker {
                         }
 
                         // Apply the substitution to the return type
-                        let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                        let ret_subst =
+                            glyim_hir::types::substitute_type(&ret, &solve_result.subst);
                         return ret_subst;
                     }
 
@@ -482,7 +686,10 @@ impl TypeChecker {
                     return *ret;
                 }
             }
-            self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*name).to_string(), span });
+            self.errors.push(TypeError::UnresolvedName {
+                name: self.interner.resolve(*name).to_string(),
+                span,
+            });
             return HirType::Error;
         }
         let ct = self.infer_dispatch(callee, None);
@@ -496,12 +703,22 @@ impl TypeChecker {
         }
     }
 
-    fn infer_binary(&mut self, op: glyim_hir::HirBinOp, lhs: &HirExpr, rhs: &HirExpr, span: Span) -> HirType {
+    fn infer_binary(
+        &mut self,
+        op: glyim_hir::HirBinOp,
+        lhs: &HirExpr,
+        rhs: &HirExpr,
+        span: Span,
+    ) -> HirType {
         let lt = self.infer_dispatch(lhs, None);
         let rt = self.infer_dispatch(rhs, None);
         match op {
-            glyim_hir::HirBinOp::Eq | glyim_hir::HirBinOp::Neq | glyim_hir::HirBinOp::Lt |
-            glyim_hir::HirBinOp::Gt | glyim_hir::HirBinOp::Lte | glyim_hir::HirBinOp::Gte => {
+            glyim_hir::HirBinOp::Eq
+            | glyim_hir::HirBinOp::Neq
+            | glyim_hir::HirBinOp::Lt
+            | glyim_hir::HirBinOp::Gt
+            | glyim_hir::HirBinOp::Lte
+            | glyim_hir::HirBinOp::Gte => {
                 self.unify_and_record(&lt, &rt, span, span);
                 HirType::Bool
             }
@@ -510,56 +727,88 @@ impl TypeChecker {
                 self.unify_and_record(&HirType::Bool, &rt, span, span);
                 HirType::Bool
             }
-            _ => { self.unify_and_record(&lt, &rt, span, span); lt }
+            _ => {
+                self.unify_and_record(&lt, &rt, span, span);
+                lt
+            }
         }
     }
 
     fn infer_unary(&mut self, op: glyim_hir::HirUnOp, operand: &HirExpr, span: Span) -> HirType {
         let ot = self.infer_dispatch(operand, None);
         match op {
-            glyim_hir::HirUnOp::Not => { self.unify_and_record(&HirType::Bool, &ot, span, span); HirType::Bool }
+            glyim_hir::HirUnOp::Not => {
+                self.unify_and_record(&HirType::Bool, &ot, span, span);
+                HirType::Bool
+            }
             glyim_hir::HirUnOp::Neg => ot,
         }
     }
 
-    fn infer_method_call(&mut self, id: glyim_hir::types::ExprId, recv: &HirExpr, meth: Symbol, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
+    fn infer_method_call(
+        &mut self,
+        id: glyim_hir::types::ExprId,
+        recv: &HirExpr,
+        meth: Symbol,
+        args: &[HirExpr],
+        _exp: Option<&HirType>,
+        span: Span,
+    ) -> HirType {
         let rt = self.infer_dispatch(recv, None);
-        let at: Vec<HirType> = std::iter::once(rt.clone()).chain(args.iter().map(|a| self.infer_dispatch(a, None))).collect();
+        let at: Vec<HirType> = std::iter::once(rt.clone())
+            .chain(args.iter().map(|a| self.infer_dispatch(a, None)))
+            .collect();
 
         let type_name = match &rt {
             HirType::Named(s) | HirType::Generic(s, _) => *s,
             HirType::RawPtr(inner) => match inner.as_ref() {
                 HirType::Named(s) | HirType::Generic(s, _) => *s,
                 _ => {
-                    self.errors.push(TypeError::UnresolvedMethod { method_name: meth, receiver_type: Box::new(rt.clone()), span });
+                    self.errors.push(TypeError::UnresolvedMethod {
+                        method_name: meth,
+                        receiver_type: Box::new(rt.clone()),
+                        span,
+                    });
                     return HirType::Error;
                 }
             },
             _ => {
-                self.errors.push(TypeError::UnresolvedMethod { method_name: meth, receiver_type: Box::new(rt.clone()), span });
+                self.errors.push(TypeError::UnresolvedMethod {
+                    method_name: meth,
+                    receiver_type: Box::new(rt.clone()),
+                    span,
+                });
                 return HirType::Error;
             }
         };
 
         let type_str = self.interner.resolve(type_name);
         let method_str = self.interner.resolve(meth);
-        let mangled = self.interner.intern(&format!("{}_{}", type_str, method_str));
+        let mangled = self
+            .interner
+            .intern(&format!("{}_{}", type_str, method_str));
 
         // Look up mangled function in environment
         if let Some(fty) = self.env.lookup(mangled).cloned() {
             if let HirType::Func(params, ret) = fty {
-                let is_generic = self.fn_types_map.get(&mangled)
+                let is_generic = self
+                    .fn_types_map
+                    .get(&mangled)
                     .map(|ft| ft.is_generic)
                     .unwrap_or(false);
 
                 if is_generic {
-                    let type_params = self.fn_types_map.get(&mangled)
+                    let type_params = self
+                        .fn_types_map
+                        .get(&mangled)
                         .map(|ft| ft.type_params.clone())
                         .unwrap_or_default();
                     // Let solve_generic_params create its own fresh variables.
                     // Pass the original param/return types (still with type params),
                     // not our pre-substituted versions.
-                    let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
+                    let formal_params: Vec<(Symbol, HirType)> = params
+                        .iter()
+                        .enumerate()
                         .map(|(i, ty)| {
                             let sym = self.interner.intern(&format!("_p{}", i));
                             (sym, ty.clone())
@@ -574,7 +823,9 @@ impl TypeChecker {
                         _exp,
                         span,
                         span,
-                        &mut |e| { self.errors.push(e); },
+                        &mut |e| {
+                            self.errors.push(e);
+                        },
                     );
                     if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
                         self.record_call_type_args(id, solve_result.concrete_args);
@@ -600,7 +851,12 @@ impl TypeChecker {
         HirType::Error
     }
 
-    fn infer_struct_lit(&mut self, struct_name: Symbol, fields: &[(Symbol, HirExpr)], span: Span) -> HirType {
+    fn infer_struct_lit(
+        &mut self,
+        struct_name: Symbol,
+        fields: &[(Symbol, HirExpr)],
+        span: Span,
+    ) -> HirType {
         for (_, f_expr) in fields {
             self.infer_dispatch(f_expr, None);
         }
@@ -608,8 +864,10 @@ impl TypeChecker {
         let generic_info = self.hir_index.as_ref().and_then(|idx| {
             idx.find_struct(struct_name).and_then(|si| {
                 if !si.type_params.is_empty() {
-                    let formal_field_types: Vec<HirType> = si.fields.iter().map(|(_, t)| t.clone()).collect();
-                    let actual_exprs: Vec<HirExpr> = fields.iter().map(|(_, e)| e.clone()).collect();
+                    let formal_field_types: Vec<HirType> =
+                        si.fields.iter().map(|(_, t)| t.clone()).collect();
+                    let actual_exprs: Vec<HirExpr> =
+                        fields.iter().map(|(_, e)| e.clone()).collect();
                     Some((si.type_params.clone(), formal_field_types, actual_exprs))
                 } else {
                     None
@@ -617,7 +875,8 @@ impl TypeChecker {
             })
         });
         if let Some((type_params, formal_field_types, actual_exprs)) = generic_info {
-            let type_args = self.infer_generic_args(&type_params, &formal_field_types, &actual_exprs, span);
+            let type_args =
+                self.infer_generic_args(&type_params, &formal_field_types, &actual_exprs, span);
             return HirType::Generic(struct_name, type_args);
         }
         // Not generic or unknown: return Named
@@ -631,29 +890,51 @@ impl TypeChecker {
         actual_exprs: &[HirExpr],
         span: Span,
     ) -> Vec<HirType> {
-        let actual_types: Vec<HirType> = actual_exprs.iter().map(|a| self.infer_dispatch(a, None)).collect();
-        let params: Vec<(Symbol, HirType)> = formal_field_types.iter().enumerate().map(|(i, ty)| {
-            (self.interner.intern(&format!("_f{}", i)), ty.clone())
-        }).collect();
+        let actual_types: Vec<HirType> = actual_exprs
+            .iter()
+            .map(|a| self.infer_dispatch(a, None))
+            .collect();
+        let params: Vec<(Symbol, HirType)> = formal_field_types
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| (self.interner.intern(&format!("_f{}", i)), ty.clone()))
+            .collect();
         let solve_result = crate::solve::solve_generic_params(
-            &mut self.table, type_params, &params, None, &actual_types, None, span, span,
+            &mut self.table,
+            type_params,
+            &params,
+            None,
+            &actual_types,
+            None,
+            span,
+            span,
             &mut |e| self.errors.push(e),
         );
         if !solve_result.had_errors {
             solve_result.concrete_args
         } else {
-            type_params.iter().map(|_| HirType::Infer(self.table.fresh_var(span))).collect()
+            type_params
+                .iter()
+                .map(|_| HirType::Infer(self.table.fresh_var(span)))
+                .collect()
         }
     }
 
-    fn infer_enum_variant(&mut self, enum_name: Symbol, variant_name: Symbol, args: &[HirExpr], span: Span) -> HirType {
+    fn infer_enum_variant(
+        &mut self,
+        enum_name: Symbol,
+        variant_name: Symbol,
+        args: &[HirExpr],
+        span: Span,
+    ) -> HirType {
         // Extract type param info before mutable borrow
         let generic_info = self.hir_index.as_ref().and_then(|idx| {
             idx.find_enum(enum_name).and_then(|ei| {
                 if !ei.type_params.is_empty() {
                     let variant_idx = ei.variant_map.get(&variant_name)?;
                     let variant = &ei.variants[*variant_idx];
-                    let field_types: Vec<HirType> = variant.fields.iter().map(|f| f.ty.clone()).collect();
+                    let field_types: Vec<HirType> =
+                        variant.fields.iter().map(|f| f.ty.clone()).collect();
                     Some((ei.type_params.clone(), field_types))
                 } else {
                     None
@@ -665,7 +946,12 @@ impl TypeChecker {
             return HirType::Generic(enum_name, type_args);
         }
         // Not generic: return Named if the enum exists, else Named fallback
-        if self.hir_index.as_ref().and_then(|idx| idx.find_enum(enum_name)).is_some() {
+        if self
+            .hir_index
+            .as_ref()
+            .and_then(|idx| idx.find_enum(enum_name))
+            .is_some()
+        {
             HirType::Named(enum_name)
         } else {
             HirType::Named(enum_name)
@@ -697,7 +983,10 @@ impl TypeChecker {
             }
             HirType::Tuple(elems) => {
                 let field_name = self.interner.resolve(field);
-                if let Some(idx) = field_name.strip_prefix('_').and_then(|s| s.parse::<usize>().ok()) {
+                if let Some(idx) = field_name
+                    .strip_prefix('_')
+                    .and_then(|s| s.parse::<usize>().ok())
+                {
                     if idx < elems.len() {
                         return elems[idx].clone();
                     }
@@ -706,7 +995,10 @@ impl TypeChecker {
             _ => {}
         }
         let resolved = self.interner.resolve(field).to_string();
-        self.errors.push(TypeError::UnresolvedName { name: resolved, span });
+        self.errors.push(TypeError::UnresolvedName {
+            name: resolved,
+            span,
+        });
         HirType::Error
     }
 
@@ -718,7 +1010,13 @@ impl TypeChecker {
         }
     }
 
-    fn infer_match(&mut self, scrut: &HirExpr, arms: &[glyim_hir::MatchArm], _exp: Option<&HirType>, span: Span) -> HirType {
+    fn infer_match(
+        &mut self,
+        scrut: &HirExpr,
+        arms: &[glyim_hir::MatchArm],
+        _exp: Option<&HirType>,
+        span: Span,
+    ) -> HirType {
         let scrut_ty = self.infer_dispatch(scrut, None);
         // For each arm, bind pattern variables
         let mut result_ty = None;
@@ -742,7 +1040,13 @@ impl TypeChecker {
         HirType::Unit
     }
 
-    fn infer_for_in(&mut self, pat: &HirPat, iter: &HirExpr, body: &HirExpr, span: Span) -> HirType {
+    fn infer_for_in(
+        &mut self,
+        pat: &HirPat,
+        iter: &HirExpr,
+        body: &HirExpr,
+        span: Span,
+    ) -> HirType {
         self.infer_dispatch(iter, None);
         // Bind the loop variable to a fresh type variable, which will be
         // constrained by usage inside the body.
@@ -754,19 +1058,35 @@ impl TypeChecker {
         HirType::Unit
     }
 
-    fn infer_tuple_lit(&mut self, elems: &[HirExpr], _exp: Option<&HirType>, _span: Span) -> HirType {
+    fn infer_tuple_lit(
+        &mut self,
+        elems: &[HirExpr],
+        _exp: Option<&HirType>,
+        _span: Span,
+    ) -> HirType {
         let et: Vec<HirType> = elems.iter().map(|e| self.infer_dispatch(e, None)).collect();
         HirType::Tuple(et)
     }
 
     fn infer_stmt(&mut self, stmt: &HirStmt) -> HirType {
         match stmt {
-            HirStmt::Let { name, mutable, value, .. } => {
+            HirStmt::Let {
+                name,
+                mutable,
+                value,
+                ..
+            } => {
                 let t = self.infer_dispatch(value, None);
                 self.env.insert(*name, t, *mutable);
                 HirType::Unit
             }
-            HirStmt::LetPat { pattern, mutable, value, ty, .. } => {
+            HirStmt::LetPat {
+                pattern,
+                mutable,
+                value,
+                ty,
+                ..
+            } => {
                 let expected = ty.as_ref();
                 let mut t = self.infer_dispatch(value, expected);
                 // Resolve through unification to get concrete type
@@ -776,11 +1096,19 @@ impl TypeChecker {
                 self.bind_pattern(pattern, &t, *mutable);
                 HirType::Unit
             }
-            HirStmt::Assign { target, value, span, .. } => {
+            HirStmt::Assign {
+                target,
+                value,
+                span,
+                ..
+            } => {
                 if let Some(_e) = self.env.lookup(*target).cloned() {
                     self.infer_dispatch(value, None);
                 } else {
-                    self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*target).to_string(), span: *span });
+                    self.errors.push(TypeError::UnresolvedName {
+                        name: self.interner.resolve(*target).to_string(),
+                        span: *span,
+                    });
                 }
                 HirType::Unit
             }

@@ -27,7 +27,6 @@ where E: FnMut(TypeError)
 {
     let mut param_vars: HashMap<Symbol, TypeVar> = HashMap::new();
     let mut had_errors = false;
-
     for tp in type_params {
         let var = table.fresh_var(expected_span);
         param_vars.insert(*tp, var);
@@ -84,24 +83,19 @@ where E: FnMut(TypeError)
     }
 
     for ((_, formal_ty), actual) in param_types.iter().zip(arg_types.iter()) {
-        eprintln!("[solve params] formal_ty={:?} actual={:?} param_vars={:?}", formal_ty, actual, param_vars);
         let formal_resolved = match substitute_type_with(formal_ty, &mut |sym| {
             let mapped = param_vars.get(sym).map(|&var| HirType::Infer(var));
-            eprintln!("[solve params]   sub lookup sym={:?} → {:?}", sym, mapped);
             mapped
         }, 0) {
             Ok(ty) => {
-                eprintln!("[solve params]   formal_resolved={:?}", ty);
                 ty
             },
             Err(_) => { had_errors = true; continue; }
         };
         if let Err(e) = table.unify(&formal_resolved, actual, expected_span, found_span) {
-            eprintln!("[solve params]   unify FAILED: {:?}", e);
             had_errors = true;
             emit_err(e.into_type_error());
         } else {
-            eprintln!("[solve params]   unify OK");
         }
     }
 
@@ -117,28 +111,25 @@ where E: FnMut(TypeError)
         }
     }
 
-    // Debug: dump all bindings for the type param variables
-    for tp in type_params {
-        let var = param_vars[tp];
-        let binding = table.debug_binding(var);
-        eprintln!("[solve bindings] tp={:?} var={:?} binding={:?}", tp, var, binding);
-    }
 
     let mut subst = HashMap::new();
     let mut concrete_args = Vec::new();
     let mut fully_resolved = true;
 
+    let all_args_concrete = arg_types.iter().all(|a| !a.has_infer() && !a.has_param());
     for tp in type_params {
         let var = param_vars[tp];
         let resolved = table.resolve(&HirType::Infer(var)).unwrap_or(HirType::Error);
         let is_unresolved = matches!(resolved, HirType::Infer(_)) || matches!(&resolved, HirType::Param(s) if type_params.contains(s));
         if is_unresolved {
             fully_resolved = false;
-            emit_err(TypeError::CannotInferType {
-                kind: InferKind::GenericArg,
-                type_var: var,
-                span: expected_span,
-            });
+            if all_args_concrete {
+                emit_err(TypeError::CannotInferType {
+                    kind: InferKind::GenericArg,
+                    type_var: var,
+                    span: expected_span,
+                });
+            }
             subst.insert(*tp, HirType::Error);
             concrete_args.push(HirType::Error);
         } else if resolved == HirType::Error {
