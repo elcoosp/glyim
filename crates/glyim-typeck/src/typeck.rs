@@ -440,18 +440,75 @@ impl TypeChecker {
         HirType::Error
     }
 
-    fn infer_struct_lit(&mut self, _name: Symbol, _fields: &[(Symbol, HirExpr)], _span: Span) -> HirType {
-        // Stub - will be fully implemented with HIR index in later chunk
-        HirType::Error
+    fn infer_struct_lit(&mut self, struct_name: Symbol, fields: &[(Symbol, HirExpr)], span: Span) -> HirType {
+        // Infer types for all field values
+        for (_, f_expr) in fields {
+            self.infer_dispatch(f_expr, None);
+        }
+
+        // If it's a known struct, return Named(struct_name)
+        if let Some(ref idx) = self.hir_index {
+            if idx.find_struct(struct_name).is_some() {
+                return HirType::Named(struct_name);
+            }
+        }
+
+        // Unknown struct - still return Named to avoid cascading errors
+        HirType::Named(struct_name)
     }
 
-    fn infer_enum_variant(&mut self, _name: Symbol, _var: Symbol, _args: &[HirExpr], _span: Span) -> HirType {
-        HirType::Error
+    fn infer_enum_variant(&mut self, enum_name: Symbol, variant_name: Symbol, args: &[HirExpr], span: Span) -> HirType {
+        // Infer types for all variant arguments
+        for a in args {
+            self.infer_dispatch(a, None);
+        }
+
+        // If it's a known enum, return Named(enum_name)
+        if let Some(ref idx) = self.hir_index {
+            if idx.find_enum(enum_name).is_some() {
+                return HirType::Named(enum_name);
+            }
+        }
+
+        // Unknown enum - still return Named
+        HirType::Named(enum_name)
     }
 
     fn infer_field_access(&mut self, obj: &HirExpr, field: Symbol, span: Span) -> HirType {
-        let _ot = self.infer_dispatch(obj, None);
-        self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(field).to_string(), span });
+        let obj_ty = self.infer_dispatch(obj, None);
+        match &obj_ty {
+            HirType::Named(s) | HirType::Generic(s, _) => {
+                if let Some(ref idx) = self.hir_index {
+                    if let Some(si) = idx.find_struct(*s) {
+                        if let Some(&fi) = si.field_map.get(&field) {
+                            if fi < si.fields.len() {
+                                return si.fields[fi].1.clone();
+                            }
+                        } else {
+                            let resolved = self.interner.resolve(field).to_string();
+                            let struct_name = self.interner.resolve(*s).to_string();
+                            self.errors.push(TypeError::UnknownField {
+                                struct_name,
+                                field: resolved,
+                                span: (span.start, span.end),
+                            });
+                            return HirType::Error;
+                        }
+                    }
+                }
+            }
+            HirType::Tuple(elems) => {
+                let field_name = self.interner.resolve(field);
+                if let Some(idx) = field_name.strip_prefix('_').and_then(|s| s.parse::<usize>().ok()) {
+                    if idx < elems.len() {
+                        return elems[idx].clone();
+                    }
+                }
+            }
+            _ => {}
+        }
+        let resolved = self.interner.resolve(field).to_string();
+        self.errors.push(TypeError::UnresolvedName { name: resolved, span });
         HirType::Error
     }
 
