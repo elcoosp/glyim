@@ -2379,6 +2379,7 @@ dependencies = [
 name = "glyim-mono"
 version = "0.5.0"
 dependencies = [
+ "glyim-diag",
  "glyim-hir",
  "glyim-interner",
  "glyim-typeck",

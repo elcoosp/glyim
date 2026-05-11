@@ -1,5 +1,5 @@
 use glyim_hir::types::HirType;
-use glyim_hir::types::Span;
+use glyim_diag::Span;
 use glyim_interner::Symbol;
 use std::collections::VecDeque;
 
