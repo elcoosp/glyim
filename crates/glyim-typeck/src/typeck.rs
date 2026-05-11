@@ -567,37 +567,75 @@ impl TypeChecker {
     }
 
     fn infer_struct_lit(&mut self, struct_name: Symbol, fields: &[(Symbol, HirExpr)], span: Span) -> HirType {
-        // Infer types for all field values
         for (_, f_expr) in fields {
             self.infer_dispatch(f_expr, None);
         }
-
-        // If it's a known struct, return Named(struct_name)
-        if let Some(ref idx) = self.hir_index {
-            if idx.find_struct(struct_name).is_some() {
-                return HirType::Named(struct_name);
-            }
+        // Extract type param info before mutable borrow
+        let generic_info = self.hir_index.as_ref().and_then(|idx| {
+            idx.find_struct(struct_name).and_then(|si| {
+                if !si.type_params.is_empty() {
+                    let formal_field_types: Vec<HirType> = si.fields.iter().map(|(_, t)| t.clone()).collect();
+                    let actual_exprs: Vec<HirExpr> = fields.iter().map(|(_, e)| e.clone()).collect();
+                    Some((si.type_params.clone(), formal_field_types, actual_exprs))
+                } else {
+                    None
+                }
+            })
+        });
+        if let Some((type_params, formal_field_types, actual_exprs)) = generic_info {
+            let type_args = self.infer_generic_args(&type_params, &formal_field_types, &actual_exprs, span);
+            return HirType::Generic(struct_name, type_args);
         }
-
-        // Unknown struct - still return Named to avoid cascading errors
+        // Not generic or unknown: return Named
         HirType::Named(struct_name)
     }
 
+    fn infer_generic_args(
+        &mut self,
+        type_params: &[Symbol],
+        formal_field_types: &[HirType],
+        actual_exprs: &[HirExpr],
+        span: Span,
+    ) -> Vec<HirType> {
+        let actual_types: Vec<HirType> = actual_exprs.iter().map(|a| self.infer_dispatch(a, None)).collect();
+        let params: Vec<(Symbol, HirType)> = formal_field_types.iter().enumerate().map(|(i, ty)| {
+            (self.interner.intern(&format!("_f{}", i)), ty.clone())
+        }).collect();
+        let solve_result = crate::solve::solve_generic_params(
+            &mut self.table, type_params, &params, None, &actual_types, None, span, span,
+            &mut |e| self.errors.push(e),
+        );
+        if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
+            solve_result.concrete_args
+        } else {
+            type_params.iter().map(|_| HirType::Infer(self.table.fresh_var(span))).collect()
+        }
+    }
+
     fn infer_enum_variant(&mut self, enum_name: Symbol, variant_name: Symbol, args: &[HirExpr], span: Span) -> HirType {
-        // Infer types for all variant arguments
-        for a in args {
-            self.infer_dispatch(a, None);
+        // Extract type param info before mutable borrow
+        let generic_info = self.hir_index.as_ref().and_then(|idx| {
+            idx.find_enum(enum_name).and_then(|ei| {
+                if !ei.type_params.is_empty() {
+                    let variant_idx = ei.variant_map.get(&variant_name)?;
+                    let variant = &ei.variants[*variant_idx];
+                    let field_types: Vec<HirType> = variant.fields.iter().map(|f| f.ty.clone()).collect();
+                    Some((ei.type_params.clone(), field_types))
+                } else {
+                    None
+                }
+            })
+        });
+        if let Some((type_params, field_types)) = generic_info {
+            let type_args = self.infer_generic_args(&type_params, &field_types, args, span);
+            return HirType::Generic(enum_name, type_args);
         }
-
-        // If it's a known enum, return Named(enum_name)
-        if let Some(ref idx) = self.hir_index {
-            if idx.find_enum(enum_name).is_some() {
-                return HirType::Named(enum_name);
-            }
+        // Not generic: return Named if the enum exists, else Named fallback
+        if self.hir_index.as_ref().and_then(|idx| idx.find_enum(enum_name)).is_some() {
+            HirType::Named(enum_name)
+        } else {
+            HirType::Named(enum_name)
         }
-
-        // Unknown enum - still return Named
-        HirType::Named(enum_name)
     }
 
     fn infer_field_access(&mut self, obj: &HirExpr, field: Symbol, span: Span) -> HirType {
