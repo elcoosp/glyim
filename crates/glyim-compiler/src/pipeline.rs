@@ -165,10 +165,11 @@ pub(crate) fn merge_mono_types(
     expr_types: &[HirType],
     _call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
 ) -> (Vec<HirType>, glyim_hir::Hir) {
-    // Stub: old monomorphize module removed
+    // Type concretization happens in TypeChecker::freeze_ty during check().
+    // glyim-mono provides the infrastructure for future HIR-level specialization,
+    // but currently the pipeline passes through the original HIR.
     (expr_types.to_vec(), hir.clone())
 }
-
 /// Compile a Glyim source file into an executable binary.
 ///
 /// # Stability

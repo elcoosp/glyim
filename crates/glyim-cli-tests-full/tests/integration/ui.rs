@@ -28,9 +28,11 @@ fn compile_stderr(source: &str, file_path: &str) -> String {
     }
     let mut interner = parse_out.interner;
     let hir = lower(&parse_out.ast, &mut interner);
-    let mut tc = TypeChecker::new(interner);
-    if let Err(type_errors) = tc.check(&hir) {
-        for e in &type_errors {
+    let known = glyim_typeck::KnownSymbols::intern_all(&mut interner);
+    let mut tc = TypeChecker::new(interner, known);
+    let result = tc.check(&hir);
+    if !result.type_errors.is_empty() {
+        for e in &result.type_errors {
             use std::fmt::Write;
             let report = glyim_diag::Report::new(glyim_parse::ParseError::Message {
                 msg: e.to_string(),

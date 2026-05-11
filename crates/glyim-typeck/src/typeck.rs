@@ -206,7 +206,14 @@ impl TypeChecker {
     }
 
     fn freeze_ty(ty: HirType, tp_map: &HashMap<TypeVar, Symbol>, tbl: &mut UnificationTable) -> HirType {
-        match ty {
+        // First resolve through the unification table
+        let resolved = match ty {
+            HirType::Infer(_) | HirType::Generic(..) | HirType::Tuple(_) | HirType::RawPtr(_) | HirType::Func(..) => {
+                tbl.resolve(&ty).unwrap_or(ty)
+            }
+            other => other,
+        };
+        match resolved {
             HirType::Infer(var) => {
                 if let Some(&sym) = tp_map.get(&var) {
                     HirType::Param(sym)
@@ -372,22 +379,58 @@ impl TypeChecker {
         }
     }
 
-    fn infer_call(&mut self, _id: glyim_hir::types::ExprId, callee: &HirExpr, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
+    fn infer_call(&mut self, id: glyim_hir::types::ExprId, callee: &HirExpr, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
         let at: Vec<HirType> = args.iter().map(|a| self.infer_dispatch(a, None)).collect();
         if let HirExpr::Ident { name, .. } = callee {
             if let Some(fty) = self.env.lookup(*name).cloned() {
                 if let HirType::Func(params, ret) = fty {
+                    let fn_types_opt = self.fn_types_map.get(name);
+                    let is_generic = fn_types_opt.map(|ft| ft.is_generic).unwrap_or(false);
+
+                    if is_generic {
+                        // Build the formal parameter types: (Symbol, HirType) pairs
+                        let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
+                            .map(|(i, ty)| {
+                                // Use synthetic symbol like _p0, _p1
+                                let sym = self.interner.intern(&format!("_p{}", i));
+                                (sym, ty.clone())
+                            })
+                            .collect();
+                        let type_params = fn_types_opt.map(|ft| ft.type_params.clone()).unwrap_or_default();
+
+                        // Run the generic solver
+                        let solve_result = crate::solve::solve_generic_params(
+                            &mut self.table,
+                            &type_params,
+                            &formal_params,
+                            Some(&*ret),
+                            &at,
+                            None,
+                            span,
+                            span,
+                            &mut |e| { self.errors.push(e); },
+                        );
+
+                        // Record the discovered type arguments
+                        if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
+                            self.record_call_type_args(id, solve_result.concrete_args);
+                        }
+
+                        // Apply the substitution to the return type
+                        let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                        return ret_subst;
+                    }
+
+                    // Non-generic: just unify
                     for (f, a) in params.iter().zip(at.iter()) {
                         self.unify_and_record(f, a, span, span);
                     }
                     return *ret;
                 }
             }
-            // Fallback: unknown function, return Error
             self.errors.push(TypeError::UnresolvedName { name: self.interner.resolve(*name).to_string(), span });
             return HirType::Error;
         }
-        // First-class function call
         let ct = self.infer_dispatch(callee, None);
         if let HirType::Func(params, ret) = ct {
             for (f, a) in params.iter().zip(at.iter()) {
@@ -549,8 +592,21 @@ impl TypeChecker {
     }
 
     fn infer_match(&mut self, scrut: &HirExpr, arms: &[glyim_hir::MatchArm], _exp: Option<&HirType>, span: Span) -> HirType {
-        let _ = self.infer_dispatch(scrut, None);
-        arms.first().map_or(HirType::Unit, |a| self.infer_dispatch(&a.body, None))
+        let scrut_ty = self.infer_dispatch(scrut, None);
+        // For each arm, bind pattern variables
+        let mut result_ty = None;
+        for arm in arms {
+            self.env.push_scope();
+            self.bind_pattern(&arm.pattern, &scrut_ty, false);
+            let arm_ty = self.infer_dispatch(&arm.body, None);
+            self.env.pop_scope();
+            if result_ty.is_none() {
+                result_ty = Some(arm_ty);
+            } else if let Some(ref first) = result_ty {
+                self.unify_and_record(first, &arm_ty, span, span);
+            }
+        }
+        result_ty.unwrap_or(HirType::Unit)
     }
 
     fn infer_while(&mut self, cond: &HirExpr, body: &HirExpr, span: Span) -> HirType {
