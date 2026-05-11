@@ -12,6 +12,37 @@ pub struct SolveResult {
     pub had_errors: bool,
 }
 
+fn collect_type_params(ty: &HirType, set: &mut std::collections::HashSet<Symbol>) {
+    match ty {
+        HirType::Param(sym) => {
+            set.insert(*sym);
+        }
+        HirType::Generic(_, args) => {
+            for a in args {
+                collect_type_params(a, set);
+            }
+        }
+        HirType::Tuple(elems) => {
+            for e in elems {
+                collect_type_params(e, set);
+            }
+        }
+        HirType::RawPtr(inner) => collect_type_params(inner, set),
+        HirType::Func(params, ret) => {
+            for p in params {
+                collect_type_params(p, set);
+            }
+            collect_type_params(ret, set);
+        }
+        HirType::Option(inner) => collect_type_params(inner, set),
+        HirType::Result(ok, err) => {
+            collect_type_params(ok, set);
+            collect_type_params(err, set);
+        }
+        _ => {}
+    }
+}
+
 pub fn solve_generic_params<E>(
     table: &mut UnificationTable,
     type_params: &[Symbol],
@@ -112,6 +143,15 @@ where E: FnMut(TypeError)
     }
 
 
+    // Determine which type parameters are actually used in the formal parameters or return type
+    let mut used_params = std::collections::HashSet::new();
+    for (_, ty) in param_types {
+        collect_type_params(ty, &mut used_params);
+    }
+    if let Some(ret) = ret_type {
+        collect_type_params(ret, &mut used_params);
+    }
+
     let mut subst = HashMap::new();
     let mut concrete_args = Vec::new();
     let mut fully_resolved = true;
@@ -123,7 +163,8 @@ where E: FnMut(TypeError)
         let is_unresolved = matches!(resolved, HirType::Infer(_)) || matches!(&resolved, HirType::Param(s) if type_params.contains(s));
         if is_unresolved {
             fully_resolved = false;
-            if all_args_concrete {
+            // Only emit an error if this type parameter is actually used in the signature.
+            if used_params.contains(tp) && all_args_concrete {
                 emit_err(TypeError::CannotInferType {
                     kind: InferKind::GenericArg,
                     type_var: var,
