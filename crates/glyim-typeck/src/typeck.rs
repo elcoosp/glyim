@@ -267,6 +267,34 @@ impl TypeChecker {
         }
     }
 
+    
+    fn bind_pattern(&mut self, pat: &HirPat, ty: &HirType, mutable: bool) {
+        match pat {
+            glyim_hir::types::HirPattern::Wild => {}
+            glyim_hir::types::HirPattern::Var(name) => {
+                self.env.insert(*name, ty.clone(), mutable);
+            }
+            glyim_hir::types::HirPattern::Struct { bindings, .. } => {
+                for (_, sub_pat) in bindings {
+                    self.bind_pattern(sub_pat, ty, mutable);
+                }
+            }
+            glyim_hir::types::HirPattern::Tuple { elements, .. } => {
+                if let HirType::Tuple(types) = ty {
+                    for (sub_pat, sub_ty) in elements.iter().zip(types.iter()) {
+                        self.bind_pattern(sub_pat, sub_ty, mutable);
+                    }
+                }
+            }
+            glyim_hir::types::HirPattern::EnumVariant { bindings, .. } => {
+                for (_, sub_pat) in bindings {
+                    self.bind_pattern(sub_pat, ty, mutable);
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub fn infer_dispatch(&mut self, expr: &HirExpr, expected: Option<&HirType>) -> HirType {
         let ty = match expr {
             HirExpr::IntLit { .. } => HirType::Int,
@@ -434,7 +462,7 @@ impl TypeChecker {
         // Not found
         self.errors.push(TypeError::UnresolvedMethod {
             method_name: meth,
-            receiver_type: Box::new(rt),
+            receiver_type: Box::new(rt.clone()),
             span,
         });
         HirType::Error
@@ -549,9 +577,9 @@ impl TypeChecker {
                 self.env.insert(*name, t, *mutable);
                 HirType::Unit
             }
-            HirStmt::LetPat { mutable, value, .. } => {
+            HirStmt::LetPat { pattern, mutable, value, .. } => {
                 let t = self.infer_dispatch(value, None);
-                self.env.insert(self.interner.intern("_"), t, *mutable);
+                self.bind_pattern(pattern, &t, *mutable);
                 HirType::Unit
             }
             HirStmt::Assign { target, value, span, .. } => {
