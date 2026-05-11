@@ -13,3 +13,6 @@ pub use metadata::{TypeMetadata, TypeStructure};
 pub use concretize::{ConcretizeError, ConcretizeErrorKind, concretize_and_register, has_unresolved_type_param, build_subst, substitute_and_concretize};
 pub use driver::{MonoDriver, MonoMetrics, MonoResult, FailedItem};
 pub use queue::{ItemKind, WorkItem, WorkItemContext, WorkQueue};
+
+#[cfg(test)]
+mod tests;

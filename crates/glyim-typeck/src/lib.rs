@@ -102,3 +102,6 @@ impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
