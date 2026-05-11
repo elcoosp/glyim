@@ -1,5 +1,5 @@
 use glyim_interner::Interner;
-use glyim_hir::types::HirType;
+use glyim_hir::types::{HirType, TypeVar};
 use crate::*;
 use glyim_diag::Span;
 
