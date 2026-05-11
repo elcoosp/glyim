@@ -97,7 +97,7 @@ fn collect_symbols_expr(expr: &HirExpr, symbols: &mut Vec<String>) {
             }
         }
         HirExpr::Call { callee, args, .. } => {
-            let s = callee.raw().to_string();
+            let s = if let HirExpr::Ident { name, .. } = callee.as_ref() { name.raw().to_string() } else { String::new() };
             if !symbols.contains(&s) {
                 symbols.push(s);
             }
@@ -355,7 +355,7 @@ fn write_expr(expr: &HirExpr, buf: &mut Vec<u8>, symbols: &[String]) {
             callee, args, span, ..
         } => {
             write_u8(buf, TAG_CALL);
-            write_sym_index(buf, *callee, symbols);
+            if let HirExpr::Ident { name, .. } = callee.as_ref() { write_sym_index(buf, *name, symbols); }
             write_u32(buf, args.len() as u32);
             for a in args {
                 write_expr(a, buf, symbols);
@@ -788,7 +788,7 @@ fn read_expr(data: &[u8], pos: &mut usize, symbols: &[String]) -> Option<HirExpr
             let s = read_span(data, pos)?;
             Some(HirExpr::Call {
                 id: make_id(),
-                callee,
+                callee: Box::new(HirExpr::Ident { id: glyim_hir::types::ExprId::new(0), name: callee, span: Span::new(0,0) }),
                 args,
                 span: s,
             })

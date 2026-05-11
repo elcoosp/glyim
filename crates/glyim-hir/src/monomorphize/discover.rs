@@ -167,6 +167,10 @@ pub fn discover_call_specialization(
 
     // Step 4: Demangle the callee name if it's pre-mangled.
     let callee_str = interner.resolve(callee).to_string();
+
+
+
+
     let base_callee = if let Some(pos) = callee_str.find("__") {
         let base_str = &callee_str[..pos];
         interner.intern(base_str)
@@ -648,11 +652,12 @@ fn discover_calls_in_expr(
         HirExpr::Call {
             id, callee, args, ..
         } => {
-            let callee_str = interner.resolve(*callee).to_string();
+            let callee_sym = if let HirExpr::Ident { name, .. } = callee.as_ref() { *name } else { return; };
+            let callee_str = interner.resolve(callee_sym).to_string();
             let base = if let Some(pos) = callee_str.find("__") {
                 interner.intern(&callee_str[..pos])
             } else {
-                *callee
+                callee_sym
             };
             if index.is_generic_fn(base) {
                 // Try call_type_args first (most reliable source)

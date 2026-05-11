@@ -94,8 +94,13 @@ impl<'a> BytecodeCompiler<'a> {
                 for a in args {
                     self.compile_expr(ctx, a);
                 }
+                let callee_name = if let HirExpr::Ident { name, .. } = callee.as_ref() {
+                    *name
+                } else {
+                    return;
+                };
                 ctx.emit(BytecodeOp::Call {
-                    name: self.resolve(*callee),
+                    name: self.resolve(callee_name),
                     arg_count: args.len() as u32,
                 });
             }

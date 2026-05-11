@@ -19,7 +19,7 @@ impl ExprId {
 }
 
 /// Type inference variable (unique per fresh unification variable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct TypeVar(u32);
 
 impl TypeVar {
@@ -30,7 +30,7 @@ impl TypeVar {
 }
 
 /// High-level types in the Glyim type system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum HirType {
     Infer(TypeVar),
     Param(Symbol),

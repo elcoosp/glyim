@@ -114,7 +114,7 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
             full_args.append(&mut args_vec);
             *expr = HirExpr::Call {
                 id,
-                callee,
+                callee: Box::new(HirExpr::Ident { id: crate::types::ExprId::new(0), name: callee, span: glyim_diag::Span::new(0,0) }),
                 args: full_args,
                 span,
             };

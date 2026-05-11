@@ -130,7 +130,7 @@ pub enum HirExpr {
     },
     Call {
         id: ExprId,
-        callee: Symbol,
+        callee: Box<HirExpr>,
         args: Vec<HirExpr>,
         span: Span,
     },
@@ -312,3 +312,5 @@ pub struct HirFn {
 pub struct Hir {
     pub items: Vec<crate::item::HirItem>,
 }
+
+

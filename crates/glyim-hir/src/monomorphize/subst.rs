@@ -203,7 +203,7 @@ impl<'a> SubstContext<'a> {
                 }
             }
             HirExpr::Call { callee, args, .. } => {
-                self.substitute_call(new_id, original_id, *callee, args, span, sub)
+                self.substitute_call(new_id, original_id, if let HirExpr::Ident { name, .. } = callee.as_ref() { *name } else { return HirExpr::IntLit { id: self.fresh_id(), value: 0, span } }, args, span, sub)
             }
             HirExpr::MethodCall {
                 receiver,
@@ -478,7 +478,7 @@ impl<'a> SubstContext<'a> {
         self.discovered.extend(discovered);
         HirExpr::Call {
             id: new_id,
-            callee: new_callee,
+            callee: Box::new(HirExpr::Ident { id: self.fresh_id(), name: new_callee, span }),
             args: new_args,
             span,
         }
@@ -514,7 +514,7 @@ impl<'a> SubstContext<'a> {
             call_args.extend(new_args);
             return HirExpr::Call {
                 id: new_id,
-                callee: mangled_callee,
+                callee: Box::new(HirExpr::Ident { id: self.fresh_id(), name: mangled_callee, span }),
                 args: call_args,
                 span,
             };
@@ -539,7 +539,7 @@ impl<'a> SubstContext<'a> {
                     call_args.extend(new_args);
                     return HirExpr::Call {
                         id: new_id,
-                        callee: mangled,
+                        callee: Box::new(HirExpr::Ident { id: self.fresh_id(), name: mangled, span }),
                         args: call_args,
                         span,
                     };

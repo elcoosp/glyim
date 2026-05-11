@@ -124,7 +124,10 @@ pub(crate) fn codegen_expr<'ctx>(
         HirExpr::Assert {
             condition, message, ..
         } => super::string::codegen_assert(cg, condition, message, fctx),
-        HirExpr::Call { callee, args, .. } => super::string::codegen_call(cg, callee, args, fctx),
+        HirExpr::Call { callee, args, .. } => {
+                let callee_sym = if let HirExpr::Ident { name, .. } = callee.as_ref() { name } else { return None };
+                super::string::codegen_call(cg, callee_sym, args, fctx)
+            }
         HirExpr::Block { stmts, .. } => {
             let mut last = Some(cg.i64_type.const_int(0, false));
             for stmt in stmts {
@@ -178,6 +181,7 @@ pub(crate) fn codegen_expr<'ctx>(
                             "f64" | "Float" => HirType::Float,
                             "bool" | "Bool" => HirType::Bool,
                             "Str" | "str" => HirType::Str,
+
                             _ => ty.clone(),
                         }
                     }
@@ -406,6 +410,7 @@ pub(crate) fn codegen_expr<'ctx>(
                         .map(|e| mangle_type(cg, e))
                         .collect::<Vec<_>>()
                         .join("_"),
+                _ => unreachable!(),
                 }
             }
 

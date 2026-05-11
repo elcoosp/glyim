@@ -296,7 +296,7 @@ impl<'a> SemanticNormalizer<'a> {
                     .map(|e| Box::new(self.normalize_expr(e))),
             },
             HirExpr::Call { callee, args, .. } => NormalizedExpr::Call {
-                callee: self.resolve_name(*callee),
+                callee: if let HirExpr::Ident { name, .. } = callee.as_ref() { self.resolve_name(*name) } else { "unknown".to_string() },
                 args: args.iter().map(|a| self.normalize_expr(a)).collect(),
             },
             HirExpr::MethodCall {

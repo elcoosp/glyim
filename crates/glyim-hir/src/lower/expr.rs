@@ -95,7 +95,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
                 HirExpr::Call {
                     id,
-                    callee: mangled,
+                    callee: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: mangled, span }),
                     args: call_args,
                     span,
                 }
@@ -452,7 +452,7 @@ fn lower_try_expr(id: ExprId, expr: &glyim_parse::ExprNode, ctx: &mut LoweringCo
             }),
             HirStmt::Expr(HirExpr::Call {
                 id: ctx.fresh_id(),
-                callee: abort_sym,
+                callee: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: abort_sym, span }),
                 args: vec![],
                 span,
             }),
@@ -508,7 +508,7 @@ fn lower_call(
         let call_args: Vec<HirExpr> = args.iter().map(|a| lower_expr(a, ctx)).collect();
         return HirExpr::Call {
             id: ctx.fresh_id(),
-            callee: mangled,
+            callee: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: mangled, span: call_span }),
             args: call_args,
             span: call_span,
         };
@@ -549,7 +549,7 @@ fn lower_call(
             _ => {
                 return HirExpr::Call {
                     id: ctx.fresh_id(),
-                    callee: *sym,
+                    callee: Box::new(HirExpr::Ident { id: ctx.fresh_id(), name: *sym, span: call_span }),
                     args: call_args,
                     span: call_span,
                 };

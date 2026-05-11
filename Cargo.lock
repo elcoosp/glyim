@@ -2517,15 +2517,6 @@ dependencies = [
  "glyim-diag",
  "glyim-hir",
  "glyim-interner",
- "glyim-parse",
- "insta",
- "miette",
- "miette-derive",
- "proptest",
- "rstest",
- "similar 3.1.0",
- "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]

@@ -13,7 +13,7 @@ fn lower_source(source: &str) -> (crate::Hir, Interner) {
 
 fn find_call_id(expr: &HirExpr, callee: Symbol) -> Option<ExprId> {
     match expr {
-        HirExpr::Call { id, callee: c, .. } if *c == callee => Some(*id),
+        HirExpr::Call { id, callee, .. } if matches!(callee.as_ref(), HirExpr::Ident { name, .. } if *name == callee) => Some(*id),
         HirExpr::Block { stmts, .. } => stmts.iter().find_map(|s| match s {
             HirStmt::Expr(e) => find_call_id(e, callee),
             HirStmt::Let { value, .. } | HirStmt::LetPat { value, .. } => find_call_id(value, callee),
