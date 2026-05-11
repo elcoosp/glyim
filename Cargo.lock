@@ -2376,6 +2376,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-mono"
+version = "0.5.0"
+dependencies = [
+ "glyim-hir",
+ "glyim-interner",
+ "glyim-typeck",
+]
+
+[[package]]
 name = "glyim-mutant"
 version = "0.5.0"
 dependencies = [
