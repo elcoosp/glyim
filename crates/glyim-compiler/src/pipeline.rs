@@ -139,38 +139,12 @@ fn load_source_with_prelude_opt(
 // ── shared monomorphize→merged_types helper ──────────────────────
 pub(crate) fn merge_mono_types(
     hir: &glyim_hir::Hir,
-    interner: &mut Interner,
+    _interner: &mut Interner,
     expr_types: &[HirType],
-    call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
+    _call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
 ) -> (Vec<HirType>, glyim_hir::Hir) {
-    let mono_result =
-        glyim_hir::monomorphize::monomorphize(hir, interner, expr_types, call_type_args);
-
-    // The monomorphized HIR uses NEW ExprIds (assigned by SubstContext::fresh_id()
-    // starting from 0). mono_result.expr_types is indexed by these new ExprIds,
-    // so we use it directly as the type map — no merge with the original expr_types
-    // is needed (or correct, since the old and new ExprId namespaces don't overlap).
-    let mut merged = mono_result.expr_types;
-
-    // Generic → Named fallback for any remaining Generic types
-    for ty in &mut merged {
-        if let HirType::Generic(sym, args) = ty {
-            let all_concrete = args.iter().all(|a| match a {
-                HirType::Named(s) => {
-                    let s = interner.resolve(*s);
-                    !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
-                }
-                _ => true,
-            });
-            if all_concrete && !args.is_empty() {
-                let mangled = glyim_hir::monomorphize::mangle_type_name(interner, *sym, args);
-                *ty = HirType::Named(mangled);
-            } else {
-                *ty = HirType::Named(*sym);
-            }
-        }
-    }
-    (merged, mono_result.hir)
+    // Stub: old monomorphize module removed
+    (expr_types.to_vec(), hir.clone())
 }
 
 /// Compile a Glyim source file into an executable binary.

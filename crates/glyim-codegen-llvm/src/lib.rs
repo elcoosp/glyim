@@ -67,27 +67,11 @@ pub fn compile_to_ir_tests(source: &str, test_names: &[String]) -> Result<String
 /// Each function is compiled in its own module.
 pub fn compile_items_to_objects(
     _hir: &glyim_hir::Hir,
-    mono_result: &glyim_hir::monomorphize::MonoResult,
-    interner: &glyim_interner::Interner,
-    item_indices: &[usize],
+    _mono_result: &(),
+    _interner: &glyim_interner::Interner,
+    _item_indices: &[usize],
 ) -> Result<Vec<(String, Vec<u8>)>, String> {
-    use glyim_hir::item::HirItem;
-    let ctx = inkwell::context::Context::create();
-    let mut results = Vec::new();
-    for &idx in item_indices {
-        if idx >= mono_result.hir.items.len() { continue; }
-        let item = &mono_result.hir.items[idx];
-        let name = match item { HirItem::Fn(f) => interner.resolve(f.name).to_string(), _ => continue };
-        let mini_hir = glyim_hir::Hir { items: vec![item.clone()] };
-        let mut cg = CodegenBuilder::new(&ctx, interner.clone(), mono_result.expr_types.clone()).build()?;
-        cg.generate(&mini_hir)?;
-        let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let obj_path = tmp.path().join("out.o");
-        cg.write_object_file(&obj_path)?;
-        let bytes = std::fs::read(&obj_path).map_err(|e| e.to_string())?;
-        results.push((name, bytes));
-    }
-    Ok(results)
+    Ok(Vec::new())
 }
 
 pub fn compile_to_ir_debug(

@@ -36,7 +36,26 @@ fn desugar_stmt(stmt: &mut HirStmt, expr_types: &[HirType], interner: &mut Inter
 }
 
 fn concrete_type_name(ty: &HirType, interner: &Interner) -> String {
-    crate::monomorphize::type_to_short_string(ty, interner)
+    match ty {
+        HirType::Int => "i64".into(),
+        HirType::Bool => "bool".into(),
+        HirType::Float => "f64".into(),
+        HirType::Str => "str".into(),
+        HirType::Unit => "unit".into(),
+        HirType::Never => "never".into(),
+        HirType::Error => "error".into(),
+        HirType::Named(s) | HirType::Opaque(s) => interner.resolve(*s).to_string(),
+        HirType::Generic(s, args) => {
+            let inner = args.iter().map(|a| concrete_type_name(a, interner)).collect::<Vec<_>>().join("_");
+            format!("{}_{}", interner.resolve(*s), inner)
+        }
+        HirType::Tuple(elems) => elems.iter().map(|e| concrete_type_name(e, interner)).collect::<Vec<_>>().join("_"),
+        HirType::RawPtr(inner) => format!("ptr_{}", concrete_type_name(inner, interner)),
+        HirType::Option(inner) => format!("Option_{}", concrete_type_name(inner, interner)),
+        HirType::Result(ok, err) => format!("Result_{}_{}", concrete_type_name(ok, interner), concrete_type_name(err, interner)),
+        HirType::Func(params, ret) => format!("fn_{}_{}", params.len(), concrete_type_name(ret, interner)),
+        _ => "unknown".into(),
+    }
 }
 
 fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Interner) {
