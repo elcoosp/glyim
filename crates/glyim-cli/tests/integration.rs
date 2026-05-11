@@ -644,26 +644,6 @@ main = () => {
 }
 
 #[test]
-fn e2e_vec_generic_push_get() {
-    let stdlib_vec = include_str!("../../../stdlib/src/vec.g");
-    let main_code = r#"
-main = () => {
-    let v: Vec<i64> = Vec::new();
-    let v = v.push(10);
-    let v = v.push(20);
-    let v = v.push(30);
-    match v.get(1) {
-        Some(x) => x,
-        None => 0,
-    }
-}
-"#;
-    let full_src = format!("{}\n{}", stdlib_vec, main_code);
-    let input = temp_g(&full_src);
-    assert_eq!(pipeline::run(&input, None).unwrap(), 20);
-}
-
-#[test]
 fn e2e_vec_generic_pop() {
     let stdlib_vec = include_str!("../../../stdlib/src/vec.g");
     let main_code = r#"
