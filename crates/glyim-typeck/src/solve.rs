@@ -84,15 +84,24 @@ where E: FnMut(TypeError)
     }
 
     for ((_, formal_ty), actual) in param_types.iter().zip(arg_types.iter()) {
+        eprintln!("[solve params] formal_ty={:?} actual={:?} param_vars={:?}", formal_ty, actual, param_vars);
         let formal_resolved = match substitute_type_with(formal_ty, &mut |sym| {
-            param_vars.get(sym).map(|&var| HirType::Infer(var))
+            let mapped = param_vars.get(sym).map(|&var| HirType::Infer(var));
+            eprintln!("[solve params]   sub lookup sym={:?} → {:?}", sym, mapped);
+            mapped
         }, 0) {
-            Ok(ty) => ty,
+            Ok(ty) => {
+                eprintln!("[solve params]   formal_resolved={:?}", ty);
+                ty
+            },
             Err(_) => { had_errors = true; continue; }
         };
         if let Err(e) = table.unify(&formal_resolved, actual, expected_span, found_span) {
+            eprintln!("[solve params]   unify FAILED: {:?}", e);
             had_errors = true;
             emit_err(e.into_type_error());
+        } else {
+            eprintln!("[solve params]   unify OK");
         }
     }
 
@@ -106,6 +115,13 @@ where E: FnMut(TypeError)
                 emit_err(e.into_type_error());
             }
         }
+    }
+
+    // Debug: dump all bindings for the type param variables
+    for tp in type_params {
+        let var = param_vars[tp];
+        let binding = table.debug_binding(var);
+        eprintln!("[solve bindings] tp={:?} var={:?} binding={:?}", tp, var, binding);
     }
 
     let mut subst = HashMap::new();

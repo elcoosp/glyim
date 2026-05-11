@@ -452,6 +452,7 @@ impl TypeChecker {
                             .collect();
 
                         // Run the generic solver — let it handle all fresh variable creation
+                        eprintln!("[infer_call::solver] callee={} fn_type_params={:?} formal_params={:?} at={:?} ret={:?} _exp={:?}", self.interner.resolve(*name), fn_type_params, formal_params, at, ret, _exp);
                         let solve_result = crate::solve::solve_generic_params(
                             &mut self.table,
                             &fn_type_params,
