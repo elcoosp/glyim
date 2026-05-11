@@ -50,15 +50,41 @@ where E: FnMut(TypeError)
         };
     }
 
-    // Zero-argument generic call with zero arguments: nothing to infer.
-    // Leave type parameters unresolved; the caller context must provide them.
+    // Zero-argument generic call: infer from expected return type.
     if param_types.is_empty() && arg_types.is_empty() {
-        return SolveResult {
-            subst: HashMap::new(),
-            concrete_args: vec![],
-            fully_resolved: false,
-            had_errors: false,
-        };
+        if let Some(expected) = expected_return {
+            if let Some(ret) = ret_type {
+                // Substitute param_vars (our local fresh variables) into ret_type,
+                // then unify with the expected type.  This causes the fresh variables
+                // to be resolved inside the table so that the extraction loop below
+                // can read them back.
+                let ret_resolved = substitute_type_with(ret, &mut |sym| {
+                    param_vars.get(sym).map(|&var| HirType::Infer(var))
+                }, 0).unwrap_or(HirType::Error);
+                // Also resolve / flatten the expected type through the table
+                let expected_flat = table.resolve(expected).unwrap_or_else(|_| expected.clone());
+                let res = table.unify(&ret_resolved, &expected_flat, expected_span, found_span);
+                if let Err(e) = res {
+                    had_errors = true;
+                    emit_err(e.into_type_error());
+                }
+            }
+        }
+        let mut subst = HashMap::new();
+        let mut concrete_args = Vec::new();
+        let mut fully_resolved = true;
+        for tp in type_params {
+            let var = param_vars[tp];
+            let resolved = table.resolve(&HirType::Infer(var)).unwrap_or(HirType::Error);
+            if matches!(resolved, HirType::Infer(_)) {
+                fully_resolved = false;
+            } else {
+                subst.insert(*tp, resolved.clone());
+                concrete_args.push(resolved);
+            }
+        }
+        eprintln!("[solve zero-arg] type_params={:?} expected_return={:?} ret_type={:?} → subst={:?} concrete_args={:?} fully_resolved={}", type_params, expected_return, ret_type, subst, concrete_args, fully_resolved);
+        return SolveResult { subst, concrete_args, fully_resolved, had_errors };
     }
 
     for ((_, formal_ty), actual) in param_types.iter().zip(arg_types.iter()) {

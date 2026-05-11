@@ -422,7 +422,7 @@ impl TypeChecker {
     fn infer_call(&mut self, id: glyim_hir::types::ExprId, callee: &HirExpr, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
         let at: Vec<HirType> = args.iter().map(|a| self.infer_dispatch(a, None)).collect();
         if let HirExpr::Ident { name, .. } = callee {
-            eprintln!("[infer_call] callee={} is_generic={}", self.interner.resolve(*name), self.fn_types_map.get(name).map(|ft| ft.is_generic).unwrap_or(false));
+            eprintln!("[infer_call] callee={} is_generic={} _exp={:?}", self.interner.resolve(*name), self.fn_types_map.get(name).map(|ft| ft.is_generic).unwrap_or(false), _exp);
             if let Some(fty) = self.env.lookup(*name).cloned() {
                 if let HirType::Func(params, ret) = fty {
                     let fn_types_opt = self.fn_types_map.get(name);
@@ -442,28 +442,24 @@ impl TypeChecker {
                             .collect();
                         let substituted_ret = glyim_hir::types::substitute_type(&ret, &callee_param_sub);
 
-                        // Build the formal parameter types: (Symbol, HirType) pairs
-                        let formal_params: Vec<(Symbol, HirType)> = substituted_params.iter().enumerate()
+                        // Build the formal parameter types: the solver will create its own
+                        // fresh type variables, so pass the original types (still with type
+                        // params), not our pre-substituted versions.
+                        let formal_params: Vec<(Symbol, HirType)> = params.iter().enumerate()
                             .map(|(i, ty)| {
                                 let sym = self.interner.intern(&format!("_p{}", i));
                                 (sym, ty.clone())
                             })
                             .collect();
 
-                        // Run the generic solver
-                        eprintln!("[infer_call::generic] fn_type_params={:?}", fn_type_params);
-                        eprintln!("[infer_call::generic] formal_params={:?}", formal_params);
-                        eprintln!("[infer_call::generic] arg_types={:?}", at);
-                        eprintln!("[infer_call::generic] subst_map={:?}", callee_param_sub.iter().map(|(k,v)| (self.interner.resolve(*k), format!("{:?}",v))).collect::<Vec<_>>());
-                        eprintln!("[infer_call::generic] substituted_params={:?}", substituted_params);
-                        eprintln!("[infer_call::generic] substituted_ret={:?}", substituted_ret);
+                        // Run the generic solver — let it handle all fresh variable creation
                         let solve_result = crate::solve::solve_generic_params(
                             &mut self.table,
                             &fn_type_params,
                             &formal_params,
-                            Some(&substituted_ret),
+                            Some(&ret),
                             &at,
-                            None,
+                            _exp,
                             span,
                             span,
                             &mut |e| { self.errors.push(e); },
@@ -528,6 +524,7 @@ impl TypeChecker {
 
     fn infer_method_call(&mut self, id: glyim_hir::types::ExprId, recv: &HirExpr, meth: Symbol, args: &[HirExpr], _exp: Option<&HirType>, span: Span) -> HirType {
         let rt = self.infer_dispatch(recv, None);
+        eprintln!("[infer_method_call] receiver_type={:?} method={} _exp={:?}", rt, self.interner.resolve(meth), _exp);
         let at: Vec<HirType> = std::iter::once(rt.clone()).chain(args.iter().map(|a| self.infer_dispatch(a, None))).collect();
 
         let type_name = match &rt {
@@ -548,6 +545,7 @@ impl TypeChecker {
         let type_str = self.interner.resolve(type_name);
         let method_str = self.interner.resolve(meth);
         let mangled = self.interner.intern(&format!("{}_{}", type_str, method_str));
+        eprintln!("[infer_method_call] mangled={} is_generic={}", self.interner.resolve(mangled), self.fn_types_map.get(&mangled).map(|ft| ft.is_generic).unwrap_or(false));
 
         // Look up mangled function in environment
         if let Some(fty) = self.env.lookup(mangled).cloned() {
@@ -583,7 +581,7 @@ impl TypeChecker {
                         &formal_params,
                         Some(&substituted_ret),
                         &at,
-                        None,
+                        _exp,
                         span,
                         span,
                         &mut |e| { self.errors.push(e); },
@@ -778,8 +776,13 @@ impl TypeChecker {
                 self.env.insert(*name, t, *mutable);
                 HirType::Unit
             }
-            HirStmt::LetPat { pattern, mutable, value, .. } => {
-                let t = self.infer_dispatch(value, None);
+            HirStmt::LetPat { pattern, mutable, value, ty, .. } => {
+                let expected = ty.as_ref();
+                let mut t = self.infer_dispatch(value, expected);
+                // Resolve through unification to get concrete type
+                if let Ok(resolved) = self.table.resolve(&t) {
+                    t = resolved;
+                }
                 self.bind_pattern(pattern, &t, *mutable);
                 HirType::Unit
             }
