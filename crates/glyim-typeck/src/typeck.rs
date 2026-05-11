@@ -984,6 +984,11 @@ impl TypeChecker {
                 "[TRACE] Returning Generic for enum: {:?} with args {:?}",
                 enum_name, type_args
             );
+                        if enum_name == self.known.option && variant_name == self.known.none && type_args.is_empty() {
+                let tv = self.table.fresh_var(span);
+                eprintln!("[FIX] Option::None created with fresh type variable");
+                return HirType::Generic(enum_name, vec![HirType::Infer(tv)]);
+            }
             return HirType::Generic(enum_name, type_args);
         }
         // Not generic: return Named if the enum exists, else Named fallback
