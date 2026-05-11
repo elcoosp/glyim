@@ -2,6 +2,7 @@ use glyim_hir::types::HirType;
 use glyim_interner::{Interner, Symbol};
 
 const MANGLE_SEPARATOR: &str = "__";
+const NESTED_SEPARATOR: &str = "_";
 const METHOD_SEPARATOR: &str = "_";
 
 #[derive(Debug, Clone)]
@@ -37,7 +38,7 @@ pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> Result<String,
             let base = interner.resolve(*sym);
             let mut s = format!("{}", base);
             for arg in args {
-                s.push_str(MANGLE_SEPARATOR);
+                s.push_str(NESTED_SEPARATOR);
                 s.push_str(&type_to_short_string(arg, interner)?);
             }
             Ok(s)
@@ -45,7 +46,7 @@ pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> Result<String,
         HirType::Tuple(elems) => {
             let mut s = String::from("tuple");
             for e in elems {
-                s.push_str(MANGLE_SEPARATOR);
+                s.push_str(NESTED_SEPARATOR);
                 s.push_str(&type_to_short_string(e, interner)?);
             }
             Ok(s)
@@ -54,10 +55,10 @@ pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> Result<String,
         HirType::Func(params, ret) => {
             let mut s = format!("fn{}", params.len());
             for p in params {
-                s.push_str(MANGLE_SEPARATOR);
+                s.push_str(NESTED_SEPARATOR);
                 s.push_str(&type_to_short_string(p, interner)?);
             }
-            s.push_str(MANGLE_SEPARATOR);
+            s.push_str(NESTED_SEPARATOR);
             s.push_str(&type_to_short_string(ret, interner)?);
             Ok(s)
         }

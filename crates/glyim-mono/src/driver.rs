@@ -2,8 +2,8 @@ use crate::concretize;
 use crate::mangle_table::MangleTable;
 use crate::metadata::TypeMetadata;
 use crate::queue::{ItemKind, WorkItem, WorkItemContext, WorkQueue};
-use glyim_hir::types::{HirType, ExprId};
 use glyim_diag::Span;
+use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
 use glyim_typeck::typeck::FnTypes;
 use std::collections::HashMap;
@@ -49,10 +49,7 @@ pub struct MonoDriver<'a> {
 }
 
 impl<'a> MonoDriver<'a> {
-    pub fn new(
-        interner: &'a mut Interner,
-        input_fn_types: &'a HashMap<Symbol, FnTypes>,
-    ) -> Self {
+    pub fn new(interner: &'a mut Interner, input_fn_types: &'a HashMap<Symbol, FnTypes>) -> Self {
         Self {
             output_fn_types: HashMap::new(),
             mangle: MangleTable::new(),
@@ -95,31 +92,42 @@ impl<'a> MonoDriver<'a> {
     pub fn run_on_hir(
         hir: &glyim_hir::Hir,
         interner: &mut Interner,
-        call_type_args: &std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>,
+        call_type_args: &std::collections::HashMap<
+            glyim_hir::types::ExprId,
+            Vec<glyim_hir::types::HirType>,
+        >,
     ) -> (glyim_hir::Hir, MonoResult) {
+        eprintln!("[DEBUG] run_on_hir: entry");
         // Build fn_types_map
-        let mut fn_types_map: std::collections::HashMap<Symbol, glyim_typeck::typeck::FnTypes> = std::collections::HashMap::new();
+        let mut fn_types_map: std::collections::HashMap<Symbol, glyim_typeck::typeck::FnTypes> =
+            std::collections::HashMap::new();
         for item in &hir.items {
             if let glyim_hir::HirItem::Fn(f) = item {
-                fn_types_map.insert(f.name, glyim_typeck::typeck::FnTypes {
-                    expr_types: std::collections::HashMap::new(),
-                    call_type_args: call_type_args.clone(),
-                    sizeof_types: std::collections::HashMap::new(),
-                    is_generic: !f.type_params.is_empty(),
-                    type_params: f.type_params.clone(),
-                    span: f.span,
-                });
-            }
-            if let glyim_hir::HirItem::Impl(imp) = item {
-                for m in &imp.methods {
-                    fn_types_map.insert(m.name, glyim_typeck::typeck::FnTypes {
+                fn_types_map.insert(
+                    f.name,
+                    glyim_typeck::typeck::FnTypes {
                         expr_types: std::collections::HashMap::new(),
                         call_type_args: call_type_args.clone(),
                         sizeof_types: std::collections::HashMap::new(),
-                        is_generic: !m.type_params.is_empty(),
-                        type_params: m.type_params.clone(),
-                        span: m.span,
-                    });
+                        is_generic: !f.type_params.is_empty(),
+                        type_params: f.type_params.clone(),
+                        span: f.span,
+                    },
+                );
+            }
+            if let glyim_hir::HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    fn_types_map.insert(
+                        m.name,
+                        glyim_typeck::typeck::FnTypes {
+                            expr_types: std::collections::HashMap::new(),
+                            call_type_args: call_type_args.clone(),
+                            sizeof_types: std::collections::HashMap::new(),
+                            is_generic: !m.type_params.is_empty(),
+                            type_params: m.type_params.clone(),
+                            span: m.span,
+                        },
+                    );
                 }
             }
         }
@@ -137,16 +145,24 @@ impl<'a> MonoDriver<'a> {
                     if let Some(ft) = fn_types_map.get(&f.name) {
                         for type_args in ft.call_type_args.values() {
                             if !type_args.is_empty() {
-                                if let Ok(mangled) = crate::mangling::mangle_name(interner, f.name, type_args) {
+                                if let Ok(mangled) =
+                                    crate::mangling::mangle_name(interner, f.name, type_args)
+                                {
                                     let mut mono_fn = f.clone();
                                     mono_fn.name = mangled;
                                     mono_fn.type_params.clear();
-                                    let sub: std::collections::HashMap<_, _> = f.type_params.iter()
+                                    let sub: std::collections::HashMap<_, _> = f
+                                        .type_params
+                                        .iter()
                                         .zip(type_args.iter())
                                         .map(|(p, a)| (*p, a.clone()))
                                         .collect();
-                                    for (_, pt) in &mut mono_fn.params { *pt = glyim_hir::types::substitute_type(pt, &sub); }
-                                    if let Some(ref mut r) = mono_fn.ret { *r = glyim_hir::types::substitute_type(r, &sub); }
+                                    for (_, pt) in &mut mono_fn.params {
+                                        *pt = glyim_hir::types::substitute_type(pt, &sub);
+                                    }
+                                    if let Some(ref mut r) = mono_fn.ret {
+                                        *r = glyim_hir::types::substitute_type(r, &sub);
+                                    }
                                     mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
                                 }
                             }
@@ -160,16 +176,24 @@ impl<'a> MonoDriver<'a> {
                         if let Some(ft) = fn_types_map.get(&m.name) {
                             for type_args in ft.call_type_args.values() {
                                 if !type_args.is_empty() {
-                                    if let Ok(mangled) = crate::mangling::mangle_name(interner, m.name, type_args) {
+                                    if let Ok(mangled) =
+                                        crate::mangling::mangle_name(interner, m.name, type_args)
+                                    {
                                         let mut mono_fn = m.clone();
                                         mono_fn.name = mangled;
                                         mono_fn.type_params.clear();
-                                        let sub: std::collections::HashMap<_, _> = m.type_params.iter()
+                                        let sub: std::collections::HashMap<_, _> = m
+                                            .type_params
+                                            .iter()
                                             .zip(type_args.iter())
                                             .map(|(p, a)| (*p, a.clone()))
                                             .collect();
-                                        for (_, pt) in &mut mono_fn.params { *pt = glyim_hir::types::substitute_type(pt, &sub); }
-                                        if let Some(ref mut r) = mono_fn.ret { *r = glyim_hir::types::substitute_type(r, &sub); }
+                                        for (_, pt) in &mut mono_fn.params {
+                                            *pt = glyim_hir::types::substitute_type(pt, &sub);
+                                        }
+                                        if let Some(ref mut r) = mono_fn.ret {
+                                            *r = glyim_hir::types::substitute_type(r, &sub);
+                                        }
                                         mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
                                     }
                                 }
@@ -180,6 +204,10 @@ impl<'a> MonoDriver<'a> {
             }
         }
 
+        eprintln!(
+            "[DEBUG] run_on_hir: returning {} items",
+            mono_hir.items.len()
+        );
         (mono_hir, result)
     }
 
@@ -187,18 +215,35 @@ impl<'a> MonoDriver<'a> {
         for (&fn_name, fn_types) in self.input_fn_types {
             if !fn_types.is_generic {
                 self.queue.push(
-                    WorkItem { kind: ItemKind::FnPassthrough, def_id: fn_name, type_args: vec![] },
-                    WorkItemContext { discovered_from: None, discovery_span: Span::new(0, 0) },
+                    WorkItem {
+                        kind: ItemKind::FnPassthrough,
+                        def_id: fn_name,
+                        type_args: vec![],
+                    },
+                    WorkItemContext {
+                        discovered_from: None,
+                        discovery_span: Span::new(0, 0),
+                    },
                     fn_name,
                 );
             } else {
                 // Check if this generic function/method is called with concrete type args
                 for (_, type_args) in &fn_types.call_type_args {
                     if !type_args.is_empty() {
-                        eprintln!("[DEBUG] mono seed: discovered generic call of {:?} with args {:?}", fn_name, type_args);
+                        eprintln!(
+                            "[DEBUG] mono seed: discovered generic call of {:?} with args {:?}",
+                            fn_name, type_args
+                        );
                         self.queue.push(
-                            WorkItem { kind: ItemKind::FnSpecialize, def_id: fn_name, type_args: type_args.clone() },
-                            WorkItemContext { discovered_from: Some(fn_name), discovery_span: Span::new(0, 0) },
+                            WorkItem {
+                                kind: ItemKind::FnSpecialize,
+                                def_id: fn_name,
+                                type_args: type_args.clone(),
+                            },
+                            WorkItemContext {
+                                discovered_from: Some(fn_name),
+                                discovery_span: Span::new(0, 0),
+                            },
                             fn_name,
                         );
                         break; // one specialization per call type args set is enough
@@ -228,7 +273,9 @@ impl<'a> MonoDriver<'a> {
                 &mut self.metadata,
                 ctx.discovery_span,
             ) {
-                Ok(c) => { new_expr_types.insert(expr_id, c); }
+                Ok(c) => {
+                    new_expr_types.insert(expr_id, c);
+                }
                 Err(e) => {
                     self.metrics.errors += 1;
                     self.failed_items.push(FailedItem {
@@ -242,17 +289,14 @@ impl<'a> MonoDriver<'a> {
             }
         }
 
-        let mangled_name = match crate::mangling::mangle_name(
-            self.interner,
-            item.def_id,
-            &item.type_args,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                self.record_failed_item_mangle(item, ctx, e);
-                return;
-            }
-        };
+        let mangled_name =
+            match crate::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+                Ok(s) => s,
+                Err(e) => {
+                    self.record_failed_item_mangle(item, ctx, e);
+                    return;
+                }
+            };
 
         self.output_fn_types.insert(mangled_name, new_expr_types);
     }
@@ -270,7 +314,9 @@ impl<'a> MonoDriver<'a> {
                     &mut self.metadata,
                     ctx.discovery_span,
                 ) {
-                    Ok(c) => { new_expr_types.insert(id, c); }
+                    Ok(c) => {
+                        new_expr_types.insert(id, c);
+                    }
                     Err(e) => {
                         self.record_failed_item_concretize(item, ctx, e);
                         return;
@@ -287,17 +333,14 @@ impl<'a> MonoDriver<'a> {
             _ => self.metrics.struct_specializations += 1,
         }
 
-        let _mangled = match crate::mangling::mangle_name(
-            self.interner,
-            item.def_id,
-            &item.type_args,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                self.record_failed_item_mangle(item, ctx, e);
-                return;
-            }
-        };
+        let _mangled =
+            match crate::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+                Ok(s) => s,
+                Err(e) => {
+                    self.record_failed_item_mangle(item, ctx, e);
+                    return;
+                }
+            };
 
         self.metadata.record(
             item.def_id,
@@ -314,17 +357,14 @@ impl<'a> MonoDriver<'a> {
             _ => self.metrics.enum_specializations += 1,
         }
 
-        let _mangled = match crate::mangling::mangle_name(
-            self.interner,
-            item.def_id,
-            &item.type_args,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                self.record_failed_item_mangle(item, ctx, e);
-                return;
-            }
-        };
+        let _mangled =
+            match crate::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+                Ok(s) => s,
+                Err(e) => {
+                    self.record_failed_item_mangle(item, ctx, e);
+                    return;
+                }
+            };
 
         self.metadata.record(
             item.def_id,
@@ -350,7 +390,12 @@ impl<'a> MonoDriver<'a> {
         });
     }
 
-    fn record_failed_item_mangle(&mut self, item: &WorkItem, ctx: &WorkItemContext, e: crate::mangling::ManglingError) {
+    fn record_failed_item_mangle(
+        &mut self,
+        item: &WorkItem,
+        ctx: &WorkItemContext,
+        e: crate::mangling::ManglingError,
+    ) {
         self.metrics.errors += 1;
         self.failed_items.push(FailedItem {
             name: item.def_id,
@@ -365,7 +410,12 @@ impl<'a> MonoDriver<'a> {
         });
     }
 
-    fn record_failed_item_concretize(&mut self, item: &WorkItem, ctx: &WorkItemContext, e: crate::concretize::ConcretizeError) {
+    fn record_failed_item_concretize(
+        &mut self,
+        item: &WorkItem,
+        ctx: &WorkItemContext,
+        e: crate::concretize::ConcretizeError,
+    ) {
         self.metrics.errors += 1;
         self.failed_items.push(FailedItem {
             name: item.def_id,
