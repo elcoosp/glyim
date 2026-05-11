@@ -25,9 +25,6 @@ pub fn solve_generic_params<E>(
 ) -> SolveResult
 where E: FnMut(TypeError)
 {
-    eprintln!("[solve_generic_params] type_params={:?}", type_params);
-    eprintln!("[solve_generic_params] param_types={:?}", param_types);
-    eprintln!("[solve_generic_params] arg_types={:?}", arg_types);
     let mut param_vars: HashMap<Symbol, TypeVar> = HashMap::new();
     let mut had_errors = false;
 
@@ -83,7 +80,6 @@ where E: FnMut(TypeError)
                 concrete_args.push(resolved);
             }
         }
-        eprintln!("[solve zero-arg] type_params={:?} expected_return={:?} ret_type={:?} → subst={:?} concrete_args={:?} fully_resolved={}", type_params, expected_return, ret_type, subst, concrete_args, fully_resolved);
         return SolveResult { subst, concrete_args, fully_resolved, had_errors };
     }
 
