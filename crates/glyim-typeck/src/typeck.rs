@@ -86,6 +86,16 @@ impl TypeChecker {
             HirType::Named(s) if *s == self.known.f64_type => HirType::Float,
             HirType::Named(s) if *s == self.known.bool_type => HirType::Bool,
             HirType::Named(s) if *s == self.known.str_type => HirType::Str,
+            HirType::Generic(s, args) => {
+                let new_args = args.iter().map(|a| self.normalize_type(a)).collect();
+                HirType::Generic(*s, new_args)
+            }
+            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.normalize_type(inner))),
+            HirType::Tuple(elems) => HirType::Tuple(elems.iter().map(|e| self.normalize_type(e)).collect()),
+            HirType::Func(params, ret) => HirType::Func(
+                params.iter().map(|p| self.normalize_type(p)).collect(),
+                Box::new(self.normalize_type(ret))
+            ),
             _ => ty.clone(),
         }
     }
@@ -393,12 +403,12 @@ impl TypeChecker {
         is_generic: bool,
         type_param_map: &HashMap<TypeVar, Symbol>,
     ) {
+        eprintln!("[DEBUG] finalize_fn for {:?}, is_generic={}", self.interner.resolve(f.name), is_generic);
         let mut new_expr = HashMap::new();
         for (&id, ty) in &self.expr_types {
-            new_expr.insert(
-                id,
-                Self::freeze_ty(ty.clone(), type_param_map, &mut self.table),
-            );
+            let frozen = Self::freeze_ty(ty.clone(), type_param_map, &mut self.table);
+            eprintln!("[DEBUG] finalize_fn: expr_id {:?}, ty={:?} -> frozen={:?}", id, ty, frozen);
+            new_expr.insert(id, frozen);
         }
         let mut new_call = HashMap::new();
         for (&id, args) in &self.call_type_args {
@@ -437,7 +447,9 @@ impl TypeChecker {
         expected_span: Span,
         found_span: Span,
     ) -> bool {
-        match self.table.unify(expected, found, expected_span, found_span) {
+        let exp = self.normalize_type(expected);
+        let found = self.normalize_type(found);
+        match self.table.unify(&exp, &found, expected_span, found_span) {
             Ok(_) => true,
             Err(e) => {
                 self.errors.push(e.into_type_error());
