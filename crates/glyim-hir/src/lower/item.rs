@@ -57,6 +57,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             ..
         } => {
             let start = attrs.first().map_or(name_span.start, |a| a.span.start);
+            ctx.push_type_params(type_params);
             let (hir_params, mutabilities): (Vec<_>, Vec<_>) = params
                 .iter()
                 .map(|(sym, _, ty, mutable)| {
@@ -86,7 +87,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
             } else {
                 None
             };
-            Some(HirItem::Fn(HirFn {
+            let hir_item = HirItem::Fn(HirFn {
                 doc: None,
                 name: *name,
                 type_params: type_params.clone(),
@@ -100,7 +101,9 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                 is_extern_backed: false,
                 is_test,
                 test_config,
-            }))
+            });
+            ctx.pop_type_params();
+            Some(hir_item)
         }
         Item::StructDef {
             doc: _,
@@ -222,6 +225,7 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                     {
                         let all_tp: Vec<_> =
                             type_params.iter().chain(fn_tp.iter()).copied().collect();
+                        ctx.push_type_params(&all_tp);
                         let mangled_name =
                             ctx.intern(&format!("{}_{}", ctx.resolve(*target), ctx.resolve(*name)));
                         let (hir_params, mutabilities): (Vec<_>, Vec<_>) = params
@@ -238,10 +242,10 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                                 )
                             })
                             .unzip();
-                        Some(HirFn {
+                        let method = HirFn {
                             doc: None,
                             name: mangled_name,
-                            type_params: all_tp,
+                            type_params: all_tp.clone(),
                             params: hir_params,
                             param_mutability: mutabilities,
                             ret: ret.as_ref().map(|t| lower_type_expr(t, ctx)),
@@ -252,7 +256,9 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                             is_extern_backed: false,
                             is_test: false,
                             test_config: None,
-                        })
+                        };
+                        ctx.pop_type_params();
+                        Some(method)
                     } else {
                         None
                     }

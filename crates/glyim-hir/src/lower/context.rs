@@ -10,6 +10,7 @@ pub struct LoweringContext<'a> {
     next_id: u32,
     pub struct_names: HashSet<Symbol>,
     pub decl_table: Option<&'a crate::decl_table::DeclTable>,
+    type_param_stack: Vec<Vec<Symbol>>,
 }
 
 impl<'a> LoweringContext<'a> {
@@ -19,6 +20,7 @@ impl<'a> LoweringContext<'a> {
             next_id: 0,
             struct_names: HashSet::new(),
             decl_table: None,
+            type_param_stack: Vec::new(),
         }
     }
 
@@ -27,8 +29,13 @@ impl<'a> LoweringContext<'a> {
         interner: &'a mut Interner,
         decl_table: &'a crate::decl_table::DeclTable,
     ) -> Self {
-        let mut ctx = Self::new(interner);
-        ctx.decl_table = Some(decl_table);
+        let mut ctx = Self {
+            interner,
+            next_id: 0,
+            struct_names: HashSet::new(),
+            decl_table: Some(decl_table),
+            type_param_stack: Vec::new(),
+        };
         ctx
     }
 
@@ -37,6 +44,21 @@ impl<'a> LoweringContext<'a> {
         let id = ExprId::new(self.next_id);
         self.next_id += 1;
         id
+    }
+
+    /// Push a set of type parameter symbols into scope.
+    pub fn push_type_params(&mut self, params: &[Symbol]) {
+        self.type_param_stack.push(params.to_vec());
+    }
+
+    /// Pop the most recently pushed type parameter scope.
+    pub fn pop_type_params(&mut self) {
+        self.type_param_stack.pop();
+    }
+
+    /// Check whether a symbol is an active type parameter.
+    pub fn is_type_param(&self, sym: Symbol) -> bool {
+        self.type_param_stack.last().map_or(false, |params| params.contains(&sym))
     }
 
     /// Intern a string and return the symbol
