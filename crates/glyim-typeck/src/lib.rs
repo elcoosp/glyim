@@ -5,35 +5,51 @@ pub mod errors;
 pub mod naming;
 pub mod solve;
 pub mod symbols;
+pub mod typeck;
 pub mod unify;
+pub mod validate;
 
 pub use errors::{TypeError, UnifyError};
 pub use naming::format_type_for_error;
-pub use symbols::KnownSymbols;
 pub use solve::SolveResult;
-pub use unify::{UnificationTable, extract_type_substitutions, ExtractResult, ExtractError};
+pub use symbols::KnownSymbols;
+pub use typeck::{FnTypes, TypeCheckOutput};
+pub use unify::{ExtractError, ExtractResult, UnificationTable, extract_type_substitutions};
+pub use validate::validate_mono_input;
 
-// Temporary stub for existing compiler pipeline (will be replaced in later chunks)
+// Backward-compatible TypeChecker wrapper for existing compiler
+use glyim_hir::Hir;
+use glyim_interner::Interner;
+use std::collections::HashMap;
+use typeck::TypeChecker as NewTypeChecker;
+
 pub struct TypeChecker {
-    pub interner: glyim_interner::Interner,
-    pub errors: Vec<TypeError>,
+    pub interner: Interner,
+    inner: NewTypeChecker,
 }
 
 impl TypeChecker {
-    pub fn new(interner: glyim_interner::Interner) -> Self {
-        Self { interner, errors: Vec::new() }
+    pub fn new(interner: Interner) -> Self {
+        let mut interner_mut = interner;
+        let known = KnownSymbols::intern_all(&mut interner_mut);
+        Self {
+            interner: interner_mut.clone(),
+            inner: NewTypeChecker::new(interner_mut, known),
+        }
     }
 
-    pub fn check(&mut self, _hir: &glyim_hir::Hir) -> Result<TypeCheckOutput, Vec<TypeError>> {
-        // This stub will be replaced by the real implementation in Chunk 6
-        Err(Vec::new())
+    pub fn check(&mut self, hir: &Hir) -> Result<TypeCheckOutput, Vec<TypeError>> {
+        let result = self.inner.check(hir);
+        if result.has_errors() {
+            Err(result.type_errors)
+        } else {
+            Ok(TypeCheckOutput {
+                expr_types: Vec::new(),
+                call_type_args: HashMap::new(),
+                interner: self.inner.interner.clone(),
+            })
+        }
     }
-}
-
-pub struct TypeCheckOutput {
-    pub expr_types: Vec<glyim_hir::types::HirType>,
-    pub call_type_args: std::collections::HashMap<glyim_hir::types::ExprId, Vec<glyim_hir::types::HirType>>,
-    pub interner: glyim_interner::Interner,
 }
 
 impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
