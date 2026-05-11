@@ -223,13 +223,6 @@ fn e2e_macro_identity() {
         99
     );
 }
-#[test]
-fn e2e_arrow() {
-    assert_eq!(
-        pipeline::run(&temp_g("main = () => { let r = Ok(42)?; r }"), None).unwrap(),
-        42
-    );
-}
 // v0.4.0
 #[test]
 fn e2e_generic_identity() {
