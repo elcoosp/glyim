@@ -121,7 +121,9 @@ pub fn concretize_type(
             HirType::Named(sym)
         }
 
-        HirType::Int
+        HirType::Infer(_)
+        | HirType::Param(_)
+        | HirType::Int
         | HirType::Bool
         | HirType::Float
         | HirType::Str

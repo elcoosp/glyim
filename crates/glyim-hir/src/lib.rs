@@ -13,7 +13,7 @@ pub use lower::desugar::desugar_method_calls;
 pub use lower::lower;
 pub use lower::lower_with_declarations;
 pub use node::{Hir, HirBinOp, HirExpr, HirFn, HirStmt, HirUnOp, MatchArm};
-pub use types::{ExprId, HirPattern, HirType};
+pub use types::{ExprId, HirPattern, HirType, TypeVar, SubstitutionError, substitute_type, substitute_type_safe, substitute_type_with};
 pub mod decl_table;
 pub mod dependency_names;
 pub mod normalize;
