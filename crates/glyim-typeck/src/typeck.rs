@@ -1043,6 +1043,9 @@ impl TypeChecker {
                     .map(|ft| ft.is_generic)
                     .unwrap_or(false);
 
+                eprintln!("[DEBUG] infer_method_call: mangled_sym={:?}, is_generic={:?}, params={:?}, ret={:?}",
+                    mangled_sym, is_generic, params, ret);
+
                 if is_generic {
                     let type_params = self
                         .fn_types_map
@@ -1360,10 +1363,13 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let iter_ty = self.infer_dispatch(iter, None);
+        eprintln!("[DEBUG] infer_for_in: iter_ty={:?}", iter_ty);
         let item_ty = HirType::Infer(self.table.fresh_var(span));
+        eprintln!("[DEBUG] infer_for_in: item_ty (fresh)={:?}", item_ty);
         self.env.push_scope();
         self.bind_pattern(pat, &item_ty, false);
         let body_ty = self.infer_dispatch(body, None);
+        eprintln!("[DEBUG] infer_for_in: body_ty={:?}", body_ty);
         self.env.pop_scope();
         HirType::Unit
     }

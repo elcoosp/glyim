@@ -171,9 +171,13 @@ pub(crate) fn codegen_call<'ctx>(
 
     if fn_val.is_none() {
         eprintln!(
-            "[codegen] fn_val is None for {}, attempting fallback lookup",
+            "[codegen] fn_val is None for {}, available functions:",
             fn_name
         );
+        for f in cg.module.get_functions() {
+            eprintln!("  {}", f.get_name().to_string_lossy());
+        }
+        eprintln!("[codegen] end of function list");
 
         // Fallback: try to find a matching function by prefix (handles mangled impl method names
         // like Vec_new when only Vec_new__i64 is registered, or Vec_get__Entry_i64_i64 when
