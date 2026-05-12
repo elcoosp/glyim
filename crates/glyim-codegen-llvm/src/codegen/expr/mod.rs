@@ -336,13 +336,13 @@ pub(crate) fn codegen_expr<'ctx>(
             receiver,
             method_name,
             args,
+            resolved_callee,
             ..
         } => {
             tracing::debug!(
                 "[codegen MethodCall] method_name={}",
                 cg.interner.resolve(*method_name)
             );
-            tracing::debug!("[codegen MethodCall] receiver_id={:?}", receiver.get_id());
 
             // Check if this method is backed by an extern function
             if let Some(extern_name) = cg.extern_methods.get(method_name).copied() {
@@ -351,87 +351,15 @@ pub(crate) fn codegen_expr<'ctx>(
                 return super::string::codegen_call(cg, &extern_name, &all_args, fctx);
             }
 
-            let receiver_val = codegen_expr(cg, receiver, fctx)?;
-            let receiver_id = receiver.get_id();
-            let receiver_ty = cg
-                .expr_types
-                .get(receiver_id.as_usize())
-                .cloned()
-                .or_else(|| {
-                    // Fallback: if the receiver is `self`, use first parameter type
-                    if let HirExpr::Ident { name, .. } = receiver.as_ref()
-                        && cg.interner.resolve(*name) == "self"
-                        && !fctx.param_types.is_empty()
-                    {
-                        Some(fctx.param_types[0].clone())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or(HirType::Int);
-
-            // Unwrap RawPtr to get the real struct type for method dispatch
-            let inner_ty = match &receiver_ty {
-                HirType::RawPtr(inner) => inner.as_ref().clone(),
-                other => other.clone(),
+            // Use the desugared resolved_callee if present (set by HIR desugaring pass)
+            let callee_sym = match resolved_callee {
+                Some(sym) => *sym,
+                None => *method_name,
             };
 
-            // Extract concrete type arguments from Generic type
-            let type_args: Vec<HirType> = match &inner_ty {
-                HirType::Generic(_, args) if !args.is_empty() => args.clone(),
-                _ => vec![],
-            };
-
-            let type_name_sym = match &inner_ty {
-                HirType::Named(sym) | HirType::Generic(sym, _) => *sym,
-                _ => *method_name,
-            };
-
-            let mangled = glyim_hir::mangling::mangle_method_name(
-                &mut cg.interner,
-                type_name_sym,
-                *method_name,
-                &type_args,
-            )
-            .unwrap_or_else(|_| *method_name);
-
-            let mangled_name = cg.interner.resolve(mangled).to_string();
-
-            tracing::debug!(
-                "[codegen MethodCall] looking for function: {}",
-                mangled_name
-            );
-
-            // Try exact lookup first
-            if let Some(fn_val) = cg.module.get_function(&mangled_name) {
-                let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
-                call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
-                    receiver_val,
-                ));
-                for a in args {
-                    if let Some(v) = codegen_expr(cg, a, fctx) {
-                        call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));
-                    }
-                }
-                let result = cg
-                    .builder
-                    .build_call(fn_val, &call_args, "method_call")
-                    .ok()?;
-                return match result.try_as_basic_value() {
-                    inkwell::values::ValueKind::Basic(basic_val) => {
-                        Some(basic_val.into_int_value())
-                    }
-                    _ => Some(cg.i64_type.const_int(0, false)),
-                };
-            }
-
-            // Fallback: if the mangled name still not found, return error (should not happen)
-            cg.report_error(format!(
-                "method call '{}' not found (mangled: {})",
-                cg.interner.resolve(*method_name),
-                mangled_name
-            ));
-            Some(cg.i64_type.const_int(0, false))
+            let mut all_args: Vec<HirExpr> = vec![receiver.as_ref().clone()];
+            all_args.extend_from_slice(args);
+            return super::string::codegen_call(cg, &callee_sym, &all_args, fctx);
         }
     }
 }
