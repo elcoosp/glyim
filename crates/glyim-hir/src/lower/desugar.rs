@@ -81,6 +81,7 @@ fn desugar_expr(
             };
 
             let base = format!("{}_{}", type_name, method_str);
+
             let callee = interner.intern(&base);
 
             let span = *span;

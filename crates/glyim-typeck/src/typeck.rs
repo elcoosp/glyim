@@ -133,16 +133,19 @@ impl TypeChecker {
 
     pub fn check(&mut self, hir: &glyim_hir::Hir) -> TypeCheckResult {
         self.seed_environment(hir);
-        // First pass: register all generic signatures so calls can resolve them
+
+        // Pass 1: register generic signatures for standalone functions and
+        // non-generic-impl generic methods so calls can resolve them.
+        // Generic methods inside generic impl blocks are skipped.
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) if !f.type_params.is_empty() => {
                     self.fn_types_map.insert(
                         f.name,
                         FnTypes {
-                            expr_types: std::collections::HashMap::new(),
-                            call_type_args: std::collections::HashMap::new(),
-                            sizeof_types: std::collections::HashMap::new(),
+                            expr_types: HashMap::new(),
+                            call_type_args: HashMap::new(),
+                            sizeof_types: HashMap::new(),
                             is_generic: true,
                             type_params: f.type_params.clone(),
                             span: f.span,
@@ -150,30 +153,35 @@ impl TypeChecker {
                     );
                 }
                 HirItem::Impl(imp) => {
-                    for m in &imp.methods {
-                        if !m.type_params.is_empty() {
-                            self.fn_types_map.insert(
-                                m.name,
-                                FnTypes {
-                                    expr_types: std::collections::HashMap::new(),
-                                    call_type_args: std::collections::HashMap::new(),
-                                    sizeof_types: std::collections::HashMap::new(),
-                                    is_generic: true,
-                                    type_params: m.type_params.clone(),
-                                    span: m.span,
-                                },
-                            );
+                    // Only register methods from non-generic impl blocks.
+                    // Generic impl block methods are skipped entirely.
+                    if imp.type_params.is_empty() {
+                        for m in &imp.methods {
+                            if !m.type_params.is_empty() {
+                                self.fn_types_map.insert(
+                                    m.name,
+                                    FnTypes {
+                                        expr_types: HashMap::new(),
+                                        call_type_args: HashMap::new(),
+                                        sizeof_types: HashMap::new(),
+                                        is_generic: true,
+                                        type_params: m.type_params.clone(),
+                                        span: m.span,
+                                    },
+                                );
+                            }
                         }
                     }
                 }
                 _ => {}
             }
         }
-        // Pass 2a: check non‑generic functions first (so call_type_args are populated)
+
+        // Pass 2a: check non-generic functions and non-generic methods first
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) if f.type_params.is_empty() => self.check_fn(f),
-                HirItem::Impl(imp) => {
+                HirItem::Impl(imp) if imp.type_params.is_empty() => {
                     for m in &imp.methods {
                         if m.type_params.is_empty() {
                             self.check_fn(m);
@@ -183,20 +191,16 @@ impl TypeChecker {
                 _ => {}
             }
         }
-        // Pass 2b: now check generic functions – their call sites have been processed
+
+        // Pass 2b: check generic standalone functions.
+        // Generic impl blocks are skipped entirely.
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) if !f.type_params.is_empty() => self.check_fn(f),
-                HirItem::Impl(imp) => {
-                    for m in &imp.methods {
-                        if !m.type_params.is_empty() {
-                            self.check_fn(m);
-                        }
-                    }
-                }
                 _ => {}
             }
         }
+
         TypeCheckResult {
             fn_types_map: std::mem::take(&mut self.fn_types_map),
             type_errors: std::mem::take(&mut self.errors),
@@ -245,7 +249,7 @@ impl TypeChecker {
                 .insert_global(sym, HirType::Func(param_tys, Box::new(ret_ty)), false);
         }
 
-        // Pre-seed generic fns
+        // Pre-seed generic standalone fns (generic impl methods are skipped)
         for item in &hir.items {
             if let HirItem::Fn(f) = item
                 && !f.type_params.is_empty()
@@ -261,23 +265,6 @@ impl TypeChecker {
                         span: f.span,
                     },
                 );
-            }
-            if let HirItem::Impl(imp) = item {
-                for m in &imp.methods {
-                    if !m.type_params.is_empty() {
-                        self.fn_types_map.insert(
-                            m.name,
-                            FnTypes {
-                                expr_types: HashMap::new(),
-                                call_type_args: HashMap::new(),
-                                sizeof_types: HashMap::new(),
-                                is_generic: true,
-                                type_params: m.type_params.clone(),
-                                span: m.span,
-                            },
-                        );
-                    }
-                }
             }
         }
 
@@ -313,10 +300,48 @@ impl TypeChecker {
                     }
                 }
                 HirItem::Impl(imp) => {
+                    // Skip generic impl blocks entirely in type-checking.
+                    // Their methods are not registered in the environment.
+                    if !imp.type_params.is_empty() {
+                        continue;
+                    }
+
                     for m in &imp.methods {
-                        let param_tys: Vec<HirType> =
+                        let is_generic_method = !m.type_params.is_empty();
+                        let mut param_tys: Vec<HirType> =
                             m.params.iter().map(|(_, t)| t.clone()).collect();
-                        let ret_ty = m.ret.clone().unwrap_or(HirType::Unit);
+                        let mut ret_ty = m.ret.clone().unwrap_or(HirType::Unit);
+
+                        if is_generic_method {
+                            let all_tp: Vec<_> = m.type_params.iter().copied().collect();
+                            fn convert_named_to_param(
+                                ty: &mut HirType,
+                                params: &[glyim_interner::Symbol],
+                            ) {
+                                match ty {
+                                    HirType::Named(sym) if params.contains(sym) => {
+                                        *ty = HirType::Param(*sym)
+                                    }
+                                    HirType::Generic(_, args) => {
+                                        for arg in args {
+                                            convert_named_to_param(arg, params);
+                                        }
+                                    }
+                                    HirType::RawPtr(inner) => convert_named_to_param(inner, params),
+                                    HirType::Tuple(elems) => {
+                                        for elem in elems {
+                                            convert_named_to_param(elem, params);
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            for pt in &mut param_tys {
+                                convert_named_to_param(pt, &all_tp);
+                            }
+                            convert_named_to_param(&mut ret_ty, &all_tp);
+                        }
+
                         self.env.insert_global(
                             m.name,
                             HirType::Func(param_tys, Box::new(ret_ty)),
@@ -344,15 +369,12 @@ impl TypeChecker {
 
         // For generic functions, register type parameters as Named types
         // so field accesses and method calls can resolve correctly.
-        // e.g., for HashMap<K,V>, K and V become Named types in scope.
         for &tp in &f.type_params {
             self.env.insert_global(tp, HirType::Param(tp), false);
         }
 
         self.env.push_scope();
         for (i, (sym, ty)) in f.params.iter().enumerate() {
-            // For generic impl methods, the first param (self) type uses
-            // the impl's type params. Substitute them with Param types.
             let resolved_ty = if is_generic {
                 let sub: std::collections::HashMap<_, _> = f
                     .type_params
@@ -482,6 +504,7 @@ impl TypeChecker {
     fn record_expr_type(&mut self, id: glyim_hir::types::ExprId, ty: HirType) {
         self.expr_types.insert(id, ty);
     }
+
     fn record_call_type_args(&mut self, id: glyim_hir::types::ExprId, args: Vec<HirType>) {
         if !args.is_empty() {
             self.call_type_args.insert(id, args);
@@ -700,8 +723,6 @@ impl TypeChecker {
                 expr, target_type, ..
             } => {
                 if let HirExpr::IntLit { value: 0, .. } = expr.as_ref() {
-                    // Allow `0 as T` for any type: structs, enums, and type parameters.
-                    // This is the zero value for all types in Glyim's runtime representation.
                     match target_type {
                         HirType::Named(sym) | HirType::Generic(sym, _) => {
                             if let Some(ref idx) = self.hir_index
@@ -712,7 +733,6 @@ impl TypeChecker {
                             }
                         }
                         HirType::Param(_) => {
-                            // `0 as K` where K is a generic type parameter - allow it
                             return target_type.clone();
                         }
                         _ => {}
@@ -933,17 +953,18 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let receiver_ty = self.infer_dispatch(recv, None);
-        eprintln!("[TYPECK] infer_method_call: self type={:?}, method={}",
-            receiver_ty, self.interner.resolve(meth));
-        if std::env::var("TYPE_VERBOSE").is_ok() {
-            eprintln!("[typeck debug] infer_method_call id={:?} receiver={:?} method={:?}",
-                id, receiver_ty, self.interner.resolve(meth));
-            eprintln!("  expected: {:?}", exp);
-        }
-        let type_name = match &receiver_ty {
-            HirType::Named(s) | HirType::Generic(s, _) => *s,
+        eprintln!(
+            "[TYPECK] infer_method_call: self type={:?}, method={}",
+            receiver_ty,
+            self.interner.resolve(meth)
+        );
+
+        let (type_base, concrete_type_args) = match &receiver_ty {
+            HirType::Generic(sym, args) => (*sym, args.clone()),
+            HirType::Named(sym) => (*sym, vec![]),
             HirType::RawPtr(inner) => match inner.as_ref() {
-                HirType::Named(s) | HirType::Generic(s, _) => *s,
+                HirType::Generic(sym, args) => (*sym, args.clone()),
+                HirType::Named(sym) => (*sym, vec![]),
                 _ => {
                     self.errors.push(TypeError::UnresolvedMethod {
                         method_name: meth,
@@ -962,16 +983,19 @@ impl TypeChecker {
                 return HirType::Error;
             }
         };
+
         let mangled_sym = self.interner.intern(&format!(
             "{}_{}",
-            self.interner.resolve(type_name),
+            self.interner.resolve(type_base),
             self.interner.resolve(meth)
         ));
+
         let has_self_param = self
             .env
             .lookup(mangled_sym)
             .map(|fty| matches!(fty, HirType::Func(params, _) if !params.is_empty()))
             .unwrap_or(false);
+
         let at: Vec<HirType> = if has_self_param {
             std::iter::once(receiver_ty.clone())
                 .chain(args.iter().map(|a| self.infer_dispatch(a, None)))
@@ -979,77 +1003,87 @@ impl TypeChecker {
         } else {
             args.iter().map(|a| self.infer_dispatch(a, None)).collect()
         };
-        if let Some(fty_orig) = self.env.lookup(mangled_sym).cloned()
-            && let HirType::Func(params, ret_orig) = fty_orig
-        {
-            let is_generic = self
-                .fn_types_map
-                .get(&mangled_sym)
-                .map(|ft| ft.is_generic)
-                .unwrap_or(false);
-            if is_generic {
+
+        if let Some(method_ty) = self.env.lookup(mangled_sym).cloned() {
+            if let HirType::Func(params, ret_orig) = method_ty {
+                let is_generic = self
+                    .fn_types_map
+                    .get(&mangled_sym)
+                    .map(|ft| ft.is_generic)
+                    .unwrap_or(false);
+
                 let type_params = self
                     .fn_types_map
                     .get(&mangled_sym)
                     .map(|ft| ft.type_params.clone())
                     .unwrap_or_default();
-                let formal_params: Vec<(Symbol, HirType)> = params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, ty)| (self.interner.intern(&format!("_p{}", i)), ty.clone()))
-                    .collect();
-                let solve_result = crate::solve::solve_generic_params(
-                    &mut self.table,
-                    &self.interner,
-                    &self.known,
-                    &type_params,
-                    &formal_params,
-                    Some(&ret_orig),
-                    &at,
-                    exp,
-                    span,
-                    span,
-                    &mut |e| {
-                        self.errors.push(e);
-                    },
-                );
-                if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
-                    self.record_call_type_args(id, solve_result.concrete_args);
-                }
-                let ret_subst = glyim_hir::types::substitute_type(&ret_orig, &solve_result.subst);
-                if let Some(ref exp) = exp {
-                    self.unify_and_record(exp, &ret_subst, span, span);
-                }
-                return ret_subst;
-            }
-            let ret: HirType = if let HirType::Generic(_, ref concrete_args) = receiver_ty {
-                let type_params = self
-                    .fn_types_map
-                    .get(&mangled_sym)
-                    .map(|ft| ft.type_params.clone())
-                    .unwrap_or_default();
-                if !concrete_args.is_empty() && !type_params.is_empty() {
-                    let mut sub = HashMap::new();
+
+                let mut sub: HashMap<Symbol, HirType> = HashMap::new();
+                if !concrete_type_args.is_empty() && !type_params.is_empty() {
                     for (i, tp) in type_params.iter().enumerate() {
-                        if i < concrete_args.len() {
-                            sub.insert(*tp, concrete_args[i].clone());
+                        if i < concrete_type_args.len() {
+                            sub.insert(*tp, concrete_type_args[i].clone());
                         }
                     }
+                }
+
+                if is_generic {
+                    let formal_params: Vec<(Symbol, HirType)> = params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, ty)| (self.interner.intern(&format!("_p{}", i)), ty.clone()))
+                        .collect();
+                    let solve_result = crate::solve::solve_generic_params(
+                        &mut self.table,
+                        &self.interner,
+                        &self.known,
+                        &type_params,
+                        &formal_params,
+                        Some(&ret_orig),
+                        &at,
+                        exp,
+                        span,
+                        span,
+                        &mut |e| {
+                            self.errors.push(e);
+                        },
+                    );
+                    if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
+                        self.record_call_type_args(id, solve_result.concrete_args);
+                    }
+                    let ret_subst =
+                        glyim_hir::types::substitute_type(&ret_orig, &solve_result.subst);
+                    if let Some(ref exp) = exp {
+                        self.unify_and_record(exp, &ret_subst, span, span);
+                    }
+                    return ret_subst;
+                }
+
+                let ret = if !sub.is_empty() {
                     glyim_hir::types::substitute_type(&ret_orig, &sub)
                 } else {
-                    *ret_orig
+                    *ret_orig.clone()
+                };
+
+                let resolved_params: Vec<HirType> = if !sub.is_empty() {
+                    params
+                        .iter()
+                        .map(|p| glyim_hir::types::substitute_type(p, &sub))
+                        .collect()
+                } else {
+                    params.iter().cloned().collect()
+                };
+
+                for (f, a) in resolved_params.iter().zip(at.iter()) {
+                    self.unify_and_record(f, a, span, span);
                 }
-            } else {
-                *ret_orig
-            };
-            for (f, a) in params.iter().zip(at.iter()) {
-                self.unify_and_record(f, a, span, span);
+                if let Some(ref exp) = exp {
+                    self.unify_and_record(exp, &ret, span, span);
+                }
+                return ret;
             }
-            if let Some(ref exp) = exp {
-                self.unify_and_record(exp, &ret, span, span);
-            }
-            return ret;
         }
+
         self.errors.push(TypeError::UnresolvedMethod {
             method_name: meth,
             receiver_type: Box::new(receiver_ty.clone()),

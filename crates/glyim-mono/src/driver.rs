@@ -496,12 +496,17 @@ pub fn run_on_hir(
         }
         if let glyim_hir::HirItem::Impl(imp) = item {
             for m in &imp.methods {
+                let is_generic = !imp.type_params.is_empty() || !m.type_params.is_empty();
+                let all_tp: Vec<_> = imp.type_params.iter()
+                    .chain(m.type_params.iter())
+                    .copied()
+                    .collect();
                 fn_types_map.insert(m.name, FnTypes {
                     expr_types: HashMap::new(),
                     call_type_args: call_type_args.clone(),
                     sizeof_types: HashMap::new(),
-                    is_generic: !m.type_params.is_empty(),
-                    type_params: m.type_params.clone(),
+                    is_generic,
+                    type_params: all_tp,
                     span: m.span,
                 });
             }
