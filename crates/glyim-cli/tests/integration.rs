@@ -1101,6 +1101,34 @@ main = () => {
 }
 
 #[test]
+fn debug_e2e_for_in_vec() {
+    unsafe { std::env::set_var("TYPE_VERBOSE", "1") };
+    let iter_src = include_str!("../../../stdlib/src/iter.g");
+    let vec_src = include_str!("../../../stdlib/src/vec.g");
+    let main_code = r#"
+main = () => {
+    let v: Vec<i64> = Vec::new();
+    let v = v.push(10);
+    let v = v.push(20);
+    let v = v.push(30);
+    let mut sum = 0;
+    for x in v.iter() {
+        sum = sum + x
+    };
+    sum
+}
+"#;
+    let full_src = format!("{}\n{}\n{}", iter_src, vec_src, main_code);
+    let input = temp_g(&full_src);
+    let result = pipeline::run(&input, None);
+    if let Err(e) = &result {
+        eprintln!("DIAGNOSTICS:\n{:?}", e);
+    }
+    assert!(result.is_ok(), "expected ok, got {:?}", result.err());
+    assert_eq!(result.unwrap(), 60);
+}
+
+#[test]
 fn e2e_zero_as_struct_field_access() {
     let src = r#"
 struct Vec<T> { data: *mut T, len: i64, cap: i64 }

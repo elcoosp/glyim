@@ -5,7 +5,7 @@ use crate::unify::UnificationTable;
 use glyim_diag::Span;
 use glyim_hir::index::HirIndex;
 use glyim_hir::types::HirPattern as HirPat;
-use glyim_hir::types::{HirType, TypeVar, substitute_type_safe as substitute_type};
+use glyim_hir::types::{HirType, TypeVar};
 use glyim_hir::{HirExpr, HirItem, HirStmt};
 use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
@@ -82,12 +82,59 @@ impl TypeChecker {
 
     pub fn check(&mut self, hir: &glyim_hir::Hir) -> TypeCheckResult {
         self.seed_environment(hir);
+        // First pass: register all generic signatures so calls can resolve them
         for item in &hir.items {
             match item {
-                HirItem::Fn(f) => self.check_fn(f),
+                HirItem::Fn(f) if !f.type_params.is_empty() => {
+                    self.fn_types_map.insert(f.name, FnTypes {
+                        expr_types: std::collections::HashMap::new(),
+                        call_type_args: std::collections::HashMap::new(),
+                        sizeof_types: std::collections::HashMap::new(),
+                        is_generic: true,
+                        type_params: f.type_params.clone(),
+                        span: f.span,
+                    });
+                }
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        self.check_fn(m);
+                        if !m.type_params.is_empty() {
+                            self.fn_types_map.insert(m.name, FnTypes {
+                                expr_types: std::collections::HashMap::new(),
+                                call_type_args: std::collections::HashMap::new(),
+                                sizeof_types: std::collections::HashMap::new(),
+                                is_generic: true,
+                                type_params: m.type_params.clone(),
+                                span: m.span,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Pass 2a: check non‑generic functions first (so call_type_args are populated)
+        for item in &hir.items {
+            match item {
+                HirItem::Fn(f) if f.type_params.is_empty() => self.check_fn(f),
+                HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        if m.type_params.is_empty() {
+                            self.check_fn(m);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Pass 2b: now check generic functions – their call sites have been processed
+        for item in &hir.items {
+            match item {
+                HirItem::Fn(f) if !f.type_params.is_empty() => self.check_fn(f),
+                HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        if !m.type_params.is_empty() {
+                            self.check_fn(m);
+                        }
                     }
                 }
                 _ => {}
@@ -231,42 +278,34 @@ impl TypeChecker {
         self.call_type_args.clear();
         self.sizeof_types.clear();
 
+        // For generic functions, record only the signature and skip body checking.
+        // Bodies will be type-checked after monomorphization, when concrete types are known.
+        if !f.type_params.is_empty() {
+            // Record minimal type info to let calls resolve
+            self.fn_types_map.insert(f.name, FnTypes {
+                expr_types: std::collections::HashMap::new(),
+                call_type_args: std::collections::HashMap::new(),
+                sizeof_types: std::collections::HashMap::new(),
+                is_generic: true,
+                type_params: f.type_params.clone(),
+                span: f.span,
+            });
+            return;
+        }
+
         let fn_name = self.interner.resolve(f.name).to_string();
         let is_method = fn_name.contains("_");
-        let mut is_generic = !f.type_params.is_empty();
-
-        if is_method && is_generic {
-            if let Some(struct_name) = fn_name.split('_').next() {
-                let struct_sym = self.interner.intern(struct_name);
-                if let Some(ref idx) = self.hir_index
-                    && let Some(si) = idx.find_struct(struct_sym)
-                    && si.type_params.is_empty()
-                {
-                    is_generic = false;
-                }
-            }
-        }
-        let mut type_param_sub = HashMap::new();
-        let mut type_param_map = HashMap::new();
-        for tp in &f.type_params {
-            let var = self.table.fresh_var(f.body.get_span());
-            type_param_map.insert(var, *tp);
-            type_param_sub.insert(*tp, HirType::Infer(var));
-        }
+        let mut is_generic = false; // already handled above
 
         self.env.push_scope();
         for (i, (sym, ty)) in f.params.iter().enumerate() {
-            let concrete = substitute_type(ty, &type_param_sub).unwrap_or(HirType::Error);
             self.env.insert(
                 *sym,
-                concrete,
+                ty.clone(),
                 f.param_mutability.get(i).copied().unwrap_or(false),
             );
         }
-        let concrete_ret = f
-            .ret
-            .as_ref()
-            .map(|r| substitute_type(r, &type_param_sub).unwrap_or(HirType::Error));
+        let concrete_ret = f.ret.clone();
         self.env.push_scope();
         let body_ty = self.infer_dispatch(&f.body, concrete_ret.as_ref());
         if let Some(expected) = &concrete_ret {
@@ -274,7 +313,8 @@ impl TypeChecker {
         }
         self.env.pop_scope();
         self.env.pop_scope();
-        self.finalize_fn(f, is_generic, &type_param_map);
+        let empty_map = std::collections::HashMap::new();
+        self.finalize_fn(f, false, &empty_map);
     }
 
     fn freeze_ty(
@@ -526,7 +566,7 @@ impl TypeChecker {
             HirExpr::IntLit { .. } => HirType::Int,
             HirExpr::FloatLit { .. } => HirType::Float,
             HirExpr::BoolLit { .. } => HirType::Bool,
-            HirExpr::StrLit { .. } => HirType::RawPtr(Box::new(HirType::Int)),
+            HirExpr::StrLit { .. } => HirType::Str,
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::AddrOf { .. } => HirType::RawPtr(Box::new(HirType::Int)),
             HirExpr::Ident { name, span, .. } => {
@@ -689,6 +729,14 @@ impl TypeChecker {
                 .get(name)
                 .map(|ft| ft.is_generic)
                 .unwrap_or(false);
+            if std::env::var("TYPE_VERBOSE").is_ok() {
+                eprintln!("[typeck debug] infer_call id={:?} callee={:?} is_generic={} type_params={:?}",
+                    id, self.interner.resolve(*name), is_generic,
+                    self.fn_types_map.get(name).map(|ft| &ft.type_params));
+                eprintln!("  arg types: {:?}", at);
+                eprintln!("  expected: {:?}", exp);
+                eprintln!("  formal params: {:?}", params);
+            }
             if is_generic {
                 let fn_type_params = self
                     .fn_types_map
@@ -748,10 +796,17 @@ impl TypeChecker {
                 if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
                     self.record_call_type_args(id, solve_result.concrete_args);
                 }
-                return glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                if let Some(ref exp) = exp {
+                    self.unify_and_record(exp, &ret_subst, span, span);
+                }
+                return ret_subst;
             }
             for (f, a) in params.iter().zip(at.iter()) {
                 self.unify_and_record(f, a, span, span);
+            }
+            if let Some(ref exp) = exp {
+                self.unify_and_record(exp, &ret, span, span);
             }
             return *ret;
         }
@@ -810,6 +865,11 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let rt = self.infer_dispatch(recv, None);
+        if std::env::var("TYPE_VERBOSE").is_ok() {
+            eprintln!("[typeck debug] infer_method_call id={:?} receiver={:?} method={:?}",
+                id, rt, self.interner.resolve(meth));
+            eprintln!("  expected: {:?}", exp);
+        }
         let type_name = match &rt {
             HirType::Named(s) | HirType::Generic(s, _) => *s,
             HirType::RawPtr(inner) => match inner.as_ref() {
@@ -886,10 +946,17 @@ impl TypeChecker {
                 if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
                     self.record_call_type_args(id, solve_result.concrete_args);
                 }
-                return glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
+                if let Some(ref exp) = exp {
+                    self.unify_and_record(exp, &ret_subst, span, span);
+                }
+                return ret_subst;
             }
             for (f, a) in params.iter().zip(at.iter()) {
                 self.unify_and_record(f, a, span, span);
+            }
+            if let Some(ref exp) = exp {
+                self.unify_and_record(exp, &ret, span, span);
             }
             return *ret;
         }
@@ -1220,6 +1287,9 @@ impl TypeChecker {
                 | (Int, Named(_))
                 | (Float, Named(_))
                 | (RawPtr(_), Named(_))
+                | (Str, Str)
+                | (RawPtr(_), Str)
+                | (Str, RawPtr(_))
         )
     }
 }
