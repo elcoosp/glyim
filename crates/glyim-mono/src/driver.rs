@@ -32,6 +32,7 @@ pub struct MonoResult {
     pub metadata: TypeMetadata,
     pub metrics: MonoMetrics,
     pub failed_items: Vec<FailedItem>,
+    pub specializations: Vec<(Symbol, Symbol, Vec<HirType>)>,
 }
 
 type DependencyCache = HashMap<Symbol, Vec<(Symbol, Option<ExprId>, bool)>>;
@@ -46,6 +47,8 @@ pub struct MonoDriver<'a> {
     metrics: MonoMetrics,
     failed_items: Vec<FailedItem>,
     dep_cache: DependencyCache,
+    /// Each entry: (mangled_name, base_name, concrete_type_args)
+    pub(crate) specializations: Vec<(Symbol, Symbol, Vec<HirType>)>,
 }
 
 impl<'a> MonoDriver<'a> {
@@ -60,6 +63,7 @@ impl<'a> MonoDriver<'a> {
             metrics: MonoMetrics::default(),
             failed_items: Vec::new(),
             dep_cache: DependencyCache::new(),
+            specializations: Vec::new(),
         }
     }
 
@@ -84,6 +88,7 @@ impl<'a> MonoDriver<'a> {
             metadata: self.metadata,
             metrics: self.metrics,
             failed_items: self.failed_items,
+            specializations: self.specializations,
         }
     }
 
@@ -136,18 +141,21 @@ impl<'a> MonoDriver<'a> {
         let result = driver.run();
         // driver dropped here - interner borrow released
 
-        // Now build the monomorphized HIR
-        // Collect all unique (base_fn, type_args) pairs from call_type_args
-        let mut specializations: std::collections::HashSet<(Symbol, Vec<HirType>)> = std::collections::HashSet::new();
+        // ── Build monomorphized HIR using the complete set of discovered specializations ──
+        let mut mono_hir = hir.clone();
+
+        // 1. Gather all specialisations: those from direct call‑site analysis AND those
+        //    discovered by the MonoDriver (transitive closure).
+        let mut all_specializations: std::collections::HashSet<(Symbol, Vec<HirType>)> =
+            std::collections::HashSet::new();
+
         for item in &hir.items {
             match item {
-                glyim_hir::HirItem::Fn(f) => {
-                    if !f.type_params.is_empty() {
-                        if let Some(ft) = fn_types_map.get(&f.name) {
-                            for type_args in ft.call_type_args.values() {
-                                if !type_args.is_empty() {
-                                    specializations.insert((f.name, type_args.clone()));
-                                }
+                glyim_hir::HirItem::Fn(f) if !f.type_params.is_empty() => {
+                    if let Some(ft) = fn_types_map.get(&f.name) {
+                        for type_args in ft.call_type_args.values() {
+                            if !type_args.is_empty() {
+                                all_specializations.insert((f.name, type_args.clone()));
                             }
                         }
                     }
@@ -158,7 +166,7 @@ impl<'a> MonoDriver<'a> {
                             if let Some(ft) = fn_types_map.get(&m.name) {
                                 for type_args in ft.call_type_args.values() {
                                     if !type_args.is_empty() {
-                                        specializations.insert((m.name, type_args.clone()));
+                                        all_specializations.insert((m.name, type_args.clone()));
                                     }
                                 }
                             }
@@ -168,60 +176,73 @@ impl<'a> MonoDriver<'a> {
                 _ => {}
             }
         }
+        // Add every specialization the driver discovered.
+        for &(_, base_sym, ref type_args) in &result.specializations {
+            all_specializations.insert((base_sym, type_args.clone()));
+        }
 
-        let mut mono_hir = hir.clone();
-        // Build a mapping from generic base names to their concrete mangled names
-        let mut specialization_sub_map = std::collections::HashMap::new();
-        for (base_name, type_args) in &specializations {
-            if let Ok(mangled) = crate::mangling::mangle_name(interner, *base_name, type_args) {
-                specialization_sub_map.insert(*base_name, mangled);
+        // 2. Build the full mapping: (base_name, type_args) → mangled_symbol
+        let mut mangled_names: std::collections::HashMap<(Symbol, Vec<HirType>), Symbol> =
+            std::collections::HashMap::new();
+        // Also build a simpler map base_name → mangled_symbol for rewrite_concrete_body.
+        let mut base_to_mangled: std::collections::HashMap<Symbol, Symbol> =
+            std::collections::HashMap::new();
+
+        for (base_sym, type_args) in &all_specializations {
+            if let Ok(mangled) = crate::mangling::mangle_name(interner, *base_sym, type_args) {
+                mangled_names.insert((*base_sym, type_args.clone()), mangled);
+                base_to_mangled.insert(*base_sym, mangled);
             }
         }
 
-        for (base_name, type_args) in specializations {
-            // Find the original function definition
-            let original_fn = hir.items.iter().find_map(|item| {
-                match item {
-                    glyim_hir::HirItem::Fn(f) if f.name == base_name => Some(f),
-                    glyim_hir::HirItem::Impl(imp) => {
-                        imp.methods.iter().find(|m| m.name == base_name)
-                    }
-                    _ => None,
+        // 3. For every specialization, clone the generic function, substitute types,
+        //    rewrite internal calls, and add to HIR.
+        for ((base_sym, type_args), &mangled_sym) in &mangled_names {
+            if let Some(f) = hir.items.iter().find_map(|item| match item {
+                glyim_hir::HirItem::Fn(f) if f.name == *base_sym => Some(f),
+                glyim_hir::HirItem::Impl(imp) => imp.methods.iter().find(|m| m.name == *base_sym),
+                _ => None,
+            }) {
+                let mut mono_fn = f.clone();
+                mono_fn.name = mangled_sym;
+                mono_fn.type_params.clear();
+
+                let subst: std::collections::HashMap<_, _> = f
+                    .type_params
+                    .iter()
+                    .zip(type_args.iter())
+                    .map(|(p, a)| (*p, a.clone()))
+                    .collect();
+
+                for (_, pt) in &mut mono_fn.params {
+                    *pt = glyim_hir::types::substitute_type(pt, &subst);
                 }
-            });
-
-            if let Some(f) = original_fn {
-                if let Ok(mangled) = crate::mangling::mangle_name(interner, f.name, &type_args) {
-                    let mut mono_fn = f.clone();
-                    mono_fn.name = mangled;
-                    mono_fn.type_params.clear();
-
-                    let sub: std::collections::HashMap<_, _> = f
-                        .type_params
-                        .iter()
-                        .zip(type_args.iter())
-                        .map(|(p, a)| (*p, a.clone()))
-                        .collect();
-
-                    // Substitute type parameters in params and return type
-                    for (_, pt) in &mut mono_fn.params {
-                        *pt = glyim_hir::types::substitute_type(pt, &sub);
-                    }
-                    if let Some(ref mut r) = mono_fn.ret {
-                        *r = glyim_hir::types::substitute_type(r, &sub);
-                    }
-
-                    // Rewrite calls inside the body to use concrete mangled names
-                    rewrite_concrete_body(&mut mono_fn.body, interner, &specialization_sub_map);
-
-                    mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
+                if let Some(ref mut r) = mono_fn.ret {
+                    *r = glyim_hir::types::substitute_type(r, &subst);
                 }
+
+                // Rewrite the body so that internal calls also use concrete names.
+                rewrite_concrete_body(&mut mono_fn.body, interner, &base_to_mangled);
+                mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
             }
         }
 
-        // Rewrite call sites in the entire HIR to use concrete mangled names
-        // for all calls where we have recorded concrete type arguments.
-        rewrite_call_sites(&mut mono_hir, call_type_args, interner);
+        // 4. Rewrite all call sites in EVERY item (original and new) so that any generic call
+        //    is replaced by its concrete mangled form.  This catches calls that were not
+        //    covered by the rewrite above (e.g. in main or in other non‑specialised items).
+        for item in &mut mono_hir.items {
+            match item {
+                glyim_hir::HirItem::Fn(f) => {
+                    rewrite_concrete_body(&mut f.body, interner, &base_to_mangled);
+                }
+                glyim_hir::HirItem::Impl(imp) => {
+                    for m in &mut imp.methods {
+                        rewrite_concrete_body(&mut m.body, interner, &base_to_mangled);
+                    }
+                }
+                _ => {}
+            }
+        }
 
         (mono_hir, result)
     }
