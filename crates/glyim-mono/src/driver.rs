@@ -170,6 +170,14 @@ impl<'a> MonoDriver<'a> {
         }
 
         let mut mono_hir = hir.clone();
+        // Build a mapping from generic base names to their concrete mangled names
+        let mut specialization_sub_map = std::collections::HashMap::new();
+        for (base_name, type_args) in &specializations {
+            if let Ok(mangled) = crate::mangling::mangle_name(interner, *base_name, type_args) {
+                specialization_sub_map.insert(*base_name, mangled);
+            }
+        }
+
         for (base_name, type_args) in specializations {
             // Find the original function definition
             let original_fn = hir.items.iter().find_map(|item| {
@@ -202,6 +210,9 @@ impl<'a> MonoDriver<'a> {
                     if let Some(ref mut r) = mono_fn.ret {
                         *r = glyim_hir::types::substitute_type(r, &sub);
                     }
+
+                    // Rewrite calls inside the body to use concrete mangled names
+                    rewrite_concrete_body(&mut mono_fn.body, interner, &specialization_sub_map);
 
                     mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
                 }
@@ -570,6 +581,109 @@ fn rewrite_expr(
         | glyim_hir::HirExpr::TupleLit { elements: args, .. } => {
             for a in args {
                 rewrite_expr(a, call_type_args, interner);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Recursively rewrite callee names in an expression to their concrete mangled versions.
+fn rewrite_concrete_body(
+    expr: &mut glyim_hir::HirExpr,
+    interner: &mut glyim_interner::Interner,
+    sub_map: &std::collections::HashMap<glyim_interner::Symbol, glyim_interner::Symbol>,
+) {
+    match expr {
+        glyim_hir::HirExpr::Call {
+            callee, args, ..
+        } => {
+            if let glyim_hir::HirExpr::Ident { name, .. } = callee.as_mut() {
+                if let Some(&new_name) = sub_map.get(name) {
+                    *name = new_name;
+                }
+            }
+            for a in args {
+                rewrite_concrete_body(a, interner, sub_map);
+            }
+        }
+        glyim_hir::HirExpr::MethodCall {
+            receiver,
+            method_name,
+            args,
+            ..
+        } => {
+            if let Some(&new_name) = sub_map.get(method_name) {
+                *method_name = new_name;
+            }
+            rewrite_concrete_body(receiver, interner, sub_map);
+            for a in args {
+                rewrite_concrete_body(a, interner, sub_map);
+            }
+        }
+        glyim_hir::HirExpr::Block { stmts, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    glyim_hir::HirStmt::Let { value, .. }
+                    | glyim_hir::HirStmt::LetPat { value, .. }
+                    | glyim_hir::HirStmt::Assign { value, .. }
+                    | glyim_hir::HirStmt::AssignDeref { value, .. }
+                    | glyim_hir::HirStmt::AssignField { value, .. } => {
+                        rewrite_concrete_body(value, interner, sub_map);
+                    }
+                    glyim_hir::HirStmt::Expr(e) => rewrite_concrete_body(e, interner, sub_map),
+                }
+            }
+        }
+        glyim_hir::HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            rewrite_concrete_body(condition, interner, sub_map);
+            rewrite_concrete_body(then_branch, interner, sub_map);
+            if let Some(eb) = else_branch {
+                rewrite_concrete_body(eb, interner, sub_map);
+            }
+        }
+        glyim_hir::HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            rewrite_concrete_body(scrutinee, interner, sub_map);
+            for arm in arms {
+                rewrite_concrete_body(&mut arm.body, interner, sub_map);
+            }
+        }
+        glyim_hir::HirExpr::While {
+            condition, body, ..
+        }
+        | glyim_hir::HirExpr::ForIn {
+            iter: condition,
+            body,
+            ..
+        } => {
+            rewrite_concrete_body(condition, interner, sub_map);
+            rewrite_concrete_body(body, interner, sub_map);
+        }
+        glyim_hir::HirExpr::Binary { lhs, rhs, .. } => {
+            rewrite_concrete_body(lhs, interner, sub_map);
+            rewrite_concrete_body(rhs, interner, sub_map);
+        }
+        glyim_hir::HirExpr::Unary { operand, .. }
+        | glyim_hir::HirExpr::Deref { expr: operand, .. }
+        | glyim_hir::HirExpr::As { expr: operand, .. }
+        | glyim_hir::HirExpr::Return { value: Some(operand), .. } => {
+            rewrite_concrete_body(operand, interner, sub_map);
+        }
+        glyim_hir::HirExpr::StructLit { fields, .. } => {
+            for (_, v) in fields {
+                rewrite_concrete_body(v, interner, sub_map);
+            }
+        }
+        glyim_hir::HirExpr::EnumVariant { args, .. }
+        | glyim_hir::HirExpr::TupleLit { elements: args, .. } => {
+            for a in args {
+                rewrite_concrete_body(a, interner, sub_map);
             }
         }
         _ => {}
