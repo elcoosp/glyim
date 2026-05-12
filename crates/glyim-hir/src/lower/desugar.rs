@@ -1,17 +1,47 @@
 use crate::{Hir, HirExpr, HirItem, HirStmt, HirType};
 use glyim_interner::Interner;
 
+/// Look up the struct name for a field access on `self` using HIR struct definitions.
+fn resolve_field_struct_name(
+    receiver: &HirExpr,
+    self_ty: Option<&HirType>,
+    interner: &Interner,
+    struct_fields: &std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>>,
+) -> Option<String> {
+    let HirExpr::FieldAccess { object, field, .. } = receiver else { return None };
+    let HirExpr::Ident { name, .. } = object.as_ref() else { return None };
+    if interner.resolve(*name) != "self" { return None }
+    let self_ty = self_ty?;
+    let struct_name = resolve_type_name(self_ty, interner)?;
+    let struct_sym = interner.resolve_symbol(&struct_name)?;
+    let fields = struct_fields.get(&struct_sym)?;
+    for (field_name, field_ty) in fields {
+        if field_name == field {
+            return resolve_type_name(field_ty, interner);
+        }
+    }
+    None
+}
+
 pub fn desugar_method_calls(hir: &mut Hir, expr_types: &[HirType], interner: &mut Interner) {
+    let mut struct_fields: std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>> = std::collections::HashMap::new();
+    for item in hir.items.iter() {
+        if let HirItem::Struct(s) = item {
+            let fields: Vec<_> = s.fields.iter().map(|f| (f.name, f.ty.clone())).collect();
+            struct_fields.insert(s.name, fields);
+        }
+    }
+
     for item in &mut hir.items {
         match item {
             HirItem::Fn(fn_def) => {
                 let self_ty = fn_def.params.first().map(|(_, ty)| ty.clone());
-                desugar_expr(&mut fn_def.body, expr_types, interner, self_ty.as_ref());
+                desugar_expr(&mut fn_def.body, expr_types, interner, self_ty.as_ref(), &struct_fields);
             }
             HirItem::Impl(impl_def) => {
                 for method in &mut impl_def.methods {
                     let self_ty = method.params.first().map(|(_, ty)| ty.clone());
-                    desugar_expr(&mut method.body, expr_types, interner, self_ty.as_ref());
+                    desugar_expr(&mut method.body, expr_types, interner, self_ty.as_ref(), &struct_fields);
                 }
             }
             _ => {}
@@ -24,20 +54,21 @@ fn desugar_stmt(
     expr_types: &[HirType],
     interner: &mut Interner,
     self_ty: Option<&HirType>,
+    struct_fields: &std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>>,
 ) {
     match stmt {
         HirStmt::Let { value, .. }
         | HirStmt::LetPat { value, .. }
-        | HirStmt::Assign { value, .. } => desugar_expr(value, expr_types, interner, self_ty),
+        | HirStmt::Assign { value, .. } => desugar_expr(value, expr_types, interner, self_ty, struct_fields),
         HirStmt::AssignDeref { target, value, .. } => {
-            desugar_expr(target, expr_types, interner, self_ty);
-            desugar_expr(value, expr_types, interner, self_ty);
+            desugar_expr(target, expr_types, interner, self_ty, struct_fields);
+            desugar_expr(value, expr_types, interner, self_ty, struct_fields);
         }
         HirStmt::AssignField { object, value, .. } => {
-            desugar_expr(object, expr_types, interner, self_ty);
-            desugar_expr(value, expr_types, interner, self_ty);
+            desugar_expr(object, expr_types, interner, self_ty, struct_fields);
+            desugar_expr(value, expr_types, interner, self_ty, struct_fields);
         }
-        HirStmt::Expr(e) => desugar_expr(e, expr_types, interner, self_ty),
+        HirStmt::Expr(e) => desugar_expr(e, expr_types, interner, self_ty, struct_fields),
     }
 }
 
@@ -53,6 +84,7 @@ fn desugar_expr(
     expr_types: &[HirType],
     interner: &mut Interner,
     self_ty: Option<&HirType>,
+    struct_fields: &std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>>,
 ) {
     match expr {
         HirExpr::MethodCall {
@@ -73,9 +105,12 @@ fn desugar_expr(
 
             // Try to get type name from receiver, falling back to self_ty
             let type_name = if receiver_ty == HirType::Error || receiver_ty == HirType::Int {
-                self_ty
-                    .and_then(|ty| resolve_type_name(ty, interner))
-                    .unwrap_or_else(|| "unknown".to_string())
+                resolve_field_struct_name(receiver, self_ty, interner, struct_fields)
+                    .unwrap_or_else(|| {
+                        self_ty
+                            .and_then(|ty| resolve_type_name(ty, interner))
+                            .unwrap_or_else(|| "unknown".to_string())
+                    })
             } else {
                 resolve_type_name(&receiver_ty, interner).unwrap_or_else(|| "unknown".to_string())
             };
@@ -106,11 +141,11 @@ fn desugar_expr(
                 args: full_args,
                 span,
             };
-            desugar_expr(expr, expr_types, interner, self_ty);
+            desugar_expr(expr, expr_types, interner, self_ty, struct_fields);
         }
         HirExpr::Block { stmts, .. } => {
             for stmt in stmts {
-                desugar_stmt(stmt, expr_types, interner, self_ty);
+                desugar_stmt(stmt, expr_types, interner, self_ty, struct_fields);
             }
         }
         HirExpr::If {
@@ -119,21 +154,21 @@ fn desugar_expr(
             else_branch,
             ..
         } => {
-            desugar_expr(condition, expr_types, interner, self_ty);
-            desugar_expr(then_branch, expr_types, interner, self_ty);
+            desugar_expr(condition, expr_types, interner, self_ty, struct_fields);
+            desugar_expr(then_branch, expr_types, interner, self_ty, struct_fields);
             if let Some(e) = else_branch {
-                desugar_expr(e, expr_types, interner, self_ty);
+                desugar_expr(e, expr_types, interner, self_ty, struct_fields);
             }
         }
         HirExpr::Match {
             scrutinee, arms, ..
         } => {
-            desugar_expr(scrutinee, expr_types, interner, self_ty);
+            desugar_expr(scrutinee, expr_types, interner, self_ty, struct_fields);
             for arm in arms.iter_mut() {
                 if let Some(ref mut g) = arm.guard {
-                    desugar_expr(g, expr_types, interner, self_ty);
+                    desugar_expr(g, expr_types, interner, self_ty, struct_fields);
                 }
-                desugar_expr(&mut arm.body, expr_types, interner, self_ty);
+                desugar_expr(&mut arm.body, expr_types, interner, self_ty, struct_fields);
             }
         }
         HirExpr::While {
@@ -144,41 +179,41 @@ fn desugar_expr(
             body,
             ..
         } => {
-            desugar_expr(condition, expr_types, interner, self_ty);
-            desugar_expr(body, expr_types, interner, self_ty);
+            desugar_expr(condition, expr_types, interner, self_ty, struct_fields);
+            desugar_expr(body, expr_types, interner, self_ty, struct_fields);
         }
         HirExpr::Binary { lhs, rhs, .. } => {
-            desugar_expr(lhs, expr_types, interner, self_ty);
-            desugar_expr(rhs, expr_types, interner, self_ty);
+            desugar_expr(lhs, expr_types, interner, self_ty, struct_fields);
+            desugar_expr(rhs, expr_types, interner, self_ty, struct_fields);
         }
         HirExpr::Unary { operand, .. }
         | HirExpr::Deref { expr: operand, .. }
         | HirExpr::As { expr: operand, .. }
         | HirExpr::FieldAccess {
             object: operand, ..
-        } => desugar_expr(operand, expr_types, interner, self_ty),
+        } => desugar_expr(operand, expr_types, interner, self_ty, struct_fields),
         HirExpr::StructLit { fields, .. } => {
             for (_, v) in fields {
-                desugar_expr(v, expr_types, interner, self_ty);
+                desugar_expr(v, expr_types, interner, self_ty, struct_fields);
             }
         }
         HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
             for a in args {
-                desugar_expr(a, expr_types, interner, self_ty);
+                desugar_expr(a, expr_types, interner, self_ty, struct_fields);
             }
         }
         HirExpr::Call { args, .. } => {
             for a in args {
-                desugar_expr(a, expr_types, interner, self_ty);
+                desugar_expr(a, expr_types, interner, self_ty, struct_fields);
             }
         }
-        HirExpr::Println { arg, .. } => desugar_expr(arg, expr_types, interner, self_ty),
+        HirExpr::Println { arg, .. } => desugar_expr(arg, expr_types, interner, self_ty, struct_fields),
         HirExpr::Assert {
             condition, message, ..
         } => {
-            desugar_expr(condition, expr_types, interner, self_ty);
+            desugar_expr(condition, expr_types, interner, self_ty, struct_fields);
             if let Some(m) = message {
-                desugar_expr(m, expr_types, interner, self_ty);
+                desugar_expr(m, expr_types, interner, self_ty, struct_fields);
             }
         }
         _ => {}
