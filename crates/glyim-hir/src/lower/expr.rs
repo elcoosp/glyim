@@ -257,6 +257,8 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 span,
                 ty: None,
             };
+            // Make sure __iter is declared as mutable so we can rebind it
+            // after each next() call returns the updated iterator state.
 
             let body_expr = lower_expr(body, ctx);
             let match_expr = HirExpr::Match {
@@ -320,11 +322,13 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
                 span,
             };
 
-            HirExpr::Block {
+            let result = HirExpr::Block {
                 id: ctx.fresh_id(),
                 stmts: vec![let_iter, let_done, HirStmt::Expr(while_expr)],
                 span,
-            }
+            };
+            eprintln!("[DESUGAR ForIn] final desugared HIR:\n{:#?}", result);
+            result
         }
 
         ExprKind::While { condition, body } => HirExpr::While {

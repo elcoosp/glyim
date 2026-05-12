@@ -87,10 +87,21 @@ pub(crate) fn codegen_expr<'ctx>(
                     cg.builder.build_int_sub(zero, val, "neg").ok()
                 }
                 HirUnOp::Not => {
-                    // Parser wraps `return expr` as Unary(Not, expr).
-                    // Pass through the value unchanged. The true `!` operator
-                    // is not yet properly implemented, so this is safe.
-                    Some(val)
+                    // Boolean negation: if val != 0, return 0; else return 1.
+                    // In Glyim, booleans are i64 with 0 = false, non-zero = true.
+                    let zero = cg.i64_type.const_int(0, false);
+                    let one = cg.i64_type.const_int(1, false);
+                    let is_false = cg.builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            val,
+                            zero,
+                            "is_false",
+                        )
+                        .ok()?;
+                    cg.builder
+                        .build_int_z_extend(is_false, cg.i64_type, "not_result")
+                        .ok()
                 }
             }
         }
