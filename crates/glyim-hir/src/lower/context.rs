@@ -57,10 +57,6 @@ impl<'a> LoweringContext<'a> {
 
     /// Pop the most recently pushed type parameter scope.
     pub fn pop_type_params(&mut self) {
-        eprintln!(
-            "[pop_type_params] stack_depth_after={}",
-            self.type_param_stack.len().saturating_sub(1)
-        );
         self.type_param_stack.pop();
     }
 
@@ -68,13 +64,6 @@ impl<'a> LoweringContext<'a> {
     pub fn is_type_param(&self, sym: Symbol) -> bool {
         let top = self.type_param_stack.last();
         let is_param = top.map_or(false, |params| params.contains(&sym));
-        eprintln!(
-            "[is_type_param] sym={} resolved={} top_stack={:?} is_param={}",
-            sym.raw(),
-            self.resolve(sym),
-            top.map(|p| p.iter().map(|&s| self.resolve(s)).collect::<Vec<_>>()),
-            is_param
-        );
         is_param
     }
 

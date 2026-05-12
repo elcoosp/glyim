@@ -82,21 +82,9 @@ where
         };
     }
 
-    // Zero-argument generic call: infer from expected return type.
-    eprintln!(
-        "[DEBUG] solve: zero-arg path check: param_empty={}, arg_empty={}, expected={:?}, ret={:?}",
-        param_types.is_empty(),
-        arg_types.is_empty(),
-        expected_return,
-        ret_type
-    );
     if param_types.is_empty() && arg_types.is_empty() {
         if let Some(expected) = expected_return {
             if let Some(ret) = ret_type {
-                eprintln!(
-                    "[DEBUG] solve: ENTERING zero-arg unify: ret={:?}, expected={:?}",
-                    ret, expected
-                );
                 // Substitute param_vars (our local fresh variables) into ret_type,
                 // then unify with the expected type.  This causes the fresh variables
                 // to be resolved inside the table so that the extraction loop below
@@ -198,33 +186,18 @@ where
         collect_type_params(ret, &mut used_params);
     }
 
-    eprintln!(
-        "[DEBUG] solve_generic_params: type_params to extract={:?}",
-        type_params
-    );
-    eprintln!(
-        "[DEBUG] solve_generic_params: used_params (params actually referenced)={:?}",
-        used_params
-    );
     let mut subst = HashMap::new();
     let mut concrete_args = Vec::new();
     let mut fully_resolved = true;
 
     let all_args_concrete = arg_types.iter().all(|a| !a.has_infer() && !a.has_param());
-    eprintln!(
-        "[DEBUG] solve_generic_params: all_args_concrete={}",
-        all_args_concrete
-    );
+
     for tp in type_params {
         let var = param_vars[tp];
-        eprintln!(
-            "[DEBUG] solve_generic_params: extracting var for param {:?}, var={:?}",
-            tp, var
-        );
+
         let resolved = table
             .resolve(&HirType::Infer(var))
             .unwrap_or(HirType::Error);
-        eprintln!("[DEBUG] solve_generic_params:   resolved={:?}", resolved);
         let is_unresolved = matches!(resolved, HirType::Infer(_))
             || matches!(&resolved, HirType::Param(s) if type_params.contains(s));
         if is_unresolved {

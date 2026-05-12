@@ -293,16 +293,6 @@ pub fn build(
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
     }
-    // Debug: list all functions in mono_hir before codegen
-    for item in &compiled.mono_hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            eprintln!(
-                "[DEBUG] mono_hir fn: {} (type_params={:?})",
-                compiled.interner.resolve(f.name),
-                f.type_params
-            );
-        }
-    }
     codegen
         .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -462,16 +452,6 @@ fn execute_jit(
         codegen = codegen.with_no_std();
     }
     codegen = codegen.with_jit_mode();
-    // Debug: list all functions in mono_hir before codegen
-    for item in &compiled.mono_hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            eprintln!(
-                "[DEBUG] mono_hir fn: {} (type_params={:?})",
-                compiled.interner.resolve(f.name),
-                f.type_params
-            );
-        }
-    }
     codegen
         .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -881,16 +861,6 @@ pub fn build_with_mode(
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
     }
-    // Debug: list all functions in mono_hir before codegen
-    for item in &compiled.mono_hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            eprintln!(
-                "[DEBUG] mono_hir fn: {} (type_params={:?})",
-                compiled.interner.resolve(f.name),
-                f.type_params
-            );
-        }
-    }
     codegen
         .generate(&compiled.mono_hir)
         .map_err(PipelineError::Codegen)?;
@@ -932,16 +902,6 @@ pub fn build_raw(source: &str, output: &Path, mode: BuildMode) -> Result<PathBuf
     .build()?;
     if compiled.is_no_std {
         codegen = codegen.with_no_std();
-    }
-    // Debug: list all functions in mono_hir before codegen
-    for item in &compiled.mono_hir.items {
-        if let glyim_hir::HirItem::Fn(f) = item {
-            eprintln!(
-                "[DEBUG] mono_hir fn: {} (type_params={:?})",
-                compiled.interner.resolve(f.name),
-                f.type_params
-            );
-        }
     }
     codegen
         .generate(&compiled.mono_hir)

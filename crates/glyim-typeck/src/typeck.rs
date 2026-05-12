@@ -422,18 +422,10 @@ impl TypeChecker {
         is_generic: bool,
         type_param_map: &HashMap<TypeVar, Symbol>,
     ) {
-        eprintln!(
-            "[DEBUG] finalize_fn for {:?}, is_generic={}",
-            self.interner.resolve(f.name),
-            is_generic
-        );
         let mut new_expr = HashMap::new();
         for (&id, ty) in &self.expr_types {
             let frozen = Self::freeze_ty(ty.clone(), type_param_map, &mut self.table);
-            eprintln!(
-                "[DEBUG] finalize_fn: expr_id {:?}, ty={:?} -> frozen={:?}",
-                id, ty, frozen
-            );
+
             new_expr.insert(id, frozen);
         }
         let mut new_call = HashMap::new();
@@ -693,13 +685,7 @@ impl TypeChecker {
                 args,
                 span,
                 ..
-            } => {
-                eprintln!(
-                    "[DEBUG] infer_dispatch Call: id={:?}, expected={:?}",
-                    id, expected
-                );
-                self.infer_call(*id, callee, args, expected, *span)
-            }
+            } => self.infer_call(*id, callee, args, expected, *span),
             HirExpr::Binary {
                 op, lhs, rhs, span, ..
             } => self.infer_binary(*op, lhs, rhs, *span),
@@ -784,11 +770,6 @@ impl TypeChecker {
             }
             _ => HirType::Error,
         };
-        eprintln!(
-            "[DEBUG] infer_dispatch: expr_id {:?}, ty={:?}",
-            expr.get_id(),
-            ty
-        );
         self.record_expr_type(expr.get_id(), ty.clone());
         ty
     }
@@ -832,10 +813,6 @@ impl TypeChecker {
         _exp: Option<&HirType>,
         span: Span,
     ) -> HirType {
-        eprintln!(
-            "[DEBUG] infer_call: id={:?}, callee={:?}, _exp={:?}",
-            id, callee, _exp
-        );
         let at: Vec<HirType> = args.iter().map(|a| self.infer_dispatch(a, None)).collect();
         if let HirExpr::Ident { name, .. } = callee {
             if let Some(fty) = self.env.lookup(*name).cloned() {
@@ -844,15 +821,6 @@ impl TypeChecker {
                     let is_generic = fn_types_opt.map(|ft| ft.is_generic).unwrap_or(false);
 
                     if is_generic {
-                        eprintln!(
-                            "[DEBUG] infer_call generic: fn_type_params={:?}, _exp={:?}, params={:?}, ret={:?}, at={:?}",
-                            fn_types_opt.map(|ft| ft.type_params.clone()),
-                            _exp,
-                            params,
-                            ret,
-                            at
-                        );
-
                         let fn_type_params = fn_types_opt
                             .map(|ft| ft.type_params.clone())
                             .unwrap_or_default();
@@ -860,10 +828,6 @@ impl TypeChecker {
                         // Handle zero-arg generic calls with expected type directly
                         if at.is_empty() && params.is_empty() {
                             if let Some(expected) = _exp {
-                                eprintln!(
-                                    "[DEBUG] infer_call: direct zero-arg inference, ret={:?}, expected={:?}",
-                                    ret, expected
-                                );
                                 let mut fresh_vars = Vec::new();
                                 let ret_subst = glyim_hir::types::substitute_type(
                                     &ret,
@@ -1096,13 +1060,6 @@ impl TypeChecker {
                             (sym, ty.clone())
                         })
                         .collect();
-                    eprintln!(
-                        "[DEBUG] infer_method_call: formal_params={:?}",
-                        formal_params
-                    );
-                    eprintln!("[DEBUG] infer_method_call: ret={:?}", ret);
-                    eprintln!("[DEBUG] infer_method_call: at (actual args)={:?}", at);
-                    eprintln!("[DEBUG] infer_method_call: type_params={:?}", type_params);
                     let solve_result = crate::solve::solve_generic_params(
                         &mut self.table,
                         &self.interner,
@@ -1118,20 +1075,11 @@ impl TypeChecker {
                             self.errors.push(e);
                         },
                     );
-                    eprintln!("[DEBUG] solve_generic_params result:");
-                    eprintln!("[DEBUG]   subst={:?}", solve_result.subst);
-                    eprintln!("[DEBUG]   concrete_args={:?}", solve_result.concrete_args);
-                    eprintln!("[DEBUG]   fully_resolved={:?}", solve_result.fully_resolved);
-                    eprintln!("[DEBUG]   had_errors={:?}", solve_result.had_errors);
                     if solve_result.fully_resolved && !solve_result.concrete_args.is_empty() {
                         self.record_call_type_args(id, solve_result.concrete_args);
                     }
                     let ret_subst = glyim_hir::types::substitute_type(&ret, &solve_result.subst);
-                    eprintln!("[DEBUG] ret_subst (after substitution)={:?}", ret_subst);
-                    eprintln!(
-                        "[DEBUG] infer_method_call: returning type for expr_id {:?} = {:?}",
-                        id, ret_subst
-                    );
+
                     return ret_subst;
                 }
 
@@ -1289,10 +1237,7 @@ impl TypeChecker {
 
     fn infer_field_access(&mut self, obj: &HirExpr, field: Symbol, span: Span) -> HirType {
         let obj_ty = self.infer_dispatch(obj, None);
-        eprintln!(
-            "[DEBUG] infer_field_access: field={:?}, obj_ty={:?}",
-            field, obj_ty
-        );
+
         match &obj_ty {
             HirType::Named(s) | HirType::Generic(s, _) => {
                 if let Some(ref idx) = self.hir_index {
@@ -1453,10 +1398,7 @@ impl TypeChecker {
                 ..
             } => {
                 let expected = ty.as_ref();
-                eprintln!(
-                    "[DEBUG] infer_stmt LetPat: ty={:?}, expected={:?}",
-                    ty, expected
-                );
+
                 let mut t = self.infer_dispatch(value, expected);
                 // Resolve through unification to get concrete type
                 if let Ok(resolved) = self.table.resolve(&t) {

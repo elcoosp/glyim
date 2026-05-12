@@ -97,7 +97,6 @@ impl<'a> MonoDriver<'a> {
             Vec<glyim_hir::types::HirType>,
         >,
     ) -> (glyim_hir::Hir, MonoResult) {
-        eprintln!("[DEBUG] run_on_hir: entry");
         // Build fn_types_map
         let mut fn_types_map: std::collections::HashMap<Symbol, glyim_typeck::typeck::FnTypes> =
             std::collections::HashMap::new();
@@ -204,10 +203,6 @@ impl<'a> MonoDriver<'a> {
             }
         }
 
-        eprintln!(
-            "[DEBUG] run_on_hir: returning {} items",
-            mono_hir.items.len()
-        );
         (mono_hir, result)
     }
 
@@ -230,10 +225,6 @@ impl<'a> MonoDriver<'a> {
                 // Check if this generic function/method is called with concrete type args
                 for (_, type_args) in &fn_types.call_type_args {
                     if !type_args.is_empty() {
-                        eprintln!(
-                            "[DEBUG] mono seed: discovered generic call of {:?} with args {:?}",
-                            fn_name, type_args
-                        );
                         self.queue.push(
                             WorkItem {
                                 kind: ItemKind::FnSpecialize,
