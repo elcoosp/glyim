@@ -168,8 +168,11 @@ pub(crate) fn merge_mono_types(
     expr_types: &[HirType],
     call_type_args: &std::collections::HashMap<ExprId, Vec<HirType>>,
 ) -> (Vec<HirType>, glyim_hir::Hir) {
-    // Run the monomorphizer to generate specialized function variants
-    let (mono_hir, _result) = glyim_mono::MonoDriver::run_on_hir(hir, interner, call_type_args);
+    // run_on_hir now:
+    // 1. Adds specialized variants for generic functions called with concrete types
+    // 2. Rewrites call sites in the original functions to use mangled names
+    // 3. Does NOT double-mangle already-mangled names (from method desugaring)
+    let (mono_hir, _mono_result) = glyim_mono::MonoDriver::run_on_hir(hir, interner, call_type_args);
     (expr_types.to_vec(), mono_hir)
 }
 

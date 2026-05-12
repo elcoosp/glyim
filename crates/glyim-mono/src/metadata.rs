@@ -10,7 +10,7 @@ pub enum TypeStructure {
 
 #[derive(Debug, Default)]
 pub struct TypeMetadata {
-    map: HashMap<Symbol, TypeStructure>,
+    pub map: HashMap<Symbol, TypeStructure>,
 }
 
 impl TypeMetadata {

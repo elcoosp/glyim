@@ -137,71 +137,80 @@ impl<'a> MonoDriver<'a> {
         // driver dropped here - interner borrow released
 
         // Now build the monomorphized HIR
-        let mut mono_hir = hir.clone();
+        // Collect all unique (base_fn, type_args) pairs from call_type_args
+        let mut specializations: std::collections::HashSet<(Symbol, Vec<HirType>)> = std::collections::HashSet::new();
         for item in &hir.items {
-            if let glyim_hir::HirItem::Fn(f) = item {
-                if !f.type_params.is_empty() {
-                    if let Some(ft) = fn_types_map.get(&f.name) {
-                        for type_args in ft.call_type_args.values() {
-                            if !type_args.is_empty() {
-                                if let Ok(mangled) =
-                                    crate::mangling::mangle_name(interner, f.name, type_args)
-                                {
-                                    let mut mono_fn = f.clone();
-                                    mono_fn.name = mangled;
-                                    mono_fn.type_params.clear();
-                                    let sub: std::collections::HashMap<_, _> = f
-                                        .type_params
-                                        .iter()
-                                        .zip(type_args.iter())
-                                        .map(|(p, a)| (*p, a.clone()))
-                                        .collect();
-                                    for (_, pt) in &mut mono_fn.params {
-                                        *pt = glyim_hir::types::substitute_type(pt, &sub);
-                                    }
-                                    if let Some(ref mut r) = mono_fn.ret {
-                                        *r = glyim_hir::types::substitute_type(r, &sub);
-                                    }
-                                    mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
+            match item {
+                glyim_hir::HirItem::Fn(f) => {
+                    if !f.type_params.is_empty() {
+                        if let Some(ft) = fn_types_map.get(&f.name) {
+                            for type_args in ft.call_type_args.values() {
+                                if !type_args.is_empty() {
+                                    specializations.insert((f.name, type_args.clone()));
                                 }
                             }
                         }
                     }
                 }
-            }
-            if let glyim_hir::HirItem::Impl(imp) = item {
-                for m in &imp.methods {
-                    if !m.type_params.is_empty() {
-                        if let Some(ft) = fn_types_map.get(&m.name) {
-                            for type_args in ft.call_type_args.values() {
-                                if !type_args.is_empty() {
-                                    if let Ok(mangled) =
-                                        crate::mangling::mangle_name(interner, m.name, type_args)
-                                    {
-                                        let mut mono_fn = m.clone();
-                                        mono_fn.name = mangled;
-                                        mono_fn.type_params.clear();
-                                        let sub: std::collections::HashMap<_, _> = m
-                                            .type_params
-                                            .iter()
-                                            .zip(type_args.iter())
-                                            .map(|(p, a)| (*p, a.clone()))
-                                            .collect();
-                                        for (_, pt) in &mut mono_fn.params {
-                                            *pt = glyim_hir::types::substitute_type(pt, &sub);
-                                        }
-                                        if let Some(ref mut r) = mono_fn.ret {
-                                            *r = glyim_hir::types::substitute_type(r, &sub);
-                                        }
-                                        mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
+                glyim_hir::HirItem::Impl(imp) => {
+                    for m in &imp.methods {
+                        if !m.type_params.is_empty() {
+                            if let Some(ft) = fn_types_map.get(&m.name) {
+                                for type_args in ft.call_type_args.values() {
+                                    if !type_args.is_empty() {
+                                        specializations.insert((m.name, type_args.clone()));
                                     }
                                 }
                             }
                         }
                     }
+                }
+                _ => {}
+            }
+        }
+
+        let mut mono_hir = hir.clone();
+        for (base_name, type_args) in specializations {
+            // Find the original function definition
+            let original_fn = hir.items.iter().find_map(|item| {
+                match item {
+                    glyim_hir::HirItem::Fn(f) if f.name == base_name => Some(f),
+                    glyim_hir::HirItem::Impl(imp) => {
+                        imp.methods.iter().find(|m| m.name == base_name)
+                    }
+                    _ => None,
+                }
+            });
+
+            if let Some(f) = original_fn {
+                if let Ok(mangled) = crate::mangling::mangle_name(interner, f.name, &type_args) {
+                    let mut mono_fn = f.clone();
+                    mono_fn.name = mangled;
+                    mono_fn.type_params.clear();
+
+                    let sub: std::collections::HashMap<_, _> = f
+                        .type_params
+                        .iter()
+                        .zip(type_args.iter())
+                        .map(|(p, a)| (*p, a.clone()))
+                        .collect();
+
+                    // Substitute type parameters in params and return type
+                    for (_, pt) in &mut mono_fn.params {
+                        *pt = glyim_hir::types::substitute_type(pt, &sub);
+                    }
+                    if let Some(ref mut r) = mono_fn.ret {
+                        *r = glyim_hir::types::substitute_type(r, &sub);
+                    }
+
+                    mono_hir.items.push(glyim_hir::HirItem::Fn(mono_fn));
                 }
             }
         }
+
+        // Rewrite call sites in the entire HIR to use concrete mangled names
+        // for all calls where we have recorded concrete type arguments.
+        rewrite_call_sites(&mut mono_hir, call_type_args, interner);
 
         (mono_hir, result)
     }
@@ -414,5 +423,155 @@ impl<'a> MonoDriver<'a> {
             discovered_from: ctx.discovered_from,
             error: e,
         });
+    }
+}
+
+/// Walk the entire HIR and rewrite Calls whose callee names are generic functions
+/// for which we have recorded concrete type arguments in `call_type_args`.
+/// The callee's name is replaced with the mangled (concrete) name.
+fn rewrite_call_sites(
+    hir: &mut glyim_hir::Hir,
+    call_type_args: &std::collections::HashMap<
+        glyim_hir::types::ExprId,
+        Vec<glyim_hir::types::HirType>,
+    >,
+    interner: &mut glyim_interner::Interner,
+) {
+    for item in &mut hir.items {
+        match item {
+            glyim_hir::HirItem::Fn(f) => rewrite_expr(&mut f.body, call_type_args, interner),
+            glyim_hir::HirItem::Impl(imp) => {
+                for m in &mut imp.methods {
+                    rewrite_expr(&mut m.body, call_type_args, interner);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn rewrite_expr(
+    expr: &mut glyim_hir::HirExpr,
+    call_type_args: &std::collections::HashMap<
+        glyim_hir::types::ExprId,
+        Vec<glyim_hir::types::HirType>,
+    >,
+    interner: &mut glyim_interner::Interner,
+) {
+    match expr {
+        glyim_hir::HirExpr::Call {
+            id,
+            callee,
+            args,
+            ..
+        } => {
+            if let glyim_hir::HirExpr::Ident { name, .. } = callee.as_mut() {
+                let name_str = interner.resolve(*name);
+                // Only mangle if the name is not already mangled (doesn't contain __)
+                if !name_str.contains("__") {
+                    if let Some(type_args) = call_type_args.get(id) {
+                        if !type_args.is_empty() {
+                            if let Ok(mangled) = crate::mangling::mangle_name(interner, *name, type_args) {
+                                *name = mangled;
+                            }
+                        }
+                    }
+                }
+            }
+            for a in args {
+                rewrite_expr(a, call_type_args, interner);
+            }
+        }
+        glyim_hir::HirExpr::Block { stmts, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    glyim_hir::HirStmt::Let { value, .. }
+                    | glyim_hir::HirStmt::LetPat { value, .. }
+                    | glyim_hir::HirStmt::Assign { value, .. }
+                    | glyim_hir::HirStmt::AssignDeref { value, .. }
+                    | glyim_hir::HirStmt::AssignField { value, .. } => {
+                        rewrite_expr(value, call_type_args, interner);
+                    }
+                    glyim_hir::HirStmt::Expr(e) => rewrite_expr(e, call_type_args, interner),
+                }
+            }
+        }
+        glyim_hir::HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            rewrite_expr(condition, call_type_args, interner);
+            rewrite_expr(then_branch, call_type_args, interner);
+            if let Some(eb) = else_branch {
+                rewrite_expr(eb, call_type_args, interner);
+            }
+        }
+        glyim_hir::HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            rewrite_expr(scrutinee, call_type_args, interner);
+            for arm in arms {
+                rewrite_expr(&mut arm.body, call_type_args, interner);
+            }
+        }
+        glyim_hir::HirExpr::While {
+            condition, body, ..
+        }
+        | glyim_hir::HirExpr::ForIn {
+            iter: condition,
+            body,
+            ..
+        } => {
+            rewrite_expr(condition, call_type_args, interner);
+            rewrite_expr(body, call_type_args, interner);
+        }
+        glyim_hir::HirExpr::Binary { lhs, rhs, .. } => {
+            rewrite_expr(lhs, call_type_args, interner);
+            rewrite_expr(rhs, call_type_args, interner);
+        }
+        glyim_hir::HirExpr::Unary { operand, .. }
+        | glyim_hir::HirExpr::Deref { expr: operand, .. }
+        | glyim_hir::HirExpr::As { expr: operand, .. }
+        | glyim_hir::HirExpr::Return { value: Some(operand), .. } => {
+            rewrite_expr(operand, call_type_args, interner);
+        }
+        glyim_hir::HirExpr::MethodCall {
+            receiver,
+            method_name,
+            args,
+            id,
+            ..
+        } => {
+            // Method calls should have been desugared by now, but handle defensively.
+            // Only mangle if the method name is not already mangled (doesn't contain __)
+            let method_str = interner.resolve(*method_name);
+            if !method_str.contains("__") {
+                if let Some(type_args) = call_type_args.get(id) {
+                    if !type_args.is_empty() {
+                        if let Ok(mangled) = crate::mangling::mangle_name(interner, *method_name, type_args) {
+                            *method_name = mangled;
+                        }
+                    }
+                }
+            }
+            rewrite_expr(receiver, call_type_args, interner);
+            for a in args {
+                rewrite_expr(a, call_type_args, interner);
+            }
+        }
+        glyim_hir::HirExpr::StructLit { fields, .. } => {
+            for (_, v) in fields {
+                rewrite_expr(v, call_type_args, interner);
+            }
+        }
+        glyim_hir::HirExpr::EnumVariant { args, .. }
+        | glyim_hir::HirExpr::TupleLit { elements: args, .. } => {
+            for a in args {
+                rewrite_expr(a, call_type_args, interner);
+            }
+        }
+        _ => {}
     }
 }
