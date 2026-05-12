@@ -133,7 +133,8 @@ fn test_mono_driver_processes_passthrough() {
         },
     );
 
-    let driver = MonoDriver::new(&mut interner, &fn_types_map);
+    let hir = glyim_hir::Hir { items: vec![] };
+    let driver = MonoDriver::new(&mut interner, &fn_types_map, &hir);
     let result = driver.run();
 
     assert!(result.failed_items.is_empty());
