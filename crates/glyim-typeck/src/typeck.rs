@@ -51,34 +51,6 @@ impl TypeCheckResult {
     }
 }
 
-pub fn normalize_type_impl(ty: &HirType, known: &KnownSymbols) -> HirType {
-    match ty {
-        HirType::Named(s) if *s == known.i64_type => HirType::Int,
-        HirType::Named(s) if *s == known.f64_type => HirType::Float,
-        HirType::Named(s) if *s == known.bool_type => HirType::Bool,
-        HirType::Named(s) if *s == known.str_type => HirType::Str,
-        HirType::Generic(s, args) => {
-            let new_args = args.iter().map(|a| normalize_type_impl(a, known)).collect();
-            HirType::Generic(*s, new_args)
-        }
-        HirType::RawPtr(inner) => HirType::RawPtr(Box::new(normalize_type_impl(inner, known))),
-        HirType::Tuple(elems) => HirType::Tuple(
-            elems
-                .iter()
-                .map(|e| normalize_type_impl(e, known))
-                .collect(),
-        ),
-        HirType::Func(params, ret) => HirType::Func(
-            params
-                .iter()
-                .map(|p| normalize_type_impl(p, known))
-                .collect(),
-            Box::new(normalize_type_impl(ret, known)),
-        ),
-        _ => ty.clone(),
-    }
-}
-
 pub struct TypeChecker {
     pub interner: Interner,
     known: KnownSymbols,
@@ -105,33 +77,6 @@ impl TypeChecker {
             sizeof_types: HashMap::new(),
             errors: Vec::new(),
             fn_types_map: HashMap::new(),
-        }
-    }
-
-    fn normalize_type(&self, ty: &HirType) -> HirType {
-        match ty {
-            HirType::Named(s) if *s == self.known.i64_type => HirType::Int,
-            HirType::Named(s) if *s == self.known.f64_type => HirType::Float,
-            HirType::Named(s) if *s == self.known.bool_type => HirType::Bool,
-            HirType::Named(s) if *s == self.known.str_type => HirType::Str,
-            HirType::Named(s) => match self.interner.resolve(*s) {
-                "i32" | "i16" | "i8" | "u8" | "u16" | "u32" | "u64" | "usize" => HirType::Int,
-                "f32" => HirType::Float,
-                _ => HirType::Named(*s),
-            },
-            HirType::Generic(s, args) => {
-                let new_args = args.iter().map(|a| self.normalize_type(a)).collect();
-                HirType::Generic(*s, new_args)
-            }
-            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.normalize_type(inner))),
-            HirType::Tuple(elems) => {
-                HirType::Tuple(elems.iter().map(|e| self.normalize_type(e)).collect())
-            }
-            HirType::Func(params, ret) => HirType::Func(
-                params.iter().map(|p| self.normalize_type(p)).collect(),
-                Box::new(self.normalize_type(ret)),
-            ),
-            _ => ty.clone(),
         }
     }
 
@@ -170,71 +115,48 @@ impl TypeChecker {
             .insert_global(self.known.unit_type, HirType::Unit, false);
 
         let i64_t = HirType::Int;
-        let ptr_u8 = HirType::RawPtr(Box::new(HirType::Int));
+        let ptr_t = HirType::RawPtr(Box::new(HirType::Int));
         let void_t = HirType::Unit;
 
-        let ptr_offset = self.interner.intern("__ptr_offset");
-        self.env.insert_global(
-            ptr_offset,
-            HirType::Func(
-                vec![ptr_u8.clone(), i64_t.clone()],
-                Box::new(ptr_u8.clone()),
+        // Built-in intrinsics
+        for (name_s, param_tys, ret_ty) in [
+            (
+                "__ptr_offset",
+                vec![ptr_t.clone(), i64_t.clone()],
+                ptr_t.clone(),
             ),
-            false,
-        );
-        let alloc = self.interner.intern("__glyim_alloc");
-        self.env.insert_global(
-            alloc,
-            HirType::Func(vec![i64_t.clone()], Box::new(ptr_u8.clone())),
-            false,
-        );
-        let free = self.interner.intern("__glyim_free");
-        self.env.insert_global(
-            free,
-            HirType::Func(vec![ptr_u8.clone()], Box::new(void_t.clone())),
-            false,
-        );
-        let hash_bytes = self.interner.intern("__glyim_hash_bytes");
-        self.env.insert_global(
-            hash_bytes,
-            HirType::Func(vec![ptr_u8.clone(), i64_t.clone()], Box::new(i64_t.clone())),
-            false,
-        );
-        let hash_seed = self.interner.intern("__glyim_hash_seed");
-        self.env.insert_global(
-            hash_seed,
-            HirType::Func(vec![], Box::new(i64_t.clone())),
-            false,
-        );
-        let abort = self.interner.intern("abort");
-        self.env.insert_global(
-            abort,
-            HirType::Func(vec![], Box::new(HirType::Never)),
-            false,
-        );
-        let sizeof = self.interner.intern("__size_of");
-        self.env.insert_global(
-            sizeof,
-            HirType::Func(vec![], Box::new(i64_t.clone())),
-            false,
-        );
+            ("__glyim_alloc", vec![i64_t.clone()], ptr_t.clone()),
+            ("__glyim_free", vec![ptr_t.clone()], void_t.clone()),
+            (
+                "__glyim_hash_bytes",
+                vec![ptr_t.clone(), i64_t.clone()],
+                i64_t.clone(),
+            ),
+            ("__glyim_hash_seed", vec![], i64_t.clone()),
+            ("abort", vec![], HirType::Never),
+            ("__size_of", vec![], i64_t.clone()),
+        ] {
+            let sym = self.interner.intern(name_s);
+            self.env
+                .insert_global(sym, HirType::Func(param_tys, Box::new(ret_ty)), false);
+        }
 
         // Pre-seed generic fns
         for item in &hir.items {
-            if let HirItem::Fn(f) = item {
-                if !f.type_params.is_empty() {
-                    self.fn_types_map.insert(
-                        f.name,
-                        FnTypes {
-                            expr_types: HashMap::new(),
-                            call_type_args: HashMap::new(),
-                            sizeof_types: HashMap::new(),
-                            is_generic: true,
-                            type_params: f.type_params.clone(),
-                            span: f.span,
-                        },
-                    );
-                }
+            if let HirItem::Fn(f) = item
+                && !f.type_params.is_empty()
+            {
+                self.fn_types_map.insert(
+                    f.name,
+                    FnTypes {
+                        expr_types: HashMap::new(),
+                        call_type_args: HashMap::new(),
+                        sizeof_types: HashMap::new(),
+                        is_generic: true,
+                        type_params: f.type_params.clone(),
+                        span: f.span,
+                    },
+                );
             }
             if let HirItem::Impl(imp) = item {
                 for m in &imp.methods {
@@ -255,20 +177,12 @@ impl TypeChecker {
             }
         }
 
-        // Register all HIR items with normalized types
+        // Register all HIR items (types already canonicalized by HIR lowering)
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) => {
-                    let param_tys: Vec<HirType> = f
-                        .params
-                        .iter()
-                        .map(|(_, t)| self.normalize_type(t))
-                        .collect();
-                    let ret_ty = f
-                        .ret
-                        .as_ref()
-                        .map(|r| self.normalize_type(r))
-                        .unwrap_or(HirType::Unit);
+                    let param_tys: Vec<HirType> = f.params.iter().map(|(_, t)| t.clone()).collect();
+                    let ret_ty = f.ret.clone().unwrap_or(HirType::Unit);
                     self.env.insert_global(
                         f.name,
                         HirType::Func(param_tys, Box::new(ret_ty)),
@@ -285,9 +199,8 @@ impl TypeChecker {
                 }
                 HirItem::Extern(ext) => {
                     for ef in &ext.functions {
-                        let param_tys: Vec<HirType> =
-                            ef.params.iter().map(|p| self.normalize_type(p)).collect();
-                        let ret_ty = self.normalize_type(&ef.ret);
+                        let param_tys: Vec<HirType> = ef.params.clone();
+                        let ret_ty = ef.ret.clone();
                         self.env.insert_global(
                             ef.name,
                             HirType::Func(param_tys, Box::new(ret_ty)),
@@ -297,16 +210,9 @@ impl TypeChecker {
                 }
                 HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        let param_tys: Vec<HirType> = m
-                            .params
-                            .iter()
-                            .map(|(_, t)| self.normalize_type(t))
-                            .collect();
-                        let ret_ty = m
-                            .ret
-                            .as_ref()
-                            .map(|r| self.normalize_type(r))
-                            .unwrap_or(HirType::Unit);
+                        let param_tys: Vec<HirType> =
+                            m.params.iter().map(|(_, t)| t.clone()).collect();
+                        let ret_ty = m.ret.clone().unwrap_or(HirType::Unit);
                         self.env.insert_global(
                             m.name,
                             HirType::Func(param_tys, Box::new(ret_ty)),
@@ -460,9 +366,7 @@ impl TypeChecker {
         expected_span: Span,
         found_span: Span,
     ) -> bool {
-        let exp = self.normalize_type(expected);
-        let found = self.normalize_type(found);
-        match self.table.unify(&exp, &found, expected_span, found_span) {
+        match self.table.unify(expected, found, expected_span, found_span) {
             Ok(_) => true,
             Err(e) => {
                 self.errors.push(e.into_type_error());
@@ -535,11 +439,10 @@ impl TypeChecker {
                             si.field_map.get(field_name).and_then(|&fi| {
                                 if fi < si.fields.len() {
                                     let field_ty = si.fields[fi].1.clone();
-                                    let norm_ty = self.normalize_type(&field_ty);
                                     if let Some(ref sub) = generic_sub {
-                                        Some(glyim_hir::types::substitute_type(&norm_ty, sub))
+                                        Some(glyim_hir::types::substitute_type(&field_ty, sub))
                                     } else {
-                                        Some(norm_ty)
+                                        Some(field_ty)
                                     }
                                 } else {
                                     None
@@ -596,11 +499,10 @@ impl TypeChecker {
                         .fields
                         .iter()
                         .map(|f| {
-                            let norm_ty = self.normalize_type(&f.ty);
                             if let Some(ref sub) = generic_sub {
-                                glyim_hir::types::substitute_type(&norm_ty, sub)
+                                glyim_hir::types::substitute_type(&f.ty, sub)
                             } else {
-                                norm_ty
+                                f.ty.clone()
                             }
                         })
                         .collect()
@@ -711,7 +613,7 @@ impl TypeChecker {
                 }
                 target_type.clone()
             }
-            HirExpr::Deref { expr, span, .. } => self.infer_deref(expr, *span),
+            HirExpr::Deref { expr, .. } => self.infer_deref(expr),
             HirExpr::Match {
                 scrutinee,
                 arms,
@@ -719,11 +621,8 @@ impl TypeChecker {
                 ..
             } => self.infer_match(scrutinee, arms, expected, *span),
             HirExpr::While {
-                condition,
-                body,
-                span,
-                ..
-            } => self.infer_while(condition, body, *span),
+                condition, body, ..
+            } => self.infer_while(condition, body),
             HirExpr::ForIn {
                 pattern,
                 iter,
@@ -737,9 +636,7 @@ impl TypeChecker {
                 self.sizeof_types.insert(*id, target_type.clone());
                 HirType::Int
             }
-            HirExpr::TupleLit { elements, span, .. } => {
-                self.infer_tuple_lit(elements, expected, *span)
-            }
+            HirExpr::TupleLit { elements, .. } => self.infer_tuple_lit(elements),
             _ => HirType::Error,
         };
         self.record_expr_type(expr.get_id(), ty.clone());
@@ -787,10 +684,15 @@ impl TypeChecker {
             && let Some(fty) = self.env.lookup(*name).cloned()
             && let HirType::Func(params, ret) = fty
         {
-            let fn_types_opt = self.fn_types_map.get(name);
-            let is_generic = fn_types_opt.map(|ft| ft.is_generic).unwrap_or(false);
+            let is_generic = self
+                .fn_types_map
+                .get(name)
+                .map(|ft| ft.is_generic)
+                .unwrap_or(false);
             if is_generic {
-                let fn_type_params = fn_types_opt
+                let fn_type_params = self
+                    .fn_types_map
+                    .get(name)
                     .map(|ft| ft.type_params.clone())
                     .unwrap_or_default();
                 if at.is_empty()
@@ -810,14 +712,14 @@ impl TypeChecker {
                             .collect(),
                     );
                     self.table.unify(&ret_subst, expected, span, span).ok();
-                    let mut resolved_args = Vec::new();
-                    for (_, var) in &fresh_vars {
-                        let resolved = self
-                            .table
-                            .resolve(&HirType::Infer(*var))
-                            .unwrap_or(HirType::Error);
-                        resolved_args.push(resolved);
-                    }
+                    let resolved_args: Vec<_> = fresh_vars
+                        .iter()
+                        .map(|(_, var)| {
+                            self.table
+                                .resolve(&HirType::Infer(*var))
+                                .unwrap_or(HirType::Error)
+                        })
+                        .collect();
                     if !resolved_args.is_empty() {
                         self.record_call_type_args(id, resolved_args);
                     }
@@ -947,7 +849,6 @@ impl TypeChecker {
         } else {
             args.iter().map(|a| self.infer_dispatch(a, None)).collect()
         };
-        let at: Vec<HirType> = at.into_iter().map(|a| self.normalize_type(&a)).collect();
         if let Some(fty_orig) = self.env.lookup(mangled_sym).cloned()
             && let HirType::Func(params, ret) = fty_orig
         {
@@ -987,11 +888,10 @@ impl TypeChecker {
                 }
                 return glyim_hir::types::substitute_type(&ret, &solve_result.subst);
             }
-            let normalized_ret = self.normalize_type(&ret);
             for (f, a) in params.iter().zip(at.iter()) {
-                self.unify_and_record(&self.normalize_type(f), &self.normalize_type(a), span, span);
+                self.unify_and_record(f, a, span, span);
             }
-            return normalized_ret;
+            return *ret;
         }
         self.errors.push(TypeError::UnresolvedMethod {
             method_name: meth,
@@ -1125,34 +1025,31 @@ impl TypeChecker {
             HirType::Named(s) | HirType::Generic(s, _) => {
                 if let Some(ref idx) = self.hir_index
                     && let Some(si) = idx.find_struct(*s)
+                    && let Some(&fi) = si.field_map.get(&field)
+                    && fi < si.fields.len()
                 {
-                    if let Some(&fi) = si.field_map.get(&field)
-                        && fi < si.fields.len()
+                    let field_ty = si.fields[fi].1.clone();
+                    if let HirType::Generic(_, type_args) = &obj_ty
+                        && !type_args.is_empty()
+                        && !si.type_params.is_empty()
                     {
-                        let field_ty = si.fields[fi].1.clone();
-                        let norm_ty = self.normalize_type(&field_ty);
-                        if let HirType::Generic(_, type_args) = &obj_ty
-                            && !type_args.is_empty()
-                            && !si.type_params.is_empty()
-                        {
-                            let sub: HashMap<_, _> = si
-                                .type_params
-                                .iter()
-                                .zip(type_args.iter())
-                                .map(|(&p, a)| (p, a.clone()))
-                                .collect();
-                            return glyim_hir::types::substitute_type(&norm_ty, &sub);
-                        }
-                        return norm_ty;
+                        let sub: HashMap<_, _> = si
+                            .type_params
+                            .iter()
+                            .zip(type_args.iter())
+                            .map(|(&p, a)| (p, a.clone()))
+                            .collect();
+                        return glyim_hir::types::substitute_type(&field_ty, &sub);
                     }
-                    let resolved = self.interner.resolve(field).to_string();
-                    self.errors.push(TypeError::UnknownField {
-                        struct_name: self.interner.resolve(*s).to_string(),
-                        field: resolved,
-                        span,
-                    });
-                    return HirType::Error;
+                    return field_ty;
                 }
+                let resolved = self.interner.resolve(field).to_string();
+                self.errors.push(TypeError::UnknownField {
+                    struct_name: self.interner.resolve(*s).to_string(),
+                    field: resolved,
+                    span,
+                });
+                return HirType::Error;
             }
             HirType::Tuple(elems) => {
                 let field_name = self.interner.resolve(field);
@@ -1174,9 +1071,8 @@ impl TypeChecker {
         HirType::Error
     }
 
-    fn infer_deref(&mut self, expr: &HirExpr, _span: Span) -> HirType {
-        let it = self.infer_dispatch(expr, None);
-        match it {
+    fn infer_deref(&mut self, expr: &HirExpr) -> HirType {
+        match self.infer_dispatch(expr, None) {
             HirType::RawPtr(i) => *i,
             _ => HirType::Error,
         }
@@ -1215,7 +1111,7 @@ impl TypeChecker {
             .unwrap_or(HirType::Unit)
     }
 
-    fn infer_while(&mut self, cond: &HirExpr, body: &HirExpr, _span: Span) -> HirType {
+    fn infer_while(&mut self, cond: &HirExpr, body: &HirExpr) -> HirType {
         self.infer_dispatch(cond, None);
         self.infer_dispatch(body, None);
         HirType::Unit
@@ -1228,7 +1124,7 @@ impl TypeChecker {
         body: &HirExpr,
         span: Span,
     ) -> HirType {
-        let _iter_ty = self.infer_dispatch(iter, None);
+        let _ = self.infer_dispatch(iter, None);
         let item_ty = HirType::Infer(self.table.fresh_var(span));
         self.env.push_scope();
         self.bind_pattern(pat, &item_ty, false);
@@ -1237,12 +1133,7 @@ impl TypeChecker {
         HirType::Unit
     }
 
-    fn infer_tuple_lit(
-        &mut self,
-        elems: &[HirExpr],
-        _exp: Option<&HirType>,
-        _span: Span,
-    ) -> HirType {
+    fn infer_tuple_lit(&mut self, elems: &[HirExpr]) -> HirType {
         HirType::Tuple(elems.iter().map(|e| self.infer_dispatch(e, None)).collect())
     }
 

@@ -1,6 +1,5 @@
 use crate::errors::{InferKind, TypeError};
 use crate::symbols::KnownSymbols;
-use crate::typeck::normalize_type_impl;
 use crate::unify::UnificationTable;
 use glyim_diag::Span;
 use glyim_hir::types::{HirType, TypeVar, substitute_type_with};
@@ -96,9 +95,9 @@ where
                 )
                 .unwrap_or(HirType::Error);
                 // Also resolve / flatten the expected type through the table
-                let ret_norm = normalize_type_impl(&ret_resolved, known);
+                let ret_norm = ret_resolved;
                 let expected_flat = table.resolve(expected).unwrap_or_else(|_| expected.clone());
-                let exp_norm = normalize_type_impl(&expected_flat, known);
+                let exp_norm = expected_flat;
                 let res = table.unify(&ret_norm, &exp_norm, expected_span, found_span);
                 if let Err(e) = res {
                     had_errors = true;
@@ -151,8 +150,8 @@ where
                 continue;
             }
         };
-        let formal_norm = normalize_type_impl(&formal_resolved, known);
-        let actual_norm = normalize_type_impl(actual, known);
+        let formal_norm = formal_resolved;
+        let actual_norm = actual.clone();
         if let Err(e) = table.unify(&formal_norm, &actual_norm, expected_span, found_span) {
             had_errors = true;
             emit_err(e.into_type_error());
@@ -168,8 +167,8 @@ where
                 0,
             )
             .unwrap_or(HirType::Error);
-            let ret_norm = normalize_type_impl(&ret_resolved, known);
-            let exp_norm = normalize_type_impl(expected, known);
+            let ret_norm = ret_resolved;
+            let exp_norm = expected.clone();
             if let Err(e) = table.unify(&ret_norm, &exp_norm, expected_span, found_span) {
                 had_errors = true;
                 emit_err(e.into_type_error());
