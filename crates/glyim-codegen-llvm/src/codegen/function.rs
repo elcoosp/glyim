@@ -82,6 +82,7 @@ pub(crate) fn codegen_fn<'ctx>(cg: &mut Codegen<'ctx>, f: &HirFn) -> Result<(), 
         fn_value,
         ret_val_ptr: Some(ret_val_ptr),
         ret_bb: Some(ret_bb),
+        param_types: f.params.iter().map(|(_, ty)| ty.clone()).collect(),
     };
     let body_val = super::stmt::codegen_block(cg, &f.body, &mut fctx).ok_or("codegen fail")?;
     if cg

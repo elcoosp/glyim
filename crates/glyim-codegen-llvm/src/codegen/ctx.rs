@@ -6,5 +6,6 @@ pub struct FunctionContext<'ctx> {
     pub(crate) fn_value: FunctionValue<'ctx>,
     pub(crate) ret_val_ptr: Option<PointerValue<'ctx>>,
     pub(crate) ret_bb: Option<inkwell::basic_block::BasicBlock<'ctx>>,
+    pub(crate) param_types: Vec<glyim_hir::types::HirType>,
 }
 impl<'ctx> FunctionContext<'ctx> {}

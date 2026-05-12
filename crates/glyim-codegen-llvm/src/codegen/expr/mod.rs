@@ -353,103 +353,49 @@ pub(crate) fn codegen_expr<'ctx>(
 
             let receiver_val = codegen_expr(cg, receiver, fctx)?;
             let receiver_id = receiver.get_id();
-            let mut receiver_ty = cg
+            let receiver_ty = cg
                 .expr_types
                 .get(receiver_id.as_usize())
                 .cloned()
+                .or_else(|| {
+                    // Fallback: if the receiver is `self`, use first parameter type
+                    if let HirExpr::Ident { name, .. } = receiver.as_ref()
+                        && cg.interner.resolve(*name) == "self"
+                        && !fctx.param_types.is_empty()
+                    {
+                        Some(fctx.param_types[0].clone())
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(HirType::Int);
 
             // Unwrap RawPtr to get the real struct type for method dispatch
-            while let HirType::RawPtr(inner) = receiver_ty {
-                receiver_ty = *inner;
-            }
-
-            // Unwrap RawPtr to get the real struct type
             let inner_ty = match &receiver_ty {
                 HirType::RawPtr(inner) => inner.as_ref().clone(),
                 other => other.clone(),
             };
 
-            fn mangle_type(cg: &Codegen, ty: &HirType) -> String {
-                match ty {
-                    HirType::Int => "i64".to_string(),
-                    HirType::Bool => "i64".to_string(),
-                    HirType::Float => "f64".to_string(),
-                    HirType::Str => "Str".to_string(),
-                    HirType::Unit => "()".to_string(),
-                    HirType::Never => "Never".to_string(),
-                    HirType::Named(sym) => {
-                        let name = cg.interner.resolve(*sym);
-                        match name {
-                            "i64" | "Int" => "i64".to_string(),
-                            "f64" | "Float" => "f64".to_string(),
-                            "bool" | "Bool" => "i64".to_string(),
-                            other => other.to_string(),
-                        }
-                    }
-                    HirType::Generic(_, type_args) if !type_args.is_empty() => {
-                        let base = match ty {
-                            HirType::Generic(sym, _) => cg.interner.resolve(*sym),
-                            _ => unreachable!(),
-                        };
-                        let args_str = type_args
-                            .iter()
-                            .map(|arg| mangle_type(cg, arg))
-                            .collect::<Vec<_>>()
-                            .join("_");
-                        format!("{}_{}", base, args_str)
-                    }
-                    HirType::Generic(sym, _) => {
-                        let name = cg.interner.resolve(*sym);
-                        match name {
-                            "i64" | "Int" => "i64".to_string(),
-                            other => other.to_string(),
-                        }
-                    }
-                    HirType::RawPtr(inner) => mangle_type(cg, inner),
-                    HirType::Opaque(sym) => cg.interner.resolve(*sym).to_string(),
-                    HirType::Func(_, _) => "fn".to_string(),
-                    HirType::Option(inner) => format!("Option_{}", mangle_type(cg, inner)),
-                    HirType::Result(ok, err) => {
-                        format!("Result_{}_{}", mangle_type(cg, ok), mangle_type(cg, err))
-                    }
-                    HirType::Error => "error".to_string(),
-                    HirType::Tuple(elems) => elems
-                        .iter()
-                        .map(|e| mangle_type(cg, e))
-                        .collect::<Vec<_>>()
-                        .join("_"),
-                    _ => unreachable!(),
-                }
-            }
+            // Extract concrete type arguments from Generic type
+            let type_args: Vec<HirType> = match &inner_ty {
+                HirType::Generic(_, args) if !args.is_empty() => args.clone(),
+                _ => vec![],
+            };
 
-            // Helper to extract the type name from inner_ty
             let type_name_sym = match &inner_ty {
                 HirType::Named(sym) | HirType::Generic(sym, _) => *sym,
-                _ => *method_name, // fallback to method name for non-struct types
+                _ => *method_name,
             };
-            let type_name = cg.interner.resolve(type_name_sym);
 
-            // Generate the mangled function name with proper type suffix
-            let mangled_name = match &inner_ty {
-                HirType::Named(_) | HirType::Generic(_, _) => {
-                    let base = format!("{}_{}", type_name, cg.interner.resolve(*method_name));
-                    let suffix = match &inner_ty {
-                        HirType::Generic(_, type_args) if !type_args.is_empty() => type_args
-                            .iter()
-                            .map(|arg| mangle_type(cg, arg))
-                            .collect::<Vec<_>>()
-                            .join("_"),
-                        _ => String::new(),
-                    };
-                    if suffix.is_empty() {
-                        base
-                    } else {
-                        format!("{}__{}", base, suffix)
-                    }
-                }
-                _ => cg.interner.resolve(*method_name).to_string(),
-            };
+            let mangled = glyim_hir::mangling::mangle_method_name(
+                &mut cg.interner,
+                type_name_sym,
+                *method_name,
+                &type_args,
+            )
+            .unwrap_or_else(|_| *method_name);
+
+            let mangled_name = cg.interner.resolve(mangled).to_string();
 
             tracing::debug!(
                 "[codegen MethodCall] looking for function: {}",
@@ -479,51 +425,12 @@ pub(crate) fn codegen_expr<'ctx>(
                 };
             }
 
-            // FALLBACK: Search for any function starting with the prefix when expr_types didn't have the type
-            let prefix = format!("{}_", type_name);
-            eprintln!(
-                "[codegen MethodCall] type_name={}, method_name={}, building prefix={}",
-                type_name,
+            // Fallback: if the mangled name still not found, return error (should not happen)
+            cg.report_error(format!(
+                "method call '{}' not found (mangled: {})",
                 cg.interner.resolve(*method_name),
-                prefix
-            );
-
-            for func in cg.module.get_functions() {
-                let name = func.get_name().to_string_lossy().to_string();
-                // Match "Vec_push__..." but not "Vec_push" itself
-                if name.starts_with(&prefix) && name.len() > prefix.len() {
-                    tracing::debug!("[codegen MethodCall] fallback found: {}", name);
-                    let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
-                    call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(
-                        receiver_val,
-                    ));
-                    for a in args {
-                        if let Some(v) = codegen_expr(cg, a, fctx) {
-                            call_args.push(inkwell::values::BasicMetadataValueEnum::IntValue(v));
-                        }
-                    }
-                    let result = cg
-                        .builder
-                        .build_call(func, &call_args, "method_call")
-                        .ok()?;
-                    return match result.try_as_basic_value() {
-                        inkwell::values::ValueKind::Basic(basic_val) => {
-                            Some(basic_val.into_int_value())
-                        }
-                        _ => Some(cg.i64_type.const_int(0, false)),
-                    };
-                }
-            }
-
-            tracing::debug!(
-                "[codegen MethodCall] WARNING: no function found for prefix '{}'",
-                prefix
-            );
-            eprintln!(
-                "[codegen MethodCall] NO function found for prefix={}",
-                prefix
-            );
-
+                mangled_name
+            ));
             Some(cg.i64_type.const_int(0, false))
         }
     }
