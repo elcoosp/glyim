@@ -87,50 +87,24 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                 .get(receiver_id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
-            let type_name = match &receiver_ty {
-                HirType::Named(s) | HirType::Generic(s, _) => interner.resolve(*s).to_string(),
-                _ => "unknown".to_string(),
+            let type_name_sym = match &receiver_ty {
+                HirType::Named(s) | HirType::Generic(s, _) => *s,
+                _ => *method_name, // fallback to method for non-struct types
             };
-            let method = interner.resolve(*method_name).to_string();
-            let base = format!("{}_{}", type_name, method);
-            // Only append suffix if all type args are concrete (no unresolved type params).
-            let mangled = match &receiver_ty {
-                HirType::Generic(_, type_args) if !type_args.is_empty() => {
-                    fn is_concrete(ty: &HirType, interner: &Interner) -> bool {
-                        match ty {
-                            HirType::Named(sym) => {
-                                let s = interner.resolve(*sym);
-                                // single uppercase letter → type parameter
-                                !(s.len() == 1 && s.chars().next().unwrap().is_uppercase())
-                            }
-                            HirType::Generic(_, args) => {
-                                args.iter().all(|a| is_concrete(a, interner))
-                            }
-                            HirType::Tuple(elems) => elems.iter().all(|e| is_concrete(e, interner)),
-                            HirType::RawPtr(inner) => is_concrete(inner, interner),
-                            HirType::Option(inner) => is_concrete(inner, interner),
-                            HirType::Result(ok, err) => {
-                                is_concrete(ok, interner) && is_concrete(err, interner)
-                            }
-                            _ => true,
-                        }
-                    }
-                    let all_concrete = type_args.iter().all(|a| is_concrete(a, interner));
-                    if all_concrete {
-                        let suffix = type_args
-                            .iter()
-                            .map(|a| concrete_type_name(a, interner))
-                            .collect::<Vec<_>>()
-                            .join("_");
-                        format!("{}__{}", base, suffix)
-                    } else {
-                        base
-                    }
-                }
-                _ => base,
+            // Extract concrete type arguments from Generic type
+            let type_args: Vec<HirType> = match &receiver_ty {
+                HirType::Generic(_, args) if !args.is_empty() => args.clone(),
+                _ => vec![],
             };
-            let callee = interner.intern(&mangled);
-            tracing::debug!("[desugar] MethodCall {} → Call {}", method, mangled);
+            let mangled = crate::mangling::mangle_method_name(
+                interner,
+                type_name_sym,
+                *method_name,
+                &type_args,
+            )
+            .unwrap_or_else(|_| *method_name);
+            let callee = mangled;
+            tracing::debug!("[desugar] MethodCall {} → Call {}", interner.resolve(*method_name), interner.resolve(mangled));
 
             let span = *span;
             let id = *id;

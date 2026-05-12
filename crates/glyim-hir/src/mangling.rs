@@ -1,4 +1,4 @@
-use glyim_hir::types::HirType;
+use crate::types::HirType;
 use glyim_interner::{Interner, Symbol};
 
 const MANGLE_SEPARATOR: &str = "__";

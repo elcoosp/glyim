@@ -154,8 +154,10 @@ fn test_mangling_error_is_std_error() {
 #[test]
 fn test_mangling_rejects_infer() {
     let mut interner = Interner::new();
-    let result =
-        mangling::type_to_short_string(&HirType::Infer(TypeVar::from_raw_unchecked(0)), &interner);
+    let result = glyim_hir::mangling::type_to_short_string(
+        &HirType::Infer(TypeVar::from_raw_unchecked(0)),
+        &interner,
+    );
     assert!(result.is_err());
 }
 
@@ -163,6 +165,6 @@ fn test_mangling_rejects_infer() {
 fn test_mangling_rejects_param() {
     let mut interner = Interner::new();
     let t = interner.intern("T");
-    let result = mangling::type_to_short_string(&HirType::Param(t), &interner);
+    let result = glyim_hir::mangling::type_to_short_string(&HirType::Param(t), &interner);
     assert!(result.is_err());
 }

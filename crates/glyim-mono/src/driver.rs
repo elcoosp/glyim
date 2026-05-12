@@ -189,7 +189,7 @@ impl<'a> MonoDriver<'a> {
             std::collections::HashMap::new();
 
         for (base_sym, type_args) in &all_specializations {
-            if let Ok(mangled) = crate::mangling::mangle_name(interner, *base_sym, type_args) {
+            if let Ok(mangled) = glyim_hir::mangling::mangle_name(interner, *base_sym, type_args) {
                 mangled_names.insert((*base_sym, type_args.clone()), mangled);
                 base_to_mangled.insert(*base_sym, mangled);
             }
@@ -322,7 +322,7 @@ impl<'a> MonoDriver<'a> {
         }
 
         let mangled_name =
-            match crate::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+            match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
                 Ok(s) => s,
                 Err(e) => {
                     self.record_failed_item_mangle(item, ctx, e);
@@ -366,7 +366,7 @@ impl<'a> MonoDriver<'a> {
         }
 
         let _mangled =
-            match crate::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+            match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
                 Ok(s) => s,
                 Err(e) => {
                     self.record_failed_item_mangle(item, ctx, e);
@@ -390,7 +390,7 @@ impl<'a> MonoDriver<'a> {
         }
 
         let _mangled =
-            match crate::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+            match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
                 Ok(s) => s,
                 Err(e) => {
                     self.record_failed_item_mangle(item, ctx, e);
@@ -426,7 +426,7 @@ impl<'a> MonoDriver<'a> {
         &mut self,
         item: &WorkItem,
         ctx: &WorkItemContext,
-        e: crate::mangling::ManglingError,
+        e: glyim_hir::mangling::ManglingError,
     ) {
         self.metrics.errors += 1;
         self.failed_items.push(FailedItem {
@@ -503,7 +503,7 @@ fn rewrite_expr(
                 if !name_str.contains("__") {
                     if let Some(type_args) = call_type_args.get(id) {
                         if !type_args.is_empty() {
-                            if let Ok(mangled) = crate::mangling::mangle_name(interner, *name, type_args) {
+                            if let Ok(mangled) = glyim_hir::mangling::mangle_name(interner, *name, type_args) {
                                 *name = mangled;
                             }
                         }
@@ -582,7 +582,7 @@ fn rewrite_expr(
             if !method_str.contains("__") {
                 if let Some(type_args) = call_type_args.get(id) {
                     if !type_args.is_empty() {
-                        if let Ok(mangled) = crate::mangling::mangle_name(interner, *method_name, type_args) {
+                        if let Ok(mangled) = glyim_hir::mangling::mangle_name(interner, *method_name, type_args) {
                             *method_name = mangled;
                         }
                     }

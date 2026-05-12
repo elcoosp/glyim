@@ -1,5 +1,5 @@
 use crate::mangle_table::MangleTable;
-use crate::mangling;
+use glyim_hir::mangling;
 use crate::metadata::{TypeMetadata, TypeStructure};
 use glyim_diag::Span;
 use glyim_hir::types::HirType;

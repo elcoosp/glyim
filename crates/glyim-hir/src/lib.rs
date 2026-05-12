@@ -3,6 +3,7 @@ mod lower;
 pub mod node;
 pub mod passes;
 pub mod types;
+pub mod mangling;
 
 pub use item::{
     EnumDef, ExternBlock, ExternFn, FnSig, HirImplDef, HirItem, HirVariant, StructDef, StructField,

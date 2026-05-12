@@ -1,4 +1,4 @@
-use crate::mangling;
+use glyim_hir::mangling;
 use glyim_hir::types::HirType;
 use glyim_interner::{Interner, Symbol};
 
@@ -17,7 +17,7 @@ impl MangleTable {
         base: Symbol,
         args: &[HirType],
         interner: &mut Interner,
-    ) -> Result<Symbol, crate::mangling::ManglingError> {
+    ) -> Result<Symbol, glyim_hir::mangling::ManglingError> {
         let mangled = mangling::mangle_name(interner, base, args)?;
         self.mark_seen(mangled);
         Ok(mangled)
@@ -41,7 +41,7 @@ impl MangleTable {
         base: Symbol,
         args: &[HirType],
         interner: &mut Interner,
-    ) -> Result<Symbol, crate::mangling::ManglingError> {
+    ) -> Result<Symbol, glyim_hir::mangling::ManglingError> {
         self.mangle(base, args, interner)
     }
 }
