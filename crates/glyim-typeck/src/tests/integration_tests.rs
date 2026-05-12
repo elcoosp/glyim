@@ -46,8 +46,12 @@ fn test_solve_generic_params_arity_mismatch() {
     let arg_types = vec![HirType::Int, HirType::Bool];
 
     let mut errors = Vec::new();
+    let mut interner = Interner::new();
+    let known = KnownSymbols::intern_all(&mut interner);
     let result = crate::solve::solve_generic_params(
         &mut table,
+        &interner,
+        &known,
         &type_params,
         &param_types,
         None,

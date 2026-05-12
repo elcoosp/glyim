@@ -1,10 +1,11 @@
 #![deny(unreachable_patterns)]
-
 pub mod env;
 pub mod errors;
 pub mod naming;
 pub mod solve;
 pub mod symbols;
+#[cfg(test)]
+mod tests;
 pub mod typeck;
 pub mod unify;
 pub mod validate;

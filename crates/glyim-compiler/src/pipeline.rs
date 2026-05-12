@@ -717,7 +717,17 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
         ));
     }
     let interner = typeck.interner;
-    let mut compiler = BytecodeCompiler::new(&interner);
+    let struct_fields = {
+        let mut map = std::collections::HashMap::new();
+        for item in &hir.items {
+            if let glyim_hir::HirItem::Struct(s) = item {
+                let fields: Vec<glyim_interner::Symbol> = s.fields.iter().map(|f| f.name).collect();
+                map.insert(s.name, fields);
+            }
+        }
+        map
+    };
+    let mut compiler = BytecodeCompiler::new(&interner, struct_fields);
     let mut interpreter = BytecodeInterpreter::new();
     for item in &hir.items {
         if let glyim_hir::HirItem::Fn(hir_fn) = item

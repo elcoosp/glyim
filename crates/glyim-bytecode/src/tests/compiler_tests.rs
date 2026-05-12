@@ -27,7 +27,7 @@ fn bin(op: HirBinOp, l: HirExpr, r: HirExpr) -> HirExpr {
 // Helper: compile_fn creates a compiler from the interner, compiles hir_fn, then returns the bc_fn.
 // The compiler reference is dropped before we use hir_fn, so borrows don't conflict.
 fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::BytecodeFn {
-    let mut compiler = BytecodeCompiler::new(source_interner);
+    let mut compiler = BytecodeCompiler::new(source_interner, std::collections::HashMap::new());
     compiler.compile_fn(hir_fn)
 }
 

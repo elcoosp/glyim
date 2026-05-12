@@ -14,11 +14,13 @@ pub struct BytecodeFn {
 
 pub struct BytecodeCompiler<'a> {
     interner: &'a Interner,
+    /// struct_name -> ordered field name list
+    struct_fields: HashMap<Symbol, Vec<Symbol>>,
 }
 
 impl<'a> BytecodeCompiler<'a> {
-    pub fn new(interner: &'a Interner) -> Self {
-        Self { interner }
+    pub fn new(interner: &'a Interner, struct_fields: HashMap<Symbol, Vec<Symbol>>) -> Self {
+        Self { interner, struct_fields }
     }
 
     pub fn compile_fn(&mut self, hir_fn: &HirFn) -> BytecodeFn {
@@ -127,18 +129,16 @@ impl<'a> BytecodeCompiler<'a> {
                 ctx.emit(BytecodeOp::Jump(loop_start));
                 ctx.patch_jump(jmp_out, ctx.instructions.len() as u32);
             }
-            HirExpr::As { expr, .. } | HirExpr::Deref { expr, .. } => self.compile_expr(ctx, expr),
-            HirExpr::SizeOf { .. } => ctx.emit(BytecodeOp::PushI64(8)),
-            HirExpr::TupleLit { elements, .. } => {
-                for e in elements {
-                    self.compile_expr(ctx, e);
-                }
-            }
             HirExpr::FieldAccess { object, field, .. } => {
                 self.compile_expr(ctx, object);
-                ctx.emit(BytecodeOp::FieldAccess {
-                    index: self.resolve(*field).len() as u32,
-                });
+                let mut field_idx = 0u32;
+                for (_struct_name, field_names) in &self.struct_fields {
+                    if let Some(pos) = field_names.iter().position(|&s| s == *field) {
+                        field_idx = pos as u32;
+                        break;
+                    }
+                }
+                ctx.emit(BytecodeOp::FieldAccess { index: field_idx });
             }
             HirExpr::StructLit { fields, .. } => {
                 ctx.emit(BytecodeOp::AllocStruct {

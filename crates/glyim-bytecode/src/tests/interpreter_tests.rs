@@ -18,7 +18,7 @@ fn int(v: i64) -> HirExpr {
     }
 }
 fn compile(source_interner: &Interner, hir_fn: &HirFn) -> crate::compiler::BytecodeFn {
-    let mut compiler = BytecodeCompiler::new(source_interner);
+    let mut compiler = BytecodeCompiler::new(source_interner, std::collections::HashMap::new());
     compiler.compile_fn(hir_fn)
 }
 

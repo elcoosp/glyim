@@ -10,3 +10,4 @@ description = "Type checker and MacroContext implementation for Glyim"
 glyim-hir = { path = "../glyim-hir" }
 glyim-interner = { path = "../glyim-interner" }
 glyim-diag = { path = "../glyim-diag" }
+glyim-parse = { path = "../glyim-parse" }
