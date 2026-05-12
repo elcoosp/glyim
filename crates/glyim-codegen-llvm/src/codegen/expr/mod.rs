@@ -91,13 +91,9 @@ pub(crate) fn codegen_expr<'ctx>(
                     // In Glyim, booleans are i64 with 0 = false, non-zero = true.
                     let zero = cg.i64_type.const_int(0, false);
                     let one = cg.i64_type.const_int(1, false);
-                    let is_false = cg.builder
-                        .build_int_compare(
-                            inkwell::IntPredicate::EQ,
-                            val,
-                            zero,
-                            "is_false",
-                        )
+                    let is_false = cg
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::EQ, val, zero, "is_false")
                         .ok()?;
                     cg.builder
                         .build_int_z_extend(is_false, cg.i64_type, "not_result")

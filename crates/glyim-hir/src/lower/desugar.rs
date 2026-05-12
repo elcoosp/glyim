@@ -6,11 +6,20 @@ fn resolve_field_struct_name(
     receiver: &HirExpr,
     self_ty: Option<&HirType>,
     interner: &Interner,
-    struct_fields: &std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>>,
+    struct_fields: &std::collections::HashMap<
+        glyim_interner::Symbol,
+        Vec<(glyim_interner::Symbol, HirType)>,
+    >,
 ) -> Option<String> {
-    let HirExpr::FieldAccess { object, field, .. } = receiver else { return None };
-    let HirExpr::Ident { name, .. } = object.as_ref() else { return None };
-    if interner.resolve(*name) != "self" { return None }
+    let HirExpr::FieldAccess { object, field, .. } = receiver else {
+        return None;
+    };
+    let HirExpr::Ident { name, .. } = object.as_ref() else {
+        return None;
+    };
+    if interner.resolve(*name) != "self" {
+        return None;
+    }
     let self_ty = self_ty?;
     let struct_name = resolve_type_name(self_ty, interner)?;
     let struct_sym = interner.resolve_symbol(&struct_name)?;
@@ -24,7 +33,10 @@ fn resolve_field_struct_name(
 }
 
 pub fn desugar_method_calls(hir: &mut Hir, expr_types: &[HirType], interner: &mut Interner) {
-    let mut struct_fields: std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>> = std::collections::HashMap::new();
+    let mut struct_fields: std::collections::HashMap<
+        glyim_interner::Symbol,
+        Vec<(glyim_interner::Symbol, HirType)>,
+    > = std::collections::HashMap::new();
     for item in hir.items.iter() {
         if let HirItem::Struct(s) = item {
             let fields: Vec<_> = s.fields.iter().map(|f| (f.name, f.ty.clone())).collect();
@@ -36,12 +48,24 @@ pub fn desugar_method_calls(hir: &mut Hir, expr_types: &[HirType], interner: &mu
         match item {
             HirItem::Fn(fn_def) => {
                 let self_ty = fn_def.params.first().map(|(_, ty)| ty.clone());
-                desugar_expr(&mut fn_def.body, expr_types, interner, self_ty.as_ref(), &struct_fields);
+                desugar_expr(
+                    &mut fn_def.body,
+                    expr_types,
+                    interner,
+                    self_ty.as_ref(),
+                    &struct_fields,
+                );
             }
             HirItem::Impl(impl_def) => {
                 for method in &mut impl_def.methods {
                     let self_ty = method.params.first().map(|(_, ty)| ty.clone());
-                    desugar_expr(&mut method.body, expr_types, interner, self_ty.as_ref(), &struct_fields);
+                    desugar_expr(
+                        &mut method.body,
+                        expr_types,
+                        interner,
+                        self_ty.as_ref(),
+                        &struct_fields,
+                    );
                 }
             }
             _ => {}
@@ -54,12 +78,17 @@ fn desugar_stmt(
     expr_types: &[HirType],
     interner: &mut Interner,
     self_ty: Option<&HirType>,
-    struct_fields: &std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>>,
+    struct_fields: &std::collections::HashMap<
+        glyim_interner::Symbol,
+        Vec<(glyim_interner::Symbol, HirType)>,
+    >,
 ) {
     match stmt {
         HirStmt::Let { value, .. }
         | HirStmt::LetPat { value, .. }
-        | HirStmt::Assign { value, .. } => desugar_expr(value, expr_types, interner, self_ty, struct_fields),
+        | HirStmt::Assign { value, .. } => {
+            desugar_expr(value, expr_types, interner, self_ty, struct_fields)
+        }
         HirStmt::AssignDeref { target, value, .. } => {
             desugar_expr(target, expr_types, interner, self_ty, struct_fields);
             desugar_expr(value, expr_types, interner, self_ty, struct_fields);
@@ -84,7 +113,10 @@ fn desugar_expr(
     expr_types: &[HirType],
     interner: &mut Interner,
     self_ty: Option<&HirType>,
-    struct_fields: &std::collections::HashMap<glyim_interner::Symbol, Vec<(glyim_interner::Symbol, HirType)>>,
+    struct_fields: &std::collections::HashMap<
+        glyim_interner::Symbol,
+        Vec<(glyim_interner::Symbol, HirType)>,
+    >,
 ) {
     match expr {
         HirExpr::MethodCall {
@@ -101,7 +133,10 @@ fn desugar_expr(
                 .cloned()
                 .unwrap_or(HirType::Error);
             let method_str = interner.resolve(*method_name).to_string();
-            eprintln!("[DESUGAR] receiver_ty={:?} method={}", receiver_ty, method_str);
+            eprintln!(
+                "[DESUGAR] receiver_ty={:?} method={}",
+                receiver_ty, method_str
+            );
 
             // Try to get type name from receiver, falling back to self_ty
             let type_name = if receiver_ty == HirType::Error || receiver_ty == HirType::Int {
@@ -207,7 +242,9 @@ fn desugar_expr(
                 desugar_expr(a, expr_types, interner, self_ty, struct_fields);
             }
         }
-        HirExpr::Println { arg, .. } => desugar_expr(arg, expr_types, interner, self_ty, struct_fields),
+        HirExpr::Println { arg, .. } => {
+            desugar_expr(arg, expr_types, interner, self_ty, struct_fields)
+        }
         HirExpr::Assert {
             condition, message, ..
         } => {

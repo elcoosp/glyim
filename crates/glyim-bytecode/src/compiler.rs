@@ -20,7 +20,10 @@ pub struct BytecodeCompiler<'a> {
 
 impl<'a> BytecodeCompiler<'a> {
     pub fn new(interner: &'a Interner, struct_fields: HashMap<Symbol, Vec<Symbol>>) -> Self {
-        Self { interner, struct_fields }
+        Self {
+            interner,
+            struct_fields,
+        }
     }
 
     pub fn compile_fn(&mut self, hir_fn: &HirFn) -> BytecodeFn {

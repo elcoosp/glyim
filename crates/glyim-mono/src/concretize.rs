@@ -1,7 +1,7 @@
 use crate::mangle_table::MangleTable;
-use glyim_hir::mangling;
 use crate::metadata::{TypeMetadata, TypeStructure};
 use glyim_diag::Span;
+use glyim_hir::mangling;
 use glyim_hir::types::HirType;
 use glyim_interner::{Interner, Symbol};
 

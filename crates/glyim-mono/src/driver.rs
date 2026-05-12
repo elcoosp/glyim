@@ -3,8 +3,8 @@ use crate::mangle_table::MangleTable;
 use crate::metadata::{TypeMetadata, TypeStructure};
 use crate::queue::{ItemKind, WorkItem, WorkItemContext, WorkQueue};
 use glyim_diag::Span;
-use glyim_hir::types::{ExprId, HirType};
 use glyim_hir::HirExpr;
+use glyim_hir::types::{ExprId, HirType};
 use glyim_interner::{Interner, Symbol};
 use glyim_typeck::typeck::FnTypes;
 use std::collections::HashMap;
@@ -129,7 +129,8 @@ impl<'a> MonoDriver<'a> {
             };
 
             let sub: HashMap<Symbol, HirType> = fn_def
-                .type_params.iter()
+                .type_params
+                .iter()
                 .zip(item.type_args.iter())
                 .map(|(p, a)| (*p, a.clone()))
                 .collect();
@@ -206,7 +207,9 @@ impl<'a> MonoDriver<'a> {
         ctx: &WorkItemContext,
     ) {
         match expr {
-            HirExpr::Call { id, callee, args, .. } => {
+            HirExpr::Call {
+                id, callee, args, ..
+            } => {
                 if let Some(call_site_args) = fn_types.call_type_args.get(id) {
                     let callee_name = if let HirExpr::Ident { name, .. } = callee.as_ref() {
                         *name
@@ -239,9 +242,15 @@ impl<'a> MonoDriver<'a> {
                     if let Some(callee_fn_types) = self.input_fn_types.get(&callee_name) {
                         if callee_fn_types.is_generic && !concrete_call_args.is_empty() {
                             if let Ok(mangled) = glyim_hir::mangling::mangle_name(
-                                self.interner, callee_name, &concrete_call_args,
+                                self.interner,
+                                callee_name,
+                                &concrete_call_args,
                             ) {
-                                self.specializations.push((mangled, callee_name, concrete_call_args.clone()));
+                                self.specializations.push((
+                                    mangled,
+                                    callee_name,
+                                    concrete_call_args.clone(),
+                                ));
                                 self.queue.push(
                                     WorkItem {
                                         kind: ItemKind::FnSpecialize,
@@ -269,7 +278,13 @@ impl<'a> MonoDriver<'a> {
                     self.scan_expr(arg, sub, fn_types, ctx);
                 }
             }
-            HirExpr::MethodCall { id, receiver, method_name, args, .. } => {
+            HirExpr::MethodCall {
+                id,
+                receiver,
+                method_name,
+                args,
+                ..
+            } => {
                 if let Some(call_site_args) = fn_types.call_type_args.get(id) {
                     let mut concrete_call_args = Vec::new();
                     for arg in call_site_args {
@@ -293,9 +308,15 @@ impl<'a> MonoDriver<'a> {
                     if let Some(callee_fn_types) = self.input_fn_types.get(method_name) {
                         if callee_fn_types.is_generic && !concrete_call_args.is_empty() {
                             if let Ok(mangled) = glyim_hir::mangling::mangle_name(
-                                self.interner, *method_name, &concrete_call_args,
+                                self.interner,
+                                *method_name,
+                                &concrete_call_args,
                             ) {
-                                self.specializations.push((mangled, *method_name, concrete_call_args.clone()));
+                                self.specializations.push((
+                                    mangled,
+                                    *method_name,
+                                    concrete_call_args.clone(),
+                                ));
                                 self.queue.push(
                                     WorkItem {
                                         kind: ItemKind::FnSpecialize,
@@ -328,21 +349,34 @@ impl<'a> MonoDriver<'a> {
                     }
                 }
             }
-            HirExpr::If { condition, then_branch, else_branch, .. } => {
+            HirExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.scan_expr(condition, sub, fn_types, ctx);
                 self.scan_expr(then_branch, sub, fn_types, ctx);
                 if let Some(eb) = else_branch {
                     self.scan_expr(eb, sub, fn_types, ctx);
                 }
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 self.scan_expr(scrutinee, sub, fn_types, ctx);
                 for arm in arms {
                     self.scan_expr(&arm.body, sub, fn_types, ctx);
                 }
             }
-            HirExpr::While { condition, body, .. }
-            | HirExpr::ForIn { iter: condition, body, .. } => {
+            HirExpr::While {
+                condition, body, ..
+            }
+            | HirExpr::ForIn {
+                iter: condition,
+                body,
+                ..
+            } => {
                 self.scan_expr(condition, sub, fn_types, ctx);
                 self.scan_expr(body, sub, fn_types, ctx);
             }
@@ -363,8 +397,7 @@ impl<'a> MonoDriver<'a> {
                     self.scan_expr(v, sub, fn_types, ctx);
                 }
             }
-            HirExpr::EnumVariant { args, .. }
-            | HirExpr::TupleLit { elements: args, .. } => {
+            HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
                 for a in args {
                     self.scan_expr(a, sub, fn_types, ctx);
                 }
@@ -386,8 +419,15 @@ impl<'a> MonoDriver<'a> {
                         _ => return,
                     };
                     self.queue.push(
-                        WorkItem { kind, def_id: base, type_args: args.clone() },
-                        WorkItemContext { discovered_from: None, discovery_span: Span::new(0, 0) },
+                        WorkItem {
+                            kind,
+                            def_id: base,
+                            type_args: args.clone(),
+                        },
+                        WorkItemContext {
+                            discovered_from: None,
+                            discovery_span: Span::new(0, 0),
+                        },
                         *sym,
                     );
                     self.specializations.push((*sym, base, args));
@@ -400,8 +440,15 @@ impl<'a> MonoDriver<'a> {
         for (&fn_name, fn_types) in self.input_fn_types {
             if !fn_types.is_generic {
                 self.queue.push(
-                    WorkItem { kind: ItemKind::FnPassthrough, def_id: fn_name, type_args: vec![] },
-                    WorkItemContext { discovered_from: None, discovery_span: Span::new(0, 0) },
+                    WorkItem {
+                        kind: ItemKind::FnPassthrough,
+                        def_id: fn_name,
+                        type_args: vec![],
+                    },
+                    WorkItemContext {
+                        discovered_from: None,
+                        discovery_span: Span::new(0, 0),
+                    },
                     fn_name,
                 );
             }
@@ -410,36 +457,58 @@ impl<'a> MonoDriver<'a> {
 
     fn process_struct_specialize(&mut self, item: &WorkItem, ctx: &WorkItemContext) {
         self.metrics.struct_specializations += 1;
-        let mangled = match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
-            Ok(s) => s,
-            Err(e) => { self.record_failed_item_mangle(item, ctx, e); return; }
-        };
-        self.metadata.record(mangled, TypeStructure::Generic { base: item.def_id, args: item.type_args.clone() });
+        let mangled =
+            match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+                Ok(s) => s,
+                Err(e) => {
+                    self.record_failed_item_mangle(item, ctx, e);
+                    return;
+                }
+            };
+        self.metadata.record(
+            mangled,
+            TypeStructure::Generic {
+                base: item.def_id,
+                args: item.type_args.clone(),
+            },
+        );
         self.mangle.mark_seen(mangled);
     }
 
     fn process_struct_passthrough(&mut self, item: &WorkItem, _ctx: &WorkItemContext) {
         self.metrics.struct_passthroughs += 1;
         if !self.mangle.contains(item.def_id) {
-            self.metadata.record(item.def_id, TypeStructure::Plain { base: item.def_id });
+            self.metadata
+                .record(item.def_id, TypeStructure::Plain { base: item.def_id });
             self.mangle.mark_seen(item.def_id);
         }
     }
 
     fn process_enum_specialize(&mut self, item: &WorkItem, ctx: &WorkItemContext) {
         self.metrics.enum_specializations += 1;
-        let mangled = match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
-            Ok(s) => s,
-            Err(e) => { self.record_failed_item_mangle(item, ctx, e); return; }
-        };
-        self.metadata.record(mangled, TypeStructure::Generic { base: item.def_id, args: item.type_args.clone() });
+        let mangled =
+            match glyim_hir::mangling::mangle_name(self.interner, item.def_id, &item.type_args) {
+                Ok(s) => s,
+                Err(e) => {
+                    self.record_failed_item_mangle(item, ctx, e);
+                    return;
+                }
+            };
+        self.metadata.record(
+            mangled,
+            TypeStructure::Generic {
+                base: item.def_id,
+                args: item.type_args.clone(),
+            },
+        );
         self.mangle.mark_seen(mangled);
     }
 
     fn process_enum_passthrough(&mut self, item: &WorkItem, _ctx: &WorkItemContext) {
         self.metrics.enum_passthroughs += 1;
         if !self.mangle.contains(item.def_id) {
-            self.metadata.record(item.def_id, TypeStructure::Plain { base: item.def_id });
+            self.metadata
+                .record(item.def_id, TypeStructure::Plain { base: item.def_id });
             self.mangle.mark_seen(item.def_id);
         }
     }
@@ -447,32 +516,50 @@ impl<'a> MonoDriver<'a> {
     fn record_failed_item(&mut self, item: &WorkItem, ctx: &WorkItemContext, reason: &str) {
         self.metrics.errors += 1;
         self.failed_items.push(FailedItem {
-            name: item.def_id, type_args: item.type_args.clone(),
+            name: item.def_id,
+            type_args: item.type_args.clone(),
             discovered_from: ctx.discovered_from,
             error: crate::concretize::ConcretizeError {
                 kind: crate::concretize::ConcretizeErrorKind::StructuralFailure,
-                ty: Box::new(HirType::Error), detail: reason.to_string(), span: ctx.discovery_span,
+                ty: Box::new(HirType::Error),
+                detail: reason.to_string(),
+                span: ctx.discovery_span,
             },
         });
     }
 
-    fn record_failed_item_mangle(&mut self, item: &WorkItem, ctx: &WorkItemContext, e: glyim_hir::mangling::ManglingError) {
+    fn record_failed_item_mangle(
+        &mut self,
+        item: &WorkItem,
+        ctx: &WorkItemContext,
+        e: glyim_hir::mangling::ManglingError,
+    ) {
         self.metrics.errors += 1;
         self.failed_items.push(FailedItem {
-            name: item.def_id, type_args: item.type_args.clone(),
+            name: item.def_id,
+            type_args: item.type_args.clone(),
             discovered_from: ctx.discovered_from,
             error: crate::concretize::ConcretizeError {
                 kind: crate::concretize::ConcretizeErrorKind::ManglingFailed,
-                ty: Box::new(HirType::Error), detail: format!("{:?}", e), span: ctx.discovery_span,
+                ty: Box::new(HirType::Error),
+                detail: format!("{:?}", e),
+                span: ctx.discovery_span,
             },
         });
     }
 
-    fn record_failed_item_concretize(&mut self, item: &WorkItem, ctx: &WorkItemContext, e: crate::concretize::ConcretizeError) {
+    fn record_failed_item_concretize(
+        &mut self,
+        item: &WorkItem,
+        ctx: &WorkItemContext,
+        e: crate::concretize::ConcretizeError,
+    ) {
         self.metrics.errors += 1;
         self.failed_items.push(FailedItem {
-            name: item.def_id, type_args: item.type_args.clone(),
-            discovered_from: ctx.discovered_from, error: e,
+            name: item.def_id,
+            type_args: item.type_args.clone(),
+            discovered_from: ctx.discovered_from,
+            error: e,
         });
     }
 }
@@ -485,30 +572,38 @@ pub fn run_on_hir(
     let mut fn_types_map: HashMap<Symbol, FnTypes> = HashMap::new();
     for item in &hir.items {
         if let glyim_hir::HirItem::Fn(f) = item {
-            fn_types_map.insert(f.name, FnTypes {
-                expr_types: HashMap::new(),
-                call_type_args: call_type_args.clone(),
-                sizeof_types: HashMap::new(),
-                is_generic: !f.type_params.is_empty(),
-                type_params: f.type_params.clone(),
-                span: f.span,
-            });
+            fn_types_map.insert(
+                f.name,
+                FnTypes {
+                    expr_types: HashMap::new(),
+                    call_type_args: call_type_args.clone(),
+                    sizeof_types: HashMap::new(),
+                    is_generic: !f.type_params.is_empty(),
+                    type_params: f.type_params.clone(),
+                    span: f.span,
+                },
+            );
         }
         if let glyim_hir::HirItem::Impl(imp) = item {
             for m in &imp.methods {
                 let is_generic = !imp.type_params.is_empty() || !m.type_params.is_empty();
-                let all_tp: Vec<_> = imp.type_params.iter()
+                let all_tp: Vec<_> = imp
+                    .type_params
+                    .iter()
                     .chain(m.type_params.iter())
                     .copied()
                     .collect();
-                fn_types_map.insert(m.name, FnTypes {
-                    expr_types: HashMap::new(),
-                    call_type_args: call_type_args.clone(),
-                    sizeof_types: HashMap::new(),
-                    is_generic,
-                    type_params: all_tp,
-                    span: m.span,
-                });
+                fn_types_map.insert(
+                    m.name,
+                    FnTypes {
+                        expr_types: HashMap::new(),
+                        call_type_args: call_type_args.clone(),
+                        sizeof_types: HashMap::new(),
+                        is_generic,
+                        type_params: all_tp,
+                        span: m.span,
+                    },
+                );
             }
         }
     }
@@ -517,7 +612,8 @@ pub fn run_on_hir(
     let result = driver.run();
 
     let mut mono_hir = hir.clone();
-    let mut all_specializations: std::collections::HashSet<(Symbol, Vec<HirType>)> = std::collections::HashSet::new();
+    let mut all_specializations: std::collections::HashSet<(Symbol, Vec<HirType>)> =
+        std::collections::HashSet::new();
 
     for item in &hir.items {
         match item {
@@ -569,8 +665,12 @@ pub fn run_on_hir(
             let mut mono_fn = f.clone();
             mono_fn.name = *mangled_sym;
             mono_fn.type_params.clear();
-            let subst: HashMap<_, _> = f.type_params.iter().zip(type_args.iter())
-                .map(|(p, a)| (*p, a.clone())).collect();
+            let subst: HashMap<_, _> = f
+                .type_params
+                .iter()
+                .zip(type_args.iter())
+                .map(|(p, a)| (*p, a.clone()))
+                .collect();
             for (_, pt) in &mut mono_fn.params {
                 *pt = glyim_hir::types::substitute_type(pt, &subst);
             }
@@ -584,7 +684,9 @@ pub fn run_on_hir(
 
     for item in &mut mono_hir.items {
         match item {
-            glyim_hir::HirItem::Fn(f) => rewrite_concrete_body(&mut f.body, interner, &base_to_mangled),
+            glyim_hir::HirItem::Fn(f) => {
+                rewrite_concrete_body(&mut f.body, interner, &base_to_mangled)
+            }
             glyim_hir::HirItem::Impl(imp) => {
                 for m in &mut imp.methods {
                     rewrite_concrete_body(&mut m.body, interner, &base_to_mangled);
@@ -613,7 +715,12 @@ fn rewrite_concrete_body(
                 rewrite_concrete_body(a, interner, sub_map);
             }
         }
-        HirExpr::MethodCall { receiver, method_name, args, .. } => {
+        HirExpr::MethodCall {
+            receiver,
+            method_name,
+            args,
+            ..
+        } => {
             if let Some(&new_name) = sub_map.get(method_name) {
                 *method_name = new_name;
             }
@@ -636,21 +743,34 @@ fn rewrite_concrete_body(
                 }
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             rewrite_concrete_body(condition, interner, sub_map);
             rewrite_concrete_body(then_branch, interner, sub_map);
             if let Some(eb) = else_branch {
                 rewrite_concrete_body(eb, interner, sub_map);
             }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             rewrite_concrete_body(scrutinee, interner, sub_map);
             for arm in arms {
                 rewrite_concrete_body(&mut arm.body, interner, sub_map);
             }
         }
-        HirExpr::While { condition, body, .. }
-        | HirExpr::ForIn { iter: condition, body, .. } => {
+        HirExpr::While {
+            condition, body, ..
+        }
+        | HirExpr::ForIn {
+            iter: condition,
+            body,
+            ..
+        } => {
             rewrite_concrete_body(condition, interner, sub_map);
             rewrite_concrete_body(body, interner, sub_map);
         }
@@ -661,7 +781,10 @@ fn rewrite_concrete_body(
         HirExpr::Unary { operand, .. }
         | HirExpr::Deref { expr: operand, .. }
         | HirExpr::As { expr: operand, .. }
-        | HirExpr::Return { value: Some(operand), .. } => {
+        | HirExpr::Return {
+            value: Some(operand),
+            ..
+        } => {
             rewrite_concrete_body(operand, interner, sub_map);
         }
         HirExpr::StructLit { fields, .. } => {
@@ -669,8 +792,7 @@ fn rewrite_concrete_body(
                 rewrite_concrete_body(v, interner, sub_map);
             }
         }
-        HirExpr::EnumVariant { args, .. }
-        | HirExpr::TupleLit { elements: args, .. } => {
+        HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
             for a in args {
                 rewrite_concrete_body(a, interner, sub_map);
             }

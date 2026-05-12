@@ -20,7 +20,6 @@ fn is_known_struct(ctx: &LoweringContext, name: glyim_interner::Symbol) -> bool 
             .is_some()
 }
 
-
 /// Replace HirType::Named symbols that match type parameters with HirType::Param.
 fn replace_named_with_param(ty: HirType, type_params: &[glyim_interner::Symbol]) -> HirType {
     if type_params.is_empty() {
@@ -30,14 +29,24 @@ fn replace_named_with_param(ty: HirType, type_params: &[glyim_interner::Symbol])
         HirType::Named(sym) if type_params.contains(&sym) => HirType::Param(sym),
         HirType::Generic(base, args) => HirType::Generic(
             base,
-            args.into_iter().map(|a| replace_named_with_param(a, type_params)).collect(),
+            args.into_iter()
+                .map(|a| replace_named_with_param(a, type_params))
+                .collect(),
         ),
-        HirType::RawPtr(inner) => HirType::RawPtr(Box::new(replace_named_with_param(*inner, type_params))),
+        HirType::RawPtr(inner) => {
+            HirType::RawPtr(Box::new(replace_named_with_param(*inner, type_params)))
+        }
         HirType::Tuple(elems) => HirType::Tuple(
-            elems.into_iter().map(|e| replace_named_with_param(e, type_params)).collect(),
+            elems
+                .into_iter()
+                .map(|e| replace_named_with_param(e, type_params))
+                .collect(),
         ),
         HirType::Func(params, ret) => HirType::Func(
-            params.into_iter().map(|p| replace_named_with_param(p, type_params)).collect(),
+            params
+                .into_iter()
+                .map(|p| replace_named_with_param(p, type_params))
+                .collect(),
             Box::new(replace_named_with_param(*ret, type_params)),
         ),
         other => other,
@@ -256,18 +265,18 @@ pub fn lower_item(item: &Item, ctx: &mut LoweringContext) -> Option<HirItem> {
                         ctx.push_type_params(&all_tp);
                         let mangled_name =
                             ctx.intern(&format!("{}_{}", ctx.resolve(*target), ctx.resolve(*name)));
-                        let combined_type_params: Vec<_> = type_params.iter()
-                            .chain(fn_tp.iter())
-                            .copied()
-                            .collect();
+                        let combined_type_params: Vec<_> =
+                            type_params.iter().chain(fn_tp.iter()).copied().collect();
                         let (hir_params, mutabilities): (Vec<_>, Vec<_>) = params
                             .iter()
                             .map(|(sym, _, ty, mutable)| {
-                                let raw_ty = ty.as_ref()
+                                let raw_ty = ty
+                                    .as_ref()
                                     .map(|t| lower_type_expr(t, ctx))
                                     .unwrap_or(HirType::Int);
                                 // Convert Named type params to HirType::Param
-                                let resolved_ty = replace_named_with_param(raw_ty, &combined_type_params);
+                                let resolved_ty =
+                                    replace_named_with_param(raw_ty, &combined_type_params);
                                 ((*sym, resolved_ty), *mutable)
                             })
                             .unzip();
