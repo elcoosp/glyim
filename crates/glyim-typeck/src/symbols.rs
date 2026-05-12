@@ -73,5 +73,4 @@ impl KnownSymbols {
         // we'll add a method that takes an interner parameter instead.
         unreachable!("use typeck's normalizer which has access to the interner")
     }
-
 }
