@@ -70,35 +70,34 @@ pub enum TypeError {
         field: Symbol,
         span: Span,
     },
-    // Legacy variant names for backward compat with snapshot tests
     UnknownField {
         struct_name: String,
         field: String,
-        span: (usize, usize),
+        span: Span,
     },
     MissingField {
         struct_name: String,
         field: String,
-        span: (usize, usize),
+        span: Span,
     },
     NonExhaustiveMatch {
         missing: Vec<String>,
-        span: (usize, usize),
+        span: Span,
     },
     AssignToImmutable {
         name: String,
         expr_id: glyim_hir::types::ExprId,
-        span: (usize, usize),
+        span: Span,
     },
     AssignThroughNonPointer {
         found: HirType,
         expr_id: glyim_hir::types::ExprId,
-        span: (usize, usize),
+        span: Span,
     },
     DerefNonPointer {
         found: HirType,
         expr_id: glyim_hir::types::ExprId,
-        span: (usize, usize),
+        span: Span,
     },
     InvalidReturnType {
         expected: HirType,

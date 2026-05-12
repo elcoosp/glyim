@@ -20,12 +20,12 @@ pub use validate::validate_mono_input;
 impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
     fn from(err: TypeError) -> glyim_diag::diagnostic::Diagnostic {
         let (start, end) = match &err {
-            TypeError::UnknownField { span, .. } => (span.0, span.1),
-            TypeError::MissingField { span, .. } => (span.0, span.1),
-            TypeError::NonExhaustiveMatch { span, .. } => (span.0, span.1),
-            TypeError::AssignToImmutable { span, .. } => (span.0, span.1),
-            TypeError::AssignThroughNonPointer { span, .. } => (span.0, span.1),
-            TypeError::DerefNonPointer { span, .. } => (span.0, span.1),
+            TypeError::UnknownField { span, .. } => (span.start, span.end),
+            TypeError::MissingField { span, .. } => (span.start, span.end),
+            TypeError::NonExhaustiveMatch { span, .. } => (span.start, span.end),
+            TypeError::AssignToImmutable { span, .. } => (span.start, span.end),
+            TypeError::AssignThroughNonPointer { span, .. } => (span.start, span.end),
+            TypeError::DerefNonPointer { span, .. } => (span.start, span.end),
             TypeError::UnresolvedName { span, .. } => (span.start, span.end),
             TypeError::MismatchedTypes { expected_span, .. } => {
                 (expected_span.start, expected_span.end)

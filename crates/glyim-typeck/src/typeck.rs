@@ -736,7 +736,15 @@ impl TypeChecker {
                         _ => {}
                     }
                 }
-                self.infer_dispatch(expr, None);
+                let src_ty = self.infer_dispatch(expr, None);
+                if !self.is_valid_cast(&src_ty, target_type) {
+                    self.errors.push(TypeError::MismatchedTypes {
+                        expected: Box::new(target_type.clone()),
+                        found: Box::new(src_ty),
+                        expected_span: expr.get_span(),
+                        found_span: expr.get_span(),
+                    });
+                }
                 target_type.clone()
             }
             HirExpr::Deref { expr, span, .. } => self.infer_deref(expr, *span),
@@ -800,8 +808,8 @@ impl TypeChecker {
             self.unify_and_record(&tt, &et, then.get_span(), e.get_span());
             tt
         } else {
-            self.unify_and_record(&HirType::Unit, &tt, span, then.get_span());
-            HirType::Unit
+            // if without else: don't constrain then branch to Unit
+            tt
         }
     }
 
@@ -1043,8 +1051,10 @@ impl TypeChecker {
                     .map(|ft| ft.is_generic)
                     .unwrap_or(false);
 
-                eprintln!("[DEBUG] infer_method_call: mangled_sym={:?}, is_generic={:?}, params={:?}, ret={:?}",
-                    mangled_sym, is_generic, params, ret);
+                eprintln!(
+                    "[DEBUG] infer_method_call: mangled_sym={:?}, is_generic={:?}, params={:?}, ret={:?}",
+                    mangled_sym, is_generic, params, ret
+                );
 
                 if is_generic {
                     let type_params = self
@@ -1269,7 +1279,7 @@ impl TypeChecker {
                             self.errors.push(TypeError::UnknownField {
                                 struct_name,
                                 field: resolved,
-                                span: (span.start, span.end),
+                                span: span,
                             });
                             return HirType::Error;
                         }
@@ -1404,9 +1414,10 @@ impl TypeChecker {
                 ..
             } => {
                 let expected = ty.as_ref();
-
                 let mut t = self.infer_dispatch(value, expected);
-                // Resolve through unification to get concrete type
+                if let Some(ann_ty) = expected {
+                    self.unify_and_record(ann_ty, &t, value.get_span(), value.get_span());
+                }
                 if let Ok(resolved) = self.table.resolve(&t) {
                     t = resolved;
                 }
@@ -1419,7 +1430,15 @@ impl TypeChecker {
                 span,
                 ..
             } => {
-                if let Some(_e) = self.env.lookup(*target).cloned() {
+                let is_mutable = self.env.is_mutable(*target);
+                if !is_mutable {
+                    self.errors.push(TypeError::AssignToImmutable {
+                        name: self.interner.resolve(*target).to_string(),
+                        expr_id: value.get_id(),
+                        span: *span,
+                    });
+                }
+                if self.env.lookup(*target).is_some() {
                     self.infer_dispatch(value, None);
                 } else {
                     self.errors.push(TypeError::UnresolvedName {
@@ -1431,6 +1450,21 @@ impl TypeChecker {
             }
             HirStmt::Expr(expr) => self.infer_dispatch(expr, None),
             _ => HirType::Unit,
+        }
+    }
+
+    /// Check whether a cast is allowed (e.g., Int to Str is not).
+    fn is_valid_cast(&self, src: &HirType, target: &HirType) -> bool {
+        use HirType::*;
+        match (src, target) {
+            (Int, Int) | (Int, Float) | (Float, Float) | (Float, Int) => true,
+            (Int, Bool) | (Float, Bool) => true, // bool values become 0/1
+            (Int, RawPtr(_)) | (Float, RawPtr(_)) | (RawPtr(_), Int) | (RawPtr(_), Float) => true,
+            (Bool, Int) | (Bool, Float) => true,
+            (Named(_), Named(_)) | (Named(_), RawPtr(_)) => true,
+            (Generic(_, _), Generic(_, _)) => true, // same generic?
+            (Int, Named(_)) | (Float, Named(_)) | (RawPtr(_), Named(_)) => true,
+            _ => false,
         }
     }
 }
