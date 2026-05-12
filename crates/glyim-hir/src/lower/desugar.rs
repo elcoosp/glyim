@@ -3,20 +3,15 @@ use glyim_interner::Interner;
 
 pub fn desugar_method_calls(hir: &mut Hir, expr_types: &[HirType], interner: &mut Interner) {
     for item in &mut hir.items {
-        let fn_self_ty = match item {
-            HirItem::Fn(f) => f.params.first().map(|(_, ty)| ty.clone()),
-            HirItem::Impl(imp) => imp.methods.first().and_then(|m| m.params.first().map(|(_, ty)| ty.clone())),
-            _ => None,
-        };
         match item {
             HirItem::Fn(fn_def) => {
-                let st = fn_def.params.first().map(|(_, ty)| ty.clone());
-                desugar_expr(&mut fn_def.body, expr_types, interner, st.as_ref());
+                let self_ty = fn_def.params.first().map(|(_, ty)| ty.clone());
+                desugar_expr(&mut fn_def.body, expr_types, interner, self_ty.as_ref());
             }
             HirItem::Impl(impl_def) => {
                 for method in &mut impl_def.methods {
-                    let st = method.params.first().map(|(_, ty)| ty.clone());
-                    desugar_expr(&mut method.body, expr_types, interner, st.as_ref());
+                    let self_ty = method.params.first().map(|(_, ty)| ty.clone());
+                    desugar_expr(&mut method.body, expr_types, interner, self_ty.as_ref());
                 }
             }
             _ => {}
@@ -24,11 +19,16 @@ pub fn desugar_method_calls(hir: &mut Hir, expr_types: &[HirType], interner: &mu
     }
 }
 
-fn desugar_stmt(stmt: &mut HirStmt, expr_types: &[HirType], interner: &mut Interner, self_ty: Option<&HirType>) {
+fn desugar_stmt(
+    stmt: &mut HirStmt,
+    expr_types: &[HirType],
+    interner: &mut Interner,
+    self_ty: Option<&HirType>,
+) {
     match stmt {
-        HirStmt::Let { value: e, .. }
-        | HirStmt::LetPat { value: e, .. }
-        | HirStmt::Assign { value: e, .. } => desugar_expr(e, expr_types, interner, self_ty),
+        HirStmt::Let { value, .. }
+        | HirStmt::LetPat { value, .. }
+        | HirStmt::Assign { value, .. } => desugar_expr(value, expr_types, interner, self_ty),
         HirStmt::AssignDeref { target, value, .. } => {
             desugar_expr(target, expr_types, interner, self_ty);
             desugar_expr(value, expr_types, interner, self_ty);
@@ -41,7 +41,19 @@ fn desugar_stmt(stmt: &mut HirStmt, expr_types: &[HirType], interner: &mut Inter
     }
 }
 
-fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Interner, self_ty: Option<&HirType>) {
+fn resolve_type_name(ty: &HirType, interner: &Interner) -> Option<String> {
+    match ty {
+        HirType::Named(s) | HirType::Generic(s, _) => Some(interner.resolve(*s).to_string()),
+        _ => None,
+    }
+}
+
+fn desugar_expr(
+    expr: &mut HirExpr,
+    expr_types: &[HirType],
+    interner: &mut Interner,
+    self_ty: Option<&HirType>,
+) {
     match expr {
         HirExpr::MethodCall {
             id,
@@ -56,32 +68,19 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                 .get(receiver_id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Error);
+            let method_str = interner.resolve(*method_name).to_string();
 
-            let effective_ty = if receiver_ty == HirType::Error {
-                eprintln!("[DESUGAR] receiver_ty is Error, self_ty={:?}", self_ty);
-                self_ty.cloned().unwrap_or(HirType::Error)
+            // Try to get type name from receiver, falling back to self_ty
+            let type_name = if receiver_ty == HirType::Error || receiver_ty == HirType::Int {
+                self_ty
+                    .and_then(|ty| resolve_type_name(ty, interner))
+                    .unwrap_or_else(|| "unknown".to_string())
             } else {
-                receiver_ty
-            };
-            eprintln!("[DESUGAR] effective_ty={:?}, method={}", effective_ty, interner.resolve(*method_name));
-
-            let type_name_sym = match &effective_ty {
-                HirType::Named(s) | HirType::Generic(s, _) => *s,
-                _ => *method_name,
-            };
-            let type_args: Vec<HirType> = match &effective_ty {
-                HirType::Generic(_, args) if !args.is_empty() => args.clone(),
-                _ => vec![],
+                resolve_type_name(&receiver_ty, interner).unwrap_or_else(|| "unknown".to_string())
             };
 
-            let mangled = crate::mangling::mangle_method_name(
-                interner,
-                type_name_sym,
-                *method_name,
-                &type_args,
-            )
-            .unwrap_or_else(|_| *method_name);
-            let callee = mangled;
+            let base = format!("{}_{}", type_name, method_str);
+            let callee = interner.intern(&base);
 
             let span = *span;
             let id = *id;
@@ -93,9 +92,8 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                     span: glyim_diag::Span::new(0, 0),
                 }),
             );
-            let mut args_vec = std::mem::take(args);
             let mut full_args = vec![receiver_expr];
-            full_args.append(&mut args_vec);
+            full_args.append(&mut std::mem::take(args));
             *expr = HirExpr::Call {
                 id,
                 callee: Box::new(HirExpr::Ident {
@@ -113,14 +111,21 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                 desugar_stmt(stmt, expr_types, interner, self_ty);
             }
         }
-        HirExpr::If { condition, then_branch, else_branch, .. } => {
+        HirExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             desugar_expr(condition, expr_types, interner, self_ty);
             desugar_expr(then_branch, expr_types, interner, self_ty);
             if let Some(e) = else_branch {
                 desugar_expr(e, expr_types, interner, self_ty);
             }
         }
-        HirExpr::Match { scrutinee, arms, .. } => {
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
             desugar_expr(scrutinee, expr_types, interner, self_ty);
             for arm in arms.iter_mut() {
                 if let Some(ref mut g) = arm.guard {
@@ -129,47 +134,49 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
                 desugar_expr(&mut arm.body, expr_types, interner, self_ty);
             }
         }
-        HirExpr::While { condition, body, .. } => {
-            desugar_expr(condition, expr_types, interner, self_ty);
-            desugar_expr(body, expr_types, interner, self_ty);
+        HirExpr::While {
+            condition, body, ..
         }
-        HirExpr::ForIn { iter, body, .. } => {
-            desugar_expr(iter, expr_types, interner, self_ty);
+        | HirExpr::ForIn {
+            iter: condition,
+            body,
+            ..
+        } => {
+            desugar_expr(condition, expr_types, interner, self_ty);
             desugar_expr(body, expr_types, interner, self_ty);
         }
         HirExpr::Binary { lhs, rhs, .. } => {
             desugar_expr(lhs, expr_types, interner, self_ty);
             desugar_expr(rhs, expr_types, interner, self_ty);
         }
-        HirExpr::Unary { operand, .. } => desugar_expr(operand, expr_types, interner, self_ty),
-        HirExpr::Deref { expr: e, .. } => desugar_expr(e, expr_types, interner, self_ty),
-        HirExpr::FieldAccess { object, .. } => desugar_expr(object, expr_types, interner, self_ty),
-        HirExpr::As { expr: e, .. } => desugar_expr(e, expr_types, interner, self_ty),
+        HirExpr::Unary { operand, .. }
+        | HirExpr::Deref { expr: operand, .. }
+        | HirExpr::As { expr: operand, .. }
+        | HirExpr::FieldAccess {
+            object: operand, ..
+        } => desugar_expr(operand, expr_types, interner, self_ty),
         HirExpr::StructLit { fields, .. } => {
-            for (_, val) in fields {
-                desugar_expr(val, expr_types, interner, self_ty);
+            for (_, v) in fields {
+                desugar_expr(v, expr_types, interner, self_ty);
             }
         }
-        HirExpr::EnumVariant { args, .. } => {
-            for arg in args {
-                desugar_expr(arg, expr_types, interner, self_ty);
-            }
-        }
-        HirExpr::TupleLit { elements, .. } => {
-            for elem in elements {
-                desugar_expr(elem, expr_types, interner, self_ty);
+        HirExpr::EnumVariant { args, .. } | HirExpr::TupleLit { elements: args, .. } => {
+            for a in args {
+                desugar_expr(a, expr_types, interner, self_ty);
             }
         }
         HirExpr::Call { args, .. } => {
-            for arg in args {
-                desugar_expr(arg, expr_types, interner, self_ty);
+            for a in args {
+                desugar_expr(a, expr_types, interner, self_ty);
             }
         }
         HirExpr::Println { arg, .. } => desugar_expr(arg, expr_types, interner, self_ty),
-        HirExpr::Assert { condition, message, .. } => {
+        HirExpr::Assert {
+            condition, message, ..
+        } => {
             desugar_expr(condition, expr_types, interner, self_ty);
-            if let Some(msg) = message {
-                desugar_expr(msg, expr_types, interner, self_ty);
+            if let Some(m) = message {
+                desugar_expr(m, expr_types, interner, self_ty);
             }
         }
         _ => {}

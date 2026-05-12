@@ -237,6 +237,7 @@ pub fn lower_expr(expr: &glyim_parse::ExprNode, ctx: &mut LoweringContext) -> Hi
             let next_sym = ctx.intern("next");
             let __some_sym = ctx.intern("Some");
             let __none_sym = ctx.intern("None");
+            eprintln!("[DESUGAR ForIn] iter_sym={} done_sym={} next_sym={}", ctx.resolve(iter_sym), ctx.resolve(done_sym), ctx.resolve(next_sym));
 
             let let_done = HirStmt::LetPat {
                 pattern: HirPattern::Var(done_sym),

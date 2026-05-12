@@ -865,8 +865,12 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let rt = self.infer_dispatch(recv, None);
-        eprintln!("[TYPECK] infer_method_call: self type={:?}, method={}",
-            rt, self.interner.resolve(meth));
+        eprintln!("[TYPECK] infer_method_call: self type={:?}, method={} recv={:?}",
+            rt, self.interner.resolve(meth), recv);
+        if self.interner.resolve(meth) == "next" {
+            eprintln!("[TYPECK DEBUG] next() called! self type details: {:?}", rt);
+            eprintln!("[TYPECK DEBUG] looking up method 'next' on type {:?}", rt);
+        }
         if std::env::var("TYPE_VERBOSE").is_ok() {
             eprintln!("[typeck debug] infer_method_call id={:?} receiver={:?} method={:?}",
                 id, rt, self.interner.resolve(meth));
@@ -899,6 +903,18 @@ impl TypeChecker {
             self.interner.resolve(type_name),
             self.interner.resolve(meth)
         ));
+        eprintln!("[TYPECK] method lookup: type={:?} meth={} mangled={}",
+            type_name, self.interner.resolve(meth), self.interner.resolve(mangled_sym));
+        // If the mangled name doesn't exist in the environment, try looking up the raw method name
+        // (this handles desugared for-in loops where the method name isn't mangled yet)
+        let lookup_name = if self.env.lookup(mangled_sym).is_none() {
+            eprintln!("[TYPECK] mangled name '{}' not found, trying raw method name '{}'",
+                self.interner.resolve(mangled_sym), self.interner.resolve(meth));
+            meth
+        } else {
+            mangled_sym
+        };
+        let mangled_sym = lookup_name;
         let has_self_param = self
             .env
             .lookup(mangled_sym)
@@ -911,9 +927,19 @@ impl TypeChecker {
         } else {
             args.iter().map(|a| self.infer_dispatch(a, None)).collect()
         };
+        eprintln!("[TYPECK] looking up mangled_sym={} in env...", self.interner.resolve(mangled_sym));
+        if let Some(fty_orig) = self.env.lookup(mangled_sym).cloned() {
+            eprintln!("[TYPECK] FOUND! fty_orig={:?}", fty_orig);
+            if let HirType::Func(params, ret) = fty_orig {
+                eprintln!("[TYPECK] Func params={:?} ret={:?}", params, ret);
+            }
+        } else {
+            eprintln!("[TYPECK] NOT FOUND in env");
+        }
         if let Some(fty_orig) = self.env.lookup(mangled_sym).cloned()
             && let HirType::Func(params, ret) = fty_orig
         {
+            eprintln!("[TYPECK] matched Func with {} params and ret {:?}", params.len(), ret);
             let is_generic = self
                 .fn_types_map
                 .get(&mangled_sym)

@@ -233,6 +233,7 @@ impl<'a> MonoDriver<'a> {
         for item in &mut mono_hir.items {
             match item {
                 glyim_hir::HirItem::Fn(f) => {
+                    eprintln!("[MONO-STEP4] rewriting fn: {}", interner.resolve(f.name));
                     rewrite_concrete_body(&mut f.body, interner, &base_to_mangled);
                 }
                 glyim_hir::HirItem::Impl(imp) => {
@@ -619,14 +620,20 @@ fn rewrite_concrete_body(
             callee, args, ..
         } => {
             if let glyim_hir::HirExpr::Ident { name, .. } = callee.as_mut() {
+                let callee_str = interner.resolve(*name);
+                eprintln!("[MONO-REWRITE] callee={}, sub_map keys: {:?}",
+                    callee_str,
+                    sub_map.keys().map(|k| interner.resolve(*k)).collect::<Vec<_>>());
                 if let Some(&new_name) = sub_map.get(name) {
+                    eprintln!("[MONO-REWRITE]   exact match -> {}", interner.resolve(new_name));
                     *name = new_name;
                 } else {
-                    // Try to match as a method name suffix (internal method calls)
+                    eprintln!("[MONO-REWRITE]   not found, trying suffix...");
                     let callee_name = interner.resolve(*name);
                     for (&base, &mangled) in sub_map.iter() {
                         let base_name = interner.resolve(base);
                         if base_name.ends_with(&format!("_{}", callee_name)) {
+                            eprintln!("[MONO-REWRITE]   suffix match {} -> {}", base_name, interner.resolve(mangled));
                             *name = mangled;
                             break;
                         }
