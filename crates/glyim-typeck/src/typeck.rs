@@ -59,6 +59,7 @@ pub fn normalize_type_impl(ty: &HirType, known: &KnownSymbols) -> HirType {
         HirType::Named(s) if *s == known.f64_type => HirType::Float,
         HirType::Named(s) if *s == known.bool_type => HirType::Bool,
         HirType::Named(s) if *s == known.str_type => HirType::Str,
+        HirType::Named(s) if *s == known.str_type => HirType::Str,
         HirType::Generic(s, args) => {
             let new_args = args.iter().map(|a| normalize_type_impl(a, known)).collect();
             HirType::Generic(*s, new_args)
@@ -111,7 +112,32 @@ impl TypeChecker {
     }
 
     fn normalize_type(&self, ty: &HirType) -> HirType {
-        normalize_type_impl(ty, &self.known)
+        match ty {
+            HirType::Named(s) if *s == self.known.i64_type => HirType::Int,
+            HirType::Named(s) if *s == self.known.f64_type => HirType::Float,
+            HirType::Named(s) if *s == self.known.bool_type => HirType::Bool,
+            HirType::Named(s) if *s == self.known.str_type => HirType::Str,
+            HirType::Named(s) => {
+                match self.interner.resolve(*s) {
+                    "i32" | "i16" | "i8" | "u8" | "u16" | "u32" | "u64" | "usize" => HirType::Int,
+                    "f32" => HirType::Float,
+                    _ => HirType::Named(*s),
+                }
+            }
+            HirType::Generic(s, args) => {
+                let new_args = args.iter().map(|a| self.normalize_type(a)).collect();
+                HirType::Generic(*s, new_args)
+            }
+            HirType::RawPtr(inner) => HirType::RawPtr(Box::new(self.normalize_type(inner))),
+            HirType::Tuple(elems) => HirType::Tuple(
+                elems.iter().map(|e| self.normalize_type(e)).collect(),
+            ),
+            HirType::Func(params, ret) => HirType::Func(
+                params.iter().map(|p| self.normalize_type(p)).collect(),
+                Box::new(self.normalize_type(ret)),
+            ),
+            _ => ty.clone(),
+        }
     }
 
     pub fn check(&mut self, hir: &glyim_hir::Hir) -> TypeCheckResult {
@@ -653,7 +679,7 @@ impl TypeChecker {
             HirExpr::IntLit { .. } => HirType::Int,
             HirExpr::FloatLit { .. } => HirType::Float,
             HirExpr::BoolLit { .. } => HirType::Bool,
-            HirExpr::StrLit { .. } => HirType::Str,
+            HirExpr::StrLit { .. } => HirType::RawPtr(Box::new(HirType::Int)),
             HirExpr::UnitLit { .. } => HirType::Unit,
             HirExpr::AddrOf { .. } => HirType::RawPtr(Box::new(HirType::Int)),
             HirExpr::Ident { name, span, .. } => {

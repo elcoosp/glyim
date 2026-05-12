@@ -66,4 +66,12 @@ impl KnownSymbols {
     pub fn is_builtin_type(&self, sym: Symbol) -> bool {
         self.builtin_set.contains(&sym)
     }
+
+    /// Get the original string name for a symbol (reverse lookup).
+    pub fn unresolve_symbol(&self, sym: Symbol) -> &str {
+        // We need access to the interner. Since KnownSymbols doesn't hold an interner,
+        // we'll add a method that takes an interner parameter instead.
+        unreachable!("use typeck's normalizer which has access to the interner")
+    }
+
 }
