@@ -134,9 +134,7 @@ impl TypeChecker {
     pub fn check(&mut self, hir: &glyim_hir::Hir) -> TypeCheckResult {
         self.seed_environment(hir);
 
-        // Pass 1: register generic signatures for standalone functions and
-        // non-generic-impl generic methods so calls can resolve them.
-        // Generic methods inside generic impl blocks are skipped.
+        // Pass 1: register generic signatures so calls can resolve them
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) if !f.type_params.is_empty() => {
@@ -153,23 +151,25 @@ impl TypeChecker {
                     );
                 }
                 HirItem::Impl(imp) => {
-                    // Only register methods from non-generic impl blocks.
-                    // Generic impl block methods are skipped entirely.
-                    if imp.type_params.is_empty() {
-                        for m in &imp.methods {
-                            if !m.type_params.is_empty() {
-                                self.fn_types_map.insert(
-                                    m.name,
-                                    FnTypes {
-                                        expr_types: HashMap::new(),
-                                        call_type_args: HashMap::new(),
-                                        sizeof_types: HashMap::new(),
-                                        is_generic: true,
-                                        type_params: m.type_params.clone(),
-                                        span: m.span,
-                                    },
-                                );
-                            }
+                    for m in &imp.methods {
+                        if !m.type_params.is_empty() || !imp.type_params.is_empty() {
+                            let all_params: Vec<_> = imp
+                                .type_params
+                                .iter()
+                                .chain(m.type_params.iter())
+                                .copied()
+                                .collect();
+                            self.fn_types_map.insert(
+                                m.name,
+                                FnTypes {
+                                    expr_types: HashMap::new(),
+                                    call_type_args: HashMap::new(),
+                                    sizeof_types: HashMap::new(),
+                                    is_generic: true,
+                                    type_params: all_params,
+                                    span: m.span,
+                                },
+                            );
                         }
                     }
                 }
@@ -177,13 +177,13 @@ impl TypeChecker {
             }
         }
 
-        // Pass 2a: check non-generic functions and non-generic methods first
+        // Pass 2a: check non‑generic functions first
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) if f.type_params.is_empty() => self.check_fn(f),
-                HirItem::Impl(imp) if imp.type_params.is_empty() => {
+                HirItem::Impl(imp) => {
                     for m in &imp.methods {
-                        if m.type_params.is_empty() {
+                        if m.type_params.is_empty() && imp.type_params.is_empty() {
                             self.check_fn(m);
                         }
                     }
@@ -192,8 +192,7 @@ impl TypeChecker {
             }
         }
 
-        // Pass 2b: check generic standalone functions.
-        // Generic impl blocks are skipped entirely.
+        // Pass 2b: check generic standalone functions (skip generic impl methods)
         for item in &hir.items {
             match item {
                 HirItem::Fn(f) if !f.type_params.is_empty() => self.check_fn(f),
@@ -249,7 +248,7 @@ impl TypeChecker {
                 .insert_global(sym, HirType::Func(param_tys, Box::new(ret_ty)), false);
         }
 
-        // Pre-seed generic standalone fns (generic impl methods are skipped)
+        // Pre-seed generic fns and methods
         for item in &hir.items {
             if let HirItem::Fn(f) = item
                 && !f.type_params.is_empty()
@@ -265,6 +264,29 @@ impl TypeChecker {
                         span: f.span,
                     },
                 );
+            }
+            if let HirItem::Impl(imp) = item {
+                for m in &imp.methods {
+                    if !m.type_params.is_empty() || !imp.type_params.is_empty() {
+                        let all_params: Vec<_> = imp
+                            .type_params
+                            .iter()
+                            .chain(m.type_params.iter())
+                            .copied()
+                            .collect();
+                        self.fn_types_map.insert(
+                            m.name,
+                            FnTypes {
+                                expr_types: HashMap::new(),
+                                call_type_args: HashMap::new(),
+                                sizeof_types: HashMap::new(),
+                                is_generic: true,
+                                type_params: all_params,
+                                span: m.span,
+                            },
+                        );
+                    }
+                }
             }
         }
 
@@ -300,20 +322,19 @@ impl TypeChecker {
                     }
                 }
                 HirItem::Impl(imp) => {
-                    // Skip generic impl blocks entirely in type-checking.
-                    // Their methods are not registered in the environment.
-                    if !imp.type_params.is_empty() {
-                        continue;
-                    }
-
                     for m in &imp.methods {
-                        let is_generic_method = !m.type_params.is_empty();
+                        let is_generic = !imp.type_params.is_empty() || !m.type_params.is_empty();
                         let mut param_tys: Vec<HirType> =
                             m.params.iter().map(|(_, t)| t.clone()).collect();
                         let mut ret_ty = m.ret.clone().unwrap_or(HirType::Unit);
 
-                        if is_generic_method {
-                            let all_tp: Vec<_> = m.type_params.iter().copied().collect();
+                        if is_generic {
+                            let all_tp: Vec<_> = imp
+                                .type_params
+                                .iter()
+                                .chain(m.type_params.iter())
+                                .copied()
+                                .collect();
                             fn convert_named_to_param(
                                 ty: &mut HirType,
                                 params: &[glyim_interner::Symbol],
@@ -368,7 +389,6 @@ impl TypeChecker {
         let is_generic = !f.type_params.is_empty();
 
         // For generic functions, register type parameters as Named types
-        // so field accesses and method calls can resolve correctly.
         for &tp in &f.type_params {
             self.env.insert_global(tp, HirType::Param(tp), false);
         }
