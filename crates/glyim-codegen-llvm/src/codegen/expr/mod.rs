@@ -353,11 +353,16 @@ pub(crate) fn codegen_expr<'ctx>(
 
             let receiver_val = codegen_expr(cg, receiver, fctx)?;
             let receiver_id = receiver.get_id();
-            let receiver_ty = cg
+            let mut receiver_ty = cg
                 .expr_types
                 .get(receiver_id.as_usize())
                 .cloned()
                 .unwrap_or(HirType::Int);
+
+            // Unwrap RawPtr to get the real struct type for method dispatch
+            while let HirType::RawPtr(inner) = receiver_ty {
+                receiver_ty = *inner;
+            }
 
             // Unwrap RawPtr to get the real struct type
             let inner_ty = match &receiver_ty {
