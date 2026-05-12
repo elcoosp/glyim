@@ -10,6 +10,42 @@ use glyim_hir::{HirExpr, HirItem, HirStmt};
 use glyim_interner::{Interner, Symbol};
 use std::collections::HashMap;
 
+fn dump_expr(expr: &glyim_hir::HirExpr, depth: usize) {
+    let indent = "  ".repeat(depth);
+    match expr {
+        glyim_hir::HirExpr::Unary { op, operand, span, .. } => {
+            eprintln!("{}Unary op={:?} span={:?}", indent, op, span);
+            dump_expr(operand, depth + 1);
+        }
+        glyim_hir::HirExpr::Ident { name, span, .. } => {
+            eprintln!("{}Ident name={:?} span={:?}", indent, name, span);
+        }
+        glyim_hir::HirExpr::FieldAccess { object, field, span, .. } => {
+            eprintln!("{}FieldAccess field={:?} span={:?}", indent, field, span);
+            dump_expr(object, depth + 1);
+        }
+        glyim_hir::HirExpr::Binary { op, lhs, rhs, span, .. } => {
+            eprintln!("{}Binary op={:?} span={:?}", indent, op, span);
+            dump_expr(lhs, depth + 1);
+            dump_expr(rhs, depth + 1);
+        }
+        glyim_hir::HirExpr::If { condition, then_branch, else_branch, span, .. } => {
+            eprintln!("{}If span={:?}", indent, span);
+            eprintln!("{}  condition:", indent);
+            dump_expr(condition, depth + 2);
+            eprintln!("{}  then:", indent);
+            dump_expr(then_branch, depth + 2);
+            if let Some(e) = else_branch {
+                eprintln!("{}  else:", indent);
+                dump_expr(e, depth + 2);
+            }
+        }
+        _ => {
+            eprintln!("{}{:?}", indent, expr);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FnTypes {
     pub expr_types: HashMap<glyim_hir::types::ExprId, HirType>,
@@ -272,6 +308,11 @@ impl TypeChecker {
     }
 
     fn check_fn(&mut self, f: &glyim_hir::HirFn) {
+        let fn_name = self.interner.resolve(f.name).to_string();
+        if fn_name == "Vec_push" {
+            eprintln!("[DEBUG Vec_push FULL BODY]");
+            dump_expr(&f.body, 0);
+        }
         self.env.clear_locals();
         self.table.reset();
         self.expr_types.clear();

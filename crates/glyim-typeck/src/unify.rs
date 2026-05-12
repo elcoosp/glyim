@@ -11,6 +11,7 @@ pub struct UnificationTable {
     ranks: Vec<u8>,
     spans: Vec<Span>,
     bindings: Vec<Option<HirType>>,
+    param_bindings: HashMap<Symbol, HirType>,
 }
 
 impl Default for UnificationTable {
@@ -32,6 +33,7 @@ impl UnificationTable {
             ranks: Vec::new(),
             spans: Vec::new(),
             bindings: Vec::new(),
+            param_bindings: HashMap::new(),
         }
     }
 
@@ -40,6 +42,7 @@ impl UnificationTable {
         self.ranks.clear();
         self.spans.clear();
         self.bindings.clear();
+        self.param_bindings.clear();
     }
 
     pub fn fresh_var(&mut self, span: Span) -> TypeVar {
@@ -49,6 +52,16 @@ impl UnificationTable {
         self.spans.push(span);
         self.bindings.push(None);
         TypeVar::from_raw_unchecked(idx)
+    }
+
+    /// Bind a type parameter symbol to a concrete type.
+    pub fn bind_param(&mut self, sym: Symbol, ty: &HirType) {
+        self.param_bindings.insert(sym, ty.clone());
+    }
+
+    /// Look up a type parameter binding.
+    pub fn resolve_param(&self, sym: Symbol) -> Option<HirType> {
+        self.param_bindings.get(&sym).cloned()
     }
 
     pub fn var_span(&self, var: TypeVar) -> Option<&Span> {
@@ -66,11 +79,27 @@ impl UnificationTable {
     }
 
     pub fn resolve(&mut self, ty: &HirType) -> Result<HirType, UnifyError> {
-        self.resolve_infer_depth(ty, 0)
+        // Replace bound type parameters first
+        let ty = match ty {
+            HirType::Param(sym) => {
+                if let Some(bound) = self.resolve_param(*sym) {
+                    return self.resolve(&bound);
+                }
+                ty.clone()
+            }
+            _ => ty.clone(),
+        };
+        self.resolve_infer_depth(&ty, 0)
     }
 
     fn resolve_infer_depth(&mut self, ty: &HirType, depth: u32) -> Result<HirType, UnifyError> {
         match ty {
+            HirType::Param(sym) => {
+                if let Some(bound) = self.param_bindings.get(sym).cloned() {
+                    return self.resolve_infer_depth(&bound, depth + 1);
+                }
+                Ok(ty.clone())
+            }
             HirType::Infer(var) => {
                 if depth > MAX_INFER_DEPTH {
                     return Err(UnifyError::ResolveDepthExceeded {
@@ -95,7 +124,7 @@ impl UnificationTable {
                 let args: Vec<HirType> = args
                     .iter()
                     .enumerate()
-                    .map(|(i, a)| {
+                    .map(|(_i, a)| {
                         let r = self.resolve_infer_depth(a, depth);
 
                         r
@@ -162,6 +191,19 @@ impl UnificationTable {
             return Ok(());
         }
 
+        if let (HirType::Param(p), concrete) = (&a_resolved, &b_resolved) {
+            if !matches!(concrete, HirType::Param(_)) {
+                self.bind_param(*p, concrete);
+                return Ok(());
+            }
+        }
+        if let (concrete, HirType::Param(p)) = (&a_resolved, &b_resolved) {
+            if !matches!(concrete, HirType::Param(_)) {
+                self.bind_param(*p, concrete);
+                return Ok(());
+            }
+        }
+
         if let (HirType::Infer(var_a), HirType::Infer(var_b)) = (&a_resolved, &b_resolved) {
             self.union(*var_a, *var_b);
             return Ok(());
@@ -216,6 +258,7 @@ impl UnificationTable {
     fn occurs(&mut self, var: TypeVar, ty: &HirType) -> Result<bool, UnifyError> {
         match ty {
             HirType::Infer(v) => Ok(self.find(var) == self.find(*v)),
+            HirType::Param(_) => Ok(false),
             HirType::Generic(_, args) | HirType::Tuple(args) => {
                 for a in args {
                     if self.occurs(var, a)? {
