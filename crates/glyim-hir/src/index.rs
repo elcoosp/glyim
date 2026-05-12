@@ -90,12 +90,15 @@ impl HirIndex {
         if !s.type_params.is_empty() {
             self.generic_struct_names.insert(s.name);
         }
-        self.structs.insert(s.name, StructInfo {
-            name: s.name,
-            fields: s.fields.iter().map(|f| (f.name, f.ty.clone())).collect(),
-            field_map,
-            type_params: s.type_params.clone(),
-        });
+        self.structs.insert(
+            s.name,
+            StructInfo {
+                name: s.name,
+                fields: s.fields.iter().map(|f| (f.name, f.ty.clone())).collect(),
+                field_map,
+                type_params: s.type_params.clone(),
+            },
+        );
         Ok(())
     }
 
@@ -110,12 +113,15 @@ impl HirIndex {
         if !e.type_params.is_empty() {
             self.generic_enum_names.insert(e.name);
         }
-        self.enums.insert(e.name, EnumInfo {
-            name: e.name,
-            variants: e.variants.clone(),
-            variant_map,
-            type_params: e.type_params.clone(),
-        });
+        self.enums.insert(
+            e.name,
+            EnumInfo {
+                name: e.name,
+                variants: e.variants.clone(),
+                variant_map,
+                type_params: e.type_params.clone(),
+            },
+        );
         Ok(())
     }
 
@@ -127,13 +133,16 @@ impl HirIndex {
         if is_generic {
             self.generic_fn_names.insert(f.name);
         }
-        self.fns.insert(f.name, FnInfo {
-            name: f.name,
-            type_params: f.type_params.clone(),
-            params: f.params.clone(),
-            ret: f.ret.clone(),
-            is_generic,
-        });
+        self.fns.insert(
+            f.name,
+            FnInfo {
+                name: f.name,
+                type_params: f.type_params.clone(),
+                params: f.params.clone(),
+                ret: f.ret.clone(),
+                is_generic,
+            },
+        );
         Ok(())
     }
 
@@ -145,7 +154,10 @@ impl HirIndex {
             let methods = self.impl_methods.entry(imp.target_name).or_default();
             for &name in &method_names {
                 if methods.contains(&name) {
-                    return Err(IndexError::DuplicateMethod { target: imp.target_name, method: name });
+                    return Err(IndexError::DuplicateMethod {
+                        target: imp.target_name,
+                        method: name,
+                    });
                 }
                 methods.insert(name);
             }

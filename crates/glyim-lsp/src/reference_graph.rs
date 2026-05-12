@@ -71,7 +71,11 @@ impl ReferenceGraph {
             HirExpr::Call {
                 callee, args, span, ..
             } => {
-                let name = if let glyim_hir::HirExpr::Ident { name, .. } = callee.as_ref() { interner.resolve(*name).to_string() } else { String::from("unknown") };
+                let name = if let glyim_hir::HirExpr::Ident { name, .. } = callee.as_ref() {
+                    interner.resolve(*name).to_string()
+                } else {
+                    String::from("unknown")
+                };
                 self.references.entry(name).or_default().push(Reference {
                     file_id,
                     span: *span,

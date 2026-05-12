@@ -1,7 +1,7 @@
 mod alloc;
 pub mod codegen;
-pub mod demangle;
 mod debug;
+pub mod demangle;
 pub mod dispatch;
 mod hash_shims;
 pub mod helpers;

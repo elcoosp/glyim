@@ -9,7 +9,8 @@ fn e2e_doc_generator_func() {
     std::fs::write(
         pkg_dir.join("glyim.toml"),
         "[package]\nname = \"docpkg\"\nversion = \"0.1.0\"\n",
-    ).unwrap();
+    )
+    .unwrap();
     let src = r#"
 // Adds two integers together.
 //
@@ -44,7 +45,8 @@ fn e2e_doc_impl_method() {
     std::fs::write(
         pkg_dir.join("glyim.toml"),
         "[package]\nname = \"docpkg2\"\nversion = \"0.1.0\"\n",
-    ).unwrap();
+    )
+    .unwrap();
     let src = "struct Counter { val: i64 }\nimpl Counter {\n    // Increments the counter.\n    fn inc(mut self: Counter) -> Counter { self.val = self.val + 1; self }\n}\nmain = () => 0";
     std::fs::write(pkg_dir.join("src/main.g"), src).unwrap();
     let doc_dir = dir.path().join("site");

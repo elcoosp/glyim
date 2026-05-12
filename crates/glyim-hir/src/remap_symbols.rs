@@ -215,7 +215,9 @@ fn for_each_expr<F: FnMut(Symbol)>(expr: &HirExpr, f: &mut F) {
             }
         }
         HirExpr::Call { callee, args, .. } => {
-            if let crate::HirExpr::Ident { name, .. } = callee.as_ref() { f(*name); }
+            if let crate::HirExpr::Ident { name, .. } = callee.as_ref() {
+                f(*name);
+            }
             for a in args {
                 for_each_expr(a, f);
             }
@@ -392,7 +394,9 @@ fn remap_expr(expr: &mut HirExpr, mapping: &HashMap<Symbol, Symbol>) {
             *name = remap_sym(*name, mapping);
         }
         HirExpr::Call { callee, args, .. } => {
-            if let crate::HirExpr::Ident { name, .. } = callee.as_mut() { *name = remap_sym(*name, mapping); }
+            if let crate::HirExpr::Ident { name, .. } = callee.as_mut() {
+                *name = remap_sym(*name, mapping);
+            }
             for a in args {
                 remap_expr(a, mapping);
             }

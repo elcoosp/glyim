@@ -312,5 +312,3 @@ pub struct HirFn {
 pub struct Hir {
     pub items: Vec<crate::item::HirItem>,
 }
-
-

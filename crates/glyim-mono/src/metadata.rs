@@ -14,7 +14,9 @@ pub struct TypeMetadata {
 }
 
 impl TypeMetadata {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn record(&mut self, name: Symbol, structure: TypeStructure) {
         self.map.insert(name, structure);

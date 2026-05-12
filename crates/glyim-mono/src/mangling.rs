@@ -14,8 +14,12 @@ pub enum ManglingError {
 impl std::fmt::Display for ManglingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ManglingError::InferInType { type_var_index } => write!(f, "Infer(?{}) reached mangling", type_var_index),
-            ManglingError::ParamInType { symbol_index } => write!(f, "Param(symbol {}) reached mangling", symbol_index),
+            ManglingError::InferInType { type_var_index } => {
+                write!(f, "Infer(?{}) reached mangling", type_var_index)
+            }
+            ManglingError::ParamInType { symbol_index } => {
+                write!(f, "Param(symbol {}) reached mangling", symbol_index)
+            }
         }
     }
 }
@@ -32,8 +36,12 @@ pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> Result<String,
         HirType::Unit => Ok("unit".into()),
         HirType::Never => Ok("never".into()),
         HirType::Error => Ok("error".into()),
-        HirType::Infer(var) => Err(ManglingError::InferInType { type_var_index: var.raw_index() }),
-        HirType::Param(sym) => Err(ManglingError::ParamInType { symbol_index: sym.raw() }),
+        HirType::Infer(var) => Err(ManglingError::InferInType {
+            type_var_index: var.raw_index(),
+        }),
+        HirType::Param(sym) => Err(ManglingError::ParamInType {
+            symbol_index: sym.raw(),
+        }),
         HirType::Generic(sym, args) => {
             let base = interner.resolve(*sym);
             let mut s = format!("{}", base);
@@ -63,12 +71,22 @@ pub fn type_to_short_string(ty: &HirType, interner: &Interner) -> Result<String,
             Ok(s)
         }
         HirType::Option(inner) => Ok(format!("Option{}", type_to_short_string(inner, interner)?)),
-        HirType::Result(ok, err) => Ok(format!("Result{}{}", type_to_short_string(ok, interner)?, type_to_short_string(err, interner)?)),
+        HirType::Result(ok, err) => Ok(format!(
+            "Result{}{}",
+            type_to_short_string(ok, interner)?,
+            type_to_short_string(err, interner)?
+        )),
     }
 }
 
-pub fn mangle_name(interner: &mut Interner, base: Symbol, type_args: &[HirType]) -> Result<Symbol, ManglingError> {
-    if type_args.is_empty() { return Ok(base); }
+pub fn mangle_name(
+    interner: &mut Interner,
+    base: Symbol,
+    type_args: &[HirType],
+) -> Result<Symbol, ManglingError> {
+    if type_args.is_empty() {
+        return Ok(base);
+    }
     let base_str = interner.resolve(base);
     let mut result = base_str.to_string();
     for arg in type_args {
@@ -78,7 +96,12 @@ pub fn mangle_name(interner: &mut Interner, base: Symbol, type_args: &[HirType])
     Ok(interner.intern(&result))
 }
 
-pub fn mangle_method_name(interner: &mut Interner, type_name: Symbol, method_name: Symbol, type_args: &[HirType]) -> Result<Symbol, ManglingError> {
+pub fn mangle_method_name(
+    interner: &mut Interner,
+    type_name: Symbol,
+    method_name: Symbol,
+    type_args: &[HirType],
+) -> Result<Symbol, ManglingError> {
     let type_str = interner.resolve(type_name);
     let method_str = interner.resolve(method_name);
     let base = format!("{}{}{}", type_str, METHOD_SEPARATOR, method_str);

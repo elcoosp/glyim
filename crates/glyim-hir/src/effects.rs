@@ -100,7 +100,11 @@ impl EffectAnalyzer {
     fn analyze_expr(&self, expr: &crate::HirExpr, interner: &Interner, effect: &mut EffectSet) {
         match expr {
             crate::HirExpr::Call { callee, .. } => {
-                if let Some(e) = if let crate::HirExpr::Ident { name, .. } = callee.as_ref() { self.effects.get(name) } else { None } {
+                if let Some(e) = if let crate::HirExpr::Ident { name, .. } = callee.as_ref() {
+                    self.effects.get(name)
+                } else {
+                    None
+                } {
                     effect.may_read |= e.may_read;
                     effect.may_write |= e.may_write;
                     effect.may_allocate |= e.may_allocate;

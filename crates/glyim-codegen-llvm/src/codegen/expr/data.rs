@@ -203,7 +203,12 @@ pub(crate) fn codegen_field_access<'ctx>(
         let obj_val = codegen_expr(cg, object, fctx)?;
         let obj_id = object.get_id();
         let obj_ty = cg.expr_types.get(obj_id.as_usize()).cloned();
-        eprintln!("[DEBUG] codegen field_access: obj_id={:?}, obj_ty={:?}, field={}", obj_id, obj_ty, cg.interner.resolve(*field));
+        eprintln!(
+            "[DEBUG] codegen field_access: obj_id={:?}, obj_ty={:?}, field={}",
+            obj_id,
+            obj_ty,
+            cg.interner.resolve(*field)
+        );
 
         if let Some(HirType::Tuple(elems)) = obj_ty {
             let field_name = cg.interner.resolve(*field);

@@ -11,7 +11,11 @@ pub fn lower_type_expr(ty: &TypeExpr, ctx: &mut LoweringContext) -> HirType {
         TypeExpr::Str => HirType::Str,
         TypeExpr::Unit => HirType::Unit,
         TypeExpr::Named(sym) => {
-            eprintln!("[lower_type_expr] Named symbol: {:?}, is_type_param={}", ctx.interner.resolve(*sym), ctx.is_type_param(*sym));
+            eprintln!(
+                "[lower_type_expr] Named symbol: {:?}, is_type_param={}",
+                ctx.interner.resolve(*sym),
+                ctx.is_type_param(*sym)
+            );
             if ctx.is_type_param(*sym) {
                 HirType::Param(*sym)
             } else {
@@ -19,7 +23,11 @@ pub fn lower_type_expr(ty: &TypeExpr, ctx: &mut LoweringContext) -> HirType {
             }
         }
         TypeExpr::Generic(sym, args) => {
-            eprintln!("[lower_type_expr] Generic symbol: {:?}, args={:?}", ctx.interner.resolve(*sym), args);
+            eprintln!(
+                "[lower_type_expr] Generic symbol: {:?}, args={:?}",
+                ctx.interner.resolve(*sym),
+                args
+            );
             HirType::Generic(*sym, args.iter().map(|a| lower_type_expr(a, ctx)).collect())
         }
         TypeExpr::Tuple(elems) => {

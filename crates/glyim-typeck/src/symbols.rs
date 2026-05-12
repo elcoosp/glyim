@@ -38,13 +38,28 @@ impl KnownSymbols {
         let unit_type = interner.intern("unit");
 
         let mut builtin_set = HashSet::new();
-        for &s in &[option, result, vec, iterator, bool_type, i64_type, f64_type, str_type, unit_type] {
+        for &s in &[
+            option, result, vec, iterator, bool_type, i64_type, f64_type, str_type, unit_type,
+        ] {
             builtin_set.insert(s);
         }
 
         Self {
-            option, some, none, result, ok, err_sym, vec, main_fn, iterator,
-            bool_type, i64_type, f64_type, str_type, unit_type, builtin_set,
+            option,
+            some,
+            none,
+            result,
+            ok,
+            err_sym,
+            vec,
+            main_fn,
+            iterator,
+            bool_type,
+            i64_type,
+            f64_type,
+            str_type,
+            unit_type,
+            builtin_set,
         }
     }
 

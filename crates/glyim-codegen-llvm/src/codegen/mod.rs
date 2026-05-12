@@ -1001,27 +1001,40 @@ impl<'ctx> Codegen<'ctx> {
                 let args_str = args
                     .iter()
                     .map(|a| {
-    let ty = a;
-    match ty {
-        glyim_hir::types::HirType::Named(s) | glyim_hir::types::HirType::Opaque(s) => self.interner.resolve(*s).to_string(),
-        glyim_hir::types::HirType::Int => "i64".into(),
-        glyim_hir::types::HirType::Bool => "bool".into(),
-        glyim_hir::types::HirType::Float => "f64".into(),
-        glyim_hir::types::HirType::Str => "str".into(),
-        glyim_hir::types::HirType::Unit => "unit".into(),
-        glyim_hir::types::HirType::Generic(s, args) => {
-            format!("{}_{}", self.interner.resolve(*s), args.iter().map(|a| {
-                match a {
-                    glyim_hir::types::HirType::Int => "i64",
-                    glyim_hir::types::HirType::Bool => "bool",
-                    glyim_hir::types::HirType::Named(s) | glyim_hir::types::HirType::Opaque(s) => self.interner.resolve(*s),
-                    _ => "?"
-                }
-            }).collect::<Vec<_>>().join("_"))
-        }
-        _ => "unknown".into(),
-    }
-})
+                        let ty = a;
+                        match ty {
+                            glyim_hir::types::HirType::Named(s)
+                            | glyim_hir::types::HirType::Opaque(s) => {
+                                self.interner.resolve(*s).to_string()
+                            }
+                            glyim_hir::types::HirType::Int => "i64".into(),
+                            glyim_hir::types::HirType::Bool => "bool".into(),
+                            glyim_hir::types::HirType::Float => "f64".into(),
+                            glyim_hir::types::HirType::Str => "str".into(),
+                            glyim_hir::types::HirType::Unit => "unit".into(),
+                            glyim_hir::types::HirType::Generic(s, args) => {
+                                format!(
+                                    "{}_{}",
+                                    self.interner.resolve(*s),
+                                    args.iter()
+                                        .map(|a| {
+                                            match a {
+                                                glyim_hir::types::HirType::Int => "i64",
+                                                glyim_hir::types::HirType::Bool => "bool",
+                                                glyim_hir::types::HirType::Named(s)
+                                                | glyim_hir::types::HirType::Opaque(s) => {
+                                                    self.interner.resolve(*s)
+                                                }
+                                                _ => "?",
+                                            }
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join("_")
+                                )
+                            }
+                            _ => "unknown".into(),
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join("_");
                 let mangled_str = format!("{}__{}", base_str, args_str);

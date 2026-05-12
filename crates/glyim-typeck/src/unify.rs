@@ -97,12 +97,18 @@ impl UnificationTable {
                     .enumerate()
                     .map(|(i, a)| {
                         let r = self.resolve_infer_depth(a, depth);
-                        eprintln!("[DEBUG] resolve_infer_depth: Generic{:?} arg[{}] {:?} -> {:?}", sym, i, a, r);
+                        eprintln!(
+                            "[DEBUG] resolve_infer_depth: Generic{:?} arg[{}] {:?} -> {:?}",
+                            sym, i, a, r
+                        );
                         r
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let resolved = HirType::Generic(*sym, args);
-                eprintln!("[DEBUG] resolve_infer_depth: Generic{:?} fully resolved to {:?}", sym, resolved);
+                eprintln!(
+                    "[DEBUG] resolve_infer_depth: Generic{:?} fully resolved to {:?}",
+                    sym, resolved
+                );
                 Ok(resolved)
             }
             HirType::Tuple(elems) => {
@@ -131,7 +137,8 @@ impl UnificationTable {
         match ty {
             HirType::Infer(var) => {
                 let root = self.find(*var);
-                let bound = self.bindings
+                let bound = self
+                    .bindings
                     .get(root.raw_index() as usize)
                     .and_then(|b| b.clone());
                 match bound {

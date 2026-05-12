@@ -1,6 +1,6 @@
 use crate::typeck::FnTypes;
-use glyim_hir::types::HirType;
 use glyim_diag::Span;
+use glyim_hir::types::HirType;
 use glyim_interner::Symbol;
 use std::collections::HashMap;
 
@@ -18,7 +18,9 @@ pub enum ValidationErrorKind {
     ParamInNonGenericOutput,
 }
 
-pub fn validate_mono_input(fn_types_map: &HashMap<Symbol, FnTypes>) -> Result<(), Vec<ValidationError>> {
+pub fn validate_mono_input(
+    fn_types_map: &HashMap<Symbol, FnTypes>,
+) -> Result<(), Vec<ValidationError>> {
     let mut errors = Vec::new();
     for (fn_name, ft) in fn_types_map {
         for ty in ft.expr_types.values() {
@@ -40,5 +42,9 @@ pub fn validate_mono_input(fn_types_map: &HashMap<Symbol, FnTypes>) -> Result<()
             }
         }
     }
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }

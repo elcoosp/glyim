@@ -1,9 +1,11 @@
-use glyim_interner::Interner;
-use glyim_hir::types::{HirType, TypeVar};
 use crate::*;
 use glyim_diag::Span;
+use glyim_hir::types::{HirType, TypeVar};
+use glyim_interner::Interner;
 
-fn sp() -> Span { Span::new(0, 1) }
+fn sp() -> Span {
+    Span::new(0, 1)
+}
 
 // ── MangleTable deduplication ─────────────────────────────────
 
@@ -13,12 +15,24 @@ fn test_mangle_table_deduplicates() {
     let vec_sym = interner.intern("Vec");
     let mut table = MangleTable::new();
 
-    let first = table.mangle(vec_sym, &[HirType::Int], &mut interner).unwrap();
-    let second = table.mangle(vec_sym, &[HirType::Int], &mut interner).unwrap();
-    assert_eq!(first, second, "Same base+args should produce same mangled symbol");
+    let first = table
+        .mangle(vec_sym, &[HirType::Int], &mut interner)
+        .unwrap();
+    let second = table
+        .mangle(vec_sym, &[HirType::Int], &mut interner)
+        .unwrap();
+    assert_eq!(
+        first, second,
+        "Same base+args should produce same mangled symbol"
+    );
 
-    let third = table.mangle(vec_sym, &[HirType::Bool], &mut interner).unwrap();
-    assert_ne!(first, third, "Different args should produce different symbols");
+    let third = table
+        .mangle(vec_sym, &[HirType::Bool], &mut interner)
+        .unwrap();
+    assert_ne!(
+        first, third,
+        "Different args should produce different symbols"
+    );
 }
 
 // ── WorkQueue deduplication ───────────────────────────────────
@@ -30,14 +44,28 @@ fn test_work_queue_deduplicates() {
     let mut queue = WorkQueue::new();
 
     queue.push(
-        WorkItem { kind: ItemKind::FnSpecialize, def_id: foo, type_args: vec![HirType::Int] },
-        WorkItemContext { discovered_from: None, discovery_span: sp() },
-        foo
+        WorkItem {
+            kind: ItemKind::FnSpecialize,
+            def_id: foo,
+            type_args: vec![HirType::Int],
+        },
+        WorkItemContext {
+            discovered_from: None,
+            discovery_span: sp(),
+        },
+        foo,
     );
     queue.push(
-        WorkItem { kind: ItemKind::FnSpecialize, def_id: foo, type_args: vec![HirType::Int] },
-        WorkItemContext { discovered_from: None, discovery_span: sp() },
-        foo // same dedup sym
+        WorkItem {
+            kind: ItemKind::FnSpecialize,
+            def_id: foo,
+            type_args: vec![HirType::Int],
+        },
+        WorkItemContext {
+            discovered_from: None,
+            discovery_span: sp(),
+        },
+        foo, // same dedup sym
     );
 
     let first = queue.pop();
@@ -55,10 +83,13 @@ fn test_type_metadata_records_generic() {
     let mangled_vec_int = interner.intern("Vec__i64");
 
     let mut metadata = TypeMetadata::new();
-    metadata.record(mangled_vec_int, TypeStructure::Generic {
-        base: vec_sym,
-        args: vec![HirType::Int],
-    });
+    metadata.record(
+        mangled_vec_int,
+        TypeStructure::Generic {
+            base: vec_sym,
+            args: vec![HirType::Int],
+        },
+    );
 
     assert!(metadata.get(mangled_vec_int).is_some());
     assert_eq!(metadata.get_base_symbol(mangled_vec_int), Some(vec_sym));
@@ -90,14 +121,17 @@ fn test_mono_driver_processes_passthrough() {
     let mut expr_types = std::collections::HashMap::new();
     expr_types.insert(glyim_hir::types::ExprId::new(0), HirType::Int);
 
-    fn_types_map.insert(add_sym, glyim_typeck::typeck::FnTypes {
-        expr_types,
-        call_type_args: std::collections::HashMap::new(),
-        sizeof_types: std::collections::HashMap::new(),
-        is_generic: false,
-        type_params: vec![],
-        span: sp(),
-    });
+    fn_types_map.insert(
+        add_sym,
+        glyim_typeck::typeck::FnTypes {
+            expr_types,
+            call_type_args: std::collections::HashMap::new(),
+            sizeof_types: std::collections::HashMap::new(),
+            is_generic: false,
+            type_params: vec![],
+            span: sp(),
+        },
+    );
 
     let driver = MonoDriver::new(&mut interner, &fn_types_map);
     let result = driver.run();
@@ -120,10 +154,8 @@ fn test_mangling_error_is_std_error() {
 #[test]
 fn test_mangling_rejects_infer() {
     let mut interner = Interner::new();
-    let result = mangling::type_to_short_string(
-        &HirType::Infer(TypeVar::from_raw_unchecked(0)),
-        &interner
-    );
+    let result =
+        mangling::type_to_short_string(&HirType::Infer(TypeVar::from_raw_unchecked(0)), &interner);
     assert!(result.is_err());
 }
 
@@ -131,9 +163,6 @@ fn test_mangling_rejects_infer() {
 fn test_mangling_rejects_param() {
     let mut interner = Interner::new();
     let t = interner.intern("T");
-    let result = mangling::type_to_short_string(
-        &HirType::Param(t),
-        &interner
-    );
+    let result = mangling::type_to_short_string(&HirType::Param(t), &interner);
     assert!(result.is_err());
 }

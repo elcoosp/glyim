@@ -494,7 +494,9 @@ fn collect_called_symbols(hir: &Hir) -> HashSet<Symbol> {
     fn walk(expr: &HirExpr, called: &mut HashSet<Symbol>) {
         match expr {
             HirExpr::Call { callee, args, .. } => {
-                if let crate::HirExpr::Ident { name, .. } = callee.as_ref() { called.insert(*name); }
+                if let crate::HirExpr::Ident { name, .. } = callee.as_ref() {
+                    called.insert(*name);
+                }
                 for a in args {
                     walk(a, called);
                 }

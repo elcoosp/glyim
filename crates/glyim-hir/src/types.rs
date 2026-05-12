@@ -19,18 +19,26 @@ impl ExprId {
 }
 
 /// Type inference variable (unique per fresh unification variable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct TypeVar(u32);
 
 impl TypeVar {
     #[inline]
-    pub fn from_raw_unchecked(index: u32) -> Self { Self(index) }
+    pub fn from_raw_unchecked(index: u32) -> Self {
+        Self(index)
+    }
     #[inline]
-    pub fn raw_index(self) -> u32 { self.0 }
+    pub fn raw_index(self) -> u32 {
+        self.0
+    }
 }
 
 /// High-level types in the Glyim type system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum HirType {
     Infer(TypeVar),
     Param(Symbol),
@@ -117,7 +125,16 @@ impl HirType {
     pub fn has_infer(&self) -> bool {
         match self {
             HirType::Infer(_) => true,
-            HirType::Param(_) | HirType::Named(_) | HirType::Int | HirType::Bool | HirType::Float | HirType::Str | HirType::Unit | HirType::Never | HirType::Error | HirType::Opaque(_) => false,
+            HirType::Param(_)
+            | HirType::Named(_)
+            | HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Error
+            | HirType::Opaque(_) => false,
             HirType::Generic(_, args) => args.iter().any(|a| a.has_infer()),
             HirType::Tuple(elems) => elems.iter().any(|e| e.has_infer()),
             HirType::RawPtr(inner) => inner.has_infer(),
@@ -128,18 +145,37 @@ impl HirType {
     pub fn has_infer_or_error(&self) -> bool {
         match self {
             HirType::Infer(_) | HirType::Error => true,
-            HirType::Param(_) | HirType::Named(_) | HirType::Int | HirType::Bool | HirType::Float | HirType::Str | HirType::Unit | HirType::Never | HirType::Opaque(_) => false,
+            HirType::Param(_)
+            | HirType::Named(_)
+            | HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Opaque(_) => false,
             HirType::Generic(_, args) => args.iter().any(|a| a.has_infer_or_error()),
             HirType::Tuple(elems) => elems.iter().any(|e| e.has_infer_or_error()),
             HirType::RawPtr(inner) => inner.has_infer_or_error(),
-            HirType::Func(params, ret) => params.iter().any(|p| p.has_infer_or_error()) || ret.has_infer_or_error(),
+            HirType::Func(params, ret) => {
+                params.iter().any(|p| p.has_infer_or_error()) || ret.has_infer_or_error()
+            }
             _ => false,
         }
     }
     pub fn has_param(&self) -> bool {
         match self {
             HirType::Param(_) => true,
-            HirType::Infer(_) | HirType::Named(_) | HirType::Int | HirType::Bool | HirType::Float | HirType::Str | HirType::Unit | HirType::Never | HirType::Error | HirType::Opaque(_) => false,
+            HirType::Infer(_)
+            | HirType::Named(_)
+            | HirType::Int
+            | HirType::Bool
+            | HirType::Float
+            | HirType::Str
+            | HirType::Unit
+            | HirType::Never
+            | HirType::Error
+            | HirType::Opaque(_) => false,
             HirType::Generic(_, args) => args.iter().any(|a| a.has_param()),
             HirType::Tuple(elems) => elems.iter().any(|e| e.has_param()),
             HirType::RawPtr(inner) => inner.has_param(),
@@ -153,7 +189,9 @@ impl HirType {
 /// `sub` maps type parameter symbols to their concrete types.
 pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType {
     match ty {
-        HirType::Param(sym) | HirType::Named(sym) => sub.get(sym).cloned().unwrap_or_else(|| ty.clone()),
+        HirType::Param(sym) | HirType::Named(sym) => {
+            sub.get(sym).cloned().unwrap_or_else(|| ty.clone())
+        }
         HirType::Generic(sym, args) => {
             let new_args: Vec<HirType> = args.iter().map(|a| substitute_type(a, sub)).collect();
             // If all args are now concrete (no type params remain), just return Named
@@ -180,28 +218,50 @@ pub fn substitute_type(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> HirType 
     }
 }
 
-
 const MAX_SUBST_DEPTH: u32 = 256;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SubstitutionError { DepthExceeded }
+pub enum SubstitutionError {
+    DepthExceeded,
+}
 
-pub fn substitute_type_with<F>(ty: &HirType, f: &mut F, depth: u32) -> Result<HirType, SubstitutionError>
-where F: FnMut(&Symbol) -> Option<HirType> {
-    if depth > MAX_SUBST_DEPTH { return Err(SubstitutionError::DepthExceeded); }
+pub fn substitute_type_with<F>(
+    ty: &HirType,
+    f: &mut F,
+    depth: u32,
+) -> Result<HirType, SubstitutionError>
+where
+    F: FnMut(&Symbol) -> Option<HirType>,
+{
+    if depth > MAX_SUBST_DEPTH {
+        return Err(SubstitutionError::DepthExceeded);
+    }
     match ty {
         HirType::Param(sym) => Ok(f(sym).unwrap_or_else(|| ty.clone())),
         HirType::Generic(sym, args) => {
-            let new_args = args.iter().map(|a| substitute_type_with(a, f, depth + 1)).collect::<Result<Vec<_>, _>>()?;
+            let new_args = args
+                .iter()
+                .map(|a| substitute_type_with(a, f, depth + 1))
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(HirType::Generic(*sym, new_args))
         }
         HirType::Tuple(elems) => {
-            let new_elems = elems.iter().map(|e| substitute_type_with(e, f, depth + 1)).collect::<Result<Vec<_>, _>>()?;
+            let new_elems = elems
+                .iter()
+                .map(|e| substitute_type_with(e, f, depth + 1))
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(HirType::Tuple(new_elems))
         }
-        HirType::RawPtr(inner) => Ok(HirType::RawPtr(Box::new(substitute_type_with(inner, f, depth + 1)?))),
+        HirType::RawPtr(inner) => Ok(HirType::RawPtr(Box::new(substitute_type_with(
+            inner,
+            f,
+            depth + 1,
+        )?))),
         HirType::Func(params, ret) => {
-            let new_params = params.iter().map(|p| substitute_type_with(p, f, depth + 1)).collect::<Result<Vec<_>, _>>()?;
+            let new_params = params
+                .iter()
+                .map(|p| substitute_type_with(p, f, depth + 1))
+                .collect::<Result<Vec<_>, _>>()?;
             let new_ret = substitute_type_with(ret, f, depth + 1)?;
             Ok(HirType::Func(new_params, Box::new(new_ret)))
         }
@@ -209,7 +269,10 @@ where F: FnMut(&Symbol) -> Option<HirType> {
     }
 }
 
-pub fn substitute_type_safe(ty: &HirType, sub: &HashMap<Symbol, HirType>) -> Result<HirType, SubstitutionError> {
+pub fn substitute_type_safe(
+    ty: &HirType,
+    sub: &HashMap<Symbol, HirType>,
+) -> Result<HirType, SubstitutionError> {
     substitute_type_with(ty, &mut |sym| sub.get(sym).cloned(), 0)
 }
 

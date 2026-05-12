@@ -86,7 +86,11 @@ pub fn hir_expr_to_egraph(
                 .iter()
                 .map(|a| hir_expr_to_egraph(egraph, a, interner, _types, type_map))
                 .collect();
-            let callee_sym = if let HirExpr::Ident { name, .. } = callee.as_ref() { *name } else { return egraph.add(GlyimLang::Num(0)); };
+            let callee_sym = if let HirExpr::Ident { name, .. } = callee.as_ref() {
+                *name
+            } else {
+                return egraph.add(GlyimLang::Num(0));
+            };
             let callee_str = interner.resolve(callee_sym).to_string();
             let id = egraph.add(GlyimLang::Call(callee_str, arg_ids));
             if let Some(ty) = _types.get(expr.get_id().as_usize()) {
@@ -205,7 +209,11 @@ pub fn egraph_to_hir_expr(
                 .collect();
             HirExpr::Call {
                 id: eid,
-                callee: Box::new(HirExpr::Ident { id: glyim_hir::types::ExprId::new(0), name: callee, span: Span::new(0, 0) }),
+                callee: Box::new(HirExpr::Ident {
+                    id: glyim_hir::types::ExprId::new(0),
+                    name: callee,
+                    span: Span::new(0, 0),
+                }),
                 args: arg_exprs,
                 span: Span::new(0, 0),
             }

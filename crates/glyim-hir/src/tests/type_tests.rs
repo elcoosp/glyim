@@ -1,4 +1,4 @@
-use crate::types::{HirType, TypeVar, substitute_type, substitute_type_safe, SubstitutionError};
+use crate::types::{HirType, SubstitutionError, TypeVar, substitute_type, substitute_type_safe};
 use glyim_interner::Interner;
 use std::collections::HashMap;
 
@@ -22,7 +22,7 @@ fn test_has_param_detection() {
 fn test_has_infer_nested() {
     let nested = HirType::Generic(
         Interner::new().intern("Vec"),
-        vec![HirType::Infer(TypeVar::from_raw_unchecked(0))]
+        vec![HirType::Infer(TypeVar::from_raw_unchecked(0))],
     );
     assert!(nested.has_infer());
 }

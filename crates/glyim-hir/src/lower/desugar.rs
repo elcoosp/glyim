@@ -46,14 +46,28 @@ fn concrete_type_name(ty: &HirType, interner: &Interner) -> String {
         HirType::Error => "error".into(),
         HirType::Named(s) | HirType::Opaque(s) => interner.resolve(*s).to_string(),
         HirType::Generic(s, args) => {
-            let inner = args.iter().map(|a| concrete_type_name(a, interner)).collect::<Vec<_>>().join("_");
+            let inner = args
+                .iter()
+                .map(|a| concrete_type_name(a, interner))
+                .collect::<Vec<_>>()
+                .join("_");
             format!("{}_{}", interner.resolve(*s), inner)
         }
-        HirType::Tuple(elems) => elems.iter().map(|e| concrete_type_name(e, interner)).collect::<Vec<_>>().join("_"),
+        HirType::Tuple(elems) => elems
+            .iter()
+            .map(|e| concrete_type_name(e, interner))
+            .collect::<Vec<_>>()
+            .join("_"),
         HirType::RawPtr(inner) => format!("ptr_{}", concrete_type_name(inner, interner)),
         HirType::Option(inner) => format!("Option_{}", concrete_type_name(inner, interner)),
-        HirType::Result(ok, err) => format!("Result_{}_{}", concrete_type_name(ok, interner), concrete_type_name(err, interner)),
-        HirType::Func(params, ret) => format!("fn_{}_{}", params.len(), concrete_type_name(ret, interner)),
+        HirType::Result(ok, err) => format!(
+            "Result_{}_{}",
+            concrete_type_name(ok, interner),
+            concrete_type_name(err, interner)
+        ),
+        HirType::Func(params, ret) => {
+            format!("fn_{}_{}", params.len(), concrete_type_name(ret, interner))
+        }
         _ => "unknown".into(),
     }
 }
@@ -133,7 +147,11 @@ fn desugar_expr(expr: &mut HirExpr, expr_types: &[HirType], interner: &mut Inter
             full_args.append(&mut args_vec);
             *expr = HirExpr::Call {
                 id,
-                callee: Box::new(HirExpr::Ident { id: crate::types::ExprId::new(0), name: callee, span: glyim_diag::Span::new(0,0) }),
+                callee: Box::new(HirExpr::Ident {
+                    id: crate::types::ExprId::new(0),
+                    name: callee,
+                    span: glyim_diag::Span::new(0, 0),
+                }),
                 args: full_args,
                 span,
             };

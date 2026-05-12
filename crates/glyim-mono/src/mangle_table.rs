@@ -8,9 +8,16 @@ pub struct MangleTable {
 }
 
 impl MangleTable {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn mangle(&mut self, base: Symbol, args: &[HirType], interner: &mut Interner) -> Result<Symbol, crate::mangling::ManglingError> {
+    pub fn mangle(
+        &mut self,
+        base: Symbol,
+        args: &[HirType],
+        interner: &mut Interner,
+    ) -> Result<Symbol, crate::mangling::ManglingError> {
         let mangled = mangling::mangle_name(interner, base, args)?;
         self.mark_seen(mangled);
         Ok(mangled)
@@ -23,11 +30,18 @@ impl MangleTable {
 
     pub fn mark_seen(&mut self, sym: Symbol) {
         let idx = sym.raw() as usize;
-        if idx >= self.seen.len() { self.seen.resize(idx + 64, false); }
+        if idx >= self.seen.len() {
+            self.seen.resize(idx + 64, false);
+        }
         self.seen[idx] = true;
     }
 
-    pub fn mangle_fn(&mut self, base: Symbol, args: &[HirType], interner: &mut Interner) -> Result<Symbol, crate::mangling::ManglingError> {
+    pub fn mangle_fn(
+        &mut self,
+        base: Symbol,
+        args: &[HirType],
+        interner: &mut Interner,
+    ) -> Result<Symbol, crate::mangling::ManglingError> {
         self.mangle(base, args, interner)
     }
 }

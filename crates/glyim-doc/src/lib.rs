@@ -1,5 +1,5 @@
-pub mod manifest;
 pub mod highlight;
+pub mod manifest;
 
 pub use highlight::highlight_code;
 pub use manifest::{DocItem, DocManifest, DocTestResult, HighlightedExample};

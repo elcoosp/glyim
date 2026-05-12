@@ -1,6 +1,6 @@
+use glyim_hir::HirExpr;
 use glyim_hir::node::HirFn;
 use glyim_hir::types::HirType;
-use glyim_hir::HirExpr;
 use glyim_interner::Interner;
 use sha2::{Digest, Sha256};
 
@@ -95,7 +95,11 @@ fn collect_callees(
     callees: &mut Vec<String>,
 ) {
     if let glyim_hir::node::HirExpr::Call { callee, .. } = expr {
-        let name = if let HirExpr::Ident { name, .. } = callee.as_ref() { interner.resolve(*name).to_string() } else { String::from("unknown") };
+        let name = if let HirExpr::Ident { name, .. } = callee.as_ref() {
+            interner.resolve(*name).to_string()
+        } else {
+            String::from("unknown")
+        };
         if !callees.contains(&name) {
             callees.push(name);
         }

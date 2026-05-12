@@ -256,7 +256,12 @@ impl PackageGraphOrchestrator {
         let result = tc.check(&hir);
         if !result.type_errors.is_empty() {
             return Err(OrchestratorError::TypeCheck(
-                result.type_errors.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"),
+                result
+                    .type_errors
+                    .into_iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             ));
         }
         interner = tc.interner;

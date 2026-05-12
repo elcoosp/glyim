@@ -40,8 +40,12 @@ impl Compiler {
             let body = harness::inject_single_test(source, test_name);
             let full_source = format!("{}\n{}", prelude, body);
             let bin = tmp_dir.path().join("test_bin");
-            glyim_compiler::pipeline::build_raw(&full_source, &bin, glyim_compiler::BuildMode::Debug)
-                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            glyim_compiler::pipeline::build_raw(
+                &full_source,
+                &bin,
+                glyim_compiler::BuildMode::Debug,
+            )
+            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             return Ok(CompiledArtifact {
                 test_defs,
                 bin_path: Some(bin),
@@ -59,8 +63,12 @@ impl Compiler {
             let body = harness::inject_single_test(source, &test_def.name);
             let full_source = format!("{}\n{}", prelude, body);
             let bin = tmp_dir.path().join(&test_def.name);
-            glyim_compiler::pipeline::build_raw(&full_source, &bin, glyim_compiler::BuildMode::Debug)
-                .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
+            glyim_compiler::pipeline::build_raw(
+                &full_source,
+                &bin,
+                glyim_compiler::BuildMode::Debug,
+            )
+            .map_err(|e| CompileError::Pipeline(format!("{:?}", e)))?;
             per_test_binaries.push((test_def.name.clone(), bin));
         }
 

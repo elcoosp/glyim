@@ -48,13 +48,19 @@ impl<'a> LoweringContext<'a> {
 
     /// Push a set of type parameter symbols into scope.
     pub fn push_type_params(&mut self, params: &[Symbol]) {
-        eprintln!("[push_type_params] params={:?}", params.iter().map(|s| self.resolve(*s)).collect::<Vec<_>>());
+        eprintln!(
+            "[push_type_params] params={:?}",
+            params.iter().map(|s| self.resolve(*s)).collect::<Vec<_>>()
+        );
         self.type_param_stack.push(params.to_vec());
     }
 
     /// Pop the most recently pushed type parameter scope.
     pub fn pop_type_params(&mut self) {
-        eprintln!("[pop_type_params] stack_depth_after={}", self.type_param_stack.len().saturating_sub(1));
+        eprintln!(
+            "[pop_type_params] stack_depth_after={}",
+            self.type_param_stack.len().saturating_sub(1)
+        );
         self.type_param_stack.pop();
     }
 

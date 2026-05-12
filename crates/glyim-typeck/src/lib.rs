@@ -5,18 +5,16 @@ pub mod errors;
 pub mod naming;
 pub mod solve;
 pub mod symbols;
-pub mod unify;
 pub mod typeck;
+pub mod unify;
 pub mod validate;
 
 pub use errors::{TypeError, UnifyError};
 pub use naming::format_type_for_error;
-pub use symbols::KnownSymbols;
 pub use solve::SolveResult;
-pub use unify::{UnificationTable, extract_type_substitutions, ExtractResult, ExtractError};
-pub use typeck::{
-    FnTypes, TypeCheckResult, TypeChecker, TypeCheckOutput,
-};
+pub use symbols::KnownSymbols;
+pub use typeck::{FnTypes, TypeCheckOutput, TypeCheckResult, TypeChecker};
+pub use unify::{ExtractError, ExtractResult, UnificationTable, extract_type_substitutions};
 pub use validate::validate_mono_input;
 
 impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
@@ -29,7 +27,9 @@ impl From<TypeError> for glyim_diag::diagnostic::Diagnostic {
             TypeError::AssignThroughNonPointer { span, .. } => (span.0, span.1),
             TypeError::DerefNonPointer { span, .. } => (span.0, span.1),
             TypeError::UnresolvedName { span, .. } => (span.start, span.end),
-            TypeError::MismatchedTypes { expected_span, .. } => (expected_span.start, expected_span.end),
+            TypeError::MismatchedTypes { expected_span, .. } => {
+                (expected_span.start, expected_span.end)
+            }
             TypeError::UnresolvedMethod { span, .. } => (span.start, span.end),
             _ => (0, 0),
         };

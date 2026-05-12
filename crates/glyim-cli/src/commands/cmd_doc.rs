@@ -1,13 +1,28 @@
 use glyim_compiler::pipeline;
 use std::path::PathBuf;
 
-pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool, test: bool, version: Option<String>) -> i32 {
+pub fn cmd_doc(
+    input: PathBuf,
+    output: Option<PathBuf>,
+    open: bool,
+    test: bool,
+    version: Option<String>,
+) -> i32 {
     if test {
         match pipeline::run_doctests(&input) {
             Ok(failed) => {
-                if failed == 0 { println!("All doc-tests passed."); 0 } else { eprintln!("{} doc-test(s) failed.", failed); 1 }
+                if failed == 0 {
+                    println!("All doc-tests passed.");
+                    0
+                } else {
+                    eprintln!("{} doc-test(s) failed.", failed);
+                    1
+                }
             }
-            Err(e) => { eprintln!("error running doc-tests: {e}"); 1 }
+            Err(e) => {
+                eprintln!("error running doc-tests: {e}");
+                1
+            }
         }
     } else {
         // Like 'cargo doc', default to the current package (where glyim.toml is)
@@ -15,7 +30,10 @@ pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool, test: bool, 
             input
         } else if input.join("src/main.g").exists() {
             // Single file: use its parent as the package root
-            input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf()
+            input
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .to_path_buf()
         } else {
             // Default to current directory
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
@@ -35,7 +53,10 @@ pub fn cmd_doc(input: PathBuf, output: Option<PathBuf>, open: bool, test: bool, 
                 }
                 0
             }
-            Err(e) => { eprintln!("error: {e}"); 1 }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
         }
     }
 }
