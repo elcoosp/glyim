@@ -133,7 +133,28 @@ fn test_mono_driver_processes_passthrough() {
         },
     );
 
-    let hir = glyim_hir::Hir { items: vec![] };
+    // Create a minimal HIR with the function definition so find_item works
+    let hir = glyim_hir::Hir {
+        items: vec![glyim_hir::HirItem::Fn(glyim_hir::HirFn {
+            doc: None,
+            name: add_sym,
+            type_params: vec![],
+            params: vec![],
+            param_mutability: vec![],
+            ret: Some(glyim_hir::types::HirType::Int),
+            body: glyim_hir::HirExpr::IntLit {
+                id: glyim_hir::types::ExprId::new(0),
+                value: 42,
+                span: glyim_diag::Span::new(0, 0),
+            },
+            span: glyim_diag::Span::new(0, 0),
+            is_pub: false,
+            is_macro_generated: false,
+            is_extern_backed: false,
+            is_test: false,
+            test_config: None,
+        })],
+    };
     let driver = MonoDriver::new(&mut interner, &fn_types_map, &hir);
     let result = driver.run();
 

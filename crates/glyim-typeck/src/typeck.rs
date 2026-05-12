@@ -278,30 +278,30 @@ impl TypeChecker {
         self.call_type_args.clear();
         self.sizeof_types.clear();
 
-        // For generic functions, record only the signature and skip body checking.
-        // Bodies will be type-checked after monomorphization, when concrete types are known.
-        if !f.type_params.is_empty() {
-            // Record minimal type info to let calls resolve
-            self.fn_types_map.insert(f.name, FnTypes {
-                expr_types: std::collections::HashMap::new(),
-                call_type_args: std::collections::HashMap::new(),
-                sizeof_types: std::collections::HashMap::new(),
-                is_generic: true,
-                type_params: f.type_params.clone(),
-                span: f.span,
-            });
-            return;
-        }
+        let is_generic = !f.type_params.is_empty();
 
-        let fn_name = self.interner.resolve(f.name).to_string();
-        let is_method = fn_name.contains("_");
-        let mut is_generic = false; // already handled above
+        // For generic functions, register type parameters as Named types
+        // so field accesses and method calls can resolve correctly.
+        // e.g., for HashMap<K,V>, K and V become Named types in scope.
+        for &tp in &f.type_params {
+            self.env.insert_global(tp, HirType::Param(tp), false);
+        }
 
         self.env.push_scope();
         for (i, (sym, ty)) in f.params.iter().enumerate() {
+            // For generic impl methods, the first param (self) type uses
+            // the impl's type params. Substitute them with Param types.
+            let resolved_ty = if is_generic {
+                let sub: std::collections::HashMap<_, _> = f.type_params.iter()
+                    .map(|&tp| (tp, HirType::Param(tp)))
+                    .collect();
+                glyim_hir::types::substitute_type(ty, &sub)
+            } else {
+                ty.clone()
+            };
             self.env.insert(
                 *sym,
-                ty.clone(),
+                resolved_ty,
                 f.param_mutability.get(i).copied().unwrap_or(false),
             );
         }
@@ -314,7 +314,7 @@ impl TypeChecker {
         self.env.pop_scope();
         self.env.pop_scope();
         let empty_map = std::collections::HashMap::new();
-        self.finalize_fn(f, false, &empty_map);
+        self.finalize_fn(f, is_generic, &empty_map);
     }
 
     fn freeze_ty(
