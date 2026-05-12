@@ -207,21 +207,20 @@ pub(crate) fn codegen_call<'ctx>(
             fn_val = cg.module.get_function(&guess2);
         }
         if fn_val.is_none() {
-            // Fallback: search any function starting with `fn_name__`
-            let prefix = format!("{}__", fn_name);
-            let mut found = None;
+            // Fallback: search any function containing the fn_name
+            // This handles cases where the desugaring produces just "grow" but
+            // the monomorphized version is "HashMap_grow__i64__i64"
             if let Some(first) = cg.module.get_first_function() {
                 let mut cur = Some(first);
                 while let Some(f) = cur {
                     let name = f.get_name().to_string_lossy();
-                    if name.starts_with(&prefix) {
-                        found = Some(f);
+                    if name.contains(fn_name) {
+                        fn_val = Some(f);
                         break;
                     }
                     cur = f.get_next_function();
                 }
             }
-            fn_val = found;
         }
     }
     if let Some(fn_val) = fn_val {

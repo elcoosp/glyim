@@ -104,6 +104,12 @@ pub fn mangle_method_name(
 ) -> Result<Symbol, ManglingError> {
     let type_str = interner.resolve(type_name);
     let method_str = interner.resolve(method_name);
+    if type_str == method_str {
+        // This is an internal method call where the receiver type
+        // resolved to the method name instead of the struct name.
+        // Just return the method name without duplicating it.
+        return mangle_name(interner, method_name, type_args);
+    }
     let base = format!("{}{}{}", type_str, METHOD_SEPARATOR, method_str);
     let base_sym = interner.intern(&base);
     mangle_name(interner, base_sym, type_args)

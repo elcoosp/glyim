@@ -865,6 +865,8 @@ impl TypeChecker {
         span: Span,
     ) -> HirType {
         let rt = self.infer_dispatch(recv, None);
+        eprintln!("[TYPECK] infer_method_call: self type={:?}, method={}",
+            rt, self.interner.resolve(meth));
         if std::env::var("TYPE_VERBOSE").is_ok() {
             eprintln!("[typeck debug] infer_method_call id={:?} receiver={:?} method={:?}",
                 id, rt, self.interner.resolve(meth));

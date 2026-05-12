@@ -621,6 +621,16 @@ fn rewrite_concrete_body(
             if let glyim_hir::HirExpr::Ident { name, .. } = callee.as_mut() {
                 if let Some(&new_name) = sub_map.get(name) {
                     *name = new_name;
+                } else {
+                    // Try to match as a method name suffix (internal method calls)
+                    let callee_name = interner.resolve(*name);
+                    for (&base, &mangled) in sub_map.iter() {
+                        let base_name = interner.resolve(base);
+                        if base_name.ends_with(&format!("_{}", callee_name)) {
+                            *name = mangled;
+                            break;
+                        }
+                    }
                 }
             }
             for a in args {
