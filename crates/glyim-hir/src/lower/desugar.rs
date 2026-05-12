@@ -69,6 +69,7 @@ fn desugar_expr(
                 .cloned()
                 .unwrap_or(HirType::Error);
             let method_str = interner.resolve(*method_name).to_string();
+            eprintln!("[DESUGAR] receiver_ty={:?} method={}", receiver_ty, method_str);
 
             // Try to get type name from receiver, falling back to self_ty
             let type_name = if receiver_ty == HirType::Error || receiver_ty == HirType::Int {

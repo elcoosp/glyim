@@ -635,12 +635,23 @@ impl TypeChecker {
             HirExpr::As {
                 expr, target_type, ..
             } => {
-                if let HirExpr::IntLit { value: 0, .. } = expr.as_ref()
-                    && let HirType::Named(sym) | HirType::Generic(sym, _) = target_type
-                    && let Some(ref idx) = self.hir_index
-                    && (idx.find_struct(*sym).is_some() || idx.find_enum(*sym).is_some())
-                {
-                    return target_type.clone();
+                if let HirExpr::IntLit { value: 0, .. } = expr.as_ref() {
+                    // Allow `0 as T` for any type: structs, enums, and type parameters.
+                    // This is the zero value for all types in Glyim's runtime representation.
+                    match target_type {
+                        HirType::Named(sym) | HirType::Generic(sym, _) => {
+                            if let Some(ref idx) = self.hir_index
+                                && (idx.find_struct(*sym).is_some() || idx.find_enum(*sym).is_some())
+                            {
+                                return target_type.clone();
+                            }
+                        }
+                        HirType::Param(_) => {
+                            // `0 as K` where K is a generic type parameter - allow it
+                            return target_type.clone();
+                        }
+                        _ => {}
+                    }
                 }
                 let src_ty = self.infer_dispatch(expr, None);
                 if !self.is_valid_cast(&src_ty, target_type) {

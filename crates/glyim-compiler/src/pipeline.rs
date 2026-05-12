@@ -398,6 +398,10 @@ pub(crate) fn compile_source_to_hir(
     let known = KnownSymbols::intern_all(&mut interner);
     let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
+    eprintln!("[PIPELINE] Type check done. errors={}", check_result.type_errors.len());
+    for err in &check_result.type_errors {
+        eprintln!("[PIPELINE type error] {:?}", err);
+    }
     if !check_result.type_errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             check_result
@@ -409,8 +413,11 @@ pub(crate) fn compile_source_to_hir(
     }
     let output = check_result;
     interner = typeck.interner;
+    eprintln!("[PIPELINE] Type check passed, about to desugar. expr_types len={}", output.fn_types_map.len());
     let (expr_types, call_type_args) = extract_types_from_result(&output);
+    eprintln!("[PIPELINE] Extracted types, about to desugar. flat expr_types len={}", expr_types.len());
     glyim_hir::desugar_method_calls(&mut hir, &expr_types, &mut interner);
+    eprintln!("[PIPELINE] Desugar complete");
     let call_type_args = call_type_args;
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
@@ -696,6 +703,10 @@ pub fn run_live(source: &str) -> Result<i32, PipelineError> {
     let known = KnownSymbols::intern_all(&mut interner);
     let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
+    eprintln!("[PIPELINE] Type check done. errors={}", check_result.type_errors.len());
+    for err in &check_result.type_errors {
+        eprintln!("[PIPELINE type error] {:?}", err);
+    }
     if !check_result.type_errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             check_result
@@ -756,6 +767,10 @@ pub fn check(input: &Path) -> Result<(), PipelineError> {
     let known = KnownSymbols::intern_all(&mut interner);
     let mut typeck = TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
+    eprintln!("[PIPELINE] Type check done. errors={}", check_result.type_errors.len());
+    for err in &check_result.type_errors {
+        eprintln!("[PIPELINE type error] {:?}", err);
+    }
     if !check_result.type_errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             check_result
@@ -1242,6 +1257,10 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     let known = KnownSymbols::intern_all(&mut interner);
     let mut typeck = glyim_typeck::TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
+    eprintln!("[PIPELINE] Type check done. errors={}", check_result.type_errors.len());
+    for err in &check_result.type_errors {
+        eprintln!("[PIPELINE type error] {:?}", err);
+    }
     if !check_result.type_errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             check_result
@@ -1253,8 +1272,11 @@ pub fn run_jit_test(source: &str, test_name: &str) -> Result<i32, PipelineError>
     }
     let output = check_result;
     interner = typeck.interner;
+    eprintln!("[PIPELINE] Type check passed, about to desugar. expr_types len={}", output.fn_types_map.len());
     let (expr_types, call_type_args) = extract_types_from_result(&output);
+    eprintln!("[PIPELINE] Extracted types, about to desugar. flat expr_types len={}", expr_types.len());
     glyim_hir::desugar_method_calls(&mut hir, &expr_types, &mut interner);
+    eprintln!("[PIPELINE] Desugar complete");
     let call_type_args = call_type_args;
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
@@ -1329,6 +1351,10 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     let known = KnownSymbols::intern_all(&mut interner);
     let mut typeck = TypeChecker::new(interner, known);
     let check_result = typeck.check(&hir);
+    eprintln!("[PIPELINE] Type check done. errors={}", check_result.type_errors.len());
+    for err in &check_result.type_errors {
+        eprintln!("[PIPELINE type error] {:?}", err);
+    }
     if !check_result.type_errors.is_empty() {
         return Err(PipelineError::Diagnostics(
             check_result
@@ -1340,8 +1366,11 @@ fn run_jit_with_config(source: &str, config: &PipelineConfig) -> Result<i32, Pip
     }
     let output = check_result;
     interner = typeck.interner;
+    eprintln!("[PIPELINE] Type check passed, about to desugar. expr_types len={}", output.fn_types_map.len());
     let (expr_types, call_type_args) = extract_types_from_result(&output);
+    eprintln!("[PIPELINE] Extracted types, about to desugar. flat expr_types len={}", expr_types.len());
     glyim_hir::desugar_method_calls(&mut hir, &expr_types, &mut interner);
+    eprintln!("[PIPELINE] Desugar complete");
     let (merged_types, mono_hir) =
         merge_mono_types(&hir, &mut interner, &expr_types, &call_type_args);
     let context = Context::create();
