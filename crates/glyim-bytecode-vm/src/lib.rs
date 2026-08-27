@@ -15,7 +15,7 @@
 //!   `OP_TRAP`.
 //!
 //! The decoder returns explicit, typed errors (`VmError::UnknownOpcode` /
-//! `UnsupportedOpcode` / `StackUnderflow` / `LocalOutOfBounds` /
+//! `UnknownOpcode` / `StackUnderflow` / `LocalOutOfBounds` /
 //! `CallFrameOverflow` / `AbnormalTermination`) rather than silently
 //! mis-executing an unhandled opcode, so adding a new emitter opcode forces a
 //! deliberate VM decision.
@@ -277,8 +277,6 @@ pub enum VmError {
     UnexpectedEndOfCode,
     /// A `u8` did not decode to a known opcode.
     UnknownOpcode(u8),
-    /// The decoded opcode is not yet implemented in this VM.
-    UnsupportedOpcode(Opcode),
     /// Stack underflow (popped with too few operands).
     StackUnderflow,
     /// Local index out of bounds.
