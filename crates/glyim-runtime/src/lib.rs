@@ -1176,6 +1176,32 @@ pub unsafe extern "C" fn glyim_net_tcp_local_addr(fd: i32, buf: *mut u8, buf_len
     bytes.len() as i32
 }
 
+#[unsafe(no_mangle)]
+/// # Safety
+/// FFI entry point.
+pub unsafe extern "C" fn glyim_net_tcp_peer_addr(fd: i32, buf: *mut u8, buf_len: usize) -> i32 {
+    let fd = fd as u32;
+    let store = tcp_streams().lock().unwrap();
+    let stream = match store.streams.get(&fd) {
+        Some(s) => s,
+        None => return -1,
+    };
+    let addr = match stream.peer_addr() {
+        Ok(a) => a,
+        Err(_) => return -1,
+    };
+    let addr_str = addr.to_string();
+    let bytes = addr_str.as_bytes();
+    if bytes.len() >= buf_len {
+        return -1;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+        *buf.add(bytes.len()) = 0;
+    }
+    bytes.len() as i32
+}
+
 /// Set non-blocking mode on a TCP stream.
 ///
 /// # Returns
