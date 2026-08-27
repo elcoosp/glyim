@@ -386,12 +386,25 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                             variant_member_types.push(variant_di);
                             let _ = i;
                         }
-                        // Discriminant member (conservatively a single byte; the
-                        // real discriminant width can exceed this for large
-                        // enums — tracked in KNOWN_GAPS.md).
+                        // Discriminant member: width must agree with the tag
+                        // type layout/codegen actually uses
+                        // (glyim-layout::discriminant_info / the U8/U16/U32/U64
+                        // scheme in glyim-codegen-llvm/abi.rs), not a hardcoded
+                        // 8 bits — otherwise a debugger misreads the discriminant
+                        // of any enum with more than 256 variants.
+                        let variant_count = adt_def.variants.len();
+                        let discr_bits: u64 = if variant_count <= 256 {
+                            8
+                        } else if variant_count <= 65_536 {
+                            16
+                        } else if variant_count <= 4_294_967_296 {
+                            32
+                        } else {
+                            64
+                        };
                         let discr_di = self
                             .builder
-                            .create_basic_type("discriminant", 8, 0x04, 0)
+                            .create_basic_type("discriminant", discr_bits, 0x04, 0)
                             .unwrap()
                             .as_type();
                         let union_di = self
