@@ -147,9 +147,13 @@ impl TcpStream {
     /// Open a TCP connection to a remote host.
     fn connect(addr: &str) -> Result<TcpStream> {
         extern "C" {
-            fn glyim_net_tcp_connect(addr: *const u8, addr_len: usize) -> i32;
+            fn glyim_net_tcp_connect(addr: *const u8, addr_len: usize, port: u16) -> i32;
         }
-        let fd = unsafe { glyim_net_tcp_connect(addr.as_ptr(), addr.len()) };
+        let (host, port) = match split_host_port(addr) {
+            Option::Some(hp) => hp,
+            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+        };
+        let fd = unsafe { glyim_net_tcp_connect(host.as_ptr(), host.len(), port) };
         if fd < 0 {
             Result::Err(Error::last_os_error())
         } else {
@@ -233,9 +237,13 @@ impl TcpListener {
     /// Create a new `TcpListener` bound to the specified address.
     fn bind(addr: &str) -> Result<TcpListener> {
         extern "C" {
-            fn glyim_net_tcp_bind(addr: *const u8, addr_len: usize) -> i32;
+            fn glyim_net_tcp_bind(addr: *const u8, addr_len: usize, port: u16) -> i32;
         }
-        let fd = unsafe { glyim_net_tcp_bind(addr.as_ptr(), addr.len()) };
+        let (host, port) = match split_host_port(addr) {
+            Option::Some(hp) => hp,
+            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+        };
+        let fd = unsafe { glyim_net_tcp_bind(host.as_ptr(), host.len(), port) };
         if fd < 0 {
             Result::Err(Error::last_os_error())
         } else {
@@ -246,23 +254,24 @@ impl TcpListener {
     /// Accept a new incoming connection.
     fn accept(&self) -> Result<(TcpStream, String)> {
         extern "C" {
-            fn glyim_net_tcp_accept(fd: i32, addr_buf: *mut u8, addr_cap: usize) -> i32;
+            fn glyim_net_tcp_accept(fd: i32) -> i32;
+            fn glyim_net_tcp_peer_addr(fd: i32, buf: *mut u8, buf_len: usize) -> i32;
         }
-        let mut addr_buf = [0u8; 256];
-        let stream_fd = unsafe { glyim_net_tcp_accept(self.fd, addr_buf.as_mut_ptr(), addr_buf.len()) };
-        if stream_fd < 0 {
-            Result::Err(Error::last_os_error())
+        let stream_fd = unsafe { glyim_net_tcp_accept(self.fd) };
+        if stream_fd < 0 { return Result::Err(Error::last_os_error()); }
+        let mut buf = [0u8; 256];
+        let n = unsafe { glyim_net_tcp_peer_addr(stream_fd, buf.as_mut_ptr(), buf.len()) };
+        let addr = if n < 0 {
+            String::new()
         } else {
-            let addr = String::from_utf8_lossy(&addr_buf).to_string();
-            Result::Ok((TcpStream { fd: stream_fd }, addr))
-        }
+            String::from_utf8_lossy(&buf[..n as usize]).to_string()
+        };
+        Result::Ok((TcpStream { fd: stream_fd }, addr))
     }
 
     /// Returns the local socket address of this listener.
     fn local_addr(&self) -> Result<String> {
-        extern "C" {
-            fn glyim_net_tcp_local_addr(fd: i32, addr_buf: *mut u8, addr_cap: usize) -> isize;
-        }
+        extern "C" { fn glyim_net_tcp_local_addr(fd: i32, buf: *mut u8, buf_len: usize) -> i32; }
         let mut buf = [0u8; 256];
         let n = unsafe { glyim_net_tcp_local_addr(self.fd, buf.as_mut_ptr(), buf.len()) };
         if n < 0 {
@@ -282,9 +291,13 @@ impl UdpSocket {
     /// Create a new `UdpSocket` bound to the specified address.
     fn bind(addr: &str) -> Result<UdpSocket> {
         extern "C" {
-            fn glyim_net_udp_bind(addr: *const u8, addr_len: usize) -> i32;
+            fn glyim_net_udp_bind(addr: *const u8, addr_len: usize, port: u16) -> i32;
         }
-        let fd = unsafe { glyim_net_udp_bind(addr.as_ptr(), addr.len()) };
+        let (host, port) = match split_host_port(addr) {
+            Option::Some(hp) => hp,
+            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+        };
+        let fd = unsafe { glyim_net_udp_bind(host.as_ptr(), host.len(), port) };
         if fd < 0 {
             Result::Err(Error::last_os_error())
         } else {
@@ -295,9 +308,16 @@ impl UdpSocket {
     /// Send data on the socket to the given address.
     fn send_to(&self, buf: &[u8], addr: &str) -> Result<usize> {
         extern "C" {
-            fn glyim_net_udp_send_to(fd: i32, buf: *const u8, len: usize, addr: *const u8, addr_len: usize) -> isize;
+            fn glyim_net_udp_send_to(
+                fd: i32, buf: *const u8, len: usize,
+                addr: *const u8, addr_len: usize, port: u16,
+            ) -> isize;
         }
-        let n = unsafe { glyim_net_udp_send_to(self.fd, buf.as_ptr(), buf.len(), addr.as_ptr(), addr.len()) };
+        let (host, port) = match split_host_port(addr) {
+            Option::Some(hp) => hp,
+            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+        };
+        let n = unsafe { glyim_net_udp_send_to(self.fd, buf.as_ptr(), buf.len(), host.as_ptr(), host.len(), port) };
         if n < 0 {
             Result::Err(Error::last_os_error())
         } else {
@@ -308,24 +328,37 @@ impl UdpSocket {
     /// Receive data from the socket.
     fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, String)> {
         extern "C" {
-            fn glyim_net_udp_recv_from(fd: i32, buf: *mut u8, len: usize, addr_buf: *mut u8, addr_cap: usize) -> isize;
+            fn glyim_net_udp_recv_from(
+                fd: i32, buf: *mut u8, len: usize,
+                addr_buf: *mut u8, addr_cap: *mut usize, port_out: *mut u16,
+            ) -> isize;
         }
         let mut addr_buf = [0u8; 256];
-        let n = unsafe { glyim_net_udp_recv_from(self.fd, buf.as_mut_ptr(), buf.len(), addr_buf.as_mut_ptr(), addr_buf.len()) };
-        if n < 0 {
-            Result::Err(Error::last_os_error())
-        } else {
-            let addr = String::from_utf8_lossy(&addr_buf).to_string();
-            Result::Ok((n as usize, addr))
-        }
+        let mut addr_cap: usize = addr_buf.len();
+        let mut port_out: u16 = 0;
+        let n = unsafe {
+            glyim_net_udp_recv_from(
+                self.fd, buf.as_mut_ptr(), buf.len(),
+                addr_buf.as_mut_ptr(), &mut addr_cap, &mut port_out,
+            )
+        };
+        if n < 0 { return Result::Err(Error::last_os_error()); }
+        // Runtime writes `addr_cap` = ip string length including its NUL.
+        let ip_len = if addr_cap > 0 { addr_cap - 1 } else { 0 };
+        let ip = String::from_utf8_lossy(&addr_buf[..ip_len]).to_string();
+        Result::Ok((n as usize, format!("{}:{}", ip, port_out)))
     }
 
     /// Connect this UDP socket to a remote address.
     fn connect(&self, addr: &str) -> Result<()> {
         extern "C" {
-            fn glyim_net_udp_connect(fd: i32, addr: *const u8, addr_len: usize) -> i32;
+            fn glyim_net_udp_connect(fd: i32, addr: *const u8, addr_len: usize, port: u16) -> i32;
         }
-        let rc = unsafe { glyim_net_udp_connect(self.fd, addr.as_ptr(), addr.len()) };
+        let (host, port) = match split_host_port(addr) {
+            Option::Some(hp) => hp,
+            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+        };
+        let rc = unsafe { glyim_net_udp_connect(self.fd, host.as_ptr(), host.len(), port) };
         if rc < 0 {
             Result::Err(Error::last_os_error())
         } else {
