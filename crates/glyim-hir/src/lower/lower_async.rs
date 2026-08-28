@@ -88,11 +88,18 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
         // clear compile-time diagnostic and route to the single-poll desugar,
         // which at least turns each `Pending` into a loud `panic!` rather than a
         // silent infinite loop.
-        let loop_await = body_id
-            .map(|b| await_inside_loop(&hir.bodies[b], root_expr_id(&hir.bodies[b]), false))
-            .unwrap_or(false);
+        let loop_await_await = body_id.and_then(|b| {
+            let root = root_expr_id(&hir.bodies[b]);
+            let mut sps = Vec::new();
+            collect_suspend_points(&hir.bodies[b], root, &mut sps);
+            let mut loop_desc = std::collections::HashSet::new();
+            collect_loop_body_descendants(&hir.bodies[b], &mut loop_desc);
+            let found = sps.iter().find(|sp| loop_desc.contains(&sp.await_expr));
+            found.map(|sp| sp.await_expr)
+        });
+        let loop_await = loop_await_await.is_some();
         if loop_await {
-            let await_expr = first_loop_await_expr(&hir.bodies[body_id.unwrap()], root_expr_id(&hir.bodies[body_id.unwrap()]));
+            let await_expr = loop_await_await;
             let span = await_expr
                 .and_then(|eid| hir.bodies[body_id.unwrap()].expr_spans.get(eid).copied())
                 .unwrap_or(Span::DUMMY);
@@ -107,6 +114,13 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
                  or collect futures into a Vec and await them sequentially outside the loop.",
                 glyim_diag::MultiSpan::from_span(span),
             ));
+            // SAFETY GATE (plan §P2-1): do NOT lower this async fn at all. Routing
+            // it to the single-poll desugar would leave the in-loop `.await`'s
+            // `Pending` arm as a `loop {}` that hangs forever if ever executed —
+            // a silent miscompile. By skipping desugaring we leave the body with
+            // an un-lowered `Expr::Await`, which type-checking rejects, turning a
+            // would-be silent hang into a loud, actionable compile error.
+            continue;
         } else if suspend_count <= 1 {
             // Single-suspension bodies are handled by the correct, tested
             // single-poll desugar (the future resolves on the first poll, or
@@ -264,111 +278,135 @@ fn collect_suspend_points(body: &Body, root: ExprId, out: &mut Vec<SuspendPoint>
     walk(body, root, out);
 }
 
-/// Phase 3 (GLYIM_DESTUB_PLAN): detect whether any `Expr::Await` lies textually
-/// inside a `while`/`loop`/`for` body. The v1 state-machine transform cannot
-/// resume into a loop's mid-iteration state, so such shapes must be reported
-/// (see `desugar_async`) rather than silently miscompiled into an
-/// infinite-`Pending` hang. `in_loop` tracks loop nesting as we descend.
-fn await_inside_loop(body: &Body, root: ExprId, in_loop: bool) -> bool {
-    fn walk(body: &Body, id: ExprId, in_loop: bool) -> bool {
-        match &body.exprs[id] {
-            Expr::Await { .. } if in_loop => true,
-            Expr::Await { expr } => walk(body, *expr, in_loop),
+/// Collect every `ExprId` that lies textually inside a `while`/`loop`/`for`
+/// body. Used by the async desugar's loop-await guard to decide whether a
+/// suspend point must be rejected (the v1 state machine cannot resume into a
+/// loop's mid-iteration state).
+///
+/// Implemented by scanning the **entire** function body arena for loop nodes
+/// (not by walking from `root_expr_id`, which can return a `Block` that is not
+/// the ancestor of the loop in the HIR tree — e.g. when the function body is a
+/// `while` whose surrounding block is not the returned root). This makes the
+/// detection root-independent and unable to silently miss a nested await.
+fn collect_loop_body_descendants(body: &Body, set: &mut std::collections::HashSet<ExprId>) {
+    // First, gather every loop node's body so we can descend into each.
+    let loops: Vec<ExprId> = (0..body.exprs.len())
+        .map(|i| ExprId::from_raw(i as u32))
+        .filter(|&id| matches!(
+            body.exprs[id],
+            Expr::While { .. } | Expr::Loop { .. } | Expr::For { .. }
+        ))
+        .collect();
+    // Recursively add every descendant of each loop body. `add_subtree` itself
+    // recurses into nested loops, so deeply nested awaits are covered.
+    fn add_subtree(body: &Body, id: ExprId, set: &mut std::collections::HashSet<ExprId>) {
+        set.insert(id);
+        let e = body.exprs[id].clone();
+        match e {
             Expr::Block { stmts, tail } => {
-                stmts.iter().any(|s| walk(body, *s, in_loop))
-                    || tail.map(|t| walk(body, t, in_loop)).unwrap_or(false)
+                for s in stmts {
+                    add_subtree(body, s, set);
+                }
+                if let Some(t) = tail {
+                    add_subtree(body, t, set);
+                }
             }
-            Expr::If {
-                cond,
-                then_branch,
-                else_branch,
-            } => {
-                walk(body, *cond, in_loop)
-                    || walk(body, *then_branch, in_loop)
-                    || else_branch.map(|e| walk(body, e, in_loop)).unwrap_or(false)
+            Expr::If { cond, then_branch, else_branch } => {
+                add_subtree(body, cond, set);
+                add_subtree(body, then_branch, set);
+                if let Some(e) = else_branch {
+                    add_subtree(body, e, set);
+                }
             }
             Expr::Match { scrutinee, arms } => {
-                walk(body, *scrutinee, in_loop)
-                    || arms.iter().any(|a| {
-                        a.guard.map(|g| walk(body, g, in_loop)).unwrap_or(false)
-                            || walk(body, a.body, in_loop)
-                    })
+                add_subtree(body, scrutinee, set);
+                for a in arms {
+                    if let Some(g) = a.guard {
+                        add_subtree(body, g, set);
+                    }
+                    add_subtree(body, a.body, set);
+                }
             }
             Expr::Call { func, args } => {
-                walk(body, *func, in_loop) || args.iter().any(|a| walk(body, *a, in_loop))
+                add_subtree(body, func, set);
+                for a in args {
+                    add_subtree(body, a, set);
+                }
             }
             Expr::MethodCall { receiver, args, .. } => {
-                walk(body, *receiver, in_loop)
-                    || args.iter().any(|a| walk(body, *a, in_loop))
+                add_subtree(body, receiver, set);
+                for a in args {
+                    add_subtree(body, a, set);
+                }
             }
-            Expr::While { cond, body: wb } => walk(body, *cond, in_loop) || walk(body, *wb, true),
-            Expr::Loop { body: lb } => walk(body, *lb, true),
-            Expr::For {
-                iterable, body: fb, ..
-            } => walk(body, *iterable, in_loop) || walk(body, *fb, true),
-            Expr::Return { value: Some(v) } => walk(body, *v, in_loop),
-            Expr::Let { value, .. } => walk(body, *value, in_loop),
-            Expr::Assign { lhs, rhs } => walk(body, *lhs, in_loop) || walk(body, *rhs, in_loop),
-            Expr::Field { receiver, .. } => walk(body, *receiver, in_loop),
-            Expr::Index { base, index } => walk(body, *base, in_loop) || walk(body, *index, in_loop),
-            Expr::Unary { expr, .. } => walk(body, *expr, in_loop),
-            Expr::Binary { lhs, rhs, .. } => walk(body, *lhs, in_loop) || walk(body, *rhs, in_loop),
-            Expr::Cast { expr, .. } => walk(body, *expr, in_loop),
-            Expr::Ref { expr, .. } => walk(body, *expr, in_loop),
-            Expr::Struct { fields, spread, .. } => {
-                fields.iter().any(|(_, f)| walk(body, *f, in_loop))
-                    || spread.map(|s| walk(body, s, in_loop)).unwrap_or(false)
-            }
-            Expr::Array(elems) => elems.iter().any(|e| walk(body, *e, in_loop)),
-            Expr::Tuple(elems) => elems.iter().any(|e| walk(body, *e, in_loop)),
-            Expr::Range { start, end, .. } => {
-                start.map(|s| walk(body, s, in_loop)).unwrap_or(false)
-                    || end.map(|e| walk(body, e, in_loop)).unwrap_or(false)
-            }
-            Expr::Closure { body: cb, .. } => walk(body, *cb, in_loop),
-            _ => false,
-        }
-    }
-    walk(body, root, in_loop)
-}
-
-/// Phase 3 (GLYIM_DESTUB_PLAN): return the `ExprId` of the first `Expr::Await`
-/// found inside a loop body (used to attach a diagnostic span). Mirrors the
-/// walk shape of `await_inside_loop`.
-fn first_loop_await_expr(body: &Body, root: ExprId) -> Option<ExprId> {
-    fn walk(body: &Body, id: ExprId, in_loop: bool) -> Option<ExprId> {
-        match &body.exprs[id] {
-            Expr::Await { .. } if in_loop => Some(id),
-            Expr::Await { expr } => walk(body, *expr, in_loop),
             Expr::While { cond, body: wb } => {
-                walk(body, *cond, in_loop).or_else(|| walk(body, *wb, true))
+                add_subtree(body, cond, set);
+                add_subtree(body, wb, set);
             }
-            Expr::Loop { body: lb } => walk(body, *lb, true),
-            Expr::For {
-                iterable, body: fb, ..
-            } => walk(body, *iterable, in_loop).or_else(|| walk(body, *fb, true)),
-            Expr::Block { stmts, tail } => stmts
-                .iter()
-                .find_map(|s| walk(body, *s, in_loop))
-                .or_else(|| tail.and_then(|t| walk(body, t, in_loop))),
-            Expr::If {
-                cond,
-                then_branch,
-                else_branch,
-            } => walk(body, *cond, in_loop)
-                .or_else(|| walk(body, *then_branch, in_loop))
-                .or_else(|| else_branch.and_then(|e| walk(body, e, in_loop))),
-            Expr::Match { scrutinee, arms } => walk(body, *scrutinee, in_loop).or_else(|| {
-                arms.iter().find_map(|a| {
-                    a.guard
-                        .and_then(|g| walk(body, g, in_loop))
-                        .or_else(|| walk(body, a.body, in_loop))
-                })
-            }),
-            _ => None,
+            Expr::Loop { body: lb } => add_subtree(body, lb, set),
+            Expr::For { iterable, body: fb, .. } => {
+                add_subtree(body, iterable, set);
+                add_subtree(body, fb, set);
+            }
+            Expr::Assign { lhs, rhs } => {
+                add_subtree(body, lhs, set);
+                add_subtree(body, rhs, set);
+            }
+            Expr::Binary { lhs, rhs, .. } => {
+                add_subtree(body, lhs, set);
+                add_subtree(body, rhs, set);
+            }
+            Expr::Return { value: Some(v) } => add_subtree(body, v, set),
+            Expr::Let { value, .. } => {
+                add_subtree(body, value, set);
+            }
+            Expr::Struct { fields, spread, .. } => {
+                for (_, f) in fields {
+                    add_subtree(body, f, set);
+                }
+                if let Some(s) = spread {
+                    add_subtree(body, s, set);
+                }
+            }
+            Expr::Field { receiver, .. } => add_subtree(body, receiver, set),
+            Expr::Index { base, index } => {
+                add_subtree(body, base, set);
+                add_subtree(body, index, set);
+            }
+            Expr::Unary { expr, .. } => add_subtree(body, expr, set),
+            Expr::Cast { expr, .. } => add_subtree(body, expr, set),
+            Expr::Ref { expr, .. } => add_subtree(body, expr, set),
+            Expr::Array(elems) => {
+                for e in elems {
+                    add_subtree(body, e, set);
+                }
+            }
+            Expr::Tuple(elems) => {
+                for e in elems {
+                    add_subtree(body, e, set);
+                }
+            }
+            Expr::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    add_subtree(body, s, set);
+                }
+                if let Some(e) = end {
+                    add_subtree(body, e, set);
+                }
+            }
+            Expr::Closure { body: cb, .. } => add_subtree(body, cb, set),
+            _ => {}
         }
     }
-    walk(body, root, false)
+    for l in loops {
+        if let Expr::While { body: wb, .. } = body.exprs[l] {
+            add_subtree(body, wb, set);
+        } else if let Expr::Loop { body: lb } = body.exprs[l] {
+            add_subtree(body, lb, set);
+        } else if let Expr::For { body: fb, .. } = body.exprs[l] {
+            add_subtree(body, fb, set);
+        }
+    }
 }
 
 fn plain_path(interner: &Interner, name: &str) -> Path {
