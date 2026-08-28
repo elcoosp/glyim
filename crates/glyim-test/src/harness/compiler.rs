@@ -68,6 +68,12 @@ impl TestCompiler for FrontendOnlyCompiler {
 /// PipelineCompiler.
 pub struct PipelineCompiler {
     backend: Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>,
+    /// When true (and the `real-llvm` feature is compiled in), the compiler
+    /// uses the real `LlvmBackend` and links a runnable native executable,
+    /// turning run-pass fixtures into a true runtime proof. Otherwise it falls
+    /// back to `MockCodegen` (no object emitted), which is the default so the
+    /// harness stays hermetic on hosts without the LLVM toolchain.
+    real_llvm: bool,
     /// Optional procedural-macro registry (Phase 9.2). When set, macro
     /// expansion runs this registry's `MacroKind::Proc` invocations through the
     /// loaded cdylib functions during the compile's expansion stage. `None`
@@ -80,8 +86,32 @@ impl PipelineCompiler {
     pub fn new(backend: Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>) -> Self {
         Self {
             backend,
+            real_llvm: false,
             proc_registry: None,
         }
+    }
+
+    /// Enable the real `LlvmBackend` path: produce a real native object,
+    /// link it, and execute run-pass fixtures on the host. Requires the
+    /// `real-llvm` feature (which pulls in `glyim-codegen-llvm`). When the
+    /// feature is absent this is a no-op and the mock backend is used.
+    ///
+    /// NOTE: the native async codegen path is currently broken (tracked gap —
+    /// `glyim-codegen-llvm` panics in `fn_abi_of` for monomorphized
+    /// `block_on<F>`/`poll` types), so enabling this on the M5 async fixtures
+    /// surfaces a genuine failure rather than a green run. That is the intended
+    /// strict behavior: the CI job must not pass by tolerating a codegen gap.
+    pub fn with_real_llvm(mut self) -> Self {
+        self.real_llvm = true;
+        self
+    }
+
+    /// Like [`with_real_llvm`](Self::with_real_llvm) but only flips the flag
+    /// when `enabled` is true — convenient for env-var gating without
+    /// branching at every call site.
+    pub fn with_real_llvm_if(mut self, enabled: bool) -> Self {
+        self.real_llvm = enabled;
+        self
     }
 
     /// Inject a procedural-macro [`Registry`](glyim_proc_macro::Registry) so
@@ -155,10 +185,47 @@ impl TestCompiler for PipelineCompiler {
         let output_path = std::env::temp_dir().join(format!("glyim_test_{}_{}.o", unique_tag, file_id.to_raw()));
         let ty_ctx = db.get_ty_ctx();
         let exe_path = output_path.with_extension("");
+
+        // Choose the backend. By default (and when the `real-llvm` feature is
+        // not compiled in) we use the injected `MockCodegen`, which emits no
+        // object so run-pass fixtures cannot link — keeping the harness
+        // hermetic on hosts without the LLVM toolchain. When `real_llvm` is
+        // enabled *and* the feature is present, we drive the real
+        // `LlvmBackend`, targeting `x86_64-unknown-linux-gnu` and emitting a
+        // C-ABI `main` entry symbol so the produced object links into a
+        // runnable ELF. The `entry_main` local id is discovered via a
+        // lightweight parse+def-map pre-pass (mirroring `glyip`).
+        //
+        // NOTE: `LlvmBackend` owns an `inkwell::Context`, which is `!Sync`, so
+        // it cannot live inside the `Arc<dyn ... + Sync>` shared across the
+        // rayon worker threads. We therefore construct it as a *local* value
+        // per `compile()` call and pass `&backend` (a `&dyn CodegenBackend`)
+        // straight into the pipeline — each worker thread gets its own backend,
+        // which is exactly what LLVM requires.
+        #[cfg(feature = "real-llvm")]
+        let real_backend_local: Option<glyim_codegen_llvm::LlvmBackend> = if self.real_llvm {
+            use glyim_pipeline::Pipeline;
+            let mut real = glyim_codegen_llvm::LlvmBackend::with_db(&db)
+                .with_target("x86_64-unknown-linux-gnu");
+            if let Some(main_id) = Pipeline::entry_main_local_id(&mut db, &path) {
+                real = real.with_entry_main(main_id);
+            }
+            Some(real)
+        } else {
+            None
+        };
+        #[cfg(feature = "real-llvm")]
+        let backend: &dyn glyim_codegen::CodegenBackend = match &real_backend_local {
+            Some(real) => real,
+            None => &*self.backend,
+        };
+#[cfg(not(feature = "real-llvm"))]
+        let backend: &dyn glyim_codegen::CodegenBackend = &*self.backend;
+
         match glyim_pipeline::Pipeline::compile_file_with_artifacts(
             &mut db,
             &path,
-            &*self.backend,
+            backend,
             &output_path,
             None,
             None,

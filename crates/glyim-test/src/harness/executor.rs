@@ -65,9 +65,15 @@ impl TestExecutor {
         use_pipeline: bool,
     ) -> Self {
         let compiler: Arc<dyn TestCompiler> = if use_pipeline {
+            // The `runtime` integration test enables `real_llvm` via the
+            // `GLYIM_TEST_REAL_LLVM` env var (set only on the Linux CI runner),
+            // which swaps in the real `LlvmBackend` so run-pass fixtures are
+            // linked and executed for real. Other hosts keep the hermetic
+            // `MockCodegen` path.
+            let real_llvm = std::env::var("GLYIM_TEST_REAL_LLVM").is_ok();
             Arc::new(PipelineCompiler::new(Arc::new(
                 crate::mock::MockCodegen::new(),
-            )))
+            )).with_real_llvm_if(real_llvm))
         } else {
             Arc::new(FrontendOnlyCompiler)
         };

@@ -6,6 +6,19 @@ version.workspace = true
 [features]
 default = []
 json-output = ["serde", "serde_json"]
+# Real LLVM backend for the `runtime` integration test. When enabled, the
+# `PipelineCompiler` harness produces a real native object (via
+# `glyim-codegen-llvm`), links it, and executes it — turning the M5 fixtures
+# into a true Linux runtime proof instead of a mock-codegen no-op. Only the
+# `test-linux-runtime` CI job enables this (it sets LLVM_SYS_220_PREFIX and
+# GLYIM_TEST_REAL_LLVM).
+#
+# NOTE (2026-08-28): the native async codegen path is currently broken (the
+# `LlvmBackend` panics in `fn_abi_of` for the monomorphized `block_on<F>` /
+# `poll` types), so these fixtures currently FAIL on the Linux job. That is the
+# intended strict behavior: the job now surfaces the gap instead of passing by
+# tolerance. Fixing the async codegen gap will make this job green.
+real-llvm = ["glyim-codegen-llvm"]
 
 [dependencies]
 glyim-mir-interp = { workspace = true }
@@ -24,6 +37,7 @@ glyim-typeck     = { workspace = true }
 glyim-lower      = { workspace = true }
 glyim-borrowck   = { workspace = true }
 glyim-codegen    = { workspace = true }
+glyim-codegen-llvm = { workspace = true, optional = true }
 glyim-db         = { workspace = true }
 glyim-pipeline   = { workspace = true }
 glyim-cli        = { workspace = true }

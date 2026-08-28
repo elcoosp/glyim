@@ -1348,6 +1348,7 @@ dependencies = [
  "glyim-borrowck",
  "glyim-cli",
  "glyim-codegen",
+ "glyim-codegen-llvm",
  "glyim-core",
  "glyim-db",
  "glyim-def-map",
