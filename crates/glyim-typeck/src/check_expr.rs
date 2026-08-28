@@ -1768,7 +1768,6 @@ impl<'a> FnCtxt<'a> {
             }
 
             if candidates.is_empty() {
-                eprintln!("[DBG resolve_method_call] no method `{}` for recv_ty={:?} (PrintTy={})", self.ctx.name_str(method_name), recv_ty, PrintTy::new(recv_ty, &*self.ctx));
                 self.diagnostics.push(GlyimDiagnostic::type_error(
                     span,
                     format!(
