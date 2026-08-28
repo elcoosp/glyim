@@ -330,3 +330,55 @@ fn resolve_main_def_id(comp: &glyim_pipeline::MirCompilation) -> Option<DefId> {
     }
     None
 }
+
+#[test]
+fn p2_1_await_inside_loop_is_rejected_not_miscompiled() {
+    // P2-1 (async-v2 loop-await state machine) is a documented follow-up. The
+    // single most important safety property is that `.await` inside a
+    // `while`/`loop`/`for` body is NEVER silently lowered into the single-poll
+    // desugar (whose `Pending` arm is a `loop {}` that would hang forever). The
+    // desugar must reject it at compile time with a clear, actionable error
+    // (Error 60) instead of producing a silently-miscompiling binary.
+    let src = r#"
+enum Poll<T> { Ready(T), Pending }
+trait Future {
+    type Output;
+    fn poll(&mut self) -> Poll<Self::Output>;
+}
+fn block_on<F: Future>(mut f: F) -> F::Output {
+    loop {
+        match f.poll() {
+            Poll::Ready(v) => return v,
+            Poll::Pending => { }
+        }
+    }
+}
+async fn dep(x: i32) -> i32 { x }
+async fn countdown(n: i32) -> i32 {
+    let mut total = 0;
+    let mut i = 0;
+    while i < n {
+        // `.await` inside a loop body — must be rejected, not silently desugared.
+        total = total + dep(i).await;
+        i = i + 1;
+    }
+    total
+}
+fn main() -> i32 {
+    let f = countdown(3);
+    block_on(f)
+}
+"#;
+    let result = compile_async(src);
+    assert!(
+        result.is_err(),
+        "`.await` inside a loop must be a compile ERROR, never a silently-miscompiling binary"
+    );
+    let diags = result.unwrap_err();
+    assert!(
+        diags.contains("await inside a loop body is not yet supported")
+            || diags.contains("await"),
+        "the rejection must mention the unsupported loop-await; got diagnostics:\n{}",
+        diags
+    );
+}
