@@ -161,7 +161,20 @@ impl Pipeline {
 
         let (hir, hir_diags) =
             glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
-        sink_cell.borrow_mut().extend(hir_diags);
+        sink_cell.borrow_mut().extend(hir_diags.clone());
+
+        // Safety gate: a compiler must not emit a binary when HIR lowering
+        // produced an Error-severity diagnostic. Notably this makes the async
+        // desugar's `.await`-inside-a-loop guard (Error 60) fatal instead of a
+        // silent miscompile — the lowered body would otherwise fall through to
+        // the single-poll desugar whose `Pending` arm is an infinite `loop {}`
+        // that hangs if ever executed. HIR errors are always real, so fail fast.
+        if hir_diags
+            .iter()
+            .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
+        {
+            return Err(sink_cell.into_inner().into_diagnostics());
+        }
 
         // Plan unstub-5 P5: populate `glyim_solve::TraitContext` with the user's
         // trait impls so `SimpleTraitSolver::prove_trait` can actually find them
@@ -482,7 +495,16 @@ pub fn compile_file_to_mir(
 
     let (hir, hir_diags) =
         glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags);
+    sink_cell.borrow_mut().extend(hir_diags.clone());
+    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
+    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
+    // of silently lowering a miscompiling state machine.
+    if hir_diags
+        .iter()
+        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
+    {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
 
     let resolver = db.interner().clone();
     let ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
@@ -574,7 +596,16 @@ pub fn emit_mir(
 
     let (hir, hir_diags) =
         glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags);
+    sink_cell.borrow_mut().extend(hir_diags.clone());
+    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
+    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
+    // of silently lowering a miscompiling state machine.
+    if hir_diags
+        .iter()
+        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
+    {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
 
     let resolver = db.interner().clone();
     let ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
@@ -648,7 +679,16 @@ pub fn emit_llvm_ir(
 
     let (hir, hir_diags) =
         glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags);
+    sink_cell.borrow_mut().extend(hir_diags.clone());
+    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
+    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
+    // of silently lowering a miscompiling state machine.
+    if hir_diags
+        .iter()
+        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
+    {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
 
     let resolver = db.interner().clone();
     let ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
@@ -733,7 +773,16 @@ pub fn emit_asm(
 
     let (hir, hir_diags) =
         glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags);
+    sink_cell.borrow_mut().extend(hir_diags.clone());
+    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
+    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
+    // of silently lowering a miscompiling state machine.
+    if hir_diags
+        .iter()
+        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
+    {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
 
     let resolver = db.interner().clone();
     let ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
