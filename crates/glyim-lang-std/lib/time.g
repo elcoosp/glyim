@@ -248,7 +248,60 @@ impl SystemTime {
     }
 }
 
-/// The UNIX epoch (1970-01-01 00:00:00 UTC).
+/// A measurement of a monotonically non-decreasing clock.
+///
+/// Instants are opaque, ordered values suitable only for measuring the
+/// duration between two events. `now` reads a monotonic nanosecond counter
+/// from the runtime (`glyim_time_now`), so it never goes backwards even
+/// across wall-clock adjustments.
+pub struct Instant {
+    nanos: u64,
+}
+
+impl Instant {
+    /// Return an instant corresponding to "now".
+    fn now() -> Instant {
+        extern "C" {
+            fn glyim_time_now() -> u64;
+        }
+        Instant { nanos: unsafe { glyim_time_now() } }
+    }
+
+    /// Seconds component of this instant's raw monotonic counter.
+    fn as_secs(&self) -> u64 {
+        self.nanos / 1_000_000_000
+    }
+
+    /// Nanoseconds component (sub-second) of this instant's raw counter.
+    fn subsec_nanos(&self) -> u32 {
+        (self.nanos % 1_000_000_000) as u32
+    }
+
+    /// Duration elapsed since `earlier`, or `None` if `earlier` is later than
+    /// `self` (clock went backwards).
+    fn checked_duration_since(&self, earlier: Instant) -> Option<Duration> {
+        if self.nanos >= earlier.nanos {
+            let diff = self.nanos - earlier.nanos;
+            Option::Some(Duration { secs: diff / 1_000_000_000, nanos: (diff % 1_000_000_000) as u32 })
+        } else {
+            Option::None
+        }
+    }
+
+    /// Duration elapsed since `earlier`; panics if `earlier` is in the future.
+    fn duration_since(&self, earlier: Instant) -> Duration {
+        match self.checked_duration_since(earlier) {
+            Option::Some(d) => d,
+            Option::None => panic!("`Instant::duration_since` called with a later instant"),
+        }
+    }
+
+    /// Duration elapsed since this instant was created (i.e. `Instant::now() - self`).
+    fn elapsed(&self) -> Duration {
+        Instant::now().duration_since(*self)
+    }
+}
+
 const UNIX_EPOCH: SystemTime = SystemTime { secs: 0, nanos: 0 };
 
 /// Returns the current time as a Duration since the UNIX epoch.
