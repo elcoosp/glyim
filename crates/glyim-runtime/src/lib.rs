@@ -1569,6 +1569,16 @@ pub unsafe extern "C" fn glyim_time_now_nanos() -> u64 {
     monotonic_base().elapsed().subsec_nanos() as u64
 }
 
+/// Monotonic nanoseconds since process start (combines secs + nanos into a
+/// single 64-bit value). Used by `std::time::Instant::now`.
+#[unsafe(no_mangle)]
+/// # Safety
+/// FFI entry point.
+pub unsafe extern "C" fn glyim_time_now() -> u64 {
+    let elapsed = monotonic_base().elapsed();
+    elapsed.as_secs() * 1_000_000_000 + elapsed.subsec_nanos() as u64
+}
+
 #[unsafe(no_mangle)]
 /// # Safety
 /// FFI entry point.
