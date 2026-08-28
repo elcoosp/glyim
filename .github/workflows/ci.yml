@@ -50,10 +50,22 @@ jobs:
         # live in crates/glyim-test/tests/runtime/m5/ and are gated to
         # x86_64-unknown-linux-gnu. On this native-Linux runner the produced ELF
         # actually runs (the macOS/Windows runners cannot, so they Ignore it).
+        #
         # The driver (crates/glyim-test/tests/runtime.rs) asserts the safety-net
-        # contract: multi-await must emit the async-v2 diagnostic (no silent
-        # miscompile); single-await must not miscompile (the known LLVM-codegen gap
-        # is tolerated until it is closed).
+        # contract: multi-await must NOT emit the async-v2 diagnostic (no silent
+        # miscompile); single-await must not miscompile (the known native-codegen
+        # gap is tolerated here, see below).
+        #
+        # STRICT PATH (currently disabled on this job): setting
+        # `GLYIM_TEST_REAL_LLVM=1` and passing `--features glyim-test/real-llvm`
+        # swaps the harness's mock codegen for the REAL `LlvmBackend` and makes
+        # the driver REQUIRE `Passed` (real codegen + link + run) instead of
+        # tolerating `CompilationFailed`. That path is wired and correct, but the
+        # native async codegen is currently broken (glyim-codegen-llvm panics in
+        # `fn_abi_of` for monomorphized `block_on<F>`/`poll` types — tracked
+        # gap), so enabling it now would make this job red. Enable it once that
+        # codegen gap is fixed; the failure is the intended honest signal that
+        # the gap is (or is not) closed.
         run: cargo nextest run -p glyim-test --test runtime
 
   test-macos:
