@@ -166,6 +166,11 @@ impl Place {
 /// ty.
     pub fn ty(&self, ctx: &dyn TypeLookup, local_decls: &IndexVec<LocalIdx, LocalDecl>) -> Ty {
         let mut ty = local_decls[self.local].ty;
+        // Tracks the variant selected by a `Downcast`, so that a subsequent
+        // `Field` projection on an enum reads the correct variant's fields
+        // (enum fields live in `AdtDef.variants[variant].fields`, not in the
+        // struct-only `AdtDef.fields` used by `field_ty`).
+        let mut downcast: Option<VariantIdx> = None;
 
         for elem in self.projection.iter() {
             ty = match elem {
@@ -187,7 +192,64 @@ impl Place {
                             ctx.error_ty()
                         }
                     }
-                    TyKind::Adt(adt_id, _substs) => ctx.field_ty(*adt_id, idx.to_raw() as usize),
+                    TyKind::Adt(adt_id, substs) => {
+                        let sub_args = ctx.substitution_args(*substs);
+                        let field_idx = idx.to_raw() as usize;
+                        let field_ty = if let Some(adt_def) = ctx.adt_def(*adt_id) {
+                            // Structs carry their fields in `AdtDef.fields`. For
+                            // enums, the field lives in a variant's
+                            // `fields`; prefer the downcast variant, else the
+                            // first variant that actually has a field at this
+                            // index (enums lay the value field out at a fixed
+                            // offset regardless of which variant is active, so a
+                            // bare `Field` on the enum local still reads the
+                            // right slot). Fall back to the first variant.
+                            let struct_field = adt_def
+                                .fields
+                                .as_slice()
+                                .get(field_idx)
+                                .map(|f| f.ty);
+                            struct_field
+                                .or_else(|| {
+                                    let variant = downcast
+                                        .and_then(|vi| adt_def.variants.get(vi.to_raw() as usize))
+                                        .or_else(|| {
+                                            adt_def
+                                                .variants
+                                                .iter()
+                                                .find(|v| v.fields.len() > field_idx)
+                                        })
+                                        .or_else(|| adt_def.variants.first());
+                                    variant.and_then(|v| {
+                                        v.fields.as_slice().get(field_idx).map(|f| f.ty)
+                                    })
+                                })
+                                .unwrap_or_else(|| ctx.field_ty(*adt_id, field_idx))
+                        } else {
+                            ctx.field_ty(*adt_id, field_idx)
+                        };
+                        // Monomorphization: a generic ADT's variant field type
+                        // may reference `Param(i)`, which must be substituted
+                        // with the ADT's own `substs[i]` so that e.g. `Poll<T>`'s
+                        // `Ready(T)` field resolves to the concrete `T` (e.g.
+                        // `i32`) instead of a bare `Param`. Read-only
+                        // `TypeLookup` cannot intern, but substituting a leaf
+                        // `Param` for an already-interned concrete handle needs
+                        // no allocation.
+                        match ctx.ty_kind(field_ty) {
+                            TyKind::Param(p) => sub_args
+                                .get(p.index as usize)
+                                .and_then(|a| {
+                                    if let GenericArg::Ty(t) = a {
+                                        Some(*t)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or(field_ty),
+                            _ => field_ty,
+                        }
+                    }
                     _ => {
                         tracing::error!("Place::ty(): Field projection on non-tuple/ADT type");
                         ctx.error_ty()
@@ -201,9 +263,11 @@ impl Place {
                         ctx.error_ty()
                     }
                 },
-                ProjectionElem::Downcast(_variant_idx) => {
-                    // Downcast keeps the same ADT type; the variant's fields are accessed via Field projections.
-                    // So we keep ty unchanged.
+                ProjectionElem::Downcast(variant_idx) => {
+                    // Downcast selects the variant; the variant's fields are
+                    // accessed via `Field` projections. Record the variant so a
+                    // following `Field` reads the right variant's field types.
+                    downcast = Some(*variant_idx);
                     ty
                 }
                 ProjectionElem::ConstantIndex {
