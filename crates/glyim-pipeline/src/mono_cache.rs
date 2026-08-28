@@ -62,7 +62,7 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
     // We create a fresh `TyCtxMut` from the interner for this purpose.
     // This is safe because substitution only reads from the frozen `ty_ctx` and writes new types
     // to the mutable context.
-    let mut sub_ctx = TyCtxMut::new(ty_ctx.resolver().clone());
+    let mut sub_ctx = TyCtxMut::from_ty_ctx(ty_ctx);
 
     fn substitute_ty(ty: Ty, substs: &Substitution, ctx: &mut TyCtxMut, frozen: &TyCtx) -> Ty {
         match frozen.ty_kind(ty).clone() {
@@ -194,6 +194,69 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                 }
                 let new_sub = ctx.intern_substitution(new_args);
                 ctx.mk_ty(TyKind::FnDef(def_id, new_sub))
+            }
+            TyKind::Projection(proj) => {
+                // Associated-type projection (`F::Output`, `Self::Output`, ...):
+                // normalize to the concrete defining type. Mirror
+                // `glyim-codegen-llvm::types::llvm_type_for_ty`'s Projection arm.
+                // First substitute the projection's self type (it may be a `Param`
+                // referencing the instantiation substs), then resolve via the
+                // projection table. Without this, `block_on<F: Future>`'s return
+                // type `Poll<F::Output>` keeps a `Param` after monomorphization
+                // and ICEs at codegen/layout with `UnknownType(Param)`.
+                let proj_subst_args = frozen.substitution_args(proj.trait_ref.substs);
+                let proj_self = proj_subst_args
+                    .first()
+                    .and_then(|a| match a {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    });
+                let concrete_self = match proj_self {
+                    Some(st) => match frozen.ty_kind(st) {
+                        TyKind::Param(p) => proj_subst_args
+                            .get(p.index as usize)
+                            .and_then(|a| match a {
+                                GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            })
+                            .unwrap_or(st),
+                        _ => st,
+                    },
+                    None => return ty,
+                };
+                // Recurse into the self type in case it still holds nested params.
+                let concrete_self = substitute_ty(concrete_self, substs, ctx, frozen);
+                let resolved = frozen.resolve_associated_type(
+                    concrete_self,
+                    proj.trait_ref.def_id,
+                    proj.item_name,
+                );
+                match resolved {
+                    Some(resolved) => resolved,
+                    None => {
+                        // Could not resolve (no matching impl); fall back to a
+                        // structurally-substituted projection so we don't drop
+                        // information, but this will still surface as a layout
+                        // error if truly unresolvable.
+                        let new_subst_args: Vec<GenericArg> = proj_subst_args
+                            .iter()
+                            .map(|a| match a {
+                                GenericArg::Ty(t) => {
+                                    GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen))
+                                }
+                                other => other.clone(),
+                            })
+                            .collect();
+                        let new_sub = ctx.intern_substitution(new_subst_args);
+                        ctx.mk_ty(TyKind::Projection(glyim_type::ProjectionTy {
+                            trait_ref: glyim_type::TraitRef {
+                                def_id: proj.trait_ref.def_id,
+                                substs: new_sub,
+                            },
+                            item_name: proj.item_name,
+                        }))
+                    }
+                }
             }
             _ => ty,
         }

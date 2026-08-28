@@ -199,7 +199,26 @@ impl<'a> MonoCtx<'a> {
                         if let Some(fn_def_id) = recv_ty.and_then(|rt| {
                             ty_ctx.resolve_trait_method(trait_def_id, rt, method_name)
                         }) {
-                            let substs = Substitution::empty();
+                            // Pass the *concrete* receiver `Self` type as the
+                            // method's substitution instead of an empty one.
+                            // The body is already monomorphized (the MIR
+                            // provider substitutes generic params before this
+                            // runs), so the receiver type here is concrete.
+                            // Without this, the resolved method was enqueued
+                            // with empty substs and its own body kept a
+                            // `Param`/`Self` type, which then ICEs at codegen
+                            // (e.g. `f.poll()` inside `block_on<F>` leaving
+                            // `Poll<Self::Output>` unresolved).
+                            let self_ty = recv_ty.map(|rt| match ty_ctx.ty_kind(rt) {
+                                TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
+                                _ => rt,
+                            });
+                            let substs = match self_ty {
+                                Some(st) => {
+                                    ty_ctx.intern_substitution(vec![GenericArg::Ty(st)])
+                                }
+                                None => Substitution::empty(),
+                            };
                             let fn_ty = ty_ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                             *c = glyim_mir::MirConst {
                                 kind: MirConstKind::Fn(fn_def_id, substs),
@@ -266,7 +285,7 @@ impl<'a> MonoCtx<'a> {
         }
     }
 
-    fn scan_terminator(&mut self, kind: &TerminatorKind, _body: &glyim_mir::Body) {
+    fn scan_terminator(&mut self, kind: &TerminatorKind, body: &glyim_mir::Body) {
         match kind {
             TerminatorKind::Call { func, args, .. } => {
                 // Instantiate the callee from the substitution carried by the
@@ -285,6 +304,12 @@ impl<'a> MonoCtx<'a> {
                         let substs = match self.ty_ctx {
                             Some(ty_ctx) => match ty_ctx.ty_kind(mir_const.ty) {
                                 TyKind::FnDef(_, s) => {
+                                    if let Some(Some(arg0)) = args.first().map(|a| match a {
+                                        Operand::Constant(c) => Some(c.ty),
+                                        Operand::Copy(p) | Operand::Move(p) => body.locals.get(p.local).map(|d| d.ty),
+                                    }) {
+                                        let _ = ty_ctx.ty_kind(arg0);
+                                    }
                                     // Guard against un-instantiated generic
                                     // calls: if the callee's `FnDef` substitution
                                     // still contains a `Param` (the type-checker
