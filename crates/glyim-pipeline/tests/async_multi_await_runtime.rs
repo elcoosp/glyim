@@ -18,14 +18,15 @@
 //!
 //! HONEST SCOPE NOTE (M5 runtime execution): full end-to-end *execution* of
 //! `block_on(f)` requires trait-method dispatch — `block_on<F: Future>` calls
-//! `f.poll()`, a `Future::poll` trait method. Neither the LLVM backend nor the
-//! in-process `glyim_mir_interp` interpreter resolves trait-method calls today
-//! (documented M5 host-blocker: generic `Future`/`block_on` instantiation gap,
-//! affecting ALL trait usage, not just async). Verifying the *runtime* resumption
-//! therefore requires closing that separate codegen/interp gap, which is OUT of
-//! scope for the async desugar (M4). This test proves the compile + MIR codegen
-//! correctness that M4 owns; the runtime-execution proof is gated on the
-//! trait-dispatch gap exactly as GLYIM_DESTUB_PLAN Phase 3 states.
+//! `f.poll()`, a `Future::poll` trait method. The monomorphization pass
+//! (`glyim-lower::mono`) devirtualizes that `VirtualMethod` call to a static
+//! `Fn(two_poll)` reference, and the in-process `glyim_mir_interp` interpreter
+//! executes the resulting direct call — so the runtime proof below DOES run
+//! `block_on(two_step(1,2))` to completion and return 3. This test therefore
+//! proves the full runtime resumption (not just compile + MIR codegen
+//! correctness). The *native* LLVM-codegen + link + run proof (a separate
+//! concern, guaranteeing the produced ELF executes on Linux) is enforced by
+//! `glyim-test`'s `runtime` test on the `test-linux-runtime` CI job.
 
 use std::io::Write;
 use std::sync::Arc;

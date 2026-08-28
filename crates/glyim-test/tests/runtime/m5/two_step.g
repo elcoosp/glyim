@@ -11,17 +11,19 @@
 // GATED TO LINUX: the pipeline links a native x86_64-unknown-linux-gnu binary,
 // so this only executes on that target (macOS/Windows runners Ignore it).
 //
-// KNOWN BLOCKER (tracked, NOT faked): as of 2026-08-26 the LLVM backend (and
-// the MIR interpreter) do not resolve trait-method dispatch (`f.poll()` where
-// `f: impl Future`), so this fixture currently cannot produce a runnable
-// binary on the host. It encodes the *target* behavior (check-stdout: 3) so
-// that once the trait-instantiation gap is closed, `cargo test -p glyim-test
-// --test runtime` (on ubuntu-latest) will exercise the full runtime proof
-// automatically. The M4 compile-correctness proof (zero diagnostics + a real
-// suspend/resume state-machine MIR) is already enforced by the
-// `glyim-pipeline` `async_multi_await_runtime` test and the `glyim-typeck`
+// STATUS (2026-08-28): trait-method dispatch (`f.poll()` where `f: F: Future`)
+// is resolved by the monomorphization devirtualization pass (`glyim-lower::mono`)
+// for the MIR interpreter, which already verifies this end-to-end
+// (`glyim-pipeline::async_multi_await_runtime::m5_two_step_runtime_returns_3`).
+// The test harness now uses the real `LlvmBackend`, so on the
+// `test-linux-runtime` (ubuntu-latest) job this binary is linked and run for
+// real and must print `3`. The NATIVE async codegen path is CURRENTLY BROKEN
+// (tracked gap): `glyim-codegen-llvm` panics in `fn_abi_of` (`lower.rs`) for the
+// monomorphized `block_on<F>` / `poll` types, so the Linux job currently FAILS
+// here until that gap is fixed. The M4 compile-correctness proof (zero
+// diagnostics + a real suspend/resume state-machine MIR) is still enforced by
+// the `glyim-pipeline` `async_multi_await_runtime` test and the `glyim-typeck`
 // `multi_await_compiles_cleanly` test.
-//
 // test-mode: run-pass
 // only-target: x86_64-unknown-linux-gnu
 // check-stdout: 3

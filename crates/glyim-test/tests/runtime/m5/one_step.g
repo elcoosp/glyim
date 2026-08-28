@@ -8,12 +8,14 @@
 // GATED TO LINUX: the pipeline links a native x86_64-unknown-linux-gnu binary,
 // so this only executes on that target (macOS/Windows runners Ignore it).
 //
-// KNOWN BLOCKER (tracked, NOT faked): as of 2026-08-24 the single-await path
-// still panics at LLVM codegen with `TyKind::Error` (an async codegen gap in
-// generic `Future`/`block_on` instantiation), so this fixture currently does
-// not produce a runnable binary. It encodes the *target* behavior so that once
-// the codegen gap is closed, `cargo test -p glyim-test --test runtime` (on
-// ubuntu-latest) will exercise the full runtime proof automatically.
+// STATUS (2026-08-28): the test harness now uses the real `LlvmBackend`
+// (feature `real-llvm`, enabled by `GLYIM_TEST_REAL_LLVM` on the Linux job) and
+// this fixture is run for real, asserting it prints `42`. The NATIVE async
+// codegen path is CURRENTLY BROKEN (tracked gap): `glyim-codegen-llvm` panics
+// in `fn_abi_of` (`lower.rs`) for the monomorphized `block_on<F>` / `poll`
+// types, so the Linux job currently FAILS here until that gap is fixed. The
+// MIR-interpreter proof (`glyim-pipeline::async_multi_await_runtime`) still
+// verifies this shape end-to-end today.
 // test-mode: run-pass
 // only-target: x86_64-unknown-linux-gnu
 // check-stdout: 42
