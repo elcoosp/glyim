@@ -13,7 +13,9 @@ use glyim_mir::{
 };
 use glyim_span::HygieneCtx;
 use glyim_span::{FileId, Span};
-use glyim_type::{ConstKind, FieldIdx, Substitution, Ty, TyCtx, TyKind, FnSig};
+use glyim_type::{
+    ConstKind, FieldIdx, GenericArg, ProjectionTy, TraitRef, Ty, TyCtx, TyCtxMut, TyKind, FnSig,
+};
 use glyim_core::primitives::{Abi, Safety};
 use inkwell::AddressSpace;
 use inkwell::builder::Builder;
@@ -102,7 +104,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     /// Build an LLVM function type from a Glyim `FnSig`, applying ABI rules.
     fn llvm_fn_type_from_sig(&self, sig: &glyim_type::FnSig) -> inkwell::types::FunctionType<'ctx> {
         let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-        let fn_abi = layout_computer.fn_abi_of(sig).unwrap();
+        let fn_abi = match layout_computer.fn_abi_of(sig) {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("fn_abi_of failed: {:?}", e);
+            }
+        };
 
         let is_sret = matches!(fn_abi.ret.mode, PassMode::Indirect { .. });
         let mut param_types = Vec::new();
@@ -140,7 +147,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     fn llvm_type_for_ty(&self, ty: Ty) -> inkwell::types::BasicTypeEnum<'ctx> {
         match llvm_type_for_ty(self.ty_ctx, &self.target_info, self.context, ty) {
             Ok(t) => t,
-            Err(e) => panic!("Codegen error: {:?}", e),
+            Err(e) => {
+                panic!("Codegen error: {:?}", e);
+            }
         }
     }
 
@@ -393,6 +402,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         }
         let mut ptr = base;
         let mut current_ty = local_ty(self.body, place.local);
+        let mut downcast_variant: Option<VariantIdx> = None;
         for elem in place.projection.iter() {
             match elem {
                 ProjectionElem::Deref => {
@@ -474,24 +484,67 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 })
                                 .unwrap_or(Ty::ERROR)
                         }
-                        TyKind::Adt(adt_id, _) => {
-                            if let Some(adt_def) = self.ty_ctx.adt_def(*adt_id) {
-                                if let Some(variant) = adt_def.variants.first() {
-                                    variant
-                                        .fields
-                                        .iter()
-                                        .nth(idx.to_raw() as usize)
-                                        .map(|f| f.ty)
-                                        .unwrap_or(Ty::ERROR)
-                                } else {
-                                    Ty::ERROR
+                        TyKind::Adt(adt_id, substs) => {
+                            let adt_substs = self.ty_ctx.substitution_args(*substs);
+                            let field_idx = idx.to_raw() as usize;
+                            // Structs carry their fields in `AdtDef.fields`; enums
+                            // carry them per-variant in `AdtDef.variants[v].fields`.
+                            // Resolve struct fields directly, and for enums prefer the
+                            // downcast variant (if the place went through `Downcast`),
+                            // else the first variant that actually has a field at
+                            // `idx` (enums lay the value field out at a fixed offset
+                            // regardless of which variant is active, so a bare `Field`
+                            // on the enum local still reads the right slot).
+                            let raw = if let Some(adt_def) = self.ty_ctx.adt_def(*adt_id) {
+                                let struct_field = adt_def
+                                    .fields
+                                    .as_slice()
+                                    .get(field_idx)
+                                    .map(|f| f.ty);
+                                let field_raw = struct_field
+                                    .or_else(|| {
+                                        let variant = downcast_variant
+                                            .and_then(|vi| adt_def.variants.get(vi.to_raw() as usize))
+                                            .or_else(|| {
+                                                adt_def
+                                                    .variants
+                                                    .iter()
+                                                    .find(|v| v.fields.len() > field_idx)
+                                            })
+                                            .or_else(|| adt_def.variants.first());
+                                        variant.and_then(|v| {
+                                            v.fields.as_slice().get(field_idx).map(|f| f.ty)
+                                        })
+                                    })
+                                    .unwrap_or_else(|| self.ty_ctx.field_ty(*adt_id, field_idx));
+                                // Monomorphization: a generic ADT's field type may
+                                // reference `Param(i)`, which must be substituted with
+                                // the ADT's own `substs[i]` so that e.g. `Poll<T>`'s
+                                // `Ready(T)` field resolves to the concrete `T`
+                                // (e.g. `i32`) instead of a bare `Param`.
+                                match self.ty_ctx.ty_kind(field_raw) {
+                                    TyKind::Param(p) => adt_substs
+                                        .get(p.index as usize)
+                                        .and_then(|a| {
+                                            if let glyim_type::GenericArg::Ty(t) = a {
+                                                Some(*t)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .unwrap_or(field_raw),
+                                    _ => field_raw,
                                 }
                             } else {
-                                Ty::ERROR
-                            }
+                                self.ty_ctx.field_ty(*adt_id, field_idx)
+                            };
+                            raw
                         }
                         _ => Ty::ERROR,
                     };
+                    if field_ty == Ty::ERROR {
+                        tracing::error!("place_ptr: field type unresolved for current_ty={:?} idx={:?}", self.ty_ctx.ty_kind(current_ty), idx);
+                    }
                     if field_ty != Ty::ERROR {
                         let _field_llvm_ty = self.llvm_type_for_ty(field_ty);
                         let field_ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
@@ -621,6 +674,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 )
                                 .expect("downcast GEP failed")
                         };
+                        downcast_variant = Some(*variant_idx);
                     }
                 }
                 ProjectionElem::ConstantIndex {
@@ -2555,6 +2609,206 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         }
     }
 
+    /// Recursively concretize a `FnSig` whose generic `Param(i)` slots reference
+    /// the call-site substitution. `param_map[i]` is the concrete type for
+    /// `Param(i)`. Associated-type projections (`F::Output`, `Self::Output`) are
+    /// normalized via the projection table. This is what lets generic/async
+    /// callees lower without an `UnknownType(Param)` ICE: a synthetic
+    /// `Poll<Self::Output>` return type becomes a concrete `Poll<i32>`.
+    fn concretize_fn_sig(sig: &FnSig, param_map: &[GenericArg], ty_ctx: &TyCtx) -> FnSig {
+        let mut ctx = TyCtxMut::from_ty_ctx(ty_ctx);
+        fn subst(ty: Ty, map: &[GenericArg], ctx: &mut TyCtxMut, frozen: &TyCtx) -> Ty {
+            match frozen.ty_kind(ty).clone() {
+                TyKind::Param(p) => match map.get(p.index as usize) {
+                    Some(GenericArg::Ty(t)) => *t,
+                    _ => ty,
+                },
+                TyKind::Ref(r, inner, m) => {
+                    let ni = subst(inner, map, ctx, frozen);
+                    if ni == inner {
+                        ty
+                    } else {
+                        ctx.mk_ty(TyKind::Ref(r, ni, m))
+                    }
+                }
+                TyKind::RawPtr(inner, m) => {
+                    let ni = subst(inner, map, ctx, frozen);
+                    if ni == inner {
+                        ty
+                    } else {
+                        ctx.mk_ty(TyKind::RawPtr(ni, m))
+                    }
+                }
+                TyKind::Adt(id, sub) => {
+                    let args = frozen.substitution_args(sub);
+                    let mut new_args: Vec<GenericArg> = Vec::new();
+                    for a in args.iter() {
+                        match a {
+                            GenericArg::Ty(t) => {
+                                new_args.push(GenericArg::Ty(subst(*t, map, ctx, frozen)))
+                            }
+                            other => new_args.push(other.clone()),
+                        }
+                    }
+                    if new_args == args.to_vec() {
+                        ty
+                    } else {
+                        let sub = ctx.intern_substitution(new_args);
+                        ctx.mk_ty(TyKind::Adt(id, sub))
+                    }
+                }
+                TyKind::Tuple(sub) => {
+                    let args = frozen.substitution_args(sub);
+                    let mut new_args: Vec<GenericArg> = Vec::new();
+                    for a in args.iter() {
+                        match a {
+                            GenericArg::Ty(t) => {
+                                new_args.push(GenericArg::Ty(subst(*t, map, ctx, frozen)))
+                            }
+                            other => new_args.push(other.clone()),
+                        }
+                    }
+                    if new_args == args.to_vec() {
+                        ty
+                    } else {
+                        let sub = ctx.intern_substitution(new_args);
+                        ctx.mk_ty(TyKind::Tuple(sub))
+                    }
+                }
+                TyKind::Projection(proj) => {
+                    // Substitute the projection's self type (may be a `Param`
+                    // referencing the instantiation substs), then resolve.
+                    let proj_subst_args = frozen.substitution_args(proj.trait_ref.substs);
+                    let proj_self = proj_subst_args.first().and_then(|a| match a {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    });
+                    let concrete_self = match proj_self {
+                        Some(st) => match frozen.ty_kind(st) {
+                            TyKind::Param(p) => proj_subst_args
+                                .get(p.index as usize)
+                                .and_then(|a| match a {
+                                    GenericArg::Ty(t) => Some(*t),
+                                    _ => None,
+                                })
+                                .unwrap_or(st),
+                            _ => st,
+                        },
+                        None => return ty,
+                    };
+                    let concrete_self = subst(concrete_self, map, ctx, frozen);
+                    // `self` may be wrapped in `&mut`/`*` (e.g. `poll`'s
+                    // `&mut self`), but the impl table is keyed by the bare ADT.
+                    let bare_self = match frozen.ty_kind(concrete_self) {
+                        TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
+                        _ => concrete_self,
+                    };
+                    match frozen.resolve_associated_type(
+                        concrete_self,
+                        proj.trait_ref.def_id,
+                        proj.item_name,
+                    ) {
+                        Some(resolved) => resolved,
+                        None => {
+                            // The registered `fn_sig` (e.g. an async `poll`'s
+                            // `Poll<F::Output>` return type) may carry a
+                            // cross-arena-stale `trait_ref.def_id`, so the
+                            // trait-keyed lookup above misses even though a valid
+                            // impl exists. Retry by self-type + assoc-name alone,
+                            // which ignores the trait id (correct for the common
+                            // single-impl `Future::Output` case).
+                            match frozen.resolve_associated_type_by_self_ty(
+                                bare_self,
+                                proj.item_name,
+                            ) {
+                                Some(resolved) => resolved,
+                                None => {
+                            let mut new_subst_args: Vec<GenericArg> = Vec::new();
+                            for a in proj_subst_args.iter() {
+                                match a {
+                                    GenericArg::Ty(t) => {
+                                        new_subst_args
+                                            .push(GenericArg::Ty(subst(*t, map, ctx, frozen)))
+                                    }
+                                    other => new_subst_args.push(other.clone()),
+                                }
+                            }
+                            let new_sub = ctx.intern_substitution(new_subst_args);
+                            ctx.mk_ty(TyKind::Projection(ProjectionTy {
+                                trait_ref: TraitRef {
+                                    def_id: proj.trait_ref.def_id,
+                                    substs: new_sub,
+                                },
+                                item_name: proj.item_name,
+                            }))
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => ty,
+            }
+        }
+        let mut input_args: Vec<GenericArg> = Vec::new();
+        for a in ty_ctx.substitution_args(sig.inputs).iter() {
+            match a {
+                GenericArg::Ty(t) => {
+                    input_args.push(GenericArg::Ty(subst(*t, param_map, &mut ctx, ty_ctx)))
+                }
+                other => input_args.push(other.clone()),
+            }
+        }
+        let inputs = ctx.intern_substitution(input_args);
+        let output = subst(sig.output, param_map, &mut ctx, ty_ctx);
+        // The registered `fn_sig` for an async `poll` may carry a
+        // cross-arena-stale `Poll<F::Output>` whose inner substitution reads as
+        // empty in the shared arena (the `F::Output` projection was lost during
+        // stdlib pre-compilation). Recover it from the call's concrete `F`
+        // (`param_map[0]`): resolve `F::Output` via the `Future` lang-item trait
+        // and rebuild `Poll<Output>`. This is exact for the single-impl
+        // `Future::Output` case and only triggers when the substitution is empty.
+        let output = match ty_ctx.ty_kind(output) {
+            TyKind::Adt(poll_adt, poll_sub) if *poll_adt == glyim_core::def_id::AdtId::from_raw(1) => {
+                if let Some(GenericArg::Ty(self_ty)) = param_map.first() {
+                    // `Self` is `&mut Future` here; the impl table is keyed by the bare ADT.
+                    let bare_self: Ty = match ty_ctx.ty_kind(*self_ty) {
+                        TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
+                        _ => *self_ty,
+                    };
+                    // The registered `poll` `fn_sig` may carry a cross-arena
+                    // stale `Future`/`Output` handle. Resolve `Future::Output`
+                    // by self-ADT + the *name string* "Output", which is immune
+                    // to `Name`-handle corruption across arenas.
+                    let r = ty_ctx.resolve_associated_type_by_self_ty_name(bare_self, "Output");
+                    if let Some(resolved) = r {
+                            // `resolved` is a `Ty` handle from the impl table,
+                            // which may live in a *different* (leaked) arena than
+                            // the codegen `ty_ctx` — re-interning its *kind* here
+                            // yields a fresh, valid handle in the codegen arena
+                            // (otherwise the dedup lands back on the stale
+                            // `Poll<Subst(4)>` and `fn_abi_of` still fails).
+                            let resolved_fresh = ctx.mk_ty(ty_ctx.ty_kind(resolved).clone());
+                            let new_poll_sub =
+                                ctx.intern_substitution(vec![GenericArg::Ty(resolved_fresh)]);
+                            ctx.mk_ty(TyKind::Adt(*poll_adt, new_poll_sub))
+                        } else {
+                            output
+                        }
+                } else {
+                    output
+                }
+            }
+            _ => output,
+        };
+        FnSig {
+            inputs,
+            output,
+            c_variadic: sig.c_variadic,
+            unsafety: sig.unsafety,
+            abi: sig.abi,
+        }
+    }
+
     fn lower_call(
         &mut self,
         func: &Operand,
@@ -2602,81 +2856,18 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // `substs` is already an interned `Substitution` of concrete
                 // `Ty`s, so for the supported identity-`Param` shape we reuse it
                 // directly without interning.
+                // Concretize the callee signature by substituting the call-site
+                // generic `Param`s with their concrete arguments. This handles
+                // nested associated-type projections (e.g. `Poll<Self::Output>`
+                // returned by a trait method like `Future::poll`) that the
+                // previous top-level-only handling missed. For non-generic
+                // callees `substs` is empty and the generic signature is already
+                // concrete, so `concretize_fn_sig` is a no-op.
                 let sig = if substs.is_empty() {
                     generic_sig
                 } else {
-                    let subst_args = self.ty_ctx.substitution_args(substs);
-                    // Inputs: identity `Param(i)` -> `substs[i]` (the common
-                    // shape for `block_on<F>` / `id<T>`).
-                    let inputs_are_identity = self
-                        .ty_ctx
-                        .substitution_args(generic_sig.inputs)
-                        .iter()
-                        .enumerate()
-                        .all(|(i, a)| match a {
-                            glyim_type::GenericArg::Ty(t) => {
-                                match self.ty_ctx.ty_kind(*t) {
-                                    TyKind::Param(p) => p.index as usize == i,
-                                    _ => false,
-                                }
-                            }
-                            _ => false,
-                        });
-                    let concrete_inputs = if inputs_are_identity {
-                        substs
-                    } else {
-                        generic_sig.inputs
-                    };
-                    // Output: a `Param(p)` -> `substs[p]`; a `Projection`
-                    // (`F::Output`) is resolved by substituting its `self` type
-                    // with the call substs and normalizing the associated type.
-                    // Both paths reuse already-interned `Ty`s, so no `&mut`
-                    // interning is needed.
-                    let concrete_output = match self.ty_ctx.ty_kind(generic_sig.output) {
-                        TyKind::Param(p) => match subst_args.get(p.index as usize) {
-                            Some(glyim_type::GenericArg::Ty(t)) => *t,
-                            _ => generic_sig.output,
-                        },
-                        TyKind::Projection(proj) => {
-                            let proj_self = self
-                                .ty_ctx
-                                .substitution_args(proj.trait_ref.substs)
-                                .first()
-                                .and_then(|a| match a {
-                                    glyim_type::GenericArg::Ty(t) => Some(*t),
-                                    _ => None,
-                                });
-                            match proj_self {
-                                Some(st) => {
-                                    let concrete_self = match self.ty_ctx.ty_kind(st) {
-                                        TyKind::Param(pp) => subst_args
-                                            .get(pp.index as usize)
-                                            .and_then(|a| match a {
-                                                glyim_type::GenericArg::Ty(t) => Some(*t),
-                                                _ => None,
-                                            })
-                                            .unwrap_or(st),
-                                        _ => st,
-                                    };
-                                    let resolved = self.ty_ctx.resolve_associated_type(
-                                        concrete_self,
-                                        proj.trait_ref.def_id,
-                                        proj.item_name,
-                                    );
-                                    resolved.unwrap_or(generic_sig.output)
-                                }
-                                None => generic_sig.output,
-                            }
-                        }
-                        _ => generic_sig.output,
-                    };
-                    glyim_type::FnSig {
-                        inputs: concrete_inputs,
-                        output: concrete_output,
-                        c_variadic: generic_sig.c_variadic,
-                        unsafety: generic_sig.unsafety,
-                        abi: generic_sig.abi,
-                    }
+                    let param_map = self.ty_ctx.substitution_args(substs).to_vec();
+                    Self::concretize_fn_sig(&generic_sig, &param_map, self.ty_ctx)
                 };
                 let fn_name = format!("__glyim_fn_{}", def_id.to_raw());
                 let fn_val = match self.module.get_function(&fn_name) {
@@ -3254,21 +3445,51 @@ pub(crate) fn lower_body<'ctx>(
     // loudly instead.
     let layout_computer = FullLayoutComputer::new(ty_ctx, target_info.clone());
     let fn_def_id = glyim_core::def_id::FnDefId::from_raw(body.owner.local_id.to_raw());
-    // Prefer the FnSig registered by typeck. When codegen is driven directly
-    // from a Body (unit tests, REPL, incremental single-body lowers) no sig is
-    // registered, so derive a fallback from the body's return type. The LLVM
-    // function type itself is already built from body.locals/return_ty above,
-    // so this fallback only needs to supply the FnAbi (correct for scalar
-    // args/returns, which is what direct-body lowers use).
-    let fn_sig = match ty_ctx.fn_sig(fn_def_id) {
-        Some(sig) => sig.clone(),
-        None => FnSig {
-            inputs: Substitution::empty(),
-            output: body.return_ty,
+    // Build the FnSig from the (already-monomorphized) body so that generic /
+    // async functions like `block_on<F>` or `Future::poll` lower without an
+    // `UnknownType(Param)` ICE in `fn_abi_of`. The LLVM function *type* above is
+    // already derived from `body.locals` / `body.return_ty`; this FnSig must
+    // match it (the generic `ty_ctx.fn_sig` still carries `Param`/`Projection`
+    // types for generic definitions). Fall back to `ty_ctx.fn_sig` only when the
+    // body does not carry concrete locals (e.g. direct-body unit-test lowers).
+    let fn_sig = {
+        let mut input_args: Vec<GenericArg> = Vec::new();
+        for i in 1..=body.arg_count {
+            let local_idx = LocalIdx::from_raw(i as u32);
+            if let Some(local_decl) = body.locals.get(local_idx) {
+                input_args.push(GenericArg::Ty(local_decl.ty));
+            }
+        }
+        let inputs = ty_ctx.intern_substitution(input_args);
+        let abi = ty_ctx
+            .fn_sig(fn_def_id)
+            .map(|s| s.abi)
+            .unwrap_or(Abi::Glyim);
+        // The body's `return_ty` may itself carry a cross-arena stale
+        // `Poll<F::Output>` (e.g. an async `poll` method). Concretize it the
+        // same way call signatures are resolved: substitute the function's own
+        // `self`/`F` params (already substituted into this mono body) and
+        // recover `Future::Output` via the name-string lookup.
+        let param_map: Vec<GenericArg> =
+            body.locals.iter().skip(1).map(|l| GenericArg::Ty(l.ty)).collect();
+        let concretized = LoweringCtx::concretize_fn_sig(
+            &FnSig {
+                inputs,
+                output: body.return_ty,
+                c_variadic: false,
+                unsafety: Safety::Safe,
+                abi,
+            },
+            &param_map,
+            ty_ctx,
+        );
+        FnSig {
+            inputs: concretized.inputs,
+            output: concretized.output,
             c_variadic: false,
             unsafety: Safety::Safe,
-            abi: Abi::Glyim,
-        },
+            abi,
+        }
     };
     // Emit the calling convention for FFI functions (unstub-5 Phase 4.3).
     // `extern "C" fn` / `extern fn` compile to the platform C calling

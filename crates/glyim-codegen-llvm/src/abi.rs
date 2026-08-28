@@ -132,14 +132,15 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                     is_unsized: false,
                 })
             }
-            TyKind::Adt(adt_id, _) => {
+            TyKind::Adt(adt_id, substs) => {
+                let substs = self.ctx.substitution_args(*substs);
                 if let Some(adt_def) = self.ctx.adt_def(*adt_id) {
                     if adt_def.variants.len() > 1 {
                         let mut variant_layouts = Vec::with_capacity(adt_def.variants.len());
                         for variant in &adt_def.variants {
                             let mut field_layouts = Vec::with_capacity(variant.fields.len());
                             for field in variant.fields.iter() {
-                                field_layouts.push(self.layout_of(field.ty)?);
+                                field_layouts.push(self.layout_of(self.subst_params(field.ty, substs))?);
                             }
                             let mut size = Size::ZERO;
                             let mut align = Align::ONE;
@@ -217,7 +218,7 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                     } else if let Some(variant) = adt_def.variants.first() {
                         let mut field_layouts = Vec::with_capacity(variant.fields.len());
                         for field in variant.fields.iter() {
-                            field_layouts.push(self.layout_of(field.ty)?);
+                            field_layouts.push(self.layout_of(self.subst_params(field.ty, substs))?);
                         }
                         if field_layouts.is_empty() {
                             return Ok(Layout::unit());
@@ -306,6 +307,63 @@ impl LayoutComputer for FullLayoutComputer<'_> {
     }
     fn target_info(&self) -> &TargetInfo {
         self.simple.target_info()
+    }
+}
+
+/// Recursively substitute generic `Param(i)` with `substs[i]` so that a
+/// monomorphized ADT whose field/variant types still reference the generic
+/// params (e.g. `Poll<T>`'s `Ready(T)` variant) lays out correctly instead of
+/// ICEing on a bare `Param`. Shared with `SimpleLayoutComputer::subst_params`.
+impl<'a> FullLayoutComputer<'a> {
+    fn subst_params(&self, ty: Ty, substs: &[glyim_type::GenericArg]) -> Ty {
+        if substs.is_empty() {
+            return ty;
+        }
+        match self.ctx.ty_kind(ty) {
+            TyKind::Param(p) => match substs.get(p.index as usize) {
+                Some(glyim_type::GenericArg::Ty(t)) => *t,
+                _ => ty,
+            },
+            TyKind::Ref(region, inner, mutbl) => {
+                let new_inner = self.subst_params(*inner, substs);
+                self.ctx.mk_ty(TyKind::Ref(region.clone(), new_inner, *mutbl))
+            }
+            TyKind::RawPtr(inner, mutbl) => {
+                let new_inner = self.subst_params(*inner, substs);
+                self.ctx.mk_ty(TyKind::RawPtr(new_inner, *mutbl))
+            }
+            TyKind::Adt(adt_id, s) => {
+                let new_args: Vec<glyim_type::GenericArg> = self
+                    .ctx
+                    .substitution_args(*s)
+                    .iter()
+                    .map(|a| match a {
+                        glyim_type::GenericArg::Ty(t) => {
+                            glyim_type::GenericArg::Ty(self.subst_params(*t, substs))
+                        }
+                        other => other.clone(),
+                    })
+                    .collect();
+                let new_s = self.ctx.intern_substitution(new_args);
+                self.ctx.mk_ty(TyKind::Adt(*adt_id, new_s))
+            }
+            TyKind::Tuple(s) => {
+                let new_args: Vec<glyim_type::GenericArg> = self
+                    .ctx
+                    .substitution_args(*s)
+                    .iter()
+                    .map(|a| match a {
+                        glyim_type::GenericArg::Ty(t) => {
+                            glyim_type::GenericArg::Ty(self.subst_params(*t, substs))
+                        }
+                        other => other.clone(),
+                    })
+                    .collect();
+                let new_s = self.ctx.intern_substitution(new_args);
+                self.ctx.mk_ty(TyKind::Tuple(new_s))
+            }
+            _ => ty,
+        }
     }
 }
 
