@@ -209,7 +209,15 @@ impl TyCtxMut {
     /// `adt_reprs`, interior-mutability). The synthetic-ADT bookkeeping and
     /// name/param caches are reset to defaults: elaboration does not register
     /// new ADTs by name, so losing that transient state is safe.
-    pub(crate) fn from_ty_ctx(ctx: &super::ty_ctx::TyCtx) -> Self {
+    /// Create a mutable view that **shares** `ctx`'s canonical `&'static`
+    /// type arena (and all registered defs). Unlike [`TyCtxMut::new`], which
+    /// leaks a brand-new arena, this keeps every `Ty`/`Substitution` handle
+    /// valid across the `TyCtx`/`TyCtxMut` boundary — essential when the
+    /// substituted types must later be read back through the original frozen
+    /// `TyCtx` (e.g. during codegen of a monomorphized body). Using `new`
+    /// here produces stale handles that manifest as `UnknownType`/`type_arena`
+    /// out-of-bounds errors.
+    pub fn from_ty_ctx(ctx: &super::ty_ctx::TyCtx) -> Self {
         Self {
             arena: ctx.arena,
             regions: ctx.regions.clone(),

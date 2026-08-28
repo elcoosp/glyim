@@ -241,6 +241,42 @@ impl TyCtx {
     /// Unlike `resolve_associated_type`, this reverse lookup finds the entry by
     /// `self_ty` + assoc name alone (the bug-aware variant used when the trait
     /// is not yet known at the call site) — used for concrete `Type::Item` paths.
+    /// Like [`Self::resolve_associated_type_by_self_ty`] but keys on the
+    /// associated-type *name string* rather than a `Name` handle. This is
+    /// robust against cross-arena `Name` handle mismatches (the codegen
+    /// `TyCtx` and the typeck `TyCtxMut` may intern the same identifier into
+    /// different `Name` indices), which would otherwise make a handle-based
+    /// lookup miss a perfectly valid impl.
+    pub fn resolve_associated_type_by_self_ty_name(
+        &self,
+        self_ty: Ty,
+        assoc_name: &str,
+    ) -> Option<Ty> {
+        let self_adt = match self.ty_kind(self_ty) {
+            TyKind::Adt(adt_id, _) => Some(*adt_id),
+            _ => None,
+        };
+        self.impl_assoc_types
+            .iter()
+            .find(|((sty, _), entries)| {
+                let sty_matches = match self_adt {
+                    Some(a) => matches!(self.ty_kind(*sty), TyKind::Adt(b, _) if b == &a),
+                    None => *sty == self_ty,
+                };
+                sty_matches
+                    && entries
+                        .iter()
+                        .any(|(n, _)| self.name_str(*n) == assoc_name)
+            })
+            .and_then(|((_, _), entries)| {
+                entries
+                    .iter()
+                    .find(|(name, _)| self.name_str(*name) == assoc_name)
+                    .map(|(_, ty)| *ty)
+            })
+    }
+
+
     pub fn resolve_associated_type_by_self_ty(
         &self,
         self_ty: Ty,
