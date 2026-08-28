@@ -354,12 +354,12 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
-    fn layout_struct(&self, adt_def: &AdtDef) -> Result<Layout, LayoutError> {
+    fn layout_struct(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
         let mut offsets = IndexVec::new();
         let mut struct_align = Align::ONE;
         let mut current_offset = Size::ZERO;
         for field in adt_def.fields.iter() {
-            let field_layout = self.layout_of(field.ty)?;
+            let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             struct_align = struct_align.max(field_layout.align);
             current_offset = current_offset.align_to(field_layout.align);
             offsets.push(current_offset);
@@ -375,12 +375,12 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
-    fn layout_union(&self, adt_def: &AdtDef) -> Result<Layout, LayoutError> {
+    fn layout_union(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
         let mut union_size = Size::ZERO;
         let mut union_align = Align::ONE;
         let mut offsets = IndexVec::new();
         for field in adt_def.fields.iter() {
-            let field_layout = self.layout_of(field.ty)?;
+            let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             union_align = union_align.max(field_layout.align);
             union_size = union_size.max(field_layout.size);
             offsets.push(Size::ZERO);
@@ -395,18 +395,18 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
-    fn layout_enum(&self, adt_def: &AdtDef, outer_ty: Ty) -> Result<Layout, LayoutError> {
+    fn layout_enum(&self, adt_def: &AdtDef, outer_ty: Ty, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
         let variant_count = adt_def.variants.len();
         if variant_count == 0 {
             return Err(LayoutError::UnknownType(outer_ty));
         }
         if variant_count == 1 {
-            return self.layout_single_variant_enum(adt_def);
+            return self.layout_single_variant_enum(adt_def, substs);
         }
         let variant_layouts: Vec<Layout> = adt_def
             .variants
             .iter()
-            .map(|v| self.layout_variant_data(v))
+            .map(|v| self.layout_variant_data(v, substs))
             .collect::<Result<Vec<_>, LayoutError>>()?;
         if let Some(result) = self.try_niche_encoding(adt_def, &variant_layouts)? {
             return Ok(result);
@@ -414,13 +414,13 @@ impl<'a> SimpleLayoutComputer<'a> {
         self.direct_tag_encoding(adt_def, &variant_layouts)
     }
 
-    fn layout_single_variant_enum(&self, adt_def: &AdtDef) -> Result<Layout, LayoutError> {
+    fn layout_single_variant_enum(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
         let variant_fields = &adt_def.variants[0].fields;
         let mut offsets = IndexVec::new();
         let mut enum_align = Align::ONE;
         let mut current_offset = Size::ZERO;
         for field in variant_fields.iter() {
-            let field_layout = self.layout_of(field.ty)?;
+            let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             enum_align = enum_align.max(field_layout.align);
             current_offset = current_offset.align_to(field_layout.align);
             offsets.push(current_offset);
@@ -439,12 +439,13 @@ impl<'a> SimpleLayoutComputer<'a> {
     fn layout_variant_data(
         &self,
         variant: &glyim_type::adt_def::VariantDef,
+        substs: &[GenericArg],
     ) -> Result<Layout, LayoutError> {
         let mut offsets = IndexVec::new();
         let mut var_align = Align::ONE;
         let mut current_offset = Size::ZERO;
         for field in variant.fields.iter() {
-            let field_layout = self.layout_of(field.ty)?;
+            let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             var_align = var_align.max(field_layout.align);
             current_offset = current_offset.align_to(field_layout.align);
             offsets.push(current_offset);
@@ -707,6 +708,59 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
+    /// Substitute generic `Param(i)` types in `ty` with the corresponding
+    /// entry of `substs` (used when laying out a monomorphized ADT whose
+    /// field/variant types still reference the generic params, e.g. the
+    /// `T` in `Poll<T>`'s `Ready(T)` variant). Without this, `layout_of`
+    /// reaches a bare `Param` and ICEs. The substitution is recursive over
+    /// `Ref`/`RawPtr`/`Adt`/`Tuple` so nested generics resolve too.
+    fn subst_params(&self, ty: Ty, substs: &[GenericArg]) -> Ty {
+        if substs.is_empty() {
+            return ty;
+        }
+        match self.ctx.ty_kind(ty) {
+            TyKind::Param(p) => match substs.get(p.index as usize) {
+                Some(GenericArg::Ty(t)) => *t,
+                _ => ty,
+            },
+            TyKind::Ref(region, inner, mutbl) => {
+                let new_inner = self.subst_params(*inner, substs);
+                self.ctx.mk_ty(TyKind::Ref(region.clone(), new_inner, *mutbl))
+            }
+            TyKind::RawPtr(inner, mutbl) => {
+                let new_inner = self.subst_params(*inner, substs);
+                self.ctx.mk_ty(TyKind::RawPtr(new_inner, *mutbl))
+            }
+            TyKind::Adt(adt_id, s) => {
+                let new_args: Vec<GenericArg> = self
+                    .ctx
+                    .substitution_args(*s)
+                    .iter()
+                    .map(|a| match a {
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_params(*t, substs)),
+                        other => other.clone(),
+                    })
+                    .collect();
+                let new_s = self.ctx.intern_substitution(new_args);
+                self.ctx.mk_ty(TyKind::Adt(*adt_id, new_s))
+            }
+            TyKind::Tuple(s) => {
+                let new_args: Vec<GenericArg> = self
+                    .ctx
+                    .substitution_args(*s)
+                    .iter()
+                    .map(|a| match a {
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_params(*t, substs)),
+                        other => other.clone(),
+                    })
+                    .collect();
+                let new_s = self.ctx.intern_substitution(new_args);
+                self.ctx.mk_ty(TyKind::Tuple(new_s))
+            }
+            _ => ty,
+        }
+    }
+
     fn layout_adt(
         &self,
         adt_id: glyim_core::AdtId,
@@ -740,10 +794,11 @@ impl<'a> SimpleLayoutComputer<'a> {
             }
         };
         let _args = self.ctx.substitution_args(substs);
+        let args = _args;
         match adt_def.kind {
-            AdtKind::Struct => self.layout_struct(adt_def),
-            AdtKind::Enum => self.layout_enum(adt_def, outer_ty),
-            AdtKind::Union => self.layout_union(adt_def),
+            AdtKind::Struct => self.layout_struct(adt_def, args),
+            AdtKind::Enum => self.layout_enum(adt_def, outer_ty, args),
+            AdtKind::Union => self.layout_union(adt_def, args),
         }
     }
 
@@ -834,11 +889,11 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
             TyKind::Tuple(substs) => return self.layout_tuple(*substs),
             TyKind::Array(inner, count) => return self.layout_array(*inner, count, ty),
             TyKind::Adt(adt_id, substs) => return self.layout_adt(*adt_id, *substs, ty),
-            TyKind::Infer(_) => return Err(LayoutError::UnknownType(ty)),
-            TyKind::Error => return Err(LayoutError::UnknownType(ty)),
-            TyKind::Param(_) | TyKind::Bound(_, _) => return Err(LayoutError::UnknownType(ty)),
-            TyKind::Opaque(_, _) => return Err(LayoutError::UnknownType(ty)),
-            TyKind::Projection(_) => return Err(LayoutError::UnknownType(ty)),
+            TyKind::Infer(_) => { return Err(LayoutError::UnknownType(ty)); }
+            TyKind::Error => { return Err(LayoutError::UnknownType(ty)); }
+            TyKind::Param(_) | TyKind::Bound(_, _) => { return Err(LayoutError::UnknownType(ty)); }
+            TyKind::Opaque(_, _) => { return Err(LayoutError::UnknownType(ty)); }
+            TyKind::Projection(_) => { return Err(LayoutError::UnknownType(ty)); }
             TyKind::Closure(_, substs) => {
                 let args = self.ctx.substitution_args(*substs);
                 if args.is_empty() {
