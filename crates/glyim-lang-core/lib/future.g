@@ -20,17 +20,35 @@ pub enum Poll<T> {
 
 /// A handle to a task's waker.
 ///
-/// In this first iteration the waker is a no-op: a single-threaded executor
-/// simply keeps polling the future until it returns `Ready`. The data/vtable
-/// indirection of a production waker is intentionally omitted for now.
-pub struct Waker;
+/// A waker lets a future signal that it is ready to make progress. The first
+/// iteration used a no-op waker and a busy-spinning `block_on`; this version
+/// records the id of the executor thread and `wake`/`wake_by_ref` call the
+/// runtime's `glyim_thread_unpark` directly, so a parked executor thread is
+/// released as soon as a future becomes ready (plan §P2-2). The waker is
+/// self-contained (no dependency on the `thread` stdlib module) because it
+/// talks to the runtime FFI directly.
+pub struct Waker {
+    thread_id: usize,
+}
 
 impl Waker {
-    /// Wake the associated task. No-op in the single-threaded executor.
-    fn wake(&self) {}
+    /// Construct a waker bound to the executor thread `id`.
+    fn new(id: usize) -> Waker {
+        Waker { thread_id: id }
+    }
 
-    /// Wake the associated task by reference. No-op here.
-    fn wake_by_ref(&self) {}
+    /// Wake the associated task: release the parked executor thread.
+    fn wake(&self) {
+        extern "C" {
+            fn glyim_thread_unpark(id: usize);
+        }
+        unsafe { glyim_thread_unpark(self.thread_id) };
+    }
+
+    /// Wake the associated task by reference (same as [`wake`](Waker::wake)).
+    fn wake_by_ref(&self) {
+        self.wake();
+    }
 }
 
 /// Per-poll contextual data handed to [`Future::poll`].
@@ -41,9 +59,9 @@ pub struct Context {
 }
 
 impl Context {
-    /// Construct a `Context` from a [`Waker`].
-    fn new() -> Context {
-        Context { waker: Waker }
+    /// Construct a `Context` owning the given [`Waker`].
+    fn from_waker(waker: Waker) -> Context {
+        Context { waker }
     }
 
     /// Borrow the [`Waker`] associated with this poll.
