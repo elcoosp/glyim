@@ -41,9 +41,10 @@ fn collect_used_locals(body: &Body) -> HashSet<LocalIdx> {
 fn collect_operand_uses(op: &Operand, used: &mut HashSet<LocalIdx>) {
     match op {
         Operand::Copy(place) | Operand::Move(place) => {
-            if place.projection.is_empty() {
-                used.insert(place.local);
-            }
+            // A projection (e.g. `p.a`) still reads the base local, so the
+            // local is used even when the projection list is non-empty. Dropping
+            // it would delete the only store that feeds the projection.
+            used.insert(place.local);
         }
         Operand::Constant(_) => {}
     }
@@ -57,9 +58,7 @@ fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
             collect_operand_uses(&box_ops.1, used);
         }
         Rvalue::Ref(place, _) => {
-            if place.projection.is_empty() {
-                used.insert(place.local);
-            }
+            used.insert(place.local);
         }
         Rvalue::Aggregate(_, operands) => {
             for op in operands {
@@ -67,9 +66,7 @@ fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
             }
         }
         Rvalue::Discriminant(place) | Rvalue::Len(place) => {
-            if place.projection.is_empty() {
-                used.insert(place.local);
-            }
+            used.insert(place.local);
         }
         Rvalue::Cast(_, op, _) => collect_operand_uses(op, used),
         Rvalue::Repeat(op, _) => collect_operand_uses(op, used),
