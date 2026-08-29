@@ -5,6 +5,7 @@ use glyim_type::{Ty, TyCtx, TyKind};
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, IntType};
 use std::num::NonZeroU32;
+use crate::abi::FullLayoutComputer;
 
 pub(crate) fn llvm_type_for_ty<'ctx>(
     ctx: &TyCtx,
@@ -76,7 +77,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 .into()
         }
         TyKind::Adt(_adt_id, _subst) => {
-            let layout_computer = glyim_layout::SimpleLayoutComputer::new(ctx, target_info.clone());
+            let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
                 if layout.size.0 == 0 {
                     return Ok(context.struct_type(&[], false).into());
@@ -87,7 +88,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             }
         }
         TyKind::Closure(_closure_id, _subst) => {
-            let layout_computer = glyim_layout::SimpleLayoutComputer::new(ctx, target_info.clone());
+            let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
                 if layout.size.0 == 0 {
                     return Ok(context.struct_type(&[], false).into());
@@ -104,7 +105,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 .into()
         }
         TyKind::Opaque(_, _subst) => {
-            let layout_computer = glyim_layout::SimpleLayoutComputer::new(ctx, target_info.clone());
+            let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
                 if layout.size.0 == 0 {
                     return Ok(context.struct_type(&[], false).into());
