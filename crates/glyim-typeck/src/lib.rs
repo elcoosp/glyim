@@ -894,7 +894,11 @@ fn check_fn_items_in_module(
                         }
                         variants.push(VariantDef {
                             name: variant.name,
-    style: glyim_type::adt_def::VariantStyle::Unit,
+                            style: match variant.kind {
+                                glyim_core::primitives::StructKind::Record => glyim_type::adt_def::VariantStyle::Struct,
+                                glyim_core::primitives::StructKind::Tuple => glyim_type::adt_def::VariantStyle::Tuple,
+                                glyim_core::primitives::StructKind::Unit => glyim_type::adt_def::VariantStyle::Unit,
+                            },
                             fields,
                         });
                     }

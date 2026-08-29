@@ -137,16 +137,32 @@ impl<'a> FnCtxt<'a> {
 
     pub fn check(mut self, params: &[(Name, Ty, Span)]) -> (thir::Body, HashMap<ExprId, Ty>) {
         let mut thir_params = Vec::with_capacity(params.len());
-        for (i, (name, ty, span)) in params.iter().enumerate() {
-            let _local_id = thir::LocalVarId::from_raw(i as u32);
-            self.env.add_binding(*name, *ty, Mutability::Not);
+        for (name, ty, span) in params.iter() {
+            // CRITICAL: the THIR `Param.local` / `Param.pat.var_id` MUST use the
+            // *same* `LocalVarId` that `add_binding` registers in the name map.
+            // References to the parameter (`Expr::Path`) resolve through
+            // `check_path` -> `env.lookup_by_name`, which returns exactly that
+            // binding id. If we instead used `LocalVarId::from_raw(i)` (the
+            // parameter *position*), the two id spaces only coincide when the
+            // parameter happens to be the first binding in the global env
+            // (env id 0 == position 0). For a body type-checked after other
+            // bindings already exist (e.g. the `async fn` wrapper desugared by
+            // `lower_async`), `add_binding` returns a larger id (say 11) while
+            // the param position is still 0 — so the reference resolves to 11
+            // but the param binding is at 0. The MIR builder then records
+            // `local_var_map[0] = param_local` and the `VarRef(11)` misses,
+            // falling back to `LocalIdx(11)` (out of the declared range) — the
+            // parameter read returns uninitialized stack garbage. Using the
+            // `add_binding` id for both the binding and the param keeps them
+            // consistent regardless of check order.
+            let local_id = self.env.add_binding(*name, *ty, Mutability::Not);
 
             thir_params.push(thir::Param {
                 name: *name,
                 ty: *ty,
                 span: *span,
-                pat: thir::Pattern::binding(_local_id, *name, Mutability::Not, *ty, *span),
-                local: _local_id,
+                pat: thir::Pattern::binding(local_id, *name, Mutability::Not, *ty, *span),
+                local: local_id,
             });
         }
 
