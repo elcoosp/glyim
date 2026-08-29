@@ -411,7 +411,8 @@ impl<'a> SimpleLayoutComputer<'a> {
         if let Some(result) = self.try_niche_encoding(adt_def, &variant_layouts)? {
             return Ok(result);
         }
-        self.direct_tag_encoding(adt_def, &variant_layouts)
+        let d = self.direct_tag_encoding(adt_def, &variant_layouts)?;
+        Ok(d)
     }
 
     fn layout_single_variant_enum(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
@@ -820,7 +821,19 @@ impl<'a> SimpleLayoutComputer<'a> {
                     PassMode::Direct
                 }
             }
-            CallConvention::Glyim => PassMode::Direct,
+            CallConvention::Glyim => {
+                // Composite return values (structs/tuples/ADTs/arrays) cannot be
+                // reliably passed in registers across all targets (e.g. AArch64
+                // returns an 8-byte `{i32,i32}` in a single x0 register, which the
+                // aggregate-return lowering reads back incorrectly from w0+w1).
+                // Return them via a hidden sret pointer, which is always correct.
+                match self.ctx.ty_kind(ty) {
+                    TyKind::Tuple(_) | TyKind::Adt(_, _) | TyKind::Array(_, _) => {
+                        PassMode::Indirect { meta_attrs: false }
+                    }
+                    _ => PassMode::Direct,
+                }
+            }
         }
     }
 }
