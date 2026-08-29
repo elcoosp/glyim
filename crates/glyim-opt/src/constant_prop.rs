@@ -405,15 +405,32 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
 
             let mut out = incoming.clone();
             let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
+            // Locals *defined* (assigned) in this block. A local defined with a
+            // non-constant rvalue must be recorded as `None` (wild) in `out`,
+            // NOT left absent. "Absent" means "this block does not define the
+            // local, so its value flows in from predecessors"; "present as None"
+            // means "this block defines it but the value is not a compile-time
+            // constant". Treating a defined-non-constant local as absent lets
+            // `merge_maps` adopt a sibling predecessor's constant and fold a
+            // phi (e.g. `match { A(v) => v, B => 0 }` → `move(local1)`) into a
+            // wrong constant -- a silent miscompile (constant-propagation over
+            // a divergent merge).
+            let mut defined: std::collections::HashSet<LocalIdx> = std::collections::HashSet::new();
             for stmt in &block.statements {
                 if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                     out.remove(&place.local);
+                    defined.insert(place.local);
                     if place.projection.is_empty()
                         && let Some(c) = evaluate_rvalue_to_const(rvalue, &out, ctx, body.locals[place.local].ty)
                     {
                         out.insert(place.local, Some(c));
                     }
                 }
+            }
+            // A defined local that wasn't re-inserted above is non-constant:
+            // pin it to `None` so the merge sees it as wild.
+            for d in &defined {
+                out.entry(*d).or_insert(None);
             }
 
             let changed_this = match &in_maps[bb_idx] {
