@@ -958,11 +958,13 @@ impl<'a> MirBuilder<'a> {
     /// preserves compatibility with hand-built THIR unit tests that allocate
     /// locals 1:1 with `LocalVarId`.
     fn local_for_var(&self, var_id: thir::LocalVarId) -> LocalIdx {
-        if let Some(&local) = self.local_var_map.get(&var_id) {
+        let hit = self.local_var_map.get(&var_id);
+        let local = if let Some(&local) = hit {
             local
         } else {
             LocalIdx::from_raw(var_id.to_raw())
-        }
+        };
+        local
     }
     pub fn lower_expr_to_operand(&mut self, expr: &thir::Expr) -> glyim_mir::Operand {
         match &expr.kind {
@@ -1352,6 +1354,26 @@ impl<'a> MirBuilder<'a> {
         // (M4/M5 async multi-await). For slice/enum dispatch the *switch*
         // discriminates on a derived value (length / discriminant), but the
         // arm-pattern fields are still projected off the whole value.
+        let scrutinee_place = self.lower_expr_to_place(scrutinee);
+        // Always materialize the *whole* scrutinee into a local so that
+        // match-arm patterns can be bound to MIR locals (mirroring `let`
+        // pattern binding in `bind_pattern`). Without this, variables bound by
+        // a `match` arm -- e.g. `match self.state { Start { f0, fut0 } => .. }`
+        // from the async state-machine desugar -- receive no `local_var_map`
+        // entry and `VarRef(var_id)` falls back to
+        // `LocalIdx::from_raw(var_id)`, colliding with the `self` parameter
+        // (M4/M5 async multi-await). For slice/enum dispatch the *switch*
+        // discriminates on a derived value (length / discriminant), but the
+        // arm-pattern fields are still projected off the whole value.
+        //
+        // IMPORTANT: `lower_expr_to_place(scrutinee)` must be called exactly
+        // once and the returned place reused for BOTH the materialized temp
+        // (`scrut_local`, used by `bind_pattern`) and the `Discriminant`
+        // read. Calling it twice allocates two distinct temps; the discriminant
+        // would then be read off the real scrutinee while the arm pattern binds
+        // off the other (orphaned, never-written) temp -- e.g. `match f.poll()
+        // { Ready(v) => v, .. }` would bind `v` to uninitialized memory while
+        // the switch dispatches on the correct result, a silent miscompile.
         let full_scrut_op = if enum_dispatch {
             // Enum scrutinees are matched *in place*: the switch reads the
             // discriminant and arm patterns project fields off the temp. Copy
@@ -1361,39 +1383,19 @@ impl<'a> MirBuilder<'a> {
             // moved value, which borrowck (B0001) correctly rejects. The
             // interpreter tolerates the move, but the desugared async poll body
             // must be borrow-check clean (M4/M5 compile-correctness gate).
-            let scrutinee_place = self.lower_expr_to_place(scrutinee);
-            glyim_mir::Operand::Copy(scrutinee_place)
+            glyim_mir::Operand::Copy(scrutinee_place.clone())
         } else {
             self.lower_expr_to_operand(scrutinee)
         };
-        let scrut_local: Option<glyim_mir::LocalIdx> = if !slice_dispatch {
-            let local = self.alloc_local(
-                scrutinee.ty,
-                glyim_core::primitives::Mutability::Not,
-                span,
-            );
-            self.push_stmt(
-                glyim_mir::StatementKind::Assign(
-                    glyim_mir::Place::new(local),
-                    glyim_mir::Rvalue::Use(full_scrut_op.clone()),
-                ),
-                span,
-            );
-            Some(local)
-        } else {
-            None
-        };
-
         // The discriminator the `SwitchInt` switches on.
         let (discr_op, switch_ty) = if slice_dispatch {
             // Slice/array matches dispatch on the *length* of the scrutinee.
-            let scrutinee_place = self.lower_expr_to_place(scrutinee);
             let len_local =
                 self.alloc_local(Ty::USIZE, glyim_core::primitives::Mutability::Not, span);
             self.push_stmt(
                 glyim_mir::StatementKind::Assign(
                     glyim_mir::Place::new(len_local),
-                    glyim_mir::Rvalue::Len(scrutinee_place),
+                    glyim_mir::Rvalue::Len(scrutinee_place.clone()),
                 ),
                 span,
             );
@@ -1410,13 +1412,14 @@ impl<'a> MirBuilder<'a> {
             // (M4/M5): `match self.state { Start => .., S0 => .., .. }` would
             // always re-enter `Start`, suspending forever. Emit
             // `Discr = Discriminant(scrut)` and switch on `Discr` (u8).
-            let scrutinee_place = self.lower_expr_to_place(scrutinee);
+            // Use the single scrutinee place (see above) so the discriminant
+            // and the arm-pattern binding agree on which value they read.
             let discr_local =
                 self.alloc_local(Ty::U8, glyim_core::primitives::Mutability::Not, span);
             self.push_stmt(
                 glyim_mir::StatementKind::Assign(
                     glyim_mir::Place::new(discr_local),
-                    glyim_mir::Rvalue::Discriminant(scrutinee_place),
+                    glyim_mir::Rvalue::Discriminant(scrutinee_place.clone()),
                 ),
                 span,
             );
@@ -1426,11 +1429,10 @@ impl<'a> MirBuilder<'a> {
             )
         } else {
             // Scalar / bool / char scrutinees: switch on the value directly.
-            let discr_op = match scrut_local {
-                Some(sl) => glyim_mir::Operand::Copy(glyim_mir::Place::new(sl)),
-                None => full_scrut_op,
-            };
-            (discr_op, scrutinee.ty)
+            // (Enum/slice scrutinees use their discriminant/length above; the
+            // whole-scrutinee materialization is only needed to bind arm
+            // patterns, which read off `scrutinee_place` directly.)
+            (full_scrut_op, scrutinee.ty)
         };
 
         let mut switch_targets: Vec<(u128, BasicBlockIdx)> = Vec::new();
@@ -1467,9 +1469,16 @@ impl<'a> MirBuilder<'a> {
             // Skipped for slice-dispatch matches, where the discriminant is the
             // slice *length* rather than the value.
             if !slice_dispatch {
-                if let Some(sl) = scrut_local {
-                    self.bind_pattern(&arm.pat, Some(sl), arm.pat.span);
-                }
+                // Bind the arm pattern's fields off the *actual* scrutinee
+                // place (`scrutinee_place`), not the `scrut_local` copy temp.
+                // The copy-temp materialization is dropped from the emitted MIR
+                // (its `Assign` is pushed before the discriminant/switch and
+                // never reaches a live block), so binding off it would read an
+                // uninitialized local -- e.g. `match f.poll() { Ready(v) => v }`
+                // would bind `v` to garbage. Binding off `scrutinee_place`
+                // (the same place the discriminant is read from) keeps the
+                // variant-field projection consistent with the switch.
+                self.bind_pattern(&arm.pat, Some(scrutinee_place.local), arm.pat.span);
             }
             if let Some(guard) = &arm.guard {
                 let guard_op = self.lower_expr_to_operand(guard);
