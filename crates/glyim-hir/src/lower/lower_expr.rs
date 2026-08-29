@@ -1377,7 +1377,6 @@ fn lower_match_expr(
                     | SyntaxKind::PatStruct
                     | SyntaxKind::PatOr
                     | SyntaxKind::PatSlice
-                    | SyntaxKind::PathExpr
                     | SyntaxKind::UsePath => {
                         pat_id = lower_pat(&part, interner, &mut body.pats, diags)
                     }
@@ -1420,6 +1419,8 @@ fn lower_match_expr(
                     guard,
                     body: body_id_val,
                 });
+            } else {
+                // Arm had neither a pattern nor a body; skip it.
             }
         }
     }
