@@ -499,17 +499,29 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         let mut b = Body {
             owner: original_body.owner,
             exprs: original_body.exprs.clone(),
-            pats: original_body.pats.clone(),
+            pats: IndexVec::new(),
             params: Vec::new(),
             span: original_body.span,
             expr_spans: original_body.expr_spans.clone(),
         };
-        // The poll body's sole parameter is `self` (the future struct).
+        // The poll body's sole parameter is `self` (the future struct). Push it
+        // FIRST so it is allocated the lowest local index — the MIR convention
+        // (used by the LLVM prologue and the MIR interpreter) assigns parameter
+        // `i` to `locals[1 + i]`. Appending the original body's pats afterwards
+        // keeps non-parameter local bindings referenced by the body alive,
+        // while `rewrite_for_poll` rewrites the captured async-parameter
+        // references to `self.fN` field accesses. Pushing `self` *after* the
+        // original pats (the previous behaviour) gave `self` a high local
+        // index, so the field rewrite resolved to a different slot than the
+        // parameter binding and the future field read returned garbage.
         let self_pat = b.pats.push(Pat::Binding {
             name: self_name,
             mutability: Mutability::Not,
             subpattern: None,
         });
+        for p in original_body.pats.iter() {
+            b.pats.push(p.clone());
+        }
         b.params.push(self_pat);
         b
     };
