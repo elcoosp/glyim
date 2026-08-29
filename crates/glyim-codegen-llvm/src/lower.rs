@@ -94,6 +94,11 @@ struct LoweringCtx<'ctx, 'a> {
     /// function's unwind continuation (the caller's pad) instead of a
     /// `resume`.
     current_seh_pad: Option<LLVMValueRef>,
+    /// Whether this function returns its result via a hidden sret pointer
+    /// (composite return values that the target ABI cannot pass in registers).
+    /// When true, the caller passes a hidden pointer as the first argument and
+    /// the callee stores its return value there instead of returning it.
+    is_sret: bool,
 }
 impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     fn llvm_int_type(&self, bits: u32) -> inkwell::types::IntType<'ctx> {
@@ -104,46 +109,61 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     /// Build an LLVM function type from a Glyim `FnSig`, applying ABI rules.
     fn llvm_fn_type_from_sig(&self, sig: &glyim_type::FnSig) -> inkwell::types::FunctionType<'ctx> {
         let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-        let fn_abi = match layout_computer.fn_abi_of(sig) {
-            Ok(a) => a,
-            Err(e) => {
-                panic!("fn_abi_of failed: {:?}", e);
-            }
-        };
-
-        let is_sret = matches!(fn_abi.ret.mode, PassMode::Indirect { .. });
-        let mut param_types = Vec::new();
-        if is_sret {
-            param_types.push(self.context.ptr_type(AddressSpace::default()).into());
-        }
-        for arg_abi in &fn_abi.args {
-            let llvm_ty = match arg_abi.mode {
-                PassMode::Direct => self.llvm_type_for_ty(arg_abi.ty),
-                PassMode::Indirect { .. } => self.context.ptr_type(AddressSpace::default()).into(),
-                PassMode::Ignore => continue,
-                _ => self.llvm_type_for_ty(arg_abi.ty),
-            };
-            param_types.push(llvm_ty);
-        }
-        let ret_type = if is_sret {
-            None
-        } else {
-            match fn_abi.ret.mode {
-                PassMode::Ignore => None,
-                _ => Some(self.llvm_type_for_ty(fn_abi.ret.ty)),
-            }
-        };
-        let metadata_param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
-            param_types.iter().map(|t| (*t).into()).collect();
-        if let Some(ret) = ret_type {
-            ret.fn_type(&metadata_param_types, sig.c_variadic)
-        } else {
-            self.context
-                .void_type()
-                .fn_type(&metadata_param_types, sig.c_variadic)
-        }
+        llvm_fn_type_from_sig_inner(self.ty_ctx, &self.target_info, self.context, &layout_computer, sig)
+            .unwrap_or_else(|e| panic!("fn type lowering failed: {:?}", e))
     }
+}
 
+/// Free-function form of `llvm_fn_type_from_sig` so it can be used before a
+/// `LoweringCtx` exists (e.g. when constructing the LLVM `FunctionValue`).
+fn llvm_fn_type_from_sig_inner<'ctx>(
+    ty_ctx: &TyCtx,
+    target_info: &TargetInfo,
+    context: &'ctx Context,
+    layout_computer: &FullLayoutComputer,
+    sig: &glyim_type::FnSig,
+) -> CompResult<inkwell::types::FunctionType<'ctx>> {
+    let fn_abi = match layout_computer.fn_abi_of(sig) {
+        Ok(a) => a,
+        Err(e) => {
+            return Err(vec![GlyimDiagnostic::internal_error(format!("fn_abi_of failed: {:?}", e))]);
+        }
+    };
+
+    let is_sret = matches!(fn_abi.ret.mode, PassMode::Indirect { .. });
+    let mut param_types = Vec::new();
+    if is_sret {
+        param_types.push(context.ptr_type(AddressSpace::default()).into());
+    }
+    for arg_abi in &fn_abi.args {
+        let llvm_ty = match arg_abi.mode {
+            PassMode::Direct => llvm_type_for_ty(ty_ctx, target_info, context, arg_abi.ty)?,
+            PassMode::Indirect { .. } => context.ptr_type(AddressSpace::default()).into(),
+            PassMode::Ignore => continue,
+            _ => llvm_type_for_ty(ty_ctx, target_info, context, arg_abi.ty)?,
+        };
+        param_types.push(llvm_ty);
+    }
+    let ret_type: Option<inkwell::types::BasicTypeEnum<'ctx>> = if is_sret {
+        None
+    } else {
+        match fn_abi.ret.mode {
+            PassMode::Ignore => None,
+            _ => Some(llvm_type_for_ty(ty_ctx, target_info, context, fn_abi.ret.ty)?),
+        }
+    };
+    let metadata_param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+        param_types.iter().map(|t| (*t).into()).collect();
+    if let Some(ret) = ret_type {
+        Ok(ret.fn_type(&metadata_param_types, sig.c_variadic))
+    } else {
+        Ok(context
+            .void_type()
+            .fn_type(&metadata_param_types, sig.c_variadic))
+    }
+}
+
+impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     fn llvm_type_for_ty(&self, ty: Ty) -> inkwell::types::BasicTypeEnum<'ctx> {
         match llvm_type_for_ty(self.ty_ctx, &self.target_info, self.context, ty) {
             Ok(t) => t,
@@ -165,6 +185,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     }
 
     fn alloc_local(&mut self, local: LocalIdx) {
+        // Idempotent: a local may already have a slot from the prologue/alloca
+        // loop (e.g. a function param whose value was just stored by the
+        // prologue). `StorageLive` is allowed to fire again for an already
+        // live local and must NOT re-allocate — re-allocating would hand the
+        // body a fresh, uninitialized slot and silently drop the prologue's
+        // stored value (the `%local_11`/`%local_22` shadow-slot bug).
+        if self.locals[local].is_some() {
+            return;
+        }
         let ty = local_ty(self.body, local);
         let llvm_ty = self.llvm_type_for_ty(ty);
         let name = format!("local_{}", local.index());
@@ -429,14 +458,32 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         if let Ok(layout) = layout_computer.layout_of(current_ty) {
                             match &layout.fields {
                                 FieldsShape::Arbitrary { offsets } => {
-                                    offsets.get(FieldIdx::from_raw(idx.to_raw())).map(|s| s.0)
+                                    // Enums (Multiple variants) store the
+                                    // discriminant tag at `offsets[tag_field]` and
+                                    // the variant payload fields start at
+                                    // `offsets[tag_field + 1]` (mirrors
+                                    // `direct_tag_encoding` / `build_layout_aggregate`,
+                                    // which write the tag at byte 0 and the payload
+                                    // immediately after it). A bare `Field` on the
+                                    // enum local must therefore skip the tag slot,
+                                    // otherwise it reads the discriminant bytes
+                                    // instead of the variant payload -- e.g.
+                                    // `match f.poll() { Ready(v) => v }` returned
+                                    // the tag, not the value (silent miscompile).
+                                    let adjusted = match &layout.variants {
+                                        VariantsShape::Multiple { tag_field, .. } => {
+                                            *tag_field + 1 + idx.to_raw()
+                                        }
+                                        _ => idx.to_raw(),
+                                    };
+                                    offsets.get(FieldIdx::from_raw(adjusted)).map(|s| s.0)
                                 }
                                 _ => None,
                             }
                         } else {
                             None
                         };
-                    let mut ptr = if let Some(offset) = field_offset_bytes {
+                    ptr = if let Some(offset) = field_offset_bytes {
                         let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::default());
                         let base_i8 = self
                             .builder
@@ -972,7 +1019,45 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     }
                 }
             }
-            Rvalue::Discriminant(place) => self.lower_discriminant(place),
+            Rvalue::Discriminant(place) => {
+                // `lower_discriminant` always returns the tag as `i64`, but the
+                // place this rvalue is stored into may be a narrower integer
+                // (e.g. `i8` for a 2-variant enum). Storing the `i64` value
+                // directly would write 8 bytes into a 1-byte `alloca`,
+                // clobbering adjacent stack (a silent miscompile:
+                // `match E::A(42) { E::A(v) => v }` returned 0). Cast to the
+                // destination type's width before returning.
+                let val = self.lower_discriminant(place)?;
+                let dest_llvm_ty = self.llvm_type_for_ty(expected_ty);
+                if val.get_type() != dest_llvm_ty {
+                    let src_int = val.into_int_value();
+                    let dest_int = dest_llvm_ty.into_int_type();
+                    let src_bits = src_int.get_type().get_bit_width();
+                    let dest_bits = dest_int.get_bit_width();
+                    let cast = if dest_bits < src_bits {
+                        self.builder
+                            .build_int_truncate(src_int, dest_int, "discr_trunc")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "trunc discr failed: {:?}",
+                                    e
+                                ))]
+                            })?
+                    } else {
+                        self.builder
+                            .build_int_z_extend(src_int, dest_int, "discr_zext_dest")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "zext discr failed: {:?}",
+                                    e
+                                ))]
+                            })?
+                    };
+                    Ok(cast.as_basic_value_enum())
+                } else {
+                    Ok(val)
+                }
+            }
             Rvalue::Len(place) => {
                 let ptr = self.place_ptr(place)?;
                 let ty = self.place_ty(place);
@@ -2262,6 +2347,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     || ret_ty == Ty::UNIT
                 {
                     self.builder.build_return(None).expect("return failed");
+                } else if self.is_sret {
+                    // Composite return via hidden sret pointer (first parameter).
+                    let ret_op =
+                        glyim_mir::Operand::Move(glyim_mir::Place::new(LocalIdx::from_raw(0)));
+                    let val = self.lower_operand(&ret_op)?;
+                    let params = self.function.get_params();
+                    let sret_ptr = params
+                        .first()
+                        .expect("sret parameter missing")
+                        .into_pointer_value();
+                    self.builder
+                        .build_store(sret_ptr, val)
+                        .expect("store sret failed");
+                    self.builder.build_return(None).expect("return failed");
                 } else {
                     let ret_op =
                         glyim_mir::Operand::Move(glyim_mir::Place::new(LocalIdx::from_raw(0)));
@@ -3131,7 +3230,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     })?
             }
         };
-        let mut param_idx = 1;
+        let mut param_idx = 0;
         if is_sret {
             let sret_attr = self.context.create_enum_attribute(
                 inkwell::attributes::Attribute::get_named_enum_kind_id("sret"),
@@ -3398,6 +3497,33 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     }
 }
 
+/// Map an unsized type (slice `[T]`, `str`/`String`) to its fat-pointer twin
+/// (`{ ptr, len }`) so it can be passed as a function argument / used in an
+/// `FnSig` without tripping `layout_of`'s `Unsized` error. Sized types are
+/// returned unchanged.
+fn lower_unsized_to_fat_ptr(ty_ctx: &TyCtx, ty: Ty) -> Ty {
+    let mk_fat_ptr = |elem: Ty| -> Ty {
+        let ptr_ty = ty_ctx.mk_ref(
+            glyim_type::Region::Static,
+            elem,
+            glyim_core::primitives::Mutability::Not,
+        );
+        let len_ty = ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
+        // A 2-field tuple `{ ptr, usize }` is the fat-pointer representation
+        // `llvm_type_for_ty` produces for slices (struct { ptr, len }).
+        let substs = ty_ctx.intern_substitution(vec![
+            GenericArg::Ty(ptr_ty),
+            GenericArg::Ty(len_ty),
+        ]);
+        ty_ctx.mk_ty(TyKind::Tuple(substs))
+    };
+    match ty_ctx.ty_kind(ty) {
+        TyKind::Slice(elem) => mk_fat_ptr(*elem),
+        TyKind::String => mk_fat_ptr(ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8))),
+        _ => ty,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_body<'ctx>(
     context: &'ctx Context,
@@ -3414,50 +3540,26 @@ pub(crate) fn lower_body<'ctx>(
         "__glyim_fn_{}",
         body.owner.local_id.to_raw()
     );
-    let ret_llvm_ty = llvm_type_for_ty(ty_ctx, &target_info, context, body.return_ty)?;
-    let void_type = context.void_type();
-    let mut param_types = Vec::new();
-    for i in 1..=body.arg_count {
-        let local_idx = LocalIdx::from_raw(i as u32);
-        if let Some(local_decl) = body.locals.get(local_idx) {
-            let param_ty = llvm_type_for_ty(ty_ctx, &target_info, context, local_decl.ty)?;
-            param_types.push(param_ty.into());
-        }
-    }
-    let fn_type = if matches!(ty_ctx.ty_kind(body.return_ty), TyKind::Never | TyKind::Unit)
-        || body.return_ty == Ty::NEVER
-        || body.return_ty == Ty::UNIT
-    {
-        void_type.fn_type(&param_types, false)
-    } else {
-        ret_llvm_ty.fn_type(&param_types, false)
-    };
-    let function = module
-        .get_function(&fn_name)
-        .unwrap_or_else(|| module.add_function(&fn_name, fn_type, None));
-
-    // Apply ABI attributes to function definition parameters.
-    // A missing FnSig for a function that has reached codegen is an internal
-    // compiler error (not a user error): by the time we lower to LLVM IR every
-    // called function must already have had its signature resolved during
-    // typeck/HIR lowering. Silently substituting an empty FnSig here produced a
-    // wrong-arity LLVM function that crashed far from the real cause, so fail
-    // loudly instead.
     let layout_computer = FullLayoutComputer::new(ty_ctx, target_info.clone());
     let fn_def_id = glyim_core::def_id::FnDefId::from_raw(body.owner.local_id.to_raw());
     // Build the FnSig from the (already-monomorphized) body so that generic /
     // async functions like `block_on<F>` or `Future::poll` lower without an
-    // `UnknownType(Param)` ICE in `fn_abi_of`. The LLVM function *type* above is
-    // already derived from `body.locals` / `body.return_ty`; this FnSig must
-    // match it (the generic `ty_ctx.fn_sig` still carries `Param`/`Projection`
-    // types for generic definitions). Fall back to `ty_ctx.fn_sig` only when the
-    // body does not carry concrete locals (e.g. direct-body unit-test lowers).
+    // `UnknownType(Param)` ICE in `fn_abi_of`. The LLVM function *type* below is
+    // derived from the same `fn_sig` so the sret hidden-pointer parameter and the
+    // function's declared type stay in agreement.
     let fn_sig = {
         let mut input_args: Vec<GenericArg> = Vec::new();
         for i in 1..=body.arg_count {
             let local_idx = LocalIdx::from_raw(i as u32);
             if let Some(local_decl) = body.locals.get(local_idx) {
-                input_args.push(GenericArg::Ty(local_decl.ty));
+                // Unsized types (slice, str) cannot be passed by value — the
+                // ABI layout of an unsized `Ty` is an error (`Unsized(Ty)`).
+                // The MIR represents such a parameter as its fat-pointer type
+                // (ptr + len), which is what `llvm_type_for_ty` lowers it to.
+                // Map the unsized local type to its fat-pointer twin here so
+                // `fn_abi_of`/`layout_of` never receive an unsized argument.
+                let arg_ty = lower_unsized_to_fat_ptr(ty_ctx, local_decl.ty);
+                input_args.push(GenericArg::Ty(arg_ty));
             }
         }
         let inputs = ty_ctx.intern_substitution(input_args);
@@ -3465,11 +3567,6 @@ pub(crate) fn lower_body<'ctx>(
             .fn_sig(fn_def_id)
             .map(|s| s.abi)
             .unwrap_or(Abi::Glyim);
-        // The body's `return_ty` may itself carry a cross-arena stale
-        // `Poll<F::Output>` (e.g. an async `poll` method). Concretize it the
-        // same way call signatures are resolved: substitute the function's own
-        // `self`/`F` params (already substituted into this mono body) and
-        // recover `Future::Output` via the name-string lookup.
         let param_map: Vec<GenericArg> =
             body.locals.iter().skip(1).map(|l| GenericArg::Ty(l.ty)).collect();
         let concretized = LoweringCtx::concretize_fn_sig(
@@ -3491,6 +3588,13 @@ pub(crate) fn lower_body<'ctx>(
             abi,
         }
     };
+    // Derive the LLVM function type (including any sret hidden pointer) from the
+    // same `fn_sig` so the declared type matches the ABI attributes applied below.
+    let fn_type = llvm_fn_type_from_sig_inner(ty_ctx, &target_info, context, &layout_computer, &fn_sig)
+        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fn type lowering failed: {:?}", e))])?;
+    let function = module
+        .get_function(&fn_name)
+        .unwrap_or_else(|| module.add_function(&fn_name, fn_type, None));
     // Emit the calling convention for FFI functions (unstub-5 Phase 4.3).
     // `extern "C" fn` / `extern fn` compile to the platform C calling
     // convention so the symbol is callable from C; the default Glyim ABI uses
@@ -3507,7 +3611,16 @@ pub(crate) fn lower_body<'ctx>(
         },
     };
     function.set_call_conventions(cc);
+    // The crate entry `main` body is called by the generated C-convention
+    // `main` wrapper (and by the C shim). On AArch64, calling a `fastcc` fn
+    // from a `ccc` site silently drops the return value (different return
+    // register), so force the entry-main body to the C convention as well.
+    if entry_main == Some(body.owner.local_id.to_raw()) {
+        function.set_call_conventions(0u32); // LLVMCCallConv::C
+    }
+    let mut is_sret_ret = false;
     if let Ok(fn_abi) = layout_computer.fn_abi_of(&fn_sig) {
+        is_sret_ret = matches!(fn_abi.ret.mode, glyim_layout::PassMode::Indirect { .. });
         let mut param_idx = 0;
         if matches!(fn_abi.ret.mode, glyim_layout::PassMode::Indirect { .. }) {
             let sret_attr = context.create_enum_attribute(
@@ -3637,9 +3750,60 @@ pub(crate) fn lower_body<'ctx>(
         debug_ctx,
         current_landingpad: None,
         current_seh_pad: None,
+        is_sret: is_sret_ret,
     };
     for (local_idx, _local_decl) in body.locals.iter_enumerated() {
         lowering_ctx.alloc_local(local_idx);
+    }
+    // Prologue: copy each incoming LLVM function parameter into its local
+    // slot. The MIR uses locals 1..=arg_count as the function's formal
+    // parameters; if we don't materialize the LLVM `%0..%n` params into those
+    // slots, every read of a parameter reads uninitialized stack garbage
+    // (silent miscompile of *every* function call in real-llvm codegen).
+    let fn_abi = layout_computer.fn_abi_of(&fn_sig).ok();
+    for i in 1..=body.arg_count {
+        let local_idx = LocalIdx::from_raw(i as u32);
+        let params = function.get_params();
+        // When returning via sret, an extra hidden pointer is prepended as the
+        // function's first parameter; the real arguments start at index 1.
+        let param_idx = if lowering_ctx.is_sret { i } else { i - 1 };
+        if let Some(param_val) = params.get(param_idx as usize) {
+            let local_ptr = lowering_ctx.get_local_ptr(local_idx);
+            // A byval/Indirect param arrives as a *pointer* to a copy of the
+            // struct. The local slot is expected to hold the struct *value*
+            // (the rest of codegen GEPs/loads the value from it), so we must
+            // dereference the byval pointer here — otherwise we store the
+            // pointer itself as if it were the struct and every field read
+            // operates on a mis-typed pointer (silent miscompile → garbage).
+            let arg_mode = fn_abi
+                .as_ref()
+                .and_then(|abi| abi.args.get((i - 1) as usize))
+                .map(|a| matches!(a.mode, glyim_layout::PassMode::Indirect { .. }));
+            match arg_mode {
+                Some(true) => {
+                    let llvm_ty = lowering_ctx
+                        .llvm_type_for_ty(body.locals.get(local_idx).map(|l| l.ty).unwrap());
+                    let loaded = lowering_ctx
+                        .builder
+                        .build_load(
+                            llvm_ty,
+                            param_val.into_pointer_value(),
+                            "param_load",
+                        )
+                        .expect("failed to load byval param");
+                    lowering_ctx
+                        .builder
+                        .build_store(local_ptr, loaded)
+                        .expect("failed to store param into local");
+                }
+                _ => {
+                    lowering_ctx
+                        .builder
+                        .build_store(local_ptr, *param_val)
+                        .expect("failed to store param into local");
+                }
+            }
+        }
     }
     for (bb_idx, bb_data) in body.basic_blocks.iter_enumerated() {
         let llvm_bb = lowering_ctx.bb_map.get(&bb_idx).unwrap();
@@ -3668,6 +3832,13 @@ pub(crate) fn lower_body<'ctx>(
     // a runnable binary. The wrapper uses the platform C calling convention so
     // libc can invoke it directly.
     if entry_main == Some(body.owner.local_id.to_raw()) {
+        // Glyim `main` has the *real* return type of `fn main() -> R` (e.g. i32
+        // for `fn main() -> i32`). The OS/libc `main` entry point must use the
+        // platform C calling convention so the host (and the C shim) can read
+        // its return value; glyim fns are `fastcc`, and calling a `fastcc` fn
+        // directly from C on AArch64 silently loses the return (wrong reg).
+        // So this `main` (ccc) calls the glyim `main` body and propagates its
+        // value. Functions with `Never`/`Unit` return are mapped to `0`.
         let i32_type = context.i32_type();
         let main_fn_type = i32_type.fn_type(&[], false);
         let main_fn = module.add_function("main", main_fn_type, None);
@@ -3675,16 +3846,26 @@ pub(crate) fn lower_body<'ctx>(
         let main_entry = context.append_basic_block(main_fn, "entry");
         let main_builder = context.create_builder();
         main_builder.position_at_end(main_entry);
-        // Glyim `main` is `fastcc void __glyim_fn_{id}()`; call it, ignore the
-        // (unit) result, and return 0 to the host.
         let callee = module
             .get_function(&fn_name)
             .unwrap_or(function);
-        main_builder
+        // The glyim `main` body is normally `fastcc` (conv 8), but the `main`
+        // wrapper is `ccc` (conv 0). Calling a `fastcc` fn from a `ccc` call
+        // site on AArch64 silently drops the return value (different return
+        // reg), so force the entry-main body to the C convention as well.
+        callee.set_call_conventions(0u32); // LLVMCCallConv::C
+        let call = main_builder
             .build_call(callee, &[], "call_glyim_main")
             .expect("failed to build main call");
+        let retval = if matches!(ty_ctx.ty_kind(body.return_ty), TyKind::Never | TyKind::Unit) {
+            BasicValueEnum::IntValue(i32_type.const_int(0, false))
+        } else {
+            call.try_as_basic_value()
+                .basic()
+                .unwrap_or_else(|| BasicValueEnum::IntValue(i32_type.const_int(0, false)))
+        };
         main_builder
-            .build_return(Some(&i32_type.const_int(0, false)))
+            .build_return(Some(&retval))
             .expect("failed to build main return");
     }
 
