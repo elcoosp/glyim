@@ -226,11 +226,18 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                 };
                 // Recurse into the self type in case it still holds nested params.
                 let concrete_self = substitute_ty(concrete_self, substs, ctx, frozen);
-                let resolved = frozen.resolve_associated_type(
-                    concrete_self,
-                    proj.trait_ref.def_id,
-                    proj.item_name,
-                );
+                // Resolve the associated type by *self-ADT + item-name string*.
+                // The plain `resolve_associated_type` does a `(Ty, TraitDefId)`
+                // table lookup whose keys come from the *type-checker's* arena;
+                // after monomorphization the `self` type may be a handle from a
+                // different (leaked) arena, so the lookup misses and we fall
+                // back to an unresolved `Projection` whose inner type lays out
+                // with align 1. That makes `block_on`'s `Poll<F::Output>` disagree
+                // with the concrete `Poll<i32>` written by the awaited future's
+                // `poll` (tag/value at the wrong byte offset) → silent infinite
+                // loop. The name-string resolver is immune to arena corruption.
+                let item_name_str = frozen.name_str(proj.item_name).to_string();
+                let resolved = frozen.resolve_associated_type_by_self_ty_name(concrete_self, &item_name_str);
                 match resolved {
                     Some(resolved) => resolved,
                     None => {
