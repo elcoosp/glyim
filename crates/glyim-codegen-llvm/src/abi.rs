@@ -54,11 +54,12 @@ impl<'a> FullLayoutComputer<'a> {
                 }
             }
             glyim_core::primitives::TargetAbi::AArch64AAPCS => {
-                if size <= 16 && layout.align.0 <= 8 {
-                    PassMode::Direct
-                } else {
-                    PassMode::Indirect { meta_attrs: false }
-                }
+                // AArch64 returns small aggregates in a single x0 register, but
+                // the aggregate-return lowering reads them back from w0+w1 (two
+                // registers), silently miscompiling every composite return. Route
+                // all non-scalar aggregates through a hidden sret pointer, which
+                // is always correct.
+                PassMode::Indirect { meta_attrs: false }
             }
             glyim_core::primitives::TargetAbi::X86_64Windows => {
                 if size <= 8 && layout.align.0 <= 8 {
@@ -184,13 +185,14 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                             glyim_type::Ty::U32
                         };
 
-                        let data_start = tag_size.align_to(tag_align);
-                        let mut untagged_offsets = glyim_core::arena::IndexVec::new();
-                        if let Some(layout) = variant_layouts.first()
-                            && let FieldsShape::Arbitrary { offsets } = &layout.fields
-                        {
-                            for offset in offsets.iter() {
-                                untagged_offsets.push(*offset + data_start);
+                        let data_start = tag_size.align_to(tag_align).align_to(max_align);
+                        let mut untagged_offsets: glyim_core::arena::IndexVec<glyim_type::ty::FieldIdx, glyim_layout::Size> =
+                            glyim_core::arena::IndexVec::new();
+                        if let Some(layout) = variant_layouts.first() {
+                            if let FieldsShape::Arbitrary { offsets } = &layout.fields {
+                                for offset in offsets.iter() {
+                                    untagged_offsets.push(*offset + data_start);
+                                }
                             }
                         }
 
@@ -206,11 +208,25 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                             variants: variant_layouts,
                         };
 
+                        // `offsets` must place the discriminant tag at byte 0
+                        // (matching `direct_tag_encoding` in glyim-layout, which
+                        // `build_layout_aggregate` uses for the WRITE path) and
+                        // the variant data immediately after it. Omitting the
+                        // tag byte here made `block_on` read the discriminant at
+                        // `data_start` instead of 0 -- a silent miscompile
+                        // (e.g. `match f.poll() { Ready(v) => v }` reads the
+                        // wrong byte and hangs).
+                        let mut field_offsets = glyim_core::arena::IndexVec::new();
+                        field_offsets.push(Size::ZERO);
+                        for o in untagged_offsets.iter() {
+                            field_offsets.push(*o);
+                        }
+
                         return Ok(Layout {
                             size: total_size,
                             align: max_align,
                             fields: FieldsShape::Arbitrary {
-                                offsets: untagged_offsets,
+                                offsets: field_offsets,
                             },
                             variants: variants_shape,
                             is_unsized: false,
