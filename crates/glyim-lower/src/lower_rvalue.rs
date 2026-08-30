@@ -1469,16 +1469,29 @@ impl<'a> MirBuilder<'a> {
             // Skipped for slice-dispatch matches, where the discriminant is the
             // slice *length* rather than the value.
             if !slice_dispatch {
-                // Bind the arm pattern's fields off the *actual* scrutinee
-                // place (`scrutinee_place`), not the `scrut_local` copy temp.
-                // The copy-temp materialization is dropped from the emitted MIR
-                // (its `Assign` is pushed before the discriminant/switch and
-                // never reaches a live block), so binding off it would read an
-                // uninitialized local -- e.g. `match f.poll() { Ready(v) => v }`
-                // would bind `v` to garbage. Binding off `scrutinee_place`
-                // (the same place the discriminant is read from) keeps the
-                // variant-field projection consistent with the switch.
-                self.bind_pattern(&arm.pat, Some(scrutinee_place.local), arm.pat.span);
+                // Bind the arm pattern's fields off the *whole* scrutinee value,
+                // materialized into a temp local. For `match self.state { ... }`
+                // the scrutinee place is `self.state`; projecting arm fields off a
+                // bare `self` local would read the `state` *field* (the whole
+                // enum) instead of the variant's payload field, so `f0` would
+                // capture the entire `Start(..)` aggregate. Materializing the
+                // full `scrutinee_place` into `scrut_local` and binding off that
+                // local makes `bind_pattern` project from the enum value itself.
+                let scrut_local = self.alloc_local(
+                    scrutinee.ty,
+                    glyim_core::primitives::Mutability::Not,
+                    span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(scrut_local),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
+                            scrutinee_place.clone(),
+                        )),
+                    ),
+                    span,
+                );
+                self.bind_pattern(&arm.pat, Some(scrut_local), arm.pat.span);
             }
             if let Some(guard) = &arm.guard {
                 let guard_op = self.lower_expr_to_operand(guard);
