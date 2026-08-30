@@ -34,6 +34,14 @@ pub struct Waker {
 }
 
 impl Waker {
+    /// Construct a standalone waker (used by the I/O reactor and other external
+    /// readiness sources that need to signal an executor thread).
+    pub fn new() -> Waker {
+        Waker {
+            pair: Arc::new((Mutex::new(false), Condvar::new())),
+        }
+    }
+
     /// Wake the associated task: mark it ready and release the executor's wait.
     pub fn wake(&self) {
         let (lock, cvar) = &*self.pair;

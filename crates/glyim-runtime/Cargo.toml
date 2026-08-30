@@ -5,6 +5,7 @@ version.workspace = true
 [dependencies]
 socket2 = "0.5"
 libc = "0.2"
+mio = { version = "1", features = ["net", "os-poll"] }
 glyim-core = { workspace = true }
 tracing = { workspace = true }
 windows-sys = { version = "0.59", features = [
