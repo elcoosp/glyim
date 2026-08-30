@@ -396,7 +396,9 @@ impl UdpSocket {
 /// Parse an IP address from a string.
 fn parse_ip_addr(s: &str) -> Option<IpAddr> {
     if s.contains(':') {
-        Option::None // IPv6 parsing not yet implemented
+        // IPv6 (may contain `::` zero-compression). An IPv4-mapped form
+        // (`::ffff:1.2.3.4`) is out of scope for this pass.
+        parse_ipv6(s).map(IpAddr::V6)
     } else {
         let parts: Vec<&str> = s.split('.');
         if parts.len() != 4 {
