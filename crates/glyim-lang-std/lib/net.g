@@ -194,6 +194,20 @@ impl TcpStream {
             Result::Ok(())
         }
     }
+
+    /// Put this socket into non-blocking mode. Required before driving the
+    /// connection through the async I/O reactor (`glyim_reactor_register`).
+    fn set_nonblocking(&self, nonblocking: bool) -> Result<()> {
+        extern "C" {
+            fn glyim_net_tcp_set_nonblocking(fd: i32, enabled: i32) -> i32;
+        }
+        let rc = unsafe { glyim_net_tcp_set_nonblocking(self.fd, if nonblocking { 1 } else { 0 }) };
+        if rc < 0 {
+            Result::Err(Error::last_os_error())
+        } else {
+            Result::Ok(())
+        }
+    }
 }
 
 impl Read for TcpStream {
