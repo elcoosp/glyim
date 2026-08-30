@@ -308,6 +308,10 @@ enum ErrorKind {
     WriteZero,
     /// An error returned when an operation could not be completed because an end of file was reached prematurely.
     UnexpectedEof,
+    /// An operation could not complete because the I/O resource (socket, pipe,
+    /// etc.) is not ready yet and the call would block. The caller should retry
+    /// after the reactor signals readiness (see `std::task`).
+    WouldBlock,
     /// Any I/O error from the operating system.
     OsError(i32),
 }
@@ -315,7 +319,14 @@ enum ErrorKind {
 impl ErrorKind {
     /// Create an `ErrorKind` from a raw OS error number.
     fn from_raw_os_error(code: i32) -> ErrorKind {
-        ErrorKind::OsError(code)
+        // EWOULDBLOCK / EAGAIN (35 on macOS, 11 on Linux) signal a
+        // non-blocking I/O resource that is not yet ready — the async reactor
+        // retries the operation once it reports readiness.
+        if code == 35 || code == 11 {
+            ErrorKind::WouldBlock
+        } else {
+            ErrorKind::OsError(code)
+        }
     }
 }
 

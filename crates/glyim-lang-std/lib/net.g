@@ -242,6 +242,124 @@ impl Write for TcpStream {
     }
 }
 
+/// A future returned by [`TcpStream::read_async`]: reads from a non-blocking
+/// socket, registering the fd with the async I/O reactor on first poll so the
+/// executor parks (instead of busy-spinning) until the reactor reports
+/// readability.
+struct ReadFuture<'a> {
+    stream: &'a mut TcpStream,
+    buf: &'a mut [u8],
+    registered: bool,
+    token: usize,
+}
+
+impl<'a> Future for ReadFuture<'a> {
+    type Output = Result<usize, Error>;
+
+    fn poll(&mut self, _cx: &mut Context) -> Poll<Result<usize, Error>> {
+        extern "C" {
+            fn glyim_reactor_register(fd: i32, interest: u32, thread_id: u64) -> usize;
+            fn glyim_reactor_deregister(token: usize);
+        }
+        if !self.registered {
+            // Put the socket in non-blocking mode and register it with the
+            // global reactor, keyed on the current executor thread. The reactor
+            // will `unpark` this thread when the fd becomes readable.
+            self.stream.set_nonblocking(true).expect("set_nonblocking");
+            let tid = thread::current_id().to_u64();
+            self.token = unsafe { glyim_reactor_register(self.stream.fd, 1, tid) };
+            self.registered = true;
+            return Poll::Pending;
+        }
+        match self.stream.read(self.buf) {
+            Result::Ok(n) => {
+                unsafe { glyim_reactor_deregister(self.token) };
+                Poll::Ready(Result::Ok(n))
+            }
+            Result::Err(e) => {
+                if e.kind() == ErrorKind::WouldBlock {
+                    // Not ready yet; the reactor will wake us.
+                    Poll::Pending
+                } else {
+                    unsafe { glyim_reactor_deregister(self.token) };
+                    Poll::Ready(Result::Err(e))
+                }
+            }
+        }
+    }
+}
+
+/// A future returned by [`TcpStream::write_async`]: writes to a non-blocking
+/// socket, registering the fd with the async I/O reactor on first poll.
+struct WriteFuture<'a> {
+    stream: &'a mut TcpStream,
+    buf: &'a [u8],
+    written: usize,
+    registered: bool,
+    token: usize,
+}
+
+impl<'a> Future for WriteFuture<'a> {
+    type Output = Result<usize, Error>;
+
+    fn poll(&mut self, _cx: &mut Context) -> Poll<Result<usize, Error>> {
+        extern "C" {
+            fn glyim_reactor_register(fd: i32, interest: u32, thread_id: u64) -> usize;
+            fn glyim_reactor_deregister(token: usize);
+        }
+        if !self.registered {
+            self.stream.set_nonblocking(true).expect("set_nonblocking");
+            let tid = thread::current_id().to_u64();
+            self.token = unsafe { glyim_reactor_register(self.stream.fd, 2, tid) };
+            self.registered = true;
+            return Poll::Pending;
+        }
+        // Write whatever remains; loop until the socket accepts bytes or blocks.
+        while self.written < self.buf.len() {
+            match self.stream.write(&self.buf[self.written..]) {
+                Result::Ok(0) => break,
+                Result::Ok(n) => self.written += n,
+                Result::Err(e) => {
+                    if e.kind() == ErrorKind::WouldBlock {
+                        return Poll::Pending;
+                    }
+                    unsafe { glyim_reactor_deregister(self.token) };
+                    return Poll::Ready(Result::Err(e));
+                }
+            }
+        }
+        unsafe { glyim_reactor_deregister(self.token) };
+        Poll::Ready(Result::Ok(self.written))
+    }
+}
+
+impl TcpStream {
+    /// Asynchronously read from this socket. Returns a future that resolves to
+    /// the number of bytes read. The fd is registered with the async I/O
+    /// reactor on first poll.
+    fn read_async<'b>(&'b mut self, buf: &'b mut [u8]) -> ReadFuture<'b> {
+        ReadFuture {
+            stream: self,
+            buf,
+            registered: false,
+            token: 0,
+        }
+    }
+
+    /// Asynchronously write to this socket. Returns a future that resolves to
+    /// the number of bytes written. The fd is registered with the async I/O
+    /// reactor on first poll.
+    fn write_async<'b>(&'b mut self, buf: &'b [u8]) -> WriteFuture<'b> {
+        WriteFuture {
+            stream: self,
+            buf,
+            written: 0,
+            registered: false,
+            token: 0,
+        }
+    }
+}
+
 /// A TCP socket server, listening for connections.
 struct TcpListener {
     fd: i32,
