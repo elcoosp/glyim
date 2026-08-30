@@ -1465,7 +1465,7 @@ pub unsafe extern "C" fn glyim_thread_spawn_named(
     let arg_usize = arg as usize;
     let mut builder = thread::Builder::new();
     if !name.is_null() && name_len > 0 {
-        let bytes = std::slice::from_raw_parts(name, name_len);
+        let bytes = unsafe { std::slice::from_raw_parts(name, name_len) };
         if let Ok(s) = std::str::from_utf8(bytes) {
             builder = builder.name(s.to_string());
         }

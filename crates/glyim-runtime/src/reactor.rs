@@ -3,20 +3,18 @@
 //! The reactor owns one `mio::Poll` running on a dedicated background thread.
 //! Callers register a non-blocking file descriptor together with the [`Waker`]
 //! that should be signalled when the fd becomes readable (or writable, per the
-//! registered `Interest`). The background thread blocks in `poll.poll(...)`
-//! and, on each readiness event, marks the associated slot and calls the waker
-//! so the executor's parked thread is released instead of busy-spinning.
+//! registered `Interest`). The background thread blocks in `poll.poll(...)` and,
+//! on each readiness event, marks the associated slot and calls the waker so the
+//! executor's parked thread is released instead of busy-spinning.
 //!
-//! This is the dependency-light (mio only) half of the async executor that lets
-//! I/O-bound futures make progress: a `TcpStream::read_async` future would
-//! register its fd on first `Pending` and the generated `poll` returns
-//! `Pending` without spinning; the reactor thread wakes it when `mio` reports
-//! readability.
-//!
-//! The `.g` async socket future types that *use* this reactor are a tracked
-//! follow-up (they require compiler/type-system work for `async fn` in the
-//! stdlib surface), so this module exposes a small, directly-testable Rust API
-//! (`register` / `take_ready`) plus a real localhost-socket integration test.
+//! Two registration paths are supported:
+//! * [`Reactor::register`] takes ownership of a `mio::Source` (used by Rust-side
+//!   async tests and futures).
+//! * [`Reactor::register_fd`] takes a raw fd + an executor thread id and wakes
+//!   that thread via `glyim_thread_unpark` on readiness. This is the bridge the
+//!   `.g` async socket futures use: on first `poll` they set the fd non-blocking,
+//!   call `glyim_reactor_register(fd, interest, current_thread_id)`, and return
+//!   `Pending`; the reactor wakes the executor thread when mio reports readiness.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,6 +22,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use mio::{event::Source, Interest, Token};
+use std::os::unix::io::FromRawFd;
 
 use crate::async_runtime::Waker;
 
@@ -39,7 +38,6 @@ trait Register: Send {
         token: Token,
         interest: Interest,
     ) -> std::io::Result<()>;
-    fn deregister_from(&mut self, poll: &mut mio::Poll) -> std::io::Result<()>;
 }
 
 impl<S: Source + Send> Register for S {
@@ -51,20 +49,24 @@ impl<S: Source + Send> Register for S {
     ) -> std::io::Result<()> {
         poll.registry().register(self, token, interest)
     }
-    fn deregister_from(&mut self, poll: &mut mio::Poll) -> std::io::Result<()> {
-        poll.registry().deregister(self)
-    }
 }
 
 /// Commands sent from the executor thread to the reactor thread.
 enum Command {
-    /// Register `source` under `token` for `interest`; on readiness call
-    /// `waker.wake()`.
+    /// Register `source` under `token` for `interest`; on readiness call the
+    /// slot's waker (created in `register`).
     Register {
         token: usize,
         source: Box<dyn Register + Send>,
-        waker: Waker,
         interest: Interest,
+    },
+    /// Register a raw fd for `interest`; on readiness wake executor `thread_id`
+    /// via `glyim_thread_unpark` (the `.g` async `Future`/`Waker` model).
+    RegisterFd {
+        token: usize,
+        fd: i32,
+        interest: Interest,
+        thread_id: usize,
     },
     /// Stop the reactor thread.
     Shutdown,
@@ -135,11 +137,40 @@ impl Reactor {
             .send(Command::Register {
                 token,
                 source: Box::new(source),
-                waker,
                 interest,
             })
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "reactor closed"))?;
         Ok(token)
+    }
+
+    /// Register a raw, already-non-blocking fd for `interest`, waking the
+    /// executor thread `thread_id` (via `glyim_thread_unpark`) when it becomes
+    /// ready. Returns a token usable with [`Reactor::deregister`].
+    ///
+    /// Unlike [`Reactor::register`], this borrows the fd only for registration
+    /// (via `mio::net::TcpStream::from_raw_fd`) and stores the resulting source
+    /// in `sources` so it stays registered for the reactor's lifetime. This is
+    /// the bridge the `.g` async socket futures use.
+    pub fn register_fd(&self, fd: i32, interest: Interest, thread_id: usize) -> usize {
+        let mut nt = self.next_token.lock().unwrap();
+        *nt += 1;
+        let token = *nt;
+        self.slots.lock().unwrap().insert(
+            token,
+            Slot {
+                waker: Waker::new(),
+                ready: Arc::new(AtomicBool::new(false)),
+            },
+        );
+        self.tx
+            .send(Command::RegisterFd {
+                token,
+                fd,
+                interest,
+                thread_id,
+            })
+            .ok();
+        token
     }
 
     /// Remove a previously registered fd: clears the slot bookkeeping AND drops
@@ -157,6 +188,30 @@ impl Reactor {
             .get(&token)
             .map(|s| s.ready.swap(false, Ordering::AcqRel))
             .unwrap_or(false)
+    }
+
+    /// Lazily-started process-wide reactor singleton. The `.g` async runtime
+    /// registers fds here so a single background thread drives all I/O.
+    pub fn global() -> Arc<Reactor> {
+        static GLOBAL: std::sync::OnceLock<Arc<Reactor>> = std::sync::OnceLock::new();
+        GLOBAL
+            .get_or_init(|| {
+                // If the reactor can't start (no kqueue/epoll), fall back to a
+                // minimal inert reactor (no background thread). Async I/O would
+                // then rely on the executor's poll-timeout to make progress —
+                // the pre-reactor behavior.
+                Reactor::new().unwrap_or_else(|_| {
+                    let (tx, _rx) = channel::<Command>();
+                    Arc::new(Reactor {
+                        tx,
+                        next_token: Mutex::new(0),
+                        slots: Arc::new(Mutex::new(HashMap::new())),
+                        sources: Arc::new(Mutex::new(HashMap::new())),
+                        join: Mutex::new(None),
+                    })
+                })
+            })
+            .clone()
     }
 }
 
@@ -180,6 +235,9 @@ fn run_reactor(
     };
     // Map mio tokens -> our slot tokens.
     let mut mio_to_slot: HashMap<Token, usize> = HashMap::new();
+    // For fds registered via `RegisterFd`, the executor thread to unpark on
+    // readiness (the `.g` waker model resumes by thread id, not by Rust Waker).
+    let fd_thread: Arc<Mutex<HashMap<usize, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     let mut events = mio::Events::with_capacity(1024);
 
     loop {
@@ -197,12 +255,28 @@ fn run_reactor(
                     // Keep the source alive for the reactor's lifetime (dropping a
                     // mio `Source` deregisters its fd from kqueue).
                     sources.lock().unwrap().insert(token, source);
-                    // Best-effort: a registration that fails (e.g. fd already
-                    // registered elsewhere) is skipped for this minimal impl.
                     if let Some(src) = sources.lock().unwrap().get_mut(&token) {
                         let _ = src.register_with(&mut poll, mt, interest);
                     }
                     mio_to_slot.insert(mt, token);
+                }
+                Command::RegisterFd {
+                    token,
+                    fd,
+                    interest,
+                    thread_id,
+                } => {
+                    let mt = Token(token);
+                    // Wrap the raw fd in a mio TcpStream and keep it alive in
+                    // `sources` so the fd stays registered. The caller must have
+                    // already put the fd in non-blocking mode.
+                    let src = unsafe { mio::net::TcpStream::from_raw_fd(fd) };
+                    sources.lock().unwrap().insert(token, Box::new(src));
+                    if let Some(s) = sources.lock().unwrap().get_mut(&token) {
+                        let _ = s.register_with(&mut poll, mt, interest);
+                    }
+                    mio_to_slot.insert(mt, token);
+                    fd_thread.lock().unwrap().insert(token, thread_id);
                 }
             }
         }
@@ -221,6 +295,11 @@ fn run_reactor(
                     slot.ready.store(true, Ordering::Release);
                     slot.waker.wake();
                 }
+                // For fd-based registrations, wake the executor thread directly
+                // (the `.g` async model resumes by thread id via unpark).
+                if let Some(tid) = fd_thread.lock().unwrap().get(&slot_token).copied() {
+                    unsafe { glyim_thread_unpark(tid) };
+                }
             }
         }
 
@@ -231,10 +310,38 @@ fn run_reactor(
     }
 }
 
+unsafe extern "C" {
+    fn glyim_thread_unpark(id: usize);
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// FFI entry point used by the `.g` async runtime. Registers `fd` (which must
+/// already be in non-blocking mode) for `interest` (1=READ, 2=WRITE, 3=BOTH)
+/// and wakes the executor thread `thread_id` (via `glyim_thread_unpark`) when
+/// the fd becomes ready. Returns a token to pass to `glyim_reactor_deregister`.
+pub unsafe extern "C" fn glyim_reactor_register(fd: i32, interest: u32, thread_id: usize) -> usize {
+    let interest = match interest {
+        1 => Interest::READABLE,
+        2 => Interest::WRITABLE,
+        3 => Interest::READABLE | Interest::WRITABLE,
+        _ => Interest::READABLE,
+    };
+    Reactor::global().register_fd(fd, interest, thread_id)
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// FFI entry point. Removes a previously-registered fd from the reactor.
+pub unsafe extern "C" fn glyim_reactor_deregister(token: usize) {
+    Reactor::global().deregister(token);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::os::unix::io::IntoRawFd;
 
     #[test]
     fn reactor_wakes_on_socket_readable() {
@@ -272,5 +379,92 @@ mod tests {
 
         drop(reactor);
         let _ = _peer_addr;
+    }
+
+    #[test]
+    fn reactor_fd_registration_detects_readiness() {
+        // Verify the fd-based registration path that the `.g` async futures use:
+        // register a raw fd (interest=READABLE) and confirm the reactor reports
+        // readiness when a peer writes to it. On readiness the reactor also calls
+        // `glyim_thread_unpark(thread_id)` to wake the `.g` executor — the same
+        // wake mechanism `task::block_on` relies on.
+        use std::os::unix::io::IntoRawFd;
+
+        let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = std_listener.local_addr().unwrap();
+        let mut peer = std::net::TcpStream::connect(addr).unwrap();
+        let (accepted, _pa) = std_listener.accept().unwrap();
+        let fd = accepted.into_raw_fd();
+
+        let reactor = Reactor::new().expect("reactor starts");
+        // `thread_id` is the executor thread the reactor will unpark on readiness;
+        // any non-zero ThreadStore id is accepted here (the wake itself is covered
+        // by the runtime's thread tests). We use the current thread's id.
+        unsafe extern "C" {
+            fn glyim_thread_current_id() -> usize;
+        }
+        let thread_id = unsafe { glyim_thread_current_id() };
+        let token = reactor.register_fd(fd, Interest::READABLE, thread_id);
+
+        // Give the reactor thread a moment to process the registration command
+        // before the peer writes, so the fd is watched when data arrives.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Write from the peer so the fd becomes readable.
+        peer.write_all(b"ping").unwrap();
+        peer.flush().unwrap();
+
+        // The reactor must detect readiness on the registered fd.
+        let mut ok = false;
+        for _ in 0..40 {
+            if reactor.take_ready(token) {
+                ok = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(ok, "reactor must detect readiness on the registered fd");
+        reactor.deregister(token);
+        drop(reactor);
+        let _ = _pa;
+    }
+
+    #[test]
+    fn reactor_unpark_wakes_executor_thread() {
+        // Verify the wake primitive the reactor uses on fd readiness:
+        // `glyim_thread_unpark(id)` must release a thread parked via the glyim
+        // thread bridge. This is what makes `.g` async I/O resume without spinning.
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc as StdArc;
+
+        let woken = StdArc::new(AtomicBool::new(false));
+        let woken_bg = woken.clone();
+        unsafe extern "C" {
+            fn glyim_thread_spawn(f: extern "C" fn(*mut u8), arg: *mut u8) -> usize;
+            fn glyim_thread_unpark(id: usize);
+        }
+        extern "C" fn exec_entry(arg: *mut u8) {
+            let w = unsafe { &*(arg as *const AtomicBool) };
+            // Park; the test will unpark this thread via glyim_thread_unpark.
+            std::thread::park();
+            w.store(true, Ordering::SeqCst);
+        }
+        let exec_id =
+            unsafe { glyim_thread_spawn(exec_entry, &*woken_bg as *const AtomicBool as *mut u8) };
+        assert!(exec_id != 0, "executor must spawn with a ThreadStore id");
+
+        // Unpark via the same id the reactor would use.
+        unsafe { glyim_thread_unpark(exec_id) };
+
+        // The executor should have been released and set the flag.
+        let mut ok = false;
+        for _ in 0..40 {
+            if woken.load(Ordering::SeqCst) {
+                ok = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(ok, "glyim_thread_unpark must release the spawned executor thread");
     }
 }
