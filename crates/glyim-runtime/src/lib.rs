@@ -1451,6 +1451,50 @@ pub unsafe extern "C" fn glyim_thread_spawn(f: extern "C" fn(*mut u8), arg: *mut
 
 #[unsafe(no_mangle)]
 /// # Safety
+/// FFI entry point. `f` must be a valid function pointer; `arg` must be a
+/// pointer the caller intends `f` to receive exactly once. `name`/`name_len`
+/// optionally describe a thread name (NUL-terminated UTF-8 slice, may be null
+/// when `name_len == 0`); `stack_size` of 0 means "use the OS default".
+pub unsafe extern "C" fn glyim_thread_spawn_named(
+    name: *const u8,
+    name_len: usize,
+    stack_size: usize,
+    f: extern "C" fn(*mut u8),
+    arg: *mut u8,
+) -> usize {
+    let arg_usize = arg as usize;
+    let mut builder = thread::Builder::new();
+    if !name.is_null() && name_len > 0 {
+        let bytes = std::slice::from_raw_parts(name, name_len);
+        if let Ok(s) = std::str::from_utf8(bytes) {
+            builder = builder.name(s.to_string());
+        }
+    }
+    if stack_size > 0 {
+        builder = builder.stack_size(stack_size);
+    }
+    let spawned = builder.spawn(move || {
+        let arg_ptr = arg_usize as *mut u8;
+        f(arg_ptr);
+    });
+    let handle = match spawned {
+        Ok(h) => h,
+        Err(_) => return 0,
+    };
+    let thread = handle.thread().clone();
+    let info = ThreadInfo {
+        handle,
+        thread: Arc::new(thread),
+    };
+    let mut store = threads().lock().unwrap();
+    let id = store.next_id;
+    store.next_id += 1;
+    store.infos.insert(id, info);
+    id
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_thread_join(handle: usize) -> i32 {
     let handle_id = handle;
@@ -1610,6 +1654,8 @@ pub mod fs;
 // ---------------------------------------------------------------------------
 
 pub mod async_runtime;
+/// Single-reactor-thread I/O readiness dispatcher (plan §P2-2).
+pub mod reactor;
 
 #[cfg(test)]
 mod tests;

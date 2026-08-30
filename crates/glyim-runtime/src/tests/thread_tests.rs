@@ -65,3 +65,60 @@ fn thread_current_id_and_parallelism() {
         .unwrap_or(1);
     assert!(parallelism >= 1, "Should have at least 1 parallelism");
 }
+
+/// Prove the `glyim_thread_spawn_named` FFI entry point (used by
+/// `std::thread::Builder::spawn` in the `.g` stdlib) actually spawns a
+/// *named* OS thread and returns a valid id that `glyim_thread_join` can wait
+/// on. This mirrors exactly what `thread.g::spawn_impl` does when a name is
+/// set, so it covers the previously-missing runtime symbol.
+#[test]
+fn glyim_thread_spawn_named_joins_value() {
+    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::sync::Arc;
+
+    unsafe extern "C" {
+        fn glyim_thread_spawn_named(
+            name: *const u8,
+            name_len: usize,
+            stack_size: usize,
+            f: extern "C" fn(*mut u8),
+            arg: *mut u8,
+        ) -> usize;
+        fn glyim_thread_join(thread_id: u64) -> i32;
+    }
+
+    static RESULT: AtomicI32 = AtomicI32::new(0);
+    let shared = Arc::new(AtomicI32::new(0));
+    let shared_ptr = Arc::into_raw(shared) as *mut AtomicI32 as *mut u8;
+
+    extern "C" fn entry(arg: *mut u8) {
+        let shared = unsafe { &*(arg as *const AtomicI32) };
+        shared.store(99, Ordering::SeqCst);
+        RESULT.store(99, Ordering::SeqCst);
+    }
+
+    let name = b"worker-1\0";
+    let id = unsafe {
+        glyim_thread_spawn_named(
+            name.as_ptr(),
+            name.len() - 1, // exclude the NUL terminator
+            0,              // 0 = default stack size
+            entry,
+            shared_ptr,
+        )
+    };
+    assert!(id != 0, "glyim_thread_spawn_named must return a non-zero id");
+
+    let rc = unsafe { glyim_thread_join(id as u64) };
+    assert_eq!(rc, 0, "glyim_thread_join should return 0 for clean exit");
+
+    assert_eq!(
+        RESULT.load(Ordering::SeqCst),
+        99,
+        "named thread must have run its entry function"
+    );
+    // Reclaim the Arc so we don't leak it.
+    unsafe {
+        let _ = Arc::from_raw(shared_ptr as *mut AtomicI32);
+    }
+}
