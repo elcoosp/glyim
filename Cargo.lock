@@ -1203,11 +1203,8 @@ name = "glyim-mir-interp"
 version = "0.1.0"
 dependencies = [
  "glyim-core",
- "glyim-db",
- "glyim-def-map",
  "glyim-layout",
  "glyim-mir",
- "glyim-pipeline",
  "glyim-span",
  "glyim-test",
  "glyim-type",

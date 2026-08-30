@@ -1177,12 +1177,12 @@ fn find_trait_default_body(
     let trait_name = trait_path.as_name()?;
 
     for (_item_id, item) in hir.items.iter_enumerated() {
-        if let ItemKind::Trait(trait_item) = &item.kind
-            && item.name == trait_name
-        {
-            for method in &trait_item.methods {
-                if method.name == method_name {
-                    return method.default_body;
+        if let ItemKind::Trait(trait_item) = &item.kind {
+            if item.name == trait_name {
+                for method in &trait_item.methods {
+                    if method.name == method_name {
+                        return method.default_body;
+                    }
                 }
             }
         }
