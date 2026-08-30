@@ -22,8 +22,8 @@ use glyim_diag::GlyimDiagnostic;
 use glyim_span::Span;
 
 use crate::{
-    Body, BodyId, CrateHir, Expr, ExprId, FnItem, Item, ItemId, ItemKind, Literal, Name,
-    Param, Path, PathKind, PathSegment, Visibility,
+    Body, BodyId, CrateHir, Expr, ExprId, FnItem, Item, ItemId, ItemKind, Literal, Name, Param,
+    Path, PathKind, PathSegment, TypeRef, Visibility,
 };
 
 use crate::lower::lower_async::desugar_async;
@@ -322,25 +322,189 @@ fn build_async_hir_with_loop_await() -> CrateHir {
     }
 }
 
-/// Phase 3 (GLYIM_DESTUB_PLAN): an `.await` inside a `for` loop body must be
-/// rejected with a clear compile-time diagnostic — NOT silently lowered into
-/// the broken state-machine skeleton that hardcodes `Poll::Pending` (which
-/// would hang forever). This is the plan's "single most important line".
+/// Builds `async fn loop_await(n: i32) -> i32 { let mut total = 0; let mut i = 0;
+/// while i < n { total = dep(i).await; i = i + 1; } total }` — the supported
+/// M4/M5 loop-await shape: a single `.await` inside a `while` body with a
+/// statically nameable future type (`dep`).
+fn build_async_hir_while_loop_await() -> CrateHir {
+    let interner = Interner::new();
+    let fn_name: Name = interner.intern("loop_await");
+    let n_name: Name = interner.intern("n");
+    let total_name: Name = interner.intern("total");
+    let i_name: Name = interner.intern("i");
+    let dep_name: Name = interner.intern("dep");
+
+    let mut exprs: IndexVec<ExprId, Expr> = IndexVec::new();
+    let mut pats: IndexVec<crate::PatId, crate::Pat> = IndexVec::new();
+
+    let path = |n: Name, exprs: &mut IndexVec<ExprId, Expr>| -> ExprId {
+        exprs.push(Expr::Path(Path {
+            segments: vec![PathSegment {
+                name: n,
+                generic_args: None,
+            }],
+            kind: PathKind::Plain,
+        }))
+    };
+    let i32_ty = TypeRef::Path(Path {
+        segments: vec![PathSegment {
+            name: interner.intern("i32"),
+            generic_args: None,
+        }],
+        kind: PathKind::Plain,
+    });
+
+    let zero = exprs.push(Expr::Literal(Literal::Int(0, None)));
+    let total_pat = pats.push(crate::Pat::Binding {
+        name: total_name,
+        mutability: glyim_core::primitives::Mutability::Mut,
+        subpattern: None,
+    });
+    let let_total = exprs.push(Expr::Let {
+        pat: total_pat,
+        value: zero,
+    });
+    let i_pat = pats.push(crate::Pat::Binding {
+        name: i_name,
+        mutability: glyim_core::primitives::Mutability::Mut,
+        subpattern: None,
+    });
+    let let_i = exprs.push(Expr::Let {
+        pat: i_pat,
+        value: zero,
+    });
+
+    let i_path = path(i_name, &mut exprs);
+    let n_path = path(n_name, &mut exprs);
+    let cond = exprs.push(Expr::Binary {
+        op: glyim_core::primitives::BinOp::Lt,
+        lhs: i_path,
+        rhs: n_path,
+    });
+
+    let i_path2 = path(i_name, &mut exprs);
+    let dep_path = path(dep_name, &mut exprs);
+    let dep_call = exprs.push(Expr::Call {
+        func: dep_path,
+        args: vec![i_path2],
+    });
+    let await_expr = exprs.push(Expr::Await { expr: dep_call });
+    let total_path = path(total_name, &mut exprs);
+    let assign_total = exprs.push(Expr::Assign {
+        lhs: total_path,
+        rhs: await_expr,
+    });
+    let i_path3 = path(i_name, &mut exprs);
+    let one = exprs.push(Expr::Literal(Literal::Int(1, None)));
+    let i_inc = exprs.push(Expr::Binary {
+        op: glyim_core::primitives::BinOp::Add,
+        lhs: i_path3,
+        rhs: one,
+    });
+    let i_path4 = path(i_name, &mut exprs);
+    let assign_i = exprs.push(Expr::Assign {
+        lhs: i_path4,
+        rhs: i_inc,
+    });
+    let loop_body = exprs.push(Expr::Block {
+        stmts: vec![assign_total, assign_i],
+        tail: None,
+    });
+
+    let while_expr = exprs.push(Expr::While { cond, body: loop_body });
+    let total_tail = path(total_name, &mut exprs);
+    let block = exprs.push(Expr::Block {
+        stmts: vec![let_total, let_i, while_expr],
+        tail: Some(total_tail),
+    });
+    let _ = block;
+
+    let body = Body {
+        owner: LocalDefId::from_raw(0),
+        exprs: exprs.clone(),
+        pats,
+        params: Vec::new(),
+        span: Span::DUMMY,
+        expr_spans: {
+            let mut s = IndexVec::new();
+            for _ in 0..exprs.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
+    };
+    let body_id = BodyId::from_raw(0);
+
+    let params = vec![Param {
+        name: n_name,
+        ty: Some(i32_ty.clone()),
+        span: Span::DUMMY,
+    }];
+    let fn_item = FnItem {
+        params,
+        return_ty: Some(i32_ty.clone()),
+        body: Some(body_id),
+        is_unsafe: false,
+        is_async: true,
+        is_const: false,
+        generic_params: Vec::new(),
+        where_clauses: Vec::new(),
+        abi: None,
+    };
+    let item = Item {
+        id: ItemId::from_raw(0),
+        name: fn_name,
+        kind: ItemKind::Fn(fn_item),
+        visibility: Visibility::Inherited,
+        span: Span::DUMMY,
+    };
+
+    let mut items: IndexVec<ItemId, Item> = IndexVec::new();
+    items.push(item);
+    let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
+    bodies.push(body);
+    let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
+    body_owners.push(LocalDefId::from_raw(0));
+
+    CrateHir {
+        items,
+        bodies,
+        body_owners,
+        interner,
+    }
+}
+
+
+/// M4/M5 (plan §P2-1): an `.await` inside a `while` loop body, whose awaited
+/// future type is statically nameable, must now desugar to a resumable
+/// `*State` coroutine machine — NOT be rejected. This is the loop-await state
+/// machine: on `Poll::Pending` the in-loop state is left in place and `poll()`
+/// re-drives it on resume, so it can never spin forever.
 #[test]
-fn await_in_loop_is_rejected_with_diagnostic() {
-    let mut hir = build_async_hir_with_loop_await();
+fn while_loop_await_desugars_to_state_machine() {
+    let mut hir = build_async_hir_while_loop_await();
     let mut diags: Vec<GlyimDiagnostic> = Vec::new();
     desugar_async(&mut hir, &mut diags);
+    // Supported shape: no error diagnostic expected.
     assert!(
-        !diags.is_empty(),
-        "await-inside-loop must emit a diagnostic, but none was produced"
-    );
-    let has_loop_error = diags
-        .iter()
-        .any(|d| d.is_error() && d.message.contains("await") && d.message.contains("loop"));
-    assert!(
-        has_loop_error,
-        "expected an error diagnostic mentioning await-inside-loop; got: {:?}",
+        diags.iter().all(|d| !d.is_error()),
+        "while-loop-await should desugar cleanly; got diagnostics: {:?}",
         diags
+    );
+    // It must have produced a `*State` enum (the coroutine state machine).
+    let has_state_enum = hir
+        .items
+        .iter()
+        .any(|it| {
+            let s = hir.interner.resolve(it.name).to_string();
+            s.contains("State") || s.ends_with("Future")
+        });
+    assert!(
+        has_state_enum,
+        "while-loop-await must produce a *State/*Future type; items: {:?}",
+        hir.items
+            .iter()
+            .map(|it| hir.interner.resolve(it.name).to_string())
+            .collect::<Vec<_>>()
     );
 }

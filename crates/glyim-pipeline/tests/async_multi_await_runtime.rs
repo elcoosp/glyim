@@ -265,6 +265,7 @@ fn main() -> i32 {
     // by DefId, exactly as the codegen path does, so `block_on<F>` becomes
     // `block_on<TwoFuture>` with a static `two_poll` call.
     let mono_bodies = comp.monomorphize(main_fn_def_id);
+    std::fs::write("/tmp/mono_dump.txt", format!("{:#?}", mono_bodies)).unwrap();
 
     let main_body = mono_bodies
         .iter()
@@ -333,13 +334,16 @@ fn resolve_main_def_id(comp: &glyim_pipeline::MirCompilation) -> Option<DefId> {
 }
 
 #[test]
-fn p2_1_await_inside_loop_is_rejected_not_miscompiled() {
-    // P2-1 (async-v2 loop-await state machine) is a documented follow-up. The
-    // single most important safety property is that `.await` inside a
-    // `while`/`loop`/`for` body is NEVER silently lowered into the single-poll
-    // desugar (whose `Pending` arm is a `loop {}` that would hang forever). The
-    // desugar must reject it at compile time with a clear, actionable error
-    // (Error 60) instead of producing a silently-miscompiling binary.
+fn p2_1_await_inside_loop_suspends_and_resumes_runtime_returns_3() {
+    // P2-1 proof (async-v2 loop-await state machine, M4/M5): an `.await` inside
+    // a `while` loop body whose future type is statically nameable must now
+    // desugar to a REAL suspend/resume state machine — not be rejected, and
+    // crucially NOT silently lowered into the single-poll desugar (whose
+    // `Pending` arm is a `loop {}` that hangs forever). We prove it both
+    // structurally (the generated `poll` is a genuine state machine) AND by
+    // *executing* `block_on(countdown(3))` in the MIR interpreter: the future
+    // must suspend on each iteration's `dep(i).await` and resume, accumulating
+    // 0+1+2 = 3. A hang or a wrong value would mean a miscompile.
     let src = r#"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
@@ -359,7 +363,7 @@ async fn countdown(n: i32) -> i32 {
     let mut total = 0;
     let mut i = 0;
     while i < n {
-        // `.await` inside a loop body — must be rejected, not silently desugared.
+        // `.await` inside a loop body — now genuinely desugared to a machine.
         total = total + dep(i).await;
         i = i + 1;
     }
@@ -370,16 +374,40 @@ fn main() -> i32 {
     block_on(f)
 }
 "#;
-    let result = compile_async(src);
-    assert!(
-        result.is_err(),
-        "`.await` inside a loop must be a compile ERROR, never a silently-miscompiling binary"
-    );
-    let diags = result.unwrap_err();
-    assert!(
-        diags.contains("await inside a loop body is not yet supported")
-            || diags.contains("await"),
-        "the rejection must mention the unsupported loop-await; got diagnostics:\n{}",
-        diags
+    let bodies = compile_async(src)
+        .expect("countdown loop-await must compile with zero diagnostics (M4/M5)");
+    // Structural guard: the generated poll body must be a real machine.
+    let poll = find_poll_body(&bodies).expect("generated countdown poll body must exist");
+    assert_is_state_machine(poll, "countdown poll");
+    std::fs::write("/tmp/poll_dump.txt", format!("{poll:#?}")).unwrap();
+
+    // Now run it for real through the interpreter, after monomorphization.
+    let comp = compile_async_full(src).expect("full compile for runtime");
+    let main_def_id = resolve_main_def_id(&comp).expect("main DefId resolvable");
+    let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
+
+    let mono_bodies = comp.monomorphize(main_fn_def_id);
+    std::fs::write("/tmp/mono_dump.txt", format!("{:#?}", mono_bodies)).unwrap();
+
+    let main_body = mono_bodies
+        .iter()
+        .find(|(id, _)| *id == main_def_id)
+        .map(|(_, b)| (**b).clone())
+        .expect("monomorphized main body present");
+
+    let mut interp = Interpreter::new(comp.ty_ctx.as_ref());
+    for (id, b) in &mono_bodies {
+        interp.add_function(*id, (**b).clone());
+    }
+    interp
+        .run_body(&main_body)
+        .expect("main must run to completion without interpreter error");
+    let ret = interp
+        .get_return_value()
+        .expect("main must produce a return value");
+    assert_eq!(
+        ret,
+        InterpValue::Int(3),
+        "block_on(countdown(3)) must execute the loop-await state machine and return 0+1+2 = 3"
     );
 }
