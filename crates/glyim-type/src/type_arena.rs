@@ -29,20 +29,13 @@
 //! own `TypeArena`; `nextest` runs distinct compilations on distinct threads,
 //! so no `TypeArena` is shared across threads. The raw-pointer fields are thus
 //! sound under `unsafe impl Send/Sync` given that invariant.
-//!
-//! NOTE (plan §1.1): the recommended fix is to replace the raw pointers with an
-//! append-only container (`elsa::FrozenVec`) so reads need no `unsafe` and are
-//! sound even under the parallel codegen of §2.4. That refactor is deferred
-//! until §2.4 lands (it is gated on it and `elsa` is not currently in the
-//! dependency set); the current design is sound under the single-threaded
-//! per-compilation invariant asserted above.
 
 use crate::flags::TypeFlags;
 use crate::substitution::*;
 use crate::ty::*;
 use smallvec::SmallVec;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 
 /// A single compilation's canonical type table.
 pub struct TypeArena {
@@ -57,12 +50,16 @@ pub struct TypeArena {
     substitution_data: *mut Vec<Box<SmallVec<[GenericArg; 4]>>>,
     /// Fast structural de-duplication so the same logical type maps to the same
     /// `Ty` handle (the "interning" property) within a compilation.
-    type_index: Mutex<HashMap<TyKind, Ty>>,
-    /// Parallel de-duplication table for substitutions (plan §2.1): the old
-    /// linear `data.iter().position(...)` scan made substitution interning
-    /// O(n) per call → O(n²) across a compilation once monomorphization runs.
-    /// Keyed by the boxed `SmallVec` so identical arg lists share one handle.
-    subst_index: Mutex<HashMap<SmallVec<[GenericArg; 4]>, Substitution>>,
+    /// `RwLock` (§1.1): readers (`TyCtx` queries) take `read()` locks; the single
+    /// writer (`TyCtxMut::alloc_ty`) takes the write lock. This lets `&self` reads
+    /// proceed without blocking behind writer serialization.
+    type_index: RwLock<HashMap<TyKind, Ty>>,
+    /// Parallel de-duplication table for substitutions (plan §2.1). `RwLock` (§1.1)
+    /// for the same reader/writer split. The old linear `data.iter().position(...)`
+    /// re-scan under the write gate (§1.2) has been removed — the HashMap alone is
+    /// the single source of truth under the write gate, so a concurrent insert is
+    /// impossible in the single-threaded-per-compilation model.
+    subst_index: RwLock<HashMap<SmallVec<[GenericArg; 4]>, Substitution>>,
     /// Serializes appends to the three tables above.
     write_gate: Mutex<()>,
 }
@@ -79,8 +76,8 @@ impl TypeArena {
             types: Box::into_raw(Box::new(Vec::new())),
             type_flags: Box::into_raw(Box::new(Vec::new())),
             substitution_data: Box::into_raw(Box::new(Vec::new())),
-            type_index: Mutex::new(HashMap::new()),
-            subst_index: Mutex::new(HashMap::new()),
+            type_index: RwLock::new(HashMap::new()),
+            subst_index: RwLock::new(HashMap::new()),
             write_gate: Mutex::new(()),
         }
     }
@@ -88,9 +85,9 @@ impl TypeArena {
     /// Allocate a fresh type, interning by structure. Returns the canonical
     /// `Ty` handle for `kind`. `flags` must already be computed for `kind`.
     pub fn alloc_ty(&self, kind: TyKind, flags: TypeFlags) -> Ty {
-        // Fast path: already interned.
+        // Fast path: already interned. `RwLock::read()` — cheap shared read.
         {
-            let idx = self.type_index.lock().unwrap();
+            let idx = self.type_index.read().unwrap();
             if let Some(&t) = idx.get(&kind) {
                 return t;
             }
@@ -103,7 +100,8 @@ impl TypeArena {
         let raw = types.len() as u32;
         types.push(Box::new(kind.clone()));
         type_flags.push(flags);
-        self.type_index.lock().unwrap().insert(kind, Ty::from_raw(raw));
+        // Re-lock with write access (the read lock from the fast path is dropped).
+        self.type_index.write().unwrap().insert(kind, Ty::from_raw(raw));
         Ty::from_raw(raw)
     }
 
@@ -130,13 +128,19 @@ impl TypeArena {
     }
 
     /// Intern a substitution's argument list; returns its stable index.
+    ///
+    /// §1.2 fix: the old code did an O(n) linear re-scan (`data.iter().position(...)`)
+    /// after taking the write gate. With `subst_index` in place (plan §2.1), if the
+    /// fast-path read-lock found no match, the write-gate path can trust the HashMap —
+    /// no other thread inserts concurrently (single-threaded per compilation). Removing
+    /// the re-scan makes substitution interning O(1) amortized instead of O(n) per call
+    /// → O(n²) across a compilation.
     pub fn intern_substitution(&self, args: Vec<GenericArg>) -> Substitution {
         let small: SmallVec<[GenericArg; 4]> = args.into_iter().collect();
         let len = small.len() as u16;
-        // Fast path: already interned (plan §2.1 — O(1) HashMap lookup instead
-        // of the old O(n) linear `data.iter().position(...)` scan).
+        // Fast path: already interned. `RwLock::read()` — cheap shared read.
         {
-            let idx = self.subst_index.lock().unwrap();
+            let idx = self.subst_index.read().unwrap();
             if let Some(&s) = idx.get(&small) {
                 return s;
             }
@@ -144,13 +148,13 @@ impl TypeArena {
         let _gate = self.write_gate.lock().unwrap();
         // SAFETY: see `alloc_ty`.
         let data = unsafe { &mut *self.substitution_data };
-        // Re-check under the gate: another thread may have inserted concurrently.
-        if let Some(pos) = data.iter().position(|e| **e == small) {
-            return Substitution::from_raw(pos as u32, len);
-        }
+        // §1.2: no O(n) re-scan here. The read-lock above already proved `small`
+        // is absent from `subst_index`, and the write gate ensures no concurrent
+        // insert, so the HashMap write-lock insert below is the single source of truth.
         let index = data.len() as u32;
         data.push(Box::new(small.clone()));
-        self.subst_index.lock().unwrap().insert(small, Substitution::from_raw(index, len));
+        // Re-lock with write access (the read lock from the fast path is dropped).
+        self.subst_index.write().unwrap().insert(small, Substitution::from_raw(index, len));
         Substitution::from_raw(index, len)
     }
 
