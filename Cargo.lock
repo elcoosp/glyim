@@ -946,6 +946,7 @@ dependencies = [
  "glyim-proc-macro",
  "glyim-test",
  "glyim-type",
+ "serde_json",
  "tempfile",
  "tracing",
  "tracing-subscriber",
