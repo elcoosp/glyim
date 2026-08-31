@@ -95,3 +95,31 @@ jobs:
         run: cargo build -p glyim-runtime
       - name: Run runtime tests (verifies Windows process signaling, Phase 6.4)
         run: cargo nextest run -p glyim-runtime
+
+  miri-check:
+    name: Miri (nightly, type/check crates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install Miri
+        uses: taiki-e/install-action@miri
+      - name: Run Miri on type-checking crates
+        # Miri won't run through LLVM-heavy crates; test the pure-Rust
+        # analysis crates (glyim-type, glyim-borrowck, glyim-solve).
+        run: |
+          cargo miri test -p glyim-type
+          cargo miri test -p glyim-borrowck
+          cargo miri test -p glyim-solve
+
+  dead-code-check:
+    name: Dead-code burndown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check for dead code in codegen crates
+        # Plan §5: dead-code burndown (CLIF target exists before emitting).
+        run: |
+          cargo clippy -p glyim-codegen -- -W dead_code
+          cargo clippy -p glyim-frontend -- -W dead_code
