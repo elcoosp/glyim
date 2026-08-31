@@ -18,6 +18,49 @@
 
 use libc;
 use std::collections::HashMap;
+
+/// # Safety — debug-only bounds sanity for FFI `(ptr, len)` slices (plan §3.2.2)
+///
+/// Every `extern "C"` FFI entry point that reconstructs a Rust slice from a raw
+/// `(ptr, len)` pair is a potential OOB read/write if the codegen backend ever
+/// emits a wrong length. These helpers centralize the slice reconstruction and
+/// gate it behind `debug_assert!` checks that fire in debug builds (and are
+/// compiled away in release). They reject:
+/// - a non-null `ptr` with `len > isize::MAX` (would wrap/overflow `from_raw_parts`),
+/// - the pathological `len == 0` with a dangling/non-null `ptr` is *allowed*
+///   (zero-length slices are always safe), but a null `ptr` with non-zero `len`
+///   is rejected up front by the callers already.
+///
+/// This is purely a defense-in-depth guard; the caller's `# Safety` contract
+/// remains the source of truth. Reconstructing through these helpers means the
+/// length mistake can only happen once (here), not in every hand-written FFI fn.
+pub(crate) unsafe fn slice_from_raw_parts<'a>(
+    ptr: *const u8,
+    len: usize,
+) -> &'a [u8] {
+    debug_assert!(
+        len <= isize::MAX as usize,
+        "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
+         refusing to reconstruct a potentially-overflowing slice"
+    );
+    // SAFETY: caller guarantees `ptr` is valid for `len` bytes of readable
+    // memory. The debug_assert above guards the length against overflow.
+    unsafe { std::slice::from_raw_parts(ptr, len) }
+}
+
+pub(crate) unsafe fn slice_from_raw_parts_mut<'a>(
+    ptr: *mut u8,
+    len: usize,
+) -> &'a mut [u8] {
+    debug_assert!(
+        len <= isize::MAX as usize,
+        "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
+         refusing to reconstruct a potentially-overflowing slice"
+    );
+    // SAFETY: caller guarantees `ptr` is valid for `len` bytes of writable
+    // memory. The debug_assert above guards the length against overflow.
+    unsafe { std::slice::from_raw_parts_mut(ptr, len) }
+}
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -315,7 +358,8 @@ pub unsafe extern "C" fn glyim_fs_read(fd: i32, buf: *mut u8, buf_len: usize) ->
         return FS_EIO as isize;
     }
     // SAFETY: Caller guarantees buf points to writable memory of buf_len bytes.
-    let slice = unsafe { std::slice::from_raw_parts_mut(buf, buf_len) };
+    // The debug_assert inside the helper rejects an overflowing length.
+    let slice = unsafe { slice_from_raw_parts_mut(buf, buf_len) };
     let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
     let file = match table.get_mut(fd) {
         Some(f) => f,
@@ -341,7 +385,8 @@ pub unsafe extern "C" fn glyim_fs_write(fd: i32, buf: *const u8, buf_len: usize)
         return FS_EIO as isize;
     }
     // SAFETY: Caller guarantees buf points to readable memory of buf_len bytes.
-    let slice = unsafe { std::slice::from_raw_parts(buf, buf_len) };
+    // The debug_assert inside the helper rejects an overflowing length.
+    let slice = unsafe { slice_from_raw_parts(buf, buf_len) };
     let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
     let file = match table.get_mut(fd) {
         Some(f) => f,
@@ -598,5 +643,44 @@ pub unsafe extern "C" fn glyim_fs_canonicalize(
             isize::try_from(bytes.len()).unwrap_or(isize::MAX)
         }
         Err(e) => io_err_to_errno(&e) as isize,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Plan §3.2.2: the `(ptr, len)` slice helpers must reject a length that
+    /// would overflow `isize` rather than handing it to `from_raw_parts`,
+    /// which would otherwise produce a fatally mis-sized slice. This is a
+    /// defense-in-depth guard against a codegen backend emitting a wrong
+    /// length over the FFI boundary.
+    #[test]
+    #[should_panic(expected = "exceeds isize::MAX")]
+    fn slice_from_raw_parts_rejects_overflow_len() {
+        let overflow_len = (isize::MAX as usize).wrapping_add(1);
+        // null ptr + overflow len: the debug_assert must fire before any
+        // `from_raw_parts` reconstruction.
+        let _ = unsafe { slice_from_raw_parts(std::ptr::null(), overflow_len) };
+    }
+
+    #[test]
+    #[should_panic(expected = "exceeds isize::MAX")]
+    fn slice_from_raw_parts_mut_rejects_overflow_len() {
+        let overflow_len = (isize::MAX as usize).wrapping_add(1);
+        let _ = unsafe { slice_from_raw_parts_mut(std::ptr::null_mut(), overflow_len) };
+    }
+
+    /// A zero-length slice from a *valid* (non-null, aligned) pointer is
+    /// always safe and must NOT panic — the guard only rejects overflowing
+    /// lengths. (A null pointer is never valid for `from_raw_parts`, even at
+    /// len 0; that case is handled by the FFI callers' `is_null()` checks.)
+    #[test]
+    fn zero_len_slice_from_valid_ptr_is_safe() {
+        let mut sentinel = 0u8;
+        let s = unsafe { slice_from_raw_parts(&sentinel as *const u8, 0) };
+        assert!(s.is_empty());
+        let m = unsafe { slice_from_raw_parts_mut(&mut sentinel as *mut u8, 0) };
+        assert!(m.is_empty());
     }
 }
