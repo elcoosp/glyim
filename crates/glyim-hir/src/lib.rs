@@ -30,6 +30,12 @@
     clippy::needless_lifetimes,
     clippy::collapsible_if
 )]
+// Plan §3.1 (ratchet, not a hard ban): HIR lowering consumes untrusted user
+// input, so `unwrap`/`expect`/`panic!` on source-derived values must become
+// `Diagnostic`/Result. `#[warn]` (not `#[deny]`) surfaces the count under
+// `cargo clippy` so the sweep is tracked and ratcheted per-PR without
+// breaking the build.
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;

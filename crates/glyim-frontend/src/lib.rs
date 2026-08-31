@@ -22,6 +22,13 @@
     clippy::needless_lifetimes,
     clippy::collapsible_if
 )]
+// Plan §3.1 (ratchet, not a hard ban): the frontend consumes untrusted user
+// input directly (lexer + parser), so `unwrap`/`expect`/`panic!` on
+// source-derived values must eventually become `Diagnostic`/Result. This is a
+// `#[warn]` gate (not `#[deny]`) — it surfaces the count under `cargo clippy`
+// so the sweep can be tracked and ratcheted down per-PR without breaking the
+// build (412 sites won't be fixed in one PR).
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 /// lexer.
 pub mod lexer;
 /// parser.

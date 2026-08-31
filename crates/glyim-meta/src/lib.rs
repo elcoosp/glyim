@@ -24,6 +24,13 @@
     clippy::needless_lifetimes,
     clippy::collapsible_if
 )]
+// Plan §3.1 (ratchet, not a hard ban): macro expansion consumes untrusted user
+// input (recursive macro definitions are a classic DoS vector), so
+// `unwrap`/`expect`/`panic!` on source-derived values must become
+// `Diagnostic`/Result. `#[warn]` (not `#[deny]`) surfaces the count under
+// `cargo clippy` so the sweep is tracked and ratcheted per-PR without
+// breaking the build.
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use glyim_core::interner::{Interner, Name};
 use glyim_diag::GlyimDiagnostic;
