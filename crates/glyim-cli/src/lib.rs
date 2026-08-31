@@ -57,21 +57,34 @@ pub struct CliArgs {
     /// procedural-macro expansion of the primary crate.
     #[arg(long = "proc-macro-deps")]
     pub proc_macro_deps: Option<String>,
+    /// Diagnostic output format: `human` (default, miette-rendered) or `json`
+    /// (one JSON object per diagnostic, machine-readable for editors/LSP).
+    /// Plan §3.4.
+    #[arg(long = "error-format", default_value = "human")]
+    pub error_format: String,
 }
 
 /// run.
 pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+    // Capture args (incl. `--error-format`) before entering the panic catcher,
+    // so we can print any returned diagnostics in the requested format.
+    let cli_args = CliArgs::parse();
+    let error_format = cli_args.error_format.clone();
     // Plan §3.1.2b: catch unexpected panics in the driver and turn them into a
     // structured ICE report instead of a raw Rust backtrace. A language
     // toolchain must never crash on user input with an unreadable stack trace —
     // an ICE with the compiler version + input + backtrace path is the
     // production-grade behaviour (rustc's `RUST_BACKTRACE` model).
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let args = CliArgs::parse();
-        run_with_args(args)
+        run_with_args(cli_args)
     }));
     match result {
-        Ok(inner) => inner,
+        Ok(inner) => {
+            if let Err(diags) = &inner {
+                print_diagnostics(diags, &error_format);
+            }
+            inner
+        }
         Err(_payload) => {
             let backtrace = std::backtrace::Backtrace::force_capture();
             let report = format!(
@@ -91,6 +104,34 @@ with the input file and the backtrace.",
                 path.display()
             );
             Err(vec![glyim_diag::GlyimDiagnostic::internal_error(report)])
+        }
+    }
+}
+
+/// Print `diags` in the requested format (plan §3.4). `human` renders each via
+/// its `Display` impl (miette-styled); `json` emits one JSON object per
+/// diagnostic on its own line, suitable for editor/LSP consumption.
+fn print_diagnostics(diags: &[glyim_diag::GlyimDiagnostic], format: &str) {
+    if format == "json" {
+        for d in diags {
+            let spans: Vec<serde_json::Value> = std::iter::once(&d.span.primary)
+                .chain(d.span.secondary.iter().map(|(s, _)| s))
+                .map(|s| {
+                    let r = s.range();
+                    serde_json::json!({ "lo": r.start, "hi": r.end })
+                })
+                .collect();
+            let obj = serde_json::json!({
+                "code": format!("{}", d.code),
+                "severity": format!("{:?}", d.severity),
+                "message": d.message,
+                "spans": spans,
+            });
+            eprintln!("{}", obj);
+        }
+    } else {
+        for d in diags {
+            eprintln!("{}", d);
         }
     }
 }
@@ -462,6 +503,7 @@ fn compile_proc_macro_dep(
         lto: "off".to_string(),
         codegen_units: None,
         proc_macro_deps: None,
+        error_format: "human".to_string(),
     };
     run_with_args(args).map_err(|diags| {
         let msg = diags
