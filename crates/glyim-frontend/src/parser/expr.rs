@@ -296,7 +296,14 @@ impl<'a> Parser<'a> {
                     while self.current_kind() != SyntaxKind::RBrace && self.current().is_some() {
                         if self.current_kind() == SyntaxKind::Ident {
                             let field_cp = self.checkpoint();
-                            let field_name_token = self.current().unwrap().clone();
+                            // `current()` is `Some` here because the outer loop
+                            // is guarded by `self.current().is_some()`; break on
+                            // the (unreachable under that guard) `None` instead
+                            // of `unwrap()` so EOF never panics the parser.
+                            let field_name_token = match self.current() {
+                                Some(t) => t.clone(),
+                                None => break,
+                            };
                             self.bump(); // field name
                             if self.current_kind() == SyntaxKind::Colon {
                                 // Explicit field: name: expr
