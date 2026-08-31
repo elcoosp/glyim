@@ -1287,7 +1287,6 @@ dependencies = [
  "glyim-type",
  "glyim-typeck",
  "glyim-vfs",
- "rayon",
  "tempfile",
  "tracing",
 ]

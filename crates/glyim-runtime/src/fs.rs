@@ -186,7 +186,7 @@ unsafe fn path_from_raw(ptr: *const u8, len: usize) -> Option<PathBuf> {
         // Glyim strings are UTF-8 at the language level (there is no UTF-16
         // string type in Glyim), so the bytes passed here are the caller's
         // `String`/`&str` bytes verbatim. Converting them via `OsString` is
-        // exact and lossless for both Unicode and any surrogate-adjacent
+        // exact and lossless for both Unicode and any surrogateadjacent
         // sequences that a prior lossy round-trip may have produced. There is
         // no separate "maybe this is actually UTF-16" branch: Glyim never
         // produces UTF-16 path bytes, and guessing an unrelated encoding for
@@ -234,6 +234,73 @@ fn io_err_to_errno(err: &std::io::Error) -> i32 {
 // ---------------------------------------------------------------------------
 // FFI functions
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// FFI function macro (plan §3.3)
+// ---------------------------------------------------------------------------
+//
+// Centralizes the repetitive boilerplate for FFI functions that reconstruct
+// a Rust slice from a raw `(buf, buf_len)` pair, acquire the file-table lock,
+// look up the file descriptor, and map `std::io::Result` to the Glyim
+// `isize` error convention.
+//
+// Each arm takes the function name + signature and an I/O method identifier
+// (`read` or `write`), and generates the full extern "C" function including
+// null-pointer checks, debug_assertions on slice length, and the file-table
+// lookup / error mapping. The method is invoked as `file.$ident(slice)` so
+// macro hygiene never needs to reach into the caller's scope.
+
+macro_rules! glyim_ffi_fn {
+    // Read path: *mut u8 -> &mut [u8] via slice_from_raw_parts_mut
+    (
+        fn $name:ident(fd: i32, buf: *mut u8, buf_len: usize) -> isize
+        $op:ident
+     ) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(fd: i32, buf: *mut u8, buf_len: usize) -> isize {
+            if buf.is_null() {
+                return FS_EIO as isize;
+            }
+            // SAFETY: Caller guarantees buf points to writable memory of buf_len bytes.
+            // The debug_assert inside the helper rejects an overflowing length.
+            let slice = unsafe { slice_from_raw_parts_mut(buf, buf_len) };
+            let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+            let file = match table.get_mut(fd) {
+                Some(f) => f,
+                None => return FS_EBADF as isize,
+            };
+            match file.$op(slice) {
+                Ok(n) => isize::try_from(n).unwrap_or(isize::MAX),
+                Err(e) => io_err_to_errno(&e) as isize,
+            }
+        }
+    };
+
+    // Write path: *const u8 -> &[u8] via slice_from_raw_parts
+    (
+        fn $name:ident(fd: i32, buf: *const u8, buf_len: usize) -> isize
+        $op:ident
+     ) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(fd: i32, buf: *const u8, buf_len: usize) -> isize {
+            if buf.is_null() && buf_len > 0 {
+                return FS_EIO as isize;
+            }
+            // SAFETY: Caller guarantees buf points to readable memory of buf_len bytes.
+            // The debug_assert inside the helper rejects an overflowing length.
+            let slice = unsafe { slice_from_raw_parts(buf as *const u8, buf_len) };
+            let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+            let file = match table.get_mut(fd) {
+                Some(f) => f,
+                None => return FS_EBADF as isize,
+            };
+            match file.$op(slice) {
+                Ok(n) => isize::try_from(n).unwrap_or(isize::MAX),
+                Err(e) => io_err_to_errno(&e) as isize,
+            }
+        }
+    };
+}
 
 // Cleanup function for process exit.
 extern "C" fn cleanup_fs_table() {
@@ -353,23 +420,9 @@ pub extern "C" fn glyim_fs_close(fd: i32) -> i32 {
 ///
 /// - `fd` must be a valid file descriptor opened for reading
 /// - `buf` must point to a writable buffer of at least `buf_len` bytes
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn glyim_fs_read(fd: i32, buf: *mut u8, buf_len: usize) -> isize {
-    if buf.is_null() {
-        return FS_EIO as isize;
-    }
-    // SAFETY: Caller guarantees buf points to writable memory of buf_len bytes.
-    // The debug_assert inside the helper rejects an overflowing length.
-    let slice = unsafe { slice_from_raw_parts_mut(buf, buf_len) };
-    let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
-    let file = match table.get_mut(fd) {
-        Some(f) => f,
-        None => return FS_EBADF as isize,
-    };
-    match file.read(slice) {
-        Ok(n) => isize::try_from(n).unwrap_or(isize::MAX),
-        Err(e) => io_err_to_errno(&e) as isize,
-    }
+glyim_ffi_fn! {
+    fn glyim_fs_read(fd: i32, buf: *mut u8, buf_len: usize) -> isize
+    read
 }
 
 /// Write `buf_len` bytes from `buf` to the file.
@@ -380,23 +433,9 @@ pub unsafe extern "C" fn glyim_fs_read(fd: i32, buf: *mut u8, buf_len: usize) ->
 ///
 /// - `fd` must be a valid file descriptor opened for writing
 /// - `buf` must point to readable data of at least `buf_len` bytes
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn glyim_fs_write(fd: i32, buf: *const u8, buf_len: usize) -> isize {
-    if buf.is_null() && buf_len > 0 {
-        return FS_EIO as isize;
-    }
-    // SAFETY: Caller guarantees buf points to readable memory of buf_len bytes.
-    // The debug_assert inside the helper rejects an overflowing length.
-    let slice = unsafe { slice_from_raw_parts(buf, buf_len) };
-    let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
-    let file = match table.get_mut(fd) {
-        Some(f) => f,
-        None => return FS_EBADF as isize,
-    };
-    match file.write(slice) {
-        Ok(n) => isize::try_from(n).unwrap_or(isize::MAX),
-        Err(e) => io_err_to_errno(&e) as isize,
-    }
+glyim_ffi_fn! {
+    fn glyim_fs_write(fd: i32, buf: *const u8, buf_len: usize) -> isize
+    write
 }
 
 /// Flush pending writes to the file.

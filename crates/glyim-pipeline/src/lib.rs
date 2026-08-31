@@ -20,7 +20,6 @@ use glyim_type::Ty;
 use glyim_type::TyKind;
 use std::collections::HashMap;
 use glyim_typeck::tyconv;
-use rayon::prelude::*;
 use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;

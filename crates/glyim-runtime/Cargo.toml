@@ -2,6 +2,11 @@
 name = "glyim-runtime"
 edition.workspace = true
 version.workspace = true
+
+[profile.dev]
+opt-level = 0
+debug = false
+
 [dependencies]
 socket2 = "0.5"
 libc = "0.2"

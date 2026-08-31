@@ -3,6 +3,10 @@ name = "glyim-meta"
 edition.workspace = true
 version.workspace = true
 
+[profile.dev]
+opt-level = 0
+debug = false
+
 [dependencies]
 rowan = { workspace = true }
 glyim-core = { workspace = true }
