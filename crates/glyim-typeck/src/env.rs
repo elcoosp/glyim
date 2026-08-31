@@ -110,6 +110,12 @@ impl LocalEnv {
             .and_then(|&id| self.vars.get(id.to_raw() as usize))
     }
 
+    /// Debug helper: the set of names currently bound in the environment.
+    #[allow(dead_code)]
+    pub fn name_map_keys(&self) -> Vec<Name> {
+        self.name_map.keys().copied().collect()
+    }
+
     #[inline]
     #[allow(dead_code)]
     pub fn lookup_by_id(&self, id: LocalVarId) -> Option<&LocalVarInfo> {

@@ -40,6 +40,11 @@ pub struct TyCtx {
     /// iterator_next_fn`, Phase 1 GLYIM_DESTUB_PLAN).
     pub(crate) adt_by_name: HashMap<Name, AdtId>,
     pub(crate) trait_defs: HashMap<glyim_core::def_id::TraitDefId, crate::TraitDef>,
+    /// Maps a trait's (interned) name to its `TraitDefId` (mirror of the
+    /// `TyCtxMut::trait_by_name` table, carried into the frozen context so
+    /// lowering/codegen passes holding only a `&TyCtx` can resolve builtin
+    /// trait names). Populated by `freeze` from the `TyCtxMut` table.
+    pub trait_by_name: HashMap<Name, glyim_core::def_id::TraitDefId>,
     pub(crate) variant_types: HashMap<AdtId, Vec<Ty>>,
     pub(crate) fn_sigs: HashMap<FnDefId, FnSig>,
     pub(crate) const_tys: HashMap<ConstDefId, Ty>,

@@ -480,11 +480,20 @@ pub fn resolve_impl_header(
                         (Some(trait_def_id), Some(name), substs)
                     }
                     None => {
-                        diagnostics.push(GlyimDiagnostic::type_error(
-                            span,
-                            format!("unresolved trait `{}`", def_map.interner.resolve(name)),
-                        ));
-                        (None, Some(name), ctx.intern_substitution(vec![]))
+                        // Fall back to builtin/lang traits registered by name
+                        // in `TyCtxMut` (Future, Drop, Deref, Clone, …) so
+                        // `impl Future for X` / `impl Drop for Y` resolve even
+                        // though they are not declared in user source.
+                        if let Some(tid) = ctx.trait_by_name.get(&name).copied() {
+                            let substs = ctx.intern_substitution(vec![]);
+                            (Some(tid), Some(name), substs)
+                        } else {
+                            diagnostics.push(GlyimDiagnostic::type_error(
+                                span,
+                                format!("unresolved trait `{}`", def_map.interner.resolve(name)),
+                            ));
+                            (None, Some(name), ctx.intern_substitution(vec![]))
+                        }
                     }
                 }
             } else {
@@ -587,7 +596,7 @@ pub fn resolve_path_type(
             if matches!(ctx.ty_kind(qual_ty), TyKind::Param(_)) || qual == "Self" {
                 let trait_def_id = if matches!(ctx.ty_kind(qual_ty), TyKind::Param(_)) {
                     ctx.param_bounds_for(qname)
-                        .and_then(|traits| traits.first().copied())
+                        .and_then(|traits| traits.first().map(|(_, tid)| *tid))
                 } else {
                     ctx.find_trait_with_assoc_type(aname)
                 };
@@ -660,7 +669,7 @@ pub fn resolve_path_type(
                 ctx.find_trait_with_assoc_type(assoc_name)
             } else {
                 ctx.param_bounds_for(first.name)
-                    .and_then(|traits| traits.first().copied())
+                    .and_then(|traits| traits.first().map(|(_, tid)| *tid))
             };
             if let Some(tid) = trait_def_id {
                 let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
@@ -767,6 +776,28 @@ pub(crate) fn resolve_path_to_local_def_id(
         }
     };
 
+    // Single-segment `Plain` paths (bare trait/type/value names like `Read`,
+    // `File`, `Error`) are resolved in `current`'s scope above. In the assembled
+    // modular stdlib, items live in submodules (`io`, `fs`, `net`, …) and are
+    // re-exported at the crate root via `pub use io::Read;`. When the def-map
+    // builder does NOT populate the root scope from those re-exports (or the
+    // re-export is for a trait the builder skips), the root lookup misses and
+    // every cross-module reference fails. As a strictly-more-permissive
+    // fallback, walk the entire module tree and return the first module whose
+    // scope defines the bare name. Names are unique in the stdlib, so this
+    // resolves cross-module references without disturbing same-module hits.
+    if path.segments.len() == 1 && matches!(path.kind, glyim_core::path::PathKind::Plain) {
+        if let Some(res) = def_map.modules[current].scope.resolve(path.segments[0].name) {
+            return Some(res.0);
+        }
+        for module in def_map.modules.iter() {
+            if let Some(res) = module.scope.resolve(path.segments[0].name) {
+                return Some(res.0);
+            }
+        }
+        return None;
+    }
+
     for (i, seg) in path.segments.iter().enumerate() {
         // NOTE: the HIR `Path` segment `Name`s already live in the def-map's
         // interner in the pipeline (the lowering and `build_def_map` share a
@@ -851,15 +882,13 @@ pub(crate) fn resolve_path_to_trait_def_id(
     path: &glyim_hir::Path,
     _span: Span,
 ) -> Option<TraitDefId> {
-    // NOTE: we intentionally do NOT gate on `ctx.trait_def(tid).is_some()`
-    // here. Traits may be known to the compiler purely via the def-map (e.g.
-    // hand-built test HIRs / where-clause bounds that reference a trait name
-    // registered only as a def-map type), and the caller performs its own
-    // validation. In particular, the *call* dispatcher in `check_expr` adds a
-    // stricter `ctx.trait_def(tid).is_some()` guard so that module-qualified
-    // function calls (`mod::fn`) and enum-variant paths are NOT misclassified
-    // as trait-method calls — but where-clause resolution and type-position
-    // trait lookups rely on the lenient cast below.
+    // Builtin/lang traits (Future, Drop, Deref, Clone, …) are not in the
+    // def-map; resolve them by name from `TyCtxMut`'s builtin trait table.
+    if let Some(name) = path.as_name() {
+        if let Some(tid) = ctx.trait_by_name.get(&name).copied() {
+            return Some(tid);
+        }
+    }
     resolve_path_to_local_def_id(ctx, def_map, path).map(|l| TraitDefId::from_raw(l.to_raw()))
 }
 
@@ -881,6 +910,7 @@ fn resolve_primitive(ctx: &mut TyCtxMut, name: Name) -> Option<Ty> {
         "bool" => Ty::BOOL,
         "char" => ctx.mk_ty(TyKind::Char),
         "str" => ctx.mk_ty(TyKind::String),
+        "String" => ctx.mk_ty(TyKind::String),
         _ => return None,
     })
 }
@@ -913,7 +943,7 @@ fn self_kind_of_inputs(
     }
 }
 
-fn resolve_name_to_adt_ty(
+pub(crate) fn resolve_name_to_adt_ty(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
     def_map: &glyim_def_map::CrateDefMap,
@@ -922,15 +952,46 @@ fn resolve_name_to_adt_ty(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Option<Ty> {
-    let adt_id = match path.as_name().and_then(|name| {
-        
-        ctx.adt_id_by_name(name)
-    }) {
-        Some(id) => id,
-        None => {
-            let def_id = resolve_name_to_def_id(def_map, path.as_name()?)?;
-            AdtId::from_raw(def_id.local_id.to_raw())
+    let name = match path.as_name() {
+        Some(n) => n,
+        None => return None,
+    };
+
+    // stdlib-completion: expand a registered type alias BEFORE falling back to
+    // the builtin/user ADT table. e.g. `type Result<T> = Result<T, Error>`
+    // lets a 1-argument usage `Result<usize>` expand to `Result<usize, Error>`.
+    // Only expand when the caller supplies exactly the alias's parameter count
+    // (a 2-argument `Result<usize, Error>` use falls through to the 2-arg
+    // builtin directly, so the alias never competes with it).
+    if let Some((params, template)) = ctx.lookup_type_alias(name).cloned() {
+        let caller_args = path.segments.last().and_then(|s| s.generic_args.as_deref());
+        let n_caller = caller_args.map_or(0, |a| a.len());
+        if n_caller == params.len() {
+            let mut subst: HashMap<u32, GenericArg> = HashMap::new();
+            if let Some(args) = caller_args {
+                for (i, arg) in args.iter().enumerate() {
+                    let ty = resolve_type_ref(ctx, infer, def_map, diagnostics, arg, param_map, span);
+                    subst.insert(params[i].0, GenericArg::Ty(ty));
+                }
+            }
+            return Some(ctx.subst_ty(template, &subst));
         }
+    }
+
+    // Resolve the ADT id. Prefer the *def-map* id (the authoritative source
+    // for source-defined types) over `adt_id_by_name`: the latter can hold a
+    // stale id minted during an earlier registration pass (e.g. a synthetic id
+    // for `ErrorKind` that does not match the def-map's real id), which would
+    // make the same logical type carry two different `AdtId`s and fail to
+    // unify (e.g. `ErrorKind::Interrupted` resolving to Adt35 while
+    // `Error::kind()` returns Adt63). Fall back to `adt_id_by_name` only for
+    // generated types (async future structs) that are not in the def map.
+    let adt_id = match path.as_name().and_then(|name| resolve_name_to_def_id(def_map, name)) {
+        Some(def_id) => AdtId::from_raw(def_id.local_id.to_raw()),
+        None => match path.as_name().and_then(|name| ctx.adt_id_by_name(name)) {
+            Some(id) => id,
+            None => return None,
+        },
     };
     let arity = ctx.adt_generic_arity(adt_id);
 

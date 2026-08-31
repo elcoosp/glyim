@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use crate::{
     AssociatedTy, Body, BodyId, ConstItem, EnumItem, Field, FnItem, GenericParam, GenericParamKind,
     ImplItem, ImplMethod, Item, ItemId, ItemKind, ModItem, Param, Pat, PatId, Path, StructItem,
-    TraitItem, TraitMethod, TypeRef, Variant, Visibility,
+    TraitItem, TraitMethod, TypeAliasItem, TypeRef, Variant, Visibility,
 };
 
 /// Collect generic type parameters from a `TypeParamList` child node (e.g. the
@@ -886,6 +886,21 @@ pub(crate) fn lower_mod_def(
                     items.push(item);
                 }
             }
+            SyntaxKind::TraitDef => {
+                if let Some(item) = lower_trait_def(
+                    &child,
+                    interner,
+                    local_def_counter,
+                    item_id_counter,
+                    bodies,
+                    body_owners,
+                    diags,
+                    struct_field_map,
+                ) {
+                    children.push(item.id);
+                    items.push(item);
+                }
+            }
             SyntaxKind::Module => {
                 if let Some(item) = lower_mod_def(
                     &child,
@@ -917,6 +932,12 @@ pub(crate) fn lower_mod_def(
                     items.push(item);
                 }
             }
+            SyntaxKind::TypeAlias => {
+                if let Some(item) = lower_type_alias(&child, interner, item_id_counter) {
+                    children.push(item.id);
+                    items.push(item);
+                }
+            }
             _ => {}
         }
     }
@@ -927,6 +948,37 @@ pub(crate) fn lower_mod_def(
         id,
         name,
         kind: ItemKind::Mod(ModItem { children }),
+        visibility: Visibility::Inherited,
+        span: node_span(node),
+    })
+}
+
+/// Lower a top-level `type Name<..> = RHS;` type alias into
+/// `ItemKind::TypeAlias` so the pipeline can register it for expansion during
+/// type resolution (e.g. `type Result<T> = Result<T, Error>` → 1-arg
+/// `Result<usize>` expands to `Result<usize, Error>`). stdlib-completion.
+pub(crate) fn lower_type_alias(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    item_id_counter: &mut u32,
+) -> Option<Item> {
+    let name_str = first_ident_text(node)?;
+    let name = interner.intern(&name_str);
+    let generic_params = collect_generic_params(node, interner);
+    let ty = node
+        .children()
+        .find(is_type_node)
+        .and_then(|t| lower_type_ref(&t, interner));
+    let id = ItemId::from_raw(*item_id_counter);
+    *item_id_counter += 1;
+    Some(Item {
+        id,
+        name,
+        kind: ItemKind::TypeAlias(TypeAliasItem {
+            ty,
+            generic_params,
+            where_clauses: Vec::new(),
+        }),
         visibility: Visibility::Inherited,
         span: node_span(node),
     })

@@ -124,6 +124,15 @@ pub(crate) fn lower_block_to_expr(
                     last_has_semi = true;
                 }
             }
+            SyntaxKind::ExternBlock => {
+                // `extern "C" { ... }` foreign-declaration blocks are
+                // type-checked as foreign items but produce NO runtime value.
+                // They may legitimately appear as statements inside a block
+                // (e.g. FFI function declarations nested in a function body),
+                // so they must be accepted as a (no-op) block child rather
+                // than tripping the `unrecognized child kind` unreachable.
+                continue;
+            }
             _ => unreachable!(
                 "parser produced a Block with unrecognized child kind: {:?}",
                 child.kind()
@@ -495,8 +504,13 @@ fn lower_struct_expr(
                             // Extract field name
                             let field_name = first_ident_text(node).unwrap_or_default();
                             let name = interner.intern(&field_name);
-                            // Check if the field has an expression inside it
-                            let expr_inside = node.children().find(is_expr_node);
+                            // Check if the field has an expression inside it.
+                            // Macro calls (`format!(..)`) are valid field values
+                            // but `MacroCall` is not in `is_expr_node`, so include
+                            // it explicitly here (it lowers via `lower_macro_call_expr`).
+                            let expr_inside = node
+                                .children()
+                                .find(|c| is_expr_node(c) || c.kind() == SyntaxKind::MacroCall);
                             if let Some(expr_id) = expr_inside
                                 .as_ref()
                                 .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map))
@@ -663,10 +677,14 @@ fn lower_struct_expr(
                         .map(|n| interner.resolve(**n).to_string())
                         .collect();
                     let span = node_span(node);
+                    let resolved = struct_name
+                        .map(|n| interner.resolve(n).to_string())
+                        .unwrap_or_else(|| "<none>".to_string());
                     diags.push(GlyimDiagnostic::type_error(
                         span,
                         format!(
-                            "missing field(s) in struct literal: {}",
+                            "missing field(s) in struct literal `{}`: {}",
+                            resolved,
                             missing_names.join(", ")
                         ),
                     ));

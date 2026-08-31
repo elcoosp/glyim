@@ -60,6 +60,7 @@ pub fn check_function_body(
         owner,
         expr_cache: HashMap::new(),
         def_map,
+        current_module: glyim_def_map::ModuleId::from_raw(0),
         trait_ctx: &trait_ctx,
         capture_log: Vec::new(),
         body_owner_map: &HashMap::new(),

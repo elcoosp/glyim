@@ -9,12 +9,13 @@ pub(crate) use lower_expr::{lower_expr, lower_literal};
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
-use glyim_core::interner::Interner;
+use glyim_core::interner::{Interner, Name};
 use glyim_diag::GlyimDiagnostic;
 use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 use glyim_syntax::{SyntaxKind, SyntaxNode};
+use std::collections::HashMap;
 
-use crate::CrateHir;
+use crate::{Body, BodyId, CrateHir, Item, ItemId};
 
 // ---------- helpers ----------
 
@@ -112,6 +113,58 @@ fn next_local_def_id(counter: &mut u32) -> LocalDefId {
     let id = *counter;
     *counter += 1;
     LocalDefId::from_raw(id)
+}
+
+/// Recursively walk the whole syntax tree for `ExternBlock` nodes and lower
+/// each inner `fn` declaration into a top-level `FnDef` HIR item. This lets the
+/// type-checker register a callable signature for `extern "C" { fn foo(); }`
+/// imports regardless of where the block appears (module top level or nested
+/// inside a function body). The def-map's `collect_extern_imports` registers
+/// the same fns in the crate-root value namespace, so resolution by name aligns
+/// the two and `check_path` can find the signature.
+fn lower_extern_imports(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    local_def_counter: &mut u32,
+    item_id_counter: &mut u32,
+    bodies: &mut IndexVec<BodyId, Body>,
+    body_owners: &mut IndexVec<BodyId, LocalDefId>,
+    diags: &mut Vec<GlyimDiagnostic>,
+    struct_field_map: &HashMap<Name, Vec<Name>>,
+    items: &mut IndexVec<ItemId, Item>,
+) {
+    for child in node.children() {
+        if child.kind() == SyntaxKind::ExternBlock {
+            for inner in child.children() {
+                if inner.kind() == SyntaxKind::FnDef {
+                    if let Some(item) = lower_item::lower_fn_def(
+                        &inner,
+                        interner,
+                        local_def_counter,
+                        item_id_counter,
+                        bodies,
+                        body_owners,
+                        diags,
+                        struct_field_map,
+                    ) {
+                        items.push(item);
+                    }
+                }
+            }
+        }
+        // Recurse into every child so nested-in-body `extern` blocks are found.
+        lower_extern_imports(
+            &child,
+            interner,
+            local_def_counter,
+            item_id_counter,
+            bodies,
+            body_owners,
+            diags,
+            struct_field_map,
+            items,
+        );
+    }
 }
 
 // ---------- entry ----------
@@ -221,29 +274,8 @@ pub(crate) fn lower_crate_raw(
                 }
             }
             SyntaxKind::ExternBlock => {
-                tracing::debug!("Processing ExternBlock");
-                let mut stack = vec![child.clone()];
-                while let Some(node) = stack.pop() {
-                    tracing::debug!("  visiting node kind {:?}", node.kind());
-                    if node.kind() == SyntaxKind::FnDef {
-                        tracing::debug!("    found FnDef inside extern block");
-                        if let Some(item) = lower_item::lower_fn_def(
-                            &node,
-                            interner,
-                            &mut local_def_counter,
-                            &mut item_id_counter,
-                            &mut bodies,
-                            &mut body_owners,
-                            diags,
-                            &struct_field_map,
-                        ) {
-                            items.push(item);
-                        }
-                    }
-                    for inner_child in node.children() {
-                        stack.push(inner_child);
-                    }
-                }
+                // Handled by the full-tree `lower_extern_imports` scan below,
+                // which catches both top-level and nested-in-body blocks.
             }
             SyntaxKind::Module => {
                 if let Some(item) = lower_item::lower_mod_def(
@@ -274,12 +306,36 @@ pub(crate) fn lower_crate_raw(
                     items.push(item);
                 }
             }
+            SyntaxKind::TypeAlias => {
+                if let Some(item) = lower_item::lower_type_alias(&child, interner, &mut item_id_counter) {
+                    items.push(item);
+                }
+            }
             // Other item kinds (Trait, Use, Extern, etc.) are not yet lowered.
             _ => {}
         }
     }
 
-    
+    // Full-tree scan for `extern "C" { fn name(...); }` import blocks. The
+    // second-pass item walk above only visits *top-level* module children, so
+    // `extern` blocks nested inside function bodies are never seen there. We
+    // lower every inner `fn` of every `ExternBlock` anywhere in the tree into a
+    // top-level `FnDef` item. This mirrors the def-map's `collect_extern_imports`
+    // pass (which registers those fns in the crate-root value namespace), so
+    // the type-checker can resolve each by `item.name` and register its
+    // signature — making `extern "C" { fn foo(); }` calls callable whether the
+    // block is at module top level or inside a function body.
+    lower_extern_imports(
+        root,
+        interner,
+        &mut local_def_counter,
+        &mut item_id_counter,
+        &mut bodies,
+        &mut body_owners,
+        diags,
+        &struct_field_map,
+        &mut items,
+    );
 
     CrateHir {
         items,

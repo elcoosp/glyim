@@ -274,7 +274,7 @@ impl<'a> FnCtxt<'a> {
             Pat::Literal(lit) => {
                 let thir_lit = crate::unify::thir_literal(lit);
                 if expected_ty != Ty::ERROR {
-                    let lit_ty = crate::unify::literal_ty(self.ctx, lit);
+                    let lit_ty = crate::unify::literal_ty(self.ctx, self.infer, lit);
                     self.unify(lit_ty, expected_ty, span);
                 }
                 thir::Pattern {
@@ -313,11 +313,11 @@ impl<'a> FnCtxt<'a> {
                 let ty = expected_ty;
                 if ty != Ty::ERROR {
                     if let Some(lit) = start.as_ref() {
-                        let lit_ty = crate::unify::literal_ty(self.ctx, lit);
+                        let lit_ty = crate::unify::literal_ty(self.ctx, self.infer, lit);
                         self.unify(lit_ty, ty, span);
                     }
                     if let Some(lit) = end.as_ref() {
-                        let lit_ty = crate::unify::literal_ty(self.ctx, lit);
+                        let lit_ty = crate::unify::literal_ty(self.ctx, self.infer, lit);
                         self.unify(lit_ty, ty, span);
                     }
                 }
@@ -436,7 +436,7 @@ impl<'a> FnCtxt<'a> {
         let resolver = glyim_def_map::Resolver::new(
             &self.def_map.modules,
             self.def_map.root,
-            self.def_map.root,
+            self.current_module,
         );
         let resolved = resolver.resolve_path(&core_path);
         resolved

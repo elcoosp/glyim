@@ -14,7 +14,7 @@ trait Read {
         while filled < buf.len() {
             match self.read(&mut buf[filled..]) {
                 Result::Ok(0) => {
-                    return Result::Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
+                    return Result::Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer".to_string()));
                 }
                 Result::Ok(n) => {
                     filled += n;
@@ -74,7 +74,7 @@ trait Write {
         while written < buf.len() {
             match self.write(&buf[written..]) {
                 Result::Ok(0) => {
-                    return Result::Err(Error::new(ErrorKind::WriteZero, "failed to write whole buffer"));
+                    return Result::Err(Error::new(ErrorKind::WriteZero, "failed to write whole buffer".to_string()));
                 }
                 Result::Ok(n) => written += n,
                 Result::Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
@@ -243,10 +243,18 @@ struct Error {
 
 impl Error {
     /// Create a new I/O error from a kind and message.
-    fn new(kind: ErrorKind, msg: impl Into<String>) -> Error {
+    fn new(kind: ErrorKind, msg: String) -> Error {
         Error {
             kind,
-            message: msg.into(),
+            message: msg,
+        }
+    }
+
+    /// Create a new I/O error of kind `InvalidInput` from a message.
+    fn invalid_input(msg: String) -> Error {
+        Error {
+            kind: ErrorKind::InvalidInput,
+            message: msg,
         }
     }
 
@@ -447,56 +455,46 @@ fn copy<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> Result<u64, Error>
 /// Print to standard output, with a newline.
 macro println! {
     () => {
-        let mut out = stdout();
-        out.write_all(b"\n").unwrap();
+        stdout().write_all(b"\n").unwrap();
     },
     ($fmt:literal) => {
-        let mut out = stdout();
-        out.write_all(format!(concat!($fmt, "\n")).as_bytes()).unwrap();
+        stdout().write_all(format!(concat!($fmt, "\n")).as_bytes()).unwrap();
     },
     ($fmt:literal, $($arg:tt)+) => {
-        let mut out = stdout();
-        out.write_all(format!(concat!($fmt, "\n"), $($arg)+).as_bytes()).unwrap();
+        stdout().write_all(format!(concat!($fmt, "\n"), $($arg)+).as_bytes()).unwrap();
     },
 }
 
 /// Print to standard output.
 macro print! {
     ($fmt:literal) => {
-        let mut out = stdout();
-        out.write_all(format!($fmt).as_bytes()).unwrap();
+        stdout().write_all(format!($fmt).as_bytes()).unwrap();
     },
     ($fmt:literal, $($arg:tt)+) => {
-        let mut out = stdout();
-        out.write_all(format!($fmt, $($arg)+).as_bytes()).unwrap();
+        stdout().write_all(format!($fmt, $($arg)+).as_bytes()).unwrap();
     },
 }
 
 /// Print to standard error, with a newline.
 macro eprintln! {
     () => {
-        let mut out = stderr();
-        out.write_all(b"\n").unwrap();
+        stderr().write_all(b"\n").unwrap();
     },
     ($fmt:literal) => {
-        let mut out = stderr();
-        out.write_all(format!(concat!($fmt, "\n")).as_bytes()).unwrap();
+        stderr().write_all(format!(concat!($fmt, "\n")).as_bytes()).unwrap();
     },
     ($fmt:literal, $($arg:tt)+) => {
-        let mut out = stderr();
-        out.write_all(format!(concat!($fmt, "\n"), $($arg)+).as_bytes()).unwrap();
+        stderr().write_all(format!(concat!($fmt, "\n"), $($arg)+).as_bytes()).unwrap();
     },
 }
 
 /// Print to standard error.
 macro eprint! {
     ($fmt:literal) => {
-        let mut out = stderr();
-        out.write_all(format!($fmt).as_bytes()).unwrap();
+        stderr().write_all(format!($fmt).as_bytes()).unwrap();
     },
     ($fmt:literal, $($arg:tt)+) => {
-        let mut out = stderr();
-        out.write_all(format!($fmt, $($arg)+).as_bytes()).unwrap();
+        stderr().write_all(format!($fmt, $($arg)+).as_bytes()).unwrap();
     },
 }
 

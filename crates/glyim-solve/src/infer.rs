@@ -201,8 +201,8 @@ impl InferenceTable {
         b: Ty,
         span: Span,
     ) -> Result<Vec<Constraint>, Vec<GlyimDiagnostic>> {
-        let a = self.resolve_ty_shallow(ctx, a);
-        let b = self.resolve_ty_shallow(ctx, b);
+        let a = self.resolve_ty_shallow_preserve_int(ctx, a);
+        let b = self.resolve_ty_shallow_preserve_int(ctx, b);
         self.unify_tys(ctx, a, b, span)
     }
 
@@ -229,7 +229,10 @@ impl InferenceTable {
             | (other, TyKind::Infer(InferVar::Int(var))) => {
                 let int_ty = if a_is_int { a } else { b };
                 match &other {
-                    TyKind::Int(_) | TyKind::Infer(InferVar::Int(_)) | TyKind::Error => {
+                    TyKind::Int(_)
+                    | TyKind::Uint(_)
+                    | TyKind::Infer(InferVar::Int(_))
+                    | TyKind::Error => {
                         self.int_vars[var].value = Some(b);
                         Ok(Vec::new())
                     }
@@ -853,6 +856,44 @@ impl InferenceTable {
         self.resolve_ty_shallow_depth(ctx, ty, 0, &mut std::collections::HashSet::new())
     }
 
+    /// Like `resolve_ty_shallow`, but leaves an unresolved integer-literal
+    /// inference var (`InferVar::Int`) as the var itself instead of defaulting
+    /// it to `i32`. Used by `unify_tys` so a literal operand (`2`) can still be
+    /// bound to its peer type (`u32`, `usize`, …) — defaulting it to `i32`
+    /// first would collapse `2 == self.raw` (raw: u32) into `i32 == u32` and
+    /// spuriously fail. Final reporting uses `resolve_ty_shallow` (which keeps
+    /// the `i32` fallback).
+    fn resolve_ty_shallow_preserve_int(
+        &self,
+        ctx: &dyn TypeLookup,
+        ty: Ty,
+    ) -> Ty {
+        match ctx.ty_kind(ty) {
+            TyKind::Infer(InferVar::Int(var)) => {
+                if let Some(value) = self.int_vars.get(*var).and_then(|v| v.value) {
+                    self.resolve_ty_shallow_preserve_int(ctx, value)
+                } else {
+                    ty
+                }
+            }
+            TyKind::Infer(InferVar::Ty(var)) => {
+                if let Some(value) = self.ty_vars.get(*var).and_then(|v| v.value) {
+                    self.resolve_ty_shallow_preserve_int(ctx, value)
+                } else {
+                    ty
+                }
+            }
+            TyKind::Infer(InferVar::Float(var)) => {
+                if let Some(value) = self.float_vars.get(*var).and_then(|v| v.value) {
+                    self.resolve_ty_shallow_preserve_int(ctx, value)
+                } else {
+                    ty
+                }
+            }
+            _ => ty,
+        }
+    }
+
     fn resolve_ty_shallow_depth(
         &self,
         ctx: &dyn TypeLookup,
@@ -889,7 +930,12 @@ impl InferenceTable {
                 if let Some(value) = self.int_vars.get(*var).and_then(|v| v.value) {
                     self.resolve_ty_shallow_depth(ctx, value, depth + 1, visited)
                 } else {
-                    ty
+                    // Unsuffixed integer literal left unconstrained: default to
+                    // `i32` (Rust fallback semantics). This is the *reporting*
+                    // default; `unify_tys` uses a preserve-var variant so a
+                    // literal can still be bound to its peer type (`u32`,
+                    // `usize`, …) before final resolution.
+                    Ty::I32
                 }
             }
             TyKind::Infer(InferVar::Float(var)) => {

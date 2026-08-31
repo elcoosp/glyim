@@ -8,7 +8,7 @@ use glyim_core::primitives::*;
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
 use glyim_span::Span;
-use glyim_type::{AdtKind, Const, ConstKind, FnSig, GenericArg, Region, Ty, TyKind};
+use glyim_type::{AdtKind, Const, ConstKind, FnSig, GenericArg, InferVar, Region, Ty, TyKind};
 use glyim_type::display::PrintTy;
 
 use crate::check_body::FnCtxt;
@@ -23,6 +23,12 @@ pub(crate) enum MethodDispatch {
     /// call is statically resolved to that impl function. Lowered to a direct
     /// `Call` of `FnDefId`.
     Static(FnDefId),
+    /// A builtin inherent method on a builtin type (`Vec::len`, `Result::is_ok`,
+    /// `String::as_ptr`, …) with no user `impl` block. Dispatches to a synthetic
+    /// `FnDefId` whose body is provided by the codegen backend as an intrinsic.
+    /// Lowered to a direct `Call`; the backend must lower the intrinsic (or emit
+    /// an explicit "unimplemented builtin method" error, never silent wrong code).
+    Builtin(FnDefId),
     /// The receiver is a generic param (`f: F` where `F: Trait`), so the
     /// concrete `impl` is unknown until monomorphization. Carries the trait so
     /// the call can be devirtualized against the instantiated receiver type.
@@ -135,7 +141,7 @@ impl<'a> FnCtxt<'a> {
 
         let result = match expr {
             Expr::Literal(lit) => {
-                let ty = literal_ty(self.ctx, lit);
+                let ty = crate::unify::literal_ty(self.ctx, self.infer, lit);
                 (
                     thir::Expr {
                         kind: thir::ExprKind::Literal(thir_literal(lit)),
@@ -808,30 +814,6 @@ impl<'a> FnCtxt<'a> {
                 let mut func_expr = func_expr;
                 func_expr.ty = callee_ty;
                 self.expr_cache.insert(*func, (func_expr.clone(), callee_ty));
-
-                // DEBUG: print callee + ret_ty for EVERY call
-                {
-                    let _cn = if let Expr::Path(p) = &self.body.exprs[*func] {
-                        p.as_name().map(|n| self.ctx.name_str(n).to_string()).or_else(|| Some(format!("{:?}", p)))
-                    } else { None };
-                    let _raw_name = if let Expr::Path(p) = &self.body.exprs[*func] {
-                        Some(p.segments.iter().map(|s| format!("{:?}=`{}`", s.name, self.ctx.name_str(s.name))).collect::<Vec<_>>().join("::"))
-                    } else { None };
-                    let _dbg_def = if is_fn_def { Some(def_id) } else { None };
-                    let dbg_sigout = if is_fn_def { self.ctx.fn_sig(def_id).map(|s| PrintTy::new(s.output, &*self.ctx)) } else { None };
-                    let _sigout_str = match dbg_sigout {
-                        Some(p) => format!("{}", p),
-                        None => "<none>".to_string(),
-                    };
-                }
-
-                if matches!(self.ctx.ty_kind(ret_ty), TyKind::Error) {
-                    let _callee_name = if let Expr::Path(p) = &self.body.exprs[*func] {
-                        p.as_name().map(|n| self.ctx.name_str(n))
-                    } else {
-                        None
-                    };
-                }
                 (
                     thir::Expr {
                         kind: thir::ExprKind::Call {
@@ -896,6 +878,31 @@ impl<'a> FnCtxt<'a> {
                                 trait_def_id,
                                 method_name: *method,
                                 args: dyn_args,
+                            },
+                            ty: ret_ty,
+                            span,
+                        }
+                    }
+                    Some(MethodDispatch::Builtin(fn_def_id)) => {
+                        // Builtin inherent method (Vec::len, Result::is_ok, …).
+                        // Lowers to a direct call of the synthetic FnDefId. The
+                        // codegen backend must lower this intrinsic; otherwise it
+                        // must emit an explicit "unimplemented builtin method"
+                        // error. It is NEVER silently lowered to wrong code.
+                        let substs = self.ctx.intern_substitution(vec![]);
+                        let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
+                        let callee = thir::Expr {
+                            kind: thir::ExprKind::FnRef(fn_def_id),
+                            ty: fn_ty,
+                            span,
+                        };
+                        let mut call_args = Vec::with_capacity(arg_exprs.len() + 1);
+                        call_args.push(recv_expr);
+                        call_args.extend(arg_exprs);
+                        thir::Expr {
+                            kind: thir::ExprKind::Call {
+                                func: Box::new(callee),
+                                args: call_args,
                             },
                             ty: ret_ty,
                             span,
@@ -1017,8 +1024,10 @@ impl<'a> FnCtxt<'a> {
                     (thir_expr, slice_ty)
                 } else {
                     // Regular indexing: check integer type.
-                    if !matches!(self.ctx.ty_kind(idx_ty), TyKind::Int(_) | TyKind::Uint(_))
-                        && idx_ty != Ty::ERROR
+                    if !matches!(
+                        self.ctx.ty_kind(idx_ty),
+                        TyKind::Int(_) | TyKind::Uint(_) | TyKind::Infer(InferVar::Int(_))
+                    ) && idx_ty != Ty::ERROR
                     {
                         self.diagnostics.push(GlyimDiagnostic::type_error(
                             span,
@@ -1600,6 +1609,102 @@ impl<'a> FnCtxt<'a> {
         glyim_type::is_valid_cast(self.ctx, from, to)
     }
 
+    /// Resolve a builtin inherent method (`Vec::len`, `Result::is_ok`,
+    /// `[T]::as_ptr`, `str::len`, …) on a builtin receiver type that has no
+    /// user `impl` block. Returns the instantiated output type and a synthetic
+    /// `FnDefId` for codegen. `None` if no builtin method matches this receiver
+    /// + name (so the caller falls through to user-impl / generic dispatch).
+    fn try_builtin_method(&mut self, step_ty: Ty, method_name: Name) -> Option<(Ty, FnDefId)> {
+        // Map the receiver step to a `(lookup_adt_id, optional_slice_elem)`.
+        let (lookup_id, elem): (Option<AdtId>, Option<Ty>) = match self.ctx.ty_kind(step_ty) {
+            TyKind::Adt(id, _) => (Some(*id), None),
+            TyKind::Slice(elem) => (Some(AdtId::from_raw(1060)), Some(*elem)),
+            TyKind::Array(elem, _) => (Some(AdtId::from_raw(1060)), Some(*elem)),
+            TyKind::String => (Some(AdtId::from_raw(1061)), None),
+            TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                TyKind::Adt(id, _) => (Some(*id), None),
+                // `&str` is `&[u8]`: route it to the `str` (1061) builtin
+                // method table rather than the generic slice (1060) one, so
+                // `Display`-style inherent methods like `to_string` resolve.
+                TyKind::Slice(elem) if matches!(self.ctx.ty_kind(*elem), TyKind::Uint(UintTy::U8)) => {
+                    (Some(AdtId::from_raw(1061)), Some(*elem))
+                }
+                TyKind::Slice(elem) => (Some(AdtId::from_raw(1060)), Some(*elem)),
+                TyKind::Array(elem, _) => (Some(AdtId::from_raw(1060)), Some(*elem)),
+                TyKind::String => (Some(AdtId::from_raw(1061)), None),
+                _ => (None, None),
+            },
+            _ => (None, None),
+        };
+        let adt_id = lookup_id?;
+        let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
+            Some(x) => x,
+            None => return None,
+        };
+
+        // Build the substitution for the method's `Param(i)` placeholders:
+        // for an ADT receiver, `i` maps to the receiver's generic argument `i`;
+        // for a slice, `Param(0)` maps to the slice element type.
+        let mut subst: HashMap<u32, GenericArg> = HashMap::new();
+        let inner_ty = match self.ctx.ty_kind(step_ty) {
+            TyKind::Ref(_, i, _) => *i,
+            _ => step_ty,
+        };
+        if let TyKind::Adt(_, s) = self.ctx.ty_kind(inner_ty) {
+            for (i, a) in self.ctx.substitution_args(*s).iter().enumerate() {
+                subst.insert(i as u32, a.clone());
+            }
+        }
+        if let Some(elem) = elem {
+            subst.insert(0, GenericArg::Ty(elem));
+        }
+        // Plan stdlib-completion: any `Param(i)` in the method's output that is
+        // NOT supplied by the receiver's substitution (e.g. `Result`'s `E`, or
+        // the return-element of `str::from_utf8`) must become a *fresh inference
+        // variable* so the caller's context can constrain it — mirroring how
+        // Rust infers `Result<T, E>` from surrounding expectations. Without this,
+        // such params stay rigid and every `from_utf8`/`map_err`/`.unwrap()` call
+        // on a builtin method errors out, poisoning its whole call chain.
+        let mut missing: Vec<u32> = Vec::new();
+        {
+            let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+            let mut stack: Vec<Ty> = vec![sig.output];
+            while let Some(t) = stack.pop() {
+                match self.ctx.ty_kind(t) {
+                    TyKind::Param(p) => {
+                        if !subst.contains_key(&p.index) && seen.insert(p.index) {
+                            missing.push(p.index);
+                        }
+                    }
+                    TyKind::Adt(_, s) => {
+                        for a in self.ctx.substitution_args(*s) {
+                            if let GenericArg::Ty(tt) = a {
+                                stack.push(*tt);
+                            }
+                        }
+                    }
+                    TyKind::Ref(_, inner, _) => stack.push(*inner),
+                    TyKind::Slice(e) => stack.push(*e),
+                    TyKind::Array(e, _) => stack.push(*e),
+                    TyKind::Tuple(s) => {
+                        for a in self.ctx.substitution_args(*s) {
+                            if let GenericArg::Ty(tt) = a {
+                                stack.push(*tt);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for i in missing {
+            let v = self.infer.new_ty_var(self.ctx);
+            subst.insert(i, GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
+        }
+        let output = self.ctx.subst_ty(sig.output, &subst);
+        Some((output, fn_id))
+    }
+
     fn resolve_method_call(&mut self, recv_ty: Ty, method_name: Name, span: Span) -> (Ty, Option<MethodDispatch>) {
         // §9.1 / §9.2: collect *every* impl whose Self type unifies with the
         // receiver and that defines `method_name`. If more than one matches,
@@ -1709,34 +1814,183 @@ impl<'a> FnCtxt<'a> {
         }
 
         if candidates.is_empty() {
+            // Builtin inherent methods on builtin ADT receivers (`Vec`/`String`/
+            // `Result`/`Option`/slice/`str`) that have no user `impl` block.
+            // Must be checked before the generic-receiver fallback, which only
+            // applies to type-parameter receivers.
+            for &step in steps.iter().chain(autoref_steps.iter()) {
+                if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
+                    return (out_ty, Some(MethodDispatch::Builtin(fn_id)));
+                }
+            }
+            // Concrete ADT receiver with `impl Trait for Self`: resolve inherited
+            // trait methods (including defaults the impl block does not override)
+            // — e.g. `Stdout: Write` inherits `write_all` from `trait Write`. The
+            // impl-scan above only sees methods declared directly in the
+            // `impl Write for Stdout` block, so defaults fall through here.
+            if let glyim_type::TyKind::Adt(_adt_id, _recv_subst) = self.ctx.ty_kind(recv_ty) {
+                let self_name = self.ctx.resolver().intern("Self");
+                let mut pm: HashMap<Name, Ty> = HashMap::new();
+                pm.insert(self_name, recv_ty);
+                let recv_ty_copy = recv_ty;
+                'concrete: for item in self.hir.items.iter() {
+                    if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
+                        let Some(trait_path) = &impl_item.trait_ref else {
+                            continue;
+                        };
+                        let param_map =
+                            crate::tyconv::build_param_tys(self.ctx, &impl_item.generic_params);
+                        let impl_self_ty = crate::tyconv::resolve_type_ref(
+                            self.ctx,
+                            self.infer,
+                            self.def_map,
+                            self.diagnostics,
+                            &impl_item.self_ty,
+                            &param_map,
+                            span,
+                        );
+                        // Probe receiver compatibility without committing diagnostics.
+                        let inf_snap = self.infer.snapshot();
+                        let diag_len = self.diagnostics.len();
+                        let ok = self.unify(recv_ty_copy, impl_self_ty, span);
+                        if !ok {
+                            self.infer.rollback_to(inf_snap);
+                            self.diagnostics.truncate(diag_len);
+                            continue;
+                        }
+                        let Some(trait_id) = crate::tyconv::resolve_path_to_trait_def_id(
+                            self.def_map,
+                            self.ctx,
+                            trait_path,
+                            span,
+                        ) else {
+                            continue;
+                        };
+                        // Prefer an impl-provided override of the method.
+                        for m in &impl_item.methods {
+                            if m.name == method_name {
+                                if let Some(body_id) = m.body {
+                                    let local = self
+                                        .body_owner_map
+                                        .get(&body_id)
+                                        .copied()
+                                        .unwrap_or_else(|| self.hir.body_owners[body_id]);
+                                    let return_ty = if let Some(rt) = &m.return_ty {
+                                        crate::tyconv::resolve_type_ref(
+                                            self.ctx,
+                                            self.infer,
+                                            self.def_map,
+                                            self.diagnostics,
+                                            rt,
+                                            &pm,
+                                            span,
+                                        )
+                                    } else {
+                                        Ty::UNIT
+                                    };
+                                    candidates.push((
+                                        recv_ty,
+                                        return_ty,
+                                        Some(MethodDispatch::Static(FnDefId::from_raw(
+                                            local.to_raw(),
+                                        ))),
+                                    ));
+                                    break 'concrete;
+                                }
+                            }
+                        }
+                        // Otherwise resolve from the trait's HIR (default method).
+                        for trait_item in self.hir.items.iter() {
+                            if let glyim_hir::ItemKind::Trait(ti) = &trait_item.kind {
+                                let tp = glyim_hir::Path {
+                                    segments: vec![glyim_hir::PathSegment {
+                                        name: trait_item.name,
+                                        generic_args: None,
+                                    }],
+                                    kind: glyim_core::path::PathKind::Plain,
+                                };
+                                let Some(local) = crate::tyconv::resolve_path_to_local_def_id(
+                                    self.ctx,
+                                    self.def_map,
+                                    &tp,
+                                ) else {
+                                    continue;
+                                };
+                                if TraitDefId::from_raw(local.to_raw()) != trait_id {
+                                    continue;
+                                }
+                                for m in &ti.methods {
+                                    if m.name == method_name {
+                                        let return_ty = if let Some(rt) = &m.return_ty {
+                                            crate::tyconv::resolve_type_ref(
+                                                self.ctx,
+                                                self.infer,
+                                                self.def_map,
+                                                self.diagnostics,
+                                                rt,
+                                                &pm,
+                                                span,
+                                            )
+                                        } else {
+                                            Ty::UNIT
+                                        };
+                                        if let Some(body_id) = m.default_body {
+                                            let local = self
+                                                .body_owner_map
+                                                .get(&body_id)
+                                                .copied()
+                                                .unwrap_or_else(|| self.hir.body_owners[body_id]);
+                                            candidates.push((
+                                                recv_ty,
+                                                return_ty,
+                                                Some(MethodDispatch::Static(FnDefId::from_raw(
+                                                    local.to_raw(),
+                                                ))),
+                                            ));
+                                        } else {
+                                            candidates.push((
+                                                recv_ty,
+                                                return_ty,
+                                                Some(MethodDispatch::Virtual(trait_id)),
+                                            ));
+                                        }
+                                        break 'concrete;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // Plan unstub-5 P5: method dispatch on a *generic* receiver
             // (`f.poll()` where `f: F` and `F: MyFuture`). No impl's `Self`
             // unifies with a type param, so the impl scan above finds nothing.
             // Instead, resolve the method from the bound trait's HIR
             // definition, substituting `Self` → the receiver type so associated
             // types in the signature (`Self::Output`) project correctly.
-            if let TyKind::Param(param) = self.ctx.ty_kind(recv_ty) {
+            // Plan stdlib-green: a generic *reference* receiver (`&mut R` /
+            // `&R` where `R: Trait`) also carries the param's trait bounds.
+            // The autoref step wraps the param in a `Ref`, so unwrap it before
+            // looking up bounds — otherwise `&mut R: Read` methods (`read`)
+            // are never found and fall through to "no method".
+            let recv_param = match self.ctx.ty_kind(recv_ty) {
+                TyKind::Param(p) => Some(p.clone()),
+                TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                    TyKind::Param(p) => Some(p.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(param) = recv_param {
                 let traits = self.ctx.param_bounds_for(param.name).map(|t| t.to_vec());
                 if let Some(traits) = traits {
                     let self_name = self.ctx.resolver().intern("Self");
                     let mut pm: HashMap<Name, Ty> = HashMap::new();
                     pm.insert(self_name, recv_ty);
-                    for tid in traits {
+                    for (bound_name, tid) in traits {
                         for item in self.hir.items.iter() {
                             if let glyim_hir::ItemKind::Trait(trait_item) = &item.kind {
-                                let trait_path = glyim_hir::Path {
-                                    segments: vec![glyim_hir::PathSegment {
-                                        name: item.name,
-                                        generic_args: None,
-                                    }],
-                                    kind: glyim_core::path::PathKind::Plain,
-                                };
-                                let Some(local) =
-                                    crate::tyconv::resolve_path_to_local_def_id(self.ctx, self.def_map, &trait_path)
-                                else {
-                                    continue;
-                                };
-                                if TraitDefId::from_raw(local.to_raw()) != tid {
+                                if self.ctx.name_str(item.name) != self.ctx.name_str(bound_name) {
                                     continue;
                                 }
                                 for m in &trait_item.methods {

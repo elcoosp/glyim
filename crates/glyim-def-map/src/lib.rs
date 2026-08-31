@@ -229,16 +229,32 @@ impl<'a> Resolver<'a> {
         for (i, segment) in path.segments.iter().enumerate().skip(start_idx) {
             let module_data = &self.modules[current_module];
             if i == path.segments.len() - 1 {
-                let types = module_data.scope.types.get(&segment.name);
-                let values = module_data.scope.values.get(&segment.name);
-                let mut result = PerNs::default();
-                if let Some((tid, tvis, _)) = types {
-                    result.types = Some((*tid, tvis.clone()));
+                // Final segment: search the current module *and its ancestors*
+                // (walking up the `parent` chain) so that a bare name referenced
+                // inside a nested `mod` block resolves to an item declared in
+                // that same module without requiring a crate-wide `pub use`
+                // re-export (Rust's lexical scoping for paths). Only the final
+                // segment is subject to this upward search; intermediate
+                // segments are pure module navigation.
+                let mut search_mod = current_module;
+                loop {
+                    let scope = &self.modules[search_mod].scope;
+                    let mut result = PerNs::default();
+                    if let Some((tid, tvis, _)) = scope.types.get(&segment.name) {
+                        result.types = Some((*tid, tvis.clone()));
+                    }
+                    if let Some((vid, vvis, _)) = scope.values.get(&segment.name) {
+                        result.values = Some((*vid, vvis.clone()));
+                    }
+                    if result.types.is_some() || result.values.is_some() {
+                        return result;
+                    }
+                    match self.modules[search_mod].parent {
+                        Some(parent) => search_mod = parent,
+                        None => break,
+                    }
                 }
-                if let Some((vid, vvis, _)) = values {
-                    result.values = Some((*vid, vvis.clone()));
-                }
-                return result;
+                return PerNs::default();
             } else if let Some((_, child_id)) = module_data
                 .children
                 .iter()
@@ -418,7 +434,7 @@ fn extract_path_from_syntax(node: &SyntaxNode, interner: &Interner) -> Option<Pa
 pub fn build_def_map(
     root: &SyntaxNode,
     krate: CrateId,
-    interner: Interner,
+    mut interner: Interner,
 ) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let mut diagnostics = Vec::new();
     let mut modules: IndexVec<ModuleId, ModuleData> = IndexVec::new();
@@ -451,6 +467,26 @@ pub fn build_def_map(
         &mut def_to_module,
         &mut use_decls,
         &mut variant_map,
+    );
+
+    // FFI import declarations: `extern "C" { fn name(...); }` blocks may appear
+    // at module top level OR nested inside function bodies. Their inner `fn`s
+    // are foreign (C-linkage) symbols that must resolve as callables from
+    // anywhere in the crate. The structural `collect_items` pass only walks
+    // top-level module children, so nested-in-body blocks never reach it. We
+    // therefore scan the *entire* syntax tree for `ExternBlock` nodes and
+    // register each inner `fn` in the crate-root value namespace (FFI has
+    // global linkage). The downstream type-checker resolves each lowered fn
+    // item by `item.name` through the def-map (see `typeck_crate`), so this
+    // registration is what makes `extern "C" { fn foo(); }` calls resolve.
+    collect_extern_imports(
+        root,
+        root_module,
+        &mut modules,
+        &mut diagnostics,
+        &mut interner,
+        &mut def_counter,
+        &mut def_to_module,
     );
 
     // Plan §4.1: fixed-point import resolution. Re-run every pending `use`
@@ -933,6 +969,70 @@ fn namespace_for_kind(kind: SyntaxKind) -> Option<Namespace> {
         | SyntaxKind::TypeAlias
         | SyntaxKind::ExternBlock => Some(Namespace::Types),
         _ => None,
+    }
+}
+
+/// Walk the *entire* syntax tree for `extern "C" { fn name(...); }` import
+/// blocks and register each inner `fn` in the crate-root value namespace as a
+/// `FnDef`. FFI imports have C-linkage (global), so they are callable from any
+/// module. Registration happens regardless of where the block appears (module
+/// top level or nested inside a function body), which the structural
+/// `collect_items` pass cannot do because it only walks top-level module
+/// children. The HIR lowering already lowers these inner `fn`s into `FnDef`
+/// items (see `lower/mod.rs`'s `ExternBlock` arm), and the type-checker
+/// resolves each such item by `item.name` through the def-map — so this
+/// declaration is what makes `extern "C" { fn foo(); }` calls resolve to a
+/// callable with a registered signature.
+fn collect_extern_imports(
+    node: &SyntaxNode,
+    root_module: ModuleId,
+    modules: &mut IndexVec<ModuleId, ModuleData>,
+    diagnostics: &mut Vec<GlyimDiagnostic>,
+    interner: &mut Interner,
+    def_counter: &mut u32,
+    def_to_module: &mut HashMap<LocalDefId, ModuleId>,
+) {
+    for child in node.children() {
+        if child.kind() == SyntaxKind::ExternBlock {
+            for inner in child.children() {
+                if inner.kind() == SyntaxKind::FnDef {
+                    let name_str = extract_ident(&inner);
+                    let name = interner.intern(&name_str);
+                    let id = LocalDefId::from_raw(*def_counter);
+                    *def_counter += 1;
+                    let span = node_span(&inner);
+                    def_to_module.insert(id, root_module);
+                    let scope = &mut modules[root_module].scope;
+                    // FFI imports have C-linkage (global): the same symbol may be
+                    // bound by `extern "C"` blocks in several modules (e.g.
+                    // `glyim_thread_unpark` is used by both the `future` and
+                    // `thread` stdlib modules). That is valid, so re-declarations
+                    // never collide — simply keep the first binding and skip the
+                    // rest rather than emitting a hard "duplicate definition"
+                    // error (which would abort def-map construction and hide every
+                    // downstream type error).
+                    if !scope.values.contains_key(&name) {
+                        scope.declare(
+                            name,
+                            id,
+                            Visibility::Public,
+                            span,
+                            Namespace::Values,
+                        );
+                    }
+                }
+            }
+        }
+        // Recurse into every child so nested-in-body `extern` blocks are found.
+        collect_extern_imports(
+            &child,
+            root_module,
+            modules,
+            diagnostics,
+            interner,
+            def_counter,
+            def_to_module,
+        );
     }
 }
 

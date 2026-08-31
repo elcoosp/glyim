@@ -301,10 +301,15 @@ impl<'a> Parser<'a> {
                             if self.current_kind() == SyntaxKind::Colon {
                                 // Explicit field: name: expr
                                 self.bump(); // colon
+                                // Start the StructField node at the field name
+                                // and nest the value expression INSIDE it, so the
+                                // HIR lower (which reads the field value as a child
+                                // of StructField) can find it. The shorthand branch
+                                // below does the same; keeping the two shapes
+                                // identical is what makes field collection work.
                                 self.start_node_at(field_cp, SyntaxKind::StructField);
-                                // The field name token is already emitted.
-                                self.finish_node();
-                                self.parse_expr(); // expression value
+                                self.parse_expr(); // expression value (nested)
+                                self.finish_node(); // StructField
                             } else {
                                 // Shorthand field: name (same as expression)
                                 self.start_node_at(field_cp, SyntaxKind::StructField);

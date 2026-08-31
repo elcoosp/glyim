@@ -1273,6 +1273,7 @@ dependencies = [
  "glyim-diag",
  "glyim-frontend",
  "glyim-hir",
+ "glyim-lang-std",
  "glyim-lower",
  "glyim-meta",
  "glyim-mir",

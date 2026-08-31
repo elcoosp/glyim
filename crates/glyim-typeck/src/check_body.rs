@@ -25,6 +25,11 @@ pub struct FnCtxt<'a> {
     pub expr_cache: HashMap<ExprId, (thir::Expr, Ty)>,
     pub trait_ctx: &'a TraitContext,
     pub def_map: &'a glyim_def_map::CrateDefMap,
+    /// Module that declares the function currently being checked. Used as the
+    /// starting point for path resolution so bare names resolve against the
+    /// function's own module (and walk up to the crate root), matching Rust's
+    /// lexical scoping for paths rather than only the root scope.
+    pub current_module: glyim_def_map::ModuleId,
     /// Per-body capture log: every `VarRef` id/type resolved while checking a
     /// `let`/closure body, in resolution order. Used by closure capture
     /// analysis (Tier 1.1) to classify captures by mutability and to filter

@@ -120,6 +120,29 @@ impl<'a> Parser<'a> {
                 }
                 self.finish_node();
             }
+            SyntaxKind::KwExtern => {
+                // `extern "C" fn(...) -> Ret` function-pointer type (used in
+                // FFI signatures, e.g. `f: extern "C" fn(*mut u8)`).
+                self.start_node(SyntaxKind::FnType);
+                self.bump(); // extern
+                if self.current_kind() == SyntaxKind::StringLit {
+                    self.bump(); // ABI string ("C")
+                }
+                self.expect(SyntaxKind::KwFn);
+                self.expect(SyntaxKind::LParen);
+                while self.current_kind() != SyntaxKind::RParen && self.current().is_some() {
+                    self.parse_type();
+                    if self.current_kind() == SyntaxKind::Comma {
+                        self.bump();
+                    }
+                }
+                self.expect(SyntaxKind::RParen);
+                if self.current_kind() == SyntaxKind::Arrow {
+                    self.bump();
+                    self.parse_type();
+                }
+                self.finish_node();
+            }
             SyntaxKind::KwFn => {
                 self.start_node(SyntaxKind::FnType);
                 self.bump(); // fn

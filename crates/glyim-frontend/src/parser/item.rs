@@ -445,15 +445,18 @@ impl<'a> Parser<'a> {
         self.start_node(SyntaxKind::Param);
         if self.current_kind() == SyntaxKind::And {
             self.bump(); // &
-            let is_mut = self.current_kind() == SyntaxKind::KwMut;
-            if is_mut {
-                self.bump(); // mut
-            }
-            // Optional lifetime on a reference receiver/param: `&'a self`,
-            // `&'a T`, `&mut 'a self`. Bump it so the lifetime survives to
-            // typeck instead of erroring as a bare Ident.
-            if self.current_kind() == SyntaxKind::Lifetime {
-                self.bump();
+            // Optional `mut` and/or lifetime, in either order:
+            // `&mut`, `&'a`, `&'a mut`, `&mut 'a`.
+            loop {
+                if self.current_kind() == SyntaxKind::KwMut {
+                    self.bump();
+                    continue;
+                }
+                if self.current_kind() == SyntaxKind::Lifetime {
+                    self.bump();
+                    continue;
+                }
+                break;
             }
             if self.current_kind() == SyntaxKind::KwSelf {
                 // `&mut self` / `&self`: build a `RefType` node whose inner is
@@ -469,6 +472,12 @@ impl<'a> Parser<'a> {
                 self.finish_node(); // Param
                 return;
             }
+            // `&'a T` / `&mut T` named parameter: wrap the pointee in a
+            // RefType so the parameter type survives to typeck.
+            self.start_node(SyntaxKind::RefType);
+            self.parse_type();
+            self.finish_node(); // RefType
+            self.finish_node(); // Param
             self.bump_expected(SyntaxKind::Ident);
             self.expect(SyntaxKind::Colon);
             self.parse_type();

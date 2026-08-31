@@ -309,15 +309,15 @@ struct Permissions {
 impl Permissions {
     /// Returns `true` if these permissions describe a readonly file.
     fn readonly(&self) -> bool {
-        (self.mode & 0o200) == 0
+        (self.mode & 0o200u32) == 0
     }
 
     /// Set the readonly flag.
     fn set_readonly(&mut self, readonly: bool) {
         if readonly {
-            self.mode &= !0o222;
+            self.mode &= !0o222u32;
         } else {
-            self.mode |= 0o200;
+            self.mode |= 0o200u32;
         }
     }
 }
@@ -333,7 +333,7 @@ fn read(path: &str) -> Result<Vec<u8>> {
 /// Read the entire contents of a file into a string.
 fn read_to_string(path: &str) -> Result<String> {
     let bytes = read(path)?;
-    let s = str::from_utf8(&bytes).map_err(|_| Error::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8"))?;
+    let s = str::from_utf8(&bytes).map_err(|_| Error::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8".to_string()))?;
     Result::Ok(s.to_string())
 }
 

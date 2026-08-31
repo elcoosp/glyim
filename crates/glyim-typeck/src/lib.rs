@@ -112,10 +112,31 @@ fn adt_id_for_item(
     // synthetic id for a generated ADT, and type resolution (which keys on the
     // `AdtId`) would never reconcile them — producing an infinite loop when
     // projecting associated types through that ADT.
+    // Prefer the item's *own defining module* (`module_id`) first: a `use`
+    // re-export (e.g. `mod fs` does `use io::{ErrorKind}`) creates a *second*
+    // def-map entry with a different `AdtId` (35) than the definition in `mod
+    // io` (63). A blind `find_map` over all modules would return the re-export's
+    // id (whichever module is first in iteration order) and split one logical
+    // type across two ids. Checking the defining module first yields the real
+    // definition's stable id. Only if it is absent there (a cross-module
+    // reference from a module that does not itself define or re-export the
+    // type) do we search every module's scope, then `adt_id_by_name`, then mint
+    // a synthetic id.
     if let Some(l) = def_map
         .modules
         .get(module_id)
         .and_then(|m| m.scope.types.get(&name))
+        .map(|(id, _, _)| *id)
+    {
+        return AdtId::from_raw(l.to_raw());
+    }
+    if let Some(l) = (0..def_map.modules.len())
+        .find_map(|i| {
+            def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)]
+                .scope
+                .types
+                .get(&name)
+        })
         .map(|(id, _, _)| *id)
     {
         return AdtId::from_raw(l.to_raw());
@@ -410,10 +431,8 @@ pub fn typeck_crate(
                                     ctx.param_bounds
                                         .entry(gp.name)
                                         .or_default()
-                                        .push(tid);
+                                        .push((name, tid));
                                 }
-                                // avoid unused warning for `name`
-                                let _ = name;
                             }
                         }
                     }
@@ -429,7 +448,7 @@ pub fn typeck_crate(
                         let p = &bound.trait_path;
                         if let Some(local) = tyconv::resolve_path_to_local_def_id(ctx, def_map, p) {
                             let tid = TraitDefId::from_raw(local.to_raw());
-                            ctx.param_bounds.entry(pname).or_default().push(tid);
+                            ctx.param_bounds.entry(pname).or_default().push((pname, tid));
                         }
                     }
                 }
@@ -658,6 +677,7 @@ pub fn typeck_crate(
                             &trait_ctx,
                             &body_owner_map,
                             &mut all_expr_types,
+                            def_map.root,
                         );
                     } else {
                         diagnostics.push(GlyimDiagnostic::type_error(
@@ -853,6 +873,7 @@ fn check_fn_items_in_module(
                         trait_ctx,
                         body_owner_map,
                         all_expr_types,
+                        module_id,
                     );
                 }
             }
@@ -1055,9 +1076,15 @@ fn check_body(
     trait_ctx: &TraitContext,
     body_owner_map: &HashMap<glyim_hir::BodyId, LocalDefId>,
     expr_types: &mut HashMap<LocalDefId, HashMap<ExprId, Ty>>,
+    module_id: glyim_def_map::ModuleId,
 ) {
     let body = &hir.bodies[body_id];
     let env = env::LocalEnv::new();
+
+    // Resolve the module that lexically contains this function (the declaring
+    // module if registered, otherwise the explicitly-passed module, otherwise
+    // the crate root). Path resolution starts here and walks up to the root.
+    let current_module = module_id;
 
     let fn_ctxt = check_body::FnCtxt {
         ctx,
@@ -1071,6 +1098,7 @@ fn check_body(
         owner,
         expr_cache: Default::default(),
         def_map,
+        current_module,
         trait_ctx,
         capture_log: Vec::new(),
         body_owner_map,

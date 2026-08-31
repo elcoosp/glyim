@@ -45,6 +45,22 @@ pub struct TyCtxMut {
     adt_by_name: HashMap<Name, AdtId>,
 
     pub(crate) trait_defs: HashMap<glyim_core::def_id::TraitDefId, crate::TraitDef>,
+    /// Maps a trait's (interned) name to its `TraitDefId`. Populated alongside
+    /// `trait_defs` by `register_trait_with_name` so that trait *type*
+    /// resolution (`resolve_impl_header`, `resolve_path_to_trait_def_id`) can
+    /// find builtin/lang traits (`Future`, `Drop`, `Deref`, `Clone`, …) by name
+    /// even though they are not declared in the user's source (plan:
+    /// stdlib-compile). Without this, `impl Future for X` / `T: Clone` fail to
+    /// resolve because the def-map only contains user-declared traits.
+    pub trait_by_name: HashMap<Name, glyim_core::def_id::TraitDefId>,
+
+    /// Maps a type-alias name (`Result`, …) to its formal parameters
+    /// `(index, name)` and a *template* `Ty` of the RHS with those formals
+    /// left as `TyKind::Param`. Populated from user `type X<..> = ..;`
+    /// declarations during pipeline setup so `resolve_name_to_adt_ty` can
+    /// expand 1-argument usages (`Result<usize>`) into the full RHS
+    /// (`Result<usize, Error>`). stdlib-completion.
+    pub type_aliases: HashMap<Name, (Vec<(u32, Name)>, Ty)>,
 
     variant_types: HashMap<AdtId, Vec<Ty>>,
     fn_sigs: HashMap<FnDefId, FnSig>,
@@ -81,8 +97,11 @@ pub struct TyCtxMut {
     /// on a generic receiver (`F::Output`, `f.poll()`) can find the bound
     /// trait without a full trait solver (plan unstub-5 P5). Name-keyed and
     /// crate-wide; sufficient because parameter names are interned and unique
-    /// within a function.
-    pub param_bounds: HashMap<Name, Vec<glyim_core::def_id::TraitDefId>>,
+    /// within a function. Stores `(trait_name, trait_def_id)` so the generic
+    /// method-dispatch fallback can match the HIR trait by *name* (avoiding
+    /// the `TraitDefId`/`LocalDefId` interner misalignment that otherwise
+    /// drops the candidate).
+    pub param_bounds: HashMap<Name, Vec<(Name, glyim_core::def_id::TraitDefId)>>,
 
     /// `AdtId`s with an explicit `Drop` impl (or owning builtins). Mirrors the
     /// `drop_impls` set on the frozen `TyCtx`, consulted by `needs_drop`.
@@ -93,6 +112,19 @@ pub struct TyCtxMut {
     /// devirtualization.
     pub(crate) impl_method_fns:
         HashMap<(glyim_core::def_id::TraitDefId, AdtId), HashMap<Name, FnDefId>>,
+
+    /// Builtin inherent-method table: `(receiver_adt_id, method_name)` →
+    /// `(synthetic FnDefId, method FnSig)`. Populated in `register_builtin_ranges`
+    /// for the builtin collection/enum types (`Vec`, `String`, `Result`,
+    /// `Option`, …) whose methods the stdlib calls but which have no user
+    /// `impl` block. The FnSig's generic params are expressed as
+    /// `TyKind::Param(i)` referring to the *receiver's* generic arguments
+    /// (0 = `T`, 1 = `E` for `Result`); the call site instantiates them against
+    /// the receiver's substitution. stdlib-completion.
+    pub builtin_method_fns: HashMap<(AdtId, Name), (FnDefId, FnSig)>,
+    /// Counter for synthetic `FnDefId`s handed out to builtin methods. Seeded
+    /// far above user/closure fn ids so it can never collide.
+    next_builtin_fn_id: u32,
 }
 
 impl TyCtxMut {
@@ -115,6 +147,8 @@ impl TyCtxMut {
             adt_defs: HashMap::new(),
             adt_by_name: HashMap::new(),
             trait_defs: HashMap::new(),
+            trait_by_name: HashMap::new(),
+            type_aliases: HashMap::new(),
             variant_types: HashMap::new(),
             fn_sigs: HashMap::new(),
             const_tys: HashMap::new(),
@@ -127,6 +161,8 @@ impl TyCtxMut {
             synthetic_adt_counter: 2_000_000,
             drop_impls: HashSet::new(),
             impl_method_fns: HashMap::new(),
+            builtin_method_fns: HashMap::new(),
+            next_builtin_fn_id: 9_000,
         };
         // sentinels
         assert_eq!(
@@ -232,6 +268,8 @@ impl TyCtxMut {
             adt_defs: ctx.adt_defs.clone(),
             adt_by_name: ctx.adt_by_name.clone(),
             trait_defs: ctx.trait_defs.clone(),
+            trait_by_name: ctx.trait_by_name.clone(),
+            type_aliases: HashMap::new(),
             variant_types: ctx.variant_types.clone(),
             fn_sigs: ctx.fn_sigs.clone(),
             const_tys: ctx.const_tys.clone(),
@@ -244,6 +282,8 @@ impl TyCtxMut {
             synthetic_adt_counter: 2_000_000,
             drop_impls: ctx.drop_impls.clone(),
             impl_method_fns: ctx.impl_method_fns.clone(),
+            builtin_method_fns: HashMap::new(),
+            next_builtin_fn_id: 9_000,
         }
     }
 
@@ -608,6 +648,20 @@ impl TyCtxMut {
         AdtId::from_raw(id)
     }
 
+    /// Register a type alias (`type X<..> = RHS;`) for expansion during type
+    /// resolution. `params` carries each formal's `(index, name)`; `template`
+    /// is the RHS type with those formals left as `TyKind::Param` so call
+    /// sites can substitute concrete arguments via `subst_ty` (stdlib-completion:
+    /// `type Result<T> = Result<T, Error>` expands `Result<usize>` → `Result<usize, Error>`).
+    pub fn register_type_alias(&mut self, name: Name, params: Vec<(u32, Name)>, template: Ty) {
+        self.type_aliases.insert(name, (params, template));
+    }
+
+    /// Look up a registered type alias by name (see `register_type_alias`).
+    pub fn lookup_type_alias(&self, name: Name) -> Option<&(Vec<(u32, Name)>, Ty)> {
+        self.type_aliases.get(&name)
+    }
+
     /// Register a nominal ADT representing a closure's captured environment.
     ///
     /// Each distinct closure expression (with a distinct capture set) gets its
@@ -652,6 +706,23 @@ impl TyCtxMut {
     /// (plan unstub-5 P5).
     pub fn adt_id_by_name(&self, name: Name) -> Option<AdtId> {
         self.adt_by_name.get(&name).copied()
+    }
+
+    /// Resolve a bare variant constructor/value name (`Ok`, `Err`, `Some`,
+    /// `None`, `Ready`, …) to its `(AdtId, VariantIdx)`. The stdlib/pre Rust
+    /// prelude references enum variants by their bare name (e.g. `Ok(x)`),
+    /// not the qualified `Enum::Variant` form, so value-path resolution must
+    /// search every registered enum's variant list. Returns the first match
+    /// (variant names are unique across the builtins the stdlib relies on).
+    pub fn variant_by_name(&self, name: Name) -> Option<(AdtId, glyim_core::def_id::VariantIdx)> {
+        for (adt_id, def) in self.adt_defs.iter() {
+            for (i, v) in def.variants.iter().enumerate() {
+                if v.name == name {
+                    return Some((*adt_id, glyim_core::def_id::VariantIdx::from_raw(i as u32)));
+                }
+            }
+        }
+        None
     }
 
     /// Number of generic type parameters declared on `adt_id`
@@ -896,7 +967,7 @@ impl TyCtxMut {
     /// during `typeck_crate` from `generic_params` / `where_clauses` (plan
     /// unstub-5 P5). Used for associated-type projection and method dispatch
     /// on a generic receiver.
-    pub fn param_bounds_for(&self, name: Name) -> Option<&[glyim_core::def_id::TraitDefId]> {
+    pub fn param_bounds_for(&self, name: Name) -> Option<&[(Name, glyim_core::def_id::TraitDefId)]> {
         self.param_bounds.get(&name).map(|v| v.as_slice())
     }
 
@@ -966,6 +1037,7 @@ impl TyCtxMut {
             adt_defs: self.adt_defs.clone(),
             adt_by_name: self.adt_by_name.clone(),
             trait_defs: self.trait_defs.clone(),
+            trait_by_name: self.trait_by_name.clone(),
             variant_types: self.variant_types.clone(),
             fn_sigs: self.fn_sigs.clone(),
             const_tys: self.const_tys.clone(),
@@ -993,6 +1065,7 @@ impl TyCtxMut {
             adt_defs: self.adt_defs,
             adt_by_name: self.adt_by_name,
             trait_defs: self.trait_defs.clone(),
+            trait_by_name: self.trait_by_name.clone(),
             variant_types: self.variant_types,
             fn_sigs: self.fn_sigs,
             const_tys: self.const_tys,
@@ -1237,11 +1310,398 @@ impl TyCtxMut {
                     fields: some_fields.clone(),
                 },
             ],
-            generic_params: vec![],
+            generic_params: vec![self.resolver.intern("T")],
 };
-        self.register_adt(AdtId::from_raw(1010), option_def);
+        self.register_adt(AdtId::from_raw(1010), option_def.clone());
         self.lang_items.register(LangItem::Option, def_id(1010))
             .expect("builtin lang item registration must not duplicate");
+        // Register `Option` by name so the path type `Option<T>` resolves from
+        // user code (the lang-item registration alone only ties it to the
+        // `Option` lang item, not the name used in type position).
+        self.register_adt_with_name(self.resolver.intern("Option"), AdtId::from_raw(1010), option_def);
+
+        // Register `Vec<T>` - ID 1020.
+        // An owning collection. We register only its name + generic arity so the
+        // frontend resolves `Vec<T>` as a type; the concrete field layout is
+        // irrelevant to type resolution (std constructs `Vec` through
+        // `Vec::new`/`with_capacity` etc., never via struct literals).
+        let vec_t_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 0,
+            name: self.resolver.intern("T"),
+        }));
+        let mut vec_field_defs = IndexVec::new();
+        vec_field_defs.push(FieldDef {
+            name: self.resolver.intern("buf"),
+            ty: vec_t_var,
+        });
+        let vec_def = AdtDef {
+            kind: AdtKind::Struct,
+            fields: vec_field_defs.clone(),
+            variants: vec![VariantDef {
+                name: self.resolver.intern(""),
+                style: crate::adt_def::VariantStyle::Unit,
+                fields: vec_field_defs,
+            }],
+            generic_params: vec![self.resolver.intern("T")],
+        };
+        self.register_adt(AdtId::from_raw(1020), vec_def.clone());
+        self.register_adt_with_name(self.resolver.intern("Vec"), AdtId::from_raw(1020), vec_def);
+        // `Vec` is an owning builtin (it owns a heap buffer) — record that it
+        // carries a `Drop` impl so `needs_drop` is correct (see `mark_has_drop`).
+        self.mark_has_drop(AdtId::from_raw(1020));
+
+        // Register `PhantomData<T>` - ID 1030.
+        // A zero-sized marker type. Only its name + arity matter for resolution.
+        let pd_t_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 0,
+            name: self.resolver.intern("T"),
+        }));
+        let mut pd_field_defs = IndexVec::new();
+        pd_field_defs.push(FieldDef {
+            name: self.resolver.intern("marker"),
+            ty: pd_t_var,
+        });
+        let pd_def = AdtDef {
+            kind: AdtKind::Struct,
+            fields: pd_field_defs.clone(),
+            variants: vec![VariantDef {
+                name: self.resolver.intern(""),
+                style: crate::adt_def::VariantStyle::Unit,
+                fields: pd_field_defs,
+            }],
+            generic_params: vec![self.resolver.intern("T")],
+        };
+        self.register_adt(AdtId::from_raw(1030), pd_def.clone());
+        self.register_adt_with_name(
+            self.resolver.intern("PhantomData"),
+            AdtId::from_raw(1030),
+            pd_def,
+        );
+
+        // Register `Result<T, E>` - ID 1011.
+        // The two-variant enum `Ok(T)` / `Err(E)`. Used pervasively by std
+        // (e.g. `io::Result<T> = Result<T, io::Error>`). Generic arity 2.
+        let mut ok_fields = IndexVec::new();
+        ok_fields.push(FieldDef {
+            name: self.resolver.intern("0"),
+            ty: t_var,
+        });
+        let mut err_fields = IndexVec::new();
+        err_fields.push(FieldDef {
+            name: self.resolver.intern("0"),
+            ty: t_var,
+        });
+        let result_def = AdtDef {
+            kind: AdtKind::Enum,
+            fields: IndexVec::new(),
+            variants: vec![
+                VariantDef {
+                    name: self.resolver.intern("Ok"),
+                    style: crate::adt_def::VariantStyle::Unit,
+                    fields: ok_fields,
+                },
+                VariantDef {
+                    name: self.resolver.intern("Err"),
+                    style: crate::adt_def::VariantStyle::Unit,
+                    fields: err_fields,
+                },
+            ],
+            generic_params: vec![self.resolver.intern("T"), self.resolver.intern("E")],
+        };
+        self.register_adt(AdtId::from_raw(1011), result_def.clone());
+        self.register_adt_with_name(
+            self.resolver.intern("Result"),
+            AdtId::from_raw(1011),
+            result_def,
+        );
+        self.lang_items.register(LangItem::Result, def_id(1011))
+            .expect("builtin lang item registration must not duplicate");
+
+        // Register `UnsafeCell<T>` by name (already registered at 1005 above,
+        // but `register_adt` alone does not make it name-resolvable in type
+        // position).
+        self.register_adt_with_name(
+            self.resolver.intern("UnsafeCell"),
+            AdtId::from_raw(1005),
+            AdtDef {
+                kind: AdtKind::Struct,
+                fields: IndexVec::new(),
+                variants: vec![VariantDef {
+                    name: self.resolver.intern(""),
+                    style: crate::adt_def::VariantStyle::Unit,
+                    fields: IndexVec::new(),
+                }],
+                generic_params: vec![self.resolver.intern("T")],
+            },
+        );
+
+        // Register `Box<T>` - ID 1040.
+        // An owning pointer. Only name + arity matter for resolution; no
+        // struct literal is written for `Box` in std.
+        let box_t_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 0,
+            name: self.resolver.intern("T"),
+        }));
+        let mut box_field_defs = IndexVec::new();
+        box_field_defs.push(FieldDef {
+            name: self.resolver.intern("ptr"),
+            ty: box_t_var,
+        });
+        let box_def = AdtDef {
+            kind: AdtKind::Struct,
+            fields: box_field_defs.clone(),
+            variants: vec![VariantDef {
+                name: self.resolver.intern(""),
+                style: crate::adt_def::VariantStyle::Unit,
+                fields: box_field_defs,
+            }],
+            generic_params: vec![self.resolver.intern("T")],
+        };
+        self.register_adt(AdtId::from_raw(1040), box_def.clone());
+        self.register_adt_with_name(self.resolver.intern("Box"), AdtId::from_raw(1040), box_def);
+        self.mark_has_drop(AdtId::from_raw(1040));
+
+        // Register `String` as a builtin ADT (id 1050). The stdlib treats
+        // `String` as a builtin (no `struct String` definition); it exposes
+        // `as_ptr`/`len`/`capacity`/`push`/`to_string`/`as_mut_ptr`/`set_len`.
+        // We register only name + arity so type resolution works; the concrete
+        // layout is irrelevant to type checking.
+        let str_t_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 0,
+            name: self.resolver.intern("T"),
+        }));
+        let mut str_field_defs = IndexVec::new();
+        str_field_defs.push(FieldDef {
+            name: self.resolver.intern("buf"),
+            ty: str_t_var,
+        });
+        let string_def = AdtDef {
+            kind: AdtKind::Struct,
+            fields: str_field_defs.clone(),
+            variants: vec![VariantDef {
+                name: self.resolver.intern(""),
+                style: crate::adt_def::VariantStyle::Unit,
+                fields: str_field_defs,
+            }],
+            generic_params: vec![self.resolver.intern("T")],
+        };
+        self.register_adt(AdtId::from_raw(1050), string_def.clone());
+        self.register_adt_with_name(
+            self.resolver.intern("String"),
+            AdtId::from_raw(1050),
+            string_def,
+        );
+        self.mark_has_drop(AdtId::from_raw(1050));
+
+        // Populate the builtin inherent-method table (Vec/String/Result/Option
+        // methods the stdlib calls but which have no user `impl` block).
+        self.register_builtin_methods();
+
+        // Register builtin/lang TRAITS by name so `impl Future for X`,
+        // `T: Clone`, `impl Drop for Y`, `T: Deref`, etc. resolve. The
+        // `LangItem` enum already declares `Future`/`Drop`/`Deref`/`Clone`/…
+        // but nothing ever registered them, so every builtin-trait reference
+        // was an "unresolved trait" before this. Trait ids are fixed and
+        // disjoint from ADT ids (ADTs use 1000–1040; traits start at 2001).
+        let mut reg_trait = |id: u32, name: &str| {
+            let n = self.resolver.intern(name);
+            let tid = glyim_core::def_id::TraitDefId::from_raw(id);
+            self.trait_defs.insert(
+                tid,
+                crate::TraitDef {
+                    name: n,
+                    methods: Vec::new(),
+                    associated_types: Vec::new(),
+                },
+            );
+            self.trait_by_name.insert(n, tid);
+        };
+        reg_trait(2001, "Future");
+        reg_trait(2002, "Drop");
+        reg_trait(2003, "Deref");
+        reg_trait(2004, "DerefMut");
+        reg_trait(2005, "Clone");
+        reg_trait(2006, "Copy");
+        reg_trait(2007, "Sized");
+        reg_trait(2008, "Send");
+        reg_trait(2009, "Sync");
+        reg_trait(2010, "Unpin");
+        reg_trait(2011, "Fn");
+        reg_trait(2012, "FnMut");
+        reg_trait(2013, "FnOnce");
+        reg_trait(2014, "Iterator");
+        reg_trait(2015, "IntoIterator");
+        reg_trait(2016, "Default");
+    }
+
+    /// Populate the builtin inherent-method table (`builtin_method_fns`) for the
+    /// collection/enum types the stdlib calls through method syntax but which
+    /// have no user `impl` block (`Vec`, `String`, `Result`, `Option`). Method
+    /// signatures use `TyKind::Param(i)` to denote the *receiver's* generic
+    /// arguments (0 = `T`, 1 = `E` for `Result`/`Option`'s single param); the
+    /// call site instantiates them against the receiver's substitution.
+    /// stdlib-completion.
+    fn register_builtin_methods(&mut self) {
+        let t_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 0,
+            name: self.resolver.intern("T"),
+        }));
+        let _e_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 1,
+            name: self.resolver.intern("E"),
+        }));
+        let usize_ty = self.mk_ty(TyKind::Uint(UintTy::Usize));
+        let bool_ty = Ty::BOOL;
+        let str_ty = self.mk_ty(TyKind::String);
+        let u8_ty = self.mk_ty(TyKind::Uint(UintTy::U8));
+        let slice_u8 = self.mk_ty(TyKind::Slice(u8_ty));
+
+        // Precompute every method's output type so the registration closure
+        // only mutates the table (avoids holding `&mut self` across repeated
+        // `self.mk_ty` calls, which the borrow checker rejects).
+        let vec_id = AdtId::from_raw(1020);
+        let string_id = AdtId::from_raw(1050);
+        let result_id = AdtId::from_raw(1011);
+        let option_id = AdtId::from_raw(1010);
+        let slice_id = AdtId::from_raw(1060);
+        let str_id = AdtId::from_raw(1061);
+        let box_id = AdtId::from_raw(1040);
+
+        let vec_as_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not));
+        let vec_as_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
+        let u8_as_ptr = self.mk_ty(TyKind::RawPtr(u8_ty, Mutability::Not));
+        let u8_as_mut_ptr = self.mk_ty(TyKind::RawPtr(u8_ty, Mutability::Mut));
+        let string_subst = self.intern_substitution(vec![GenericArg::Ty(u8_ty)]);
+        let string_ty = self.mk_ty(TyKind::Adt(string_id, string_subst));
+        let slice_as_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not));
+        let slice_as_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
+        let option_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+        let option_ty = self.mk_ty(TyKind::Adt(option_id, option_subst));
+        // Associated-function output types (no receiver). `Vec<T>` and friends
+        // carry the element type as `Param(0)` so the caller can instantiate.
+        let vec_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+        let vec_ty = self.mk_ty(TyKind::Adt(vec_id, vec_subst));
+        let result_subst = self.intern_substitution(vec![GenericArg::Ty(t_var), GenericArg::Ty(_e_var)]);
+        let result_ty = self.mk_ty(TyKind::Adt(result_id, result_subst));
+        // `str::from_utf8(&[u8]) -> Result<&str, E>`: the `&str` element is
+        // concrete; the error `E` is left as `Param(1)` so the inferred-output
+        // fix in `try_builtin_method` turns it into a fresh inference var
+        // (constrained by the caller's `.map_err(Error::new(...))`).
+        let str_ref_ty = self.mk_ty(TyKind::Ref(Region::Erased, str_ty, Mutability::Not));
+        let ref_slice_u8_ty = self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not));
+        let str_from_utf8_subst = self.intern_substitution(vec![
+            GenericArg::Ty(str_ref_ty),
+            GenericArg::Ty(_e_var),
+        ]);
+        let str_from_utf8_result = self.mk_ty(TyKind::Adt(result_id, str_from_utf8_subst));
+        let str_find_subst = self.intern_substitution(vec![GenericArg::Ty(usize_ty)]);
+        let str_find_result = self.mk_ty(TyKind::Adt(option_id, str_find_subst));
+        let box_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+        let box_ty = self.mk_ty(TyKind::Adt(box_id, box_subst));
+
+        // (adt_id, method_name, inputs, output) tuples.
+        let entries: Vec<(AdtId, &str, Vec<Ty>, Ty)> = vec![
+            // Vec<T>
+            (vec_id, "len", vec![], usize_ty),
+            (vec_id, "capacity", vec![], usize_ty),
+            (vec_id, "as_ptr", vec![], vec_as_ptr),
+            (vec_id, "as_mut_ptr", vec![], vec_as_mut_ptr),
+            (vec_id, "set_len", vec![usize_ty], Ty::UNIT),
+            (vec_id, "push", vec![t_var], Ty::UNIT),
+            (vec_id, "is_empty", vec![], bool_ty),
+            // String (element u8)
+            (string_id, "len", vec![], usize_ty),
+            (string_id, "capacity", vec![], usize_ty),
+            (string_id, "as_ptr", vec![], u8_as_ptr),
+            (string_id, "as_mut_ptr", vec![], u8_as_mut_ptr),
+            (string_id, "set_len", vec![usize_ty], Ty::UNIT),
+            (string_id, "push", vec![u8_ty], Ty::UNIT),
+            (string_id, "to_string", vec![], string_ty),
+            // Result<T, E>
+            (result_id, "is_ok", vec![], bool_ty),
+            (result_id, "is_err", vec![], bool_ty),
+            (result_id, "unwrap_or", vec![t_var], t_var),
+            (result_id, "unwrap_or_default", vec![], t_var),
+            (result_id, "expect", vec![str_ty], t_var),
+            // Option<T>
+            (option_id, "is_some", vec![], bool_ty),
+            (option_id, "is_none", vec![], bool_ty),
+            (option_id, "unwrap_or", vec![t_var], t_var),
+            (option_id, "unwrap_or_default", vec![], t_var),
+            (option_id, "expect", vec![str_ty], t_var),
+            (option_id, "take", vec![], option_ty),
+            // Slice [T]
+            (slice_id, "len", vec![], usize_ty),
+            (slice_id, "as_ptr", vec![], slice_as_ptr),
+            (slice_id, "as_mut_ptr", vec![], slice_as_mut_ptr),
+            (slice_id, "is_empty", vec![], bool_ty),
+            // str
+            (str_id, "len", vec![], usize_ty),
+            (str_id, "is_empty", vec![], bool_ty),
+            (str_id, "as_ptr", vec![], u8_as_ptr),
+            (str_id, "as_mut_ptr", vec![], u8_as_mut_ptr),
+            (str_id, "as_bytes", vec![], self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not))),
+            (str_id, "contains", vec![u8_ty], bool_ty),
+            (str_id, "to_string", vec![], string_ty),
+            (str_id, "from_utf8", vec![ref_slice_u8_ty], str_from_utf8_result),
+            (str_id, "find", vec![str_ty], str_find_result),
+            // Inherent associated functions (path-style `Vec::new()`, called
+            // through `check_path`'s `Adt::fn` branch, not `recv.method()`).
+            (vec_id, "new", vec![], vec_ty),
+            (vec_id, "with_capacity", vec![usize_ty], vec_ty),
+            (vec_id, "from", vec![], vec_ty),
+            (vec_id, "from_raw_parts", vec![], vec_ty),
+            (string_id, "new", vec![], string_ty),
+            (string_id, "with_capacity", vec![usize_ty], string_ty),
+            (string_id, "from", vec![], string_ty),
+            (string_id, "from_utf8", vec![], result_ty),
+            (string_id, "from_utf8_lossy", vec![ref_slice_u8_ty], string_ty),
+            (string_id, "from_str", vec![], result_ty),
+            (result_id, "unwrap", vec![], t_var),
+            (result_id, "unwrap_or_else", vec![], t_var),
+            (result_id, "map", vec![], result_ty),
+            (result_id, "map_or", vec![t_var, t_var], t_var),
+            (option_id, "unwrap", vec![], t_var),
+            (option_id, "unwrap_or_else", vec![], t_var),
+            (option_id, "map", vec![], option_ty),
+            // Box<T>
+            (box_id, "new", vec![t_var], box_ty),
+            (box_id, "into_raw", vec![box_ty], self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))),
+            (box_id, "from_raw", vec![self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))], box_ty),
+            (box_id, "leak", vec![box_ty], self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Mut))),
+            (box_id, "as_ptr", vec![], self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not))),
+        ];
+
+        for (adt_id, name, inputs, output) in entries {
+            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            self.next_builtin_fn_id += 1;
+            let n = self.resolver.intern(name);
+            let inputs_subst = self.intern_substitution(
+                inputs.iter().map(|t| GenericArg::Ty(*t)).collect(),
+            );
+            self.builtin_method_fns.insert(
+                (adt_id, n),
+                (
+                    fn_id,
+                    FnSig {
+                        inputs: inputs_subst,
+                        output,
+                        c_variadic: false,
+                        unsafety: glyim_core::primitives::Safety::Safe,
+                        abi: glyim_core::primitives::Abi::Glyim,
+                    },
+                ),
+            );
+        }
+    }
+
+    /// Look up a builtin inherent method by receiver ADT id + method name.
+    /// Returns the synthetic `FnDefId` and the method's `FnSig` template
+    /// (generic params as `TyKind::Param` referring to the receiver's generic
+    /// args). The caller instantiates the output type against the receiver's
+    /// substitution. Returns `None` when no builtin method matches.
+    pub fn lookup_builtin_method(&self, adt_id: AdtId, name: Name) -> Option<(FnDefId, FnSig)> {
+        self.builtin_method_fns.get(&(adt_id, name)).map(|(id, sig)| (*id, sig.clone()))
     }
 }
 

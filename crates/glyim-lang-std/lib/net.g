@@ -151,7 +151,7 @@ impl TcpStream {
         }
         let (host, port) = match split_host_port(addr) {
             Option::Some(hp) => hp,
-            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+            Option::None => return Result::Err(Error::invalid_input("invalid address".to_string())),
         };
         let fd = unsafe { glyim_net_tcp_connect(host.as_ptr(), host.len(), port) };
         if fd < 0 {
@@ -258,7 +258,7 @@ impl<'a> Future for ReadFuture<'a> {
 
     fn poll(&mut self, _cx: &mut Context) -> Poll<Result<usize, Error>> {
         extern "C" {
-            fn glyim_reactor_register(fd: i32, interest: u32, thread_id: u64) -> usize;
+            fn glyim_reactor_register(fd: i32, interest: u32, thread_id: usize) -> usize;
             fn glyim_reactor_deregister(token: usize);
         }
         if !self.registered {
@@ -266,7 +266,7 @@ impl<'a> Future for ReadFuture<'a> {
             // global reactor, keyed on the current executor thread. The reactor
             // will `unpark` this thread when the fd becomes readable.
             self.stream.set_nonblocking(true).expect("set_nonblocking");
-            let tid = thread::current_id().to_u64();
+            let tid = thread::current_id() as usize;
             self.token = unsafe { glyim_reactor_register(self.stream.fd, 1, tid) };
             self.registered = true;
             return Poll::Pending;
@@ -303,13 +303,9 @@ impl<'a> Future for WriteFuture<'a> {
     type Output = Result<usize, Error>;
 
     fn poll(&mut self, _cx: &mut Context) -> Poll<Result<usize, Error>> {
-        extern "C" {
-            fn glyim_reactor_register(fd: i32, interest: u32, thread_id: u64) -> usize;
-            fn glyim_reactor_deregister(token: usize);
-        }
         if !self.registered {
             self.stream.set_nonblocking(true).expect("set_nonblocking");
-            let tid = thread::current_id().to_u64();
+            let tid = thread::current_id() as usize;
             self.token = unsafe { glyim_reactor_register(self.stream.fd, 2, tid) };
             self.registered = true;
             return Poll::Pending;
@@ -373,7 +369,7 @@ impl TcpListener {
         }
         let (host, port) = match split_host_port(addr) {
             Option::Some(hp) => hp,
-            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+            Option::None => return Result::Err(Error::invalid_input("invalid address".to_string())),
         };
         let fd = unsafe { glyim_net_tcp_bind(host.as_ptr(), host.len(), port) };
         if fd < 0 {
@@ -427,7 +423,7 @@ impl UdpSocket {
         }
         let (host, port) = match split_host_port(addr) {
             Option::Some(hp) => hp,
-            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+            Option::None => return Result::Err(Error::invalid_input("invalid address".to_string())),
         };
         let fd = unsafe { glyim_net_udp_bind(host.as_ptr(), host.len(), port) };
         if fd < 0 {
@@ -447,7 +443,7 @@ impl UdpSocket {
         }
         let (host, port) = match split_host_port(addr) {
             Option::Some(hp) => hp,
-            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+            Option::None => return Result::Err(Error::invalid_input("invalid address".to_string())),
         };
         let n = unsafe { glyim_net_udp_send_to(self.fd, buf.as_ptr(), buf.len(), host.as_ptr(), host.len(), port) };
         if n < 0 {
@@ -488,7 +484,7 @@ impl UdpSocket {
         }
         let (host, port) = match split_host_port(addr) {
             Option::Some(hp) => hp,
-            Option::None => return Result::Err(Error::invalid_input("invalid address")),
+            Option::None => return Result::Err(Error::invalid_input("invalid address".to_string())),
         };
         let rc = unsafe { glyim_net_udp_connect(self.fd, host.as_ptr(), host.len(), port) };
         if rc < 0 {
@@ -525,38 +521,280 @@ impl UdpSocket {
     }
 }
 
-/// Parse an IP address from a string.
-fn parse_ip_addr(s: &str) -> Option<IpAddr> {
-    if s.contains(':') {
-        // IPv6 (may contain `::` zero-compression). An IPv4-mapped form
-        // (`::ffff:1.2.3.4`) is out of scope for this pass.
-        parse_ipv6(s).map(IpAddr::V6)
+/// Split an address of the form `host:port` into `(host, port)`.
+/// The port separator is the LAST ':' (so IPv6 `::` compression is ignored).
+fn split_host_port(addr: &str) -> Option<(String, u16)> {
+    let bytes = addr.as_bytes();
+    let mut colon = addr.len();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b':' {
+            colon = i;
+        }
+        i += 1;
+    }
+    if colon == 0 || colon == addr.len() {
+        return Option::None;
+    }
+    let port = match parse_u16_dec(addr, colon + 1, addr.len()) {
+        Option::Some(v) => v,
+        Option::None => return Option::None,
+    };
+    // Build the host string from the byte range [0, colon).
+    let mut host: String = String::new();
+    let mut j = 0;
+    while j < colon {
+        host.push(bytes[j] as u8);
+        j += 1;
+    }
+    Option::Some((host, port))
+}
+
+/// Parse an IPv6 address from the byte range `s[start..end]`, supporting `::`.
+fn parse_ipv6_range(s: &str, start: usize, end: usize) -> Option<Ipv6Addr> {
+    if start >= end || end > s.len() {
+        return Option::None;
+    }
+    let bytes = s.as_bytes();
+    // Find the `::` compression marker (two consecutive colons) if present.
+    let mut dcolon = end; // index of the first ':' of "::", or `end` if absent
+    let mut k = start;
+    while k + 1 < end {
+        if bytes[k] == b':' && bytes[k + 1] == b':' {
+            dcolon = k;
+            break;
+        }
+        k += 1;
+    }
+    let (head_end, tail_start) = if dcolon < end {
+        (dcolon, dcolon + 2)
     } else {
-        let parts: Vec<&str> = s.split('.');
-        if parts.len() != 4 {
+        (end, end)
+    };
+
+    let mut segments: [u16; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+    let mut head_count = 0;
+    // Parse head segments [start, head_end) split on ':'.
+    if head_end > start {
+        let mut seg_start = start;
+        let mut idx = start;
+        while idx <= head_end {
+            if idx == head_end || bytes[idx] == b':' {
+                if idx > seg_start {
+                    if head_count >= 8 {
+                        return Option::None;
+                    }
+                    segments[head_count] = match parse_u16_hex(s, seg_start, idx) {
+                        Option::Some(v) => v,
+                        Option::None => return Option::None,
+                    };
+                    head_count += 1;
+                }
+                seg_start = idx + 1;
+            }
+            idx += 1;
+        }
+    }
+
+    let mut tail_count = 0;
+    if tail_start < end {
+        // Collect tail segments left-to-right into a temp array.
+        let mut tail_segs: [u16; 8] = [0; 8];
+        let mut seg_start = tail_start;
+        let mut idx = tail_start;
+        while idx <= end {
+            if idx == end || bytes[idx] == b':' {
+                if idx > seg_start {
+                    if tail_count >= 8 {
+                        return Option::None;
+                    }
+                    tail_segs[tail_count] = match parse_u16_hex(s, seg_start, idx) {
+                        Option::Some(v) => v,
+                        Option::None => return Option::None,
+                    };
+                    tail_count += 1;
+                }
+                seg_start = idx + 1;
+            }
+            idx += 1;
+        }
+        // Place them at the end of `segments`, leaving the `::` gap in the middle.
+        let mut i = 0;
+        while i < tail_count {
+            segments[8 - tail_count + i] = tail_segs[i];
+            i += 1;
+        }
+    } else {
+        if head_count != 8 {
             return Option::None;
         }
+    }
+
+    if head_count + tail_count > 8 {
+        return Option::None;
+    }
+
+    Option::Some(Ipv6Addr::new(
+        segments[0], segments[1], segments[2], segments[3],
+        segments[4], segments[5], segments[6], segments[7],
+    ))
+}
+
+/// Parse a hexadecimal `u16` from the byte range `s[start..end]`.
+fn parse_u16_hex(s: &str, start: usize, end: usize) -> Option<u16> {
+    if start >= end || end > s.len() {
+        return Option::None;
+    }
+    let bytes = s.as_bytes();
+    let mut value: u32 = 0;
+    let mut i = start;
+    while i < end {
+        let ch = bytes[i];
+        let digit: u32 = if ch >= 48 && ch <= 57 {
+            // '0'..='9'
+            (ch as u32) - 48
+        } else if ch >= 97 && ch <= 102 {
+            // 'a'..='f'
+            (ch as u32) - 87
+        } else if ch >= 65 && ch <= 70 {
+            // 'A'..='F'
+            (ch as u32) - 55
+        } else {
+            return Option::None;
+        };
+        value = value * 16 + digit;
+        if value > 0xFFFF {
+            return Option::None;
+        }
+        i += 1;
+    }
+    Option::Some(value as u16)
+}
+
+/// Parse a decimal `u8` from the byte range `s[start..end]`.
+fn parse_u8_dec(s: &str, start: usize, end: usize) -> Option<u8> {
+    if start >= end || end > s.len() {
+        return Option::None;
+    }
+    let bytes = s.as_bytes();
+    let mut value: u32 = 0;
+    let mut i = start;
+    while i < end {
+        let ch = bytes[i];
+        if ch < b'0' || ch > b'9' {
+            return Option::None;
+        }
+        value = value * 10 + ((ch as u32) - (b'0' as u32));
+        if value > 0xFF {
+            return Option::None;
+        }
+        i += 1;
+    }
+    Option::Some(value as u8)
+}
+
+/// Parse a decimal `u16` from the byte range `s[start..end]`.
+fn parse_u16_dec(s: &str, start: usize, end: usize) -> Option<u16> {
+    if start >= end || end > s.len() {
+        return Option::None;
+    }
+    let bytes = s.as_bytes();
+    let mut value: u32 = 0;
+    let mut i = start;
+    while i < end {
+        let ch = bytes[i];
+        if ch < b'0' || ch > b'9' {
+            return Option::None;
+        }
+        value = value * 10 + ((ch as u32) - (b'0' as u32));
+        if value > 0xFFFF {
+            return Option::None;
+        }
+        i += 1;
+    }
+    Option::Some(value as u16)
+}
+
+/// Parse an IP address from the byte range `s[start..end]`.
+fn parse_ip_addr(s: &str, start: usize, end: usize) -> Option<IpAddr> {
+    if start >= end || end > s.len() {
+        return Option::None;
+    }
+    let bytes = s.as_bytes();
+    // Detect an IPv6 address (contains ':') within the range.
+    let mut has_colon = false;
+    let mut j = start;
+    while j < end {
+        if bytes[j] == b':' {
+            has_colon = true;
+            break;
+        }
+        j += 1;
+    }
+    if has_colon {
+        // IPv6 (may contain `::` zero-compression). An IPv4-mapped form
+        // (`::ffff:1.2.3.4`) is out of scope for this pass.
+        parse_ipv6_range(s, start, end).map(IpAddr::V6)
+    } else {
+        // Manual split on '.' into at most 4 octets (no iterator needed).
         let mut octets = [0u8; 4];
-        let mut i = 0;
-        while i < 4 {
-            match parts[i].parse::<u8>() {
-                Option::Some(v) => octets[i] = v,
-                Option::None => return Option::None,
+        let mut part_count = 0;
+        let mut seg_start = start;
+        let mut idx = start;
+        while idx <= end {
+            if idx == end || bytes[idx] == b'.' {
+                let part = if idx > seg_start {
+                    match parse_u8_dec(s, seg_start, idx) {
+                        Option::Some(v) => v,
+                        Option::None => return Option::None,
+                    }
+                } else {
+                    return Option::None;
+                };
+                octets[part_count] = part;
+                part_count += 1;
+                if part_count > 4 {
+                    return Option::None;
+                }
+                seg_start = idx + 1;
             }
-            i += 1;
+            idx += 1;
+        }
+        if part_count != 4 {
+            return Option::None;
         }
         Option::Some(IpAddr::V4(Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3])))
     }
 }
 
+/// Parse an IP address from the whole string `s`.
+fn parse_ip_addr_full(s: &str) -> Option<IpAddr> {
+    parse_ip_addr(s, 0, s.len())
+}
+
 /// Parse a socket address from a string (e.g. "127.0.0.1:8080").
 fn parse_socket_addr(s: &str) -> Option<SocketAddr> {
-    let parts: Vec<&str> = s.rsplitn(2, ':');
-    if parts.len() != 2 {
+    // Manual split on the LAST ':' (no rsplitn iterator needed).
+    let bytes = s.as_bytes();
+    let mut colon = s.len();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b':' {
+            colon = i;
+        }
+        i += 1;
+    }
+    if colon == 0 || colon == s.len() {
         return Option::None;
     }
-    let port = parts[0].parse::<u16>()?;
-    let ip = parse_ip_addr(parts[1])?;
+    let port = match parse_u16_dec(s, colon + 1, s.len()) {
+        Option::Some(v) => v,
+        Option::None => return Option::None,
+    };
+    let ip = match parse_ip_addr(s, 0, colon) {
+        Option::Some(v) => v,
+        Option::None => return Option::None,
+    };
     match ip {
         IpAddr::V4(v4) => Option::Some(SocketAddr::V4(SocketAddrV4::new(v4, port))),
         IpAddr::V6(v6) => Option::Some(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))),

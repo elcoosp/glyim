@@ -241,9 +241,9 @@ fn park() {
 /// Atomically makes the token available if it is not already.
 fn unpark(thread: &Thread) {
     extern "C" {
-        fn glyim_thread_unpark(thread_id: u64);
+        fn glyim_thread_unpark(id: usize);
     }
-    unsafe { glyim_thread_unpark(thread.id.to_u64()) }
+    unsafe { glyim_thread_unpark(thread.id.to_u64() as usize) }
 }
 
 /// Determine whether to give up a timeslice based on a hint.

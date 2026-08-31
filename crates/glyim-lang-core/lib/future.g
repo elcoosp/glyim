@@ -42,7 +42,7 @@ impl Waker {
         extern "C" {
             fn glyim_thread_unpark(id: usize);
         }
-        unsafe { glyim_thread_unpark(self.thread_id) };
+        unsafe { glyim_thread_unpark(self.thread_id) }
     }
 
     /// Wake the associated task by reference (same as [`wake`](Waker::wake)).

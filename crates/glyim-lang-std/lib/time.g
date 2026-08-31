@@ -139,60 +139,6 @@ impl Default for Duration {
     }
 }
 
-/// A measurement of a monotonically non-decreasing clock.
-struct Instant {
-    secs: u64,
-    nanos: u32,
-}
-
-impl Instant {
-    /// Returns an instant corresponding to "now".
-    fn now() -> Instant {
-        extern "C" {
-            fn glyim_time_now_secs() -> u64;
-            fn glyim_time_now_nanos() -> u32;
-        }
-        let secs = unsafe { glyim_time_now_secs() };
-        let nanos = unsafe { glyim_time_now_nanos() };
-        Instant { secs, nanos }
-    }
-
-    /// Returns the amount of time elapsed since this instant was created.
-    fn elapsed(&self) -> Duration {
-        self.diff(&Instant::now())
-    }
-
-    /// Returns the amount of time elapsed from another instant to this one,
-    /// or zero if that instant is later than this one.
-    fn duration_since(&self, earlier: &Instant) -> Duration {
-        self.diff(earlier)
-    }
-
-    /// Returns `Some(t)` where `t` is the time `self + duration` if `t` can be represented.
-    fn checked_add(&self, duration: Duration) -> Option<Instant> {
-        let secs = self.secs.checked_add(duration.secs)?;
-        Option::Some(Instant { secs, nanos: self.nanos + duration.nanos })
-    }
-
-    /// Returns `Some(t)` where `t` is the time `self - duration` if `t` can be represented.
-    fn checked_sub(&self, duration: Duration) -> Option<Instant> {
-        let secs = self.secs.checked_sub(duration.secs)?;
-        Option::Some(Instant { secs, nanos: self.nanos.saturating_sub(duration.nanos) })
-    }
-
-    fn diff(&self, later: &Instant) -> Duration {
-        if later.secs > self.secs || (later.secs == self.secs && later.nanos >= self.nanos) {
-            if later.nanos >= self.nanos {
-                Duration { secs: later.secs - self.secs, nanos: later.nanos - self.nanos }
-            } else {
-                Duration { secs: later.secs - self.secs - 1, nanos: later.nanos + 1_000_000_000 - self.nanos }
-            }
-        } else {
-            Duration::default()
-        }
-    }
-}
-
 /// A measurement of the system clock, useful for talking to external entities
 /// like the file system or other processes.
 struct SystemTime {

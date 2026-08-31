@@ -31,3 +31,4 @@ tempfile = "3"
 glyim-test = { workspace = true }
 glyim-mir-interp = { workspace = true }
 glyim-core = { workspace = true }
+glyim-lang-std = { workspace = true }
