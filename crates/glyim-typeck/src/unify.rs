@@ -325,9 +325,9 @@ impl<'a> FnCtxt<'a> {
                 &std::collections::HashMap::new(),
                 span,
             );
-            if let Some(adt_id) = adt_ty_resolved.and_then(|ty| {
+            if let Some((adt_id, adt_ty)) = adt_ty_resolved.and_then(|ty| {
                 if let glyim_type::TyKind::Adt(id, _) = self.ctx.ty_kind(ty) {
-                    Some(*id)
+                    Some((*id, ty))
                 } else {
                     None
                 }
@@ -338,7 +338,7 @@ impl<'a> FnCtxt<'a> {
                     // `T` left as a fresh inference variable, matching how the
                     // receiver-arg substitution works for method calls).
                     let mut subst: std::collections::HashMap<u32, GenericArg> = std::collections::HashMap::new();
-                    if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty_resolved.unwrap()) {
+                    if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
                         for (i, a) in self.ctx.substitution_args(*s).iter().enumerate() {
                             subst.insert(i as u32, a.clone());
                         }
