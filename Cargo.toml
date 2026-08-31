@@ -115,3 +115,19 @@ libloading = "0.8"
 # incrementally rather than hard-failing the build while the doc pass lands.
 [workspace.lints.rust]
 missing_docs = "warn"
+
+# Plan §2.5 — build/link profile.
+#
+# `panic = "unwind"` is required because `glyim-runtime`/proc-macro loading
+# catches panics across the FFI boundary (and `thread.g` uses
+# `panic::catch_unwind`); switching to `abort` would break those paths.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+strip = "debuginfo"
+
+# The LLVM backend and the const-evaluator are hot even in debug builds, so
+# give them a small opt level instead of the default 0 (plan §2.5).
+[profile.dev]
+opt-level = 1

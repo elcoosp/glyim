@@ -61,8 +61,38 @@ pub struct CliArgs {
 
 /// run.
 pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
-    let args = CliArgs::parse();
-    run_with_args(args)
+    // Plan §3.1.2b: catch unexpected panics in the driver and turn them into a
+    // structured ICE report instead of a raw Rust backtrace. A language
+    // toolchain must never crash on user input with an unreadable stack trace —
+    // an ICE with the compiler version + input + backtrace path is the
+    // production-grade behaviour (rustc's `RUST_BACKTRACE` model).
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let args = CliArgs::parse();
+        run_with_args(args)
+    }));
+    match result {
+        Ok(inner) => inner,
+        Err(_payload) => {
+            let backtrace = std::backtrace::Backtrace::force_capture();
+            let report = format!(
+                "glyim internal compiler error (ICE): the compiler panicked.\n\
+                 version: {}\n\
+                 Please file a bug report. Backtrace saved below.\n\n{:?}",
+                env!("CARGO_PKG_VERSION"),
+                backtrace,
+            );
+            let path = std::env::temp_dir().join("glyim-ice.txt");
+            let _ = std::fs::write(&path, &report);
+            eprintln!(
+                "error: glyim panicked (ICE). Backtrace saved to {}:
+
+please file a bug report at <https://github.com/elcoosp/glyim-v2/issues> \
+with the input file and the backtrace.",
+                path.display()
+            );
+            Err(vec![glyim_diag::GlyimDiagnostic::internal_error(report)])
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
