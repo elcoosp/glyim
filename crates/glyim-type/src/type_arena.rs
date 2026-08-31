@@ -29,6 +29,13 @@
 //! own `TypeArena`; `nextest` runs distinct compilations on distinct threads,
 //! so no `TypeArena` is shared across threads. The raw-pointer fields are thus
 //! sound under `unsafe impl Send/Sync` given that invariant.
+//!
+//! NOTE (plan §1.1): the recommended fix is to replace the raw pointers with an
+//! append-only container (`elsa::FrozenVec`) so reads need no `unsafe` and are
+//! sound even under the parallel codegen of §2.4. That refactor is deferred
+//! until §2.4 lands (it is gated on it and `elsa` is not currently in the
+//! dependency set); the current design is sound under the single-threaded
+//! per-compilation invariant asserted above.
 
 use crate::flags::TypeFlags;
 use crate::substitution::*;
