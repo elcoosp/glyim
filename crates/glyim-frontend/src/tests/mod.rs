@@ -1,4 +1,5 @@
 mod comments;
+mod depth_limit;
 mod edge_cases;
 mod errors;
 mod float_exponent;

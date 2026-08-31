@@ -29,7 +29,20 @@ pub(crate) struct Parser<'a> {
     last_was_path: bool,
     suppress_struct_lit: bool,
     pending_gt_count: u32,
+    /// Monotonic expression-nesting counter (plan §3.6): guards against a
+    /// stack-overflow DoS from pathologically nested source (e.g.
+    /// `((((...))))`). `parse_expr` increments it on entry; once it exceeds
+    /// `MAX_EXPR_DEPTH` we emit a diagnostic and bail instead of recursing
+    /// further. It is never decremented — monotonic tracking is sufficient for
+    /// a depth guard and avoids per-return cleanup in a large function.
+    recursion_depth: u32,
 }
+
+/// Plan §3.6: maximum expression nesting depth before the parser bails with a
+/// diagnostic. Deeply nested expressions are a classic stack-overflow DoS
+/// vector in recursive-descent parsers; this bounds recursion without rejecting
+/// any realistic program (real code rarely nests beyond a few dozen levels).
+const MAX_EXPR_DEPTH: u32 = 256;
 
 impl<'a> Parser<'a> {
     pub(crate) fn new(tokens: &'a [crate::lexer::Token]) -> Self {
@@ -41,6 +54,7 @@ impl<'a> Parser<'a> {
             last_was_path: false,
             suppress_struct_lit: false,
             pending_gt_count: 0,
+            recursion_depth: 0,
         }
     }
 

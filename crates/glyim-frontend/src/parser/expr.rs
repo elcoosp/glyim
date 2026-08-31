@@ -549,6 +549,20 @@ impl<'a> Parser<'a> {
                 self.finish_node();
             }
             SyntaxKind::LParen => {
+                // Plan §3.6: bound expression-nesting recursion to prevent a
+                // stack-overflow / runaway-tree DoS from pathologically nested
+                // source (e.g. `((((...)))).` We check BEFORE consuming the `(`
+                // or opening any node, and bail (no node, no recursion) once
+                // MAX_EXPR_DEPTH is exceeded. `recursion_depth` is monotonic
+                // (never decremented), so this reliably trips on the deepest
+                // path actually reached. Bailing here — rather than inside
+                // `parse_expr` — also avoids building a deep green tree that
+                // rowan would later materialize recursively.
+                if self.recursion_depth > super::MAX_EXPR_DEPTH {
+                    self.error("expression nested too deeply");
+                    return;
+                }
+                self.recursion_depth += 1;
                 let cp = self.checkpoint();
                 self.bump(); // (
                 if self.current_kind() == SyntaxKind::RParen {
