@@ -8,6 +8,7 @@ use glyim_pipeline::MirCompilation;
 use glyim_core::def_id::DefId;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::sync::{Arc, Mutex};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use tracing::info;
@@ -453,28 +454,32 @@ fn compile_and_run_compiled(
         .spawn()
         .map_err(|e| format!("failed to spawn compiled test binary: {e}"))?;
 
-    // Per-test timeout (plan §23.1): run the child in its own thread and wait
-    // on a channel with a deadline so a hanging test cannot block the runner.
-    // Capture the PID first so a timed-out/hung child can be killed by PID
-    // (the `Child` handle is moved into the waiting thread).
-    let child_pid = child.id();
+    // Per-test timeout: run the child in its own thread and wait on a channel
+    // with a deadline so a hanging test cannot block the runner. Keep the `Child`
+    // behind a shared handle so the main thread can kill it portably on timeout
+    // (plan §1.4: `Child::kill()` is cross-platform; shelling out to a `kill`
+    // binary is Unix-only, sends SIGTERM (ignorable), and swallows errors).
+    let child = Arc::new(Mutex::new(Some(child)));
+    let child_wait = child.clone();
     let (tx, rx) = std::sync::mpsc::channel::<Option<ExitStatus>>();
     std::thread::spawn(move || {
-        let _ = tx.send(child.wait().ok());
+        let status = child_wait
+            .lock()
+            .unwrap()
+            .take()
+            .and_then(|mut c| c.wait().ok());
+        let _ = tx.send(status);
     });
 
     let status = match rx.recv_timeout(timeout) {
         Ok(Some(status)) => status,
         Ok(None) => {
-            let _ = std::process::Command::new("kill")
-                .arg(child_pid.to_string())
-                .status();
             return Err("test subprocess wait failed".to_string());
         }
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            let _ = std::process::Command::new("kill")
-                .arg(child_pid.to_string())
-                .status();
+            if let Some(mut c) = child.lock().unwrap().take() {
+                let _ = c.kill();
+            }
             return Err(format!("test timed out after {}s", timeout.as_secs()));
         }
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {

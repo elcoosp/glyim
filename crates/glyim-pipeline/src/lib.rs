@@ -453,18 +453,6 @@ impl Pipeline {
         let all_bodies: Vec<Arc<Body>> = if cgus.is_empty() {
             mir_bodies_map.into_values().collect()
         } else {
-            let _cgu_stats: Vec<(usize, usize)> = cgus
-                .par_iter()
-                .map(|cgu_indices| {
-                    let body_count = cgu_indices.len();
-                    let total_locals: usize = cgu_indices
-                        .iter()
-                        .map(|&idx| mono_items[idx].body.locals.len())
-                        .sum();
-                    (body_count, total_locals)
-                })
-                .collect();
-
             cgus.iter()
                 .flat_map(|cgu_indices| cgu_indices.iter().map(|&idx| mono_items[idx].body.clone()))
                 .collect()

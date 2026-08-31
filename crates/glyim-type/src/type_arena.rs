@@ -51,6 +51,11 @@ pub struct TypeArena {
     /// Fast structural de-duplication so the same logical type maps to the same
     /// `Ty` handle (the "interning" property) within a compilation.
     type_index: Mutex<HashMap<TyKind, Ty>>,
+    /// Parallel de-duplication table for substitutions (plan §2.1): the old
+    /// linear `data.iter().position(...)` scan made substitution interning
+    /// O(n) per call → O(n²) across a compilation once monomorphization runs.
+    /// Keyed by the boxed `SmallVec` so identical arg lists share one handle.
+    subst_index: Mutex<HashMap<SmallVec<[GenericArg; 4]>, Substitution>>,
     /// Serializes appends to the three tables above.
     write_gate: Mutex<()>,
 }
@@ -68,6 +73,7 @@ impl TypeArena {
             type_flags: Box::into_raw(Box::new(Vec::new())),
             substitution_data: Box::into_raw(Box::new(Vec::new())),
             type_index: Mutex::new(HashMap::new()),
+            subst_index: Mutex::new(HashMap::new()),
             write_gate: Mutex::new(()),
         }
     }
@@ -120,14 +126,24 @@ impl TypeArena {
     pub fn intern_substitution(&self, args: Vec<GenericArg>) -> Substitution {
         let small: SmallVec<[GenericArg; 4]> = args.into_iter().collect();
         let len = small.len() as u16;
+        // Fast path: already interned (plan §2.1 — O(1) HashMap lookup instead
+        // of the old O(n) linear `data.iter().position(...)` scan).
+        {
+            let idx = self.subst_index.lock().unwrap();
+            if let Some(&s) = idx.get(&small) {
+                return s;
+            }
+        }
         let _gate = self.write_gate.lock().unwrap();
         // SAFETY: see `alloc_ty`.
         let data = unsafe { &mut *self.substitution_data };
+        // Re-check under the gate: another thread may have inserted concurrently.
         if let Some(pos) = data.iter().position(|e| **e == small) {
             return Substitution::from_raw(pos as u32, len);
         }
         let index = data.len() as u32;
-        data.push(Box::new(small));
+        data.push(Box::new(small.clone()));
+        self.subst_index.lock().unwrap().insert(small, Substitution::from_raw(index, len));
         Substitution::from_raw(index, len)
     }
 

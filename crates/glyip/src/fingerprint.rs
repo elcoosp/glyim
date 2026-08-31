@@ -53,6 +53,28 @@ impl Fingerprint {
     pub fn matches(&self, other: &Fingerprint) -> bool {
         self.hash == other.hash
     }
+
+    /// Cheap metadata-only equality check (plan §1.5): compares `(size, mtime)`
+    /// against the file currently on disk without reading its contents. This is
+    /// the fast path used by incremental builds — files whose size and mtime
+    /// are unchanged since the last fingerprint are assumed unchanged, avoiding
+    /// a full `fs::read` + SHA-256 on every no-op build. Returns `true` when the
+    /// on-disk metadata matches this fingerprint (so an expensive re-hash is
+    /// unnecessary). Clock-skew / touch-without-edit cases are handled by the
+    /// full `from_file` + `matches` comparison done by `has_changed`.
+    pub fn metadata_matches_path(&self, path: &Path) -> bool {
+        match fs::metadata(path) {
+            Ok(m) => m.len() == self.size && {
+                m.modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+                    == self.mtime
+            },
+            Err(_) => false,
+        }
+    }
 }
 
 /// Persistent store of file fingerprints for incremental compilation.
@@ -169,10 +191,20 @@ impl FingerprintStore {
     }
 
     /// Return `true` if the file on disk differs from the stored fingerprint.
+    /// Uses a cheap `(size, mtime)` stat first (plan §1.5); only falls back to a
+    /// full content SHA-256 when the metadata disagrees (handles clock skew /
+    /// touch-without-edit), so no-op incremental builds stay O(files-changed)
+    /// instead of O(total source bytes).
     pub fn has_changed(&self, path: &Path) -> crate::error::GlyipResult<bool> {
-        let current = Fingerprint::from_file(path)?;
         match self.fingerprints.get(path) {
-            Some(stored) => Ok(!stored.matches(&current)),
+            Some(stored) => {
+                // Fast path: metadata unchanged ⇒ content unchanged (no read/hash).
+                if stored.metadata_matches_path(path) {
+                    return Ok(false);
+                }
+                let current = Fingerprint::from_file(path)?;
+                Ok(!stored.matches(&current))
+            }
             None => Ok(true),
         }
     }

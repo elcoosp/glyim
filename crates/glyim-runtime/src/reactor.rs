@@ -233,16 +233,24 @@ fn run_reactor(
         Ok(p) => p,
         Err(_) => return,
     };
+    // Dedicated wake token (plan §1.6): a `mio::Waker` lets the executor thread
+    // immediately unblock `poll()` whenever a new registration (or shutdown)
+    // is sent, instead of waiting up to 50ms on a fixed poll timeout. Distinct
+    // from any slot token, which start at 1 (see `next_token`).
+    let wake_token = Token(usize::MAX);
+    let waker = mio::Waker::new(poll.registry(), wake_token).ok();
     // Map mio tokens -> our slot tokens.
     let mut mio_to_slot: HashMap<Token, usize> = HashMap::new();
     // For fds registered via `RegisterFd`, the executor thread to unpark on
     // readiness (the `.g` waker model resumes by thread id, not by Rust Waker).
     let fd_thread: Arc<Mutex<HashMap<usize, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     let mut events = mio::Events::with_capacity(1024);
+    let mut pending_commands = false;
 
     loop {
         // Drain any pending registration commands.
         while let Ok(cmd) = rx.try_recv() {
+            pending_commands = true;
             match cmd {
                 Command::Shutdown => return,
                 Command::Register {
@@ -281,15 +289,25 @@ fn run_reactor(
             }
         }
 
-        // Block briefly for readiness. A non-zero timeout lets new
-        // registrations be picked up promptly without a dedicated wake channel.
-        if poll
-            .poll(&mut events, Some(std::time::Duration::from_millis(50)))
-            .is_err()
-        {
+        // Block for readiness. With a `mio::Waker` registered, a `poll.poll()`
+        // with no timeout returns immediately when the executor sends a
+        // registration (or shutdown) — no 50ms latency tax, no idle busy-poll
+        // (plan §1.6). The wake is only needed when we actually drained a
+        // command this iteration; otherwise `poll` blocks until real I/O fires.
+        if pending_commands {
+            pending_commands = false;
+            if let Some(w) = &waker {
+                let _ = w.wake();
+            }
+        }
+        if poll.poll(&mut events, None).is_err() {
             continue;
         }
         for event in events.iter() {
+            if event.token() == wake_token {
+                // Spurious wake to re-check the command channel; loop back.
+                continue;
+            }
             if let Some(&slot_token) = mio_to_slot.get(&event.token()) {
                 if let Some(slot) = slots.lock().unwrap().get(&slot_token) {
                     slot.ready.store(true, Ordering::Release);
