@@ -216,7 +216,7 @@ pub unsafe extern "C" fn glyim_env_var(
         return -1;
     }
     // SAFETY: Caller guarantees name points to valid UTF-8 data of name_len bytes.
-    let name_bytes = unsafe { std::slice::from_raw_parts(name, name_len) };
+    let name_bytes = unsafe { crate::fs::slice_from_raw_parts(name, name_len) };
     let name_str = match std::str::from_utf8(name_bytes) {
         Ok(s) => s,
         Err(_) => return -1,
@@ -259,8 +259,8 @@ pub unsafe extern "C" fn glyim_env_set_var(
         return -1;
     }
     // SAFETY: Caller guarantees valid UTF-8 data of the given lengths.
-    let name_bytes = unsafe { std::slice::from_raw_parts(name, name_len) };
-    let value_bytes = unsafe { std::slice::from_raw_parts(value, value_len) };
+    let name_bytes = unsafe { crate::fs::slice_from_raw_parts(name, name_len) };
+    let value_bytes = unsafe { crate::fs::slice_from_raw_parts(value, value_len) };
     let name_str = match std::str::from_utf8(name_bytes) {
         Ok(s) => s,
         Err(_) => return -1,
@@ -296,7 +296,7 @@ pub unsafe extern "C" fn glyim_env_remove_var(name: *const u8, name_len: usize) 
         return -1;
     }
     // SAFETY: Caller guarantees valid UTF-8 data of the given length.
-    let name_bytes = unsafe { std::slice::from_raw_parts(name, name_len) };
+    let name_bytes = unsafe { crate::fs::slice_from_raw_parts(name, name_len) };
     let name_str = match std::str::from_utf8(name_bytes) {
         Ok(s) => s,
         Err(_) => return -1,
@@ -640,7 +640,7 @@ pub unsafe extern "C" fn glyim_process_spawn(
         return -1;
     }
     // SAFETY: Caller guarantees cmd points to valid UTF-8 data of cmd_len bytes.
-    let cmd_bytes = unsafe { std::slice::from_raw_parts(cmd, cmd_len) };
+    let cmd_bytes = unsafe { crate::fs::slice_from_raw_parts(cmd, cmd_len) };
     let cmd_str = match std::str::from_utf8(cmd_bytes) {
         Ok(s) => s,
         Err(_) => return -1,
@@ -650,7 +650,7 @@ pub unsafe extern "C" fn glyim_process_spawn(
         Vec::new()
     } else {
         // SAFETY: Caller guarantees args points to args_len bytes.
-        let args_bytes = unsafe { std::slice::from_raw_parts(args, args_len) };
+        let args_bytes = unsafe { crate::fs::slice_from_raw_parts(args, args_len) };
         split_null_separated(args_bytes)
     };
 
@@ -1039,7 +1039,7 @@ unsafe fn bytes_to_string(ptr: *const u8, len: usize) -> Option<String> {
     if ptr.is_null() {
         return None;
     }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts(ptr, len) };
     std::str::from_utf8(slice).ok().map(|s| s.to_string())
 }
 
@@ -1123,7 +1123,7 @@ pub unsafe extern "C" fn glyim_net_tcp_read(fd: i32, buf: *mut u8, count: usize)
         Some(s) => s,
         None => return -1,
     };
-    let slice = unsafe { std::slice::from_raw_parts_mut(buf, count) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts_mut(buf, count) };
     match stream.read(slice) {
         Ok(n) => n as isize,
         Err(_) => -1,
@@ -1143,7 +1143,7 @@ pub unsafe extern "C" fn glyim_net_tcp_write(fd: i32, buf: *const u8, count: usi
         Some(s) => s,
         None => return -1,
     };
-    let slice = unsafe { std::slice::from_raw_parts(buf, count) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts(buf, count) };
     match stream.write_all(slice) {
         Ok(()) => count as isize,
         Err(_) => -1,
@@ -1278,7 +1278,7 @@ pub unsafe extern "C" fn glyim_net_udp_send_to(
         Some(s) => s,
         None => return -1,
     };
-    let slice = unsafe { std::slice::from_raw_parts(buf, count) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts(buf, count) };
     match socket.send_to(slice, target) {
         Ok(n) => n as isize,
         Err(_) => -1,
@@ -1305,7 +1305,7 @@ pub unsafe extern "C" fn glyim_net_udp_recv_from(
         Some(s) => s,
         None => return -1,
     };
-    let slice = unsafe { std::slice::from_raw_parts_mut(buf, count) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts_mut(buf, count) };
     let (n, addr) = match socket.recv_from(slice) {
         Ok((n, addr)) => (n, addr),
         Err(_) => return -1,
@@ -1376,7 +1376,7 @@ pub unsafe extern "C" fn glyim_net_udp_send(fd: i32, buf: *const u8, count: usiz
         Some(s) => s,
         None => return -1,
     };
-    let slice = unsafe { std::slice::from_raw_parts(buf, count) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts(buf, count) };
     match socket.send(slice) {
         Ok(n) => n as isize,
         Err(_) => -1,
@@ -1396,7 +1396,7 @@ pub unsafe extern "C" fn glyim_net_udp_recv(fd: i32, buf: *mut u8, count: usize)
         Some(s) => s,
         None => return -1,
     };
-    let slice = unsafe { std::slice::from_raw_parts_mut(buf, count) };
+    let slice = unsafe { crate::fs::slice_from_raw_parts_mut(buf, count) };
     match socket.recv(slice) {
         Ok(n) => n as isize,
         Err(_) => -1,
@@ -1465,7 +1465,7 @@ pub unsafe extern "C" fn glyim_thread_spawn_named(
     let arg_usize = arg as usize;
     let mut builder = thread::Builder::new();
     if !name.is_null() && name_len > 0 {
-        let bytes = unsafe { std::slice::from_raw_parts(name, name_len) };
+        let bytes = unsafe { crate::fs::slice_from_raw_parts(name, name_len) };
         if let Ok(s) = std::str::from_utf8(bytes) {
             builder = builder.name(s.to_string());
         }
