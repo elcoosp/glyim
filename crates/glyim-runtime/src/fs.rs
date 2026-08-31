@@ -169,7 +169,8 @@ unsafe fn path_from_raw(ptr: *const u8, len: usize) -> Option<PathBuf> {
         return None;
     }
     // SAFETY: Caller guarantees [ptr, ptr + len) is valid readable memory.
-    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+    // The debug_assert in the helper rejects an overflowing length.
+    let bytes = unsafe { slice_from_raw_parts(ptr, len) };
 
     #[cfg(unix)]
     {
