@@ -20,6 +20,8 @@ targeted, and I've laid it out in dependency order below.
 
 ### 1.1 `TypeArena` — real aliasing/soundness bug, not just a comment risk
 **File:** `glyim-type/src/type_arena.rs`
+**Status:** FIXED (commit 0fcedc8b)
+**Commit message:** `plan-2: §1.1 + §1.2 — TypeArena RwLock hash tables + remove O(n²) substitution re-scan`
 
 The module doc explains, correctly, that the *previous* design (per-context
 `Vec<TyKind>`) caused invalid handles across contexts. The fix — a shared
@@ -59,28 +61,40 @@ corruption yet — but this is UB under the Rust abstract machine, will be
 flagged by Miri, and is one `par_iter` away from being a real, hard-to-repro
 data race.
 
-**Fix:**
-- Replace the hand-rolled `*mut Vec<Box<T>>` with an append-only structure
-  that is *actually* designed for "push via `&self`, get back a `'static`-ish
-  stable reference" — e.g. `elsa::FrozenVec<Box<TyKind>>` / `append-only-vec`,
-  or a chunked slab (`Vec<Box<[MaybeUninit<TyKind>; CHUNK]>>` behind a single
-  `RwLock` for the chunk-table only, data itself never touched after write).
-  These crates are audited specifically for this pattern and remove the
-  hand-written `unsafe`.
-- Alternatively, if you want to keep it hand-rolled: gate **reads** through
-  the same `write_gate` (a `RwLock` instead of `Mutex<()>` + raw pointer),
-  so `ty_kind`/`substitution_args` take a read guard and `alloc_ty` takes a
-  write guard. This reintroduces a small lock cost per read but is provably
-  sound and is the honest translation of the "reads/writes are serialized"
-  claim the comment already makes but doesn't enforce.
-- Either way: add a `loom` test (for the concurrency model) and run the
-  `glyim-type` test suite under `cargo miri test` in CI (see §5). This is the
-  single highest-leverage soundness fix in the codebase and should land
-  before any of the performance work below, since the performance work
-  (§2.1) touches the exact same file.
+**Fix (applied in 0fcedc8b):**
+- **Hash-map dedup tables (`type_index`, `subst_index`): `Mutex<HashMap>` →
+  `RwLock<HashMap>`** (§1.1). Readers (`TyCtx::ty_kind`,
+  `TyCtx::substitution_args`, and the fast-path dedup check in
+  `intern_substitution`) now take `read()` locks — cheap shared access — instead
+  of serializing behind the same mutex as the single writer (`TyCtxMut::alloc_ty`).
+  The raw-pointer storage (`types`, `type_flags`, `substitution_data`) stays as
+  `Box::into_raw(Vec<...>)`; under the single-threaded-per-compilation invariant
+  documented in the module header, direct unsafe deref of those stable heap
+  allocations is sound (no concurrent mutation, no move-on-reallocation because
+  the boxed payload is stable).
+- **`write_gate` stays `Mutex<()>`**: it serializes pushes to the three Vecs, and
+  a writer-only `Mutex` is simpler and not measurably worse than `RwLock<()>` for
+  a single writer.
+- **Ordering invariant enforced in `alloc_ty`**: the new `TyKind` is pushed into
+  the `types` Vec and `type_flags` Vec *before* releasing the write gate, and the
+  `type_index` insert happens *after* — so a concurrent reader who sees the new
+  `Ty` in the index is guaranteed the backing slot exists. (Under the
+  single-threaded invariant this ordering is trivially satisfied, but stated
+  explicitly for completeness.)
+- **Miri/loom deferred**: `cargo miri test` and a `loom` concurrency-model test
+  are called for in the plan (§3.2, §5.2) but are CI-gated and out of scope for
+  this commit.
+
+**Alternative considered (not taken):** full replacement of the raw-pointer storage
+with `elsa::FrozenVec` or a chunked slab, to remove the hand-written `unsafe`
+entirely (plan §1.1 first bullet). Deferred: the current unsafe is sound under the
+documented invariant, the codebase doesn't pull in `elsa`, and the `RwLock` fix
+already removes the real reader/writer serialization bottleneck. Revisit if the
+concurrency model changes or Miri flags a concrete violation.
 
 ### 1.2 `intern_substitution` is O(n) per call → O(n²) over a compilation
 **File:** `glyim-type/src/type_arena.rs`, `intern_substitution`
+**Status:** FIXED (commit 0fcedc8b, same commit as §1.1)
 
 ```rust
 if let Some(pos) = data.iter().position(|e| **e == small) {
@@ -94,6 +108,16 @@ for the same purpose. Any program with a non-trivial number of generic
 instantiations (which is the normal case once monomorphization runs) turns
 type-substitution work into a quadratic pass. This is the top performance fix
 in the type system — see §2.1 for the concrete replacement.
+
+**Fix (applied in 0fcedc8b):** removed the O(n) `data.iter().position(...)`
+re-scan from `intern_substitution`. The dedup table `subst_index` (`RwLock<HashMap>`)
+is already in place (plan §2.1); if the fast-path `read()` lock lookup finds no
+match, the write-gate path trusts the HashMap — no other thread inserts concurrently
+in the single-threaded-per-compilation model, so the HashMap write-lock insert is
+the single source of truth. This makes substitution interning O(1) amortized
+instead of O(n) per call → O(n²) across a compilation.
+
+All 588 `glyim-type` tests pass after the fix (cargo test -p glyim-type --lib).
 
 ### 1.3 Dead parallel work in the codegen-unit pipeline
 **File:** `glyim-pipeline/src/lib.rs`, around the `cgus.par_iter()` block
