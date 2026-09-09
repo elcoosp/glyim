@@ -1,24 +1,23 @@
-<div style="display: flex; flex-direction: column; align-items: center;">
+<div align="center">
   <img src="docs/logo.png" alt="Glyim Logo" width="200"/>
-  <p style="max-width: 800px; text-align: center;"> <!-- optional max-width for readability -->
+  <p>
     <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
-  Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference & trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
-</p>
-
-<div style="display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center;">
-  <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust">
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT">
-  <img src="https://img.shields.io/badge/LLVM-22-262D3A?style=flat-square&logo=llvm" alt="LLVM">
-  <img src="https://img.shields.io/badge/Crates-20%2B-6F4E37?style=flat-square" alt="Crates">
-  <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend">
-  <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP">
-  <img src="https://img.shields.io/badge/Testing-Snapshot%20%2B%20UI-00BFFF?style=flat-square" alt="Testing">
-  <img src="https://img.shields.io/badge/Borrow%20Checker-NLL-FF4500?style=flat-square" alt="Borrow Checker">
-  <img src="https://img.shields.io/badge/Optimizations-Const%20Prop%20%2B%20DCE-333333?style=flat-square" alt="Optimizations">
-  <img src="https://img.shields.io/badge/Type%20System-Inference%20%2B%20Traits-007ACC?style=flat-square" alt="Type System">
-  <img src="https://img.shields.io/badge/HIR%2FMIR-Full%20Support-228B22?style=flat-square" alt="HIR/MIR">
-  <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square&logo=githubactions" alt="Build">
-</div>
+    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
+    <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
+    <img src="https://img.shields.io/badge/LLVM-22-262D3A?style=flat-square&logo=llvm" alt="LLVM"/>
+    <img src="https://img.shields.io/badge/Crates-20%2B-6F4E37?style=flat-square" alt="Crates"/>
+    <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend"/>
+    <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP"/>
+    <img src="https://img.shields.io/badge/Testing-Snapshot%20%2B%20UI-00BFFF?style=flat-square" alt="Testing"/>
+    <img src="https://img.shields.io/badge/Borrow%20Checker-NLL-FF4500?style=flat-square" alt="Borrow Checker"/>
+    <img src="https://img.shields.io/badge/Optimizations-Const%20Prop%20%2B%20DCE-333333?style=flat-square" alt="Optimizations"/>
+    <img src="https://img.shields.io/badge/Type%20System-Inference%20%2B%20Traits-007ACC?style=flat-square" alt="Type System"/>
+    <img src="https://img.shields.io/badge/HIR%2FMIR-Full%20Support-228B22?style=flat-square" alt="HIR/MIR"/>
+    <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square&logo=githubactions" alt="Build"/>
+  </p>
 </div>
 
 ---
