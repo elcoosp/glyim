@@ -1,11 +1,26 @@
-# Glyim Compiler
+<p align="center">
+  <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
+  Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference & trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
+</p>
 
-Glyim is a modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.  
-It implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference & trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM).
+<div style="display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center;">
+  <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT">
+  <img src="https://img.shields.io/badge/LLVM-22-262D3A?style=flat-square&logo=llvm" alt="LLVM">
+  <img src="https://img.shields.io/badge/Crates-20%2B-6F4E37?style=flat-square" alt="Crates">
+  <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend">
+  <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP">
+  <img src="https://img.shields.io/badge/Testing-Snapshot%20%2B%20UI-00BFFF?style=flat-square" alt="Testing">
+  <img src="https://img.shields.io/badge/Borrow%20Checker-NLL-FF4500?style=flat-square" alt="Borrow Checker">
+  <img src="https://img.shields.io/badge/Optimizations-Const%20Prop%20%2B%20DCE-333333?style=flat-square" alt="Optimizations">
+  <img src="https://img.shields.io/badge/Type%20System-Inference%20%2B%20Traits-007ACC?style=flat-square" alt="Type System">
+  <img src="https://img.shields.io/badge/HIR%2FMIR-Full%20Support-228B22?style=flat-square" alt="HIR/MIR">
+  <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square&logo=githubactions" alt="Build">
+</div>
 
-The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
+---
 
-## ✨ Features
+## Features
 
 - **Lexer & Parser** – Recursive‑descent parser with error recovery, producing a concrete syntax tree (CST).  
 - **Name Resolution** – Module graph, item scopes, and path resolution (`self::`, `super::`, `crate::`).  
@@ -30,7 +45,9 @@ The project is organised as a Cargo workspace with more than 20 crates, designed
   - Property‑based type generation  
 - **Standard & Core Libraries** – Source files for `core`, `alloc`, and `std` written in Glyim syntax, used for testing and bootstrapping.  
 
-## 🏗️ Architecture
+---
+
+## Architecture
 
 The compiler is split into many small crates, each with a single responsibility:
 
@@ -68,7 +85,9 @@ The compiler is split into many small crates, each with a single responsibility:
 | `glyip` | Package manager / build tool (in development). |
 | `glyim-pilot` | Agent‑driven development tool (experimental). |
 
-## 🚀 Getting Started
+---
+
+## Getting Started
 
 ### Prerequisites
 
@@ -104,13 +123,15 @@ GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test
 GLYIM_BLESS=1 cargo test -p glyim-test
 ```
 
-## 💻 Usage
+---
+
+## Usage
 
 ```bash
 # Compile a source file using the LLVM backend (default)
 glyim input.g -o output.o
 
-# Use the bytecode backend (produces a `.bc` file)
+# Use the bytecode backend (produces a .bc file)
 glyim input.g --backend bytecode
 
 # Optimise (level 1)
@@ -123,7 +144,9 @@ glyim input.g --target aarch64-unknown-linux-gnu
 glyim --help
 ```
 
-## 🧩 Development
+---
+
+## Development
 
 ### Workspace Structure
 
@@ -152,11 +175,15 @@ cargo test -p glyim-test -- --filter parser
 
 This runs only tests whose file path contains `parser`.
 
-## 📝 License
+---
+
+## License
 
 This project is licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgements
+---
+
+## Acknowledgements
 
 - [Rowan](https://github.com/rust-analyzer/rowan) – for lossless syntax trees.
 - [Inkwell](https://github.com/TheDan64/inkwell) – for LLVM bindings.
@@ -166,4 +193,6 @@ This project is licensed under the **MIT License** – see the [LICENSE](LICENSE
 
 ---
 
-*Glyim is a work in progress. Contributions are welcome!*
+<p align="center">
+  <em>Glyim is a work in progress. Contributions are welcome!</em>
+</p>
