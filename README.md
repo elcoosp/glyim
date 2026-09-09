@@ -1,5 +1,6 @@
+<div align="center">
+<img src="docs/logo.png" alt="Glyim Logo" width="200"/>
 <p align="center">
-    <img src="docs/logo.png" alt="Vautr Logo" width="200"/>
   <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
   Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference & trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
 </p>
@@ -17,6 +18,7 @@
   <img src="https://img.shields.io/badge/Type%20System-Inference%20%2B%20Traits-007ACC?style=flat-square" alt="Type System">
   <img src="https://img.shields.io/badge/HIR%2FMIR-Full%20Support-228B22?style=flat-square" alt="HIR/MIR">
   <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square&logo=githubactions" alt="Build">
+</div>
 </div>
 
 ---
