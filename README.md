@@ -1,4 +1,5 @@
 <p align="center">
+    <img src="docs/logo.png" alt="Vautr Logo" width="200"/>
   <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
   Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference & trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
 </p>
