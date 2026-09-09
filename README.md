@@ -1,7 +1,7 @@
 <div style="display: flex; flex-direction: column; align-items: center;">
-<img src="docs/logo.png" alt="Glyim Logo" width="200"/>
-<p>
-  <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
+  <img src="docs/logo.png" alt="Glyim Logo" width="200"/>
+  <p style="max-width: 800px; text-align: center;"> <!-- optional max-width for readability -->
+    <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
   Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference & trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
 </p>
 
