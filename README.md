@@ -24,7 +24,6 @@
 
 # Glyim
 
-
 > [!NOTE]
 > Glyim is a research-grade compiler under active development. The pipeline is end-to-end functional for a substantial subset of the language, and the test harness verifies every stage from lexing through MIR interpretation. See [Project Status](#project-status) for what's wired up today versus what's still on the roadmap.
 
