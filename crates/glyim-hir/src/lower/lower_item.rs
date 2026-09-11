@@ -561,6 +561,7 @@ pub(crate) fn lower_impl_def(
             name: mname,
             body: body_id,
             params,
+            generic_params: collect_generic_params(&method_node, interner),
             return_ty,
         });
     }
