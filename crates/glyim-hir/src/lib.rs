@@ -203,6 +203,8 @@ pub struct ImplMethod {
 /// Struct.
     pub params: Vec<Param>,
 /// Struct.
+    pub generic_params: Vec<GenericParam>,
+/// Struct.
     pub return_ty: Option<TypeRef>,
 }
 
