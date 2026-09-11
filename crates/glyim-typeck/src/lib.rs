@@ -593,6 +593,15 @@ pub fn typeck_crate(
                         body_owner_map.insert(bid, local_def_id);
                     }
 
+                    // Concatenate the impl's generic params with the method's own
+                    // generic params so that method-level generics like `U` in
+                    // `fn map<U>(...) -> Option<U>` are visible to `resolve_fn_sig`
+                    // (which builds the param-map via `build_param_tys`).
+                    let combined_generics: Vec<glyim_hir::GenericParam> =
+                        impl_item.generic_params.iter()
+                            .chain(method.generic_params.iter())
+                            .cloned()
+                            .collect();
                     let sig = tyconv::resolve_fn_sig(
                         &mut ctx,
                         &mut infer,
@@ -600,7 +609,7 @@ pub fn typeck_crate(
                         &mut diagnostics,
                         &method.params,
                         &method.return_ty,
-                        &impl_item.generic_params,
+                        &combined_generics,
                         impl_span,
                         self_ty_opt,
                     );
