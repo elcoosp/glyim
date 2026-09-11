@@ -28,18 +28,20 @@ pub(crate) fn lower_type_ref(node: &SyntaxNode, interner: &mut Interner) -> Opti
             let mut params = Vec::new();
             let mut ret = None;
             let mut after_arrow = false;
-            for child in node.children() {
+            for child in node.children_with_tokens() {
                 if child.kind() == SyntaxKind::Arrow {
                     after_arrow = true;
                     continue;
                 }
-                if is_type_node(&child)
-                    && let Some(ty) = lower_type_ref(&child, interner)
-                {
-                    if after_arrow {
-                        ret = Some(Box::new(ty));
-                    } else {
-                        params.push(ty);
+                if let Some(n) = child.as_node() {
+                    if is_type_node(&n) {
+                        if let Some(ty) = lower_type_ref(&n, interner) {
+                            if after_arrow {
+                                ret = Some(Box::new(ty));
+                            } else {
+                                params.push(ty);
+                            }
+                        }
                     }
                 }
             }
