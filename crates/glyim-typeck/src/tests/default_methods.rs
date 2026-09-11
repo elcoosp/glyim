@@ -134,6 +134,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
         name: method_name,
         body: impl_body_opt,
         params: vec![],
+        generic_params: vec![],
         return_ty: None,
     };
 
@@ -267,12 +268,14 @@ fn v03_t03_default_method_calling_another_default_method() {
             name: bar_name,
             body: None,
             params: vec![],
+            generic_params: vec![],
             return_ty: None,
         },
         ImplMethod {
             name: foo_name,
             body: None,
             params: vec![],
+            generic_params: vec![],
             return_ty: None,
         },
     ];
@@ -388,6 +391,7 @@ fn v03_t04_default_method_with_generic_params() {
         name: method_name,
         body: None,
         params: vec![],
+        generic_params: vec![],
         return_ty: None,
     };
 
@@ -501,6 +505,7 @@ fn v03_t05_default_method_calls_missing_method_error() {
         name: method_name,
         body: None,
         params: vec![],
+        generic_params: vec![],
         return_ty: None,
     };
 
