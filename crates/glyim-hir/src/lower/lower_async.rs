@@ -517,24 +517,21 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
             span: original_body.span,
             expr_spans: original_body.expr_spans.clone(),
         };
-        // The poll body's sole parameter is `self` (the future struct). Push it
-        // FIRST so it is allocated the lowest local index — the MIR convention
-        // (used by the LLVM prologue and the MIR interpreter) assigns parameter
-        // `i` to `locals[1 + i]`. Appending the original body's pats afterwards
-        // keeps non-parameter local bindings referenced by the body alive,
-        // while `rewrite_for_poll` rewrites the captured async-parameter
-        // references to `self.fN` field accesses. Pushing `self` *after* the
-        // original pats (the previous behaviour) gave `self` a high local
-        // index, so the field rewrite resolved to a different slot than the
-        // parameter binding and the future field read returned garbage.
+        // The cloned `exprs` arena still contains `Expr::Let { pat: PatId(k) }`
+        // nodes that reference the original body's `pats` by index. Pushing the
+        // `self` PatId *before* the original pats shifts all those indices,
+        // causing `let x = ...` to bind `self` and every later `x` reference to
+        // be unresolved. Instead, preserve the original pat ordering verbatim,
+        // then append the synthesized `self` binding at a fresh index and
+        // register it as the sole poll parameter.
+        for p in original_body.pats.iter() {
+            b.pats.push(p.clone());
+        }
         let self_pat = b.pats.push(Pat::Binding {
             name: self_name,
             mutability: Mutability::Not,
             subpattern: None,
         });
-        for p in original_body.pats.iter() {
-            b.pats.push(p.clone());
-        }
         b.params.push(self_pat);
         b
     };
@@ -555,6 +552,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         name: poll_id,
         body: Some(poll_body_id),
         params: vec![self_mut_param],
+        generic_params: Vec::new(),
         return_ty: Some(poll_return_ty),
     };
     let impl_item = Item {
@@ -1005,6 +1003,7 @@ fn build_future_impl(
                 name: poll_id,
                 body: Some(poll_body_id),
                 params: vec![self_mut_param],
+                generic_params: Vec::new(),
                 return_ty: Some(poll_return_ty),
             }],
             generic_params: Vec::new(),
