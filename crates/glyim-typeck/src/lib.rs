@@ -276,7 +276,7 @@ pub fn typeck_crate(
     let local_krate = def_map.krate;
 
     let mut next_local_def_id: u32 = 0;
-    let alloc_local_def_id = |counter: &mut u32, diags: &mut Vec<GlyimDiagnostic>| -> LocalDefId {
+    let _alloc_local_def_id = |counter: &mut u32, diags: &mut Vec<GlyimDiagnostic>| -> LocalDefId {
         let id = *counter;
         *counter += 1;
         if *counter == u32::MAX {
