@@ -391,7 +391,10 @@ impl DiagSink {
             diagnostics: Vec::new(),
             error_count: 0,
             suppressed_count: 0,
-            error_limit: 50,
+            error_limit: std::env::var("GLYIM_ERR_LIMIT")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(50),
             on_emit: Some(Box::new(|diag| match diag.severity {
                 DiagSeverity::Error => tracing::warn!("[{}] {}", diag.code, diag.message),
                 DiagSeverity::Warning => tracing::info!("[{}] {}", diag.code, diag.message),

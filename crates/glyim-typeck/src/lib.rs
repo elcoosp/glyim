@@ -564,6 +564,33 @@ pub fn typeck_crate(
         }
     }
 
+    // Recursively pre-register function signatures in ALL nested modules
+    // (not just top-level). Without this, a body checked by the walker
+    // below can call a function defined in another module (or later in the
+    // same module) whose `FnSig` is not yet registered, producing spurious
+    // "enum-variant value paths are not yet supported" / "unresolved name"
+    // diagnostics. Verified cases: `thread::current_id` (thread.g) called
+    // from `fs.g`; `split_host_port` (net.g:526) used at net.g:152.
+    // Mirrors the walker's traversal so the same `LocalDefId` keys are
+    // used and the walker's own registration is an idempotent overwrite.
+    {
+        let pre_ids: Vec<ItemId> = hir
+            .items
+            .iter_enumerated()
+            .filter(|(id, _)| !child_set.contains(id))
+            .map(|(id, _)| id)
+            .collect();
+        pre_register_fn_sigs_in_module(
+            &mut ctx,
+            &mut infer,
+            def_map,
+            &mut diagnostics,
+            hir,
+            &pre_ids,
+            def_map.root,
+        );
+    }
+
     for (item_id, item) in hir.items.iter_enumerated() {
         if child_set.contains(&item_id) {
             continue;
@@ -773,6 +800,86 @@ pub fn typeck_crate(
         expr_types,
     };
     (frozen_ctx, result)
+}
+
+/// Pre-register every function's `FnSig` in every module (root and nested
+/// `mod` children) so cross-module and forward references resolve. Mirrors
+/// the `ItemKind::Fn` arm of `check_fn_items_in_module` (same `LocalDefId`
+/// lookup) but runs before any body check. Registration is idempotent.
+fn pre_register_fn_sigs_in_module(
+    ctx: &mut TyCtxMut,
+    infer: &mut InferenceTable,
+    def_map: &CrateDefMap,
+    diagnostics: &mut Vec<GlyimDiagnostic>,
+    hir: &glyim_hir::CrateHir,
+    item_ids: &[ItemId],
+    module_id: ModuleId,
+) {
+    for item_id in item_ids {
+        let item = match hir.items.get(*item_id) {
+            Some(i) => i,
+            None => continue,
+        };
+        match &item.kind {
+            ItemKind::Fn(f) => {
+                let local_def_id = match def_map.modules[module_id]
+                    .scope
+                    .values
+                    .get(&item.name)
+                {
+                    Some((id, _, _)) => *id,
+                    None => LocalDefId::from_raw(item.id.to_raw()),
+                };
+                let fn_id = FnDefId::from_raw(local_def_id.to_raw());
+                if ctx.fn_sig(fn_id).is_some() {
+                    continue;
+                }
+                let sig = tyconv::resolve_fn_sig(
+                    ctx,
+                    infer,
+                    def_map,
+                    diagnostics,
+                    &f.params,
+                    &f.return_ty,
+                    &f.generic_params,
+                    item.span,
+                    None,
+                );
+                let inputs = ctx.intern_substitution(
+                    sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
+                );
+                ctx.register_fn_sig(
+                    fn_id,
+                    FnSig {
+                        inputs,
+                        output: sig.return_ty,
+                        c_variadic: false,
+                        unsafety: Safety::Safe,
+                        abi: abi_from_name(f.abi, ctx),
+                    },
+                );
+            }
+            ItemKind::Mod(m) => {
+                let child_mod = def_map.modules[module_id]
+                    .children
+                    .iter()
+                    .find(|(n, _)| *n == item.name)
+                    .map(|(_, id)| *id);
+                if let Some(child_mod) = child_mod {
+                    pre_register_fn_sigs_in_module(
+                        ctx,
+                        infer,
+                        def_map,
+                        diagnostics,
+                        hir,
+                        &m.children,
+                        child_mod,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Recursively type-check function definitions, walking the HIR `ModItem`
