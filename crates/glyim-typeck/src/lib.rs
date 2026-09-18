@@ -465,6 +465,31 @@ pub fn typeck_crate(
                 ItemKind::Fn(f) => {
                     register_bounds(&mut ctx, &f.generic_params, &f.where_clauses);
                 }
+                ItemKind::Trait(trait_item) => {
+                    // Register `Self: <trait>` so a trait's *default* method
+                    // bodies can resolve `self.method(..)` calls via the
+                    // generic-receiver dispatch path (which consults
+                    // `param_bounds`). Without it, `self.write(..)` inside
+                    // `Write::write_all`'s default falls through to "no method".
+                    let trait_path = glyim_hir::Path {
+                        segments: vec![glyim_hir::PathSegment {
+                            name: item.name,
+                            generic_args: None,
+                        }],
+                        kind: glyim_core::path::PathKind::Plain,
+                    };
+                    if let Some(local) =
+                        tyconv::resolve_path_to_local_def_id(&ctx, def_map, &trait_path)
+                    {
+                        let tid = TraitDefId::from_raw(local.to_raw());
+                        let self_name = ctx.resolver().intern("Self");
+                        ctx.param_bounds
+                            .entry(self_name)
+                            .or_default()
+                            .push((item.name, tid));
+                    }
+                    register_bounds(&mut ctx, &trait_item.generic_params, &[]);
+                }
                 ItemKind::Impl(impl_item) => {
                     register_bounds(&mut ctx, &impl_item.generic_params, &impl_item.where_clauses);
                 }
