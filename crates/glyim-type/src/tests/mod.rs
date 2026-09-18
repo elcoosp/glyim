@@ -1,4 +1,3 @@
-mod alias_expansion;
 mod auto_trait;
 mod auto_traits;
 mod binder;

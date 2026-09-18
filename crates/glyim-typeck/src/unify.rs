@@ -66,12 +66,33 @@ impl<'a> FnCtxt<'a> {
                 };
                 return (thir_expr, var_info.ty);
             }
-            // 1b. Bare enum-variant value path (`Ok`, `Err`, `Some`, `None`,
-            //     `Ready`, …). The Rust prelude references variants by bare name;
-            //     search every registered enum's variant list (builtins live in
+            // 1b. Bare enum-variant value path (`Ok`, `Err`, `Some`, `None`).
+            //     The Rust prelude references these by bare name, so search
+            //     every registered enum's variant list (builtins live in
             //     `TyCtxMut`, not the def-map value namespace).
-            if let Some((adt_id, variant_idx)) = self.ctx.variant_by_name(name) {
-                return self.variant_expr(adt_id, variant_idx, span);
+            //
+            //     IMPORTANT (glyim-v2 stdlib handoff, Issue 1/3): restricted to
+            //     the small set of names the prelude makes bare-accessible and
+            //     that user code cannot unambiguously redeclare. This search is
+            //     unscoped — it matches ANY registered ADT, builtin or
+            //     user-declared, by variant name alone — so a name like
+            //     `Ready`/`Pending` (`Poll`, which is NOT a prelude item and is
+            //     routinely redeclared by user code) must NOT be matched here;
+            //     doing so risks resolving to the wrong `Poll` depending on
+            //     hashmap iteration order (this is what caused the
+            //     `nested_async_single_await_compiles` regression via the
+            //     mirror-image bug in `check_pat.rs`). Qualified `Poll::Ready`
+            //     still resolves correctly below via scoped path resolution
+            //     (step 0), which is unambiguous.
+            let bare_name = self.ctx.name_str(name);
+            let bare_safe = matches!(
+                bare_name,
+                "None" | "Some" | "Ok" | "Err" | "Less" | "Equal" | "Greater"
+            );
+            if bare_safe {
+                if let Some((adt_id, variant_idx)) = self.ctx.variant_by_name(name) {
+                    return self.variant_expr(adt_id, variant_idx, span);
+                }
             }
         }
 

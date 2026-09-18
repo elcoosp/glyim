@@ -95,7 +95,7 @@ fn build_empty_def_map(krate: CrateId) -> CrateDefMap {
         modules,
         krate,
         interner: global_interner(),
-    variant_map: Default::default(),
+        variant_map: Default::default(),
     }
 }
 
@@ -369,7 +369,10 @@ fn v03_t04_default_method_with_generic_params() {
 
     let generic_params = vec![GenericParam {
         name: t_name,
-        kind: GenericParamKind::Type { default: None, bounds: Vec::new() },
+        kind: GenericParamKind::Type {
+            default: None,
+            bounds: Vec::new(),
+        },
         span: Span::DUMMY,
     }];
 
@@ -473,7 +476,7 @@ fn v03_t04_default_method_with_generic_params() {
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-    variant_map: Default::default(),
+        variant_map: Default::default(),
     };
 
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
@@ -589,6 +592,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
                 name: method_name,
                 body: None,
                 params: vec![],
+                generic_params: vec![],
                 return_ty: None,
             }],
             generic_params: vec![],
@@ -650,7 +654,8 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
             is_const: false,
             generic_params: vec![],
             where_clauses: vec![],
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::DUMMY,
     });

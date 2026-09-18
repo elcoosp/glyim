@@ -138,13 +138,16 @@ pub extern "C" fn pm_ts_push(stream: *mut PmTokenStream, token: PmToken) {
         let s = &mut *stream;
         if s.len == s.cap {
             let new_cap = (s.cap as usize).max(8) * 2;
-            let new_ptr = std::alloc::realloc(
-                s.ptr as *mut u8,
-                std::alloc::Layout::array::<PmToken>(s.cap as usize).unwrap_or(
-                    std::alloc::Layout::from_size_align(0, 1).unwrap(),
-                ),
-                new_cap * std::mem::size_of::<PmToken>(),
-            ) as *mut PmToken;
+            let new_layout = std::alloc::Layout::array::<PmToken>(new_cap).unwrap();
+            let new_ptr = if s.ptr.is_null() {
+                std::alloc::alloc(new_layout) as *mut PmToken
+            } else {
+                let old_layout = std::alloc::Layout::array::<PmToken>(s.cap as usize).unwrap();
+                std::alloc::realloc(s.ptr as *mut u8, old_layout, new_layout.size()) as *mut PmToken
+            };
+            if new_ptr.is_null() {
+                std::alloc::handle_alloc_error(new_layout);
+            }
             s.ptr = new_ptr;
             s.cap = new_cap as u32;
         }
@@ -164,10 +167,9 @@ pub extern "C" fn pm_ts_free(stream: *mut PmTokenStream) {
     unsafe {
         let s = &mut *stream;
         if !s.ptr.is_null() && s.cap > 0 {
-            std::alloc::dealloc(
-                s.ptr as *mut u8,
-                std::alloc::Layout::array::<PmToken>(s.cap as usize).unwrap(),
-            );
+            if let Ok(layout) = std::alloc::Layout::array::<PmToken>(s.cap as usize) {
+                std::alloc::dealloc(s.ptr as *mut u8, layout);
+            }
         }
         s.ptr = ptr::null_mut();
         s.len = 0;

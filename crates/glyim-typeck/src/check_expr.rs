@@ -999,29 +999,79 @@ impl<'a> FnCtxt<'a> {
             Expr::Index { base, index } => {
                 let (base_expr, base_ty) = self.check_expr(*base);
                 let (idx_expr, idx_ty) = self.check_expr(*index);
+                
+                // Helper to get the element type and whether this is a str type.
+                // Handles Array, Slice, Vec<T>, str, and their reference variants.
+                fn get_index_info(
+                    ctx: &mut glyim_type::TyCtxMut,
+                    base_ty: Ty,
+                    span: Span,
+                    diagnostics: &mut Vec<GlyimDiagnostic>,
+                ) -> Option<(Ty, bool, bool)> {
+                    // Peel references to get to the underlying type
+                    let (inner_ty, is_ref) = match ctx.ty_kind(base_ty) {
+                        TyKind::Ref(_, inner, _) => (*inner, true),
+                        _ => (base_ty, false),
+                    };
+                    
+                    match ctx.ty_kind(inner_ty) {
+                        TyKind::Array(elem, _) | TyKind::Slice(elem) => {
+                            Some((*elem, false, false)) // elem_ty, is_str, is_ref
+                        }
+                        // Vec<T> indexes like [T]
+                        TyKind::Adt(adt_id, substs) => {
+                            if *adt_id == AdtId::from_raw(1020) {
+                                // Vec<T> - extract element type
+                                let elem = ctx.substitution_args(*substs)
+                                    .first()
+                                    .and_then(|a| match a { GenericArg::Ty(t) => Some(*t), _ => None })
+                                    .unwrap_or_else(|| ctx.error_ty());
+                                Some((elem, false, is_ref))
+                            } else {
+                                diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    "indexing operation requires array, slice, Vec, or str type",
+                                ));
+                                None
+                            }
+                        }
+                        // str indexes to u8
+                        TyKind::String => {
+                            Some((ctx.mk_ty(TyKind::Uint(UintTy::U8)), true, is_ref))
+                        }
+                        _ => {
+                            diagnostics.push(GlyimDiagnostic::type_error(
+                                span,
+                                "indexing operation requires array, slice, Vec, or str type",
+                            ));
+                            None
+                        }
+                    }
+                }
+                
+                let (elem_ty, is_str, is_ref) = match get_index_info(self.ctx, base_ty, span, &mut self.diagnostics) {
+                    Some(info) => info,
+                    None => return (thir::Expr::err(span), Ty::ERROR),
+                };
+                
                 // Check if the index is a Range expression.
                 if let thir::ExprKind::Range { .. } = idx_expr.kind {
                     // Slicing: result type is slice of element type.
-                    let elem_ty = match self.ctx.ty_kind(base_ty) {
-                        TyKind::Array(elem, _) | TyKind::Slice(elem) => *elem,
-                        _ => {
-                            self.diagnostics.push(GlyimDiagnostic::type_error(
-                                span,
-                                "slicing requires array or slice type",
-                            ));
-                            self.fresh_infer_ty()
-                        }
+                    // For str, slicing a str produces a str (not [u8])
+                    let result_ty = if is_str {
+                        self.ctx.mk_ty(TyKind::String)
+                    } else {
+                        self.ctx.mk_ty(TyKind::Slice(elem_ty))
                     };
-                    let slice_ty = self.ctx.mk_ty(TyKind::Slice(elem_ty));
                     let thir_expr = thir::Expr {
                         kind: thir::ExprKind::Index {
                             base: Box::new(base_expr),
                             index: Box::new(idx_expr),
                         },
-                        ty: slice_ty,
+                        ty: result_ty,
                         span,
                     };
-                    (thir_expr, slice_ty)
+                    (thir_expr, result_ty)
                 } else {
                     // Regular indexing: check integer type.
                     if !matches!(
@@ -1034,16 +1084,6 @@ impl<'a> FnCtxt<'a> {
                             "index expression must have integer type",
                         ));
                     }
-                    let elem_ty = match self.ctx.ty_kind(base_ty) {
-                        TyKind::Array(elem, _) | TyKind::Slice(elem) => *elem,
-                        _ => {
-                            self.diagnostics.push(GlyimDiagnostic::type_error(
-                                span,
-                                "indexing operation requires array or slice type",
-                            ));
-                            self.fresh_infer_ty()
-                        }
-                    };
                     let thir_expr = thir::Expr {
                         kind: thir::ExprKind::Index {
                             base: Box::new(base_expr),

@@ -89,6 +89,10 @@ pub struct Reactor {
     /// the registration — hence it is stored here (and removed on `deregister`).
     sources: Arc<Mutex<HashMap<usize, Box<dyn Register + Send>>>>,
     join: Mutex<Option<std::thread::JoinHandle<()>>>,
+    /// Wakes the reactor thread's blocking `poll`. `Drop` must fire this after
+    /// sending `Shutdown`, or the thread stays parked in `poll.poll(.., None)`
+    /// and `join()` deadlocks (reactor tests hung for 26s and were SIGTERM'd).
+    wake: Option<mio::Waker>,
 }
 
 impl Reactor {
@@ -101,9 +105,16 @@ impl Reactor {
             Arc::new(Mutex::new(HashMap::new()));
         let sources_bg = sources.clone();
 
+        // Poll + waker are created here so `Drop` can interrupt the background
+        // thread's blocking `poll.poll(.., None)` during shutdown.
+        let poll = mio::Poll::new()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let waker = mio::Waker::new(poll.registry(), Token(usize::MAX))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
         let handle = std::thread::Builder::new()
             .name("glyim-io-reactor".to_string())
-            .spawn(move || run_reactor(rx, slots_bg, sources_bg))
+            .spawn(move || run_reactor(rx, slots_bg, sources_bg, poll))
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(Arc::new(Reactor {
@@ -112,6 +123,7 @@ impl Reactor {
             slots,
             sources,
             join: Mutex::new(Some(handle)),
+            wake: Some(waker),
         }))
     }
 
@@ -140,6 +152,9 @@ impl Reactor {
                 interest,
             })
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "reactor closed"))?;
+        if let Some(w) = &self.wake {
+            let _ = w.wake();
+        }
         Ok(token)
     }
 
@@ -170,6 +185,9 @@ impl Reactor {
                 thread_id,
             })
             .ok();
+        if let Some(w) = &self.wake {
+            let _ = w.wake();
+        }
         token
     }
 
@@ -208,6 +226,7 @@ impl Reactor {
                         slots: Arc::new(Mutex::new(HashMap::new())),
                         sources: Arc::new(Mutex::new(HashMap::new())),
                         join: Mutex::new(None),
+                        wake: None,
                     })
                 })
             })
@@ -218,6 +237,13 @@ impl Reactor {
 impl Drop for Reactor {
     fn drop(&mut self) {
         let _ = self.tx.send(Command::Shutdown);
+        // Interrupt the blocking `poll.poll(.., None)` so the reactor thread
+        // observes `Shutdown`; without this `join()` below deadlocks whenever
+        // no I/O event is pending (reactor_* tests hung for 26s and were
+        // SIGTERM'd by nextest).
+        if let Some(w) = &self.wake {
+            let _ = w.wake();
+        }
         if let Some(h) = self.join.lock().unwrap().take() {
             let _ = h.join();
         }
@@ -228,17 +254,13 @@ fn run_reactor(
     rx: Receiver<Command>,
     slots: Arc<Mutex<HashMap<usize, Slot>>>,
     sources: Arc<Mutex<HashMap<usize, Box<dyn Register + Send>>>>,
+    mut poll: mio::Poll,
 ) {
-    let mut poll = match mio::Poll::new() {
-        Ok(p) => p,
-        Err(_) => return,
-    };
     // Dedicated wake token (plan §1.6): a `mio::Waker` lets the executor thread
     // immediately unblock `poll()` whenever a new registration (or shutdown)
     // is sent, instead of waiting up to 50ms on a fixed poll timeout. Distinct
     // from any slot token, which start at 1 (see `next_token`).
     let wake_token = Token(usize::MAX);
-    let waker = mio::Waker::new(poll.registry(), wake_token).ok();
     // Map mio tokens -> our slot tokens.
     let mut mio_to_slot: HashMap<Token, usize> = HashMap::new();
     // For fds registered via `RegisterFd`, the executor thread to unpark on
@@ -296,11 +318,15 @@ fn run_reactor(
         // command this iteration; otherwise `poll` blocks until real I/O fires.
         if pending_commands {
             pending_commands = false;
-            if let Some(w) = &waker {
-                let _ = w.wake();
-            }
         }
-        if poll.poll(&mut events, None).is_err() {
+        // Bounded timeout: defense-in-depth so Shutdown is observed even if
+        // the waker is unavailable (inert-reactor fallback, exotic platform).
+        // `Reactor::register`/`register_fd`/`drop` call `wake()` to unblock
+        // this poll immediately on new commands.
+        if poll
+            .poll(&mut events, Some(std::time::Duration::from_millis(100)))
+            .is_err()
+        {
             continue;
         }
         for event in events.iter() {
@@ -371,6 +397,9 @@ mod tests {
         // Peer writes data to the connection.
         let mut peer = std::net::TcpStream::connect(addr).unwrap();
         let (accepted, _peer_addr) = std_listener.accept().unwrap();
+        accepted
+            .set_nonblocking(true)
+            .expect("set non-blocking");
         let client = unsafe { mio::net::TcpStream::from_std(accepted) };
 
         let reactor = Reactor::new().expect("reactor starts");
@@ -412,6 +441,9 @@ mod tests {
         let addr = std_listener.local_addr().unwrap();
         let mut peer = std::net::TcpStream::connect(addr).unwrap();
         let (accepted, _pa) = std_listener.accept().unwrap();
+        accepted
+            .set_nonblocking(true)
+            .expect("set non-blocking");
         let fd = accepted.into_raw_fd();
 
         let reactor = Reactor::new().expect("reactor starts");

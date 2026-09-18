@@ -261,6 +261,24 @@ impl<'a> Resolver<'a> {
                 .find(|(n, _)| *n == segment.name)
             {
                 current_module = *child_id;
+            } else if path.kind == PathKind::Plain && i == start_idx {
+                let mut ancestor = self.modules[current_module].parent;
+                let mut found = None;
+                while let Some(parent) = ancestor {
+                    if let Some((_, child_id)) = self.modules[parent]
+                        .children
+                        .iter()
+                        .find(|(n, _)| *n == segment.name)
+                    {
+                        found = Some(*child_id);
+                        break;
+                    }
+                    ancestor = self.modules[parent].parent;
+                }
+                match found {
+                    Some(id) => current_module = id,
+                    None => return PerNs::default(),
+                }
             } else {
                 return PerNs::default();
             }
@@ -310,7 +328,7 @@ fn resolve_module_path_for_modules(
         }
     };
 
-    for segment in path.segments.iter().skip(start_idx) {
+    for (i, segment) in path.segments.iter().skip(start_idx).enumerate() {
         let module_data = &modules[current_module];
         if let Some((_, child_id)) = module_data
             .children
@@ -318,6 +336,24 @@ fn resolve_module_path_for_modules(
             .find(|(n, _)| *n == segment.name)
         {
             current_module = *child_id;
+        } else if path.kind == PathKind::Plain && i == 0 {
+            let mut ancestor = modules[current_module].parent;
+            let mut found = None;
+            while let Some(parent) = ancestor {
+                if let Some((_, child_id)) = modules[parent]
+                    .children
+                    .iter()
+                    .find(|(n, _)| *n == segment.name)
+                {
+                    found = Some(*child_id);
+                    break;
+                }
+                ancestor = modules[parent].parent;
+            }
+            match found {
+                Some(id) => current_module = id,
+                None => return None,
+            }
         } else {
             return None;
         }

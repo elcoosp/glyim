@@ -425,7 +425,7 @@ pub fn recursion_depth(&self) -> usize {
                     // can be passed as leading arguments — matching the calling
                     // convention the closure body was lowered with
                     // (`arg_count = captures.len() + params.len()`).
-                    let (callee_id, captured) = self.resolve_callee(&func)?;
+                    let (callee_id, captured) = self.resolve_callee(&func, &args)?;
                     let callee_body =
                         self.function_table
                             .get(&callee_id)
@@ -1485,7 +1485,7 @@ pub fn recursion_depth(&self) -> usize {
         }
     }
 
-    fn resolve_callee(&self, func: &Operand) -> InterpResult<(DefId, Vec<InterpValue>)> {
+    fn resolve_callee(&self, func: &Operand, args: &[Operand]) -> InterpResult<(DefId, Vec<InterpValue>)> {
         match func {
             Operand::Constant(c) => match &c.kind {
                 MirConstKind::Fn(def_id, _) => {
@@ -1500,6 +1500,20 @@ pub fn recursion_depth(&self) -> usize {
                     DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(*id as u32)),
                     Vec::new(),
                 )),
+                MirConstKind::VirtualMethod { trait_def_id, method_name } => {
+                    let recv_ty = args.first().and_then(|a| self.operand_ty(a));
+                    if let Some(recv_ty) = recv_ty {
+                        if let Some(fn_def_id) = self.tcx.resolve_trait_method(*trait_def_id, recv_ty, *method_name) {
+                            let crate_id = CrateId::from_raw(0);
+                            let local_def_id = LocalDefId::from_raw(fn_def_id.to_raw());
+                            return Ok((DefId::new(crate_id, local_def_id), Vec::new()));
+                        }
+                    }
+                    Err(InterpError::Panic(format!(
+                        "could not devirtualize trait method {:?} on receiver {:?}",
+                        method_name, recv_ty
+                    )))
+                }
                 _ => Err(InterpError::Panic(
                     "callee must be a function reference".into(),
                 )),

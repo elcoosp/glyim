@@ -734,7 +734,7 @@ pub fn typeck_crate(
         &top_level_ids,
         def_map.root,
         &mut next_local_def_id,
-        &body_owner_map,
+        &mut body_owner_map,
     );
 
     // 3. Obligation fulfillment
@@ -799,7 +799,7 @@ fn check_fn_items_in_module(
     item_ids: &[ItemId],
     module_id: ModuleId,
     next_local_def_id: &mut u32,
-    body_owner_map: &HashMap<glyim_hir::BodyId, LocalDefId>,
+    body_owner_map: &mut HashMap<glyim_hir::BodyId, LocalDefId>,
 ) {
     for item_id in item_ids {
         let item = match hir.items.get(*item_id) {
@@ -1016,6 +1016,123 @@ fn check_fn_items_in_module(
                         next_local_def_id,
                         body_owner_map,
                     );
+                }
+            }
+            ItemKind::Impl(impl_item) => {
+                let impl_span = item_span;
+                let param_map = tyconv::build_param_tys(ctx, &impl_item.generic_params);
+                let self_ty_opt = Some(tyconv::resolve_type_ref(
+                    ctx,
+                    infer,
+                    def_map,
+                    diagnostics,
+                    &impl_item.self_ty,
+                    &param_map,
+                    impl_span,
+                ));
+                for method in &impl_item.methods {
+                    let local_def_id = {
+                        let id = *next_local_def_id;
+                        *next_local_def_id += 1;
+                        LocalDefId::from_raw(id)
+                    };
+                    let owner = DefId::new(local_krate, local_def_id);
+                    if let Some(bid) = method.body {
+                        body_owner_map.insert(bid, local_def_id);
+                    }
+                    let combined_generics: Vec<glyim_hir::GenericParam> =
+                        impl_item.generic_params.iter()
+                            .chain(method.generic_params.iter())
+                            .cloned()
+                            .collect();
+                    let sig = tyconv::resolve_fn_sig(
+                        ctx,
+                        infer,
+                        def_map,
+                        diagnostics,
+                        &method.params,
+                        &method.return_ty,
+                        &combined_generics,
+                        impl_span,
+                        self_ty_opt,
+                    );
+                    let inputs = ctx.intern_substitution(
+                        sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
+                    );
+                    ctx.register_fn_sig(
+                        FnDefId::from_raw(local_def_id.to_raw()),
+                        FnSig {
+                            inputs,
+                            output: sig.return_ty,
+                            c_variadic: false,
+                            unsafety: Safety::Safe,
+                            abi: Abi::Glyim,
+                        },
+                    );
+                    if let (Some(trait_path), Some(self_ty)) = (&impl_item.trait_ref, self_ty_opt) {
+                        if let Some(trait_def_id) = tyconv::resolve_path_to_trait_def_id(
+                            def_map,
+                            ctx,
+                            trait_path,
+                            impl_span,
+                        ) {
+                            if let glyim_type::TyKind::Adt(self_adt_id, _) = ctx.ty_kind(self_ty) {
+                                ctx.register_impl_method(
+                                    trait_def_id,
+                                    *self_adt_id,
+                                    method.name,
+                                    FnDefId::from_raw(local_def_id.to_raw()),
+                                );
+                            }
+                        }
+                    }
+                    process_where_clauses(
+                        ctx,
+                        infer,
+                        def_map,
+                        diagnostics,
+                        all_obligations,
+                        &impl_item.generic_params,
+                        &impl_item.where_clauses,
+                        impl_span,
+                    );
+                    let body_id = method.body.or_else(|| {
+                        find_trait_default_body(hir, &impl_item.trait_ref, method.name)
+                    });
+                    if let Some(body_id) = body_id {
+                        let params: Vec<(Name, Ty, Span)> = method
+                            .params
+                            .iter()
+                            .zip(sig.param_tys.iter())
+                            .map(|(p, ty)| (p.name, *ty, p.span))
+                            .collect();
+                        check_body(
+                            ctx,
+                            infer,
+                            diagnostics,
+                            all_obligations,
+                            hir,
+                            body_id,
+                            owner,
+                            sig.return_ty,
+                            &params,
+                            thir_bodies,
+                            local_def_id,
+                            def_map,
+                            trait_ctx,
+                            body_owner_map,
+                            all_expr_types,
+                            module_id,
+                        );
+                    } else {
+                        diagnostics.push(GlyimDiagnostic::type_error(
+                            impl_span,
+                            format!(
+                                "method `{}` has no implementation and no default",
+                                ctx.name_str(method.name)
+                            ),
+                        ));
+                    }
                 }
             }
             ItemKind::Const(c) => {

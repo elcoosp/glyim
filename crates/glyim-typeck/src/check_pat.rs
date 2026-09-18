@@ -119,6 +119,63 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                     None => {
+                        // Fallback: builtin enums (Option, Result, Poll, etc.) live
+                        // only in TyCtxMut, not in the def-map.
+                        //
+                        // IMPORTANT (glyim-v2 stdlib handoff, Issue 1): the
+                        // scope-correct path resolution runs FIRST. Only after it
+                        // fails do we fall back to the unscoped bare-name search,
+                        // and even that is restricted to the small set of names
+                        // the Rust prelude makes bare-accessible and that user
+                        // code essentially never redeclares
+                        // (`None`/`Some`/`Ok`/`Err`, `Ordering`'s
+                        // `Less`/`Equal`/`Greater`). `Poll`'s `Ready`/`Pending`
+                        // are deliberately EXCLUDED: `Poll` is not a prelude
+                        // item, gets redeclared by user code (see
+                        // `nested_async_single_await_compiles`), and
+                        // `variant_by_name` searches every registered ADT
+                        // (builtin AND user-declared) in unspecified hashmap
+                        // order — trying `Ready` there first resolved the bare
+                        // pattern against the wrong `Poll` depending on hashmap
+                        // iteration order. Qualified `Poll::Ready` still
+                        // resolves correctly below via scoped path resolution,
+                        // which is unambiguous.
+                        if let Some((adt_id, vidx)) =
+                            crate::tyconv::resolve_enum_variant_path(self.ctx, self.def_map, path)
+                        {
+                            return thir::Pattern {
+                                kind: thir::PatternKind::Struct {
+                                    adt_id,
+                                    variant_idx: vidx,
+                                    fields: Vec::new(),
+                                    rest: false,
+                                },
+                                ty: expected_ty,
+                                span,
+                            };
+                        }
+                        // Restricted unscoped fallback for bare prelude variant
+                        // names like `None`, `Some`, `Ok`, `Err`.
+                        if let Some(name) = path.as_name() {
+                            let bare_name = self.ctx.name_str(name);
+                            let bare_safe = matches!(
+                                bare_name,
+                                "None" | "Some" | "Ok" | "Err" | "Less" | "Equal" | "Greater"
+                            );
+                            if bare_safe && let Some((adt_id, vidx)) = self.ctx.variant_by_name(name) {
+                                return thir::Pattern {
+                                    kind: thir::PatternKind::Struct {
+                                        adt_id,
+                                        variant_idx: vidx.index() as u32,
+                                        fields: Vec::new(),
+                                        rest: false,
+                                    },
+                                    ty: expected_ty,
+                                    span,
+                                };
+                            }
+                        }
+                        // Genuinely unresolved.
                         let label = if let Some(name) = path.as_name() {
                             format!(
                                 "unresolved path pattern `{}`",
@@ -127,8 +184,7 @@ impl<'a> FnCtxt<'a> {
                         } else {
                             "unresolved path pattern".to_string()
                         };
-                        self.diagnostics
-                            .push(GlyimDiagnostic::type_error(span, label));
+                        self.diagnostics.push(GlyimDiagnostic::type_error(span, label));
                         thir::Pattern::err(span)
                     }
                 }
