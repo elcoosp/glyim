@@ -1740,6 +1740,20 @@ impl<'a> FnCtxt<'a> {
             },
             _ => (None, None),
         };
+        // Primitive receiver (u32/u64/usize/…): consult the primitive method
+        // table before the ADT-keyed one. Primitives are not ADTs so they
+        // cannot be reached through `lookup_builtin_method`.
+        if matches!(
+            self.ctx.ty_kind(step_ty),
+            TyKind::Int(_) | TyKind::Uint(_)
+        ) {
+            if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(step_ty, method_name) {
+                let output = sig.output;
+                return Some((output, fn_id));
+            }
+            return None;
+        }
+
         let adt_id = lookup_id?;
         let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
             Some(x) => x,
