@@ -1237,6 +1237,30 @@ fn is_descendant_of(
     }
 }
 
+/// Look up the *declared* visibility of `def_id` in its defining module's own
+/// scope. Entries created by a `use` import store the *binding's* visibility
+/// (e.g. `Inherited` for a plain `use`), which is not the accessibility of the
+/// target item itself — to validate an import we must consult the visibility
+/// the item was declared with in its defining module.
+///
+/// Returns `None` when `def_id` is not found in `defining_mod`'s scope (e.g.
+/// enum variants in synthetic modules); callers fall back to the stored entry
+/// visibility in that case.
+fn declared_visibility_of(
+    modules: &IndexVec<ModuleId, ModuleData>,
+    defining_mod: ModuleId,
+    def_id: LocalDefId,
+) -> Option<Visibility> {
+    let scope = &modules[defining_mod].scope;
+    scope
+        .types
+        .values()
+        .chain(scope.values.values())
+        .chain(scope.macros.values())
+        .find(|(id, _, _)| *id == def_id)
+        .map(|(_, vis, _)| vis.clone())
+}
+
 /// Validate that items in each module's scope are accessible from that module.
 /// Items imported via `use` that are not accessible will generate a diagnostic.
 /// Directly declared items always pass because the defining module equals the
@@ -1253,46 +1277,70 @@ fn validate_import_visibility(
 
         // Check type namespace items
         for (name, (def_id, vis, span)) in &scope.types {
-            if let Some(&defining_mod) = def_to_module.get(def_id)
-                && !is_accessible_from(vis.clone(), defining_mod, module_id, modules)
-            {
-                diagnostics.push(GlyimDiagnostic::parse_error(
-                    *span,
-                    format!(
-                        "`{}` is private and not accessible from this module",
-                        interner.resolve(*name)
-                    ),
-                ));
+            if let Some(&defining_mod) = def_to_module.get(def_id) {
+                // A plain `use` binding stores `Visibility::Inherited`, which
+                // is NOT the accessibility of the imported item. For entries
+                // whose target lives in a *different* module, validate against
+                // the target's declared visibility instead; otherwise a legal
+                // `use io::Read` from a sibling module (`fs`) is flagged as
+                // private simply because `fs` is not a descendant of `io`.
+                let effective_vis = if defining_mod != module_id {
+                    declared_visibility_of(modules, defining_mod, *def_id)
+                        .unwrap_or_else(|| vis.clone())
+                } else {
+                    vis.clone()
+                };
+                if !is_accessible_from(effective_vis, defining_mod, module_id, modules) {
+                    diagnostics.push(GlyimDiagnostic::parse_error(
+                        *span,
+                        format!(
+                            "`{}` is private and not accessible from this module",
+                            interner.resolve(*name)
+                        ),
+                    ));
+                }
             }
         }
 
         // Check value namespace items
         for (name, (def_id, vis, span)) in &scope.values {
-            if let Some(&defining_mod) = def_to_module.get(def_id)
-                && !is_accessible_from(vis.clone(), defining_mod, module_id, modules)
-            {
-                diagnostics.push(GlyimDiagnostic::parse_error(
-                    *span,
-                    format!(
-                        "`{}` is private and not accessible from this module",
-                        interner.resolve(*name)
-                    ),
-                ));
+            if let Some(&defining_mod) = def_to_module.get(def_id) {
+                let effective_vis = if defining_mod != module_id {
+                    declared_visibility_of(modules, defining_mod, *def_id)
+                        .unwrap_or_else(|| vis.clone())
+                } else {
+                    vis.clone()
+                };
+                if !is_accessible_from(effective_vis, defining_mod, module_id, modules) {
+                    diagnostics.push(GlyimDiagnostic::parse_error(
+                        *span,
+                        format!(
+                            "`{}` is private and not accessible from this module",
+                            interner.resolve(*name)
+                        ),
+                    ));
+                }
             }
         }
 
         // Check macro namespace items
         for (name, (def_id, vis, span)) in &scope.macros {
-            if let Some(&defining_mod) = def_to_module.get(def_id)
-                && !is_accessible_from(vis.clone(), defining_mod, module_id, modules)
-            {
-                diagnostics.push(GlyimDiagnostic::parse_error(
-                    *span,
-                    format!(
-                        "macro `{}` is private and not accessible from this module",
-                        interner.resolve(*name)
-                    ),
-                ));
+            if let Some(&defining_mod) = def_to_module.get(def_id) {
+                let effective_vis = if defining_mod != module_id {
+                    declared_visibility_of(modules, defining_mod, *def_id)
+                        .unwrap_or_else(|| vis.clone())
+                } else {
+                    vis.clone()
+                };
+                if !is_accessible_from(effective_vis, defining_mod, module_id, modules) {
+                    diagnostics.push(GlyimDiagnostic::parse_error(
+                        *span,
+                        format!(
+                            "macro `{}` is private and not accessible from this module",
+                            interner.resolve(*name)
+                        ),
+                    ));
+                }
             }
         }
     }
