@@ -1688,6 +1688,59 @@ fn lower_array_expr(
     diags: &mut Vec<GlyimDiagnostic>,
     struct_field_map: &HashMap<Name, Vec<Name>>,
 ) -> Option<ExprId> {
+    // Repeat form: `[elem; N]` (e.g. `[0u8; 4096]`). The parser records the
+    // `;` as a direct token child of `ArrayExpr`; without this branch the
+    // count expression was treated as a second element, so `[0u8; 4096]`
+    // lowered to a 2-element array `[0u8, 4096]` and every stdlib
+    // `let mut tmp = [0u8; 4096];` failed against its `[u8; 4096]` slot with
+    // `mismatched array lengths`. Expand in place: all N slots share the
+    // element's `ExprId`; the type-checker's per-expr cache makes the
+    // repeated check O(1).
+    if node
+        .children_with_tokens()
+        .any(|e| e.kind() == SyntaxKind::Semicolon)
+    {
+        let exprs: Vec<_> = node.children().filter(is_expr_node).collect();
+        if exprs.len() != 2 {
+            diags.push(GlyimDiagnostic::parse_error(
+                node_span(node),
+                "malformed array-repeat expression: expected `[elem; count]`",
+            ));
+            return None;
+        }
+        let elem_id = lower_expr(&exprs[0], interner, body, diags, struct_field_map)?;
+        // The count is the second child — a `LitExpr` wrapping an `IntLit`
+        // token. Grab the literal text and parse the plain digit prefix so
+        // suffixes (`4096usize`) and underscores don't trip the parse.
+        let count_text = exprs[1]
+            .descendants_with_tokens()
+            .find(|e| e.kind() == SyntaxKind::IntLit)
+            .and_then(|e| e.into_token())
+            .map(|t| t.text().to_string());
+        let count = count_text.and_then(|s| {
+            let numeric: String = s
+                .trim()
+                .replace('_', "")
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            numeric.parse::<u32>().ok()
+        });
+        let n = match count {
+            Some(c) if c <= 1_000_000 => c as usize,
+            _ => {
+                diags.push(GlyimDiagnostic::parse_error(
+                    node_span(node),
+                    "array-repeat count must be a plain integer literal",
+                ));
+                return None;
+            }
+        };
+        let elems = vec![elem_id; n];
+        let expr = Expr::Array(elems);
+        let eid = body.alloc_expr(expr, node_span(node));
+        return Some(eid);
+    }
     let mut elems = Vec::new();
     for child in node.children().filter(is_expr_node) {
         if let Some(id) = lower_expr(&child, interner, body, diags, struct_field_map) {

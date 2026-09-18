@@ -466,7 +466,33 @@ impl InferenceTable {
                 Ok(constraints)
             }
             (TyKind::Array(elem_a, const_a), TyKind::Array(elem_b, const_b)) => {
-                if const_a.kind != const_b.kind || const_a.ty != const_b.ty {
+                // Array lengths compare by *value*, not by the raw
+                // `ConstKind`/`ty` pair. The type side (`[u8; 4096]`) is
+                // resolved by `tyconv::resolve_const_ref` to
+                // `ConstKind::Uint(4096)` / `usize`; the value side
+                // (`[0u8; 4096]`, an array-literal expression) produces
+                // `ConstKind::Int(4096)` / `isize`. Both denote length 4096,
+                // but the previous exact-kind comparison (`Int != Uint`)
+                // reported `mismatched array lengths` for every such pair —
+                // which is what broke every `let mut tmp = [0u8; 4096];` in
+                // the stdlib. Compare the numeric value; fall back to the
+                // exact-kind check for non-integer consts so genuine
+                // mismatches still diagnose.
+                let same_len = match (&const_a.kind, &const_b.kind) {
+                    (ConstKind::Int(a), ConstKind::Int(b)) => a == b,
+                    (ConstKind::Uint(a), ConstKind::Uint(b)) => a == b,
+                    (ConstKind::Int(a), ConstKind::Uint(b))
+                    | (ConstKind::Uint(b), ConstKind::Int(a)) => {
+                        (*a >= 0) && (*a as u128) == *b
+                    }
+                    // Infer / Param lengths only need the same shape; keep the
+                    // old behaviour so unresolved generics don't false-positive.
+                    (ConstKind::Infer(_), _) | (_, ConstKind::Infer(_)) => true,
+                    (ConstKind::Param(_), _) | (_, ConstKind::Param(_)) => true,
+                    (ConstKind::Error, _) | (_, ConstKind::Error) => true,
+                    _ => const_a.kind == const_b.kind && const_a.ty == const_b.ty,
+                };
+                if !same_len {
                     return Err(vec![GlyimDiagnostic::type_error(
                         span,
                         "mismatched array lengths".to_string(),
