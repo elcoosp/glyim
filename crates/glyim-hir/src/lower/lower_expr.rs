@@ -587,8 +587,17 @@ fn lower_struct_expr(
     ) {
         match n.kind() {
             SyntaxKind::StructExpr => {
-                // For the top-level StructExpr, use sibling-based collection on its
-                // children *and* tokens (the `..base` spread is a token, not a node).
+                // Sibling-based collection handles this struct's *own* fields
+                // (including the `..base` spread token). The previous
+                // "also recurse into children for safety" loop was harmful:
+                // when a field's value is itself a struct literal (e.g.
+                // `Mutex { inner: UnsafeCell::new(MutexInner { locked: ... }) }`),
+                // descending into the child `StructExpr` collected the *nested*
+                // struct's fields into this struct's field list — producing
+                // `no field MutexInner on struct Mutex` / `no field locked on
+                // struct Mutex` diagnostics, because the outer struct was
+                // handed `inner, MutexInner, locked, _padding, _marker` as its
+                // field set.
                 let elements: Vec<SyntaxElement> = n.children_with_tokens().collect();
                 collect_from_siblings(
                     &elements,
@@ -600,19 +609,6 @@ fn lower_struct_expr(
                     spread,
                     skip_name,
                 );
-                // Also recurse into children for safety (but sibling collection should cover it)
-                for child in n.children() {
-                    collect_fields(
-                        &child,
-                        interner,
-                        body,
-                        diags,
-                        struct_field_map,
-                        fields,
-                        spread,
-                        skip_name,
-                    );
-                }
             }
             _ => {
                 // For other nodes, just recurse

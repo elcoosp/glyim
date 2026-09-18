@@ -128,6 +128,25 @@ fn adt_id_for_item(
     // reference from a module that does not itself define or re-export the
     // type) do we search every module's scope, then `adt_id_by_name`, then mint
     // a synthetic id.
+    if matches!(ctx.name_str(name), "MutexInner" | "RwLockInner" | "Ipv4Addr" | "Ipv6Addr") {
+        let name_str = ctx.name_str(name).to_string();
+        let from_own_mod = def_map
+            .modules
+            .get(module_id)
+            .and_then(|m| m.scope.types.get(&name))
+            .map(|(id, _, _)| id.to_raw());
+        let from_any = (0..def_map.modules.len())
+            .find_map(|i| {
+                def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)]
+                    .scope
+                    .types
+                    .get(&name)
+                    .map(|(id, _, _)| id.to_raw())
+            });
+        let by_name = ctx.adt_id_by_name(name).map(|a| a.to_raw());
+        eprintln!("DBG_ADT: name=`{}` module_id={:?} own_mod={:?} any={:?} by_name={:?}",
+            name_str, module_id, from_own_mod, from_any, by_name);
+    }
     if let Some(l) = def_map
         .modules
         .get(module_id)
