@@ -832,12 +832,48 @@ impl<'a> FnCtxt<'a> {
                 args,
             } => {
                 let (recv_expr, recv_ty) = self.check_expr(*receiver);
-                let mut arg_exprs = Vec::new();
-                for &arg_id in args {
-                    arg_exprs.push(self.check_expr(arg_id).0);
-                }
+                // Resolve the method before checking its args: the dispatch's
+                // instantiated signature gives each argument's expected type,
+                // which we (a) hand to closure-literal args so their own
+                // params are seeded from the expected `fn(..)` signature, and
+                // (b) unify each arg against after checking it.
                 let (ret_ty, dispatch) = self.resolve_method_call(recv_ty, *method, span);
                 let ret_ty = self.extract_return_ty(ret_ty, span);
+                // Builtin method sigs list ONLY the explicit args (the
+                // receiver is not in `inputs`), so no skip.
+                let expected_args: Vec<Ty> = match &dispatch {
+                    Some(MethodDispatch::Builtin(fn_id)) => self
+                        .ctx
+                        .fn_sig(*fn_id)
+                        .map(|sig| {
+                            self.ctx
+                                .substitution_args(sig.inputs)
+                                .iter()
+                                .filter_map(|a| match a {
+                                    GenericArg::Ty(t) => Some(*t),
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default(),
+                    _ => Vec::new(),
+                };
+                let mut arg_exprs = Vec::with_capacity(args.len());
+                for (i, &arg_id) in args.iter().enumerate() {
+                    let expected = expected_args.get(i).copied();
+                    if let (Some(exp), Expr::Closure { .. }) = (expected, &self.body.exprs[arg_id]) {
+                        if matches!(self.ctx.ty_kind(exp), TyKind::FnPtr(_)) {
+                            self.pending_closure_expectation = Some(exp);
+                        }
+                    }
+                    let (a_expr, a_ty) = self.check_expr(arg_id);
+                    if let Some(exp) = expected {
+                        if exp != Ty::ERROR && a_ty != Ty::ERROR {
+                            self.unify(a_ty, exp, span);
+                        }
+                    }
+                    arg_exprs.push(a_expr);
+                }
                 let thir_expr = match dispatch {
                     Some(MethodDispatch::Static(fn_def_id)) => {
                         // Static dispatch: call the concrete impl function

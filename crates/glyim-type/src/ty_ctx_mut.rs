@@ -1800,6 +1800,31 @@ impl TyCtxMut {
         };
 
         // (adt_id, method_name, inputs, output) tuples.
+        // `fn(T) -> U` / `fn(T) -> bool` for `map_or` / `map` closure args.
+        // Without a `FnPtr` shape here, the closure arg is typed as bare
+        // `Param(0)` and the closure's own param `m` stays a bare inference
+        // var — `m.is_file()` then fails ("no method `is_file` on type").
+        let fn_t_to_t = {
+            let inputs = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+            self.mk_ty(TyKind::FnPtr(crate::FnSig {
+                inputs,
+                output: t_var,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            }))
+        };
+        let fn_t_to_bool = {
+            let inputs = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+            self.mk_ty(TyKind::FnPtr(crate::FnSig {
+                inputs,
+                output: bool_ty,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            }))
+        };
+
         let entries: Vec<(AdtId, &str, Vec<Ty>, Ty)> = vec![
             // Vec<T>
             (vec_id, "len", vec![], usize_ty),
@@ -1864,11 +1889,11 @@ impl TyCtxMut {
             (string_id, "from_str", vec![], result_ty),
             (result_id, "unwrap", vec![], t_var),
             (result_id, "unwrap_or_else", vec![], t_var),
-            (result_id, "map", vec![], result_ty),
-            (result_id, "map_or", vec![t_var, t_var], t_var),
+            (result_id, "map", vec![fn_t_to_t], result_ty),
+            (result_id, "map_or", vec![_e_var, fn_t_to_bool], _e_var),
             (option_id, "unwrap", vec![], t_var),
             (option_id, "unwrap_or_else", vec![], t_var),
-            (option_id, "map", vec![], option_ty),
+            (option_id, "map", vec![fn_t_to_t], option_ty),
             // Ordering — unit variants only, no methods.
             // AtomicBool
             (AdtId::from_raw(1016), "new", vec![bool_ty], atomic_bool_ty),
