@@ -315,10 +315,16 @@ impl<'a> FnCtxt<'a> {
             // Resolved to a value that is neither a registered function nor a
             // registered constant (e.g. an enum variant, which needs a
             // dedicated `VariantRef` THIR node). Report a clear error.
-            self.diagnostics.push(GlyimDiagnostic::type_error(
-                span,
-                "enum-variant value paths are not yet supported".to_string(),
-            ));
+            {
+                let segs: Vec<String> = path.segments.iter()
+                    .map(|s| self.ctx.name_str(s.name).to_string())
+                    .collect();
+                self.diagnostics.push(GlyimDiagnostic::type_error(
+                    span,
+                    format!("enum-variant value paths are not yet supported: `{}` (local={:?})",
+                        segs.join("::"), local),
+                ));
+            }
             return (thir::Expr::err(span), Ty::ERROR);
         }
 
