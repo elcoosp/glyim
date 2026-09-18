@@ -1386,10 +1386,22 @@ impl TyCtxMut {
             name: self.resolver.intern("0"),
             ty: t_var,
         });
+        // `E` — the error type parameter (`Param(1)`). `t_var` above is
+        // `Param(0)` (`T`); the `Err` variant needs its own parameter.
+        let e_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 1,
+            name: self.resolver.intern("E"),
+        }));
         let mut err_fields = IndexVec::new();
         err_fields.push(FieldDef {
             name: self.resolver.intern("0"),
-            ty: t_var,
+            // `Err(E)` — field type is `Param(1)` (`E`), NOT `Param(0)` (`T`).
+            // Typing it `t_var` bound `Result::Err(e)` patterns to `T`
+            // (`Result<usize, Error>::Err(e)` gave `e: usize`), which then
+            // cascaded into `e.kind()` being "no method `kind` on usize" and
+            // dozens of downstream errors across the stdlib error-handling
+            // paths.
+            ty: e_var,
         });
         let result_def = AdtDef {
             kind: AdtKind::Enum,
