@@ -120,54 +120,6 @@ impl<'a> FnCtxt<'a> {
             resolver.resolve_path(&core_path)
         };
 
-        // 0. Enum-variant value path `Enum::Variant` (e.g. `ErrorKind::Interrupted`,
-        //    `Ordering::Less`, `IpAddr::V4`, `FileType::Regular`, `Poll::Pending`,
-        //    `Option::None`, `Result::Err`). Resolve the first segment to an enum
-        //    ADT (by name, via the type context or the def-map) and match the
-        //    second segment against its variants. This is the general form that
-        //    subsumes the narrower handlers below and works regardless of which
-        //    namespace the def-map resolver happens to surface `Enum` in (the
-        //    value-namespace branch can miss user enums whose variant local is
-        //    not in `variant_map`, and the type-namespace branch can miss enums
-        //    that only resolve through the def-map). Returning a `VariantRef` /
-        //    `VariantCtor` here is exactly what downstream code expects, so this
-        //    is safe for paths that are genuinely enum variants (the variant-name
-        //    check ensures trait methods / inherent assoc fns are NOT mis-matched).
-        if path.segments.len() == 2 {
-            let enum_path = glyim_hir::Path {
-                segments: vec![glyim_hir::PathSegment {
-                    name: path.segments[0].name,
-                    generic_args: None,
-                }],
-                kind: glyim_core::path::PathKind::Plain,
-            };
-            let resolved_adt = crate::tyconv::resolve_name_to_adt_ty(
-                self.ctx,
-                self.infer,
-                self.def_map,
-                &mut Vec::new(),
-                &enum_path,
-                &std::collections::HashMap::new(),
-                span,
-            );
-            if let Some(adt_ty) = resolved_adt {
-                if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(adt_ty) {
-                    if let Some(variant_idx) = self
-                        .ctx
-                        .adt_def(*adt_id)
-                        .and_then(|def| {
-                            def.variants
-                                .iter()
-                                .position(|v| v.name == path.segments[1].name)
-                        })
-                        .map(|i| glyim_core::def_id::VariantIdx::from_raw(i as u32))
-                    {
-                        return self.variant_expr(*adt_id, variant_idx, span);
-                    }
-                }
-            }
-        }
-
         if let Some((local, _vis)) = resolved.values {
             // Enum variant value path. `Color::Red` (unit) is a value of the
             // enum type; `Some` / `Color::Green` (data-carrying) is a
