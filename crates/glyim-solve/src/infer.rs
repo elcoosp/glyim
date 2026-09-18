@@ -629,6 +629,51 @@ impl InferenceTable {
                 }
                 Ok(constraints)
             }
+            // A closure value unifies with the `fn(..) -> R` pointer signature
+            // its enclosing call expects (e.g. `map_or(false, |m| m.is_file())`
+            // where `map_or`'s second parameter is `fn(T) -> bool`). Look up
+            // the closure's registered `FnSig` and unify its params/return
+            // against the `FnPtr` signature. Without this arm, passing a
+            // closure to a `FnPtr`-typed parameter always fails, so every
+            // higher-order builtin method (`map`, `map_or`, `and_then`, …)
+            // left its closure argument untyped and cascaded.
+            (TyKind::Closure(cid, _), TyKind::FnPtr(sig))
+            | (TyKind::FnPtr(sig), TyKind::Closure(cid, _)) => {
+                let Some(closure_sig) = ctx.closure_sig(cid).cloned() else {
+                    return Ok(Vec::new());
+                };
+                let closure_inputs: Vec<Ty> = ctx
+                    .substitution_args(closure_sig.inputs)
+                    .iter()
+                    .filter_map(|a| match a {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    })
+                    .collect();
+                let fn_inputs: Vec<Ty> = ctx
+                    .substitution_args(sig.inputs)
+                    .iter()
+                    .filter_map(|a| match a {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    })
+                    .collect();
+                // The closure's registered sig includes the captures as its
+                // first params; the expected `FnPtr` sig only describes the
+                // *call* params. Compare the trailing `fn_inputs.len()` of the
+                // closure's inputs.
+                let offset = closure_inputs.len().saturating_sub(fn_inputs.len());
+                let mut constraints = Vec::new();
+                for (i, fty) in fn_inputs.iter().enumerate() {
+                    if let Some(cty) = closure_inputs.get(offset + i) {
+                        constraints.extend(self.unify_tys(ctx, *cty, *fty, span)?);
+                    }
+                }
+                if closure_sig.output != Ty::ERROR && sig.output != Ty::ERROR {
+                    constraints.extend(self.unify_tys(ctx, closure_sig.output, sig.output, span)?);
+                }
+                Ok(constraints)
+            }
             (TyKind::Closure(id_a, substs_a), TyKind::Closure(id_b, substs_b)) => {
                 if id_a != id_b {
                     return Err(vec![GlyimDiagnostic::type_error(
