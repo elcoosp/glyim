@@ -1598,6 +1598,12 @@ impl TyCtxMut {
         let str_find_result = self.mk_ty(TyKind::Adt(option_id, str_find_subst));
         let box_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
         let box_ty = self.mk_ty(TyKind::Adt(box_id, box_subst));
+        // `&[T]` — used by `Vec::extend_from_slice` / `<[T]>::copy_from_slice`
+        // (both take a `&[T]` sibling slice of the *same* element type).
+        // Bind the inner slice type to a local so the two `mk_ty` calls don't
+        // overlap on `&mut self`.
+        let slice_t = self.mk_ty(TyKind::Slice(t_var));
+        let ref_slice_t = self.mk_ty(TyKind::Ref(Region::Erased, slice_t, Mutability::Not));
 
         // (adt_id, method_name, inputs, output) tuples.
         let entries: Vec<(AdtId, &str, Vec<Ty>, Ty)> = vec![
@@ -1609,6 +1615,9 @@ impl TyCtxMut {
             (vec_id, "set_len", vec![usize_ty], Ty::UNIT),
             (vec_id, "push", vec![t_var], Ty::UNIT),
             (vec_id, "is_empty", vec![], bool_ty),
+            (vec_id, "clear", vec![], Ty::UNIT),
+            (vec_id, "extend_from_slice", vec![ref_slice_t], Ty::UNIT),
+            (vec_id, "clone", vec![], vec_ty),
             // String (element u8)
             (string_id, "len", vec![], usize_ty),
             (string_id, "capacity", vec![], usize_ty),
@@ -1635,6 +1644,8 @@ impl TyCtxMut {
             (slice_id, "as_ptr", vec![], slice_as_ptr),
             (slice_id, "as_mut_ptr", vec![], slice_as_mut_ptr),
             (slice_id, "is_empty", vec![], bool_ty),
+            (slice_id, "copy_from_slice", vec![ref_slice_t], Ty::UNIT),
+            (slice_id, "clone", vec![], slice_t),
             // str
             (str_id, "len", vec![], usize_ty),
             (str_id, "is_empty", vec![], bool_ty),
