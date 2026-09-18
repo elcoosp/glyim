@@ -60,6 +60,7 @@ pub(crate) fn is_type_node(node: &SyntaxNode) -> bool {
         node.kind(),
         SyntaxKind::PathType
             | SyntaxKind::RefType
+            | SyntaxKind::RawPtrType
             | SyntaxKind::FnType
             | SyntaxKind::DynType
             | SyntaxKind::SliceType

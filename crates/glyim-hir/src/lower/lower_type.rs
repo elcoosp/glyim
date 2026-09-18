@@ -24,6 +24,19 @@ pub(crate) fn lower_type_ref(node: &SyntaxNode, interner: &mut Interner) -> Opti
                 mutability,
             })
         }
+        SyntaxKind::RawPtrType => {
+            // `*const T` / `*mut T`. The `mut` keyword governs the mutability
+            // of the pointee (not the pointer binding).
+            let inner_node = node.children().find(is_type_node)?;
+            let inner = lower_type_ref(&inner_node, interner)?;
+            let mutability = if node.children_with_tokens().any(|c| {
+                matches!(&c, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwMut)
+            }) { Mutability::Mut } else { Mutability::Not };
+            Some(TypeRef::RawPtr {
+                inner: Box::new(inner),
+                mutability,
+            })
+        }
         SyntaxKind::FnType => {
             let mut params = Vec::new();
             let mut ret = None;

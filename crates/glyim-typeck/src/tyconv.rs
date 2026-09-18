@@ -35,6 +35,18 @@ pub fn resolve_type_ref(
             ctx.mk_ref(Region::Erased, inner_ty, *mutability)
         }
 
+        glyim_hir::TypeRef::RawPtr { inner, mutability } => {
+            // `*const T` / `*mut T` — a raw pointer, not a reference. Used by
+            // stdlib FFI wrappers (`*const u8` in `extern "C"` signatures) and
+            // smart-pointer internals (`Arc<T>.ptr: *const ArcInner<T>`).
+            let inner_ty =
+                resolve_type_ref(ctx, infer, def_map, diagnostics, inner, param_map, span);
+            if inner_ty == Ty::ERROR {
+                return Ty::ERROR;
+            }
+            ctx.mk_ty(TyKind::RawPtr(inner_ty, *mutability))
+        }
+
         glyim_hir::TypeRef::Tuple(elements) => {
             let mut tys = Vec::with_capacity(elements.len());
             for elem in elements {

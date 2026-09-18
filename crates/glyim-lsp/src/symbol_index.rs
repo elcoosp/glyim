@@ -551,6 +551,14 @@ pub fn render_type_ref(ty: &glyim_hir::TypeRef, interner: &glyim_core::Interner)
             };
             format!("{}{}", prefix, render_type_ref(inner, interner))
         }
+        glyim_hir::TypeRef::RawPtr { inner, mutability } => {
+            let prefix = if matches!(mutability, glyim_core::primitives::Mutability::Mut) {
+                "*mut "
+            } else {
+                "*const "
+            };
+            format!("{}{}", prefix, render_type_ref(inner, interner))
+        }
         glyim_hir::TypeRef::Slice(inner) => format!("[{}]", render_type_ref(inner, interner)),
         glyim_hir::TypeRef::Array { inner, .. } => {
             format!("[{}]", render_type_ref(inner, interner))

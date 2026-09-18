@@ -386,6 +386,13 @@ pub enum TypeRef {
 /// Struct.
         mutability: Mutability,
     },
+    /// A raw pointer type `*const T` / `*mut T`.
+    RawPtr {
+/// Struct.
+        inner: Box<TypeRef>,
+/// Struct.
+        mutability: Mutability,
+    },
 #[allow(missing_docs)]
     Slice(Box<TypeRef>),
 /// Variant.
