@@ -72,18 +72,18 @@ impl Duration {
     }
 
     /// Returns the total number of whole milliseconds contained by this `Duration`.
-    fn as_millis(&self) -> u128 {
-        self.secs as u128 * 1_000 + self.nanos as u128 / 1_000_000
+    fn as_millis(&self) -> u64 {
+        self.secs * 1_000 + (self.nanos / 1_000_000) as u64
     }
 
     /// Returns the total number of whole microseconds contained by this `Duration`.
-    fn as_micros(&self) -> u128 {
-        self.secs as u128 * 1_000_000 + self.nanos as u128 / 1_000
+    fn as_micros(&self) -> u64 {
+        self.secs * 1_000_000 + (self.nanos / 1_000) as u64
     }
 
     /// Returns the total number of nanoseconds contained by this `Duration`.
-    fn as_nanos(&self) -> u128 {
-        self.secs as u128 * 1_000_000_000 + self.nanos as u128
+    fn as_nanos(&self) -> u64 {
+        self.secs * 1_000_000_000 + self.nanos as u64
     }
 
     /// Checked `Duration` addition. Computes `self + other`, returning `None` if overflow occurred.
@@ -111,7 +111,7 @@ impl Duration {
 
     /// Multiply `Duration` by a scalar.
     fn mul(self, rhs: u32) -> Duration {
-        let total_nanos = self.as_nanos() * rhs as u128;
+        let total_nanos = self.as_nanos() * rhs as u64;
         Duration {
             secs: (total_nanos / 1_000_000_000) as u64,
             nanos: (total_nanos % 1_000_000_000) as u32,
@@ -120,7 +120,7 @@ impl Duration {
 
     /// Divide `Duration` by a scalar.
     fn div(self, rhs: u32) -> Duration {
-        let total_nanos = self.as_nanos() / rhs as u128;
+        let total_nanos = self.as_nanos() / rhs as u64;
         Duration {
             secs: (total_nanos / 1_000_000_000) as u64,
             nanos: (total_nanos % 1_000_000_000) as u32,
