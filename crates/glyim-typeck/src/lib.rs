@@ -256,6 +256,7 @@ pub fn typeck_crate(
     hir: &glyim_hir::CrateHir,
     solver: &mut dyn glyim_solve::TraitSolver,
 ) -> (TyCtx, TypeckResult) {
+
     let mut diagnostics = Vec::new();
     let mut infer = InferenceTable::new();
     let mut all_obligations: Vec<Obligation> = Vec::new();

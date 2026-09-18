@@ -30,6 +30,12 @@ pub fn std_source(name: &str) -> Option<&'static str> {
         // depend on `Future`/`Poll`/`Context`/`Waker`, so it must be assembled
         // alongside the std modules.
         "future" => Some(include_str!("../../glyim-lang-core/lib/future.g")),
+        // Core extension-method impls. `impl str` / `impl<T> [T]` define the
+        // `as_ptr`/`len`/`to_string`/`iter_mut` methods the std sources call
+        // on primitive receivers. Emitted FLAT (below, via `flat_modules`) so
+        // the `impl str` self-type binds to the primitive, not a `str` module.
+        "str" => Some(include_str!("../../glyim-lang-core/lib/str.g")),
+        "slice" => Some(include_str!("../../glyim-lang-core/lib/slice.g")),
         _ => None,
     }
 }
