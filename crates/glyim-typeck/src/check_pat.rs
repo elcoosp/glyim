@@ -234,6 +234,7 @@ impl<'a> FnCtxt<'a> {
                 };
                 let adt_def = self.ctx.adt_def(adt_id);
                 let adt_known = adt_def.is_some();
+
                 let mut field_pats = Vec::new();
                 if is_variant {
                     // Variant pattern: `fields` are positional (the inner
