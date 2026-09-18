@@ -1107,7 +1107,7 @@ impl<'a> FnCtxt<'a> {
                     self.def_map,
                     self.diagnostics,
                     target_ref,
-                    &HashMap::new(),
+                    &self.param_map,
                     span,
                 );
 
@@ -1284,7 +1284,7 @@ impl<'a> FnCtxt<'a> {
                     self.def_map,
                     self.diagnostics,
                     path,
-                    &HashMap::new(),
+                    &self.param_map,
                     span,
                 );
 

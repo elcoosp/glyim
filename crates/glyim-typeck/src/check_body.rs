@@ -1,5 +1,6 @@
 //! Per-function type-checking engine.
 
+use glyim_core::interner::Name;
 use std::collections::HashMap;
 
 use glyim_core::def_id::{DefId, LocalDefId};
@@ -40,4 +41,10 @@ pub struct FnCtxt<'a> {
     /// typeck allocated for its MIR body, so trait-method static dispatch can
     /// resolve to the body key stored during monomorphization.
     pub body_owner_map: &'a HashMap<glyim_hir::BodyId, LocalDefId>,
+    /// Generic parameters in scope for the body being checked (the enclosing
+    /// fn's own params, plus any impl-level params for methods). Used by
+    /// `check_expr` when resolving a `TypeRef` written *inside* the body
+    /// (cast target, struct-literal path, …) so `T` / `F` resolve to the
+    /// body's rigid type param rather than an "unresolved type" error.
+    pub param_map: HashMap<Name, Ty>,
 }

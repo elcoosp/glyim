@@ -720,6 +720,7 @@ pub fn typeck_crate(
                             &body_owner_map,
                             &mut all_expr_types,
                             def_map.root,
+                            &combined_generics,
                         );
                     } else {
                         diagnostics.push(GlyimDiagnostic::type_error(
@@ -996,6 +997,7 @@ fn check_fn_items_in_module(
                         body_owner_map,
                         all_expr_types,
                         module_id,
+                        &f.generic_params,
                     );
                 }
             }
@@ -1230,6 +1232,7 @@ fn check_fn_items_in_module(
                             body_owner_map,
                             all_expr_types,
                             module_id,
+                            &combined_generics,
                         );
                     } else {
                         diagnostics.push(GlyimDiagnostic::type_error(
@@ -1316,6 +1319,11 @@ fn check_body(
     body_owner_map: &HashMap<glyim_hir::BodyId, LocalDefId>,
     expr_types: &mut HashMap<LocalDefId, HashMap<ExprId, Ty>>,
     module_id: glyim_def_map::ModuleId,
+    // Generic parameters in scope for this body (fn-level, plus impl-level for
+    // methods). Threaded through so `check_expr` can resolve `TypeRef`s written
+    // inside the body (cast target, struct-literal path, …) against the same
+    // param map `resolve_fn_sig` used for the signature.
+    generic_params: &[glyim_hir::GenericParam],
 ) {
     let body = &hir.bodies[body_id];
     let env = env::LocalEnv::new();
@@ -1325,6 +1333,10 @@ fn check_body(
     // the crate root). Path resolution starts here and walks up to the root.
     let current_module = module_id;
 
+    // Build the body's generic param map *before* the `FnCtxt` literal: the
+    // literal borrows `ctx` immutably (as a struct field), so the `&mut ctx`
+    // that `build_param_tys` needs must complete first.
+    let body_param_map = tyconv::build_param_tys(ctx, generic_params);
     let fn_ctxt = check_body::FnCtxt {
         ctx,
         infer,
@@ -1341,6 +1353,7 @@ fn check_body(
         trait_ctx,
         capture_log: Vec::new(),
         body_owner_map,
+        param_map: body_param_map,
     };
 
     let (thir_body, body_expr_types) = fn_ctxt.check(params);
