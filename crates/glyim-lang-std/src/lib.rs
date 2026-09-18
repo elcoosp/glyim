@@ -34,6 +34,13 @@ pub fn std_source(name: &str) -> Option<&'static str> {
         // `as_ptr`/`len`/`to_string`/`iter_mut` methods the std sources call
         // on primitive receivers. Emitted FLAT (below, via `flat_modules`) so
         // the `impl str` self-type binds to the primitive, not a `str` module.
+        // `cmp.g` (core). Supplies the free functions `min`/`max` that
+        // `io.g` calls by bare name, plus the comparison traits
+        // (`Ord`/`PartialOrd`/`Eq`/`PartialEq`).
+        "cmp" => Some(include_str!("../../glyim-lang-core/lib/cmp.g")),
+        // Core extension-method impls. `impl str` / `impl<T> [T]` define the
+        // `as_ptr`/`len`/`to_string`/`iter_mut` methods the std sources call
+        // on primitive receivers. Emitted FLAT (below, via `flat_modules`).
         "str" => Some(include_str!("../../glyim-lang-core/lib/str.g")),
         "slice" => Some(include_str!("../../glyim-lang-core/lib/slice.g")),
         _ => None,
@@ -90,9 +97,32 @@ pub fn std_source_assembled() -> String {
             "future",
             &["Poll", "Waker", "Context", "Future"],
         ),
+        // `cmp.g` (core). Re-export the free `min`/`max` and the comparison
+        // traits so bare `min(a, b)` in `io.g` resolves. `Ordering` is
+        // DELIBERATELY EXCLUDED: `cmp::Ordering` (`Less`/`Equal`/`Greater`)
+        // and `sync::Ordering` (`Relaxed`/`Release`/…) are distinct types —
+        // each module keeps its own, and neither is referenced by bare name
+        // at the crate root.
+        (
+            "cmp",
+            &["min", "max", "Ord", "PartialOrd", "Eq", "PartialEq", "Reverse"],
+        ),
     ];
+    // Core-library sources emitted FLAT (no `pub mod` wrapper). `str.g` and
+    // `slice.g` define `impl str { .. }` / `impl<T> [T] { .. }` extension
+    // methods; wrapping them in `pub mod str { … }` would shadow the
+    // *primitive* `str` with the module, so `impl str` inside would bind to
+    // the module (an Adt) rather than the primitive (`TyKind::String`).
+    let flat_modules: &[&str] = &["str", "slice"];
     let mut out = String::new();
     out.push_str("// Assembled modular glyim standard library (Option A).\n");
+    for name in flat_modules {
+        if let Some(src) = std_source(name) {
+            let pub_src = make_pub(src);
+            out.push_str(&pub_src);
+            out.push('\n');
+        }
+    }
     for (name, _items) in pubs {
         if let Some(src) = std_source(name) {
             let pub_src = make_pub(src);
