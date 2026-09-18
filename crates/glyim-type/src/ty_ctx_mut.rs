@@ -1566,6 +1566,7 @@ impl TyCtxMut {
         let slice_id = AdtId::from_raw(1060);
         let str_id = AdtId::from_raw(1061);
         let box_id = AdtId::from_raw(1040);
+        let unsafe_cell_id = AdtId::from_raw(1005);
 
         let vec_as_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not));
         let vec_as_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
@@ -1598,6 +1599,10 @@ impl TyCtxMut {
         let str_find_result = self.mk_ty(TyKind::Adt(option_id, str_find_subst));
         let box_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
         let box_ty = self.mk_ty(TyKind::Adt(box_id, box_subst));
+        let unsafe_cell_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+        let unsafe_cell_ty = self.mk_ty(TyKind::Adt(unsafe_cell_id, unsafe_cell_subst));
+        let ucell_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
+        let ucell_mut_ref = self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Mut));
         // `&[T]` — used by `Vec::extend_from_slice` / `<[T]>::copy_from_slice`
         // (both take a `&[T]` sibling slice of the *same* element type).
         // Bind the inner slice type to a local so the two `mk_ty` calls don't
@@ -1681,6 +1686,14 @@ impl TyCtxMut {
             (box_id, "from_raw", vec![self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))], box_ty),
             (box_id, "leak", vec![box_ty], self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Mut))),
             (box_id, "as_ptr", vec![], self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not))),
+            // UnsafeCell<T> — used by stdlib's `Mutex`/`RwLock` via
+            // `self.inner.get()`/`UnsafeCell::new(...)`. The receiver type is
+            // the *builtin* `UnsafeCell` (AdtId 1005), not any user decl, so
+            // no impl-scan match is possible and these must live here.
+            (unsafe_cell_id, "new", vec![t_var], unsafe_cell_ty),
+            (unsafe_cell_id, "get", vec![], ucell_mut_ptr),
+            (unsafe_cell_id, "get_mut", vec![], ucell_mut_ref),
+            (unsafe_cell_id, "into_inner", vec![], t_var),
         ];
 
         for (adt_id, name, inputs, output) in entries {
