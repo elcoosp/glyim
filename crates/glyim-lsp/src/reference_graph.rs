@@ -734,7 +734,10 @@ impl ReferenceGraph {
                 // future `Expr` variant that DOES carry children will be a
                 // compile error here, forcing a real traversal to be written
                 // (Phase 8.1, unstub-5).
-                Expr::Missing | Expr::Literal(_) | Expr::Continue | Expr::Err | Expr::Await { .. } => {}
+                Expr::Missing | Expr::Literal(_) | Expr::Continue | Expr::Err => {}
+            Expr::Await { expr } | Expr::Try { expr } => {
+                walk_expr(*expr, body, interner, _file_id, add_ref, function_names, false, AccessKind::Read);
+            }
             }
         }
 

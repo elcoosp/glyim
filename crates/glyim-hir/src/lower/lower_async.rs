@@ -1883,6 +1883,9 @@ fn copy_expr_renamed(
         Expr::Await { expr } => Expr::Await {
             expr: copy_expr_renamed(src, dst, *expr, rename, interner),
         },
+        Expr::Try { expr } => Expr::Try {
+            expr: copy_expr_renamed(src, dst, *expr, rename, interner),
+        },
     };
     dst.alloc_expr(expr, Span::DUMMY)
 }
@@ -2072,6 +2075,9 @@ fn copy_expr_subst_await(
                     expr: copy_expr_subst_await(src, dst, *expr, rename, interner, await_eid, subst_name),
                 }
             }
+        },
+        Expr::Try { expr } => Expr::Try {
+            expr: copy_expr_subst_await(src, dst, *expr, rename, interner, await_eid, subst_name),
         },
         other => other.clone(),
     };

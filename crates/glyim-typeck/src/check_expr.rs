@@ -1621,6 +1621,70 @@ impl<'a> FnCtxt<'a> {
                 ));
                 (thir::Expr::err(span), Ty::ERROR)
             }
+            Expr::Try { expr: operand } => {
+                // `expr?` — check the operand, then extract the success type:
+                // for `Result<T, E>` that is `T` (positional arg 0), for
+                // `Option<T>` it is `T` (arg 0). The error/None branch is
+                // checked against the enclosing function's return type's error
+                // type (positional arg 1 for `Result<T, E>`, no-op for
+                // `Option<T>` returning `Option`). This is the semantics the
+                // `?` operator needs for the stdlib's `let x = f()?;` chains —
+                // previously `TryExpr` was unhandled in HIR lowering entirely,
+                // so the whole `let` statement vanished and every use of the
+                // bound name reported `unresolved name`.
+                let (operand_expr, operand_ty) = self.check_expr(*operand);
+                let (result_ty, thir_expr) = match self.ctx.ty_kind(operand_ty) {
+                    TyKind::Adt(adt_id, substs) => {
+                        let args: Vec<GenericArg> =
+                            self.ctx.substitution_args(*substs).to_vec();
+                        match args.first() {
+                            Some(GenericArg::Ty(t)) => {
+                                // Constrain the enclosing function's error type:
+                                // the operand's error arg must match it for
+                                // `Result`, or the operand must be `Option` when
+                                // the function returns `Option`.
+                                if args.len() >= 2 {
+                                    if let GenericArg::Ty(err_ty) = &args[1] {
+                                        // Unify with the function's return
+                                        // error position when the function
+                                        // returns a `Result`/`Option`.
+                                        if let TyKind::Adt(ret_id, ret_substs) =
+                                            self.ctx.ty_kind(self.return_ty)
+                                        {
+                                            let _ = ret_id;
+                                            let ret_args: Vec<GenericArg> = self
+                                                .ctx
+                                                .substitution_args(*ret_substs)
+                                                .to_vec();
+                                            if ret_args.len() >= 2 {
+                                                if let GenericArg::Ty(ret_err) = &ret_args[1] {
+                                                    if *ret_err != Ty::ERROR && *err_ty != Ty::ERROR
+                                                    {
+                                                        self.unify(*err_ty, *ret_err, span);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                (*t, operand_expr)
+                            }
+                            _ => (Ty::ERROR, operand_expr),
+                        }
+                    }
+                    _ => (Ty::ERROR, operand_expr),
+                };
+                (
+                    thir::Expr {
+                        kind: thir::ExprKind::Try {
+                            expr: Box::new(thir_expr),
+                        },
+                        ty: result_ty,
+                        span,
+                    },
+                    result_ty,
+                )
+            }
         };
 
         self.expr_cache.insert(expr_id, result.clone());

@@ -113,6 +113,7 @@ impl<'a> FnCtxt<'a> {
                     Expr::Closure { body, .. } => vec![*body],
                     Expr::Array(es) | Expr::Tuple(es) => es.clone(),
                     Expr::Let { value, .. } => vec![*value],
+                    Expr::Try { expr } => vec![*expr],
                     Expr::Struct { fields, spread, .. } => {
                         let mut v: Vec<ExprId> = fields.iter().map(|(_, e)| *e).collect();
                         if let Some(s) = spread {

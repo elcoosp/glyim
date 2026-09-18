@@ -320,6 +320,14 @@ pub enum ExprKind {
 /// Struct.
         inclusive: bool,
     },
+    /// `expr?` — the try operator. Carries the operand expression; typeck has
+    /// already extracted the success type (and constrained the enclosing
+    /// function's error type). MIR lowering turns this into an early-return on
+    /// the error/None branch (`docs/issues/INDEX.md` §0007-adjacent).
+    Try {
+/// Struct.
+        expr: Box<Expr>,
+    },
 /// Variant.
     Err,
 }

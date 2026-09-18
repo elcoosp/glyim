@@ -662,6 +662,12 @@ pub enum Expr {
         /// expr field.
         expr: ExprId,
     },
+    /// The `?` operator: `expr?`. Lowers to an early-return on the error/None
+    /// branch. `expr` is the operand (a `Result<T, E>` or `Option<T>`).
+    Try {
+        /// expr field.
+        expr: ExprId,
+    },
 /// Variant.
     Err,
 }

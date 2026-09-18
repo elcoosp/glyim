@@ -292,6 +292,21 @@ pub(crate) fn lower_expr(
             let eid = body.alloc_expr(expr, node_span(node));
             Some(eid)
         }
+        SyntaxKind::TryExpr => {
+            // `expr?` — lower the operand; the `?` is represented by the
+            // `Expr::Try` wrapper. The parser produces a `TryExpr` node whose
+            // single child is the operand expression.
+            let operand = node
+                .children()
+                .find(is_expr_node)
+                .and_then(|c| lower_expr(&c, interner, body, diags, struct_field_map));
+            let operand = match operand {
+                Some(e) => e,
+                None => body.alloc_expr(Expr::Missing, node_span(node)),
+            };
+            let eid = body.alloc_expr(Expr::Try { expr: operand }, node_span(node));
+            Some(eid)
+        }
         SyntaxKind::CastExpr => lower_cast_expr(node, interner, body, diags, struct_field_map),
         SyntaxKind::FieldExpr => lower_field_expr(node, interner, body, diags, struct_field_map),
         SyntaxKind::IndexExpr => lower_index_expr(node, interner, body, diags, struct_field_map),
