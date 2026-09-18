@@ -318,9 +318,40 @@ impl<'a> FnCtxt<'a> {
                 }
             }
             Pat::Tuple(pats) => {
+                // Project each element's type from the scrutinee's tuple type
+                // when available (e.g. `let (secs, nanos) = match dur { .. };`
+                // where the value is `(u64, u32)`). Passing `Ty::ERROR` down
+                // (the old behaviour) left every tuple-destructured binding
+                // typed `<error>`, so downstream uses (`secs`, `nanos`, …)
+                // cascaded into "no method"/"cannot dereference" diagnostics.
+                // A `Vec<Option<Ty>>` local collects the projection so the
+                // `self.ctx` borrow from `substitution_args` ends before any
+                // `self.fresh_infer_ty()` call (a closure over `self` while
+                // that borrow is live is rejected by the borrow checker).
+                let projected: Vec<Option<Ty>> = match self.ctx.ty_kind(expected_ty) {
+                    TyKind::Tuple(substs) => {
+                        let args: Vec<glyim_type::GenericArg> =
+                            self.ctx.substitution_args(*substs).to_vec();
+                        if args.len() == pats.len() {
+                            args.iter()
+                                .map(|a| match a {
+                                    glyim_type::GenericArg::Ty(t) => Some(*t),
+                                    _ => None,
+                                })
+                                .collect()
+                        } else {
+                            pats.iter().map(|_| None).collect()
+                        }
+                    }
+                    _ => pats.iter().map(|_| None).collect(),
+                };
                 let mut thir_pats = Vec::new();
-                for &p_id in pats {
-                    thir_pats.push(self.check_pattern(p_id, Ty::ERROR));
+                for (i, &p_id) in pats.iter().enumerate() {
+                    let sub_ty = match projected.get(i).copied().flatten() {
+                        Some(t) => t,
+                        None => self.fresh_infer_ty(),
+                    };
+                    thir_pats.push(self.check_pattern(p_id, sub_ty));
                 }
                 thir::Pattern {
                     kind: thir::PatternKind::Tuple(thir_pats),
