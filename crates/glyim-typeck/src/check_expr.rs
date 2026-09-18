@@ -1115,12 +1115,7 @@ impl<'a> FnCtxt<'a> {
                     && !self.is_cast_valid(inner_ty, target_ty)
                 {
                     self.diagnostics
-                        .push(GlyimDiagnostic::type_error(
-                            span,
-                            format!("invalid cast: from={:?} to={:?}",
-                                self.ctx.ty_kind(inner_ty),
-                                self.ctx.ty_kind(target_ty)),
-                        ));
+                        .push(GlyimDiagnostic::type_error(span, "invalid cast"));
                 }
 
                 let result_ty = if target_ty == Ty::ERROR {
