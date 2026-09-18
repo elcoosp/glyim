@@ -122,6 +122,11 @@ pub struct TyCtxMut {
     /// (0 = `T`, 1 = `E` for `Result`); the call site instantiates them against
     /// the receiver's substitution. stdlib-completion.
     pub builtin_method_fns: HashMap<(AdtId, Name), (FnDefId, FnSig)>,
+    /// Builtin inherent methods on *primitive* numeric receivers
+    /// (`u64::checked_add`, `u32::saturating_sub`, …), keyed on the receiver's
+    /// `Ty`. Primitive types are not ADTs, so they cannot share
+    /// `builtin_method_fns`'s `AdtId` key.
+    pub primitive_method_fns: HashMap<(Ty, Name), (FnDefId, FnSig)>,
     /// Counter for synthetic `FnDefId`s handed out to builtin methods. Seeded
     /// far above user/closure fn ids so it can never collide.
     next_builtin_fn_id: u32,
@@ -162,6 +167,7 @@ impl TyCtxMut {
             drop_impls: HashSet::new(),
             impl_method_fns: HashMap::new(),
             builtin_method_fns: HashMap::new(),
+            primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
         };
         // sentinels
@@ -283,6 +289,7 @@ impl TyCtxMut {
             drop_impls: ctx.drop_impls.clone(),
             impl_method_fns: ctx.impl_method_fns.clone(),
             builtin_method_fns: HashMap::new(),
+            primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
         }
     }
@@ -1730,6 +1737,67 @@ impl TyCtxMut {
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
         };
         let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
+        let u32_ty = self.mk_ty(TyKind::Uint(UintTy::U32));
+        let u64_ty = self.mk_ty(TyKind::Uint(UintTy::U64));
+        // `Option<u64>` / `Option<usize>` for `checked_add`/`checked_sub`.
+        let option_u64_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(u64_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
+        let option_usize_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(usize_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
+        // `Option<&T>` for `Option::as_ref`.
+        let option_ref_t_ty = {
+            let ref_t = self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Not));
+            let s = self.intern_substitution(vec![GenericArg::Ty(ref_t)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
+        // `&Vec<T>` / `&[T]` for `Vec::as_slice` / `Vec::as_ref`.
+        let ref_slice_t_for_vec = {
+            let s = self.mk_ty(TyKind::Slice(t_var));
+            self.mk_ty(TyKind::Ref(Region::Erased, s, Mutability::Not))
+        };
+        // `&String` for `Vec<T>::as_str`? no, `String::as_str` -> `&str`.
+        let ref_str_ty = self.mk_ty(TyKind::Ref(Region::Erased, str_ty, Mutability::Not));
+        // `Option<&str>` — for `Option::as_str`? not used; skip.
+        // String <-> Vec conversions: `String::into_bytes` -> `Vec<u8>`.
+        let vec_u8_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(u8_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1020), s))
+        };
+        // `String::as_str` output is `&str`.
+        // `Vec<T>::into_iter`/`iter_mut` — skip for now (needs iterator machinery).
+        let ref_slice_u8_for_bytes = {
+            let s = self.mk_ty(TyKind::Slice(u8_ty));
+            self.mk_ty(TyKind::Ref(Region::Erased, s, Mutability::Not))
+        };
+        let char_ty = self.mk_ty(TyKind::Char);
+        let vec_char_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(char_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1020), s))
+        };
+        let ref_slice_t_ty = {
+            let s = self.mk_ty(TyKind::Slice(t_var));
+            self.mk_ty(TyKind::Ref(Region::Erased, s, Mutability::Not))
+        };
+        let ref_mut_slice_t_ty = {
+            let s = self.mk_ty(TyKind::Slice(t_var));
+            self.mk_ty(TyKind::Ref(Region::Erased, s, Mutability::Mut))
+        };
+        let option_ref_t_ty2 = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(ref_slice_t_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
+        let tuple_ref_slice_pair = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(ref_slice_t_ty), GenericArg::Ty(ref_slice_t_ty)]);
+            self.mk_ty(TyKind::Tuple(s))
+        };
+        let option_u32_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(u32_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
 
         // (adt_id, method_name, inputs, output) tuples.
         let entries: Vec<(AdtId, &str, Vec<Ty>, Ty)> = vec![
@@ -1823,6 +1891,32 @@ impl TyCtxMut {
             // ExitStatus
             (AdtId::from_raw(1022), "code", vec![], i32_ty),
             (AdtId::from_raw(1022), "success", vec![], bool_ty),
+            // Vec — additional methods
+            (vec_id, "join", vec![str_ty], string_ty),
+            (vec_id, "as_slice", vec![], ref_slice_t_for_vec),
+            (vec_id, "as_ref", vec![], ref_slice_t_for_vec),
+            (vec_id, "insert", vec![usize_ty, t_var], Ty::UNIT),
+            (vec_id, "remove", vec![usize_ty], t_var),
+            (vec_id, "pop", vec![], option_ty),
+            (vec_id, "reserve", vec![usize_ty], Ty::UNIT),
+            (vec_id, "truncate", vec![usize_ty], Ty::UNIT),
+            // String — additional
+            (string_id, "as_str", vec![], ref_str_ty),
+            (string_id, "as_bytes", vec![], ref_slice_u8_for_bytes),
+            (string_id, "into_bytes", vec![], vec_u8_ty),
+            (string_id, "push_str", vec![ref_str_ty], Ty::UNIT),
+            (string_id, "clear", vec![], Ty::UNIT),
+            (string_id, "is_empty", vec![], bool_ty),
+            (string_id, "chars", vec![], vec_char_ty),
+            // Option — additional
+            (option_id, "as_ref", vec![], option_ref_t_ty),
+            (option_id, "is_none_or", vec![], bool_ty),
+            // Slice — additional (Vec/slice parity)
+            (slice_id, "iter", vec![], ref_slice_t_ty),
+            (slice_id, "iter_mut", vec![], ref_mut_slice_t_ty),
+            (slice_id, "to_vec", vec![], vec_ty),
+            (slice_id, "get", vec![usize_ty], option_ref_t_ty2),
+            (slice_id, "split_at", vec![usize_ty], tuple_ref_slice_pair),
 
             // Box<T>
             (box_id, "new", vec![t_var], box_ty),
@@ -1839,6 +1933,50 @@ impl TyCtxMut {
             (unsafe_cell_id, "get_mut", vec![], ucell_mut_ref),
             (unsafe_cell_id, "into_inner", vec![], t_var),
         ];
+
+        // Primitive numeric methods (keyed on the primitive `Ty`).
+        let prim_entries: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
+            // u64
+            (u64_ty, "checked_add", vec![u64_ty], option_u64_ty),
+            (u64_ty, "checked_sub", vec![u64_ty], option_u64_ty),
+            (u64_ty, "checked_mul", vec![u64_ty], option_u64_ty),
+            (u64_ty, "saturating_add", vec![u64_ty], u64_ty),
+            (u64_ty, "saturating_sub", vec![u64_ty], u64_ty),
+            (u64_ty, "wrapping_add", vec![u64_ty], u64_ty),
+            (u64_ty, "wrapping_sub", vec![u64_ty], u64_ty),
+            // u32
+            (u32_ty, "checked_add", vec![u32_ty], option_u32_ty),
+            (u32_ty, "checked_sub", vec![u32_ty], option_u32_ty),
+            (u32_ty, "saturating_sub", vec![u32_ty], u32_ty),
+            (u32_ty, "saturating_add", vec![u32_ty], u32_ty),
+            (u32_ty, "wrapping_sub", vec![u32_ty], u32_ty),
+            // usize
+            (usize_ty, "checked_add", vec![usize_ty], option_usize_ty),
+            (usize_ty, "checked_sub", vec![usize_ty], option_usize_ty),
+            (usize_ty, "checked_mul", vec![usize_ty], option_usize_ty),
+            (usize_ty, "saturating_add", vec![usize_ty], usize_ty),
+            (usize_ty, "saturating_sub", vec![usize_ty], usize_ty),
+            (usize_ty, "wrapping_add", vec![usize_ty], usize_ty),
+            (usize_ty, "wrapping_sub", vec![usize_ty], usize_ty),
+        ];
+        for (recv_ty, name, inputs, output) in prim_entries {
+            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            self.next_builtin_fn_id += 1;
+            let n = self.resolver.intern(name);
+            let inputs_subst = self.intern_substitution(
+                inputs.iter().map(|t| GenericArg::Ty(*t)).collect(),
+            );
+            self.primitive_method_fns.insert(
+                (recv_ty, n),
+                (fn_id, FnSig {
+                    inputs: inputs_subst,
+                    output,
+                    c_variadic: false,
+                    unsafety: glyim_core::primitives::Safety::Safe,
+                    abi: glyim_core::primitives::Abi::Glyim,
+                }),
+            );
+        }
 
         for (adt_id, name, inputs, output) in entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
@@ -1870,6 +2008,13 @@ impl TyCtxMut {
     /// substitution. Returns `None` when no builtin method matches.
     pub fn lookup_builtin_method(&self, adt_id: AdtId, name: Name) -> Option<(FnDefId, FnSig)> {
         self.builtin_method_fns.get(&(adt_id, name)).map(|(id, sig)| (*id, sig.clone()))
+    }
+
+    /// Look up a builtin inherent method on a *primitive* numeric receiver
+    /// (`u64::checked_add`, `u32::saturating_sub`, …). Returns `None` for
+    /// non-primitive receivers.
+    pub fn lookup_primitive_method(&self, recv_ty: Ty, name: Name) -> Option<(FnDefId, FnSig)> {
+        self.primitive_method_fns.get(&(recv_ty, name)).map(|(id, sig)| (*id, sig.clone()))
     }
 }
 
