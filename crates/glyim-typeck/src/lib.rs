@@ -620,143 +620,23 @@ pub fn typeck_crate(
         if child_set.contains(&item_id) {
             continue;
         }
-        let item_span = item.span;
+        let _item_span = item.span;
 
         match &item.kind {
             ItemKind::Fn(_) => {}
 
-            ItemKind::Impl(impl_item) => {
-                let impl_span = item_span;
-                let param_map = tyconv::build_param_tys(&mut ctx, &impl_item.generic_params);
-                let self_ty_opt = Some(tyconv::resolve_type_ref(
-                    &mut ctx,
-                    &mut infer,
-                    def_map,
-                    &mut diagnostics,
-                    &impl_item.self_ty,
-                    &param_map,
-                    impl_span,
-                ));
-
-                for method in &impl_item.methods {
-                    let local_def_id = alloc_local_def_id(&mut next_local_def_id, &mut diagnostics);
-                    let owner = DefId::new(local_krate, local_def_id);
-                    if let Some(bid) = method.body {
-                        body_owner_map.insert(bid, local_def_id);
-                    }
-
-                    // Concatenate the impl's generic params with the method's own
-                    // generic params so that method-level generics like `U` in
-                    // `fn map<U>(...) -> Option<U>` are visible to `resolve_fn_sig`
-                    // (which builds the param-map via `build_param_tys`).
-                    let combined_generics: Vec<glyim_hir::GenericParam> =
-                        impl_item.generic_params.iter()
-                            .chain(method.generic_params.iter())
-                            .cloned()
-                            .collect();
-                    let sig = tyconv::resolve_fn_sig(
-                        &mut ctx,
-                        &mut infer,
-                        def_map,
-                        &mut diagnostics,
-                        &method.params,
-                        &method.return_ty,
-                        &combined_generics,
-                        impl_span,
-                        self_ty_opt,
-                    );
-
-                    // Register the resolved signature for the LLVM codegen pass
-                    // (see the Fn arm for rationale).
-                    let inputs = ctx.intern_substitution(
-                        sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
-                    );
-                    ctx.register_fn_sig(
-                        FnDefId::from_raw(local_def_id.to_raw()),
-                        FnSig {
-                            inputs,
-                            output: sig.return_ty,
-                            c_variadic: false,
-                            unsafety: Safety::Safe,
-                            abi: Abi::Glyim,
-                        },
-                    );
-
-                    // Populate the trait-method dispatch table so generic-bound
-                    // calls (`f.poll()`) can be devirtualized at mono/interp
-                    // time. Only `impl Trait for Adt` (concrete self) is
-                    // registered; the self ADT id is needed as the dispatch key.
-                    if let (Some(trait_path), Some(self_ty)) =
-                        (&impl_item.trait_ref, self_ty_opt)
-                    {
-                        if let Some(trait_def_id) = tyconv::resolve_path_to_trait_def_id(
-                            def_map,
-                            &ctx,
-                            trait_path,
-                            impl_span,
-                        ) {
-                            if let glyim_type::TyKind::Adt(self_adt_id, _) = ctx.ty_kind(self_ty) {
-                                ctx.register_impl_method(
-                                    trait_def_id,
-                                    *self_adt_id,
-                                    method.name,
-                                    FnDefId::from_raw(local_def_id.to_raw()),
-                                );
-                            }
-                        }
-                    }
-
-                    process_where_clauses(
-                        &mut ctx,
-                        &mut infer,
-                        def_map,
-                        &mut diagnostics,
-                        &mut all_obligations,
-                        &impl_item.generic_params,
-                        &impl_item.where_clauses,
-                        impl_span,
-                    );
-
-                    let body_id = method.body.or_else(|| {
-                        find_trait_default_body(hir, &impl_item.trait_ref, method.name)
-                    });
-
-                    if let Some(body_id) = body_id {
-                        let params: Vec<(Name, Ty, Span)> = method
-                            .params
-                            .iter()
-                            .zip(sig.param_tys.iter())
-                            .map(|(p, ty)| (p.name, *ty, p.span))
-                            .collect();
-                        check_body(
-                            &mut ctx,
-                            &mut infer,
-                            &mut diagnostics,
-                            &mut all_obligations,
-                            hir,
-                            body_id,
-                            owner,
-                            sig.return_ty,
-                            &params,
-                            &mut thir_bodies,
-                            local_def_id,
-                            def_map,
-                            &trait_ctx,
-                            &body_owner_map,
-                            &mut all_expr_types,
-                            def_map.root,
-                            &combined_generics,
-                        );
-                    } else {
-                        diagnostics.push(GlyimDiagnostic::type_error(
-                            impl_span,
-                            format!(
-                                "method `{}` has no implementation and no default",
-                                ctx.name_str(method.name)
-                            ),
-                        ));
-                    }
-                }
+            ItemKind::Impl(_) => {
+                // Impl method bodies are exclusively checked by the module-
+                // aware walker (`check_fn_items_in_module`, its own
+                // `ItemKind::Impl` arm), which tracks the declaring module so
+                // `check_body` resolves paths against the right scope. Checking
+                // them *here as well* (the pre-walker behaviour) type-checked
+                // every impl body twice — doubling `thir_bodies` (the
+                // `v03_t03` test's "Expected two method bodies" saw 4) and
+                // duplicating any body diagnostics. Signature registration for
+                // cross-module call resolution is handled by the
+                // `pre_register_fn_sigs_in_module` pass above; nothing is lost
+                // by no-op'ing this arm.
             }
 
             _ => {}
