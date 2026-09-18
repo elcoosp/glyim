@@ -10,6 +10,7 @@
 
 use crate::adt_def::AdtKind;
 use crate::display::TypeLookup;
+use crate::ty::InferVar;
 use crate::{Ty, TyKind};
 
 // The following are referenced only by the `#[cfg(test)]` module below
@@ -36,6 +37,12 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
     let from_k = ctx.ty_kind(from);
     let to_k = ctx.ty_kind(to);
     match (from_k, to_k) {
+        // A numeric *inference variable* (`{integer}` / `{float}`) unifies
+        // with any concrete numeric target, so `(x as u16)` where `x: {integer}`
+        // is valid. Without these arms, every `as u16` / `as u8` on a
+        // literal-inferred integer in the stdlib reported `invalid cast`.
+        (Infer(InferVar::Int(_)), Int(_) | Uint(_) | Float(_)) => true,
+        (Infer(InferVar::Float(_)), Int(_) | Uint(_) | Float(_)) => true,
         (Int(_) | Uint(_), Int(_) | Uint(_) | Float(_)) => true,
         (Float(_), Float(_) | Int(_) | Uint(_)) => true,
         (RawPtr(_, _) | Ref(_, _, _), RawPtr(_, _) | Int(_)) => true,
