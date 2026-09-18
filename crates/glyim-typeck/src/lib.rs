@@ -1259,6 +1259,7 @@ fn check_body(
         capture_log: Vec::new(),
         body_owner_map,
         param_map: body_param_map,
+        pending_closure_expectation: None,
     };
 
     let (thir_body, body_expr_types) = fn_ctxt.check(params);

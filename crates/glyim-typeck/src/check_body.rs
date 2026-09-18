@@ -47,4 +47,10 @@ pub struct FnCtxt<'a> {
     /// (cast target, struct-literal path, …) so `T` / `F` resolve to the
     /// body's rigid type param rather than an "unresolved type" error.
     pub param_map: HashMap<Name, Ty>,
+    /// Expected `FnPtr` signature for a closure literal about to be checked.
+    /// `Expr::MethodCall` sets this before invoking `check_expr` on a closure
+    /// argument whose formal type is a `FnPtr`; the `Expr::Closure` arm
+    /// consumes it to seed the closure's own param/return types from the
+    /// expected signature.
+    pub pending_closure_expectation: Option<Ty>,
 }

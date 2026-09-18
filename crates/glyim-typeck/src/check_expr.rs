@@ -1383,9 +1383,35 @@ impl<'a> FnCtxt<'a> {
                 //    LocalVarId boundary) from captures of the enclosing env.
                 self.env.enter_scope();
                 let boundary = self.env.next_var_id();
+                // Consume any expected `fn(..) -> R` signature supplied by the
+                // enclosing method call and seed this closure's parameter
+                // types from it.
+                let expected_fn_sig = match self.pending_closure_expectation.take() {
+                    Some(exp) => match self.ctx.ty_kind(exp) {
+                        TyKind::FnPtr(sig) => Some(sig.clone()),
+                        _ => None,
+                    },
+                    None => None,
+                };
+                let expected_param_tys: Vec<Ty> = expected_fn_sig
+                    .as_ref()
+                    .map(|s| {
+                        self.ctx
+                            .substitution_args(s.inputs)
+                            .iter()
+                            .filter_map(|a| match a {
+                                GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
                 let mut thir_params: Vec<thir::Param> = Vec::with_capacity(params.len());
-                for pat_id in params {
-                    let ty = self.fresh_infer_ty();
+                for (param_idx, pat_id) in params.iter().enumerate() {
+                    let ty = match expected_param_tys.get(param_idx).copied() {
+                        Some(t) if t != Ty::ERROR => t,
+                        _ => self.fresh_infer_ty(),
+                    };
                     let local = self.bind_pattern(*pat_id, ty, Mutability::Not);
                     // Recover the binding name from the HIR pattern for the
                     // THIR param (used as the MIR local debug name).
@@ -1416,6 +1442,11 @@ impl<'a> FnCtxt<'a> {
                 self.expr_cache.clear();
                 let log_start = self.capture_log.len();
                 let (body_expr, body_ty) = self.check_expr(*body);
+                if let Some(sig) = expected_fn_sig.as_ref() {
+                    if body_ty != Ty::ERROR && sig.output != Ty::ERROR {
+                        self.unify(body_ty, sig.output, span);
+                    }
+                }
 
                 // 3. Classify captures: anything resolved below the boundary
                 //    is a capture from an enclosing scope; classify mutability
@@ -1853,6 +1884,33 @@ impl<'a> FnCtxt<'a> {
             subst.insert(i, GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
         }
         let output = self.ctx.subst_ty(sig.output, &subst);
+        // Register the *instantiated* signature under the same `FnDefId` so
+        // `MethodCall` can read the concrete argument types (the receiver's
+        // substitution applied, remaining `Param(i)` replaced with fresh
+        // inference vars) before checking each argument. Without this, an
+        // arg's expected type is the rigid `Param(0)` and a closure argument
+        // cannot be seeded from it.
+        let inst_inputs: Vec<GenericArg> = self
+            .ctx
+            .substitution_args(sig.inputs)
+            .to_vec()
+            .iter()
+            .map(|a| match a {
+                GenericArg::Ty(t) => GenericArg::Ty(self.ctx.subst_ty(*t, &subst)),
+                other => other.clone(),
+            })
+            .collect();
+        let inst_inputs = self.ctx.intern_substitution(inst_inputs);
+        self.ctx.register_fn_sig(
+            fn_id,
+            FnSig {
+                inputs: inst_inputs,
+                output,
+                c_variadic: sig.c_variadic,
+                unsafety: sig.unsafety,
+                abi: sig.abi,
+            },
+        );
         Some((output, fn_id))
     }
 
