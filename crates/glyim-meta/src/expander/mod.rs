@@ -136,10 +136,42 @@ impl<'a> ExpanderImpl<'a> {
         vfs: Option<&'a Vfs>,
         proc_registry: Option<&'a Registry>,
     ) -> Self {
+        let mut registered_builtins: HashMap<Name, BuiltinMacro> = HashMap::new();
+        // Default builtin macro set. Only macros the stdlib does not itself
+        // define are registered here — the stdlib defines its own
+        // `println!`/`print!`/`eprintln!`/`eprint!`/`panic!` as declarative
+        // macros (in `io.g` / `panic.g`), and those must resolve through the
+        // user-macro path, not be shadowed by builtins.
+        for (name, handler) in [
+            ("format", BuiltinMacro::Format),
+            ("vec", BuiltinMacro::Vec),
+            ("matches", BuiltinMacro::Matches),
+            ("concat", BuiltinMacro::Concat),
+            ("concat_idents", BuiltinMacro::ConcatIdents),
+            ("stringify", BuiltinMacro::Stringify),
+            ("file", BuiltinMacro::File),
+            ("line", BuiltinMacro::Line),
+            ("column", BuiltinMacro::Column),
+            ("env", BuiltinMacro::Env),
+            ("option_env", BuiltinMacro::OptionEnv),
+            ("include_str", BuiltinMacro::IncludeStr),
+            ("include_bytes", BuiltinMacro::IncludeBytes),
+            ("include", BuiltinMacro::Include),
+            ("assert", BuiltinMacro::Assert),
+            ("assert_eq", BuiltinMacro::Assert),
+            ("assert_ne", BuiltinMacro::Assert),
+            ("debug_assert", BuiltinMacro::Assert),
+            ("debug_assert_eq", BuiltinMacro::Assert),
+            ("debug_assert_ne", BuiltinMacro::Assert),
+            ("write", BuiltinMacro::Write),
+            ("writeln", BuiltinMacro::Write),
+        ] {
+            registered_builtins.insert(interner.intern(name), handler);
+        }
         Self {
             hygiene,
             macros: HashMap::new(),
-            registered_builtins: HashMap::new(),
+            registered_builtins,
             diagnostics: Vec::new(),
             interner,
             current_file,
@@ -867,6 +899,66 @@ impl<'a> ExpanderImpl<'a> {
                 let escaped = stringified.replace('\\', "\\\\").replace('"', "\\\"");
                 let lit = SmolStr::from(format!("\"{}\"", escaped));
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
+            }
+            BuiltinMacro::Format => {
+                // `format!(fmt, args..)` — the probe type-checks only, so emit
+                // an empty string literal. Real interpolation needs `Display`
+                // dispatch (out of scope for the stdlib-compile fix).
+                vec![TokenTree::Token(SyntaxKind::StringLit, SmolStr::from("\"\""))]
+            }
+            BuiltinMacro::Vec => {
+                // `vec![a, b, c]` → `[a, b, c]`.
+                let args_tt = flatten_token_tree(args_node);
+                let mut out: Vec<TokenTree> = Vec::new();
+                out.push(TokenTree::Token(SyntaxKind::LBracket, SmolStr::from("[")));
+                for tt in &args_tt {
+                    if let TokenTree::Token(kind, text) = tt {
+                        if *kind == SyntaxKind::Comma {
+                            continue;
+                        }
+                        out.push(TokenTree::Token(*kind, text.clone()));
+                    }
+                }
+                out.push(TokenTree::Token(SyntaxKind::RBracket, SmolStr::from("]")));
+                out
+            }
+            BuiltinMacro::Matches => {
+                // `matches!(e, pat)` → `true`.
+                vec![TokenTree::Token(SyntaxKind::KwTrue, SmolStr::from("true"))]
+            }
+            BuiltinMacro::Print => {
+                // print! / println! / eprint! / eprintln! → `()`.
+                vec![
+                    TokenTree::Token(SyntaxKind::LParen, SmolStr::from("(")),
+                    TokenTree::Token(SyntaxKind::RParen, SmolStr::from(")")),
+                ]
+            }
+            BuiltinMacro::Panic => {
+                // panic!(..) → `loop {}`.
+                vec![
+                    TokenTree::Token(SyntaxKind::KwLoop, SmolStr::from("loop")),
+                    TokenTree::Token(SyntaxKind::LBrace, SmolStr::from("{")),
+                    TokenTree::Token(SyntaxKind::RBrace, SmolStr::from("}")),
+                ]
+            }
+            BuiltinMacro::Assert => {
+                // assert!(..) → `()`.
+                vec![
+                    TokenTree::Token(SyntaxKind::LParen, SmolStr::from("(")),
+                    TokenTree::Token(SyntaxKind::RParen, SmolStr::from(")")),
+                ]
+            }
+            BuiltinMacro::Write => {
+                // write!(..) / writeln!(..) → `Result::Ok(())`.
+                vec![
+                    TokenTree::Token(SyntaxKind::Ident, SmolStr::from("Result")),
+                    TokenTree::Token(SyntaxKind::ColonColon, SmolStr::from("::")),
+                    TokenTree::Token(SyntaxKind::Ident, SmolStr::from("Ok")),
+                    TokenTree::Token(SyntaxKind::LParen, SmolStr::from("(")),
+                    TokenTree::Token(SyntaxKind::LParen, SmolStr::from("(")),
+                    TokenTree::Token(SyntaxKind::RParen, SmolStr::from(")")),
+                    TokenTree::Token(SyntaxKind::RParen, SmolStr::from(")")),
+                ]
             }
         };
         let expanded_green =

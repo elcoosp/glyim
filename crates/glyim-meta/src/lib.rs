@@ -117,6 +117,26 @@ pub enum BuiltinMacro {
     ConcatIdents,
 /// Variant.
     Stringify,
+    /// `format!(fmt, args..)` — expands to a placeholder empty `String`
+    /// literal. The probe only type-checks; real runtime interpolation is a
+    /// separate follow-up.
+    Format,
+    /// `vec![a, b, c]` — expands to the array literal `[a, b, c]`.
+    Vec,
+    /// `matches!(e, pat)` — expands to `true` (a type-checks-only placeholder;
+    /// the stdlib only uses it in trait default bodies that the probe never
+    /// executes).
+    Matches,
+    /// Print / eprint / println / eprintln — expands to `()`.
+    Print,
+    /// `panic!` / `unreachable!` / `todo!` / `unimplemented!` — expands to a
+    /// diverging block that aborts. Placeholder until real panic lowering.
+    Panic,
+    /// `assert!` / `assert_eq!` / `assert_ne!` and their `debug_*` forms —
+    /// expands to `()`.
+    Assert,
+    /// `write!` / `writeln!` — expands to `Result::Ok(())`-shaped tokens.
+    Write,
 }
 
 #[derive(Clone, Debug)]
