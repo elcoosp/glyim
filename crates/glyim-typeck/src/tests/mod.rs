@@ -40,4 +40,3 @@ mod while_loop;
 mod generics;
 mod dyn_dispatch;
 mod deref_impl;
-mod zz_scratch;
