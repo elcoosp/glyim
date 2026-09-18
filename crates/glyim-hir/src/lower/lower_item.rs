@@ -597,6 +597,20 @@ pub(crate) fn lower_impl_def(
         });
     }
 
+    if std::env::var("GLYIM_DUMP_IMPL_SPANS").is_ok() {
+        let r = node.text_range();
+        let self_ty_str = match &self_ty {
+            TypeRef::Path(p) => p.segments.iter().map(|s| interner.resolve(s.name).to_string()).collect::<Vec<_>>().join("::"),
+            TypeRef::Slice(inner) => {
+                let i = match &**inner { TypeRef::Path(p) => p.segments.iter().map(|s| interner.resolve(s.name).to_string()).collect::<Vec<_>>().join("::"), _ => "?".into() };
+                format!("[{}]", i)
+            }
+            other => format!("{:?}", other),
+        };
+        eprintln!("DBG_IMPL_SPAN: name={} self_ty_str=`{}` lo={} hi={}",
+            interner.resolve(name), self_ty_str,
+            u32::from(r.start()), u32::from(r.end()));
+    }
     let id = ItemId::from_raw(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {

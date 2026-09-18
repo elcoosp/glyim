@@ -339,6 +339,23 @@ pub(crate) fn lower_crate_raw(
         &mut items,
     );
 
+    if std::env::var("GLYIM_DUMP_ITEMS").is_ok() {
+        for (i, item) in items.iter_enumerated() {
+            let kind = match &item.kind {
+                crate::ItemKind::Fn(_) => "Fn",
+                crate::ItemKind::Struct(_) => "Struct",
+                crate::ItemKind::Enum(_) => "Enum",
+                crate::ItemKind::Impl(_) => "Impl",
+                crate::ItemKind::Trait(_) => "Trait",
+                crate::ItemKind::Mod(_) => "Mod",
+                crate::ItemKind::Const(_) => "Const",
+                crate::ItemKind::TypeAlias(_) => "TypeAlias",
+                _ => "Other",
+            };
+            eprintln!("DBG_ITEM[{}]: kind={} name={}", i.index(), kind, interner.resolve(item.name));
+        }
+    }
+
     CrateHir {
         items,
         bodies,

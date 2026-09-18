@@ -1947,8 +1947,25 @@ impl<'a> FnCtxt<'a> {
             let mut found: Vec<(Ty, Ty, Option<MethodDispatch>)> = Vec::new();
             for (_id, item) in this.hir.items.iter_enumerated() {
                 if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
-                    let param_map =
-                        crate::tyconv::build_param_tys(this.ctx, &impl_item.generic_params);
+                    // Instantiate the impl's generic params with *fresh
+                    // inference variables* (not rigid `Param`s) so a generic
+                    // self type like `impl<T> [T]` unifies with a concrete
+                    // receiver `[u8]` (binding `T := u8`). `build_param_tys`
+                    // yields `TyKind::Param`, which is rigid and cannot unify
+                    // with a concrete type — that was why `impl str` /
+                    // `impl<T> [T]` methods (`as_ptr`, `len`, …) never matched
+                    // their primitive receivers.
+                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                    for (i, gp) in impl_item.generic_params.iter().enumerate() {
+                        let var = this.infer.new_ty_var(this.ctx);
+                        let ty = this
+                            .ctx
+                            .mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                        // Index and name both key the map: `resolve_type_ref`
+                        // looks up by `Name`.
+                        let _ = i;
+                        param_map.insert(gp.name, ty);
+                    }
                     let impl_self_ty = crate::tyconv::resolve_type_ref(
                         this.ctx,
                         this.infer,
