@@ -1719,6 +1719,39 @@ impl<'a> FnCtxt<'a> {
     /// `FnDefId` for codegen. `None` if no builtin method matches this receiver
     /// + name (so the caller falls through to user-impl / generic dispatch).
     fn try_builtin_method(&mut self, step_ty: Ty, method_name: Name) -> Option<(Ty, FnDefId)> {
+        // Universal methods (`into`, `to_owned`, `to_string`, `clone`) resolve
+        // for any receiver via a synthetic fn id whose output is either a fresh
+        // inference var (context-pinned by the caller, e.g. `.into()` where the
+        // target is stated) or a `String` for `to_string`/`to_owned`. This
+        // covers blanket-like `From`/`Into`/`ToString`/`Clone` behaviour the
+        // stdlib relies on without a real trait-solver blanket impl.
+        {
+            let mn = self.ctx.name_str(method_name).to_string();
+            if mn == "into" {
+                // Result is a fresh var: the caller's context (assignment,
+                // return, explicit comparison) pins the target.
+                let var = self.infer.new_ty_var(self.ctx);
+                let out_ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                let fn_id = FnDefId::from_raw(u32::MAX - 1);
+                return Some((out_ty, fn_id));
+            }
+            if mn == "to_owned" || mn == "to_string" {
+                let out_ty = self.ctx.mk_ty(TyKind::String);
+                let fn_id = FnDefId::from_raw(u32::MAX - 2);
+                return Some((out_ty, fn_id));
+            }
+            if mn == "clone" {
+                // Clone returns the same type as the receiver, with the outer
+                // reference peeled off if the receiver is `&T` (auto-deref).
+                let inner = match self.ctx.ty_kind(step_ty) {
+                    TyKind::Ref(_, i, _) => *i,
+                    _ => step_ty,
+                };
+                let fn_id = FnDefId::from_raw(u32::MAX - 3);
+                return Some((inner, fn_id));
+            }
+        }
+
         // Map the receiver step to a `(lookup_adt_id, optional_slice_elem)`.
         let (lookup_id, elem): (Option<AdtId>, Option<Ty>) = match self.ctx.ty_kind(step_ty) {
             TyKind::Adt(id, _) => (Some(*id), None),
