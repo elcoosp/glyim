@@ -1429,6 +1429,87 @@ impl TyCtxMut {
         self.lang_items.register(LangItem::Result, def_id(1011))
             .expect("builtin lang item registration must not duplicate");
 
+        // Register `Ordering` (memory-order enum) - ID 1015.
+        // The core library's `cmp.g` declares comparison `Ordering`
+        // (`Less`/`Equal`/`Greater`); the stdlib's atomics (`sync.g`) reuse
+        // the name for memory orderings (`Acquire`/`Release`/`Relaxed`/
+        // `SeqCst`). Register a single enum carrying all seven variants so
+        // both sets of paths (`Ordering::Acquire`, `Ordering::Less`, …)
+        // resolve against one canonical ADT.
+        let ordering_unit = |this: &mut Self, name: &str| VariantDef {
+            name: this.resolver.intern(name),
+            style: crate::adt_def::VariantStyle::Unit,
+            fields: IndexVec::new(),
+        };
+        let ordering_def = AdtDef {
+            kind: AdtKind::Enum,
+            fields: IndexVec::new(),
+            variants: vec![
+                ordering_unit(self, "Less"),
+                ordering_unit(self, "Equal"),
+                ordering_unit(self, "Greater"),
+                ordering_unit(self, "Acquire"),
+                ordering_unit(self, "Release"),
+                ordering_unit(self, "Relaxed"),
+                ordering_unit(self, "SeqCst"),
+            ],
+            generic_params: Vec::new(),
+        };
+        self.register_adt(AdtId::from_raw(1015), ordering_def.clone());
+        self.register_adt_with_name(
+            self.resolver.intern("Ordering"),
+            AdtId::from_raw(1015),
+            ordering_def,
+        );
+
+        // Register `AtomicBool` (1016), `AtomicUsize` (1017), `AtomicU8`
+        // (1018) as unit-struct builtins. Their methods (`load`/`store`/
+        // `fetch_add`/`fetch_sub`/`compare_exchange`) live in the builtin
+        // method table below, keyed on these ids.
+        let unit_struct = |this: &mut Self, name: &str, id: AdtId| {
+            let def = AdtDef {
+                kind: AdtKind::Struct,
+                fields: IndexVec::new(),
+                variants: vec![VariantDef {
+                    name: this.resolver.intern(""),
+                    style: crate::adt_def::VariantStyle::Unit,
+                    fields: IndexVec::new(),
+                }],
+                generic_params: Vec::new(),
+            };
+            this.register_adt(id, def.clone());
+            this.register_adt_with_name(this.resolver.intern(name), id, def);
+        };
+        unit_struct(self, "AtomicBool", AdtId::from_raw(1016));
+        unit_struct(self, "AtomicUsize", AdtId::from_raw(1017));
+        unit_struct(self, "AtomicU8", AdtId::from_raw(1018));
+        unit_struct(self, "AtomicI32", AdtId::from_raw(1019));
+        unit_struct(self, "AtomicU32", AdtId::from_raw(1021));
+        // `ExitStatus` (1022) — a unit struct carrying a `code` field for the
+        // stdlib's `Child::wait` result. Register with one `i32`-typed field.
+        let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
+        let mut exit_fields = IndexVec::new();
+        exit_fields.push(FieldDef {
+            name: self.resolver.intern("code"),
+            ty: i32_ty,
+        });
+        let exit_status_def = AdtDef {
+            kind: AdtKind::Struct,
+            fields: exit_fields.clone(),
+            variants: vec![VariantDef {
+                name: self.resolver.intern(""),
+                style: crate::adt_def::VariantStyle::Unit,
+                fields: exit_fields,
+            }],
+            generic_params: Vec::new(),
+        };
+        self.register_adt(AdtId::from_raw(1022), exit_status_def.clone());
+        self.register_adt_with_name(
+            self.resolver.intern("ExitStatus"),
+            AdtId::from_raw(1022),
+            exit_status_def,
+        );
+
         // Register `UnsafeCell<T>` by name (already registered at 1005 above,
         // but `register_adt` alone does not make it name-resolvable in type
         // position).
@@ -1622,6 +1703,34 @@ impl TyCtxMut {
         let slice_t = self.mk_ty(TyKind::Slice(t_var));
         let ref_slice_t = self.mk_ty(TyKind::Ref(Region::Erased, slice_t, Mutability::Not));
 
+        // Atomic/Ordering/ExitStatus helper types (precomputed so the entry
+        // list below doesn't hold two `&mut self` borrows across a call).
+        let ordering_ty = {
+            let s = self.intern_substitution(vec![]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1015), s))
+        };
+        let atomic_bool_ty = {
+            let s = self.intern_substitution(vec![]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1016), s))
+        };
+        let atomic_usize_ty = {
+            let s = self.intern_substitution(vec![]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1017), s))
+        };
+        let atomic_u8_ty = {
+            let s = self.intern_substitution(vec![]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1018), s))
+        };
+        let result_bool_bool = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(bool_ty), GenericArg::Ty(bool_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
+        };
+        let result_usize_usize = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(usize_ty), GenericArg::Ty(usize_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
+        };
+        let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
+
         // (adt_id, method_name, inputs, output) tuples.
         let entries: Vec<(AdtId, &str, Vec<Ty>, Ty)> = vec![
             // Vec<T>
@@ -1692,6 +1801,29 @@ impl TyCtxMut {
             (option_id, "unwrap", vec![], t_var),
             (option_id, "unwrap_or_else", vec![], t_var),
             (option_id, "map", vec![], option_ty),
+            // Ordering — unit variants only, no methods.
+            // AtomicBool
+            (AdtId::from_raw(1016), "new", vec![bool_ty], atomic_bool_ty),
+            (AdtId::from_raw(1016), "load", vec![ordering_ty], bool_ty),
+            (AdtId::from_raw(1016), "store", vec![bool_ty, ordering_ty], Ty::UNIT),
+            (AdtId::from_raw(1016), "compare_exchange", vec![bool_ty, bool_ty, ordering_ty], result_bool_bool),
+            (AdtId::from_raw(1016), "fetch_and", vec![bool_ty, ordering_ty], bool_ty),
+            (AdtId::from_raw(1016), "fetch_or", vec![bool_ty, ordering_ty], bool_ty),
+            // AtomicUsize
+            (AdtId::from_raw(1017), "new", vec![usize_ty], atomic_usize_ty),
+            (AdtId::from_raw(1017), "load", vec![ordering_ty], usize_ty),
+            (AdtId::from_raw(1017), "store", vec![usize_ty, ordering_ty], Ty::UNIT),
+            (AdtId::from_raw(1017), "fetch_add", vec![usize_ty, ordering_ty], usize_ty),
+            (AdtId::from_raw(1017), "fetch_sub", vec![usize_ty, ordering_ty], usize_ty),
+            (AdtId::from_raw(1017), "compare_exchange", vec![usize_ty, usize_ty, ordering_ty], result_usize_usize),
+            // AtomicU8
+            (AdtId::from_raw(1018), "new", vec![u8_ty], atomic_u8_ty),
+            (AdtId::from_raw(1018), "load", vec![ordering_ty], u8_ty),
+            (AdtId::from_raw(1018), "store", vec![u8_ty, ordering_ty], Ty::UNIT),
+            // ExitStatus
+            (AdtId::from_raw(1022), "code", vec![], i32_ty),
+            (AdtId::from_raw(1022), "success", vec![], bool_ty),
+
             // Box<T>
             (box_id, "new", vec![t_var], box_ty),
             (box_id, "into_raw", vec![box_ty], self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))),
