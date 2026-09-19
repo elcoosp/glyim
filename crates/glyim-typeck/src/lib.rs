@@ -506,6 +506,15 @@ pub fn typeck_crate(
                 }
                 ItemKind::Impl(impl_item) => {
                     register_bounds(&mut ctx, &impl_item.generic_params, &impl_item.where_clauses);
+                    // Also register each *method's* own generic params. A
+                    // method-level bound (`impl str { fn parse<T: FromStr>.. }`)
+                    // is not part of the impl's params, and without this the
+                    // bound is invisible to `param_bounds_for` — so a
+                    // `T::from_str(s)` call inside the method body reports
+                    // "unresolved value path".
+                    for m in &impl_item.methods {
+                        register_bounds(&mut ctx, &m.generic_params, &[]);
+                    }
                 }
                 _ => {}
             }

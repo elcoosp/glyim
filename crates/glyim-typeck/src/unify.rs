@@ -11,6 +11,7 @@ use glyim_type::{FieldIdx, FnSig, GenericArg, InferVar, Ty, TyCtxMut, TyKind};
 
 use crate::check_body::FnCtxt;
 use crate::thir;
+use std::collections::HashMap;
 
 impl<'a> FnCtxt<'a> {
     pub fn expr_span(&self, expr_id: ExprId) -> Span {

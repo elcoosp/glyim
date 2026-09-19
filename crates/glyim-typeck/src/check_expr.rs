@@ -605,6 +605,85 @@ impl<'a> FnCtxt<'a> {
                     _ => None,
                 };
 
+                // Param-bound associated function `T::method(args)` where `T`
+                // is a *generic type parameter* in scope carrying a trait
+                // bound (`fn parse<T: FromStr>(s) -> T { T::from_str(s) }`).
+                // There is no receiver to devirtualize against, so unlike the
+                // `Trait::method(receiver, ..)` path we cannot statically
+                // dispatch here. Instead, resolve the trait method's declared
+                // *signature* with `Self` bound to the param and use it as
+                // the call's fn type, so the arg/return types are correct.
+                let param_assoc_call = match &self.body.exprs[*func] {
+                    Expr::Path(path) if path.segments.len() == 2 => {
+                        let self_ty = self.param_map.get(&path.segments[0].name).copied();
+                        self_ty.and_then(|ty| {
+                            let TyKind::Param(p) = self.ctx.ty_kind(ty) else { return None };
+                            let param_name = p.name;
+                            let bounds = self.ctx.param_bounds_for(param_name)?.to_vec();
+                            for (bound_name, tid) in bounds {
+                                for item in self.hir.items.iter() {
+                                    if let glyim_hir::ItemKind::Trait(trait_item) = &item.kind {
+                                        if self.ctx.name_str(item.name)
+                                            != self.ctx.name_str(bound_name)
+                                        {
+                                            continue;
+                                        }
+                                        for m in &trait_item.methods {
+                                            if m.name == path.segments[1].name {
+                                                return Some((ty, tid, m.clone()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            None
+                        })
+                    }
+                    _ => None,
+                };
+
+                // Param-bound associated function handling must run BEFORE
+                // `check_expr(*func)`: the callee is `T::method`, whose
+                // `check_path` fallback would emit a spurious
+                // "unresolved value path" before we get a chance to build the
+                // call. Handle it fully here and return.
+                if let Some((self_ty, _tid, m)) = param_assoc_call {
+                    let self_name = self.ctx.resolver().intern("Self");
+                    let mut pm: HashMap<Name, Ty> = HashMap::new();
+                    pm.insert(self_name, self_ty);
+                    let mut arg_exprs = Vec::with_capacity(args.len());
+                    for &arg_id in args {
+                        arg_exprs.push(self.check_expr(arg_id).0);
+                    }
+                    let ret_ty = if let Some(rt) = &m.return_ty {
+                        crate::tyconv::resolve_type_ref(
+                            self.ctx,
+                            self.infer,
+                            self.def_map,
+                            self.diagnostics,
+                            rt,
+                            &pm,
+                            span,
+                        )
+                    } else {
+                        Ty::UNIT
+                    };
+                    // Emit as a call through an error-node callee; MIR
+                    // devirtualization will rewrite once the receiver type
+                    // is concrete.
+                    return (
+                        thir::Expr {
+                            kind: thir::ExprKind::Call {
+                                func: Box::new(thir::Expr::err(span)),
+                                args: arg_exprs,
+                            },
+                            ty: ret_ty,
+                            span,
+                        },
+                        ret_ty,
+                    );
+                }
+
                 let (func_expr, func_ty) = self.check_expr(*func);
                 let mut arg_exprs = Vec::with_capacity(args.len());
                 for &arg_id in args {
