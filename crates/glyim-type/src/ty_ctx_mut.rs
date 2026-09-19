@@ -1650,6 +1650,14 @@ impl TyCtxMut {
             index: 1,
             name: self.resolver.intern("E"),
         }));
+        // `U` — the fresh return-type parameter for the combinators
+        // (`map`, `map_or`). NOT a receiver generic: it is instantiated to a
+        // fresh inference variable at the call site by `try_builtin_method`'s
+        // "missing param" pass (it does not appear in the receiver's subst).
+        let _u_var = self.mk_ty(TyKind::Param(ParamTy {
+            index: 2,
+            name: self.resolver.intern("U"),
+        }));
         let usize_ty = self.mk_ty(TyKind::Uint(UintTy::Usize));
         let bool_ty = Ty::BOOL;
         let str_ty = self.mk_ty(TyKind::String);
@@ -1824,6 +1832,27 @@ impl TyCtxMut {
                 abi: glyim_core::primitives::Abi::Glyim,
             }))
         };
+        // `fn(T) -> U` for the value-transforming combinators (`map`,
+        // `map_or`). The output `U` is the fresh `_u_var` above, NOT the
+        // receiver's `T`.
+        let fn_t_to_u = {
+            let inputs = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
+            self.mk_ty(TyKind::FnPtr(crate::FnSig {
+                inputs,
+                output: _u_var,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            }))
+        };
+        // `Result<U, E>` and `Option<U>` — the outputs of `map`.
+        let result_u_subst = self.intern_substitution(vec![
+            GenericArg::Ty(_u_var),
+            GenericArg::Ty(_e_var),
+        ]);
+        let result_u_ty = self.mk_ty(TyKind::Adt(result_id, result_u_subst));
+        let option_u_subst = self.intern_substitution(vec![GenericArg::Ty(_u_var)]);
+        let option_u_ty = self.mk_ty(TyKind::Adt(option_id, option_u_subst));
 
         let entries: Vec<(AdtId, &str, Vec<Ty>, Ty)> = vec![
             // Vec<T>
@@ -1889,11 +1918,18 @@ impl TyCtxMut {
             (string_id, "from_str", vec![], result_ty),
             (result_id, "unwrap", vec![], t_var),
             (result_id, "unwrap_or_else", vec![], t_var),
-            (result_id, "map", vec![fn_t_to_t], result_ty),
-            (result_id, "map_or", vec![_e_var, fn_t_to_bool], _e_var),
+            (result_id, "map", vec![fn_t_to_u], result_u_ty),
+            // `Result<T, E>::map_or<U>(self, default: U, f: fn(T) -> U) -> U`
+            // — the default and the closure's return share the SAME fresh U,
+            // and U is the method's return type. Using the receiver's E here
+            // (the previous signature) unified `false: bool` with `E = Error`
+            // for `Result<_, Error>::map_or(false, ..)`, which is the source
+            // of the `bool vs Adt21` diagnostic family.
+            (result_id, "map_or", vec![_u_var, fn_t_to_u], _u_var),
             (option_id, "unwrap", vec![], t_var),
             (option_id, "unwrap_or_else", vec![], t_var),
-            (option_id, "map", vec![fn_t_to_t], option_ty),
+            // `Option<T>::map<U>(self, f: fn(T) -> U) -> Option<U>`
+            (option_id, "map", vec![fn_t_to_u], option_u_ty),
             // Ordering — unit variants only, no methods.
             // AtomicBool
             (AdtId::from_raw(1016), "new", vec![bool_ty], atomic_bool_ty),
