@@ -344,6 +344,113 @@ impl<'a> FnCtxt<'a> {
                     );
                     return (thir_expr, fn_ty);
                 }
+
+                // 2c.1 User-declared inherent associated function
+                //      `Type::method` (`S::new()`, `OO::with_capacity(..)`).
+                //      Method-call syntax (`recv.method()`) resolves by
+                //      scanning the HIR impl blocks (see
+                //      `resolve_method_call`); path syntax must do the same,
+                //      otherwise `OO::new()` falls through to
+                //      "unresolved value path" — `<error>` — and any chained
+                //      `.set(..)` on the result fails with "no method". Fixed
+                //      for inherent impls only; trait-provided associated
+                //      functions use `<Type as Trait>::method`, handled by the
+                //      trait-path branch below.
+                for hir_item in self.hir.items.iter() {
+                    let glyim_hir::ItemKind::Impl(impl_item) = &hir_item.kind else {
+                        continue;
+                    };
+                    if impl_item.trait_ref.is_some() {
+                        continue; // inherent only
+                    }
+                    // Does this impl's Self resolve to the same ADT?
+                    let empty: std::collections::HashMap<Name, Ty> =
+                        std::collections::HashMap::new();
+                    let self_ty = crate::tyconv::resolve_type_ref(
+                        self.ctx,
+                        self.infer,
+                        self.def_map,
+                        &mut Vec::new(),
+                        &impl_item.self_ty,
+                        &empty,
+                        span,
+                    );
+                    let self_adt = match self.ctx.ty_kind(self_ty) {
+                        glyim_type::TyKind::Adt(id, _) => *id,
+                        _ => continue,
+                    };
+                    if self_adt != adt_id {
+                        continue;
+                    }
+                    for m in &impl_item.methods {
+                        if m.name != path.segments[1].name {
+                            continue;
+                        }
+                        let Some(body_id) = m.body else { continue };
+                        let Some(local) = self.body_owner_map.get(&body_id).copied() else {
+                            continue;
+                        };
+                        let fn_def_id = FnDefId::from_raw(local.to_raw());
+                        // Instantiate the impl's own generic params (e.g.
+                        // `impl<T> OO<T>`) with fresh inference vars, then
+                        // substitute them through the method's signature so
+                        // `OO::<T>::new() -> OO<T>` becomes `-> OO<?fresh>`.
+                        let mut subst: std::collections::HashMap<u32, GenericArg> =
+                            std::collections::HashMap::new();
+                        let mut impl_param_idx = 0u32;
+                        for gp in &impl_item.generic_params {
+                            let v = self.infer.new_ty_var(self.ctx);
+                            let fresh = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
+                            subst.insert(impl_param_idx, GenericArg::Ty(fresh));
+                            let _ = gp;
+                            impl_param_idx += 1;
+                        }
+                        // Plus the receiver's own substitution (if any).
+                        if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
+                            for (i, a) in
+                                self.ctx.substitution_args(*s).iter().enumerate()
+                            {
+                                subst.entry(i as u32).or_insert_with(|| a.clone());
+                            }
+                        }
+                        let empty_substs = self.ctx.intern_substitution(vec![]);
+                        let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, empty_substs));
+                        // Re-register the sig with the substituted param types
+                        // so call-argument checking sees concrete expected
+                        // types (mirrors the builtin branch above).
+                        if let Some(sig) = self.ctx.fn_sig(fn_def_id).cloned() {
+                            let raw_inputs: Vec<GenericArg> =
+                                self.ctx.substitution_args(sig.inputs).to_vec();
+                            let mut inputs: Vec<GenericArg> = Vec::with_capacity(raw_inputs.len());
+                            for a in raw_inputs {
+                                match a {
+                                    GenericArg::Ty(t) => {
+                                        inputs.push(GenericArg::Ty(self.ctx.subst_ty(t, &subst)));
+                                    }
+                                    other => inputs.push(other),
+                                }
+                            }
+                            let inputs = self.ctx.intern_substitution(inputs);
+                            let output = self.ctx.subst_ty(sig.output, &subst);
+                            self.ctx.register_fn_sig(
+                                fn_def_id,
+                                FnSig {
+                                    inputs,
+                                    output,
+                                    c_variadic: sig.c_variadic,
+                                    unsafety: sig.unsafety,
+                                    abi: sig.abi,
+                                },
+                            );
+                        }
+                        let thir_expr = thir::Expr {
+                            kind: thir::ExprKind::FnRef(fn_def_id),
+                            ty: fn_ty,
+                            span,
+                        };
+                        return (thir_expr, fn_ty);
+                    }
+                }
             }
         }
 
