@@ -285,25 +285,38 @@ pub fn typeck_crate(
     // Allocating every ADT id up front (with a placeholder def) lets the
     // field-type resolution in pass 2 see all ADTs regardless of order.
     for (_item_id, item) in hir.items.iter_enumerated() {
-        if matches!(
-            &item.kind,
-            glyim_hir::ItemKind::Enum(_) | glyim_hir::ItemKind::Struct(_)
-        ) {
-            let adt_id = adt_id_for_item(&mut ctx, def_map, def_map.root, item.name);
-            ctx.register_adt_with_name(
-                item.name,
-                adt_id,
-                glyim_type::adt_def::AdtDef {
-                    kind: match &item.kind {
-                        glyim_hir::ItemKind::Enum(_) => glyim_type::adt_def::AdtKind::Enum,
-                        _ => glyim_type::adt_def::AdtKind::Struct,
-                    },
-                    fields: IndexVec::new(),
-                    variants: Vec::new(),
-                    generic_params: Vec::new(),
-                },
-            );
-        }
+        // Seed the placeholder with the item's *arity* (its generic-param
+        // count), even though fields/variants stay empty until pass 2.
+        // Forward references in field types are resolved during pass 2 in
+        // item order, so `struct Arc<T> { ptr: *const ArcInner<T> }` (whose
+        // field type mentions `ArcInner`, defined LATER in the same module)
+        // resolves `ArcInner<T>` before `ArcInner`'s own pass-2 registration
+        // has run. With an empty `generic_params` here, `adt_generic_arity`
+        // returned 0 and the reference reported
+        // "generic type `ArcInner` expects 0 type argument(s), found 1".
+        // Seeding arity up front keeps forward references accurate.
+        let (adt_kind, generic_params): (glyim_type::adt_def::AdtKind, Vec<Name>) = match &item.kind {
+            glyim_hir::ItemKind::Enum(e) => (
+                glyim_type::adt_def::AdtKind::Enum,
+                e.generic_params.iter().map(|p| p.name).collect(),
+            ),
+            glyim_hir::ItemKind::Struct(s) => (
+                glyim_type::adt_def::AdtKind::Struct,
+                s.generic_params.iter().map(|p| p.name).collect(),
+            ),
+            _ => continue,
+        };
+        let adt_id = adt_id_for_item(&mut ctx, def_map, def_map.root, item.name);
+        ctx.register_adt_with_name(
+            item.name,
+            adt_id,
+            glyim_type::adt_def::AdtDef {
+                kind: adt_kind,
+                fields: IndexVec::new(),
+                variants: Vec::new(),
+                generic_params,
+            },
+        );
     }
     // Pass 2: now that every ADT name -> id is known, register the full
     // definitions (resolving variant/field types, which may reference other
