@@ -163,16 +163,34 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_multiplicative_expr(&mut self) {
         let mut cp = self.checkpoint();
-        self.parse_unary_expr();
+        self.parse_cast_expr();
         while matches!(
             self.current_kind(),
             SyntaxKind::Star | SyntaxKind::Slash | SyntaxKind::Percent
         ) {
             self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
-            self.parse_unary_expr();
+            self.parse_cast_expr();
             self.finish_node();
             cp = self.checkpoint();
+        }
+    }
+
+    /// Cast layer, sitting between multiplicative and unary. Rust's `as`
+    /// binds tighter than binary operators but looser than unary/prefix, so
+    /// `&x as *mut T` is `(&x) as *mut T`, NOT `&(x as *mut T)`. Previously
+    /// `as` lived inside `parse_postfix_expr`, which made `&` wrap the whole
+    /// cast — the stdlib's `&self.v as *mut T` idiom lowered as
+    /// `&(self.v as *mut T)` and typeck then reported "invalid cast" plus
+    /// `mismatched types: &*mut T vs *mut T`.
+    pub(crate) fn parse_cast_expr(&mut self) {
+        let cp = self.checkpoint();
+        self.parse_unary_expr();
+        if self.current_kind() == SyntaxKind::KwAs {
+            self.start_node_at(cp, SyntaxKind::CastExpr);
+            self.bump();
+            self.parse_type();
+            self.finish_node();
         }
     }
 
@@ -282,12 +300,6 @@ impl<'a> Parser<'a> {
                 SyntaxKind::Question => {
                     self.start_node_at(cp, SyntaxKind::TryExpr);
                     self.bump();
-                    self.finish_node();
-                }
-                SyntaxKind::KwAs => {
-                    self.start_node_at(cp, SyntaxKind::CastExpr);
-                    self.bump();
-                    self.parse_type();
                     self.finish_node();
                 }
                 SyntaxKind::LBrace if self.last_was_path && !self.suppress_struct_lit => {
