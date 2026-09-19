@@ -49,11 +49,32 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
         (Bool, Int(_) | Uint(_)) => true,
         (Char, Int(_) | Uint(_)) => true,
         (Adt(from_id, _), Int(_) | Uint(_)) => {
-            // Only a fieldless enum may cast to an integer (plan §13.2).
-            // Structs, unions, and enums with data are rejected.
+            // Two legal shapes:
+            //   1. A fieldless (C-like) enum → any integer (plan §13.2).
+            //   2. A single-field newtype struct whose sole field is itself
+            //      a scalar (int/uint/char/bool) → any integer. This is what
+            //      the stdlib relies on for `ThreadId(id: u64) as usize`;
+            //      without it, every such cast reports "invalid cast".
+            // Structs with more than one field, and enums with data, are
+            // rejected.
             match ctx.adt_def(*from_id) {
                 Some(adt) => {
-                    adt.kind == AdtKind::Enum && adt.variants.iter().all(|v| v.fields.is_empty())
+                    if adt.kind == AdtKind::Enum
+                        && adt.variants.iter().all(|v| v.fields.is_empty())
+                    {
+                        return true;
+                    }
+                    if adt.kind == AdtKind::Struct && adt.fields.len() == 1 {
+                        if let Some(f) = adt.fields.iter().next() {
+                            if matches!(
+                                ctx.ty_kind(f.ty),
+                                Int(_) | Uint(_) | Char | Bool
+                            ) {
+                                return true;
+                            }
+                        }
+                    }
+                    false
                 }
                 None => false,
             }
