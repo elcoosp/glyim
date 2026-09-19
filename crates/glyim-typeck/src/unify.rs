@@ -531,7 +531,20 @@ impl<'a> FnCtxt<'a> {
                 .map(|def| def.fields.is_empty())
                 .unwrap_or(false);
             if is_unit_struct {
-                let substs = self.ctx.intern_substitution(vec![]);
+                // A generic unit struct (`struct P<T>;`, `PhantomData<T>`) is
+                // still written *without* its arguments at value position —
+                // `_m: PhantomData`. Emitting a 0-arg substitution for a
+                // 1-param ADT triggered "mismatched type argument counts" in
+                // `Mutex { _marker: PhantomData }`. Fill in one fresh
+                // inference var per declared generic param (mirroring the
+                // `else` branch of `resolve_name_to_adt_ty`).
+                let arity = self.ctx.adt_generic_arity(adt_id);
+                let mut substs: Vec<GenericArg> = Vec::with_capacity(arity);
+                for _ in 0..arity {
+                    let v = self.infer.new_ty_var(self.ctx);
+                    substs.push(GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
+                }
+                let substs = self.ctx.intern_substitution(substs);
                 let adt_ty = self.ctx.mk_ty(TyKind::Adt(adt_id, substs));
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::Struct {
@@ -586,7 +599,17 @@ impl<'a> FnCtxt<'a> {
                 None
             });
             if let Some(adt_id) = builtin_unit {
-                let substs = self.ctx.intern_substitution(vec![]);
+                // Same arity reasoning as the user unit-struct arm above:
+                // `PhantomData<T>` at value position carries a fresh
+                // inference var for each declared param, not an empty
+                // substitution.
+                let arity = self.ctx.adt_generic_arity(adt_id);
+                let mut substs: Vec<GenericArg> = Vec::with_capacity(arity);
+                for _ in 0..arity {
+                    let v = self.infer.new_ty_var(self.ctx);
+                    substs.push(GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
+                }
+                let substs = self.ctx.intern_substitution(substs);
                 let adt_ty = self.ctx.mk_ty(TyKind::Adt(adt_id, substs));
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::Struct {
