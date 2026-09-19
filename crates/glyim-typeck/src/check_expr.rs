@@ -1087,14 +1087,6 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                     _ => {
-                        if std::env::var("GLYIM_TRACE_FIELD").is_ok() {
-                            eprintln!(
-                                "[FIELD-ERR] recv_ty={} field={} span.lo={}",
-                                PrintTy::new(adj_recv_ty, &*self.ctx),
-                                self.ctx.name_str(*field),
-                                span.lo.to_raw(),
-                            );
-                        }
                         self.diagnostics.push(GlyimDiagnostic::type_error(
                             span,
                             "field access on non-ADT, non-tuple type",
@@ -1528,22 +1520,12 @@ impl<'a> FnCtxt<'a> {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
-                if std::env::var("GLYIM_TRACE_CLOSURE").is_ok() {
-                    eprintln!(
-                        "[CLOSURE] pending_present={} fn_sig_inputs={:?}",
-                        expected_fn_sig.is_some(),
-                        expected_param_tys.iter().map(|t| PrintTy::new(*t, &*self.ctx).to_string()).collect::<Vec<_>>(),
-                    );
-                }
                 let mut thir_params: Vec<thir::Param> = Vec::with_capacity(params.len());
                 for (param_idx, pat_id) in params.iter().enumerate() {
                     let ty = match expected_param_tys.get(param_idx).copied() {
                         Some(t) if t != Ty::ERROR => t,
                         _ => self.fresh_infer_ty(),
                     };
-                    if std::env::var("GLYIM_TRACE_CLOSURE").is_ok() {
-                        eprintln!("  closure param[{}] ty={}", param_idx, PrintTy::new(ty, &*self.ctx));
-                    }
                     let local = self.bind_pattern(*pat_id, ty, Mutability::Not);
                     // Recover the binding name from the HIR pattern for the
                     // THIR param (used as the MIR local debug name).
