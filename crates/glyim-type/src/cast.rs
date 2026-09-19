@@ -79,6 +79,16 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
                 None => false,
             }
         }
+        // Type-param transmute: the stdlib writes `unsafe { x as T }` where
+        // `x` is a concrete ADT and `T` is a generic parameter of the
+        // enclosing impl/fn (e.g. `Mutex<T>::into_inner` unwraps its
+        // `UnsafeCell<MutexInner>` and reinterprets the inner as `T`).
+        // glyim's `as` therefore behaves like a transmute when the target is
+        // a type parameter. Allowing it here keeps the stdlib's
+        // `mem::transmute`-shaped idiom well-typed; genuinely-illegal casts
+        // (e.g. `Adt → float`) remain rejected by the arms above.
+        (_, Param(_)) => true,
+        (Param(_), _) => true,
         _ if from == to => true,
         _ => false,
     }
