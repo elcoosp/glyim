@@ -505,7 +505,7 @@ impl<'a> ConstEvaluator<'a> {
                     span,
                 ))
             }
-            Expr::Let { pat, value } => {
+            Expr::Let { pat, value, .. } => {
                 let val = self.evaluate_at_depth(*value, depth)?;
                 // Bind a simple identifier pattern into the const environment.
                 if let glyim_hir::Pat::Binding { name, .. } = &self.body.pats[*pat] {

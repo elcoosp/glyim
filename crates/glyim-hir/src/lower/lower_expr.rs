@@ -91,11 +91,14 @@ pub(crate) fn lower_block_to_expr(
             SyntaxKind::LetStmt => {
                 let mut pat_node = None;
                 let mut expr_node = None;
+                let mut type_node: Option<SyntaxNode> = None;
                 for inner in child.children() {
                     if is_expr_node(&inner) || inner.kind() == SyntaxKind::Block {
                         expr_node = Some(inner.clone());
                     } else if is_pattern(inner.kind()) {
                         pat_node = Some(inner);
+                    } else if is_type_node(&inner) {
+                        type_node = Some(inner);
                     }
                 }
                 if let (Some(pat), Some(rhs)) = (pat_node, expr_node.clone())
@@ -103,9 +106,11 @@ pub(crate) fn lower_block_to_expr(
                 {
                     let rhs_expr_id = lower_expr(&rhs, interner, body, diags, struct_field_map);
                     if let Some(rhs_id) = rhs_expr_id {
+                        let ty = type_node.as_ref().and_then(|n| lower_type_ref(n, interner));
                         let let_expr = Expr::Let {
                             pat: pat_id,
                             value: rhs_id,
+                            ty,
                         };
                         let let_id = body.alloc_expr(let_expr, node_span(&child));
                         if let Some(prev) = pending.take() {

@@ -228,6 +228,7 @@ fn build_async_hir_with_loop_await() -> CrateHir {
     let let_expr = exprs.push(Expr::Let {
         pat: wild_pat_id,
         value: await_expr,
+        ty: None,
     });
     // loop body: `let _x = a.await;` (no enclosing Block needed; pointing the
     // For body directly at the Let keeps the root block the only Block, so
@@ -363,6 +364,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     let let_total = exprs.push(Expr::Let {
         pat: total_pat,
         value: zero,
+        ty: None,
     });
     let i_pat = pats.push(crate::Pat::Binding {
         name: i_name,
@@ -372,6 +374,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     let let_i = exprs.push(Expr::Let {
         pat: i_pat,
         value: zero,
+        ty: None,
     });
 
     let i_path = path(i_name, &mut exprs);

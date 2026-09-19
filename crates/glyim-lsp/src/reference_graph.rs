@@ -473,7 +473,7 @@ impl ReferenceGraph {
                     );
                 }
                 Expr::Break { value: None } => {}
-                Expr::Let { pat, value } => {
+                Expr::Let { pat, value, .. } => {
                     // The pattern of a `let` introduces a *write* to the bound
                     // variable (mirrors the `Expr::Assign` LHS write tracking).
                     if let Pat::Binding { name, .. } = &body.pats[*pat] {

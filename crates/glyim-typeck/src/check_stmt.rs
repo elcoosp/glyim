@@ -231,11 +231,33 @@ impl<'a> FnCtxt<'a> {
             let span = self.expr_span(expr_id);
 
             match expr {
-                Expr::Let { pat, value } => {
+                Expr::Let { pat, value, ty } => {
                     let (value_expr, value_ty) = self.check_expr(*value);
-                    // Bind the pattern into the local environment and build a
-                    // THIR `Let` statement (lowered to a storage-live + assign
-                    // + bind in MIR).
+                    // Apply the declared type annotation (if any) so
+                    // `let r: Result<M, i32> = Result::Ok(M { .. })` pins `r`
+                    // to `Result<M, i32>` instead of the initializer's
+                    // unconstrained `Result<?t, ?e>`. The annotation is
+                    // resolved against the *body's* param map (fn + impl
+                    // generics in scope); unify is done *before* binding the
+                    // pattern so the binding's recorded type is the annotation.
+                    let value_ty = match ty {
+                        Some(ty_ref) => {
+                            let annotation = crate::tyconv::resolve_type_ref(
+                                self.ctx,
+                                self.infer,
+                                self.def_map,
+                                self.diagnostics,
+                                ty_ref,
+                                &self.param_map,
+                                span,
+                            );
+                            if annotation != Ty::ERROR && value_ty != Ty::ERROR {
+                                self.unify(value_ty, annotation, span);
+                            }
+                            annotation
+                        }
+                        None => value_ty,
+                    };
                     let pat_thir = self.check_pattern(*pat, value_ty);
                     if is_tail {
                         self.unify(Ty::UNIT, self.return_ty, span);
@@ -314,8 +336,26 @@ impl<'a> FnCtxt<'a> {
         let expr = &self.body.exprs[stmt_id];
         let span = self.expr_span(stmt_id);
         match expr {
-            Expr::Let { pat, value } => {
+            Expr::Let { pat, value, ty } => {
                 let (value_expr, value_ty) = self.check_expr(*value);
+                let value_ty = match ty {
+                    Some(ty_ref) => {
+                        let annotation = crate::tyconv::resolve_type_ref(
+                            self.ctx,
+                            self.infer,
+                            self.def_map,
+                            self.diagnostics,
+                            ty_ref,
+                            &self.param_map,
+                            span,
+                        );
+                        if annotation != Ty::ERROR && value_ty != Ty::ERROR {
+                            self.unify(value_ty, annotation, span);
+                        }
+                        annotation
+                    }
+                    None => value_ty,
+                };
                 let pat_thir = self.check_pattern(*pat, value_ty);
                 if is_tail {
                     self.unify(Ty::UNIT, self.return_ty, span);

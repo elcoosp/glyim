@@ -1343,6 +1343,7 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             Expr::Let {
                 pat: fut_pat,
                 value: fut0,
+                ty: None,
             },
             Span::DUMMY,
         );
@@ -1382,7 +1383,10 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             mutability: Mutability::Not,
             subpattern: None,
         });
-        let fut1_let = poll_body.alloc_expr(Expr::Let { pat: fut1_pat, value: fut1_expr }, Span::DUMMY);
+        let fut1_let = poll_body.alloc_expr(
+            Expr::Let { pat: fut1_pat, value: fut1_expr, ty: None },
+            Span::DUMMY,
+        );
         let s1_struct = build_state_struct(
             &mut poll_body,
             interner,
@@ -1520,6 +1524,7 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
                     Expr::Let {
                         pat: fut_next_pat,
                         value: fut_next,
+                        ty: None,
                     },
                     Span::DUMMY,
                 );
@@ -1863,9 +1868,10 @@ fn copy_expr_renamed(
                 .map(|e| copy_expr_renamed(src, dst, *e, rename, interner))
                 .collect(),
         ),
-        Expr::Let { pat, value } => Expr::Let {
+        Expr::Let { pat, value, ty } => Expr::Let {
             pat: copy_pat_renamed(src, dst, *pat, rename, interner),
             value: copy_expr_renamed(src, dst, *value, rename, interner),
+            ty: ty.clone(),
         },
         Expr::Struct { path, fields, spread } => Expr::Struct {
             path: path.clone(),
@@ -2353,6 +2359,7 @@ fn desugar_loop_async_fn(
             Expr::Let {
                 pat: fut_pat,
                 value: fut_inner,
+                ty: None,
             },
             Span::DUMMY,
         ));

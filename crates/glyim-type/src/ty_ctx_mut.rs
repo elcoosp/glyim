@@ -403,6 +403,37 @@ impl TyCtxMut {
                 let new_substs = self.intern_substitution(new_args);
                 self.mk_ty(TyKind::FnDef(id, new_substs))
             }
+            TyKind::FnPtr(sig) => {
+                // Function-pointer types MUST be substituted through their
+                // inputs and output. The builtin-method table stores closure
+                // arguments as `fn(Param(0)) -> Param(2)`, and the receiver's
+                // own substitution is applied in `try_builtin_method` before
+                // the signature is stored for the `MethodCall` arm's
+                // arg-expectation pass. Without this arm `subst_ty` treated
+                // the whole `FnPtr` as opaque, so a closure passed to
+                // `Result<M, E>::map(..)` saw its parameter typed as the
+                // *rigid* `Param(T)` instead of the receiver's concrete
+                // element (`M`) — producing "field access on non-ADT,
+                // non-tuple type" inside the closure body.
+                let inputs: Vec<GenericArg> = self
+                    .substitution_args(sig.inputs)
+                    .to_vec()
+                    .into_iter()
+                    .map(|a| match a {
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty(t, subst)),
+                        other => other,
+                    })
+                    .collect();
+                let new_inputs = self.intern_substitution(inputs);
+                let new_output = self.subst_ty(sig.output, subst);
+                self.mk_ty(TyKind::FnPtr(crate::FnSig {
+                    inputs: new_inputs,
+                    output: new_output,
+                    c_variadic: sig.c_variadic,
+                    unsafety: sig.unsafety,
+                    abi: sig.abi,
+                }))
+            }
             TyKind::Projection(proj) => {
                 // Plan unstub-5 P5: substitute the projection's self type. When
                 // the substituted self type becomes a concrete ADT that has a

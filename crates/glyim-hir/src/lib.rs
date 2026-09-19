@@ -636,6 +636,14 @@ pub enum Expr {
         pat: PatId,
 /// Struct.
         value: ExprId,
+        /// Optional type annotation written after the pattern (`let x: T = ..`).
+        /// Without it, `let r: Result<M, i32> = Result::Ok(M { .. })` bound
+        /// `r` to the *initializer's* type with unconstrained generic args —
+        /// every subsequent use of `r` saw `Result<?t, ?e>` instead of
+        /// `Result<M, i32>`, and generic methods dispatched on `r` (`.map`,
+        /// `.map_or`, …) instantiated against fresh vars rather than the
+        /// declared element type.
+        ty: Option<TypeRef>,
     },
 /// Variant.
     Struct {
