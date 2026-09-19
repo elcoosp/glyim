@@ -2,126 +2,149 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..163
-  FnDef@0..70
-    KwFn@0..2 "fn"
-    Ident@2..16 "sum_of_squares"
-    LParen@16..17 "("
-    ParamList@17..30
-      Param@17..30
-        Ident@17..23 "values"
-        Colon@23..24 ":"
-        RefType@24..30
-          And@24..25 "&"
-          SliceType@25..30
-            LBracket@25..26 "["
-            PathType@26..29
-              UsePath@26..29
-                Ident@26..29 "i32"
-            RBracket@29..30 "]"
-    RParen@30..31 ")"
-    Arrow@31..33 "->"
-    PathType@33..36
-      UsePath@33..36
-        Ident@33..36 "i32"
-    Block@36..70
-      LBrace@36..37 "{"
-      ExprStmt@37..69
-        MethodCallExpr@37..69
-          MethodCallExpr@37..63
-            MethodCallExpr@37..50
-              PathExpr@37..43
-                UsePath@37..43
-                  Ident@37..43 "values"
-              Dot@43..44 "."
-              Ident@44..48 "iter"
-              LParen@48..49 "("
-              RParen@49..50 ")"
-            Dot@50..51 "."
-            Ident@51..54 "map"
-            LParen@54..55 "("
-            ClosureExpr@55..62
-              Or@55..56 "|"
-              ParamList@56..59
-                Param@56..58
-                  And@56..57 "&"
-                  PatIdent@57..58
-                    Ident@57..58 "x"
-                Or@58..59 "|"
-              BinaryExpr@59..62
-                PathExpr@59..60
-                  UsePath@59..60
-                    Ident@59..60 "x"
-                Star@60..61 "*"
-                PathExpr@61..62
-                  UsePath@61..62
-                    Ident@61..62 "x"
-            RParen@62..63 ")"
-          Dot@63..64 "."
-          Ident@64..67 "sum"
-          LParen@67..68 "("
-          RParen@68..69 ")"
-      RBrace@69..70 "}"
-  FnDef@70..163
-    KwFn@70..72 "fn"
-    Ident@72..90 "filter_and_collect"
-    LParen@90..91 "("
-    ParamList@91..106
-      Param@91..106
-        Ident@91..97 "values"
-        Colon@97..98 ":"
-        PathType@98..106
-          UsePath@98..101
-            Ident@98..101 "Vec"
-          Lt@101..102 "<"
-          PathType@102..105
-            UsePath@102..105
-              Ident@102..105 "i32"
-          Gt@105..106 ">"
-    RParen@106..107 ")"
-    Arrow@107..109 "->"
-    PathType@109..117
-      UsePath@109..112
-        Ident@109..112 "Vec"
-      Lt@112..113 "<"
-      PathType@113..116
-        UsePath@113..116
-          Ident@113..116 "i32"
-      Gt@116..117 ">"
-    Block@117..163
-      LBrace@117..118 "{"
-      ExprStmt@118..162
-        MethodCallExpr@118..162
-          MethodCallExpr@118..152
-            MethodCallExpr@118..136
-              PathExpr@118..124
-                UsePath@118..124
-                  Ident@118..124 "values"
-              Dot@124..125 "."
-              Ident@125..134 "into_iter"
-              LParen@134..135 "("
-              RParen@135..136 ")"
-            Dot@136..137 "."
-            Ident@137..143 "filter"
-            LParen@143..144 "("
-            ClosureExpr@144..151
-              Or@144..145 "|"
-              ParamList@145..148
-                Param@145..147
-                  And@145..146 "&"
-                  PatIdent@146..147
-                    Ident@146..147 "x"
-                Or@147..148 "|"
-              BinaryExpr@148..151
-                PathExpr@148..149
-                  UsePath@148..149
-                    Ident@148..149 "x"
-                Gt@149..150 ">"
-                LitExpr@150..151
-                  IntLit@150..151 "0"
-            RParen@151..152 ")"
-          Dot@152..153 "."
-          Ident@153..160 "collect"
-          LParen@160..161 "("
-          RParen@161..162 ")"
-      RBrace@162..163 "}"
+SourceFile@0..195
+  Whitespace@0..1 "\n"
+  FnDef@1..85
+    KwFn@1..3 "fn"
+    Whitespace@3..4 " "
+    Ident@4..18 "sum_of_squares"
+    LParen@18..19 "("
+    ParamList@19..33
+      Param@19..33
+        Ident@19..25 "values"
+        Colon@25..26 ":"
+        Whitespace@26..27 " "
+        RefType@27..33
+          And@27..28 "&"
+          SliceType@28..33
+            LBracket@28..29 "["
+            PathType@29..32
+              UsePath@29..32
+                Ident@29..32 "i32"
+            RBracket@32..33 "]"
+    RParen@33..34 ")"
+    Whitespace@34..35 " "
+    Arrow@35..37 "->"
+    Whitespace@37..38 " "
+    PathType@38..42
+      UsePath@38..42
+        Ident@38..41 "i32"
+        Whitespace@41..42 " "
+    Block@42..85
+      LBrace@42..43 "{"
+      Whitespace@43..48 "\n    "
+      ExprStmt@48..84
+        MethodCallExpr@48..83
+          MethodCallExpr@48..77
+            MethodCallExpr@48..61
+              PathExpr@48..54
+                UsePath@48..54
+                  Ident@48..54 "values"
+              Dot@54..55 "."
+              Ident@55..59 "iter"
+              LParen@59..60 "("
+              RParen@60..61 ")"
+            Dot@61..62 "."
+            Ident@62..65 "map"
+            LParen@65..66 "("
+            ClosureExpr@66..76
+              Or@66..67 "|"
+              ParamList@67..70
+                Param@67..69
+                  And@67..68 "&"
+                  PatIdent@68..69
+                    Ident@68..69 "x"
+                Or@69..70 "|"
+              Whitespace@70..71 " "
+              BinaryExpr@71..76
+                PathExpr@71..73
+                  UsePath@71..73
+                    Ident@71..72 "x"
+                    Whitespace@72..73 " "
+                Star@73..74 "*"
+                Whitespace@74..75 " "
+                PathExpr@75..76
+                  UsePath@75..76
+                    Ident@75..76 "x"
+            RParen@76..77 ")"
+          Dot@77..78 "."
+          Ident@78..81 "sum"
+          LParen@81..82 "("
+          RParen@82..83 ")"
+        Whitespace@83..84 "\n"
+      RBrace@84..85 "}"
+  Whitespace@85..87 "\n\n"
+  FnDef@87..194
+    KwFn@87..89 "fn"
+    Whitespace@89..90 " "
+    Ident@90..108 "filter_and_collect"
+    LParen@108..109 "("
+    ParamList@109..125
+      Param@109..125
+        Ident@109..115 "values"
+        Colon@115..116 ":"
+        Whitespace@116..117 " "
+        PathType@117..125
+          UsePath@117..120
+            Ident@117..120 "Vec"
+          Lt@120..121 "<"
+          PathType@121..124
+            UsePath@121..124
+              Ident@121..124 "i32"
+          Gt@124..125 ">"
+    RParen@125..126 ")"
+    Whitespace@126..127 " "
+    Arrow@127..129 "->"
+    Whitespace@129..130 " "
+    PathType@130..139
+      UsePath@130..133
+        Ident@130..133 "Vec"
+      Lt@133..134 "<"
+      PathType@134..137
+        UsePath@134..137
+          Ident@134..137 "i32"
+      Gt@137..138 ">"
+      Whitespace@138..139 " "
+    Block@139..194
+      LBrace@139..140 "{"
+      Whitespace@140..145 "\n    "
+      ExprStmt@145..193
+        MethodCallExpr@145..192
+          MethodCallExpr@145..182
+            MethodCallExpr@145..163
+              PathExpr@145..151
+                UsePath@145..151
+                  Ident@145..151 "values"
+              Dot@151..152 "."
+              Ident@152..161 "into_iter"
+              LParen@161..162 "("
+              RParen@162..163 ")"
+            Dot@163..164 "."
+            Ident@164..170 "filter"
+            LParen@170..171 "("
+            ClosureExpr@171..181
+              Or@171..172 "|"
+              ParamList@172..175
+                Param@172..174
+                  And@172..173 "&"
+                  PatIdent@173..174
+                    Ident@173..174 "x"
+                Or@174..175 "|"
+              Whitespace@175..176 " "
+              BinaryExpr@176..181
+                PathExpr@176..178
+                  UsePath@176..178
+                    Ident@176..177 "x"
+                    Whitespace@177..178 " "
+                Gt@178..179 ">"
+                Whitespace@179..180 " "
+                LitExpr@180..181
+                  IntLit@180..181 "0"
+            RParen@181..182 ")"
+          Dot@182..183 "."
+          Ident@183..190 "collect"
+          LParen@190..191 "("
+          RParen@191..192 ")"
+        Whitespace@192..193 "\n"
+      RBrace@193..194 "}"
+  Whitespace@194..195 "\n"

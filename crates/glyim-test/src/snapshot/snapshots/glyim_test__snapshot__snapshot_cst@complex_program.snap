@@ -1,176 +1,230 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 18
 expression: tree
 ---
-SourceFile@0..175
-  Visibility@0..3
-    KwPub@0..3 "pub"
-  StructDef@3..27
-    KwStruct@3..9 "struct"
-    Ident@9..14 "Point"
-    TypeParamList@14..17
-      Lt@14..15 "<"
-      TypeParam@15..16
-        Ident@15..16 "T"
-      Gt@16..17 ">"
-    LBrace@17..18 "{"
-    Ident@18..19 "x"
-    Colon@19..20 ":"
-    PathType@20..21
-      UsePath@20..21
-        Ident@20..21 "T"
-    Comma@21..22 ","
-    Ident@22..23 "y"
-    Colon@23..24 ":"
-    PathType@24..25
-      UsePath@24..25
-        Ident@24..25 "T"
-    Comma@25..26 ","
-    RBrace@26..27 "}"
-  ImplDef@27..110
-    KwImpl@27..31 "impl"
-    TypeParamList@31..40
-      Lt@31..32 "<"
-      TypeParam@32..39
-        Ident@32..33 "T"
-        Colon@33..34 ":"
-        PathType@34..39
-          UsePath@34..39
-            Ident@34..39 "Clone"
-      Gt@39..40 ">"
-    PathType@40..48
-      UsePath@40..45
-        Ident@40..45 "Point"
-      Lt@45..46 "<"
-      PathType@46..47
-        UsePath@46..47
-          Ident@46..47 "T"
-      Gt@47..48 ">"
-    LBrace@48..49 "{"
-    KwPub@49..52 "pub"
-    FnDef@52..86
-      KwFn@52..54 "fn"
-      Ident@54..57 "new"
-      LParen@57..58 "("
-      ParamList@58..65
-        Param@58..61
-          Ident@58..59 "x"
-          Colon@59..60 ":"
-          PathType@60..61
-            UsePath@60..61
-              Ident@60..61 "T"
-        Comma@61..62 ","
-        Param@62..65
-          Ident@62..63 "y"
-          Colon@63..64 ":"
-          PathType@64..65
-            UsePath@64..65
-              Ident@64..65 "T"
-      RParen@65..66 ")"
-      Arrow@66..68 "->"
-      PathType@68..72
-        UsePath@68..72
-          Ident@68..72 "Self"
-      Block@72..86
-        LBrace@72..73 "{"
-        ExprStmt@73..85
-          StructExpr@73..85
-            PathExpr@73..78
-              UsePath@73..78
-                Ident@73..78 "Point"
-            LBrace@78..79 "{"
-            StructField@79..81
-              Ident@79..80 "x"
-              PathExpr@80..81
-                UsePath@80..81
-                  Ident@80..81 "x"
-            Comma@81..82 ","
-            StructField@82..84
-              Ident@82..83 "y"
-              PathExpr@83..84
-                UsePath@83..84
-                  Ident@83..84 "y"
-            RBrace@84..85 "}"
-        RBrace@85..86 "}"
-    FnDef@86..109
-      KwFn@86..88 "fn"
-      Ident@88..92 "dist"
-      LParen@92..93 "("
-      ParamList@93..98
-        Param@93..98
-          And@93..94 "&"
-          RefType@94..98
-            PathType@94..98
-              UsePath@94..98
-                KwSelf@94..98 "self"
-      RParen@98..99 ")"
+SourceFile@0..297
+  Whitespace@0..1 "\n"
+  Visibility@1..5
+    KwPub@1..4 "pub"
+    Whitespace@4..5 " "
+  StructDef@5..44
+    KwStruct@5..11 "struct"
+    Whitespace@11..12 " "
+    Ident@12..17 "Point"
+    TypeParamList@17..20
+      Lt@17..18 "<"
+      TypeParam@18..19
+        Ident@18..19 "T"
+      Gt@19..20 ">"
+    Whitespace@20..21 " "
+    LBrace@21..22 "{"
+    Whitespace@22..27 "\n    "
+    Ident@27..28 "x"
+    Colon@28..29 ":"
+    Whitespace@29..30 " "
+    PathType@30..31
+      UsePath@30..31
+        Ident@30..31 "T"
+    Comma@31..32 ","
+    Whitespace@32..37 "\n    "
+    Ident@37..38 "y"
+    Colon@38..39 ":"
+    Whitespace@39..40 " "
+    PathType@40..41
+      UsePath@40..41
+        Ident@40..41 "T"
+    Comma@41..42 ","
+    Whitespace@42..43 "\n"
+    RBrace@43..44 "}"
+  Whitespace@44..46 "\n\n"
+  ImplDef@46..186
+    KwImpl@46..50 "impl"
+    TypeParamList@50..60
+      Lt@50..51 "<"
+      TypeParam@51..59
+        Ident@51..52 "T"
+        Colon@52..53 ":"
+        Whitespace@53..54 " "
+        PathType@54..59
+          UsePath@54..59
+            Ident@54..59 "Clone"
+      Gt@59..60 ">"
+    Whitespace@60..61 " "
+    PathType@61..70
+      UsePath@61..66
+        Ident@61..66 "Point"
+      Lt@66..67 "<"
+      PathType@67..68
+        UsePath@67..68
+          Ident@67..68 "T"
+      Gt@68..69 ">"
+      Whitespace@69..70 " "
+    LBrace@70..71 "{"
+    Whitespace@71..76 "\n    "
+    KwPub@76..79 "pub"
+    Whitespace@79..80 " "
+    FnDef@80..137
+      KwFn@80..82 "fn"
+      Whitespace@82..83 " "
+      Ident@83..86 "new"
+      LParen@86..87 "("
+      ParamList@87..97
+        Param@87..91
+          Ident@87..88 "x"
+          Colon@88..89 ":"
+          Whitespace@89..90 " "
+          PathType@90..91
+            UsePath@90..91
+              Ident@90..91 "T"
+        Comma@91..92 ","
+        Whitespace@92..93 " "
+        Param@93..97
+          Ident@93..94 "y"
+          Colon@94..95 ":"
+          Whitespace@95..96 " "
+          PathType@96..97
+            UsePath@96..97
+              Ident@96..97 "T"
+      RParen@97..98 ")"
+      Whitespace@98..99 " "
       Arrow@99..101 "->"
-      PathType@101..104
-        UsePath@101..104
-          Ident@101..104 "f64"
-      Block@104..109
-        LBrace@104..105 "{"
-        ExprStmt@105..108
-          LitExpr@105..108
-            FloatLit@105..108 "0.0"
-        RBrace@108..109 "}"
-    RBrace@109..110 "}"
-  FnDef@110..175
-    KwFn@110..112 "fn"
-    Ident@112..116 "main"
-    LParen@116..117 "("
-    RParen@117..118 ")"
-    Block@118..175
-      LBrace@118..119 "{"
-      LetStmt@119..144
-        KwLet@119..122 "let"
-        PatIdent@122..123
-          Ident@122..123 "p"
-        Eq@123..124 "="
-        CallExpr@124..143
-          PathExpr@124..134
-            UsePath@124..134
-              Ident@124..129 "Point"
-              ColonColon@129..131 "::"
-              Ident@131..134 "new"
-          LParen@134..135 "("
-          LitExpr@135..138
-            FloatLit@135..138 "1.0"
-          Comma@138..139 ","
-          LitExpr@139..142
-            FloatLit@139..142 "2.0"
-          RParen@142..143 ")"
-        Semicolon@143..144 ";"
-      LetStmt@144..158
-        KwLet@144..147 "let"
-        PatIdent@147..148
-          Ident@147..148 "d"
-        Eq@148..149 "="
-        MethodCallExpr@149..157
-          PathExpr@149..150
-            UsePath@149..150
-              Ident@149..150 "p"
-          Dot@150..151 "."
-          Ident@151..155 "dist"
-          LParen@155..156 "("
-          RParen@156..157 ")"
-        Semicolon@157..158 ";"
-      ExprStmt@158..174
-        IfExpr@158..174
-          KwIf@158..160 "if"
-          BinaryExpr@160..165
-            PathExpr@160..161
-              UsePath@160..161
-                Ident@160..161 "d"
-            Gt@161..162 ">"
-            LitExpr@162..165
-              FloatLit@162..165 "0.0"
-          Block@165..174
-            LBrace@165..166 "{"
-            ExprStmt@166..173
-              ReturnExpr@166..172
-                KwReturn@166..172 "return"
-              Semicolon@172..173 ";"
-            RBrace@173..174 "}"
-      RBrace@174..175 "}"
+      Whitespace@101..102 " "
+      PathType@102..107
+        UsePath@102..107
+          Ident@102..106 "Self"
+          Whitespace@106..107 " "
+      Block@107..137
+        LBrace@107..108 "{"
+        Whitespace@108..117 "\n        "
+        ExprStmt@117..136
+          StructExpr@117..131
+            PathExpr@117..123
+              UsePath@117..123
+                Ident@117..122 "Point"
+                Whitespace@122..123 " "
+            LBrace@123..124 "{"
+            Whitespace@124..125 " "
+            StructField@125..126
+              PathExpr@125..126
+                UsePath@125..126
+                  Ident@125..126 "x"
+            Comma@126..127 ","
+            Whitespace@127..128 " "
+            StructField@128..129
+              PathExpr@128..129
+                UsePath@128..129
+                  Ident@128..129 "y"
+            Whitespace@129..130 " "
+            RBrace@130..131 "}"
+          Whitespace@131..136 "\n    "
+        RBrace@136..137 "}"
+    Whitespace@137..143 "\n\n    "
+    FnDef@143..184
+      KwFn@143..145 "fn"
+      Whitespace@145..146 " "
+      Ident@146..150 "dist"
+      LParen@150..151 "("
+      ParamList@151..156
+        Param@151..156
+          And@151..152 "&"
+          RefType@152..156
+            PathType@152..156
+              UsePath@152..156
+                KwSelf@152..156 "self"
+      RParen@156..157 ")"
+      Whitespace@157..158 " "
+      Arrow@158..160 "->"
+      Whitespace@160..161 " "
+      PathType@161..165
+        UsePath@161..165
+          Ident@161..164 "f64"
+          Whitespace@164..165 " "
+      Block@165..184
+        LBrace@165..166 "{"
+        Whitespace@166..175 "\n        "
+        ExprStmt@175..183
+          LitExpr@175..178
+            FloatLit@175..178 "0.0"
+          Whitespace@178..183 "\n    "
+        RBrace@183..184 "}"
+    Whitespace@184..185 "\n"
+    RBrace@185..186 "}"
+  Whitespace@186..188 "\n\n"
+  FnDef@188..296
+    KwFn@188..190 "fn"
+    Whitespace@190..191 " "
+    Ident@191..195 "main"
+    LParen@195..196 "("
+    RParen@196..197 ")"
+    Whitespace@197..198 " "
+    Block@198..296
+      LBrace@198..199 "{"
+      Whitespace@199..204 "\n    "
+      LetStmt@204..233
+        KwLet@204..207 "let"
+        Whitespace@207..208 " "
+        PatIdent@208..209
+          Ident@208..209 "p"
+        Whitespace@209..210 " "
+        Eq@210..211 "="
+        Whitespace@211..212 " "
+        CallExpr@212..232
+          PathExpr@212..222
+            UsePath@212..222
+              Ident@212..217 "Point"
+              ColonColon@217..219 "::"
+              Ident@219..222 "new"
+          LParen@222..223 "("
+          LitExpr@223..226
+            FloatLit@223..226 "1.0"
+          Comma@226..227 ","
+          Whitespace@227..228 " "
+          LitExpr@228..231
+            FloatLit@228..231 "2.0"
+          RParen@231..232 ")"
+        Semicolon@232..233 ";"
+      Whitespace@233..238 "\n    "
+      LetStmt@238..255
+        KwLet@238..241 "let"
+        Whitespace@241..242 " "
+        PatIdent@242..243
+          Ident@242..243 "d"
+        Whitespace@243..244 " "
+        Eq@244..245 "="
+        Whitespace@245..246 " "
+        MethodCallExpr@246..254
+          PathExpr@246..247
+            UsePath@246..247
+              Ident@246..247 "p"
+          Dot@247..248 "."
+          Ident@248..252 "dist"
+          LParen@252..253 "("
+          RParen@253..254 ")"
+        Semicolon@254..255 ";"
+      Whitespace@255..260 "\n    "
+      ExprStmt@260..295
+        IfExpr@260..295
+          KwIf@260..262 "if"
+          Whitespace@262..263 " "
+          BinaryExpr@263..271
+            PathExpr@263..265
+              UsePath@263..265
+                Ident@263..264 "d"
+                Whitespace@264..265 " "
+            Gt@265..266 ">"
+            Whitespace@266..267 " "
+            LitExpr@267..270
+              FloatLit@267..270 "0.0"
+            Whitespace@270..271 " "
+          Block@271..294
+            LBrace@271..272 "{"
+            Whitespace@272..281 "\n        "
+            ExprStmt@281..288
+              ReturnExpr@281..287
+                KwReturn@281..287 "return"
+              Semicolon@287..288 ";"
+            Whitespace@288..293 "\n    "
+            RBrace@293..294 "}"
+          Whitespace@294..295 "\n"
+      RBrace@295..296 "}"
+  Whitespace@296..297 "\n"

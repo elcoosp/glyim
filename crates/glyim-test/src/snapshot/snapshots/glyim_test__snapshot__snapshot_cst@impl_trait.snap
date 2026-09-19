@@ -1,88 +1,119 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 18
 expression: tree
 ---
-SourceFile@0..138
-  TraitDef@0..36
-    KwTrait@0..5 "trait"
-    Ident@5..11 "Animal"
-    LBrace@11..12 "{"
-    FnDef@12..35
-      KwFn@12..14 "fn"
-      Ident@14..19 "speak"
-      LParen@19..20 "("
-      ParamList@20..25
-        Param@20..25
-          And@20..21 "&"
-          RefType@21..25
-            PathType@21..25
-              UsePath@21..25
-                KwSelf@21..25 "self"
-      RParen@25..26 ")"
-      Arrow@26..28 "->"
-      PathType@28..34
-        UsePath@28..34
-          Ident@28..34 "String"
-      Semicolon@34..35 ";"
-    RBrace@35..36 "}"
-  StructDef@36..46
-    KwStruct@36..42 "struct"
-    Ident@42..45 "Dog"
-    Semicolon@45..46 ";"
-  ImplDef@46..106
-    KwImpl@46..50 "impl"
-    PathType@50..56
-      UsePath@50..56
-        Ident@50..56 "Animal"
-    KwFor@56..59 "for"
-    PathType@59..62
-      UsePath@59..62
-        Ident@59..62 "Dog"
-    LBrace@62..63 "{"
-    FnDef@63..105
-      KwFn@63..65 "fn"
-      Ident@65..70 "speak"
-      LParen@70..71 "("
-      ParamList@71..76
-        Param@71..76
-          And@71..72 "&"
-          RefType@72..76
-            PathType@72..76
-              UsePath@72..76
-                KwSelf@72..76 "self"
-      RParen@76..77 ")"
-      Arrow@77..79 "->"
-      PathType@79..85
-        UsePath@79..85
-          Ident@79..85 "String"
-      Block@85..105
-        LBrace@85..86 "{"
-        ExprStmt@86..104
-          MethodCallExpr@86..104
-            LitExpr@86..92
-              StringLit@86..92 "\"woof\""
-            Dot@92..93 "."
-            Ident@93..102 "to_string"
-            LParen@102..103 "("
-            RParen@103..104 ")"
-        RBrace@104..105 "}"
-    RBrace@105..106 "}"
-  FnDef@106..138
-    KwFn@106..108 "fn"
-    Ident@108..119 "make_animal"
-    LParen@119..120 "("
-    RParen@120..121 ")"
-    Arrow@121..123 "->"
-    ImplTraitType@123..133
-      KwImpl@123..127 "impl"
-      PathType@127..133
-        UsePath@127..133
-          Ident@127..133 "Animal"
-    Block@133..138
-      LBrace@133..134 "{"
-      ExprStmt@134..137
-        PathExpr@134..137
-          UsePath@134..137
-            Ident@134..137 "Dog"
-      RBrace@137..138 "}"
+SourceFile@0..197
+  Whitespace@0..1 "\n"
+  TraitDef@1..48
+    KwTrait@1..6 "trait"
+    Whitespace@6..7 " "
+    Ident@7..13 "Animal"
+    Whitespace@13..14 " "
+    LBrace@14..15 "{"
+    Whitespace@15..20 "\n    "
+    FnDef@20..46
+      KwFn@20..22 "fn"
+      Whitespace@22..23 " "
+      Ident@23..28 "speak"
+      LParen@28..29 "("
+      ParamList@29..34
+        Param@29..34
+          And@29..30 "&"
+          RefType@30..34
+            PathType@30..34
+              UsePath@30..34
+                KwSelf@30..34 "self"
+      RParen@34..35 ")"
+      Whitespace@35..36 " "
+      Arrow@36..38 "->"
+      Whitespace@38..39 " "
+      PathType@39..45
+        UsePath@39..45
+          Ident@39..45 "String"
+      Semicolon@45..46 ";"
+    Whitespace@46..47 "\n"
+    RBrace@47..48 "}"
+  Whitespace@48..50 "\n\n"
+  StructDef@50..61
+    KwStruct@50..56 "struct"
+    Whitespace@56..57 " "
+    Ident@57..60 "Dog"
+    Semicolon@60..61 ";"
+  Whitespace@61..63 "\n\n"
+  ImplDef@63..151
+    KwImpl@63..67 "impl"
+    Whitespace@67..68 " "
+    PathType@68..75
+      UsePath@68..75
+        Ident@68..74 "Animal"
+        Whitespace@74..75 " "
+    KwFor@75..78 "for"
+    Whitespace@78..79 " "
+    PathType@79..83
+      UsePath@79..83
+        Ident@79..82 "Dog"
+        Whitespace@82..83 " "
+    LBrace@83..84 "{"
+    Whitespace@84..89 "\n    "
+    FnDef@89..149
+      KwFn@89..91 "fn"
+      Whitespace@91..92 " "
+      Ident@92..97 "speak"
+      LParen@97..98 "("
+      ParamList@98..103
+        Param@98..103
+          And@98..99 "&"
+          RefType@99..103
+            PathType@99..103
+              UsePath@99..103
+                KwSelf@99..103 "self"
+      RParen@103..104 ")"
+      Whitespace@104..105 " "
+      Arrow@105..107 "->"
+      Whitespace@107..108 " "
+      PathType@108..115
+        UsePath@108..115
+          Ident@108..114 "String"
+          Whitespace@114..115 " "
+      Block@115..149
+        LBrace@115..116 "{"
+        Whitespace@116..125 "\n        "
+        ExprStmt@125..148
+          MethodCallExpr@125..143
+            LitExpr@125..131
+              StringLit@125..131 "\"woof\""
+            Dot@131..132 "."
+            Ident@132..141 "to_string"
+            LParen@141..142 "("
+            RParen@142..143 ")"
+          Whitespace@143..148 "\n    "
+        RBrace@148..149 "}"
+    Whitespace@149..150 "\n"
+    RBrace@150..151 "}"
+  Whitespace@151..153 "\n\n"
+  FnDef@153..196
+    KwFn@153..155 "fn"
+    Whitespace@155..156 " "
+    Ident@156..167 "make_animal"
+    LParen@167..168 "("
+    RParen@168..169 ")"
+    Whitespace@169..170 " "
+    Arrow@170..172 "->"
+    Whitespace@172..173 " "
+    ImplTraitType@173..185
+      KwImpl@173..177 "impl"
+      Whitespace@177..178 " "
+      PathType@178..185
+        UsePath@178..185
+          Ident@178..184 "Animal"
+          Whitespace@184..185 " "
+    Block@185..196
+      LBrace@185..186 "{"
+      Whitespace@186..191 "\n    "
+      ExprStmt@191..195
+        PathExpr@191..195
+          UsePath@191..195
+            Ident@191..194 "Dog"
+            Whitespace@194..195 "\n"
+      RBrace@195..196 "}"
+  Whitespace@196..197 "\n"

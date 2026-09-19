@@ -1,16 +1,17 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 16
 expression: tree
 ---
-SourceFile@0..18
+SourceFile@0..20
   Visibility@0..10
     KwPub@0..3 "pub"
     LParen@3..4 "("
     VisSuper@4..9
       KwSuper@4..9 "super"
     RParen@9..10 ")"
-  StructDef@10..18
-    KwStruct@10..16 "struct"
-    Ident@16..17 "S"
-    Semicolon@17..18 ";"
+  Whitespace@10..11 " "
+  StructDef@11..20
+    KwStruct@11..17 "struct"
+    Whitespace@17..18 " "
+    Ident@18..19 "S"
+    Semicolon@19..20 ";"

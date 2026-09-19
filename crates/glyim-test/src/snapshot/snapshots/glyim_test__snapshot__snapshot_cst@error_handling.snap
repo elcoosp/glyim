@@ -2,191 +2,240 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..225
-  EnumDef@0..30
-    KwEnum@0..4 "enum"
-    Ident@4..10 "Result"
-    TypeParamList@10..15
-      Lt@10..11 "<"
-      TypeParam@11..12
-        Ident@11..12 "T"
-      Comma@12..13 ","
+SourceFile@0..324
+  Whitespace@0..1 "\n"
+  EnumDef@1..45
+    KwEnum@1..5 "enum"
+    Whitespace@5..6 " "
+    Ident@6..12 "Result"
+    TypeParamList@12..18
+      Lt@12..13 "<"
       TypeParam@13..14
-        Ident@13..14 "E"
-      Gt@14..15 ">"
-    LBrace@15..16 "{"
-    VariantList@16..29
-      EnumVariant@16..21
-        Ident@16..18 "Ok"
-        LParen@18..19 "("
-        PathType@19..20
-          UsePath@19..20
-            Ident@19..20 "T"
-        RParen@20..21 ")"
-      Comma@21..22 ","
-      EnumVariant@22..28
-        Ident@22..25 "Err"
-        LParen@25..26 "("
-        PathType@26..27
-          UsePath@26..27
-            Ident@26..27 "E"
-        RParen@27..28 ")"
-      Comma@28..29 ","
-    RBrace@29..30 "}"
-  FnDef@30..145
-    KwFn@30..32 "fn"
-    Ident@32..38 "divide"
-    LParen@38..39 "("
-    ParamList@39..50
-      Param@39..44
-        Ident@39..40 "a"
-        Colon@40..41 ":"
-        PathType@41..44
-          UsePath@41..44
-            Ident@41..44 "i32"
-      Comma@44..45 ","
-      Param@45..50
-        Ident@45..46 "b"
-        Colon@46..47 ":"
-        PathType@47..50
-          UsePath@47..50
-            Ident@47..50 "i32"
-    RParen@50..51 ")"
-    Arrow@51..53 "->"
-    PathType@53..71
-      UsePath@53..59
-        Ident@53..59 "Result"
-      Lt@59..60 "<"
-      PathType@60..63
-        UsePath@60..63
-          Ident@60..63 "i32"
+        Ident@13..14 "T"
+      Comma@14..15 ","
+      Whitespace@15..16 " "
+      TypeParam@16..17
+        Ident@16..17 "E"
+      Gt@17..18 ">"
+    Whitespace@18..19 " "
+    LBrace@19..20 "{"
+    VariantList@20..44
+      Whitespace@20..25 "\n    "
+      EnumVariant@25..30
+        Ident@25..27 "Ok"
+        LParen@27..28 "("
+        PathType@28..29
+          UsePath@28..29
+            Ident@28..29 "T"
+        RParen@29..30 ")"
+      Comma@30..31 ","
+      Whitespace@31..36 "\n    "
+      EnumVariant@36..42
+        Ident@36..39 "Err"
+        LParen@39..40 "("
+        PathType@40..41
+          UsePath@40..41
+            Ident@40..41 "E"
+        RParen@41..42 ")"
+      Comma@42..43 ","
+      Whitespace@43..44 "\n"
+    RBrace@44..45 "}"
+  Whitespace@45..47 "\n\n"
+  FnDef@47..212
+    KwFn@47..49 "fn"
+    Whitespace@49..50 " "
+    Ident@50..56 "divide"
+    LParen@56..57 "("
+    ParamList@57..71
+      Param@57..63
+        Ident@57..58 "a"
+        Colon@58..59 ":"
+        Whitespace@59..60 " "
+        PathType@60..63
+          UsePath@60..63
+            Ident@60..63 "i32"
       Comma@63..64 ","
-      PathType@64..70
-        UsePath@64..70
-          Ident@64..70 "String"
-      Gt@70..71 ">"
-    Block@71..145
-      LBrace@71..72 "{"
-      ExprStmt@72..144
-        IfExpr@72..144
-          KwIf@72..74 "if"
-          BinaryExpr@74..78
-            PathExpr@74..75
-              UsePath@74..75
-                Ident@74..75 "b"
-            EqEq@75..77 "=="
-            LitExpr@77..78
-              IntLit@77..78 "0"
-          Block@78..123
-            LBrace@78..79 "{"
-            ExprStmt@79..122
-              CallExpr@79..122
-                PathExpr@79..90
-                  UsePath@79..90
-                    Ident@79..85 "Result"
-                    ColonColon@85..87 "::"
-                    Ident@87..90 "Err"
-                LParen@90..91 "("
-                MethodCallExpr@91..121
-                  LitExpr@91..109
-                    StringLit@91..109 "\"division by zero\""
-                  Dot@109..110 "."
-                  Ident@110..119 "to_string"
-                  LParen@119..120 "("
-                  RParen@120..121 ")"
-                RParen@121..122 ")"
-            RBrace@122..123 "}"
-          KwElse@123..127 "else"
-          Block@127..144
-            LBrace@127..128 "{"
-            ExprStmt@128..143
-              CallExpr@128..143
-                PathExpr@128..138
-                  UsePath@128..138
-                    Ident@128..134 "Result"
-                    ColonColon@134..136 "::"
-                    Ident@136..138 "Ok"
-                LParen@138..139 "("
-                BinaryExpr@139..142
-                  PathExpr@139..140
-                    UsePath@139..140
-                      Ident@139..140 "a"
-                  Slash@140..141 "/"
-                  PathExpr@141..142
-                    UsePath@141..142
-                      Ident@141..142 "b"
-                RParen@142..143 ")"
-            RBrace@143..144 "}"
-      RBrace@144..145 "}"
-  FnDef@145..225
-    KwFn@145..147 "fn"
-    Ident@147..151 "main"
-    LParen@151..152 "("
-    RParen@152..153 ")"
-    Arrow@153..155 "->"
-    PathType@155..172
-      UsePath@155..161
-        Ident@155..161 "Result"
-      Lt@161..162 "<"
-      TupleType@162..164
-        LParen@162..163 "("
-        RParen@163..164 ")"
-      Comma@164..165 ","
-      PathType@165..171
-        UsePath@165..171
-          Ident@165..171 "String"
-      Gt@171..172 ">"
-    Block@172..225
-      LBrace@172..173 "{"
-      LetStmt@173..192
-        KwLet@173..176 "let"
-        PatIdent@176..177
-          Ident@176..177 "x"
-        Eq@177..178 "="
-        TryExpr@178..191
-          CallExpr@178..190
-            PathExpr@178..184
-              UsePath@178..184
-                Ident@178..184 "divide"
-            LParen@184..185 "("
-            LitExpr@185..187
-              IntLit@185..187 "10"
-            Comma@187..188 ","
-            LitExpr@188..189
-              IntLit@188..189 "2"
-            RParen@189..190 ")"
-          Question@190..191 "?"
-        Semicolon@191..192 ";"
-      LetStmt@192..210
-        KwLet@192..195 "let"
-        PatIdent@195..196
-          Ident@195..196 "y"
-        Eq@196..197 "="
-        TryExpr@197..209
-          CallExpr@197..208
-            PathExpr@197..203
-              UsePath@197..203
-                Ident@197..203 "divide"
-            LParen@203..204 "("
-            PathExpr@204..205
-              UsePath@204..205
-                Ident@204..205 "x"
-            Comma@205..206 ","
-            LitExpr@206..207
-              IntLit@206..207 "0"
-            RParen@207..208 ")"
-          Question@208..209 "?"
-        Semicolon@209..210 ";"
-      ExprStmt@210..224
-        CallExpr@210..224
-          PathExpr@210..220
-            UsePath@210..220
-              Ident@210..216 "Result"
-              ColonColon@216..218 "::"
-              Ident@218..220 "Ok"
-          LParen@220..221 "("
-          TupleExpr@221..223
-            LParen@221..222 "("
-            RParen@222..223 ")"
-          RParen@223..224 ")"
-      RBrace@224..225 "}"
+      Whitespace@64..65 " "
+      Param@65..71
+        Ident@65..66 "b"
+        Colon@66..67 ":"
+        Whitespace@67..68 " "
+        PathType@68..71
+          UsePath@68..71
+            Ident@68..71 "i32"
+    RParen@71..72 ")"
+    Whitespace@72..73 " "
+    Arrow@73..75 "->"
+    Whitespace@75..76 " "
+    PathType@76..96
+      UsePath@76..82
+        Ident@76..82 "Result"
+      Lt@82..83 "<"
+      PathType@83..86
+        UsePath@83..86
+          Ident@83..86 "i32"
+      Comma@86..87 ","
+      Whitespace@87..88 " "
+      PathType@88..94
+        UsePath@88..94
+          Ident@88..94 "String"
+      Gt@94..95 ">"
+      Whitespace@95..96 " "
+    Block@96..212
+      LBrace@96..97 "{"
+      Whitespace@97..102 "\n    "
+      ExprStmt@102..211
+        IfExpr@102..210
+          KwIf@102..104 "if"
+          Whitespace@104..105 " "
+          BinaryExpr@105..112
+            PathExpr@105..107
+              UsePath@105..107
+                Ident@105..106 "b"
+                Whitespace@106..107 " "
+            EqEq@107..109 "=="
+            Whitespace@109..110 " "
+            LitExpr@110..111
+              IntLit@110..111 "0"
+            Whitespace@111..112 " "
+          Block@112..171
+            LBrace@112..113 "{"
+            Whitespace@113..122 "\n        "
+            ExprStmt@122..170
+              CallExpr@122..165
+                PathExpr@122..133
+                  UsePath@122..133
+                    Ident@122..128 "Result"
+                    ColonColon@128..130 "::"
+                    Ident@130..133 "Err"
+                LParen@133..134 "("
+                MethodCallExpr@134..164
+                  LitExpr@134..152
+                    StringLit@134..152 "\"division by zero\""
+                  Dot@152..153 "."
+                  Ident@153..162 "to_string"
+                  LParen@162..163 "("
+                  RParen@163..164 ")"
+                RParen@164..165 ")"
+              Whitespace@165..170 "\n    "
+            RBrace@170..171 "}"
+          Whitespace@171..172 " "
+          KwElse@172..176 "else"
+          Whitespace@176..177 " "
+          Block@177..210
+            LBrace@177..178 "{"
+            Whitespace@178..187 "\n        "
+            ExprStmt@187..209
+              CallExpr@187..204
+                PathExpr@187..197
+                  UsePath@187..197
+                    Ident@187..193 "Result"
+                    ColonColon@193..195 "::"
+                    Ident@195..197 "Ok"
+                LParen@197..198 "("
+                BinaryExpr@198..203
+                  PathExpr@198..200
+                    UsePath@198..200
+                      Ident@198..199 "a"
+                      Whitespace@199..200 " "
+                  Slash@200..201 "/"
+                  Whitespace@201..202 " "
+                  PathExpr@202..203
+                    UsePath@202..203
+                      Ident@202..203 "b"
+                RParen@203..204 ")"
+              Whitespace@204..209 "\n    "
+            RBrace@209..210 "}"
+        Whitespace@210..211 "\n"
+      RBrace@211..212 "}"
+  Whitespace@212..214 "\n\n"
+  FnDef@214..323
+    KwFn@214..216 "fn"
+    Whitespace@216..217 " "
+    Ident@217..221 "main"
+    LParen@221..222 "("
+    RParen@222..223 ")"
+    Whitespace@223..224 " "
+    Arrow@224..226 "->"
+    Whitespace@226..227 " "
+    PathType@227..246
+      UsePath@227..233
+        Ident@227..233 "Result"
+      Lt@233..234 "<"
+      TupleType@234..236
+        LParen@234..235 "("
+        RParen@235..236 ")"
+      Comma@236..237 ","
+      Whitespace@237..238 " "
+      PathType@238..244
+        UsePath@238..244
+          Ident@238..244 "String"
+      Gt@244..245 ">"
+      Whitespace@245..246 " "
+    Block@246..323
+      LBrace@246..247 "{"
+      Whitespace@247..252 "\n    "
+      LetStmt@252..275
+        KwLet@252..255 "let"
+        Whitespace@255..256 " "
+        PatIdent@256..257
+          Ident@256..257 "x"
+        Whitespace@257..258 " "
+        Eq@258..259 "="
+        Whitespace@259..260 " "
+        TryExpr@260..274
+          CallExpr@260..273
+            PathExpr@260..266
+              UsePath@260..266
+                Ident@260..266 "divide"
+            LParen@266..267 "("
+            LitExpr@267..269
+              IntLit@267..269 "10"
+            Comma@269..270 ","
+            Whitespace@270..271 " "
+            LitExpr@271..272
+              IntLit@271..272 "2"
+            RParen@272..273 ")"
+          Question@273..274 "?"
+        Semicolon@274..275 ";"
+      Whitespace@275..280 "\n    "
+      LetStmt@280..302
+        KwLet@280..283 "let"
+        Whitespace@283..284 " "
+        PatIdent@284..285
+          Ident@284..285 "y"
+        Whitespace@285..286 " "
+        Eq@286..287 "="
+        Whitespace@287..288 " "
+        TryExpr@288..301
+          CallExpr@288..300
+            PathExpr@288..294
+              UsePath@288..294
+                Ident@288..294 "divide"
+            LParen@294..295 "("
+            PathExpr@295..296
+              UsePath@295..296
+                Ident@295..296 "x"
+            Comma@296..297 ","
+            Whitespace@297..298 " "
+            LitExpr@298..299
+              IntLit@298..299 "0"
+            RParen@299..300 ")"
+          Question@300..301 "?"
+        Semicolon@301..302 ";"
+      Whitespace@302..307 "\n    "
+      ExprStmt@307..322
+        CallExpr@307..321
+          PathExpr@307..317
+            UsePath@307..317
+              Ident@307..313 "Result"
+              ColonColon@313..315 "::"
+              Ident@315..317 "Ok"
+          LParen@317..318 "("
+          TupleExpr@318..320
+            LParen@318..319 "("
+            RParen@319..320 ")"
+          RParen@320..321 ")"
+        Whitespace@321..322 "\n"
+      RBrace@322..323 "}"
+  Whitespace@323..324 "\n"

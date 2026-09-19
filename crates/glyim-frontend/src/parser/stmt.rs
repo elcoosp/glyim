@@ -104,10 +104,8 @@ impl<'a> Parser<'a> {
                         | SyntaxKind::And
                         | SyntaxKind::KwUnsafe
                 ) {
-                    self.error(format!(
-                        "unexpected token in statement: {:?}",
-                        self.current_kind()
-                    ));
+                    let found = self.current_kind();
+                    self.error(format!("unexpected token in statement: {:?}", found));
                     if self.current().is_some() {
                         self.bump();
                     }

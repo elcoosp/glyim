@@ -63,11 +63,32 @@ impl<'a> Parser<'a> {
         self.pos
     }
 
-    fn current(&self) -> Option<&crate::lexer::Token> {
+    /// Emit any trivia tokens (whitespace, comments) at the current position
+    /// into the tree, advancing past them. The parser's tree must contain every
+    /// source byte so that `node.text_range()` equals the byte range in the
+    /// original source; otherwise every span downstream (HIR, typeck, diagnostics)
+    /// is offset by the omitted trivia. This is why the previous design — a
+    /// trivia-free token stream fed to the parser — made `no method read`
+    /// point at `break;`.
+    fn flush_trivia(&mut self) {
+        while let Some(t) = self.tokens.get(self.pos) {
+            if t.kind.is_trivia() {
+                let kind = GlyimLang::kind_to_raw(t.kind);
+                let text = t.text.clone();
+                self.builder.token(kind, text.as_str());
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn current(&mut self) -> Option<&'a crate::lexer::Token> {
+        self.flush_trivia();
         self.tokens.get(self.pos)
     }
 
-    fn current_kind(&self) -> SyntaxKind {
+    fn current_kind(&mut self) -> SyntaxKind {
         if self.pending_gt_count > 0 {
             return SyntaxKind::Gt;
         }
@@ -78,11 +99,12 @@ impl<'a> Parser<'a> {
     /// whitespace). `n == 0` is the next non-ws token; `n == 1` the one after.
     /// Used to disambiguate `extern "C" fn` (string then fn) from a bare
     /// `extern { }` block (unstub-5 Phase 4).
-    fn peek_non_ws_kind(&self, n: usize) -> SyntaxKind {
+    fn peek_non_ws_kind(&mut self, n: usize) -> SyntaxKind {
+        self.flush_trivia();
         let mut p = self.pos + 1;
         let mut seen = 0;
         while let Some(t) = self.tokens.get(p) {
-            if t.kind != SyntaxKind::Whitespace {
+            if !t.kind.is_trivia() {
                 if seen == n {
                     return t.kind;
                 }
@@ -95,10 +117,11 @@ impl<'a> Parser<'a> {
 
     /// Kind of the next non-trivia token after the current one (skips
     /// whitespace). Used to disambiguate `const fn` from `const ITEM`.
-    fn next_non_ws_kind(&self) -> SyntaxKind {
+    fn next_non_ws_kind(&mut self) -> SyntaxKind {
+        self.flush_trivia();
         let mut p = self.pos + 1;
         while let Some(t) = self.tokens.get(p) {
-            if t.kind != SyntaxKind::Whitespace {
+            if !t.kind.is_trivia() {
                 return t.kind;
             }
             p += 1;
@@ -113,7 +136,8 @@ impl<'a> Parser<'a> {
             self.pending_gt_count -= 1;
             return;
         }
-        if let Some(token) = self.current() {
+        self.flush_trivia();
+        if let Some(token) = self.tokens.get(self.pos) {
             let kind = GlyimLang::kind_to_raw(token.kind);
             let text = token.text.clone();
             self.builder.token(kind, text.as_str());
@@ -125,11 +149,8 @@ impl<'a> Parser<'a> {
         if self.current_kind() == expected {
             self.bump();
         } else {
-            self.error(format!(
-                "expected {:?}, found {:?}",
-                expected,
-                self.current_kind()
-            ));
+            let found = self.current_kind();
+            self.error(format!("expected {:?}, found {:?}", expected, found));
         }
     }
 
@@ -144,11 +165,8 @@ impl<'a> Parser<'a> {
 
     fn bump_expected(&mut self, expected: SyntaxKind) {
         if self.current_kind() != expected {
-            self.error(format!(
-                "expected {:?}, found {:?}",
-                expected,
-                self.current_kind()
-            ));
+            let found = self.current_kind();
+            self.error(format!("expected {:?}, found {:?}", expected, found));
         }
         if self.current().is_some() || self.pending_gt_count > 0 {
             self.bump();
@@ -164,12 +182,21 @@ impl<'a> Parser<'a> {
             .start_node_at(checkpoint, GlyimLang::kind_to_raw(kind));
     }
 
-    fn peek_kind(&self) -> Option<SyntaxKind> {
-        self.tokens.get(self.pos + 1).map(|t| t.kind)
+    fn peek_kind(&mut self) -> Option<SyntaxKind> {
+        self.flush_trivia();
+        let mut p = self.pos + 1;
+        while let Some(t) = self.tokens.get(p) {
+            if !t.kind.is_trivia() {
+                return Some(t.kind);
+            }
+            p += 1;
+        }
+        None
     }
 
     fn skip_token(&mut self) {
-        if self.current().is_some() {
+        self.flush_trivia();
+        if self.tokens.get(self.pos).is_some() {
             self.pos += 1;
         }
     }
@@ -203,7 +230,7 @@ impl<'a> Parser<'a> {
 
 /// parse_to_syntax.
 pub fn parse_to_syntax(source: &str, file_id: FileId) -> ParseResult {
-    let lex_result = crate::lexer::lex(source, file_id);
+    let lex_result = crate::lexer::lex_with_trivia(source, file_id);
     let mut parser = Parser::new(&lex_result.tokens);
     parser.parse_source_file();
     let (green_node, diagnostics) = parser.finish();

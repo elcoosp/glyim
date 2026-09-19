@@ -186,7 +186,8 @@ impl<'a> Parser<'a> {
                 self.finish_node();
             }
             _ => {
-                self.error(format!("expected type, found {:?}", self.current_kind()));
+                let found = self.current_kind();
+                self.error(format!("expected type, found {:?}", found));
                 if self.current().is_some() {
                     self.bump();
                 }

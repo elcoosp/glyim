@@ -2,221 +2,271 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..192
-  FnDef@0..192
-    KwFn@0..2 "fn"
-    Ident@2..6 "eval"
-    LParen@6..7 "("
-    ParamList@7..16
-      Param@7..16
-        Ident@7..11 "expr"
-        Colon@11..12 ":"
-        PathType@12..16
-          UsePath@12..16
-            Ident@12..16 "Expr"
-    RParen@16..17 ")"
-    Arrow@17..19 "->"
-    PathType@19..22
-      UsePath@19..22
-        Ident@19..22 "i32"
-    Block@22..192
-      LBrace@22..23 "{"
-      ExprStmt@23..191
-        MatchExpr@23..191
-          KwMatch@23..28 "match"
-          PathExpr@28..32
-            UsePath@28..32
-              Ident@28..32 "expr"
-          LBrace@32..33 "{"
-          MatchArmList@33..190
-            MatchArm@33..49
-              PatStruct@33..45
-                UsePath@33..42
-                  Ident@33..37 "Expr"
-                  ColonColon@37..39 "::"
-                  Ident@39..42 "Lit"
-                PatTuple@42..45
-                  LParen@42..43 "("
-                  PatIdent@43..44
-                    Ident@43..44 "n"
-                  RParen@44..45 ")"
-              FatArrow@45..47 "=>"
-              PathExpr@47..48
-                UsePath@47..48
-                  Ident@47..48 "n"
-              Comma@48..49 ","
-            MatchArm@49..83
-              PatStruct@49..63
-                UsePath@49..58
-                  Ident@49..53 "Expr"
-                  ColonColon@53..55 "::"
-                  Ident@55..58 "Add"
-                PatTuple@58..63
-                  LParen@58..59 "("
-                  PatIdent@59..60
-                    Ident@59..60 "a"
-                  Comma@60..61 ","
-                  PatIdent@61..62
-                    Ident@61..62 "b"
-                  RParen@62..63 ")"
-              FatArrow@63..65 "=>"
-              BinaryExpr@65..82
-                CallExpr@65..73
-                  PathExpr@65..69
-                    UsePath@65..69
-                      Ident@65..69 "eval"
-                  LParen@69..70 "("
-                  UnaryExpr@70..72
-                    Star@70..71 "*"
-                    PathExpr@71..72
-                      UsePath@71..72
-                        Ident@71..72 "a"
-                  RParen@72..73 ")"
-                Plus@73..74 "+"
-                CallExpr@74..82
-                  PathExpr@74..78
-                    UsePath@74..78
-                      Ident@74..78 "eval"
-                  LParen@78..79 "("
-                  UnaryExpr@79..81
-                    Star@79..80 "*"
-                    PathExpr@80..81
-                      UsePath@80..81
-                        Ident@80..81 "b"
-                  RParen@81..82 ")"
-              Comma@82..83 ","
-            MatchArm@83..136
-              PatStruct@83..97
-                UsePath@83..92
-                  Ident@83..87 "Expr"
-                  ColonColon@87..89 "::"
-                  Ident@89..92 "Sub"
-                PatTuple@92..97
-                  LParen@92..93 "("
-                  PatIdent@93..94
-                    Ident@93..94 "a"
-                  Comma@94..95 ","
+SourceFile@0..334
+  Whitespace@0..1 "\n"
+  FnDef@1..333
+    KwFn@1..3 "fn"
+    Whitespace@3..4 " "
+    Ident@4..8 "eval"
+    LParen@8..9 "("
+    ParamList@9..19
+      Param@9..19
+        Ident@9..13 "expr"
+        Colon@13..14 ":"
+        Whitespace@14..15 " "
+        PathType@15..19
+          UsePath@15..19
+            Ident@15..19 "Expr"
+    RParen@19..20 ")"
+    Whitespace@20..21 " "
+    Arrow@21..23 "->"
+    Whitespace@23..24 " "
+    PathType@24..28
+      UsePath@24..28
+        Ident@24..27 "i32"
+        Whitespace@27..28 " "
+    Block@28..333
+      LBrace@28..29 "{"
+      Whitespace@29..34 "\n    "
+      ExprStmt@34..332
+        MatchExpr@34..331
+          KwMatch@34..39 "match"
+          Whitespace@39..40 " "
+          PathExpr@40..45
+            UsePath@40..45
+              Ident@40..44 "expr"
+              Whitespace@44..45 " "
+          LBrace@45..46 "{"
+          MatchArmList@46..330
+            Whitespace@46..55 "\n        "
+            MatchArm@55..73
+              PatStruct@55..67
+                UsePath@55..64
+                  Ident@55..59 "Expr"
+                  ColonColon@59..61 "::"
+                  Ident@61..64 "Lit"
+                PatTuple@64..67
+                  LParen@64..65 "("
+                  PatIdent@65..66
+                    Ident@65..66 "n"
+                  RParen@66..67 ")"
+              Whitespace@67..68 " "
+              FatArrow@68..70 "=>"
+              Whitespace@70..71 " "
+              PathExpr@71..72
+                UsePath@71..72
+                  Ident@71..72 "n"
+              Comma@72..73 ","
+            Whitespace@73..82 "\n        "
+            MatchArm@82..121
+              PatStruct@82..97
+                UsePath@82..91
+                  Ident@82..86 "Expr"
+                  ColonColon@86..88 "::"
+                  Ident@88..91 "Add"
+                PatTuple@91..97
+                  LParen@91..92 "("
+                  PatIdent@92..93
+                    Ident@92..93 "a"
+                  Comma@93..94 ","
+                  Whitespace@94..95 " "
                   PatIdent@95..96
                     Ident@95..96 "b"
                   RParen@96..97 ")"
-              KwIf@97..99 "if"
-              BinaryExpr@99..116
-                CallExpr@99..107
-                  PathExpr@99..103
-                    UsePath@99..103
-                      Ident@99..103 "eval"
-                  LParen@103..104 "("
-                  UnaryExpr@104..106
-                    Star@104..105 "*"
-                    PathExpr@105..106
-                      UsePath@105..106
-                        Ident@105..106 "a"
-                  RParen@106..107 ")"
-                Gt@107..108 ">"
-                CallExpr@108..116
-                  PathExpr@108..112
-                    UsePath@108..112
-                      Ident@108..112 "eval"
-                  LParen@112..113 "("
-                  UnaryExpr@113..115
-                    Star@113..114 "*"
-                    PathExpr@114..115
-                      UsePath@114..115
-                        Ident@114..115 "b"
-                  RParen@115..116 ")"
-              FatArrow@116..118 "=>"
-              BinaryExpr@118..135
-                CallExpr@118..126
-                  PathExpr@118..122
-                    UsePath@118..122
-                      Ident@118..122 "eval"
-                  LParen@122..123 "("
-                  UnaryExpr@123..125
-                    Star@123..124 "*"
-                    PathExpr@124..125
-                      UsePath@124..125
-                        Ident@124..125 "a"
-                  RParen@125..126 ")"
-                Minus@126..127 "-"
-                CallExpr@127..135
-                  PathExpr@127..131
-                    UsePath@127..131
-                      Ident@127..131 "eval"
-                  LParen@131..132 "("
-                  UnaryExpr@132..134
-                    Star@132..133 "*"
-                    PathExpr@133..134
-                      UsePath@133..134
-                        Ident@133..134 "b"
-                  RParen@134..135 ")"
-              Comma@135..136 ","
-            MatchArm@136..185
-              PatStruct@136..150
-                UsePath@136..145
-                  Ident@136..140 "Expr"
-                  ColonColon@140..142 "::"
-                  Ident@142..145 "Mul"
-                PatTuple@145..150
-                  LParen@145..146 "("
-                  PatIdent@146..147
-                    Ident@146..147 "a"
-                  Comma@147..148 ","
-                  PatIdent@148..149
-                    Ident@148..149 "b"
-                  RParen@149..150 ")"
-              FatArrow@150..152 "=>"
-              Block@152..185
-                LBrace@152..153 "{"
-                LetStmt@153..167
-                  KwLet@153..156 "let"
-                  PatIdent@156..157
-                    Ident@156..157 "x"
-                  Eq@157..158 "="
-                  CallExpr@158..166
-                    PathExpr@158..162
-                      UsePath@158..162
-                        Ident@158..162 "eval"
-                    LParen@162..163 "("
-                    UnaryExpr@163..165
-                      Star@163..164 "*"
-                      PathExpr@164..165
-                        UsePath@164..165
-                          Ident@164..165 "a"
-                    RParen@165..166 ")"
-                  Semicolon@166..167 ";"
-                LetStmt@167..181
-                  KwLet@167..170 "let"
-                  PatIdent@170..171
-                    Ident@170..171 "y"
-                  Eq@171..172 "="
-                  CallExpr@172..180
-                    PathExpr@172..176
-                      UsePath@172..176
-                        Ident@172..176 "eval"
-                    LParen@176..177 "("
-                    UnaryExpr@177..179
-                      Star@177..178 "*"
-                      PathExpr@178..179
-                        UsePath@178..179
-                          Ident@178..179 "b"
-                    RParen@179..180 ")"
-                  Semicolon@180..181 ";"
-                ExprStmt@181..184
-                  BinaryExpr@181..184
-                    PathExpr@181..182
-                      UsePath@181..182
-                        Ident@181..182 "x"
-                    Star@182..183 "*"
-                    PathExpr@183..184
-                      UsePath@183..184
-                        Ident@183..184 "y"
-                RBrace@184..185 "}"
-            MatchArm@185..190
-              PatWild@185..186
-                Underscore@185..186 "_"
-              FatArrow@186..188 "=>"
-              LitExpr@188..189
-                IntLit@188..189 "0"
-              Comma@189..190 ","
-          RBrace@190..191 "}"
-      RBrace@191..192 "}"
+              Whitespace@97..98 " "
+              FatArrow@98..100 "=>"
+              Whitespace@100..101 " "
+              BinaryExpr@101..120
+                CallExpr@101..109
+                  PathExpr@101..105
+                    UsePath@101..105
+                      Ident@101..105 "eval"
+                  LParen@105..106 "("
+                  UnaryExpr@106..108
+                    Star@106..107 "*"
+                    PathExpr@107..108
+                      UsePath@107..108
+                        Ident@107..108 "a"
+                  RParen@108..109 ")"
+                Whitespace@109..110 " "
+                Plus@110..111 "+"
+                Whitespace@111..112 " "
+                CallExpr@112..120
+                  PathExpr@112..116
+                    UsePath@112..116
+                      Ident@112..116 "eval"
+                  LParen@116..117 "("
+                  UnaryExpr@117..119
+                    Star@117..118 "*"
+                    PathExpr@118..119
+                      UsePath@118..119
+                        Ident@118..119 "b"
+                  RParen@119..120 ")"
+              Comma@120..121 ","
+            Whitespace@121..130 "\n        "
+            MatchArm@130..192
+              PatStruct@130..145
+                UsePath@130..139
+                  Ident@130..134 "Expr"
+                  ColonColon@134..136 "::"
+                  Ident@136..139 "Sub"
+                PatTuple@139..145
+                  LParen@139..140 "("
+                  PatIdent@140..141
+                    Ident@140..141 "a"
+                  Comma@141..142 ","
+                  Whitespace@142..143 " "
+                  PatIdent@143..144
+                    Ident@143..144 "b"
+                  RParen@144..145 ")"
+              Whitespace@145..146 " "
+              KwIf@146..148 "if"
+              Whitespace@148..149 " "
+              BinaryExpr@149..169
+                CallExpr@149..157
+                  PathExpr@149..153
+                    UsePath@149..153
+                      Ident@149..153 "eval"
+                  LParen@153..154 "("
+                  UnaryExpr@154..156
+                    Star@154..155 "*"
+                    PathExpr@155..156
+                      UsePath@155..156
+                        Ident@155..156 "a"
+                  RParen@156..157 ")"
+                Whitespace@157..158 " "
+                Gt@158..159 ">"
+                Whitespace@159..160 " "
+                CallExpr@160..168
+                  PathExpr@160..164
+                    UsePath@160..164
+                      Ident@160..164 "eval"
+                  LParen@164..165 "("
+                  UnaryExpr@165..167
+                    Star@165..166 "*"
+                    PathExpr@166..167
+                      UsePath@166..167
+                        Ident@166..167 "b"
+                  RParen@167..168 ")"
+                Whitespace@168..169 " "
+              FatArrow@169..171 "=>"
+              Whitespace@171..172 " "
+              BinaryExpr@172..191
+                CallExpr@172..180
+                  PathExpr@172..176
+                    UsePath@172..176
+                      Ident@172..176 "eval"
+                  LParen@176..177 "("
+                  UnaryExpr@177..179
+                    Star@177..178 "*"
+                    PathExpr@178..179
+                      UsePath@178..179
+                        Ident@178..179 "a"
+                  RParen@179..180 ")"
+                Whitespace@180..181 " "
+                Minus@181..182 "-"
+                Whitespace@182..183 " "
+                CallExpr@183..191
+                  PathExpr@183..187
+                    UsePath@183..187
+                      Ident@183..187 "eval"
+                  LParen@187..188 "("
+                  UnaryExpr@188..190
+                    Star@188..189 "*"
+                    PathExpr@189..190
+                      UsePath@189..190
+                        Ident@189..190 "b"
+                  RParen@190..191 ")"
+              Comma@191..192 ","
+            Whitespace@192..201 "\n        "
+            MatchArm@201..318
+              PatStruct@201..216
+                UsePath@201..210
+                  Ident@201..205 "Expr"
+                  ColonColon@205..207 "::"
+                  Ident@207..210 "Mul"
+                PatTuple@210..216
+                  LParen@210..211 "("
+                  PatIdent@211..212
+                    Ident@211..212 "a"
+                  Comma@212..213 ","
+                  Whitespace@213..214 " "
+                  PatIdent@214..215
+                    Ident@214..215 "b"
+                  RParen@215..216 ")"
+              Whitespace@216..217 " "
+              FatArrow@217..219 "=>"
+              Whitespace@219..220 " "
+              Block@220..309
+                LBrace@220..221 "{"
+                Whitespace@221..234 "\n            "
+                LetStmt@234..251
+                  KwLet@234..237 "let"
+                  Whitespace@237..238 " "
+                  PatIdent@238..239
+                    Ident@238..239 "x"
+                  Whitespace@239..240 " "
+                  Eq@240..241 "="
+                  Whitespace@241..242 " "
+                  CallExpr@242..250
+                    PathExpr@242..246
+                      UsePath@242..246
+                        Ident@242..246 "eval"
+                    LParen@246..247 "("
+                    UnaryExpr@247..249
+                      Star@247..248 "*"
+                      PathExpr@248..249
+                        UsePath@248..249
+                          Ident@248..249 "a"
+                    RParen@249..250 ")"
+                  Semicolon@250..251 ";"
+                Whitespace@251..264 "\n            "
+                LetStmt@264..281
+                  KwLet@264..267 "let"
+                  Whitespace@267..268 " "
+                  PatIdent@268..269
+                    Ident@268..269 "y"
+                  Whitespace@269..270 " "
+                  Eq@270..271 "="
+                  Whitespace@271..272 " "
+                  CallExpr@272..280
+                    PathExpr@272..276
+                      UsePath@272..276
+                        Ident@272..276 "eval"
+                    LParen@276..277 "("
+                    UnaryExpr@277..279
+                      Star@277..278 "*"
+                      PathExpr@278..279
+                        UsePath@278..279
+                          Ident@278..279 "b"
+                    RParen@279..280 ")"
+                  Semicolon@280..281 ";"
+                Whitespace@281..294 "\n            "
+                ExprStmt@294..308
+                  BinaryExpr@294..308
+                    PathExpr@294..296
+                      UsePath@294..296
+                        Ident@294..295 "x"
+                        Whitespace@295..296 " "
+                    Star@296..297 "*"
+                    Whitespace@297..298 " "
+                    PathExpr@298..308
+                      UsePath@298..308
+                        Ident@298..299 "y"
+                        Whitespace@299..308 "\n        "
+                RBrace@308..309 "}"
+              Whitespace@309..318 "\n        "
+            MatchArm@318..325
+              PatWild@318..319
+                Underscore@318..319 "_"
+              Whitespace@319..320 " "
+              FatArrow@320..322 "=>"
+              Whitespace@322..323 " "
+              LitExpr@323..324
+                IntLit@323..324 "0"
+              Comma@324..325 ","
+            Whitespace@325..330 "\n    "
+          RBrace@330..331 "}"
+        Whitespace@331..332 "\n"
+      RBrace@332..333 "}"
+  Whitespace@333..334 "\n"

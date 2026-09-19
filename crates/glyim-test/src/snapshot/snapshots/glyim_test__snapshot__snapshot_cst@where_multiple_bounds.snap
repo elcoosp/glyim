@@ -1,40 +1,48 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 18
 expression: tree
 ---
-SourceFile@0..34
-  FnDef@0..34
+SourceFile@0..43
+  FnDef@0..43
     KwFn@0..2 "fn"
-    Ident@2..5 "bar"
-    TypeParamList@5..8
-      Lt@5..6 "<"
-      TypeParam@6..7
-        Ident@6..7 "T"
-      Gt@7..8 ">"
-    LParen@8..9 "("
-    RParen@9..10 ")"
-    WhereClause@10..32
-      KwWhere@10..15 "where"
-      WherePredicate@15..32
-        PathType@15..16
-          UsePath@15..16
-            Ident@15..16 "T"
-        Colon@16..17 ":"
-        Bound@17..22
-          PathType@17..22
-            UsePath@17..22
-              Ident@17..22 "Clone"
-        Plus@22..23 "+"
-        Bound@23..27
-          PathType@23..27
-            UsePath@23..27
-              Ident@23..27 "Send"
+    Whitespace@2..3 " "
+    Ident@3..6 "bar"
+    TypeParamList@6..9
+      Lt@6..7 "<"
+      TypeParam@7..8
+        Ident@7..8 "T"
+      Gt@8..9 ">"
+    LParen@9..10 "("
+    RParen@10..11 ")"
+    Whitespace@11..12 " "
+    WhereClause@12..41
+      KwWhere@12..17 "where"
+      WherePredicate@17..41
+        Whitespace@17..18 " "
+        PathType@18..19
+          UsePath@18..19
+            Ident@18..19 "T"
+        Colon@19..20 ":"
+        Bound@20..27
+          Whitespace@20..21 " "
+          PathType@21..27
+            UsePath@21..27
+              Ident@21..26 "Clone"
+              Whitespace@26..27 " "
         Plus@27..28 "+"
-        Bound@28..32
-          PathType@28..32
-            UsePath@28..32
-              Ident@28..32 "Sync"
-    Block@32..34
-      LBrace@32..33 "{"
-      RBrace@33..34 "}"
+        Bound@28..34
+          Whitespace@28..29 " "
+          PathType@29..34
+            UsePath@29..34
+              Ident@29..33 "Send"
+              Whitespace@33..34 " "
+        Plus@34..35 "+"
+        Bound@35..41
+          Whitespace@35..36 " "
+          PathType@36..41
+            UsePath@36..41
+              Ident@36..40 "Sync"
+              Whitespace@40..41 " "
+    Block@41..43
+      LBrace@41..42 "{"
+      RBrace@42..43 "}"

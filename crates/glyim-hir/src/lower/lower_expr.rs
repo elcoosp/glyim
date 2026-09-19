@@ -27,7 +27,8 @@ use crate::{
 };
 
 use super::{
-    first_ident_text, is_expr_node, is_type_node, lower_item::lower_param, lower_pat::lower_pat,
+    first_ident_text, first_ident_text_with_depth, is_expr_node, is_type_node,
+    lower_item::lower_param, lower_pat::lower_pat,
     lower_type::lower_type_ref, node_span,
 };
 
@@ -516,8 +517,12 @@ fn lower_struct_expr(
                 SyntaxElement::Node(node) => {
                     match node.kind() {
                         SyntaxKind::StructField => {
-                            // Extract field name
-                            let field_name = first_ident_text(node).unwrap_or_default();
+                            // Extract field name. Explicit fields have a direct
+                            // `Ident` child (`y: expr`); shorthand fields wrap the
+                            // name in `PathExpr -> UsePath -> Ident` (`x`), so a
+                            // depth-aware scan is required.
+                            let field_name =
+                                first_ident_text_with_depth(node).unwrap_or_default();
                             let name = interner.intern(&field_name);
                             // Check if the field has an expression inside it.
                             // Macro calls (`format!(..)`) are valid field values

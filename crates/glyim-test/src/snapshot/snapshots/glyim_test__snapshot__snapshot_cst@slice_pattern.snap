@@ -2,39 +2,52 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..34
-  FnDef@0..34
+SourceFile@0..47
+  FnDef@0..47
     KwFn@0..2 "fn"
-    Ident@2..6 "main"
-    LParen@6..7 "("
-    RParen@7..8 ")"
-    Block@8..34
-      LBrace@8..9 "{"
-      ExprStmt@9..33
-        MatchExpr@9..33
-          KwMatch@9..14 "match"
-          PathExpr@14..17
-            UsePath@14..17
-              Ident@14..17 "arr"
-          LBrace@17..18 "{"
-          MatchArmList@18..32
-            MatchArm@18..32
-              PatSlice@18..28
-                LBracket@18..19 "["
-                PatIdent@19..20
-                  Ident@19..20 "a"
-                Comma@20..21 ","
-                PatIdent@21..22
-                  Ident@21..22 "b"
-                Comma@22..23 ","
-                DotDot@23..25 ".."
-                Comma@25..26 ","
-                PatIdent@26..27
-                  Ident@26..27 "c"
-                RBracket@27..28 "]"
-              FatArrow@28..30 "=>"
-              Block@30..32
-                LBrace@30..31 "{"
-                RBrace@31..32 "}"
-          RBrace@32..33 "}"
-      RBrace@33..34 "}"
+    Whitespace@2..3 " "
+    Ident@3..7 "main"
+    LParen@7..8 "("
+    RParen@8..9 ")"
+    Whitespace@9..10 " "
+    Block@10..47
+      LBrace@10..11 "{"
+      Whitespace@11..12 " "
+      ExprStmt@12..46
+        MatchExpr@12..45
+          KwMatch@12..17 "match"
+          Whitespace@17..18 " "
+          PathExpr@18..22
+            UsePath@18..22
+              Ident@18..21 "arr"
+              Whitespace@21..22 " "
+          LBrace@22..23 "{"
+          MatchArmList@23..44
+            Whitespace@23..24 " "
+            MatchArm@24..44
+              PatSlice@24..37
+                LBracket@24..25 "["
+                PatIdent@25..26
+                  Ident@25..26 "a"
+                Comma@26..27 ","
+                Whitespace@27..28 " "
+                PatIdent@28..29
+                  Ident@28..29 "b"
+                Comma@29..30 ","
+                Whitespace@30..31 " "
+                DotDot@31..33 ".."
+                Comma@33..34 ","
+                Whitespace@34..35 " "
+                PatIdent@35..36
+                  Ident@35..36 "c"
+                RBracket@36..37 "]"
+              Whitespace@37..38 " "
+              FatArrow@38..40 "=>"
+              Whitespace@40..41 " "
+              Block@41..43
+                LBrace@41..42 "{"
+                RBrace@42..43 "}"
+              Whitespace@43..44 " "
+          RBrace@44..45 "}"
+        Whitespace@45..46 " "
+      RBrace@46..47 "}"

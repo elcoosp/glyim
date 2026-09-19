@@ -1,30 +1,34 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 18
 expression: tree
 ---
-SourceFile@0..24
-  FnDef@0..24
+SourceFile@0..29
+  FnDef@0..29
     KwFn@0..2 "fn"
-    Ident@2..5 "foo"
-    TypeParamList@5..8
-      Lt@5..6 "<"
-      TypeParam@6..7
-        Ident@6..7 "T"
-      Gt@7..8 ">"
-    LParen@8..9 "("
-    RParen@9..10 ")"
-    WhereClause@10..22
-      KwWhere@10..15 "where"
-      WherePredicate@15..22
-        PathType@15..16
-          UsePath@15..16
-            Ident@15..16 "T"
-        Colon@16..17 ":"
-        Bound@17..22
-          PathType@17..22
-            UsePath@17..22
-              Ident@17..22 "Clone"
-    Block@22..24
-      LBrace@22..23 "{"
-      RBrace@23..24 "}"
+    Whitespace@2..3 " "
+    Ident@3..6 "foo"
+    TypeParamList@6..9
+      Lt@6..7 "<"
+      TypeParam@7..8
+        Ident@7..8 "T"
+      Gt@8..9 ">"
+    LParen@9..10 "("
+    RParen@10..11 ")"
+    Whitespace@11..12 " "
+    WhereClause@12..27
+      KwWhere@12..17 "where"
+      WherePredicate@17..27
+        Whitespace@17..18 " "
+        PathType@18..19
+          UsePath@18..19
+            Ident@18..19 "T"
+        Colon@19..20 ":"
+        Bound@20..27
+          Whitespace@20..21 " "
+          PathType@21..27
+            UsePath@21..27
+              Ident@21..26 "Clone"
+              Whitespace@26..27 " "
+    Block@27..29
+      LBrace@27..28 "{"
+      RBrace@28..29 "}"

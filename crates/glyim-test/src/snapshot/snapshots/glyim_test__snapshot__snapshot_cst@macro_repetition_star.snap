@@ -1,80 +1,103 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 16
 expression: tree
 ---
-SourceFile@0..73
-  MacroDef@0..73
-    KwMacroRules@0..11 "macro_rules"
-    Bang@11..12 "!"
-    Ident@12..15 "vec"
-    LBrace@15..16 "{"
-    MacroArm@16..71
-      TokenTree@16..30
-        LParen@16..17 "("
-        TokenTree@17..29
-          Dollar@17..18 "$"
-          TokenTree@18..27
-            LParen@18..19 "("
-            TokenTree@19..26
-              Dollar@19..20 "$"
-              MetaVar@20..26
-                Ident@20..21 "x"
-                Colon@21..22 ":"
-                Ident@22..26 "expr"
-            RParen@26..27 ")"
-          Comma@27..28 ","
-          Star@28..29 "*"
-        RParen@29..30 ")"
-      FatArrow@30..32 "=>"
-      TokenTree@32..71
-        LBrace@32..33 "{"
-        TokenTree@33..70
-          LBrace@33..34 "{"
-          TokenTree@34..37
-            KwLet@34..37 "let"
-          TokenTree@37..40
-            KwMut@37..40 "mut"
-          TokenTree@40..41
-            Ident@40..41 "v"
-          TokenTree@41..42
-            Eq@41..42 "="
-          TokenTree@42..45
-            Ident@42..45 "Vec"
-          TokenTree@45..47
-            ColonColon@45..47 "::"
-          TokenTree@47..50
-            Ident@47..50 "new"
-          TokenTree@50..52
-            LParen@50..51 "("
-            RParen@51..52 ")"
-          TokenTree@52..53
-            Semicolon@52..53 ";"
-          TokenTree@53..54
-            Dollar@53..54 "$"
-          TokenTree@54..67
-            LParen@54..55 "("
-            TokenTree@55..56
-              Ident@55..56 "v"
-            TokenTree@56..57
-              Dot@56..57 "."
-            TokenTree@57..61
-              Ident@57..61 "push"
-            TokenTree@61..65
-              LParen@61..62 "("
-              TokenTree@62..64
-                Dollar@62..63 "$"
-                MetaVar@63..64
-                  Ident@63..64 "x"
-              RParen@64..65 ")"
-            TokenTree@65..66
-              Semicolon@65..66 ";"
-            RParen@66..67 ")"
-          TokenTree@67..68
-            Star@67..68 "*"
+SourceFile@0..113
+  Whitespace@0..1 "\n"
+  MacroDef@1..112
+    KwMacroRules@1..12 "macro_rules"
+    Bang@12..13 "!"
+    Whitespace@13..14 " "
+    Ident@14..17 "vec"
+    Whitespace@17..18 " "
+    LBrace@18..19 "{"
+    Whitespace@19..24 "\n    "
+    MacroArm@24..109
+      TokenTree@24..42
+        LParen@24..25 "("
+        Whitespace@25..26 " "
+        TokenTree@26..40
+          Dollar@26..27 "$"
+          TokenTree@27..38
+            LParen@27..28 "("
+            Whitespace@28..29 " "
+            TokenTree@29..36
+              Dollar@29..30 "$"
+              MetaVar@30..36
+                Ident@30..31 "x"
+                Colon@31..32 ":"
+                Ident@32..36 "expr"
+            Whitespace@36..37 " "
+            RParen@37..38 ")"
+          Comma@38..39 ","
+          Star@39..40 "*"
+        Whitespace@40..41 " "
+        RParen@41..42 ")"
+      Whitespace@42..43 " "
+      FatArrow@43..45 "=>"
+      Whitespace@45..46 " "
+      TokenTree@46..109
+        LBrace@46..47 "{"
+        Whitespace@47..56 "\n        "
+        TokenTree@56..103
+          LBrace@56..57 "{"
+          Whitespace@57..58 " "
+          TokenTree@58..61
+            KwLet@58..61 "let"
+          Whitespace@61..62 " "
+          TokenTree@62..65
+            KwMut@62..65 "mut"
+          Whitespace@65..66 " "
+          TokenTree@66..67
+            Ident@66..67 "v"
+          Whitespace@67..68 " "
           TokenTree@68..69
-            Ident@68..69 "v"
-          RBrace@69..70 "}"
-        RBrace@70..71 "}"
-    Semicolon@71..72 ";"
-    RBrace@72..73 "}"
+            Eq@68..69 "="
+          Whitespace@69..70 " "
+          TokenTree@70..73
+            Ident@70..73 "Vec"
+          TokenTree@73..75
+            ColonColon@73..75 "::"
+          TokenTree@75..78
+            Ident@75..78 "new"
+          TokenTree@78..80
+            LParen@78..79 "("
+            RParen@79..80 ")"
+          TokenTree@80..81
+            Semicolon@80..81 ";"
+          Whitespace@81..82 " "
+          TokenTree@82..83
+            Dollar@82..83 "$"
+          TokenTree@83..98
+            LParen@83..84 "("
+            Whitespace@84..85 " "
+            TokenTree@85..86
+              Ident@85..86 "v"
+            TokenTree@86..87
+              Dot@86..87 "."
+            TokenTree@87..91
+              Ident@87..91 "push"
+            TokenTree@91..95
+              LParen@91..92 "("
+              TokenTree@92..94
+                Dollar@92..93 "$"
+                MetaVar@93..94
+                  Ident@93..94 "x"
+              RParen@94..95 ")"
+            TokenTree@95..96
+              Semicolon@95..96 ";"
+            Whitespace@96..97 " "
+            RParen@97..98 ")"
+          TokenTree@98..99
+            Star@98..99 "*"
+          Whitespace@99..100 " "
+          TokenTree@100..101
+            Ident@100..101 "v"
+          Whitespace@101..102 " "
+          RBrace@102..103 "}"
+        Whitespace@103..108 "\n    "
+        RBrace@108..109 "}"
+    Semicolon@109..110 ";"
+    Whitespace@110..111 "\n"
+    RBrace@111..112 "}"
+  Whitespace@112..113 "\n"

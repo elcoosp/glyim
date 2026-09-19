@@ -1,18 +1,20 @@
 ---
 source: crates/glyim-test/src/snapshot/mod.rs
-assertion_line: 16
 expression: tree
 ---
-SourceFile@0..22
+SourceFile@0..25
   Visibility@0..4
     KwPub@0..3 "pub"
     LParen@3..4 "("
   KwIn@4..6 "in"
-  KwCrate@6..11 "crate"
-  ColonColon@11..13 "::"
-  Ident@13..16 "foo"
-  RParen@16..17 ")"
-  Module@17..22
-    KwMod@17..20 "mod"
-    Ident@20..21 "m"
-    Semicolon@21..22 ";"
+  Whitespace@6..7 " "
+  KwCrate@7..12 "crate"
+  ColonColon@12..14 "::"
+  Ident@14..17 "foo"
+  RParen@17..18 ")"
+  Whitespace@18..19 " "
+  Module@19..25
+    KwMod@19..22 "mod"
+    Whitespace@22..23 " "
+    Ident@23..24 "m"
+    Semicolon@24..25 ";"

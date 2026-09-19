@@ -2,12 +2,14 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..9
-  FnDef@0..9
+SourceFile@0..11
+  FnDef@0..11
     KwFn@0..2 "fn"
-    Ident@2..5 "baz"
-    LParen@5..6 "("
-    RParen@6..7 ")"
-    Block@7..9
-      LBrace@7..8 "{"
-      RBrace@8..9 "}"
+    Whitespace@2..3 " "
+    Ident@3..6 "baz"
+    LParen@6..7 "("
+    RParen@7..8 ")"
+    Whitespace@8..9 " "
+    Block@9..11
+      LBrace@9..10 "{"
+      RBrace@10..11 "}"

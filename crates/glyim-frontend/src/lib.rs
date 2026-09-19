@@ -34,7 +34,7 @@ pub mod lexer;
 /// parser.
 pub mod parser;
 
-pub use lexer::{LexResult, Token, lex};
+pub use lexer::{LexResult, Token, lex, lex_with_trivia};
 pub use parser::{ParseResult, parse_to_syntax, try_parse_fragment};
 
 #[cfg(test)]

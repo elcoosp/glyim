@@ -304,23 +304,43 @@ impl<'a> Parser<'a> {
                                 Some(t) => t.clone(),
                                 None => break,
                             };
-                            self.bump(); // field name
-                            if self.current_kind() == SyntaxKind::Colon {
+                            // Peek whether this is `name:` (explicit) or bare
+                            // `name` (shorthand). The field-name token itself is
+                            // emitted by the branch below — NOT by an early
+                            // `bump()` here, because `start_node_at(field_cp, ..)`
+                            // starts the StructField *at* the name, and bumping
+                            // first would emit the name before the node opens
+                            // AND again inside the shorthand PathExpr — a
+                            // 2× text duplication that shifts every subsequent
+                            // byte in the tree.
+                            let mut peek = self.pos + 1;
+                            while let Some(t) = self.tokens.get(peek) {
+                                if !t.kind.is_trivia() {
+                                    break;
+                                }
+                                peek += 1;
+                            }
+                            let is_explicit = self
+                                .tokens
+                                .get(peek)
+                                .map(|t| t.kind == SyntaxKind::Colon)
+                                .unwrap_or(false);
+                            if is_explicit {
                                 // Explicit field: name: expr
-                                self.bump(); // colon
-                                // Start the StructField node at the field name
-                                // and nest the value expression INSIDE it, so the
-                                // HIR lower (which reads the field value as a child
-                                // of StructField) can find it. The shorthand branch
-                                // below does the same; keeping the two shapes
-                                // identical is what makes field collection work.
                                 self.start_node_at(field_cp, SyntaxKind::StructField);
+                                self.flush_trivia();
+                                self.builder.token(
+                                    GlyimLang::kind_to_raw(field_name_token.kind),
+                                    field_name_token.text.as_str(),
+                                );
+                                self.pos += 1;
+                                self.flush_trivia();
+                                self.bump(); // colon
                                 self.parse_expr(); // expression value (nested)
                                 self.finish_node(); // StructField
                             } else {
                                 // Shorthand field: name (same as expression)
                                 self.start_node_at(field_cp, SyntaxKind::StructField);
-                                // Emit the field name as a PathExpr for the value
                                 self.start_node(SyntaxKind::PathExpr);
                                 self.start_node(SyntaxKind::UsePath);
                                 self.builder.token(
@@ -329,6 +349,7 @@ impl<'a> Parser<'a> {
                                 );
                                 self.finish_node(); // UsePath
                                 self.finish_node(); // PathExpr
+                                self.pos += 1; // consume the field name (already emitted)
                                 self.finish_node(); // StructField
                             }
                         } else if self.current_kind() == SyntaxKind::DotDot {
@@ -682,10 +703,8 @@ impl<'a> Parser<'a> {
                 self.finish_node(); // MatchExpr
             }
             _ => {
-                self.error(format!(
-                    "expected expression, found {:?}",
-                    self.current_kind()
-                ));
+                let found = self.current_kind();
+                self.error(format!("expected expression, found {:?}", found));
                 if self.current().is_some() {
                     self.bump();
                 }

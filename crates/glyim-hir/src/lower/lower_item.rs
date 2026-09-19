@@ -283,7 +283,13 @@ pub(crate) fn lower_struct_def(
     let name = interner.intern(&name_str);
     let mut fields = Vec::new();
     let kind;
-    let tokens: Vec<_> = node.children_with_tokens().collect();
+    // Skip trivia tokens (whitespace/comments): the frontend now emits them
+    // into the tree so byte offsets match the source, so the
+    // [Ident, Colon, TypeNode] field pattern is no longer contiguous.
+    let tokens: Vec<_> = node
+        .children_with_tokens()
+        .filter(|el| !el.kind().is_trivia())
+        .collect();
     let mut i = 0;
     let mut has_fields = false;
     while i < tokens.len() {

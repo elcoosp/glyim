@@ -167,7 +167,8 @@ impl<'a> Parser<'a> {
                 self.finish_node();
             }
             _ => {
-                self.error(format!("expected item, found {:?}", self.current_kind()));
+                let found = self.current_kind();
+                self.error(format!("expected item, found {:?}", found));
                 while self.current().is_some()
                     && !matches!(
                         self.current_kind(),
@@ -680,10 +681,8 @@ impl<'a> Parser<'a> {
                 SyntaxKind::KwExtern => self.parse_extern_block(),
                 SyntaxKind::KwUnsafe => self.parse_item(),
                 _ => {
-                    self.error(format!(
-                        "expected trait item, found {:?}",
-                        self.current_kind()
-                    ));
+                    let found = self.current_kind();
+                    self.error(format!("expected trait item, found {:?}", found));
                     self.bump();
                 }
             }
@@ -773,10 +772,8 @@ impl<'a> Parser<'a> {
                 SyntaxKind::KwExtern => self.parse_extern_block(),
                 SyntaxKind::KwUnsafe => self.parse_item(),
                 _ => {
-                    self.error(format!(
-                        "expected impl item, found {:?}",
-                        self.current_kind()
-                    ));
+                    let found = self.current_kind();
+                    self.error(format!("expected impl item, found {:?}", found));
                     self.bump();
                 }
             }
@@ -859,15 +856,17 @@ impl<'a> Parser<'a> {
                 self.bump();
             }
         }
-        // Handle >> as two Gt tokens: emit both, one for this list, one queued
+        // Handle >> as two Gt tokens: emit ONE `>` for this list, and defer
+        // the second to the outer list via `pending_gt_count`. The outer's
+        // eventual `bump()` consumes the pending count and emits the second
+        // `>`. Emitting both here AND incrementing `pending_gt_count` (the
+        // previous behavior) produced a THIRD `>` — every `>>` in a nested
+        // generic (`Result<Vec<u8>>`) grew the tree by one byte.
         if self.current_kind() == SyntaxKind::Shr {
-            self.builder
-                .token(GlyimLang::kind_to_raw(SyntaxKind::Gt), ">");
             self.builder
                 .token(GlyimLang::kind_to_raw(SyntaxKind::Gt), ">");
             self.pos += 1; // skip the Shr token
             self.pending_gt_count += 1;
-            // Do NOT consume from pending here.
             self.finish_node();
             return;
         }
@@ -899,15 +898,13 @@ impl<'a> Parser<'a> {
         // Handle >> as two Gt tokens:
         // Emit both now. The first closes this list, the second is queued for the outer list.
         if self.current_kind() == SyntaxKind::Shr {
-            // Emit Gt for THIS list (closes this type arg list)
-            self.builder
-                .token(GlyimLang::kind_to_raw(SyntaxKind::Gt), ">");
-            // Emit Gt for the OUTER list (queued via pending_gt_count)
+            // Emit `>` for THIS list (closes this type-arg list). The second
+            // `>` (for the outer list) is deferred to the outer's `bump()` via
+            // `pending_gt_count` — see the twin site below.
             self.builder
                 .token(GlyimLang::kind_to_raw(SyntaxKind::Gt), ">");
             self.pos += 1; // skip the Shr token
             self.pending_gt_count += 1; // outer list will see Gt via current_kind
-            // Do NOT consume from pending here - the Gt for this list was already emitted.
             return;
         }
         // Not Shr - consume a real Gt token

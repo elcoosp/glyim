@@ -2,26 +2,33 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..22
-  FnDef@0..22
+SourceFile@0..29
+  FnDef@0..29
     KwFn@0..2 "fn"
-    Ident@2..6 "main"
-    LParen@6..7 "("
-    RParen@7..8 ")"
-    Block@8..22
-      LBrace@8..9 "{"
-      LetStmt@9..21
-        KwLet@9..12 "let"
-        PatIdent@12..13
-          Ident@12..13 "x"
-        Eq@13..14 "="
-        IndexExpr@14..20
-          PathExpr@14..17
-            UsePath@14..17
-              Ident@14..17 "arr"
-          LBracket@17..18 "["
-          LitExpr@18..19
-            IntLit@18..19 "0"
-          RBracket@19..20 "]"
-        Semicolon@20..21 ";"
-      RBrace@21..22 "}"
+    Whitespace@2..3 " "
+    Ident@3..7 "main"
+    LParen@7..8 "("
+    RParen@8..9 ")"
+    Whitespace@9..10 " "
+    Block@10..29
+      LBrace@10..11 "{"
+      Whitespace@11..12 " "
+      LetStmt@12..27
+        KwLet@12..15 "let"
+        Whitespace@15..16 " "
+        PatIdent@16..17
+          Ident@16..17 "x"
+        Whitespace@17..18 " "
+        Eq@18..19 "="
+        Whitespace@19..20 " "
+        IndexExpr@20..26
+          PathExpr@20..23
+            UsePath@20..23
+              Ident@20..23 "arr"
+          LBracket@23..24 "["
+          LitExpr@24..25
+            IntLit@24..25 "0"
+          RBracket@25..26 "]"
+        Semicolon@26..27 ";"
+      Whitespace@27..28 " "
+      RBrace@28..29 "}"

@@ -2,30 +2,36 @@
 source: crates/glyim-test/src/snapshot/mod.rs
 expression: tree
 ---
-SourceFile@0..24
-  FnDef@0..24
+SourceFile@0..30
+  FnDef@0..30
     KwFn@0..2 "fn"
-    Ident@2..5 "qux"
-    TypeParamList@5..11
-      Lt@5..6 "<"
-      TypeParam@6..8
-        Lifetime@6..8 "'a"
-      Comma@8..9 ","
-      TypeParam@9..10
-        Ident@9..10 "T"
-      Gt@10..11 ">"
-    LParen@11..12 "("
-    RParen@12..13 ")"
-    WhereClause@13..22
-      KwWhere@13..18 "where"
-      WherePredicate@18..22
-        PathType@18..19
-          UsePath@18..19
-            Ident@18..19 "T"
-        Colon@19..20 ":"
-        Bound@20..22
-          Lifetime@20..22
-            Lifetime@20..22 "'a"
-    Block@22..24
-      LBrace@22..23 "{"
-      RBrace@23..24 "}"
+    Whitespace@2..3 " "
+    Ident@3..6 "qux"
+    TypeParamList@6..13
+      Lt@6..7 "<"
+      TypeParam@7..9
+        Lifetime@7..9 "'a"
+      Comma@9..10 ","
+      Whitespace@10..11 " "
+      TypeParam@11..12
+        Ident@11..12 "T"
+      Gt@12..13 ">"
+    LParen@13..14 "("
+    RParen@14..15 ")"
+    Whitespace@15..16 " "
+    WhereClause@16..28
+      KwWhere@16..21 "where"
+      WherePredicate@21..28
+        Whitespace@21..22 " "
+        PathType@22..23
+          UsePath@22..23
+            Ident@22..23 "T"
+        Colon@23..24 ":"
+        Bound@24..27
+          Whitespace@24..25 " "
+          Lifetime@25..27
+            Lifetime@25..27 "'a"
+        Whitespace@27..28 " "
+    Block@28..30
+      LBrace@28..29 "{"
+      RBrace@29..30 "}"

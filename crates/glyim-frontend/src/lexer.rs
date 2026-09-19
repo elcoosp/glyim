@@ -79,12 +79,43 @@ impl<'a> Lexer<'a> {
     }
 
 /// lex.
-    pub fn lex(mut self) -> LexResult {
+    /// Lex to a trivia-free token stream (whitespace and comments omitted).
+    /// This is the historical `Lexer::lex` behavior; it is preserved for
+    /// callers (tests, fragment validation) that want only meaningful tokens.
+    /// The parser uses `Lexer::lex_all` so tree byte offsets match the source.
+    pub fn lex(self) -> LexResult {
+        let mut r = self.lex_all();
+        r.tokens.retain(|t| !t.kind.is_trivia());
+        r
+    }
+
+    /// Lex to a token stream that **includes** trivia tokens (whitespace,
+    /// line/block/doc comments). The parser calls this so the syntax tree it
+    /// builds has byte offsets that line up with the source: `GreenNode`
+    /// stores only concatenated token text, so `text_range()` is measured in
+    /// the byte space of that concatenation. Omitting trivia makes tree
+    /// offsets diverge from source offsets (a 115 KB source produced a 56 KB
+    /// tree), which is why every diagnostic span downstream pointed at the
+    /// wrong source text. Existing callers that want the historical
+    /// trivia-free stream use `Lexer::lex`.
+    pub fn lex_all(mut self) -> LexResult {
         let mut tokens = Vec::new();
 
         while self.pos < self.source.len() {
             let start = self.pos;
             if self.lex_trivia() {
+                let text = &self.source[start..self.pos];
+                // Classify the consumed run: block comment, line comment, or
+                // (bare) whitespace. Consecutive whitespace including newlines
+                // is emitted as one Whitespace token.
+                let kind = if text.starts_with("/*") {
+                    SyntaxKind::BlockComment
+                } else if text.starts_with("//") {
+                    SyntaxKind::LineComment
+                } else {
+                    SyntaxKind::Whitespace
+                };
+                tokens.push(Token::new(kind, self.span(start, self.pos), text));
                 continue;
             }
             if self.pos >= self.source.len() {
@@ -920,4 +951,11 @@ fn lookup_keyword(ident: &str) -> SyntaxKind {
 /// lex.
 pub fn lex(source: &str, file_id: FileId) -> LexResult {
     Lexer::new(source, file_id).lex()
+}
+
+/// Lex a source string to a token stream that **includes** trivia tokens
+/// (`Whitespace`, `LineComment`, `BlockComment`). Used by the parser so the
+/// syntax tree's byte offsets match the source text.
+pub fn lex_with_trivia(source: &str, file_id: FileId) -> LexResult {
+    Lexer::new(source, file_id).lex_all()
 }

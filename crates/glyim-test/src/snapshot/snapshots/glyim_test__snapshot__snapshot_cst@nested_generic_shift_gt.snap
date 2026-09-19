@@ -5,20 +5,20 @@ expression: tree
 SourceFile@0..18
   StructDef@0..15
     KwStruct@0..6 "struct"
-    Ident@6..7 "S"
-    TypeParamList@7..15
-      Lt@7..8 "<"
-      TypeParam@8..9
-        Ident@8..9 "A"
+    Whitespace@6..7 " "
+    Ident@7..8 "S"
+    TypeParamList@8..15
+      Lt@8..9 "<"
       TypeParam@9..10
-        Lt@9..10 "<"
+        Ident@9..10 "A"
       TypeParam@10..11
-        Ident@10..11 "B"
+        Lt@10..11 "<"
       TypeParam@11..12
-        Lt@11..12 "<"
+        Ident@11..12 "B"
       TypeParam@12..13
-        Ident@12..13 "C"
-      Gt@13..14 ">"
+        Lt@12..13 "<"
+      TypeParam@13..14
+        Ident@13..14 "C"
       Gt@14..15 ">"
   Gt@15..16 ">"
   Gt@16..17 ">"

@@ -209,7 +209,8 @@ impl<'a> Parser<'a> {
                 }
             }
             _ => {
-                self.error(format!("expected pattern, found {:?}", self.current_kind()));
+                let found = self.current_kind();
+                self.error(format!("expected pattern, found {:?}", found));
                 if self.current().is_some() {
                     self.bump();
                 }
