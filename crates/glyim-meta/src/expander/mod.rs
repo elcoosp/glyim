@@ -270,8 +270,64 @@ impl<'a> ExpanderImpl<'a> {
                                 && let Some(block) =
                                     n.children().find(|c| c.kind() == SyntaxKind::Block)
                             {
-                                for stmt in block.children_with_tokens() {
+                                // Skip the Block's own `{`/`}` delimiter tokens.
+                                // `children_with_tokens()` yields them, but they
+                                // are NOT part of the expanded expression — the
+                                // wrapper `fn __glyim_expanded() { ... }` is
+                                // scaffolding we added for the reparse. Emitting
+                                // them wraps the expansion in a spurious block:
+                                // `format!(..)` in struct-field position became
+                                // `Foo { f: { "" } }`, which the field-collector
+                                // cannot lower (no expr node inside the field),
+                                // silently dropping the field and producing
+                                // "missing field" diagnostics. The same leak also
+                                // produced stray `{`/`}` in any expansion
+                                // returned from a non-statement position.
+                                for stmt in block
+                                    .children_with_tokens()
+                                    .filter(|el| !matches!(
+                                        el.kind(),
+                                        SyntaxKind::LBrace | SyntaxKind::RBrace
+                                    ))
+                                {
                                     match stmt {
+                                        // Unwrap a single-expression `ExprStmt`
+                                        // (no trailing semicolon) into its inner
+                                        // expression. The wrapper function
+                                        // forced statement context on the
+                                        // reparse, so `format!(..)` inside
+                                        // `fn __glyim_expanded() {{ .. }}` becomes
+                                        // `ExprStmt { <expr> }`. Emitting that
+                                        // `ExprStmt` node leaks statement
+                                        // structure into expression positions:
+                                        // a struct field becomes
+                                        // `Field {{ name: ExprStmt { expr } }}`,
+                                        // which the field-collector can't
+                                        // recognize (no direct expr-node child),
+                                        // silently dropping the field. The
+                                        // expansion was an expression to begin
+                                        // with, so strip the statement wrapper.
+                                        rowan::NodeOrToken::Node(s)
+                                            if s.kind() == SyntaxKind::ExprStmt =>
+                                        {
+                                            for inner in s.children_with_tokens() {
+                                                match inner {
+                                                    rowan::NodeOrToken::Node(m) => {
+                                                        self.expand_node_recursive(
+                                                            &m,
+                                                            depth + 1,
+                                                            builder,
+                                                            diagnostics,
+                                                        );
+                                                    }
+                                                    rowan::NodeOrToken::Token(t) => {
+                                                        let kind =
+                                                            GlyimLang::kind_to_raw(t.kind());
+                                                        builder.token(kind, t.text());
+                                                    }
+                                                }
+                                            }
+                                        }
                                         rowan::NodeOrToken::Node(s) => {
                                             self.expand_node_recursive(
                                                 &s,
