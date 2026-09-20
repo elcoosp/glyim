@@ -92,22 +92,35 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_or_expr(&mut self) {
+        let mut cp = self.checkpoint();
         self.parse_and_expr();
         while self.current_kind() == SyntaxKind::OrOr {
-            self.start_node(SyntaxKind::BinaryExpr);
+            // `start_node_at(cp, ..)` — NOT `start_node`. The BinaryExpr must
+            // begin at the *left operand*, not at the `||` token. Using
+            // `start_node` produced a node whose span started at the operator
+            // and left the LHS as a sibling (so `a || b` had an empty LHS and
+            // the enclosing expression was structurally malformed — the
+            // `ch >= 48 && ch <= 57` in net.g's `parse_u16_hex` was the first
+            // such chain to surface the bug as "unresolved name `digit`").
+            self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
             self.parse_and_expr();
             self.finish_node();
+            cp = self.checkpoint();
         }
     }
 
     pub(crate) fn parse_and_expr(&mut self) {
+        let mut cp = self.checkpoint();
         self.parse_comparison_expr();
         while self.current_kind() == SyntaxKind::AndAnd {
-            self.start_node(SyntaxKind::BinaryExpr);
+            // See `parse_or_expr` above — `start_node_at(cp, ..)` so the
+            // BinaryExpr wraps its left operand.
+            self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
             self.parse_comparison_expr();
             self.finish_node();
+            cp = self.checkpoint();
         }
     }
 
