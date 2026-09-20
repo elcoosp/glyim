@@ -1320,6 +1320,21 @@ fn process_where_clauses(
             continue;
         }
 
+        // A `where`-bound on a *type parameter* of the enclosing item
+        // (`fn f<F: FnOnce>()` / `where F: FnOnce`) is an **assumption**
+        // supplied by the caller, not something to prove at the item's own
+        // scope. Pushing it as an obligation made fulfillment fail with
+        // "no impl of `FnOnce` for `Param(F)`" for every stdlib function
+        // whose generics are `where`-bound (thread.g's
+        // `thread_trampoline<F, T>` after `where_clauses` started lowering).
+        // The bound is still recorded in `ctx.param_bounds` (by the separate
+        // `register_bounds` pass) for method dispatch; it becomes a real
+        // obligation only at the *call site*, once a concrete type
+        // substitutes the param.
+        if matches!(ctx.ty_kind(ty), glyim_type::TyKind::Param(_)) {
+            continue;
+        }
+
         for bound in &wc.bounds {
             let trait_path = &bound.trait_path;
             let trait_def_id = match tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, bound.span)

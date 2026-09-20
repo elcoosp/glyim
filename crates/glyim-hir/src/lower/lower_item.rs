@@ -49,8 +49,63 @@ pub(crate) fn collect_generic_params(
 }
 use super::{
     first_ident_text, first_ident_text_with_depth, is_type_node, lower_expr::lower_block_to_expr,
-    lower_expr::lower_expr, lower_type::lower_type_ref, next_local_def_id, node_span,
+    lower_expr::lower_expr, lower_type::lower_path_from_type, lower_type::lower_type_ref,
+    next_local_def_id, node_span,
 };
+
+/// Collect every `where` predicate on `node` into HIR `WhereClause`s.
+///
+/// The parser emits `WhereClause -> WherePredicate{ PathType ':' Bound{ PathType } (+ Bound)* }`
+/// but lowering previously discarded the entire `WhereClause` node (every
+/// item constructor passed `Vec::new()`), so the bound table never saw them
+/// and trait-method dispatch on `where`-bound params failed.
+pub(crate) fn collect_where_clauses(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+) -> Vec<crate::where_clause::WhereClause> {
+    let Some(wc) = node
+        .children()
+        .find(|c| c.kind() == SyntaxKind::WhereClause)
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for pred in wc
+        .children()
+        .filter(|c| c.kind() == SyntaxKind::WherePredicate)
+    {
+        // The predicate's self type is the first type-node child; the
+        // bounds are `Bound` nodes that each wrap a type node.
+        let mut self_ty: Option<TypeRef> = None;
+        let mut bounds: Vec<crate::where_clause::TraitBound> = Vec::new();
+        for child in pred.children() {
+            match child.kind() {
+                SyntaxKind::Bound => {
+                    if let Some(tn) = child.children().find(is_type_node) {
+                        if let Some(path) = lower_path_from_type(&tn, interner) {
+                            bounds.push(crate::where_clause::TraitBound {
+                                trait_path: path,
+                                span: node_span(&child),
+                            });
+                        }
+                    }
+                }
+                k if is_type_node(&child) && self_ty.is_none() && k == SyntaxKind::PathType => {
+                    self_ty = lower_type_ref(&child, interner);
+                }
+                _ => {}
+            }
+        }
+        if let Some(ty) = self_ty {
+            out.push(crate::where_clause::WhereClause {
+                ty,
+                bounds,
+                span: node_span(&pred),
+            });
+        }
+    }
+    out
+}
 
 pub(crate) fn collect_struct_fields(
     node: &SyntaxNode,
@@ -228,7 +283,7 @@ pub(crate) fn lower_fn_def(
             is_async,
             is_const,
             generic_params,
-            where_clauses: Vec::new(),
+            where_clauses: collect_where_clauses(node, interner),
             abi,
         }),
         visibility: Visibility::Inherited,
@@ -349,7 +404,7 @@ pub(crate) fn lower_struct_def(
             fields,
             kind,
             generic_params: collect_generic_params(node, interner),
-            where_clauses: Vec::new(),
+            where_clauses: collect_where_clauses(node, interner),
         }),
         visibility: Visibility::Inherited,
         span: node_span(node),
@@ -386,7 +441,7 @@ pub(crate) fn lower_enum_def(
         kind: ItemKind::Enum(EnumItem {
             variants,
             generic_params: collect_generic_params(node, interner),
-            where_clauses: Vec::new(),
+            where_clauses: collect_where_clauses(node, interner),
         }),
         visibility: Visibility::Inherited,
         span: node_span(node),
@@ -627,7 +682,7 @@ pub(crate) fn lower_impl_def(
             self_ty,
             methods,
             generic_params: collect_generic_params(node, interner),
-            where_clauses: Vec::new(),
+            where_clauses: collect_where_clauses(node, interner),
             associated_types,
         }),
         visibility: Visibility::Inherited,
@@ -744,7 +799,7 @@ pub(crate) fn lower_trait_def(
             associated_types,
             methods,
             generic_params: Vec::new(),
-            where_clauses: Vec::new(),
+            where_clauses: collect_where_clauses(node, interner),
         }),
         visibility: Visibility::Inherited,
         span: node_span(node),
@@ -998,7 +1053,7 @@ pub(crate) fn lower_type_alias(
         kind: ItemKind::TypeAlias(TypeAliasItem {
             ty,
             generic_params,
-            where_clauses: Vec::new(),
+            where_clauses: collect_where_clauses(node, interner),
         }),
         visibility: Visibility::Inherited,
         span: node_span(node),
