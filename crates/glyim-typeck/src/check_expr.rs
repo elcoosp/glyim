@@ -470,10 +470,35 @@ impl<'a> FnCtxt<'a> {
                         None => None,
                     }
                 };
-                // Resolve Iterator::Item for the iterable type.
-                // For now, we use a fresh inference variable to represent the item type;
-                // the actual resolution will be done by the trait solver when lowering.
-                let item_ty = self.fresh_infer_ty();
+                // Resolve `Iterator::Item` for the iterable.
+                //
+                // For a `Range`/`RangeInclusive`/`RangeFrom`/`RangeTo`/
+                // `RangeToInclusive<usize>` iterable (the `for i in 1..n`
+                // idiom, ubiquitous in the stdlib), the item type is the
+                // range's element type — `usize`. Leaving it as a fresh
+                // inference variable made `let mut j = i; ... self[j - 1]`
+                // in slice.g's `sort` fail with "index expression must have
+                // integer type": `j` was `?ty`, so `j - 1` wasn't an integer.
+                //
+                // Other iterables still get a fresh var (the trait solver
+                // resolves those during lowering).
+                let item_ty = {
+                    let range_elem = match self.ctx.ty_kind(iter_ty) {
+                        TyKind::Adt(id, substs)
+                            if id.to_raw() >= 1000 && id.to_raw() <= 1004 =>
+                        {
+                            self.ctx
+                                .substitution_args(*substs)
+                                .first()
+                                .and_then(|a| match a {
+                                    GenericArg::Ty(t) => Some(*t),
+                                    _ => None,
+                                })
+                        }
+                        _ => None,
+                    };
+                    range_elem.unwrap_or_else(|| self.fresh_infer_ty())
+                };
                 // Phase 1 (GLYIM_DESTUB_PLAN): the loop-pattern bindings (`x` in
                 // `for x in ..`) must remain in scope while the body is checked.
                 // The previous code opened+closed a scope around `check_pattern`
