@@ -38,6 +38,12 @@ pub fn std_source(name: &str) -> Option<&'static str> {
         // `io.g` calls by bare name, plus the comparison traits
         // (`Ord`/`PartialOrd`/`Eq`/`PartialEq`).
         "cmp" => Some(include_str!("../../glyim-lang-core/lib/cmp.g")),
+        // Panic-family macros (`panic!`, `assert!`, `assert_eq!`, …) live in
+        // core's `panic.g`. Without this arm they are not part of the
+        // assembled stdlib, so `panic!(..)` in e.g. time.g's
+        // `Instant::duration_since` fails to expand and its match arm is
+        // dropped ("non-exhaustive match: missing variants None").
+        "panic" => Some(include_str!("../../glyim-lang-core/lib/panic.g")),
         // Core extension-method impls. `impl str` / `impl<T> [T]` define the
         // `as_ptr`/`len`/`to_string`/`iter_mut` methods the std sources call
         // on primitive receivers. Emitted FLAT (below, via `flat_modules`).
@@ -107,6 +113,14 @@ pub fn std_source_assembled() -> String {
             "cmp",
             &["min", "max", "Ord", "PartialOrd", "Eq", "PartialEq", "Reverse"],
         ),
+        // `panic.g` (core). Defines the `panic!` / `assert!` / `assert_eq!`
+        // / `assert_ne!` / `unimplemented!` / `unreachable!` macros plus
+        // `panic_any`. Without this module in the assembled set, `panic!(..)`
+        // in time.g's `Instant::duration_since` never expanded and its
+        // match arm was dropped ("non-exhaustive match: missing variants
+        // `None`"). The macros are collected by the expander from the
+        // wrapped module; `panic_any` is re-exported at the root.
+        ("panic", &["panic_any"]),
     ];
     // Core-library sources emitted FLAT (no `pub mod` wrapper). `str.g` and
     // `slice.g` define `impl str { .. }` / `impl<T> [T] { .. }` extension
