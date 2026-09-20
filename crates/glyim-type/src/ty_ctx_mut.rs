@@ -1784,6 +1784,17 @@ impl TyCtxMut {
             name: self.resolver.intern("T"),
         }));
         self.register_deref_impl(box_ty, box_target);
+
+        // `Vec<T>: Deref<Target = [T]>` and `String: Deref<Target = str>`.
+        // The stdlib's `impl Deref for Vec<T>` lives in
+        // `glyim-lang-alloc/lib/vec.g` / `boxed.g`, neither of which is in
+        // the assembled set, so register the builtin templates directly.
+        // Without them `&Vec<u8>` cannot coerce to `&[u8]` and every
+        // `buf.as_slice()`/`&vec[..]`-style use fails to unify.
+        let vec_target = self.mk_ty(TyKind::Slice(t_var));
+        self.register_deref_impl(vec_ty, vec_target);
+        let str_target = str_ty;
+        self.register_deref_impl(string_ty, str_target);
         let unsafe_cell_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
         let unsafe_cell_ty = self.mk_ty(TyKind::Adt(unsafe_cell_id, unsafe_cell_subst));
         let ucell_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));

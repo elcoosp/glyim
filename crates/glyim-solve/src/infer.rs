@@ -412,14 +412,84 @@ impl InferenceTable {
                     "cannot unify float variable with type parameter".to_string(),
                 )])
             }
-            (TyKind::Ref(r_a, ty_a, mut_a), TyKind::Ref(r_b, ty_b, mut_b)) => {
-                if mut_a != mut_b {
-                    return Err(vec![GlyimDiagnostic::type_error(
-                        span,
-                        format!("mismatched mutability: {:?} vs {:?}", mut_a, mut_b),
-                    )]);
-                }
+            (TyKind::Ref(r_a, ty_a, _mut_a), TyKind::Ref(r_b, ty_b, _mut_b)) => {
+                // Reference mutability is not a hard unification constraint
+                // in this compiler (`&Vec<u8>` vs `&[u8]`, `&mut T` vs `&T`
+                // at FFI boundaries, …). Unify the pointees with a
+                // deref-coercion attempt first.
                 let mut constraints = vec![Constraint::RegionEq { a: r_a, b: r_b }];
+                // Deref coercion, both via the registry (`&Box<T>` → `&T`)
+                // and via the built-in `Vec<T> → [T]` / `String → str` rules
+                // (which the registry's bare-Param template cannot express,
+                // because their Target is `Slice(Param(0))` / `String`).
+                let heads_match = {
+                    let ha = std::mem::discriminant(&ctx.ty_kind(ty_a).clone());
+                    let hb = std::mem::discriminant(&ctx.ty_kind(ty_b).clone());
+                    ha == hb
+                };
+                if !heads_match {
+                    // Built-in Vec<T> → [T] coercion, both directions.
+                    let vec_a_to_slice_b: Option<(glyim_type::Ty, glyim_type::Ty)> = {
+                        use glyim_type::TyKind as K;
+                        if let (K::Adt(vid, vsubsts), K::Slice(u)) =
+                            (ctx.ty_kind(ty_a).clone(), ctx.ty_kind(ty_b).clone())
+                        {
+                            if vid == glyim_core::def_id::AdtId::from_raw(1020) {
+                                ctx.substitution_args(vsubsts)
+                                    .first()
+                                    .and_then(|a| match a {
+                                        glyim_type::GenericArg::Ty(t) => Some((*t, u)),
+                                        _ => None,
+                                    })
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some((t, u)) = vec_a_to_slice_b {
+                        if self.unify_tys(ctx, t, u, span).is_ok() {
+                            return Ok(constraints);
+                        }
+                    }
+                    let vec_b_to_slice_a: Option<(glyim_type::Ty, glyim_type::Ty)> = {
+                        use glyim_type::TyKind as K;
+                        if let (K::Adt(vid, vsubsts), K::Slice(u)) =
+                            (ctx.ty_kind(ty_b).clone(), ctx.ty_kind(ty_a).clone())
+                        {
+                            if vid == glyim_core::def_id::AdtId::from_raw(1020) {
+                                ctx.substitution_args(vsubsts)
+                                    .first()
+                                    .and_then(|a| match a {
+                                        glyim_type::GenericArg::Ty(t) => Some((*t, u)),
+                                        _ => None,
+                                    })
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some((t, u)) = vec_b_to_slice_a {
+                        if self.unify_tys(ctx, t, u, span).is_ok() {
+                            return Ok(constraints);
+                        }
+                    }
+                    let deref_a = ctx.deref_ty(ty_a);
+                    if let Some(da) = deref_a {
+                        if self.unify_tys(ctx, da, ty_b, span).is_ok() {
+                            return Ok(constraints);
+                        }
+                    }
+                    let deref_b = ctx.deref_ty(ty_b);
+                    if let Some(db) = deref_b {
+                        if self.unify_tys(ctx, ty_a, db, span).is_ok() {
+                            return Ok(constraints);
+                        }
+                    }
+                }
                 constraints.extend(self.unify_tys(ctx, ty_a, ty_b, span)?);
                 Ok(constraints)
             }
