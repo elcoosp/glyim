@@ -1073,48 +1073,93 @@ impl<'a> FnCtxt<'a> {
                     adj_recv_ty = resolved;
                 }
 
+                // Try to resolve the field on the current receiver type; if
+                // it isn't an ADT/tuple *and* has a `Deref::Target`, step
+                // through Deref (Box<T>, Rc<T>, Ref<T>, user impls) and try
+                // again. This mirrors Rust field auto-deref without
+                // unconditionally peeling (an unconditional peel would drop a
+                // legitimate outer field when the same-named field exists on
+                // both the wrapper and its pointee).
                 let field_ty = {
-                    match self.ctx.ty_kind(adj_recv_ty) {
-                    TyKind::Adt(adt_id, substs) => {
-                        self.lookup_field_ty_with_substs(*adt_id, *field, span, *substs)
-                    }
-                    TyKind::Tuple(substs) => {
-                        let idx = self.ctx.name_str(*field).parse::<usize>().ok();
-                        if let Some(idx) = idx {
-                            let args = self.ctx.substitution_args(*substs);
-                            if idx < args.len() {
-                                if let GenericArg::Ty(ty) = args[idx] {
-                                    ty
+                    let mut lookup_ty = adj_recv_ty;
+                    let mut resolved: Option<Ty> = None;
+                    let mut tries = 0;
+                    loop {
+                        let attempt = match self.ctx.ty_kind(lookup_ty) {
+                            TyKind::Adt(adt_id, substs) => {
+                                if self.ctx.field_index(*adt_id, *field).is_some() {
+                                    Some(
+                                        self.lookup_field_ty_with_substs(
+                                            *adt_id, *field, span, *substs,
+                                        ),
+                                    )
                                 } else {
-                                    Ty::ERROR
+                                    None
                                 }
-                            } else {
-                                self.diagnostics.push(GlyimDiagnostic::type_error(
-                                    span,
-                                    format!(
-                                        "tuple index {} out of bounds (length {})",
-                                        idx,
-                                        args.len()
-                                    ),
-                                ));
-                                Ty::ERROR
                             }
-                        } else {
-                            self.diagnostics.push(GlyimDiagnostic::type_error(
-                                span,
-                                format!("no field `{}` on tuple", self.ctx.name_str(*field)),
-                            ));
+                            TyKind::Tuple(substs) => {
+                                let idx = self.ctx.name_str(*field).parse::<usize>().ok();
+                                match idx {
+                                    Some(i) if i < self.ctx.substitution_args(*substs).len() => {
+                                        match self.ctx.substitution_args(*substs)[i] {
+                                            GenericArg::Ty(t) => Some(t),
+                                            _ => Some(Ty::ERROR),
+                                        }
+                                    }
+                                    _ => None,
+                                }
+                            }
+                            _ => None,
+                        };
+                        if let Some(t) = attempt {
+                            resolved = Some(t);
+                            break;
+                        }
+                        // Field missing: try one Deref step.
+                        if tries >= 10 {
+                            break;
+                        }
+                        match self.ctx.deref_ty(lookup_ty) {
+                            Some(next) if next != lookup_ty => {
+                                lookup_ty = next;
+                                tries += 1;
+                            }
+                            _ => break,
+                        }
+                    }
+                    match resolved {
+                        Some(t) => t,
+                        None => {
+                            // Diagnose against the *original* receiver type.
+                            match self.ctx.ty_kind(adj_recv_ty) {
+                                TyKind::Adt(_, _) => {
+                                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                                        span,
+                                        format!(
+                                            "no field `{}` on type",
+                                            self.ctx.name_str(*field)
+                                        ),
+                                    ));
+                                }
+                                TyKind::Tuple(_) => {
+                                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                                        span,
+                                        format!(
+                                            "no field `{}` on tuple",
+                                            self.ctx.name_str(*field)
+                                        ),
+                                    ));
+                                }
+                                _ => {
+                                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                                        span,
+                                        "field access on non-ADT, non-tuple type",
+                                    ));
+                                }
+                            }
                             Ty::ERROR
                         }
                     }
-                    _ => {
-                        self.diagnostics.push(GlyimDiagnostic::type_error(
-                            span,
-                            "field access on non-ADT, non-tuple type",
-                        ));
-                        Ty::ERROR
-                    }
-                }
                 };
 
                 (
