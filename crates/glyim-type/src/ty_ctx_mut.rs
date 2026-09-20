@@ -367,6 +367,18 @@ impl TyCtxMut {
                 let new_inner = self.subst_ty(inner, subst);
                 self.mk_ref(region, new_inner, mutability)
             }
+            TyKind::RawPtr(inner, mutability) => {
+                // Raw pointers must be substituted through their pointee. The
+                // builtin `UnsafeCell::get -> *mut T` table entry stores the
+                // return as `*mut Param(0)`; without this arm `subst_ty` fell
+                // through to the catch-all and returned the unsubstituted
+                // `*mut T`, so `self.inner.get()` on a `UnsafeCell<Inner>`
+                // field produced `*mut T` (the impl's own generic param) and
+                // later unified against `&Inner` as `T vs Inner`. This was
+                // the root cause of the entire `T vs Adt` cluster in sync.g.
+                let new_inner = self.subst_ty(inner, subst);
+                self.mk_ty(TyKind::RawPtr(new_inner, mutability))
+            }
             TyKind::Adt(adt_id, substs) => {
                 let args: Vec<GenericArg> = self.substitution_args(substs).to_vec();
                 let new_args: Vec<GenericArg> = args
