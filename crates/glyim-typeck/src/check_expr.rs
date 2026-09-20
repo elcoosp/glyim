@@ -483,6 +483,8 @@ impl<'a> FnCtxt<'a> {
                 // Other iterables still get a fresh var (the trait solver
                 // resolves those during lowering).
                 let item_ty = {
+                    // 1. Range-family iterable (`for i in 1..n`): item is the
+                    //    range's element type (`usize`).
                     let range_elem = match self.ctx.ty_kind(iter_ty) {
                         TyKind::Adt(id, substs)
                             if id.to_raw() >= 1000 && id.to_raw() <= 1004 =>
@@ -497,7 +499,30 @@ impl<'a> FnCtxt<'a> {
                         }
                         _ => None,
                     };
-                    range_elem.unwrap_or_else(|| self.fresh_infer_ty())
+                    // 2. `&[T]` / `&mut [T]` iterable: item is `&T` /
+                    //    `&mut T` respectively. slice.g's `fill` is
+                    //    `for item in self { *item = .. }` where `self` is the
+                    //    `&mut [T]` receiver, so the item must be `&mut T` for
+                    //    the `*item = ..` write to type-check. Without this the
+                    //    item was a fresh var and `*item` reported "cannot
+                    //    dereference non-pointer type" (io.g's `read_exact`
+                    //    loop, slice.g's `fill`).
+                    let ref_slice_elem = match self.ctx.ty_kind(iter_ty) {
+                        TyKind::Ref(_, inner, mutability) => {
+                            match self.ctx.ty_kind(*inner) {
+                                TyKind::Slice(elem) => Some(self.ctx.mk_ref(
+                                    glyim_type::Region::Erased,
+                                    *elem,
+                                    *mutability,
+                                )),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    };
+                    range_elem
+                        .or(ref_slice_elem)
+                        .unwrap_or_else(|| self.fresh_infer_ty())
                 };
                 // Phase 1 (GLYIM_DESTUB_PLAN): the loop-pattern bindings (`x` in
                 // `for x in ..`) must remain in scope while the body is checked.
