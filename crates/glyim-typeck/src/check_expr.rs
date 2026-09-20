@@ -176,15 +176,30 @@ impl<'a> FnCtxt<'a> {
                     };
                     (block_expr, tail_ty)
                 } else {
+                    // A block with no tail whose *last statement* is a
+                    // divergent expression (`return` / `break`) has type `!`
+                    // (never), not `()`. Without this, an
+                    // `if cond { x } else { return y; }` unifies the `x`
+                    // arm's type against `()` and reports
+                    // "expected integer type, found ()" — exactly the shape
+                    // of `let digit: u32 = if .. { .. } else { return ..; };`
+                    // in net.g's `parse_u16_hex` / `parse_u16_dec`.
+                    let diverges = stmts.last().map(|&sid| {
+                        matches!(
+                            &self.body.exprs[sid],
+                            Expr::Return { .. } | Expr::Break { .. }
+                        )
+                    }).unwrap_or(false);
+                    let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
                     let unit_expr = thir::Expr {
                         kind: thir::ExprKind::Block {
                             stmts: thir_stmts,
                             tail: None,
                         },
-                        ty: Ty::UNIT,
+                        ty,
                         span,
                     };
-                    (unit_expr, Ty::UNIT)
+                    (unit_expr, ty)
                 }
             }
 
