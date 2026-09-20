@@ -443,17 +443,59 @@ pub fn typeck_crate(
             for gp in params {
                 if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
                     for bound in bounds {
-                        if let glyim_hir::TypeRef::Path(p) = bound {
-                            if let Some(name) = p.as_name() {
-                                if let Some(local) = tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
-                                {
-                                    let tid = TraitDefId::from_raw(local.to_raw());
-                                    ctx.param_bounds
-                                        .entry(gp.name)
-                                        .or_default()
-                                        .push((name, tid));
+                        match bound {
+                            glyim_hir::TypeRef::Path(p) => {
+                                if let Some(name) = p.as_name() {
+                                    if let Some(local) =
+                                        tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
+                                    {
+                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        ctx.param_bounds
+                                            .entry(gp.name)
+                                            .or_default()
+                                            .push((name, tid));
+                                    }
                                 }
                             }
+                            glyim_hir::TypeRef::Fn { params: fp, ret } => {
+                                // Parenthesized `Fn`-trait bound
+                                // (`F: FnOnce() -> i32`). Record the bound's
+                                // shape so `Expr::Call` can type `f()` on the
+                                // param; there is no `FnDefId` for a trait
+                                // bound. `gp.span` is the type parameter's
+                                // own span (the closure has no `item`).
+                                let empty: std::collections::HashMap<Name, Ty> =
+                                    std::collections::HashMap::new();
+                                let mut infer = glyim_solve::InferenceTable::new();
+                                let mut diags = Vec::new();
+                                let mut inputs: Vec<glyim_type::GenericArg> = Vec::new();
+                                for pt in fp {
+                                    let t = tyconv::resolve_type_ref(
+                                        ctx, &mut infer, def_map, &mut diags, pt, &empty,
+                                        gp.span,
+                                    );
+                                    inputs.push(glyim_type::GenericArg::Ty(t));
+                                }
+                                let output = match ret {
+                                    Some(r) => tyconv::resolve_type_ref(
+                                        ctx, &mut infer, def_map, &mut diags, r, &empty,
+                                        gp.span,
+                                    ),
+                                    None => Ty::UNIT,
+                                };
+                                let inputs = ctx.intern_substitution(inputs);
+                                ctx.register_fn_trait_sig(
+                                    gp.name,
+                                    glyim_type::FnSig {
+                                        inputs,
+                                        output,
+                                        c_variadic: false,
+                                        unsafety: Safety::Safe,
+                                        abi: Abi::Glyim,
+                                    },
+                                );
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -465,6 +507,46 @@ pub fn typeck_crate(
                 };
                 if let Some(pname) = wc_ty_name {
                     for bound in &wc.bounds {
+                        // Parenthesized Fn bound in a where-clause
+                        // (`where F: FnOnce() -> T`): register a callable
+                        // sig under the bounded param, same as an inline
+                        // `F: FnOnce() -> T` bound. Without this, `f()` on a
+                        // where-bound param reports "call to non-function".
+                        if let Some(glyim_hir::TypeRef::Fn { params: fp, ret }) =
+                            &bound.fn_shape
+                        {
+                            let empty: std::collections::HashMap<Name, Ty> =
+                                std::collections::HashMap::new();
+                            let mut infer = glyim_solve::InferenceTable::new();
+                            let mut diags = Vec::new();
+                            let mut inputs: Vec<glyim_type::GenericArg> = Vec::new();
+                            for pt in fp {
+                                let t = tyconv::resolve_type_ref(
+                                    ctx, &mut infer, def_map, &mut diags, pt, &empty,
+                                    bound.span,
+                                );
+                                inputs.push(glyim_type::GenericArg::Ty(t));
+                            }
+                            let output = match ret {
+                                Some(r) => tyconv::resolve_type_ref(
+                                    ctx, &mut infer, def_map, &mut diags, r, &empty,
+                                    bound.span,
+                                ),
+                                None => Ty::UNIT,
+                            };
+                            let inputs = ctx.intern_substitution(inputs);
+                            ctx.register_fn_trait_sig(
+                                pname,
+                                glyim_type::FnSig {
+                                    inputs,
+                                    output,
+                                    c_variadic: false,
+                                    unsafety: Safety::Safe,
+                                    abi: Abi::Glyim,
+                                },
+                            );
+                            continue;
+                        }
                         let p = &bound.trait_path;
                         if let Some(local) = tyconv::resolve_path_to_local_def_id(ctx, def_map, p) {
                             let tid = TraitDefId::from_raw(local.to_raw());
@@ -1320,22 +1402,28 @@ fn process_where_clauses(
             continue;
         }
 
-        // A `where`-bound on a *type parameter* of the enclosing item
-        // (`fn f<F: FnOnce>()` / `where F: FnOnce`) is an **assumption**
-        // supplied by the caller, not something to prove at the item's own
-        // scope. Pushing it as an obligation made fulfillment fail with
-        // "no impl of `FnOnce` for `Param(F)`" for every stdlib function
-        // whose generics are `where`-bound (thread.g's
-        // `thread_trampoline<F, T>` after `where_clauses` started lowering).
-        // The bound is still recorded in `ctx.param_bounds` (by the separate
-        // `register_bounds` pass) for method dispatch; it becomes a real
-        // obligation only at the *call site*, once a concrete type
-        // substitutes the param.
-        if matches!(ctx.ty_kind(ty), glyim_type::TyKind::Param(_)) {
-            continue;
-        }
-
         for bound in &wc.bounds {
+            // A `Fn`-family bound on a type parameter (`fn f<F: FnOnce()>`
+            // / `where F: FnOnce()`) is supplied by the caller and only
+            // *proved* at the call site, once `F` is a concrete type. The
+            // obligation solver has no `impl FnOnce for Param(F)` to find,
+            // so pushing it here fails unconditionally — which is what
+            // produced the "trait bound not satisfied: FnOnce/Send for
+            // Param(F)" cascade in thread.g's `thread_trampoline<F, T>`
+            // once `where_clauses` started lowering. Skip the obligation
+            // for these lang traits when the self type is a type param; the
+            // bound is still recorded in `ctx.param_bounds` (separate
+            // `register_bounds` pass) so method/`()` call dispatch works.
+            // Other param bounds (`T: Clone` etc.) still produce an
+            // obligation, matching the existing where-clause diagnostics.
+            if matches!(ctx.ty_kind(ty), glyim_type::TyKind::Param(_)) {
+                let tname = ctx
+                    .name_str(bound.trait_path.as_name().unwrap_or_else(|| ctx.resolver().intern("")));
+                if matches!(tname, "Fn" | "FnMut" | "FnOnce" | "Send" | "Sync") {
+                    continue;
+                }
+            }
+
             let trait_path = &bound.trait_path;
             let trait_def_id = match tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, bound.span)
             {

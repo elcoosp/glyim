@@ -102,6 +102,11 @@ pub struct TyCtxMut {
     /// the `TraitDefId`/`LocalDefId` interner misalignment that otherwise
     /// drops the candidate).
     pub param_bounds: HashMap<Name, Vec<(Name, glyim_core::def_id::TraitDefId)>>,
+    /// Parenthesized `Fn`/`FnMut`/`FnOnce` bound signatures, keyed by the
+    /// *bounded type parameter's* name. `fn call<F: FnOnce() -> i32>(f: F)`
+    /// records `F -> fn() -> i32` here; the `Expr::Call` handler reads it to
+    /// type `f()` without a concrete `FnDefId`.
+    pub fn_trait_sigs: HashMap<Name, crate::FnSig>,
 
     /// `AdtId`s with an explicit `Drop` impl (or owning builtins). Mirrors the
     /// `drop_impls` set on the frozen `TyCtx`, consulted by `needs_drop`.
@@ -161,6 +166,7 @@ impl TyCtxMut {
             closure_adt_map: HashMap::new(),
             impl_assoc_types: HashMap::new(),
             param_bounds: HashMap::new(),
+            fn_trait_sigs: HashMap::new(),
             body_tys: HashMap::new(),
             lang_items: LangItems::default(),
             synthetic_adt_counter: 2_000_000,
@@ -283,6 +289,7 @@ impl TyCtxMut {
             closure_adt_map: ctx.closure_adt_map.clone(),
             impl_assoc_types: ctx.impl_assoc_types.clone(),
             param_bounds: HashMap::new(),
+            fn_trait_sigs: HashMap::new(),
             body_tys: ctx.body_tys.clone(),
             lang_items: ctx.lang_items.clone(),
             synthetic_adt_counter: 2_000_000,
@@ -1019,6 +1026,17 @@ impl TyCtxMut {
     /// on a generic receiver.
     pub fn param_bounds_for(&self, name: Name) -> Option<&[(Name, glyim_core::def_id::TraitDefId)]> {
         self.param_bounds.get(&name).map(|v| v.as_slice())
+    }
+
+    /// Register a parenthesized `Fn`-trait bound signature for a type param.
+    pub fn register_fn_trait_sig(&mut self, param_name: Name, sig: crate::FnSig) {
+        self.fn_trait_sigs.insert(param_name, sig);
+    }
+
+    /// Look up the registered `Fn`/`FnMut`/`FnOnce` bound signature for a
+    /// type param (used to type `f()` on `F: FnOnce(..) -> R`).
+    pub fn fn_trait_sig_for(&self, param_name: Name) -> Option<&crate::FnSig> {
+        self.fn_trait_sigs.get(&param_name)
     }
 
     /// Find a registered trait definition that declares an associated type

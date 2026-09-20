@@ -191,6 +191,7 @@ fn t01_fn_where_clone_satisfied() {
         bounds: vec![TraitBound {
             trait_path: Path::from_single(name_clone),
             span: dummy_span(),
+            fn_shape: None,
         }],
         span: dummy_span(),
     };
@@ -236,11 +237,13 @@ fn t02_supertrait_impl_satisfies_both() {
             TraitBound {
                 trait_path: Path::from_single(name_copy),
                 span: dummy_span(),
-            },
+            fn_shape: None,
+        },
             TraitBound {
                 trait_path: Path::from_single(name_clone),
                 span: dummy_span(),
-            },
+            fn_shape: None,
+        },
         ],
         span: dummy_span(),
     };
@@ -287,11 +290,13 @@ fn t04_multiple_where_bounds() {
             TraitBound {
                 trait_path: Path::from_single(name_clone),
                 span: dummy_span(),
-            },
+            fn_shape: None,
+        },
             TraitBound {
                 trait_path: Path::from_single(name_debug),
                 span: dummy_span(),
-            },
+            fn_shape: None,
+        },
         ],
         span: dummy_span(),
     };
@@ -336,6 +341,7 @@ fn t06_missing_supertrait_error() {
         bounds: vec![TraitBound {
             trait_path: Path::from_single(name_clone),
             span: dummy_span(),
+            fn_shape: None,
         }],
         span: dummy_span(),
     };
@@ -379,6 +385,7 @@ fn t07_where_bound_not_satisfied_error() {
         bounds: vec![TraitBound {
             trait_path: Path::from_single(name_copy),
             span: dummy_span(),
+            fn_shape: None,
         }],
         span: dummy_span(),
     };
@@ -490,6 +497,7 @@ fn t08_where_clause_multi_segment_path_resolves() {
         bounds: vec![TraitBound {
             trait_path,
             span: dummy_span(),
+            fn_shape: None,
         }],
         span: dummy_span(),
     };

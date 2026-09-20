@@ -769,6 +769,34 @@ impl<'a> FnCtxt<'a> {
                         );
                     }
                     TyKind::Error => (false, FnDefId::from_raw(0), true),
+                    TyKind::Param(p) => {
+                        // `f()` where `f: F` and `F: FnOnce(..) -> R`. The
+                        // bound's signature was recorded by
+                        // `register_fn_trait_sig` (register_bounds pass);
+                        // resolve args/return against it and emit the call.
+                        if let Some(sig) = self.ctx.fn_trait_sig_for(p.name).cloned() {
+                            let inputs = self.ctx.substitution_args(sig.inputs).to_vec();
+                            for (i, arg_expr) in arg_exprs.iter().enumerate() {
+                                if let Some(GenericArg::Ty(exp)) = inputs.get(i) {
+                                    if *exp != Ty::ERROR && arg_expr.ty != Ty::ERROR {
+                                        self.unify(arg_expr.ty, *exp, span);
+                                    }
+                                }
+                            }
+                            return (
+                                thir::Expr {
+                                    kind: thir::ExprKind::Call {
+                                        func: Box::new(func_expr),
+                                        args: arg_exprs,
+                                    },
+                                    ty: sig.output,
+                                    span,
+                                },
+                                sig.output,
+                            );
+                        }
+                        (false, FnDefId::from_raw(0), false)
+                    }
                     TyKind::Closure(closure_id, _) => {
                         // A closure-typed callee: the closure's registered
                         // signature carries [captures.., params..]; the call

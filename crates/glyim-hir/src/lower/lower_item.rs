@@ -83,9 +83,15 @@ pub(crate) fn collect_where_clauses(
                 SyntaxKind::Bound => {
                     if let Some(tn) = child.children().find(is_type_node) {
                         if let Some(path) = lower_path_from_type(&tn, interner) {
+                            // Preserve a parenthesized Fn shape if present.
+                            let fn_shape = match lower_type_ref(&tn, interner) {
+                                Some(f @ TypeRef::Fn { .. }) => Some(f),
+                                _ => None,
+                            };
                             bounds.push(crate::where_clause::TraitBound {
                                 trait_path: path,
                                 span: node_span(&child),
+                                fn_shape,
                             });
                         }
                     }

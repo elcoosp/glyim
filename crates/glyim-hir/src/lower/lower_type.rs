@@ -10,6 +10,53 @@ use super::is_type_node;
 pub(crate) fn lower_type_ref(node: &SyntaxNode, interner: &mut Interner) -> Option<TypeRef> {
     match node.kind() {
         SyntaxKind::PathType => {
+            // Parenthesized `Fn`-trait bound: `FnOnce(A) -> B`,
+            // `FnMut(A) -> B`, `Fn(A) -> B`. The parser emits a `PathType`
+            // containing `UsePath(<FnTrait>)`, a `GenericArgList(A)` holding
+            // the parenthesized parameter types, an `Arrow`, and a trailing
+            // `PathType(B)` for the return. `lower_path_from_type` alone
+            // treats `B` as a generic *argument* of the trait — `FnOnce<i32>`
+            // — silently dropping the arrow shape. Special-case it here into
+            // `TypeRef::Fn { params, ret }`, matching how a bare
+            // `fn(A) -> B` type node already lowers.
+            if node
+                .children_with_tokens()
+                .any(|el| el.kind() == SyntaxKind::Arrow)
+            {
+                let mut params = Vec::new();
+                let mut ret = None;
+                let mut after_arrow = false;
+                for child in node.children_with_tokens() {
+                    match child.kind() {
+                        SyntaxKind::Arrow => after_arrow = true,
+                        SyntaxKind::GenericArgList => {
+                            if let Some(n) = child.as_node() {
+                                for inner in n.children() {
+                                    if is_type_node(&inner) {
+                                        if let Some(t) = lower_type_ref(&inner, interner) {
+                                            params.push(t);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            if let Some(n) = child.as_node()
+                                && is_type_node(&n)
+                            {
+                                if after_arrow {
+                                    ret = lower_type_ref(&n, interner).map(Box::new);
+                                } else {
+                                    params.push(
+                                        lower_type_ref(&n, interner).unwrap_or(TypeRef::Error),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                return Some(TypeRef::Fn { params, ret });
+            }
             let path = lower_path_from_type(node, interner)?;
             Some(TypeRef::Path(path))
         }
