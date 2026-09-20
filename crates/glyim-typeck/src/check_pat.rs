@@ -263,9 +263,21 @@ impl<'a> FnCtxt<'a> {
                         // scrutinee's substitution. When matching
                         // `Poll<F::Output>` against `Poll::Ready(v)`, `v` must
                         // get type `F::Output`, not the bare formal `T`.
+                        // Peel reference layers off the scrutinee before
+                        // reading its ADT substitution: matching
+                        // `&Option<String>` with `Option::Some(n)` must still
+                        // project `T := String` (previously the `TyKind::Ref`
+                        // arm fell to an empty map, so `n` got the rigid
+                        // formal `Param(T)` and every method on it failed —
+                        // thread.g's `match &name { Some(n) => n.as_ptr() }`
+                        // reported "no method `as_ptr`").
+                        let (adt_expected, was_ref) = match self.ctx.ty_kind(expected_ty) {
+                            TyKind::Ref(_, inner, _) => (*inner, true),
+                            _ => (expected_ty, false),
+                        };
                         let field_ty = match field_tys.get(i).copied() {
                             Some(formal) => {
-                                let subst = match self.ctx.ty_kind(expected_ty) {
+                                let subst = match self.ctx.ty_kind(adt_expected) {
                                     TyKind::Adt(_, sub) => {
                                         let args = self.ctx.substitution_args(*sub);
                                         let mut m = std::collections::HashMap::new();
@@ -278,7 +290,19 @@ impl<'a> FnCtxt<'a> {
                                     }
                                     _ => std::collections::HashMap::new(),
                                 };
-                                self.ctx.subst_ty(formal, &subst)
+                                let resolved = self.ctx.subst_ty(formal, &subst);
+                                // Rust default binding mode: a binding inside
+                                // a pattern matched against `&Enum<..>` has
+                                // type `&Field`.
+                                if was_ref {
+                                    self.ctx.mk_ref(
+                                        glyim_type::Region::Erased,
+                                        resolved,
+                                        glyim_core::primitives::Mutability::Not,
+                                    )
+                                } else {
+                                    resolved
+                                }
                             }
                             None => expected_ty,
                         };
