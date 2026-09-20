@@ -1922,6 +1922,7 @@ impl TyCtxMut {
             // String (element u8)
             (string_id, "len", vec![], usize_ty),
             (string_id, "capacity", vec![], usize_ty),
+            (string_id, "as_str", vec![], ref_str_ty),
             (string_id, "as_ptr", vec![], u8_as_ptr),
             (string_id, "as_mut_ptr", vec![], u8_as_mut_ptr),
             (string_id, "set_len", vec![usize_ty], Ty::UNIT),
@@ -1949,6 +1950,7 @@ impl TyCtxMut {
             (slice_id, "clone", vec![], slice_t),
             // str
             (str_id, "len", vec![], usize_ty),
+            (str_id, "as_str", vec![], ref_str_ty),
             (str_id, "is_empty", vec![], bool_ty),
             (str_id, "as_ptr", vec![], u8_as_ptr),
             (str_id, "as_mut_ptr", vec![], u8_as_mut_ptr),
