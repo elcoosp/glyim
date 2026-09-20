@@ -431,6 +431,26 @@ impl InferenceTable {
             (TyKind::Bool, TyKind::Bool) => Ok(Vec::new()),
             (TyKind::Char, TyKind::Char) => Ok(Vec::new()),
             (TyKind::String, TyKind::String) => Ok(Vec::new()),
+            // `String` has two representations in this compiler:
+            //   * `TyKind::String` — what `String`/`str` resolve to via
+            //     `resolve_primitive`, and
+            //   * `Adt(1050, [u8])` — the builtin String ADT returned by
+            //     every String-returning builtin (`String::from`,
+            //     `.to_string()`, `split_host_port`'s tuple return, …).
+            // They are the same type for method/coercion purposes, so bridge
+            // them here. Without this, `TcpListener::bind(addr: &str)` in
+            // net.g unified a `String` argument against the `&str` param and
+            // reported "Adt1050<u8> vs str".
+            (TyKind::String, TyKind::Adt(id, _))
+                if id == glyim_core::def_id::AdtId::from_raw(1050) =>
+            {
+                Ok(Vec::new())
+            }
+            (TyKind::Adt(id, _), TyKind::String)
+                if id == glyim_core::def_id::AdtId::from_raw(1050) =>
+            {
+                Ok(Vec::new())
+            }
             (TyKind::Unit, TyKind::Unit) => Ok(Vec::new()),
             (TyKind::Tuple(substs_a), TyKind::Tuple(substs_b)) => {
                 let args_a = ctx.substitution_args(substs_a);
