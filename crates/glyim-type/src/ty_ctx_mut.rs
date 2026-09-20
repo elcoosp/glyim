@@ -1912,6 +1912,24 @@ impl TyCtxMut {
         // `fn(T) -> U` for the value-transforming combinators (`map`,
         // `map_or`). The output `U` is the fresh `_u_var` above, NOT the
         // receiver's `T`.
+        // `fn(E) -> U` for `Result::map_err` — transforms the error type.
+        let fn_e_to_u = {
+            let inputs = self.intern_substitution(vec![GenericArg::Ty(_e_var)]);
+            self.mk_ty(TyKind::FnPtr(crate::FnSig {
+                inputs,
+                output: _u_var,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            }))
+        };
+        // `Result<T, U>` — the output of `map_err`.
+        let result_t_u_subst = self.intern_substitution(vec![
+            GenericArg::Ty(t_var),
+            GenericArg::Ty(_u_var),
+        ]);
+        let result_t_u_ty = self.mk_ty(TyKind::Adt(result_id, result_t_u_subst));
+
         let fn_t_to_u = {
             let inputs = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
             self.mk_ty(TyKind::FnPtr(crate::FnSig {
@@ -2014,6 +2032,8 @@ impl TyCtxMut {
             // (the previous signature) unified `false: bool` with `E = Error`
             // for `Result<_, Error>::map_or(false, ..)`, which is the source
             // of the `bool vs Adt21` diagnostic family.
+            // `Result<T, E>::map_err<F, O: FnOnce(E) -> O>(self, op: O) -> Result<T, F>`
+            (result_id, "map_err", vec![fn_e_to_u], result_t_u_ty),
             (result_id, "map_or", vec![_u_var, fn_t_to_u], _u_var),
             (option_id, "unwrap", vec![], t_var),
             (option_id, "unwrap_or_else", vec![], t_var),
