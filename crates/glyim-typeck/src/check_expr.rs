@@ -221,7 +221,21 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                     UnOp::Not => {
-                        if matches!(self.ctx.ty_kind(inner_ty), TyKind::Bool | TyKind::Int(_)) {
+                        // `!` is valid on `bool` and on every integer type
+                        // (signed *and* unsigned). The check previously
+                        // allowed only `Bool | Int(_)`, so `!0o222u32` in
+                        // fs.g's `Permissions::set_readonly` reported
+                        // "cannot apply unary not to non-bool/non-int type".
+                        // `Infer(Int)` / `Infer(Ty)` cover a literal whose
+                        // integer type is still being inferred.
+                        if matches!(
+                            self.ctx.ty_kind(inner_ty),
+                            TyKind::Bool
+                                | TyKind::Int(_)
+                                | TyKind::Uint(_)
+                                | TyKind::Infer(InferVar::Int(_))
+                                | TyKind::Infer(InferVar::Ty(_))
+                        ) {
                             inner_ty
                         } else {
                             self.diagnostics.push(GlyimDiagnostic::type_error(
