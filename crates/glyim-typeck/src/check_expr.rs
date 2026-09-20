@@ -216,16 +216,25 @@ impl<'a> FnCtxt<'a> {
                             Ty::ERROR
                         }
                     }
-                    UnOp::Deref => match self.ctx.ty_kind(inner_ty) {
-                        TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
-                        _ => {
-                            self.diagnostics.push(GlyimDiagnostic::type_error(
-                                span,
-                                "cannot dereference non-pointer type",
-                            ));
-                            Ty::ERROR
+                    UnOp::Deref => {
+                        // Structural derefs (`&T`, `*T`) plus any registered
+                        // `Deref` impl (Box<T>, Rc<T>, Ref<T>, …). Previously
+                        // this only matched `Ref`/`RawPtr`, so `*boxed_value`
+                        // on a `Box<ResultSlot<T>>` reported "cannot
+                        // dereference non-pointer type" even though Box's
+                        // `Deref` is registered — the same registry `deref_ty`
+                        // already consults for method autoref.
+                        match self.ctx.deref_ty(inner_ty) {
+                            Some(pointee) => pointee,
+                            None => {
+                                self.diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    "cannot dereference non-pointer type",
+                                ));
+                                Ty::ERROR
+                            }
                         }
-                    },
+                    }
                 };
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::Unary {

@@ -1750,6 +1750,16 @@ impl TyCtxMut {
         let str_find_result = self.mk_ty(TyKind::Adt(option_id, str_find_subst));
         let box_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
         let box_ty = self.mk_ty(TyKind::Adt(box_id, box_subst));
+        // The compiler's builtin `Box<T>` is a `Deref` type even though the
+        // stdlib's `impl<T> Deref for Box<T>` lives in `glyim-lang-alloc/lib/
+        // boxed.g`, which is not part of the assembled set. Register the
+        // Deref template directly so `*boxed_value` and Box autoref resolve.
+        // `Box<T>::Target = T`, and `T` is `Param(0)` here.
+        let box_target = self.mk_ty(TyKind::Param(ParamTy {
+            index: 0,
+            name: self.resolver.intern("T"),
+        }));
+        self.register_deref_impl(box_ty, box_target);
         let unsafe_cell_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
         let unsafe_cell_ty = self.mk_ty(TyKind::Adt(unsafe_cell_id, unsafe_cell_subst));
         let ucell_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
