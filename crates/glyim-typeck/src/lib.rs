@@ -256,7 +256,12 @@ pub fn typeck_crate(
 
     let local_krate = def_map.krate;
 
-    let mut next_local_def_id: u32 = 0;
+    // Seed *above* the def-map's id range. Impl-method bodies (checked
+    // here) allocate fresh `LocalDefId`s; if the counter starts at 0 it
+    // collides with the def-map's ids — an impl method that got id 51
+    // previously overwrote `io::copy`'s `FnSig` (also id 51), making
+    // `io::copy(..)` type as `Adt63` (OpenOptions).
+    let mut next_local_def_id: u32 = def_map.max_local_def_id;
     let _alloc_local_def_id = |counter: &mut u32, diags: &mut Vec<GlyimDiagnostic>| -> LocalDefId {
         let id = *counter;
         *counter += 1;

@@ -52,6 +52,12 @@ pub struct CrateDefMap {
     /// declaring enum items so value paths like `Enum::Variant` / `Variant`
     /// resolve to a concrete `(AdtId, VariantIdx)`.
     pub variant_map: HashMap<LocalDefId, (LocalDefId, VariantIdx)>,
+    /// One past the highest `LocalDefId` the def-map assigned. Impl-method
+    /// bodies (checked later by typeck) must allocate ids *above* this so
+    /// they cannot collide with the def-map's ids — an impl method that got
+    /// id 51 previously overwrote `io::copy`'s `FnSig` (also id 51),
+    /// making `io::copy(..)` type as `Adt63` (OpenOptions).
+    pub max_local_def_id: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -559,6 +565,7 @@ pub fn build_def_map(
         krate,
         interner,
         variant_map,
+        max_local_def_id: def_counter,
     };
     (def_map, diagnostics)
 }
