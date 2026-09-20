@@ -1693,6 +1693,12 @@ impl TyCtxMut {
         reg_trait(2014, "Iterator");
         reg_trait(2015, "IntoIterator");
         reg_trait(2016, "Default");
+        // `Any` (thread.g's `Result<T, Box<dyn Any + Send>>`). Unlike
+        // `Send`/`Sync` it is not declared in the assembled stdlib, so it
+        // must be a builtin trait for `dyn Any` / `dyn Any + Send` to
+        // resolve. (The prior commit's message mentioned this but the diff
+        // only captured the str-table change; the registration was lost.)
+        reg_trait(2017, "Any");
     }
 
     /// Populate the builtin inherent-method table (`builtin_method_fns`) for the
