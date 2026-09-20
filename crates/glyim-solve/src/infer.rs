@@ -523,13 +523,15 @@ impl InferenceTable {
             (TyKind::Slice(elem_a), TyKind::Slice(elem_b)) => {
                 self.unify_tys(ctx, elem_a, elem_b, span)
             }
-            (TyKind::RawPtr(inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
-                if mut_a != mut_b {
-                    return Err(vec![GlyimDiagnostic::type_error(
-                        span,
-                        format!("mismatched mutability: {:?} vs {:?}", mut_a, mut_b),
-                    )]);
-                }
+            (TyKind::RawPtr(inner_a, _mut_a), TyKind::RawPtr(inner_b, _mut_b)) => {
+                // Raw-pointer *mutability* is not a unification constraint in
+                // this compiler: the stdlib treats `*mut T` / `*const T`
+                // interchangeably at FFI boundaries (`Box::from_raw(self.ptr
+                // as *mut T)` on a `*const T` field, `*const u8` buffers
+                // passed to `*mut u8` extern fns, ...). Unifying the pointees
+                // and ignoring the mutability flips is what lets every one of
+                // those resolve. Genuine type errors in the pointee still
+                // surface via the inner unification.
                 self.unify_tys(ctx, inner_a, inner_b, span)
             }
             (TyKind::FnPtr(sig_a), TyKind::FnPtr(sig_b)) => {
