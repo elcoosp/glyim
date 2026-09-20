@@ -306,7 +306,28 @@ pub(crate) fn lower_param(
     let ty = node
         .children()
         .find(is_type_node)
-        .and_then(|n| lower_type_ref(&n, interner));
+        .and_then(|n| lower_type_ref(&n, interner))
+        .map(|t| {
+            // `&mut self` parses as `Param { And, KwMut, RefType(self) }` —
+            // the `mut` token is a SIBLING of `RefType`, not a child, so
+            // `lower_type_ref`'s `RefType` arm (which scans *its own*
+            // children for `KwMut`) produced `Ref { mutability: Not }`.
+            // That typed every `&mut self` receiver as `&Self`, so
+            // `self.x = ..` / `self.field_method(..)` reported
+            // "mismatched mutability: Not vs Mut".
+            if let TypeRef::Ref { inner, mutability } = t {
+                let has_mut = node.children_with_tokens().any(
+                    |c| matches!(&c, glyim_syntax::SyntaxElement::Token(t)
+                        if t.kind() == SyntaxKind::KwMut),
+                );
+                TypeRef::Ref {
+                    inner,
+                    mutability: if has_mut { Mutability::Mut } else { mutability },
+                }
+            } else {
+                t
+            }
+        });
     let pat = if name_text == "_" {
         Pat::Wild
     } else {
