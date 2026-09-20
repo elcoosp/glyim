@@ -1970,6 +1970,16 @@ impl TyCtxMut {
             (str_id, "len", vec![], usize_ty),
             (str_id, "as_str", vec![], ref_str_ty),
             (str_id, "is_empty", vec![], bool_ty),
+            // `String` (capital) resolves to `TyKind::String` in this
+            // compiler, which routes method lookup to the `str_id` (1061)
+            // table rather than the `string_id` (1050) table. Mirror the
+            // mutating String methods here so `s.push(b)` / `s.push_str(..)`
+            // resolve on a `String` value.
+            (str_id, "push", vec![u8_ty], Ty::UNIT),
+            (str_id, "push_str", vec![ref_str_ty], Ty::UNIT),
+            (str_id, "set_len", vec![usize_ty], Ty::UNIT),
+            (str_id, "capacity", vec![], usize_ty),
+            (str_id, "clear", vec![], Ty::UNIT),
             (str_id, "as_ptr", vec![], u8_as_ptr),
             (str_id, "as_mut_ptr", vec![], u8_as_mut_ptr),
             (str_id, "as_bytes", vec![], self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not))),
