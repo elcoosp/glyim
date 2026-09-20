@@ -1051,6 +1051,18 @@ impl<'a> FnCtxt<'a> {
                 while let TyKind::Ref(_, inner, _) = self.ctx.ty_kind(adj_recv_ty) {
                     adj_recv_ty = *inner;
                 }
+                // Resolve any inference variable at the head of the receiver
+                // type before the ADT/tuple field match. The MethodCall arm
+                // returns `*mut ?v` for `self.inner.get()` where the impl
+                // `Cell<T>::get -> *mut T` bound `?v := Inner` during method
+                // resolution — but `?v` is stored as `TyKind::Infer`, which
+                // matches neither `Adt` nor `Tuple`, so `(*…).x` fell into the
+                // "field access on non-ADT" arm. Shallow-resolve first so the
+                // bound concrete type is what the match sees.
+                let resolved = self.infer.resolve_ty_shallow(self.ctx, adj_recv_ty);
+                if resolved != adj_recv_ty {
+                    adj_recv_ty = resolved;
+                }
 
                 let field_ty = {
                     match self.ctx.ty_kind(adj_recv_ty) {
