@@ -86,6 +86,21 @@ impl<'a> FnCtxt<'a> {
             //     still resolves correctly below via scoped path resolution
             //     (step 0), which is unambiguous.
             let bare_name = self.ctx.name_str(name);
+            // `drop(x)` — the stdlib calls the builtin drop function
+            // directly (`sync.g`'s `Condvar::wait` does `drop(mutex_guard)`).
+            // It has no source definition, so resolve it here to a synthetic
+            // unit-returning fn value rather than an unresolved-name error.
+            if bare_name == "drop" {
+                let substs = self.ctx.intern_substitution(vec![]);
+                let fn_id = FnDefId::from_raw(u32::MAX - 4);
+                let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_id, substs));
+                let thir_expr = thir::Expr {
+                    kind: thir::ExprKind::FnRef(fn_id),
+                    ty: fn_ty,
+                    span,
+                };
+                return (thir_expr, fn_ty);
+            }
             let bare_safe = matches!(
                 bare_name,
                 "None" | "Some" | "Ok" | "Err" | "Less" | "Equal" | "Greater"
