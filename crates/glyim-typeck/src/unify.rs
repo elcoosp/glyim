@@ -311,7 +311,14 @@ impl<'a> FnCtxt<'a> {
                 }],
                 kind: glyim_core::path::PathKind::Plain,
             };
-            let adt_ty_resolved = crate::tyconv::resolve_name_to_adt_ty(
+            // Try strict ADT resolution first; fall back to the broader
+            // `resolve_path_type` only when it fails. The fallback lets a
+            // primitive first segment like `str::from_utf8` resolve to
+            // `TyKind::String` (the closure below then maps it to the
+            // synthetic `str` table id 1061). Doing the fallback *only on
+            // `None`* keeps all previously-working cases — e.g. `extern "C"`
+            // blocks and bare path resolution — on the strict path.
+            let adt_ty_resolved = match crate::tyconv::resolve_name_to_adt_ty(
                 self.ctx,
                 self.infer,
                 self.def_map,
@@ -319,14 +326,32 @@ impl<'a> FnCtxt<'a> {
                 &adt_path,
                 &std::collections::HashMap::new(),
                 span,
-            );
-            if let Some((adt_id, adt_ty)) = adt_ty_resolved.and_then(|ty| {
-                if let glyim_type::TyKind::Adt(id, _) = self.ctx.ty_kind(ty) {
-                    Some((*id, ty))
-                } else {
-                    None
-                }
-            }) {
+            ) {
+                Some(t) => t,
+                None => crate::tyconv::resolve_path_type(
+                    self.ctx,
+                    self.infer,
+                    self.def_map,
+                    &mut Vec::new(),
+                    &adt_path,
+                    &std::collections::HashMap::new(),
+                    span,
+                ),
+            };
+            let adt_lookup: Option<(glyim_core::def_id::AdtId, glyim_type::Ty)> =
+                match self.ctx.ty_kind(adt_ty_resolved) {
+                    glyim_type::TyKind::Adt(id, _) => Some((*id, adt_ty_resolved)),
+                    // `str::from_utf8(..)` — the first segment `str` resolves
+                    // to `TyKind::String` (via `resolve_primitive`), not an
+                    // Adt, but the builtin table stores the primitive `str`
+                    // methods under the synthetic id 1061. Route it there so
+                    // path-form associated fns on `str` resolve.
+                    glyim_type::TyKind::String => {
+                        Some((glyim_core::def_id::AdtId::from_raw(1061), adt_ty_resolved))
+                    }
+                    _ => None,
+                };
+            if let Some((adt_id, adt_ty)) = adt_lookup {
                 if let Some((fn_id, sig)) = self.ctx.lookup_builtin_method(adt_id, path.segments[1].name) {
                     // Instantiate the output type against the *callee* ADT's own
                     // generic substitution (so `Vec::new` yields `Vec<T>` with
