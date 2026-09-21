@@ -36,6 +36,10 @@
 // `cargo clippy` so the sweep is tracked and ratcheted per-PR without
 // breaking the build.
 #![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+// Test code routinely asserts with `unwrap`/`expect`/`panic`. Keep
+// the production-code opt-in strict (warn) but allow the same lints
+// inside `#[cfg(test)]` modules so test helpers stay concise.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
