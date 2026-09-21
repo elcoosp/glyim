@@ -250,6 +250,13 @@ macro_rules! glyim_ffi_fn {
         fn $name:ident(fd: i32, buf: *mut u8, buf_len: usize) -> isize
         $op:ident
      ) => {
+        /// Read into a caller-provided buffer from the file descriptor `fd`.
+        ///
+        /// # Safety
+        ///
+        /// The caller must ensure that `buf` (if non-null) is valid for writes
+        /// of `buf_len` bytes for the duration of the call. A null `buf` is
+        /// handled by returning `FS_EIO`.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(fd: i32, buf: *mut u8, buf_len: usize) -> isize {
             if buf.is_null() {
@@ -275,6 +282,13 @@ macro_rules! glyim_ffi_fn {
         fn $name:ident(fd: i32, buf: *const u8, buf_len: usize) -> isize
         $op:ident
      ) => {
+        /// Write the caller-provided buffer to the file descriptor `fd`.
+        ///
+        /// # Safety
+        ///
+        /// The caller must ensure that `buf` is valid for reads of `buf_len`
+        /// bytes for the duration of the call. A null `buf` with `buf_len > 0`
+        /// is handled by returning `FS_EIO`.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(fd: i32, buf: *const u8, buf_len: usize) -> isize {
             if buf.is_null() && buf_len > 0 {
