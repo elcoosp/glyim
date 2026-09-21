@@ -108,14 +108,14 @@ impl Reactor {
         // Poll + waker are created here so `Drop` can interrupt the background
         // thread's blocking `poll.poll(.., None)` during shutdown.
         let poll = mio::Poll::new()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         let waker = mio::Waker::new(poll.registry(), Token(usize::MAX))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
 
         let handle = std::thread::Builder::new()
             .name("glyim-io-reactor".to_string())
             .spawn(move || run_reactor(rx, slots_bg, sources_bg, poll))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
 
         Ok(Arc::new(Reactor {
             tx,
@@ -151,7 +151,7 @@ impl Reactor {
                 source: Box::new(source),
                 interest,
             })
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "reactor closed"))?;
+            .map_err(|_| std::io::Error::other("reactor closed"))?;
         if let Some(w) = &self.wake {
             let _ = w.wake();
         }

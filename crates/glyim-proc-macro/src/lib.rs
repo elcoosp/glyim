@@ -166,11 +166,10 @@ pub extern "C" fn pm_ts_push(stream: *mut PmTokenStream, token: PmToken) {
 pub extern "C" fn pm_ts_free(stream: *mut PmTokenStream) {
     unsafe {
         let s = &mut *stream;
-        if !s.ptr.is_null() && s.cap > 0 {
-            if let Ok(layout) = std::alloc::Layout::array::<PmToken>(s.cap as usize) {
+        if !s.ptr.is_null() && s.cap > 0
+            && let Ok(layout) = std::alloc::Layout::array::<PmToken>(s.cap as usize) {
                 std::alloc::dealloc(s.ptr as *mut u8, layout);
             }
-        }
         s.ptr = ptr::null_mut();
         s.len = 0;
         s.cap = 0;

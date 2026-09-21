@@ -974,10 +974,7 @@ pub(crate) fn resolve_name_to_adt_ty(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Option<Ty> {
-    let name = match path.as_name() {
-        Some(n) => n,
-        None => return None,
-    };
+    let name = path.as_name()?;
 
     // stdlib-completion: expand a registered type alias BEFORE falling back to
     // the builtin/user ADT table. e.g. `type Result<T> = Result<T, Error>`
@@ -1010,10 +1007,7 @@ pub(crate) fn resolve_name_to_adt_ty(
     // generated types (async future structs) that are not in the def map.
     let adt_id = match path.as_name().and_then(|name| resolve_name_to_def_id(def_map, name)) {
         Some(def_id) => AdtId::from_raw(def_id.local_id.to_raw()),
-        None => match path.as_name().and_then(|name| ctx.adt_id_by_name(name)) {
-            Some(id) => id,
-            None => return None,
-        },
+        None => path.as_name().and_then(|name| ctx.adt_id_by_name(name))?,
     };
     let arity = ctx.adt_generic_arity(adt_id);
 

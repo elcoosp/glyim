@@ -292,10 +292,9 @@ fn evaluate_rvalue_to_const(rv: &Rvalue, locals: &BlockMap, ctx: &TyCtx, ty: Ty)
             // single `MirConstKind::Aggregate`.
             let mut field_consts = Vec::with_capacity(operands.len());
             for op in operands {
-                if let Some(c) = operand_to_const(op, locals) {
+                {
+                    let c = operand_to_const(op, locals)?;
                     field_consts.push(c);
-                } else {
-                    return None;
                 }
             }
             match kind {

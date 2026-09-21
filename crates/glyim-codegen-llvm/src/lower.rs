@@ -542,7 +542,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             // `idx` (enums lay the value field out at a fixed offset
                             // regardless of which variant is active, so a bare `Field`
                             // on the enum local still reads the right slot).
-                            let raw = if let Some(adt_def) = self.ty_ctx.adt_def(*adt_id) {
+                            
+                            if let Some(adt_def) = self.ty_ctx.adt_def(*adt_id) {
                                 let struct_field = adt_def
                                     .fields
                                     .as_slice()
@@ -584,8 +585,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 }
                             } else {
                                 self.ty_ctx.field_ty(*adt_id, field_idx)
-                            };
-                            raw
+                            }
                         }
                         _ => Ty::ERROR,
                     };

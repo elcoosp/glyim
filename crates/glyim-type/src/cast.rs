@@ -64,16 +64,14 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
                     {
                         return true;
                     }
-                    if adt.kind == AdtKind::Struct && adt.fields.len() == 1 {
-                        if let Some(f) = adt.fields.iter().next() {
-                            if matches!(
+                    if adt.kind == AdtKind::Struct && adt.fields.len() == 1
+                        && let Some(f) = adt.fields.iter().next()
+                            && matches!(
                                 ctx.ty_kind(f.ty),
                                 Int(_) | Uint(_) | Char | Bool
                             ) {
                                 return true;
                             }
-                        }
-                    }
                     false
                 }
                 None => false,

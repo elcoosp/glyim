@@ -102,10 +102,9 @@ fn extract_pub_name(line: &str) -> Option<String> {
         ("struct", r)
     } else if let Some(r) = trimmed.strip_prefix("pub enum ") {
         ("enum", r)
-    } else if let Some(r) = trimmed.strip_prefix("pub trait ") {
-        ("trait", r)
     } else {
-        return None;
+        let r = trimmed.strip_prefix("pub trait ")?;
+        ("trait", r)
     };
 
     match after_pub.0 {

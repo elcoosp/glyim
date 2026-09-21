@@ -2187,10 +2187,7 @@ fn desugar_loop_async_fn(
     let fn_name = item.name;
     let original_params = fn_item.params.clone();
     let return_ty = fn_item.return_ty.clone();
-    let original_body_id = match fn_item.body {
-        Some(b) => b,
-        None => return None,
-    };
+    let original_body_id = fn_item.body?;
     let original_body_owner = hir.bodies[original_body_id].owner;
 
     let interner = &hir.interner;

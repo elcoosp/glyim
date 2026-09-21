@@ -158,7 +158,7 @@ impl<'a> MonoCtx<'a> {
             self.scan_terminator(&block.terminator.kind, body);
         }
 
-        let pending_drops: Vec<_> = self.drop_locals.drain(..).collect();
+        let pending_drops: Vec<_> = std::mem::take(&mut self.drop_locals);
         for local_idx in pending_drops {
             let local_raw = local_idx.to_raw() as usize;
             if let Some(local_decl) = body

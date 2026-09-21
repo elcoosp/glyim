@@ -42,13 +42,13 @@ pub(crate) fn lower_type_ref(node: &SyntaxNode, interner: &mut Interner) -> Opti
                         }
                         _ => {
                             if let Some(n) = child.as_node()
-                                && is_type_node(&n)
+                                && is_type_node(n)
                             {
                                 if after_arrow {
-                                    ret = lower_type_ref(&n, interner).map(Box::new);
+                                    ret = lower_type_ref(n, interner).map(Box::new);
                                 } else {
                                     params.push(
-                                        lower_type_ref(&n, interner).unwrap_or(TypeRef::Error),
+                                        lower_type_ref(n, interner).unwrap_or(TypeRef::Error),
                                     );
                                 }
                             }
@@ -94,8 +94,8 @@ pub(crate) fn lower_type_ref(node: &SyntaxNode, interner: &mut Interner) -> Opti
                     continue;
                 }
                 if let Some(n) = child.as_node() {
-                    if is_type_node(&n) {
-                        if let Some(ty) = lower_type_ref(&n, interner) {
+                    if is_type_node(n) {
+                        if let Some(ty) = lower_type_ref(n, interner) {
                             if after_arrow {
                                 ret = Some(Box::new(ty));
                             } else {

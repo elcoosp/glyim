@@ -979,7 +979,7 @@ impl TyCtxMut {
             _ => return map,
         };
         // Find the impl registered for this trait whose `Self` ADT matches.
-        for ((impl_self, tid), _) in self.impl_assoc_types.iter() {
+        for (impl_self, tid) in self.impl_assoc_types.keys() {
             if *tid != trait_def_id {
                 continue;
             }

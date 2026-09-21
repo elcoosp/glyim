@@ -50,8 +50,8 @@ pub fn discover_mono_roots(
                     items.push(mono_item);
                 }
             }
-            ItemKind::Static(_static_item) => {
-                if has_attr_in_span(root, item.span, "used") {
+            ItemKind::Static(_static_item)
+                if has_attr_in_span(root, item.span, "used") => {
                     let local_def_id = resolve_root_id(item.name)
                         .unwrap_or_else(|| LocalDefId::from_raw(item.id.to_raw()));
                     let static_def_id = StaticDefId::from_raw(local_def_id.to_raw());
@@ -61,7 +61,6 @@ pub fn discover_mono_roots(
                     };
                     items.push(mono_item);
                 }
-            }
             _ => {}
         }
     }

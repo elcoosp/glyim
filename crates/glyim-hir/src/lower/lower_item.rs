@@ -479,7 +479,7 @@ pub(crate) fn lower_variant(node: &SyntaxNode, interner: &mut Interner) -> Optio
     let vname_str = first_ident_text(node)?;
     let vname = interner.intern(&vname_str);
     let mut fields = Vec::new();
-    let kind;
+    
     let mut in_paren = false;
     let mut has_tuple = false;
     for child in node.children_with_tokens() {
@@ -524,13 +524,13 @@ pub(crate) fn lower_variant(node: &SyntaxNode, interner: &mut Interner) -> Optio
             }
         }
     }
-    if has_record {
-        kind = StructKind::Record;
+    let kind = if has_record {
+        StructKind::Record
     } else if has_tuple {
-        kind = StructKind::Tuple;
+        StructKind::Tuple
     } else {
-        kind = StructKind::Unit;
-    }
+        StructKind::Unit
+    };
     Some(Variant {
         name: vname,
         fields,

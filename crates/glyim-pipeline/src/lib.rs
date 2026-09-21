@@ -292,8 +292,8 @@ impl Pipeline {
                 let mut alias_infer = InferenceTable::new();
                 let mut alias_diags = Vec::new();
                 for (_id, item) in hir.items.iter_enumerated() {
-                    if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind {
-                        if let Some(rhs) = &alias.ty {
+                    if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
+                        && let Some(rhs) = &alias.ty {
                             let mut param_map: HashMap<Name, Ty> = HashMap::new();
                             let mut params: Vec<(u32, Name)> = Vec::new();
                             for (i, gp) in alias.generic_params.iter().enumerate() {
@@ -314,7 +314,6 @@ impl Pipeline {
                             );
                             ty_ctx_mut.register_type_alias(item.name, params, template);
                         }
-                    }
                 }
             }
 
@@ -625,8 +624,8 @@ pub fn compile_file_to_mir(
         let mut alias_infer = InferenceTable::new();
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind {
-                if let Some(rhs) = &alias.ty {
+            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
+                && let Some(rhs) = &alias.ty {
                     let mut param_map: HashMap<Name, Ty> = HashMap::new();
                     let mut params: Vec<(u32, Name)> = Vec::new();
                     for (i, gp) in alias.generic_params.iter().enumerate() {
@@ -647,7 +646,6 @@ pub fn compile_file_to_mir(
                     );
                     ty_ctx_mut.register_type_alias(item.name, params, template);
                 }
-            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -686,7 +684,7 @@ pub fn compile_file_to_mir(
     {
         let frozen: &glyim_type::TyCtx = &ty_ctx_guard;
         let mut elaborator = frozen.to_mut();
-        for (_owner, body_arc) in bodies.iter_mut() {
+        for body_arc in bodies.values_mut() {
             let mut body = (**body_arc).clone();
             glyim_opt::elaborate_drops(&mut elaborator, &mut body);
             *body_arc = Arc::new(body);
@@ -761,8 +759,8 @@ pub fn emit_mir(
         let mut alias_infer = InferenceTable::new();
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind {
-                if let Some(rhs) = &alias.ty {
+            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
+                && let Some(rhs) = &alias.ty {
                     let mut param_map: HashMap<Name, Ty> = HashMap::new();
                     let mut params: Vec<(u32, Name)> = Vec::new();
                     for (i, gp) in alias.generic_params.iter().enumerate() {
@@ -783,7 +781,6 @@ pub fn emit_mir(
                     );
                     ty_ctx_mut.register_type_alias(item.name, params, template);
                 }
-            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -879,8 +876,8 @@ pub fn emit_llvm_ir(
         let mut alias_infer = InferenceTable::new();
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind {
-                if let Some(rhs) = &alias.ty {
+            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
+                && let Some(rhs) = &alias.ty {
                     let mut param_map: HashMap<Name, Ty> = HashMap::new();
                     let mut params: Vec<(u32, Name)> = Vec::new();
                     for (i, gp) in alias.generic_params.iter().enumerate() {
@@ -901,7 +898,6 @@ pub fn emit_llvm_ir(
                     );
                     ty_ctx_mut.register_type_alias(item.name, params, template);
                 }
-            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -1008,8 +1004,8 @@ pub fn emit_asm(
         let mut alias_infer = InferenceTable::new();
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind {
-                if let Some(rhs) = &alias.ty {
+            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
+                && let Some(rhs) = &alias.ty {
                     let mut param_map: HashMap<Name, Ty> = HashMap::new();
                     let mut params: Vec<(u32, Name)> = Vec::new();
                     for (i, gp) in alias.generic_params.iter().enumerate() {
@@ -1030,7 +1026,6 @@ pub fn emit_asm(
                     );
                     ty_ctx_mut.register_type_alias(item.name, params, template);
                 }
-            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);

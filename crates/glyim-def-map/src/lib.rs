@@ -316,10 +316,9 @@ fn resolve_module_path_for_modules(
         PathKind::Super(n) => {
             let mut module = current_module;
             for _ in 0..n {
-                if let Some(parent) = modules[module].parent {
+                {
+                    let parent = modules[module].parent?;
                     module = parent;
-                } else {
-                    return None;
                 }
             }
             current_module = module;
@@ -356,9 +355,9 @@ fn resolve_module_path_for_modules(
                 }
                 ancestor = modules[parent].parent;
             }
-            match found {
-                Some(id) => current_module = id,
-                None => return None,
+            {
+                let id = found?;
+                current_module = id
             }
         } else {
             return None;

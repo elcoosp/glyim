@@ -113,19 +113,16 @@ fn align_impl_param_subst(
         return;
     }
     for (fa, aa) in formal_args.iter().zip(actual_args.iter()) {
-        match fa {
-            glyim_type::GenericArg::Ty(ft) => {
-                if let glyim_type::TyKind::Param(p) = ctx.ty_kind(*ft) {
-                    subst.insert(p.index, aa.clone());
-                } else {
-                    // Recurse into nested ADT args (e.g. Box<Vec<T>>).
-                    align_impl_param_subst(ctx, *ft, match aa {
-                        glyim_type::GenericArg::Ty(t) => *t,
-                        _ => continue,
-                    }, subst);
-                }
+        if let glyim_type::GenericArg::Ty(ft) = fa {
+            if let glyim_type::TyKind::Param(p) = ctx.ty_kind(*ft) {
+                subst.insert(p.index, aa.clone());
+            } else {
+                // Recurse into nested ADT args (e.g. Box<Vec<T>>).
+                align_impl_param_subst(ctx, *ft, match aa {
+                    glyim_type::GenericArg::Ty(t) => *t,
+                    _ => continue,
+                }, subst);
             }
-            _ => {}
         }
     }
 }
@@ -959,7 +956,7 @@ impl<'a> FnCtxt<'a> {
                                     // param and unification against the caller's
                                     // concrete type fails (mismatched types: T vs i32).
                                     align_impl_param_subst(
-                                        &self.ctx,
+                                        self.ctx,
                                         *param_ty,
                                         arg_expr.ty,
                                         &mut subst,
@@ -1343,7 +1340,7 @@ impl<'a> FnCtxt<'a> {
                     }
                 }
                 
-                let (elem_ty, is_str, _is_ref) = match get_index_info(self.ctx, base_ty, span, &mut self.diagnostics) {
+                let (elem_ty, is_str, _is_ref) = match get_index_info(self.ctx, base_ty, span, self.diagnostics) {
                     Some(info) => info,
                     None => return (thir::Expr::err(span), Ty::ERROR),
                 };
@@ -2113,10 +2110,7 @@ impl<'a> FnCtxt<'a> {
         }
 
         let adt_id = lookup_id?;
-        let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
-            Some(x) => x,
-            None => return None,
-        };
+        let (fn_id, sig) = self.ctx.lookup_builtin_method(adt_id, method_name)?;
 
         // Build the substitution for the method's `Param(i)` placeholders:
         // for an ADT receiver, `i` maps to the receiver's generic argument `i`;

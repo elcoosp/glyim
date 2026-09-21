@@ -256,11 +256,10 @@ pub(crate) fn lower_pat(
                             fields.push((name, binding_id));
                         }
                     }
-                    glyim_syntax::SyntaxElement::Token(t) => {
-                        if t.kind() == SyntaxKind::DotDot {
+                    glyim_syntax::SyntaxElement::Token(t)
+                        if t.kind() == SyntaxKind::DotDot => {
                             rest = true;
                         }
-                    }
                     _ => {}
                 }
             }

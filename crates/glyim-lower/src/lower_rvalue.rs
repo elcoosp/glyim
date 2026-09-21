@@ -902,7 +902,7 @@ impl<'a> MirBuilder<'a> {
                 // codegen follow-up (tracked as ISSUE-0007-adjacent); the
                 // stdlib-compile probe only exercises typeck, so the identity
                 // lowering here is sufficient to keep the pipeline green.
-                return self.lower_expr_to_rvalue(inner);
+                self.lower_expr_to_rvalue(inner)
             }
 
             thir::ExprKind::DynamicCall {
@@ -971,12 +971,12 @@ impl<'a> MirBuilder<'a> {
     /// locals 1:1 with `LocalVarId`.
     fn local_for_var(&self, var_id: thir::LocalVarId) -> LocalIdx {
         let hit = self.local_var_map.get(&var_id);
-        let local = if let Some(&local) = hit {
+        
+        if let Some(&local) = hit {
             local
         } else {
             LocalIdx::from_raw(var_id.to_raw())
-        };
-        local
+        }
     }
     pub fn lower_expr_to_operand(&mut self, expr: &thir::Expr) -> glyim_mir::Operand {
         match &expr.kind {
