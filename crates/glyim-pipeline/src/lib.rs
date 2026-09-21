@@ -450,7 +450,11 @@ impl Pipeline {
             // / pathological mono-set sizes surface as diagnostics instead of
             // being silently ignored.
             let mut post_diags = check_unsized_locals(mono_ctx.items(), ty_ctx_ref);
-            post_diags.extend(check_unused_generic_params(mono_ctx.items(), ty_ctx_ref));
+            post_diags.extend(check_unused_generic_params(
+                mono_ctx.items(),
+                Some(&mir_bodies_map),
+                ty_ctx_ref,
+            ));
             post_diags.extend(check_large_mono_set(mono_ctx.items(), 1000));
             sink_cell.borrow_mut().extend(post_diags);
             mono_ctx.items().to_vec()

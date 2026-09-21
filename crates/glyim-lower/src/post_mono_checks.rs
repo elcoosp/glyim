@@ -54,14 +54,44 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
 ///
 /// If a function has type parameters (substitution non-empty) but none of those
 /// parameters appear in the body's types, a warning is emitted.
-pub fn check_unused_generic_params(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDiagnostic> {
+///
+/// **The body must be the pre-substitution body.** `MonoItemData::body` is
+/// post-substitution: `MonoCtx::collect` ran it through `substitute_body`,
+/// which rewrites every `TyKind::Param(_)` to a concrete type. Checking that
+/// body for `Param` always finds nothing and warns for *every* generic
+/// function, however it used its parameters (e.g. `block_on<F: Future>` is
+/// warned about even though `F` is used throughout its body).
+///
+/// `pre_mono_bodies` is the pre-substitution map (`mir_bodies_map` in the
+/// pipeline), where `Param` references still appear. `None` (the unit tests'
+/// path — their hand-built bodies already carry `Param` when relevant) falls
+/// back to `item.body`.
+pub fn check_unused_generic_params(
+    items: &[MonoItemData],
+    pre_mono_bodies: Option<
+        &std::collections::HashMap<
+            glyim_core::def_id::DefId,
+            std::sync::Arc<glyim_mir::Body>,
+        >,
+    >,
+    ctx: &TyCtx,
+) -> Vec<GlyimDiagnostic> {
     let mut diags = Vec::new();
     for item in items {
-        if let MonoItem::Fn { substs, .. } = &item.item {
+        if let MonoItem::Fn { def_id, substs } = &item.item {
             if substs.is_empty() {
                 continue;
             }
-            if !body_uses_any_param(&item.body, ctx) {
+            let checked_body = pre_mono_bodies
+                .and_then(|m| {
+                    m.get(&glyim_core::def_id::DefId::new(
+                        glyim_core::def_id::CrateId::from_raw(0),
+                        glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                    ))
+                })
+                .map(|arc| arc.as_ref())
+                .unwrap_or_else(|| item.body.as_ref());
+            if !body_uses_any_param(checked_body, ctx) {
                 let msg = format!("unused generic parameter(s) in function `{}`", item.symbol);
                 diags.push(GlyimDiagnostic::new(
                     glyim_diag::ErrorCode {

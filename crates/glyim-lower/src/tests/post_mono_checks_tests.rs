@@ -142,7 +142,7 @@ fn unused_generic_param_warns() {
     let item = make_mono_fn_with_subst(10, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_has_severity(&diags, DiagSeverity::Warning);
     assert_diag_contains(&diags, "unused generic parameter");
 }
@@ -159,7 +159,7 @@ fn no_unused_when_body_uses_generic() {
     let item = make_mono_fn_with_subst(11, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -260,7 +260,7 @@ fn unused_generic_param_multiple_substs_warns() {
     let item = make_mono_fn_with_subst(12, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_has_severity(&diags, DiagSeverity::Warning);
     assert_diag_contains(&diags, "unused generic parameter");
 }
@@ -275,7 +275,7 @@ fn empty_substitution_no_warn() {
     let item = make_mono_fn_with_subst(13, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -294,7 +294,7 @@ fn generic_param_used_in_rvalue_constant_no_warn() {
     let item = make_mono_fn_with_subst(14, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -356,7 +356,7 @@ fn const_item_ignored_for_unused_params() {
     let items = vec![item];
 
     // Const items should not be checked for unused generic params
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -389,7 +389,7 @@ fn generic_param_used_in_ref_local_no_warn() {
     let item = make_mono_fn_with_subst(16, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -409,7 +409,7 @@ fn generic_param_used_in_tuple_local_no_warn() {
     let item = make_mono_fn_with_subst(17, subst, body);
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -437,7 +437,7 @@ fn static_item_ignored_for_unused_params() {
     };
     let items = vec![item];
 
-    let diags = check_unused_generic_params(&items, &frozen);
+    let diags = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags);
 }
 
@@ -501,7 +501,7 @@ fn combined_post_mono_checks() {
     let diags_large = check_large_mono_set(&items, 2);
     assert_has_severity(&diags_large, DiagSeverity::Warning);
 
-    let diags_unused = check_unused_generic_params(&items, &frozen);
+    let diags_unused = check_unused_generic_params(&items, None, &frozen);
     assert_no_errors(&diags_unused);
 }
 
