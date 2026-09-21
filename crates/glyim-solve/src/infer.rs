@@ -227,17 +227,27 @@ impl InferenceTable {
             (TyKind::Never, _) | (_, TyKind::Never) => Ok(Vec::new()),
             (TyKind::Infer(InferVar::Int(var)), other)
             | (other, TyKind::Infer(InferVar::Int(var))) => {
-                let int_ty = if a_is_int { a } else { b };
+                // `other_ty` is the Ty on the opposite side of the Int var.
+                // The Int var may be either `a` (a_is_int) or `b`; when it is
+                // `b`, binding to `b` would alias the var to itself and
+                // produce an infinite type that `resolve_ty_shallow` later
+                // collapses to `Error`. Bind to the peer side instead.
+                let other_ty = if a_is_int { b } else { a };
+                // For the general-Ty case, `int_var_ty` is the Int var's own
+                // Ty: the general var should resolve *through* the Int var,
+                // not directly to the (possibly still-unresolved) concrete
+                // side, so the Int var's eventual value wins.
+                let int_var_ty = if a_is_int { a } else { b };
                 match &other {
                     TyKind::Int(_)
                     | TyKind::Uint(_)
                     | TyKind::Infer(InferVar::Int(_))
                     | TyKind::Error => {
-                        self.int_vars[var].value = Some(b);
+                        self.int_vars[var].value = Some(other_ty);
                         Ok(Vec::new())
                     }
                     TyKind::Infer(InferVar::Ty(general)) => {
-                        self.ty_vars[*general].value = Some(int_ty);
+                        self.ty_vars[*general].value = Some(int_var_ty);
                         Ok(Vec::new())
                     }
                     _ => Err(vec![GlyimDiagnostic::type_error(
@@ -251,14 +261,16 @@ impl InferenceTable {
             }
             (TyKind::Infer(InferVar::Float(var)), other)
             | (other, TyKind::Infer(InferVar::Float(var))) => {
-                let float_ty = if a_is_float { a } else { b };
+                // See the Int arm above for the self-binding rationale.
+                let other_ty = if a_is_float { b } else { a };
+                let float_var_ty = if a_is_float { a } else { b };
                 match &other {
                     TyKind::Float(_) | TyKind::Infer(InferVar::Float(_)) | TyKind::Error => {
-                        self.float_vars[var].value = Some(b);
+                        self.float_vars[var].value = Some(other_ty);
                         Ok(Vec::new())
                     }
                     TyKind::Infer(InferVar::Ty(general)) => {
-                        self.ty_vars[*general].value = Some(float_ty);
+                        self.ty_vars[*general].value = Some(float_var_ty);
                         Ok(Vec::new())
                     }
                     _ => Err(vec![GlyimDiagnostic::type_error(
