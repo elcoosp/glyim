@@ -1047,6 +1047,18 @@ impl<'a> MirBuilder<'a> {
             }
             thir::ExprKind::Index { base, index } => {
                 let base_place = self.lower_expr_to_place(base);
+                // Auto-deref a `&[T]`/`&mut [T]`/`&Vec<T>` receiver before
+                // applying the `Index` projection (mirrors Rust indexing,
+                // which peels the reference first).
+                let base_decl_ty = self.locals[base_place.local].ty;
+                let base_place = if matches!(
+                    self.ctx.ty_ctx().ty_kind(base_decl_ty),
+                    TyKind::Ref(..)
+                ) {
+                    self.place_with_projection(base_place, ProjectionElem::Deref)
+                } else {
+                    base_place
+                };
                 let index_local = self.alloc_local(
                     index.ty,
                     glyim_core::primitives::Mutability::Not,
@@ -1713,10 +1725,38 @@ impl<'a> MirBuilder<'a> {
         result_ty: Ty,
         span: glyim_span::Span,
     ) -> glyim_mir::Rvalue {
+        // Auto-deref the base place for slicing (mirrors Rust indexing, which
+        // peels `&`/`&mut` before applying the index operation). Required for
+        // the common `buf[..n]` pattern where `buf: &mut [u8]` / `&[T]`.
+        let raw_base_ty = base_place.ty(self.ctx.ty_ctx(), &self.locals);
+        let base_place = if matches!(
+            self.ctx.ty_ctx().ty_kind(raw_base_ty),
+            TyKind::Ref(..)
+        ) {
+            self.place_with_projection(base_place, ProjectionElem::Deref)
+        } else {
+            base_place
+        };
         // Determine the element type and whether we have a slice or array.
         let base_ty = base_place.ty(self.ctx.ty_ctx(), &self.locals);
         let elem_ty = match self.ctx.ty_ctx().ty_kind(base_ty) {
             TyKind::Array(elem, _) | TyKind::Slice(elem) => *elem,
+            // `Vec<T>` (builtin ADT id 1020) also supports dynamic range
+            // slicing (via `Index<Range<usize>> -> [T]`). Extract `T` from
+            // the substitution so the slice element type lines up.
+            TyKind::Adt(adt_id, substs)
+                if *adt_id == glyim_core::def_id::AdtId::from_raw(1020) =>
+            {
+                self.ctx
+                    .ty_ctx()
+                    .substitution_args(*substs)
+                    .first()
+                    .and_then(|a| match a {
+                        glyim_type::GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| self.ctx.ty_ctx().error_ty())
+            }
             _ => {
                 self.diagnostics.push(GlyimDiagnostic::type_error(
                     span,

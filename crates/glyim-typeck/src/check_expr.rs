@@ -589,10 +589,17 @@ impl<'a> FnCtxt<'a> {
                     });
                 }
 
-                let resolved_result = self.infer.resolve_ty_shallow(self.ctx, result_ty);
+                let resolved_result = self
+                    .infer
+                    .resolve_ty_shallow_preserve_int(self.ctx, result_ty);
                 let final_ty = if resolved_result == Ty::ERROR {
                     Ty::ERROR
-                } else if matches!(self.ctx.ty_kind(resolved_result), TyKind::Infer(_)) {
+                } else if matches!(
+                    self.ctx.ty_kind(resolved_result),
+                    TyKind::Infer(InferVar::Int(_))
+                ) {
+                    resolved_result
+                } else if matches!(self.ctx.ty_kind(resolved_result), TyKind::Infer(InferVar::Ty(_))) {
                     Ty::UNIT
                 } else {
                     resolved_result

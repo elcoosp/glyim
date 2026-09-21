@@ -1026,7 +1026,7 @@ impl InferenceTable {
     /// first would collapse `2 == self.raw` (raw: u32) into `i32 == u32` and
     /// spuriously fail. Final reporting uses `resolve_ty_shallow` (which keeps
     /// the `i32` fallback).
-    fn resolve_ty_shallow_preserve_int(
+    pub fn resolve_ty_shallow_preserve_int(
         &self,
         ctx: &dyn TypeLookup,
         ty: Ty,
