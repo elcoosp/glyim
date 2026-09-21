@@ -213,9 +213,21 @@ impl<'a> MonoCtx<'a> {
                                 TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                                 _ => rt,
                             });
-                            let substs = match self_ty {
-                                Some(st) => ty_ctx.intern_substitution(vec![GenericArg::Ty(st)]),
-                                None => Substitution::empty(),
+                            // The impl-level substitution is the receiver
+                            // ADT's own generic arguments (matched to the
+                            // impl's `<T, ..>` params). Injecting `Self`
+                            // unconditionally produced a spurious 1-element
+                            // subst for a *non-generic* impl (`impl Future for
+                            // AddOneFuture`), which monomorphization then read
+                            // as a used generic parameter and reported as an
+                            // "unused generic parameter" post-mono warning.
+                            // Non-generic receivers now get the empty subst.
+                            let substs = match self_ty.and_then(|st| match ty_ctx.ty_kind(st) {
+                                TyKind::Adt(_, s) => Some(*s),
+                                _ => None,
+                            }) {
+                                Some(s) if !s.is_empty() => s,
+                                _ => Substitution::empty(),
                             };
                             let fn_ty = ty_ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                             *c = glyim_mir::MirConst {
