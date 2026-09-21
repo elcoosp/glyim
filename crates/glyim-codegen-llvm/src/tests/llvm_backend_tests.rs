@@ -316,7 +316,7 @@ fn s08_t27_generate_with_directory_path_errors() {
     let dir = tempfile::tempdir().expect("failed to create tempdir");
     let output = dir.path(); // This is a directory, not a file
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&bodies, output);
     assert!(
         result.is_err(),
         "generate with a directory path should error"
