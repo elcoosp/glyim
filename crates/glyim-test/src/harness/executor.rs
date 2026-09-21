@@ -84,7 +84,18 @@ impl TestExecutor {
             bless,
             verbose,
             max_concurrent,
-            target_triple: "x86_64-unknown-linux-gnu".to_string(),
+            // Default to the *host* triple, not a hardcoded Linux one. Fixtures
+            // carry `// only-target: <triple>` to declare the triple their
+            // produced artifact executes on (the LLVM backend can *cross*-
+            // compile an ELF for `x86_64-unknown-linux-gnu` from any host, but
+            // only a Linux host can *run* that ELF without a user-mode
+            // emulator). Defaulting to Linux made the runner try to execute
+            // Linux ELFs on macOS, where every such fixture correctly
+            // reported `FAILED` rather than `Ignored` — polluting the
+            // summary with false regressions. With the host default, a
+            // Linux-only fixture is `Ignored` on macOS and `RunPass` on
+            // Linux, which is what the fixtures actually intend.
+            target_triple: host_target_triple(),
             compiler,
         }
     }
@@ -330,5 +341,23 @@ where
     match rx.recv_timeout(timeout) {
         Ok(result) => Ok(result),
         Err(_) => Err(TimeoutError { timeout_secs }),
+    }
+}
+
+
+/// Best-effort Rust target triple for the host executing the tests. Mirrors
+/// the mapping `glyim-cli::host_target_triple` uses for proc-macro builds so
+/// the two agree on what "the host" means.
+fn host_target_triple() -> String {
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    match (arch, os) {
+        ("x86_64", "macos") => "x86_64-apple-darwin".to_string(),
+        ("aarch64", "macos") => "aarch64-apple-darwin".to_string(),
+        ("x86_64", "linux") => "x86_64-unknown-linux-gnu".to_string(),
+        ("aarch64", "linux") => "aarch64-unknown-linux-gnu".to_string(),
+        ("x86_64", "windows") => "x86_64-pc-windows-msvc".to_string(),
+        ("aarch64", "windows") => "aarch64-pc-windows-msvc".to_string(),
+        _ => format!("{}-{}", arch, os),
     }
 }

@@ -21,19 +21,16 @@
 //!     (see `glyim-pipeline::async_multi_await_runtime`); this driver enforces
 //!     the *native* LLVM-codegen + link + execute proof on Linux.
 //!
-//! STATUS (2026-08-28): the harness now compiles with the REAL `LlvmBackend`
-//! (feature `real-llvm`, enabled by `GLYIM_TEST_REAL_LLVM` on the Linux job)
-//! and links a runnable ELF, and this driver is now STRICT — it requires
-//! `Passed` (real codegen + link + run) and no longer tolerates
-//! `CompilationFailed`. That closes the previous blind spot where a native
-//! codegen gap was silently accepted. NOTE: the native async codegen path is
-//! CURRENTLY BROKEN (tracked gap) — `glyim-codegen-llvm` panics in
-//! `fn_abi_of` (`lower.rs`) for the monomorphized `block_on<F>` / `poll` types,
-//! and the bytecode backend ICEs in `type_arena` (`ty_kind` OOB). So this job
-//! will currently FAIL on these fixtures until that codegen gap is fixed; the
-//! failure is the correct, honest signal (it used to pass by tolerance). The
-//! MIR-interpreter runtime proof (`async_multi_await_runtime`) remains the
-//! verified end-to-end execution evidence today.
+//! STATUS (2026-09-21): the native async codegen path is CLOSED. The
+//! `fn_abi_of` ICE and the enum `Field`-offset OOB were fixed together with a
+//! post-inference zonk pass (which keeps raw `Infer(Int(_))` types out of
+//! codegen). On the `test-linux-runtime` (ubuntu-latest) job this driver is
+//! STRICT — the fixtures compile with the real `LlvmBackend`, link a runnable
+//! ELF, and must print `42` / `3`. On other hosts the fixtures are `Ignored`
+//! via their `only-target:` gate (the runner defaults its target to the host
+//! triple; only a Linux host can execute the linked ELF without an emulator).
+//! The MIR-interpreter runtime proof (`async_multi_await_runtime`) remains
+//! green in parallel.
 
 use glyim_test::harness::executor::TestOutcome;
 use glyim_test::harness::{TestMode, TestRunner};
@@ -96,6 +93,12 @@ fn m5_two_step_multi_await_compiles_cleanly() {
     // (it only proves the compile/desugar contract, not native execution).
     match &two_step.outcome {
         TestOutcome::Passed => { /* the real runtime proof: ran and printed 3 */ }
+        // On a non-Linux host the fixture's `only-target` gate matches against
+        // the *host* triple now, so a Linux-gated fixture is `Ignored` rather
+        // than tried-and-failed. Either `Ignored` or `CompilationFailed` is the
+        // tolerated non-real-LLVM outcome; only a wrong-output `Failed` or an
+        // unexpected `Passed` from a broken mock backend would be a red flag.
+        TestOutcome::Ignored if !real_llvm => {}
         TestOutcome::Failed { reason } if !real_llvm => {
             assert!(
                 matches!(
