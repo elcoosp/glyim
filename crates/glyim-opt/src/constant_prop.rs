@@ -293,7 +293,7 @@ fn evaluate_rvalue_to_const(
                 }
             }
             match kind {
-                AggregateKind::Tuple | AggregateKind::Array(_) | AggregateKind::Adt(_, _, _) => {
+                AggregateKind::Tuple | AggregateKind::Array(_) => {
                     if field_consts.is_empty() {
                         // Empty tuple is the unit value.
                         Some(MirConst {
