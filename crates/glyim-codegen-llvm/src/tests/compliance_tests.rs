@@ -3,6 +3,16 @@ use glyim_codegen::CodegenBackend;
 use std::io::Read;
 use std::path::Path;
 
+/// Per-process unique temp file path. Prevents concurrent test processes
+/// (a second `cargo nextest` invocation, `cargo-mutants` workers, parallel
+/// CI shards on the same host) from racing on a fixed `/tmp/glyim_test_*.o`
+/// path — one process's `remove_file` was racing another's write+read, which
+/// produced spurious `output.exists()` / `metadata()` failures.
+fn tpath(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("glyim_test_{}_{}", std::process::id(), name))
+}
+
+
 #[test]
 fn s08_t40_codegen_backend_name_static() {
     let backend: &dyn CodegenBackend = &LlvmBackend::new();
@@ -18,7 +28,7 @@ fn s08_t41_generate_returns_error_for_invalid_path() {
     // Use a path with invalid characters (on Unix, /tmp works fine; use a deeply nested nonexistent dir)
     let output = Path::new("/tmp/nonexistent/nested/deeply/output.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, output);
+    let result = backend.generate(&bodies, &output);
     assert!(result.is_err());
     // The error should be an internal error (target machine file write failure)
     let err = result.unwrap_err();
@@ -58,17 +68,17 @@ fn s08_t43_generate_function_produces_deterministic_output_across_backends() {
 #[test]
 fn s08_t44_generate_with_empty_bodies_produces_valid_object() {
     let backend = LlvmBackend::new();
-    let output = Path::new("/tmp/glyim_empty_module.o");
+    let output = tpath("glyim_empty_module.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    backend.generate(&bodies, output).unwrap();
+    backend.generate(&bodies, &output).unwrap();
     // Verify ELF magic if x86_64-unknown-linux-gnu (default)
     let mut buf = [0u8; 4];
-    std::fs::File::open(output)
+    std::fs::File::open(&output)
         .unwrap()
         .read_exact(&mut buf)
         .unwrap();
     assert_eq!(&buf, &[0x7f, 0x45, 0x4c, 0x46]);
-    std::fs::remove_file(output).ok();
+    std::fs::remove_file(&output).ok();
 }
 
 #[test]

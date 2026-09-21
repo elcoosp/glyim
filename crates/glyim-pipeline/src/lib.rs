@@ -581,7 +581,11 @@ pub fn compile_file_to_mir(
     let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
     if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
         let dump = expanded_root.text().to_string();
-        let _ = std::fs::write("/tmp/glyim_expanded.g", &dump);
+        let dump_path = std::env::temp_dir().join(format!(
+            "glyim_expanded_{}.g",
+            std::process::id()
+        ));
+        let _ = std::fs::write(&dump_path, &dump);
         eprintln!("wrote {} bytes to /tmp/glyim_expanded.g", dump.len());
     }
     sink_cell.borrow_mut().extend(expand_diags);

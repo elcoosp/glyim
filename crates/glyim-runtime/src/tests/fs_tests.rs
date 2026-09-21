@@ -19,7 +19,14 @@ use crate::fs::*;
 /// each test. Using a per-test subdirectory avoids collisions when tests run
 /// in parallel.
 fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join("glyim-s19-test").join(name);
+    // Per-process + per-test unique dir. `std::process::id()` prevents a
+    // second test process (parallel CI shard, `cargo-mutants` worker) from
+    // racing on the same directory: previously `remove_dir_all` in one
+    // process could delete the directory another just created, causing
+    // spurious `canonicalize` failures.
+    let dir = std::env::temp_dir()
+        .join(format!("glyim-s19-test-{}", std::process::id()))
+        .join(name);
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("failed to create temp dir");
     dir

@@ -1,21 +1,30 @@
 use crate::LlvmBackend;
 use glyim_codegen::CodegenBackend;
 use std::io::Read;
-use std::path::Path;
+
+/// Per-process unique temp file path. Prevents concurrent test processes
+/// (a second `cargo nextest` invocation, `cargo-mutants` workers, parallel
+/// CI shards on the same host) from racing on a fixed `/tmp/glyim_test_*.o`
+/// path — one process's `remove_file` was racing another's write+read, which
+/// produced spurious `output.exists()` / `metadata()` failures.
+fn tpath(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("glyim_test_{}_{}", std::process::id(), name))
+}
+
 
 #[test]
 fn s08_t21_generate_output_is_elf() {
     let backend = LlvmBackend::new();
-    let output = Path::new("/tmp/glyim_test_elf_check.o");
+    let output = tpath("glyim_test_elf_check.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
         glyim_core::CrateId::from_raw(0),
         glyim_core::LocalDefId::from_raw(100),
     )));
     let bodies = vec![body];
-    let result = backend.generate(&bodies, output);
+    let result = backend.generate(&bodies, &output);
     assert!(result.is_ok(), "generate should succeed");
 
-    let mut file = std::fs::File::open(output).expect("output file should exist");
+    let mut file = std::fs::File::open(&output).expect("output file should exist");
     let mut buf = [0u8; 4];
     file.read_exact(&mut buf).expect("should read 4 bytes");
     assert_eq!(
@@ -25,26 +34,26 @@ fn s08_t21_generate_output_is_elf() {
     );
 
     // Clean up
-    std::fs::remove_file(output).ok();
+    std::fs::remove_file(&output).ok();
 }
 
 #[test]
 fn s08_t22_generate_output_non_empty() {
     let backend = LlvmBackend::new();
-    let output = Path::new("/tmp/glyim_test_nonempty.o");
+    let output = tpath("glyim_test_nonempty.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
         glyim_core::CrateId::from_raw(0),
         glyim_core::LocalDefId::from_raw(101),
     )));
     let bodies = vec![body];
     backend
-        .generate(&bodies, output)
+        .generate(&bodies, &output)
         .expect("generate should succeed");
 
-    let metadata = std::fs::metadata(output).expect("output file should exist");
+    let metadata = std::fs::metadata(&output).expect("output file should exist");
     assert!(metadata.len() > 0, "output file should not be empty");
 
-    std::fs::remove_file(output).ok();
+    std::fs::remove_file(&output).ok();
 }
 
 #[test]
@@ -96,7 +105,7 @@ fn s08_t25_generate_after_many_functions() {
         backend.generate_function(&body).unwrap();
     }
     // Then call generate with a batch
-    let output = Path::new("/tmp/glyim_test_after_functions.o");
+    let output = tpath("glyim_test_after_functions.o");
     let bodies: Vec<_> = (0..10)
         .map(|i| {
             std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
@@ -105,13 +114,13 @@ fn s08_t25_generate_after_many_functions() {
             )))
         })
         .collect();
-    let result = backend.generate(&bodies, output);
+    let result = backend.generate(&bodies, &output);
     assert!(
         result.is_ok(),
         "generate after many generate_function calls should succeed"
     );
     assert!(output.exists());
-    std::fs::remove_file(output).ok();
+    std::fs::remove_file(&output).ok();
 }
 
 #[test]
