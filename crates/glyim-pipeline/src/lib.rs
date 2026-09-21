@@ -601,7 +601,7 @@ pub fn compile_file_to_mir(
         let dump_path =
             std::env::temp_dir().join(format!("glyim_expanded_{}.g", std::process::id()));
         let _ = std::fs::write(&dump_path, &dump);
-        eprintln!("wrote {} bytes to /tmp/glyim_expanded.g", dump.len());
+        eprintln!("wrote {} bytes to {}", dump.len(), dump_path.display());
     }
     sink_cell.borrow_mut().extend(expand_diags);
     if sink_cell.borrow().has_errors() {
