@@ -25,10 +25,10 @@ fn s08_t36_concurrent_generate_independent_backends() {
                     glyim_core::LocalDefId::from_raw(i * 1000),
                 )));
                 let bodies = vec![body];
-                let result = backend.generate(&bodies, &output);
+                let result = backend.generate(&bodies, &output_path);
                 assert!(result.is_ok(), "concurrent generate in thread {} failed", i);
                 // Clean up
-                std::fs::remove_file(&output).ok();
+                std::fs::remove_file(output).ok();
             })
         })
         .collect();
