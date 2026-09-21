@@ -27,7 +27,7 @@ fn s08_t41_generate_returns_error_for_invalid_path() {
     // Use a path with invalid characters (on Unix, /tmp works fine; use a deeply nested nonexistent dir)
     let output = Path::new("/tmp/nonexistent/nested/deeply/output.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&bodies, output);
     assert!(result.is_err());
     // The error should be an internal error (target machine file write failure)
     let err = result.unwrap_err();
