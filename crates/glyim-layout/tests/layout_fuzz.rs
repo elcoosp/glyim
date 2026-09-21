@@ -206,9 +206,7 @@ fn fuzz_random_enum_layouts() {
         // For enums, the variants shape should be Multiple.
         match layout.variants {
             VariantsShape::Multiple {
-                tag: _,
                 variants: variant_layouts,
-                tag_encoding: _,
                 ..
             } => {
                 assert_eq!(
