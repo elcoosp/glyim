@@ -62,10 +62,15 @@ impl LocalEnv {
     }
 
     pub fn leave_scope(&mut self) {
-        let base = self
-            .scope_stack
-            .pop()
-            .expect("leave_scope without matching enter_scope");
+        // An unbalanced `leave_scope` (no matching `enter_scope`) is a
+        // compiler-internal invariant violation, not a user error. Surface it
+        // via `debug_assert!` in debug/test builds; in release, bail out
+        // rather than falling back to `base = 0` (which would clobber every
+        // in-scope name).
+        let Some(base) = self.scope_stack.pop() else {
+            debug_assert!(false, "leave_scope without matching enter_scope");
+            return;
+        };
 
         // Iterate over the variables added in this scope to update the name_map,
         // but do NOT pop them from self.vars so that LocalVarIds remain stable
