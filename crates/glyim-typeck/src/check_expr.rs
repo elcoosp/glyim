@@ -946,21 +946,54 @@ impl<'a> FnCtxt<'a> {
                     // registered return type through it. This makes
                     // `id(40)` return `i32` (not the rigid `T`) and is what
                     // unblocks `block_on<F: MyFuture>`-style dispatch.
-                    if let Some(sig) = self.ctx.fn_sig(def_id) {
+                    if let Some(sig) = self.ctx.fn_sig(def_id).cloned() {
                         let mut subst: std::collections::HashMap<u32, GenericArg> =
                             std::collections::HashMap::new();
                         // Collect the formal input types into an owned vec so the
                         // immutable borrow of `self.ctx` ends before the mutable
-                        // `intern_substitution`/`mk_ty` calls below.
+                        // `unify`/`intern_substitution`/`mk_ty` calls below.
+                        // (`sig` was also cloned above for the same reason.)
                         let inputs: Vec<GenericArg> =
                             self.ctx.substitution_args(sig.inputs).to_vec();
                         for (i, arg_expr) in arg_exprs.iter().enumerate() {
                             if let Some(GenericArg::Ty(param_ty)) = inputs.get(i) {
-                                // Direct bare-param formal (e.g. `fn id<T>(x: T)`):
-                                // map the param index to the argument's concrete type.
+                                // Bare-param formal (`fn id<T>(x: T)`): the
+                                // formal is rigid and cannot unify with the
+                                // concrete argument. Record the mapping in
+                                // `subst` so the return type instantiates at
+                                // the call site. `unify` here would emit a
+                                // spurious "mismatched types: T vs <arg>"
+                                // diagnostic.
                                 if let TyKind::Param(pt) = self.ctx.ty_kind(*param_ty) {
                                     subst.insert(pt.index, GenericArg::Ty(arg_expr.ty));
                                 } else {
+                                    // Anchor an unsuffixed integer/float literal
+                                    // argument to its formal parameter type.
+                                    // Without this, `fn add_one(x: i32)` called
+                                    // as `add_one(41)` leaves the `41`'s
+                                    // `Infer(Int(_))` unbound — no other code in
+                                    // this arm unifies against a *concrete*
+                                    // formal (the `Param` arm records a subst;
+                                    // `align_impl_param_subst` only fires for
+                                    // structural ADT/Ref formals). The raw var
+                                    // then survives to codegen and trips the LLVM
+                                    // backend's "Infer reached codegen" ICE.
+                                    //
+                                    // Scoped narrowly to `Infer(Int/Float)` so
+                                    // we don't introduce eager unification for
+                                    // every call argument, which collides with
+                                    // the deferred `subst` / structural-alignment
+                                    // strategy above (and produces spurious
+                                    // mismatched-types for FFI ref-vs-ptr
+                                    // arguments and generic-self ADTs).
+                                    if matches!(
+                                        self.ctx.ty_kind(arg_expr.ty),
+                                        TyKind::Infer(InferVar::Int(_))
+                                            | TyKind::Infer(InferVar::Float(_))
+                                    ) && *param_ty != Ty::ERROR
+                                    {
+                                        self.unify(arg_expr.ty, *param_ty, span);
+                                    }
                                     // Structural alignment: a formal that is an
                                     // `Adt`/`Ref(Adt)` whose generic args carry the
                                     // *impl's* type parameters (e.g. the `self`
