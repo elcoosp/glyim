@@ -118,13 +118,9 @@ fn impl_item_to_header(
     };
 
     let self_type_name = match &impl_item.self_ty {
-        TypeRef::Path(p) => p.as_name().and_then(|name| {
-            if def_map.modules[def_map.root].scope.resolve(name).is_some() {
-                Some(name)
-            } else {
-                None
-            }
-        }),
+        TypeRef::Path(p) => p
+            .as_name()
+            .filter(|name| def_map.modules[def_map.root].scope.resolve(*name).is_some()),
         _ => None,
     };
 
