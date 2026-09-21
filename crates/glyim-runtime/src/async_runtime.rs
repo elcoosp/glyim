@@ -33,6 +33,12 @@ pub struct Waker {
     pair: Arc<(Mutex<bool>, Condvar)>,
 }
 
+impl Default for Waker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Waker {
     /// Construct a standalone waker (used by the I/O reactor and other external
     /// readiness sources that need to signal an executor thread).
