@@ -394,9 +394,15 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                 "bytecode backend opt-level currently has no effect; reserved for future peephole passes"
             );
         }
-        let ctx = glyim_type::TyCtxMut::new(db.interner().clone()).freeze();
+        // The bytecode backend reads layouts through the *shared*
+        // `TyCtxHandle` the pipeline publishes, so it must be constructed
+        // with that handle — not with an empty `TyCtxMut::new().freeze()`
+        // (which was the source of the `type_arena::ty_kind` OOB: every
+        // `layout_of` indexed past the end of the empty arena). The
+        // pipeline populates the handle during `compile_file`, which runs
+        // after this constructor.
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(
-            BytecodeBackend::with_ty_ctx(std::sync::Arc::new(ctx), target_info),
+            BytecodeBackend::with_ty_ctx_handle(db.ty_ctx_handle(), target_info),
         );
         Pipeline::compile_file(
             &mut db,

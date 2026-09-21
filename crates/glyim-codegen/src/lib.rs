@@ -59,15 +59,43 @@ pub trait LayoutProvider {
     fn tag_offset(&self, ty: Ty) -> u64;
 }
 
+/// Shared handle to the pipeline-published `TyCtx`. Matches
+/// `glyim_db::TyCtxHandle` structurally; declared locally so this crate does
+/// not take a dependency on `glyim-db` (which would invert the crate layering
+/// and risk a cycle, since the pipeline builds both). Any
+/// `Arc<RwLock<Option<Arc<TyCtx>>>>` the pipeline publishes is assignment-
+/// compatible.
+pub type TyCtxHandle = std::sync::Arc<std::sync::RwLock<Option<std::sync::Arc<TyCtx>>>>;
+
 /// Real layout provider using glyim-layout.
+///
+/// Holds a `TyCtxHandle` (a shared, pipeline-published `RwLock<Option<Arc<TyCtx>>>`)
+/// rather than an owned `Arc<TyCtx>`. The handle lets the provider resolve the
+/// *live* type context at each layout query, so a backend constructed before
+/// the pipeline has run still sees the real (post-typeck) `TyCtx` by the time
+/// `generate` is invoked. Without this, an early-constructed backend captured
+/// an empty `TyCtxMut::new(..).freeze()` and every `layout_of` read past the
+/// end of the empty arena (`type_arena::ty_kind` OOB).
 struct GlyimLayoutProvider {
-    ty_ctx: Arc<TyCtx>,
+    ty_ctx: TyCtxHandle,
     target: TargetInfo,
+}
+
+impl GlyimLayoutProvider {
+    /// Resolve the current `Arc<TyCtx>` from the handle, or `None` if the
+    /// pipeline has not yet published one.
+    fn ctx(&self) -> Option<Arc<TyCtx>> {
+        self.ty_ctx.read().ok().and_then(|g| g.clone())
+    }
 }
 
 impl LayoutProvider for GlyimLayoutProvider {
     fn field_offset(&self, ty: Ty, field_idx: FieldIdx) -> u64 {
-        let computer = SimpleLayoutComputer::new(&self.ty_ctx, self.target.clone());
+        let Some(ctx) = self.ctx() else {
+            tracing::warn!("Layout computation failed: TyCtx not published");
+            return 0;
+        };
+        let computer = SimpleLayoutComputer::new(ctx.as_ref(), self.target.clone());
         if let Ok(layout) = computer.layout_of(ty) {
             match layout.fields {
                 FieldsShape::Arbitrary { ref offsets } => {
@@ -87,7 +115,11 @@ impl LayoutProvider for GlyimLayoutProvider {
     }
 
     fn size_of(&self, ty: Ty) -> u64 {
-        let computer = SimpleLayoutComputer::new(&self.ty_ctx, self.target.clone());
+        let Some(ctx) = self.ctx() else {
+            tracing::warn!("Layout computation failed: TyCtx not published");
+            return 0;
+        };
+        let computer = SimpleLayoutComputer::new(ctx.as_ref(), self.target.clone());
         if let Ok(layout) = computer.layout_of(ty) {
             layout.size.0
         } else {
@@ -98,14 +130,19 @@ impl LayoutProvider for GlyimLayoutProvider {
 
     fn variant_type(&self, enum_ty: Ty, variant_idx: VariantIdx) -> Ty {
         use glyim_type::TyKind;
-        match self.ty_ctx.ty_kind(enum_ty) {
-            TyKind::Adt(adt_id, _substs) => self.ty_ctx.variant_type(*adt_id, variant_idx.to_raw()),
+        let Some(ctx) = self.ctx() else { return Ty::ERROR };
+        match ctx.ty_kind(enum_ty) {
+            TyKind::Adt(adt_id, _substs) => ctx.variant_type(*adt_id, variant_idx.to_raw()),
             _ => Ty::ERROR,
         }
     }
 
     fn tag_offset(&self, ty: Ty) -> u64 {
-        let computer = SimpleLayoutComputer::new(&self.ty_ctx, self.target.clone());
+        let Some(ctx) = self.ctx() else {
+            tracing::warn!("Layout computation failed: TyCtx not published");
+            return 0;
+        };
+        let computer = SimpleLayoutComputer::new(ctx.as_ref(), self.target.clone());
         if let Ok(layout) = computer.layout_of(ty) {
             if let VariantsShape::Multiple {
                 tag_encoding: TagEncoding::Direct,
@@ -146,7 +183,12 @@ pub struct BytecodeBackend {
     string_table: RefCell<Vec<String>>,
     fn_table: RefCell<Vec<(FnDefId, Substitution)>>,
     layout_provider: Box<dyn LayoutProvider>,
-    ty_ctx: Option<Arc<TyCtx>>,
+    /// Shared handle to the pipeline-published `TyCtx`. Reading through the
+    /// handle (rather than holding an owned `Arc<TyCtx>`) lets a backend
+    /// constructed *before* the pipeline runs still see the real, post-typeck
+    /// context by the time `generate_function` executes. See
+    /// [`GlyimLayoutProvider`] for the failure mode this avoids.
+    ty_ctx: Option<TyCtxHandle>,
     /// Optimization level (default `O0`). Higher levels run the peephole pass.
     opt_level: OptLevel,
     /// Per emitted `OP_LOAD_CONST`, whether the pushed value is an integer
@@ -156,19 +198,37 @@ pub struct BytecodeBackend {
 }
 
 impl BytecodeBackend {
-    /// with_ty_ctx.
-    pub fn with_ty_ctx(ctx: Arc<TyCtx>, target: TargetInfo) -> Self {
+    /// Construct with a shared pipeline `TyCtxHandle`. Preferred entry point:
+    /// the backend resolves the live `TyCtx` at each call, so it works
+    /// regardless of whether the pipeline has published it yet.
+    pub fn with_ty_ctx_handle(handle: TyCtxHandle, target: TargetInfo) -> Self {
         Self {
             string_table: RefCell::new(Vec::new()),
             fn_table: RefCell::new(Vec::new()),
             layout_provider: Box::new(GlyimLayoutProvider {
-                ty_ctx: ctx.clone(),
+                ty_ctx: handle.clone(),
                 target: target.clone(),
             }),
-            ty_ctx: Some(ctx),
+            ty_ctx: Some(handle),
             opt_level: OptLevel::O0,
             const_is_int: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Construct with an owned `Arc<TyCtx>` (test convenience). The backend
+    /// installs the context into a private handle internally, so `ty_ctx`
+    /// reads behave identically to the `with_ty_ctx_handle` path.
+    pub fn with_ty_ctx(ctx: Arc<TyCtx>, target: TargetInfo) -> Self {
+        let handle: TyCtxHandle = std::sync::Arc::new(std::sync::RwLock::new(Some(ctx)));
+        Self::with_ty_ctx_handle(handle, target)
+    }
+
+    /// Resolve the current `Arc<TyCtx>` from the handle, or `None` if the
+    /// pipeline has not published it yet.
+    fn resolve_ty_ctx(&self) -> Option<Arc<TyCtx>> {
+        self.ty_ctx
+            .as_ref()
+            .and_then(|h| h.read().ok().and_then(|g| g.clone()))
     }
 
     /// with_opt_level.
@@ -212,15 +272,14 @@ impl BytecodeBackend {
             match proj {
                 ProjectionElem::Deref => {
                     bc.push(OP_DEREF);
-                    current_ty = match self
-                        .ty_ctx
-                        .as_ref()
-                        .map(|c| c.ty_kind(current_ty))
-                        .unwrap_or(&glyim_type::TyKind::Error)
-                    {
-                        glyim_type::TyKind::Ref(_, inner, _)
-                        | glyim_type::TyKind::RawPtr(inner, _) => *inner,
-                        _ => Ty::ERROR,
+                    current_ty = if let Some(ctx) = self.resolve_ty_ctx() {
+                        match ctx.ty_kind(current_ty) {
+                            glyim_type::TyKind::Ref(_, inner, _)
+                            | glyim_type::TyKind::RawPtr(inner, _) => *inner,
+                            _ => Ty::ERROR,
+                        }
+                    } else {
+                        Ty::ERROR
                     };
                 }
                 ProjectionElem::Field(idx) => {
@@ -245,13 +304,11 @@ impl BytecodeBackend {
                         // `Assert` for an unreachable/panic target).
                         bc.push(OP_LOAD_LOCAL);
                         bc.extend_from_slice(&local.to_raw().to_le_bytes());
-                        match self
-                            .ty_ctx
-                            .as_ref()
-                            .map(|c| c.ty_kind(current_ty))
-                            .unwrap_or(&TyKind::Error)
-                        {
-                            TyKind::Array(_, len_const) => {
+                        let kind_owned: Option<TyKind> = self
+                            .resolve_ty_ctx()
+                            .map(|ctx| ctx.ty_kind(current_ty).clone());
+                        match kind_owned.as_ref() {
+                            Some(TyKind::Array(_, len_const)) => {
                                 let n = match &len_const.kind {
                                     ConstKind::Uint(n) => *n as i64,
                                     ConstKind::Int(n) => *n as i64,
@@ -260,7 +317,7 @@ impl BytecodeBackend {
                                 bc.push(OP_LOAD_CONST);
                                 bc.extend_from_slice(&n.to_le_bytes());
                             }
-                            TyKind::Slice(_) => {
+                            Some(TyKind::Slice(_)) => {
                                 bc.push(OP_LEN);
                                 bc.extend_from_slice(&place.local.to_raw().to_le_bytes());
                             }
@@ -287,16 +344,14 @@ impl BytecodeBackend {
                         bc.push(OP_MUL);
                         bc.push(OP_ADD);
                     }
-                    current_ty = match self
-                        .ty_ctx
-                        .as_ref()
-                        .map(|c| c.ty_kind(current_ty))
-                        .unwrap_or(&glyim_type::TyKind::Error)
-                    {
-                        glyim_type::TyKind::Array(elem, _) | glyim_type::TyKind::Slice(elem) => {
-                            *elem
+                    current_ty = if let Some(ctx) = self.resolve_ty_ctx() {
+                        match ctx.ty_kind(current_ty) {
+                            glyim_type::TyKind::Array(elem, _)
+                            | glyim_type::TyKind::Slice(elem) => *elem,
+                            _ => Ty::ERROR,
                         }
-                        _ => Ty::ERROR,
+                    } else {
+                        Ty::ERROR
                     };
                 }
                 ProjectionElem::Downcast(_) => {
@@ -323,7 +378,7 @@ impl BytecodeBackend {
                     let index_val = if *from_end {
                         // For arrays the length is known at compile time, so the
                         // from-end index can be resolved to a constant offset.
-                        if let Some(ctx) = self.ty_ctx.as_ref() {
+                        if let Some(ctx) = self.resolve_ty_ctx() {
                             if let TyKind::Array(_, const_val) = ctx.ty_kind(current_ty) {
                                 let n = match &const_val.kind {
                                     ConstKind::Uint(n) => *n as u64,
@@ -355,14 +410,13 @@ impl BytecodeBackend {
                                 bc.extend_from_slice(&(elem_size as i64).to_le_bytes());
                                 bc.push(OP_MUL);
                                 bc.push(OP_ADD);
-                                current_ty = match self
-                                    .ty_ctx
-                                    .as_ref()
-                                    .map(|c| c.ty_kind(current_ty))
-                                    .unwrap_or(&TyKind::Error)
-                                {
-                                    TyKind::Slice(elem) => *elem,
-                                    _ => Ty::ERROR,
+                                current_ty = if let Some(ctx) = self.resolve_ty_ctx() {
+                                    match ctx.ty_kind(current_ty) {
+                                        TyKind::Slice(elem) => *elem,
+                                        _ => Ty::ERROR,
+                                    }
+                                } else {
+                                    Ty::ERROR
                                 };
                                 continue;
                             }
@@ -912,12 +966,14 @@ impl BytecodeBackend {
                         self.const_is_int.borrow_mut().push(false);
                     }
                     MirConstKind::String(_name) => {
-                        let str_content = self
-                            .ty_ctx
-                            .as_ref()
-                            .map(|ctx| ctx.name_str(*_name))
-                            .unwrap_or("string_payload")
-                            .to_string();
+                        // Resolve the interner through the live TyCtx. Hold the
+                        // `Arc` in a local so the `&str` we copy out of it
+                        // outlives the closure (a bare `.map(|ctx| ...)` would
+                        // borrow from a temporary owned by the map closure).
+                        let str_content = match self.resolve_ty_ctx() {
+                            Some(ctx) => ctx.name_str(*_name).to_string(),
+                            None => "string_payload".to_string(),
+                        };
                         let idx = self.intern_string(&str_content);
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&(idx as i64).to_le_bytes());
