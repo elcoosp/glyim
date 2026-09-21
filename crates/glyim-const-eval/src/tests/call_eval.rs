@@ -50,10 +50,7 @@ fn name(s: &str) -> Name {
 
 /// Build `name(arg0, arg1, ...)` as an `Expr::Call` over literal args.
 fn call_lits(body: &mut Body, fn_name: &str, arg_lits: Vec<Literal>) -> ExprId {
-    let func = body.alloc_expr(
-        Expr::Path(Path::from_single(name(fn_name))),
-        dummy_span(),
-    );
+    let func = body.alloc_expr(Expr::Path(Path::from_single(name(fn_name))), dummy_span());
     let args = arg_lits
         .into_iter()
         .map(|l| alloc_lit(body, l))
@@ -76,11 +73,7 @@ fn eval_err(body: &Body, expr_id: ExprId) -> ConstEvalError {
 #[test]
 fn abs_of_negative() {
     let mut body = test_body();
-    let c = call_lits(
-        &mut body,
-        "abs",
-        vec![Literal::Int(-7, Some(IntTy::I32))],
-    );
+    let c = call_lits(&mut body, "abs", vec![Literal::Int(-7, Some(IntTy::I32))]);
     assert_eq!(eval_ok(&body, c), ConstValue::Int(7, IntTy::I32));
 }
 
@@ -172,7 +165,11 @@ fn call_result_used_in_binary() {
 #[test]
 fn unknown_const_fn_errors() {
     let mut body = test_body();
-    let c = call_lits(&mut body, "frobnicate", vec![Literal::Int(1, Some(IntTy::I32))]);
+    let c = call_lits(
+        &mut body,
+        "frobnicate",
+        vec![Literal::Int(1, Some(IntTy::I32))],
+    );
     let err = eval_err(&body, c);
     assert!(
         err.message.contains("unknown const fn"),

@@ -225,10 +225,7 @@ pub fn link_with_args(
 /// - `clang`/`gcc` drivers accept `--target=<triple>` directly.
 /// - GNU `ld` needs an explicit emulation via `-m <emulation>` (e.g.
 ///   `-m aarch64linux` for an aarch64 Linux target from an x86_64 host).
-pub(crate) fn linker_flags_for_target(
-    triple: &str,
-    linker: &str,
-) -> Result<Vec<String>, String> {
+pub(crate) fn linker_flags_for_target(triple: &str, linker: &str) -> Result<Vec<String>, String> {
     // The flags differ between a compiler *driver* (cc/clang/gcc) and a raw
     // GNU `ld`:
     //   - drivers accept a single-dash `-target <triple>` (Apple clang rejects
@@ -270,7 +267,7 @@ pub(crate) fn linker_flags_for_target(
                 "cross-compilation target '{}' is not in the supported linker-flag table; \
                  supply explicit --target/--ld-emulation flags via the linker config",
                 triple
-            ))
+            ));
         }
     };
     Ok(vec!["-m".to_string(), emulation.to_string()])
@@ -371,9 +368,7 @@ mod tests {
         // detects rather than returning an arbitrary fallback.
         let detected = detect_unix_linker();
         assert!(!detected.is_empty());
-        const CANDIDATES: &[&str] = &[
-            "cc", "clang", "gcc", "ld", "ld.lld", "ld.gold", "mold",
-        ];
+        const CANDIDATES: &[&str] = &["cc", "clang", "gcc", "ld", "ld.lld", "ld.gold", "mold"];
         assert!(
             CANDIDATES.contains(&detected.as_str()),
             "detected linker '{}' must be one of the probed candidates",
@@ -388,7 +383,10 @@ mod tests {
         // flags, so dependency-style linking is honoured and user flags still
         // append last (overridable).
         let args = LinkArgs {
-            search_paths: vec![std::path::PathBuf::from("/deps/a"), std::path::PathBuf::from("/deps/b")],
+            search_paths: vec![
+                std::path::PathBuf::from("/deps/a"),
+                std::path::PathBuf::from("/deps/b"),
+            ],
             libs: vec!["mylib".to_string(), "pthread".to_string()],
             objects: vec![std::path::PathBuf::from("/tmp/extra.o")],
             user_flags: vec!["-Wl,--as-needed".to_string(), "-static".to_string()],
@@ -406,8 +404,15 @@ mod tests {
         assert_eq!(parts[6], "-static");
 
         // Relative order: every structured flag precedes every user flag.
-        let user_start = parts.iter().position(|p| p.starts_with("-Wl,") || p == &"-static").unwrap();
-        assert!(parts[..user_start].iter().all(|p| p.starts_with("-L") || p.starts_with("-l") || p.ends_with(".o")));
+        let user_start = parts
+            .iter()
+            .position(|p| p.starts_with("-Wl,") || p == &"-static")
+            .unwrap();
+        assert!(
+            parts[..user_start]
+                .iter()
+                .all(|p| p.starts_with("-L") || p.starts_with("-l") || p.ends_with(".o"))
+        );
     }
 
     #[test]

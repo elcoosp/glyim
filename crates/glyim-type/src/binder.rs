@@ -4,22 +4,22 @@ use crate::ty::BoundTyKind;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// Binder.
 pub struct Binder<T> {
-/// Struct.
+    /// Struct.
     pub value: T,
-/// Struct.
+    /// Struct.
     pub bound_vars: Box<[BoundVariableKind]>,
 }
 
 impl<T> Binder<T> {
-/// bind.
+    /// bind.
     pub fn bind(value: T, bound_vars: Box<[BoundVariableKind]>) -> Self {
         Self { value, bound_vars }
     }
-/// skip_binder.
+    /// skip_binder.
     pub fn skip_binder(self) -> T {
         self.value
     }
-/// as_ref.
+    /// as_ref.
     pub fn as_ref(&self) -> Binder<&T> {
         Binder {
             value: &self.value,
@@ -31,10 +31,10 @@ impl<T> Binder<T> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// BoundVariableKind.
 pub enum BoundVariableKind {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Ty(BoundTyKind),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Region(BoundRegionKind),
-/// Variant.
+    /// Variant.
     Const,
 }

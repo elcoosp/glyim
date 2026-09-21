@@ -18,10 +18,10 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
-use mio::{event::Source, Interest, Token};
+use mio::{Interest, Token, event::Source};
 use std::os::unix::io::FromRawFd;
 
 use crate::async_runtime::Waker;
@@ -107,10 +107,9 @@ impl Reactor {
 
         // Poll + waker are created here so `Drop` can interrupt the background
         // thread's blocking `poll.poll(.., None)` during shutdown.
-        let poll = mio::Poll::new()
-            .map_err(std::io::Error::other)?;
-        let waker = mio::Waker::new(poll.registry(), Token(usize::MAX))
-            .map_err(std::io::Error::other)?;
+        let poll = mio::Poll::new().map_err(std::io::Error::other)?;
+        let waker =
+            mio::Waker::new(poll.registry(), Token(usize::MAX)).map_err(std::io::Error::other)?;
 
         let handle = std::thread::Builder::new()
             .name("glyim-io-reactor".to_string())
@@ -396,9 +395,7 @@ mod tests {
         // Peer writes data to the connection.
         let mut peer = std::net::TcpStream::connect(addr).unwrap();
         let (accepted, _peer_addr) = std_listener.accept().unwrap();
-        accepted
-            .set_nonblocking(true)
-            .expect("set non-blocking");
+        accepted.set_nonblocking(true).expect("set non-blocking");
         let client = mio::net::TcpStream::from_std(accepted);
 
         let reactor = Reactor::new().expect("reactor starts");
@@ -440,9 +437,7 @@ mod tests {
         let addr = std_listener.local_addr().unwrap();
         let mut peer = std::net::TcpStream::connect(addr).unwrap();
         let (accepted, _pa) = std_listener.accept().unwrap();
-        accepted
-            .set_nonblocking(true)
-            .expect("set non-blocking");
+        accepted.set_nonblocking(true).expect("set non-blocking");
         let fd = accepted.into_raw_fd();
 
         let reactor = Reactor::new().expect("reactor starts");
@@ -483,8 +478,8 @@ mod tests {
         // Verify the wake primitive the reactor uses on fd readiness:
         // `glyim_thread_unpark(id)` must release a thread parked via the glyim
         // thread bridge. This is what makes `.g` async I/O resume without spinning.
-        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc as StdArc;
+        use std::sync::atomic::{AtomicBool, Ordering};
 
         let woken = StdArc::new(AtomicBool::new(false));
         let woken_bg = woken.clone();
@@ -514,6 +509,9 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
-        assert!(ok, "glyim_thread_unpark must release the spawned executor thread");
+        assert!(
+            ok,
+            "glyim_thread_unpark must release the spawned executor thread"
+        );
     }
 }

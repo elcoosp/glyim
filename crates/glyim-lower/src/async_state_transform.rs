@@ -21,9 +21,7 @@
 
 use fixedbitset::FixedBitSet;
 use glyim_borrowck::compute_liveness;
-use glyim_mir::{
-    BasicBlockIdx, Body, LocalIdx, TerminatorKind,
-};
+use glyim_mir::{BasicBlockIdx, Body, LocalIdx, TerminatorKind};
 
 /// A suspend point: a basic block whose terminator `Call`s `Future::poll`.
 ///
@@ -79,7 +77,9 @@ pub fn split_at_suspend_points(body: &Body) -> Vec<SuspendSite> {
     let mut sites = Vec::new();
     for (block, data) in body.basic_blocks.iter_enumerated() {
         if let TerminatorKind::Call {
-            destination, target, ..
+            destination,
+            target,
+            ..
         } = &data.terminator.kind
         {
             // A suspend point polls a future and has a real continuation
@@ -139,10 +139,7 @@ pub fn plan_async_transform(body: &Body) -> AsyncTransformPlan {
 /// `S_k` variant, and the `Return` of `Poll::Pending`) is performed by the
 /// pipeline codegen in [`transform_async_body`]. Keeping the analysis separate
 /// makes the logic unit-testable without constructing full enum MIR.
-pub fn plan_resume_arm(
-    plan: &AsyncTransformPlan,
-    site_index: usize,
-) -> ResumeArmPlan {
+pub fn plan_resume_arm(plan: &AsyncTransformPlan, site_index: usize) -> ResumeArmPlan {
     let next_state = site_index + 1; // S_k resumes at site k+1's Ready arm
     let live = plan
         .live_after
@@ -180,7 +177,6 @@ pub struct ResumeArmPlan {
 /// on this host. The function returns the plan so the caller can drive the
 /// real emission.
 pub fn transform_async_body(body: &Body) -> AsyncTransformPlan {
-    
     // A body with no suspend sites resolves on the first poll; a body with a
     // single suspend site is handled by the single-poll desugar; only bodies
     // with >1 suspend site require the full state machine (M3 codegen). The
@@ -198,7 +194,10 @@ mod tests {
     use glyim_core::arena::IndexVec;
     use glyim_core::def_id::FnDefId;
     use glyim_core::primitives::Mutability;
-    use glyim_mir::{BasicBlockData, LocalDecl, MirConst, MirConstKind, Operand, Place, SourceInfo, Terminator, TerminatorKind};
+    use glyim_mir::{
+        BasicBlockData, LocalDecl, MirConst, MirConstKind, Operand, Place, SourceInfo, Terminator,
+        TerminatorKind,
+    };
     use glyim_span::Span;
     use glyim_type::{Substitution, Ty};
 
@@ -225,10 +224,7 @@ mod tests {
             let term = Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
-                        kind: MirConstKind::Fn(
-                            FnDefId::from_raw(0),
-                            Substitution::empty(),
-                        ),
+                        kind: MirConstKind::Fn(FnDefId::from_raw(0), Substitution::empty()),
                         ty: Ty::ERROR,
                         span: Span::DUMMY,
                     }),

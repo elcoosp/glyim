@@ -161,8 +161,8 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
         modules,
         krate: CrateId::from_raw(0),
         interner,
-    variant_map: Default::default(),
-    max_local_def_id: 0,
+        variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 

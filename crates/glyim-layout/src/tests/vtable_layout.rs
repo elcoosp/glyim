@@ -151,4 +151,3 @@ fn s15_vtable_unknown_trait_is_hard_error() {
         result
     );
 }
-

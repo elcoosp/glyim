@@ -8,8 +8,8 @@ use glyim_core::primitives::*;
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
 use glyim_span::Span;
-use glyim_type::{AdtKind, Const, ConstKind, FnSig, GenericArg, InferVar, Region, Ty, TyKind};
 use glyim_type::display::PrintTy;
+use glyim_type::{AdtKind, Const, ConstKind, FnSig, GenericArg, InferVar, Region, Ty, TyKind};
 
 use crate::check_body::FnCtxt;
 use crate::thir;
@@ -102,8 +102,7 @@ fn align_impl_param_subst(
             _ => return,
         },
     };
-    let (TyKind::Adt(_, fsub), TyKind::Adt(_, asub)) =
-        (ctx.ty_kind(formal), ctx.ty_kind(actual))
+    let (TyKind::Adt(_, fsub), TyKind::Adt(_, asub)) = (ctx.ty_kind(formal), ctx.ty_kind(actual))
     else {
         return;
     };
@@ -118,10 +117,15 @@ fn align_impl_param_subst(
                 subst.insert(p.index, aa.clone());
             } else {
                 // Recurse into nested ADT args (e.g. Box<Vec<T>>).
-                align_impl_param_subst(ctx, *ft, match aa {
-                    glyim_type::GenericArg::Ty(t) => *t,
-                    _ => continue,
-                }, subst);
+                align_impl_param_subst(
+                    ctx,
+                    *ft,
+                    match aa {
+                        glyim_type::GenericArg::Ty(t) => *t,
+                        _ => continue,
+                    },
+                    subst,
+                );
             }
         }
     }
@@ -181,12 +185,15 @@ impl<'a> FnCtxt<'a> {
                     // "expected integer type, found ()" — exactly the shape
                     // of `let digit: u32 = if .. { .. } else { return ..; };`
                     // in net.g's `parse_u16_hex` / `parse_u16_dec`.
-                    let diverges = stmts.last().map(|&sid| {
-                        matches!(
-                            &self.body.exprs[sid],
-                            Expr::Return { .. } | Expr::Break { .. }
-                        )
-                    }).unwrap_or(false);
+                    let diverges = stmts
+                        .last()
+                        .map(|&sid| {
+                            matches!(
+                                &self.body.exprs[sid],
+                                Expr::Return { .. } | Expr::Break { .. }
+                            )
+                        })
+                        .unwrap_or(false);
                     let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
                     let unit_expr = thir::Expr {
                         kind: thir::ExprKind::Block {
@@ -331,14 +338,14 @@ impl<'a> FnCtxt<'a> {
                 // as `ByRef(Mut)`.
                 if *mutability == Mutability::Mut
                     && let thir::ExprKind::VarRef(id) = inner_expr.kind
-                        && let Some(entry) = self
-                            .capture_log
-                            .iter_mut()
-                            .rev()
-                            .find(|(vid, ..)| *vid == id)
-                        {
-                            entry.2 = true;
-                        }
+                    && let Some(entry) = self
+                        .capture_log
+                        .iter_mut()
+                        .rev()
+                        .find(|(vid, ..)| *vid == id)
+                {
+                    entry.2 = true;
+                }
                 let ref_ty = self.ctx.mk_ref(Region::Erased, inner_ty, *mutability);
                 (
                     thir::Expr {
@@ -464,11 +471,8 @@ impl<'a> FnCtxt<'a> {
                                 let ref_iter_ty =
                                     self.ctx.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
                                 let fn_substs = self.ctx.intern_substitution(vec![]);
-                                let fn_ty = self
-                                    .ctx
-                                    .mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
-                                let discr_ty =
-                                    self.ctx.mk_ty(TyKind::Uint(UintTy::U8));
+                                let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
+                                let discr_ty = self.ctx.mk_ty(TyKind::Uint(UintTy::U8));
                                 thir::ForIteratorNext {
                                     fn_def_id,
                                     fn_substs,
@@ -497,9 +501,7 @@ impl<'a> FnCtxt<'a> {
                     // 1. Range-family iterable (`for i in 1..n`): item is the
                     //    range's element type (`usize`).
                     let range_elem = match self.ctx.ty_kind(iter_ty) {
-                        TyKind::Adt(id, substs)
-                            if id.to_raw() >= 1000 && id.to_raw() <= 1004 =>
-                        {
+                        TyKind::Adt(id, substs) if id.to_raw() >= 1000 && id.to_raw() <= 1004 => {
                             self.ctx
                                 .substitution_args(*substs)
                                 .first()
@@ -519,16 +521,14 @@ impl<'a> FnCtxt<'a> {
                     //    dereference non-pointer type" (io.g's `read_exact`
                     //    loop, slice.g's `fill`).
                     let ref_slice_elem = match self.ctx.ty_kind(iter_ty) {
-                        TyKind::Ref(_, inner, mutability) => {
-                            match self.ctx.ty_kind(*inner) {
-                                TyKind::Slice(elem) => Some(self.ctx.mk_ref(
-                                    glyim_type::Region::Erased,
-                                    *elem,
-                                    *mutability,
-                                )),
-                                _ => None,
-                            }
-                        }
+                        TyKind::Ref(_, inner, mutability) => match self.ctx.ty_kind(*inner) {
+                            TyKind::Slice(elem) => Some(self.ctx.mk_ref(
+                                glyim_type::Region::Erased,
+                                *elem,
+                                *mutability,
+                            )),
+                            _ => None,
+                        },
                         _ => None,
                     };
                     range_elem
@@ -596,7 +596,10 @@ impl<'a> FnCtxt<'a> {
                     TyKind::Infer(InferVar::Int(_))
                 ) {
                     resolved_result
-                } else if matches!(self.ctx.ty_kind(resolved_result), TyKind::Infer(InferVar::Ty(_))) {
+                } else if matches!(
+                    self.ctx.ty_kind(resolved_result),
+                    TyKind::Infer(InferVar::Ty(_))
+                ) {
                     Ty::UNIT
                 } else {
                     resolved_result
@@ -630,18 +633,33 @@ impl<'a> FnCtxt<'a> {
                                     // typed payload instead of re-parsing prose.
                                     let shapes: Vec<(String, glyim_diag::VariantShape)> = missing
                                         .iter()
-                                        .zip((0..adt.variants.len()).filter(|i| !covered.contains(&(*i as u32))))
+                                        .zip(
+                                            (0..adt.variants.len())
+                                                .filter(|i| !covered.contains(&(*i as u32))),
+                                        )
                                         .map(|(name, vi)| {
                                             let shape = match adt.variants[vi as usize].style {
-                                                glyim_type::adt_def::VariantStyle::Unit => glyim_diag::VariantShape::Unit,
-                                                glyim_type::adt_def::VariantStyle::Tuple => glyim_diag::VariantShape::Tuple(adt.variants[vi as usize].fields.len()),
-                                                glyim_type::adt_def::VariantStyle::Struct => glyim_diag::VariantShape::Struct(
-                                                    adt.variants[vi as usize]
-                                                        .fields
-                                                        .iter()
-                                                        .map(|f| self.ctx.name_str(f.name).to_string())
-                                                        .collect(),
-                                                ),
+                                                glyim_type::adt_def::VariantStyle::Unit => {
+                                                    glyim_diag::VariantShape::Unit
+                                                }
+                                                glyim_type::adt_def::VariantStyle::Tuple => {
+                                                    glyim_diag::VariantShape::Tuple(
+                                                        adt.variants[vi as usize].fields.len(),
+                                                    )
+                                                }
+                                                glyim_type::adt_def::VariantStyle::Struct => {
+                                                    glyim_diag::VariantShape::Struct(
+                                                        adt.variants[vi as usize]
+                                                            .fields
+                                                            .iter()
+                                                            .map(|f| {
+                                                                self.ctx
+                                                                    .name_str(f.name)
+                                                                    .to_string()
+                                                            })
+                                                            .collect(),
+                                                    )
+                                                }
                                             };
                                             (name.clone(), shape)
                                         })
@@ -709,7 +727,9 @@ impl<'a> FnCtxt<'a> {
                     Expr::Path(path) if path.segments.len() == 2 => {
                         let self_ty = self.param_map.get(&path.segments[0].name).copied();
                         self_ty.and_then(|ty| {
-                            let TyKind::Param(p) = self.ctx.ty_kind(ty) else { return None };
+                            let TyKind::Param(p) = self.ctx.ty_kind(ty) else {
+                                return None;
+                            };
                             let param_name = p.name;
                             let bounds = self.ctx.param_bounds_for(param_name)?.to_vec();
                             for (bound_name, tid) in bounds {
@@ -783,10 +803,7 @@ impl<'a> FnCtxt<'a> {
                 }
 
                 if let Some((trait_def_id, method_name)) = trait_call {
-                    let recv_ty = arg_exprs
-                        .first()
-                        .map(|e| e.ty)
-                        .unwrap_or(Ty::ERROR);
+                    let recv_ty = arg_exprs.first().map(|e| e.ty).unwrap_or(Ty::ERROR);
                     if let Some(fn_def_id) =
                         self.resolve_trait_method_fn(recv_ty, trait_def_id, method_name, span)
                     {
@@ -899,7 +916,8 @@ impl<'a> FnCtxt<'a> {
                                     span,
                                     format!(
                                         "closure expects {} arguments, got {}",
-                                        param_count, args.len()
+                                        param_count,
+                                        args.len()
                                     ),
                                 ));
                             }
@@ -1011,7 +1029,8 @@ impl<'a> FnCtxt<'a> {
                 // concrete substitution, enabling monomorphization.
                 let mut func_expr = func_expr;
                 func_expr.ty = callee_ty;
-                self.expr_cache.insert(*func, (func_expr.clone(), callee_ty));
+                self.expr_cache
+                    .insert(*func, (func_expr.clone(), callee_ty));
                 (
                     thir::Expr {
                         kind: thir::ExprKind::Call {
@@ -1060,7 +1079,8 @@ impl<'a> FnCtxt<'a> {
                 let mut arg_exprs = Vec::with_capacity(args.len());
                 for (i, &arg_id) in args.iter().enumerate() {
                     let expected = expected_args.get(i).copied();
-                    if let (Some(exp), Expr::Closure { .. }) = (expected, &self.body.exprs[arg_id]) {
+                    if let (Some(exp), Expr::Closure { .. }) = (expected, &self.body.exprs[arg_id])
+                    {
                         if matches!(self.ctx.ty_kind(exp), TyKind::FnPtr(_)) {
                             self.pending_closure_expectation = Some(exp);
                         }
@@ -1199,11 +1219,9 @@ impl<'a> FnCtxt<'a> {
                         let attempt = match self.ctx.ty_kind(lookup_ty) {
                             TyKind::Adt(adt_id, substs) => {
                                 if self.ctx.field_index(*adt_id, *field).is_some() {
-                                    Some(
-                                        self.lookup_field_ty_with_substs(
-                                            *adt_id, *field, span, *substs,
-                                        ),
-                                    )
+                                    Some(self.lookup_field_ty_with_substs(
+                                        *adt_id, *field, span, *substs,
+                                    ))
                                 } else {
                                     None
                                 }
@@ -1246,10 +1264,7 @@ impl<'a> FnCtxt<'a> {
                                 TyKind::Adt(_, _) => {
                                     self.diagnostics.push(GlyimDiagnostic::type_error(
                                         span,
-                                        format!(
-                                            "no field `{}` on type",
-                                            self.ctx.name_str(*field)
-                                        ),
+                                        format!("no field `{}` on type", self.ctx.name_str(*field)),
                                     ));
                                 }
                                 TyKind::Tuple(_) => {
@@ -1290,7 +1305,7 @@ impl<'a> FnCtxt<'a> {
             Expr::Index { base, index } => {
                 let (base_expr, base_ty) = self.check_expr(*base);
                 let (idx_expr, idx_ty) = self.check_expr(*index);
-                
+
                 // Helper to get the element type and whether this is a str type.
                 // Handles Array, Slice, Vec<T>, str, and their reference variants.
                 fn get_index_info(
@@ -1304,7 +1319,7 @@ impl<'a> FnCtxt<'a> {
                         TyKind::Ref(_, inner, _) => (*inner, true),
                         _ => (base_ty, false),
                     };
-                    
+
                     match ctx.ty_kind(inner_ty) {
                         TyKind::Array(elem, _) | TyKind::Slice(elem) => {
                             Some((*elem, false, false)) // elem_ty, is_str, is_ref
@@ -1313,9 +1328,13 @@ impl<'a> FnCtxt<'a> {
                         TyKind::Adt(adt_id, substs) => {
                             if *adt_id == AdtId::from_raw(1020) {
                                 // Vec<T> - extract element type
-                                let elem = ctx.substitution_args(*substs)
+                                let elem = ctx
+                                    .substitution_args(*substs)
                                     .first()
-                                    .and_then(|a| match a { GenericArg::Ty(t) => Some(*t), _ => None })
+                                    .and_then(|a| match a {
+                                        GenericArg::Ty(t) => Some(*t),
+                                        _ => None,
+                                    })
                                     .unwrap_or_else(|| ctx.error_ty());
                                 Some((elem, false, is_ref))
                             } else {
@@ -1327,9 +1346,7 @@ impl<'a> FnCtxt<'a> {
                             }
                         }
                         // str indexes to u8
-                        TyKind::String => {
-                            Some((ctx.mk_ty(TyKind::Uint(UintTy::U8)), true, is_ref))
-                        }
+                        TyKind::String => Some((ctx.mk_ty(TyKind::Uint(UintTy::U8)), true, is_ref)),
                         _ => {
                             diagnostics.push(GlyimDiagnostic::type_error(
                                 span,
@@ -1339,12 +1356,13 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                 }
-                
-                let (elem_ty, is_str, _is_ref) = match get_index_info(self.ctx, base_ty, span, self.diagnostics) {
-                    Some(info) => info,
-                    None => return (thir::Expr::err(span), Ty::ERROR),
-                };
-                
+
+                let (elem_ty, is_str, _is_ref) =
+                    match get_index_info(self.ctx, base_ty, span, self.diagnostics) {
+                        Some(info) => info,
+                        None => return (thir::Expr::err(span), Ty::ERROR),
+                    };
+
                 // Check if the index is a Range expression.
                 if let thir::ExprKind::Range { .. } = idx_expr.kind {
                     // Slicing: result type is slice of element type.
@@ -1438,8 +1456,9 @@ impl<'a> FnCtxt<'a> {
                     }
                     elem_exprs.push(e_expr);
                 }
-                let elem_const_ty =
-                    self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::Isize));
+                let elem_const_ty = self
+                    .ctx
+                    .mk_ty(TyKind::Int(glyim_core::primitives::IntTy::Isize));
                 let arr_ty = self.ctx.mk_ty(TyKind::Array(
                     elem_ty,
                     Const {
@@ -1523,16 +1542,17 @@ impl<'a> FnCtxt<'a> {
 
                     for &(field_name, field_expr_id) in fields {
                         provided_fields.insert(field_name);
-                        let expected_field_ty =
-                            if let Some((_, ty)) = field_infos.iter().find(|(n, _)| *n == field_name) {
-                                self.substitute_type(*ty, substs, span)
-                            } else {
-                                self.diagnostics.push(GlyimDiagnostic::type_error(
-                                    span,
-                                    format!("no field `{}` on variant", self.ctx.name_str(field_name)),
-                                ));
-                                Ty::ERROR
-                            };
+                        let expected_field_ty = if let Some((_, ty)) =
+                            field_infos.iter().find(|(n, _)| *n == field_name)
+                        {
+                            self.substitute_type(*ty, substs, span)
+                        } else {
+                            self.diagnostics.push(GlyimDiagnostic::type_error(
+                                span,
+                                format!("no field `{}` on variant", self.ctx.name_str(field_name)),
+                            ));
+                            Ty::ERROR
+                        };
                         let (field_expr, field_ty) = self.check_expr(field_expr_id);
                         if expected_field_ty != Ty::ERROR && field_ty != Ty::ERROR {
                             self.unify(field_ty, expected_field_ty, span);
@@ -1668,7 +1688,11 @@ impl<'a> FnCtxt<'a> {
                 (thir_expr, struct_ty)
             }
 
-            Expr::Closure { params, body, is_move } => {
+            Expr::Closure {
+                params,
+                body,
+                is_move,
+            } => {
                 // 1. Enter the closure's own scope and bind the parameters so
                 //    that the body's own bindings are distinguishable (by
                 //    LocalVarId boundary) from captures of the enclosing env.
@@ -1770,7 +1794,9 @@ impl<'a> FnCtxt<'a> {
                 let capture_tys: Vec<(Name, Ty)> = captures
                     .iter()
                     .enumerate()
-                    .map(|(i, (_, _, ty))| (self.ctx.resolver().intern(&format!("capture_{i}")), *ty))
+                    .map(|(i, (_, _, ty))| {
+                        (self.ctx.resolver().intern(&format!("capture_{i}")), *ty)
+                    })
                     .collect();
                 let closure_adt = self.ctx.register_closure(capture_tys.clone());
                 // The closure *value* type is `TyKind::Closure(id, substs)`
@@ -1781,7 +1807,10 @@ impl<'a> FnCtxt<'a> {
                 // struct of captures (mirroring the synthetic ADT's fields).
                 let closure_id = ClosureId::from_raw(closure_adt.to_raw());
                 let closure_substs = self.ctx.intern_substitution(
-                    capture_tys.iter().map(|(_, t)| GenericArg::Ty(*t)).collect(),
+                    capture_tys
+                        .iter()
+                        .map(|(_, t)| GenericArg::Ty(*t))
+                        .collect(),
                 );
                 let closure_ty = self.ctx.mk_ty(TyKind::Closure(closure_id, closure_substs));
 
@@ -1789,8 +1818,10 @@ impl<'a> FnCtxt<'a> {
                 // its own parameters) so `Expr::Call` can resolve a call through
                 // a closure-typed value and `lower_call` can emit the target.
                 let closure_id = ClosureId::from_raw(closure_adt.to_raw());
-                let mut sig_inputs: Vec<GenericArg> =
-                    capture_tys.iter().map(|(_, t)| GenericArg::Ty(*t)).collect();
+                let mut sig_inputs: Vec<GenericArg> = capture_tys
+                    .iter()
+                    .map(|(_, t)| GenericArg::Ty(*t))
+                    .collect();
                 sig_inputs.extend(thir_params.iter().map(|p| GenericArg::Ty(p.ty)));
                 let closure_sig = FnSig {
                     inputs: self.ctx.intern_substitution(sig_inputs),
@@ -1838,11 +1869,14 @@ impl<'a> FnCtxt<'a> {
                 let (lhs_expr, lhs_ty) = self.check_expr(*lhs);
                 // An assignment to a captured local is a mutating use.
                 if let thir::ExprKind::VarRef(id) = lhs_expr.kind
-                    && let Some(entry) =
-                        self.capture_log.iter_mut().rev().find(|(vid, ..)| *vid == id)
-                    {
-                        entry.2 = true;
-                    }
+                    && let Some(entry) = self
+                        .capture_log
+                        .iter_mut()
+                        .rev()
+                        .find(|(vid, ..)| *vid == id)
+                {
+                    entry.2 = true;
+                }
                 let (_rhs_expr, rhs_ty) = self.check_expr(*rhs);
                 if lhs_ty != Ty::ERROR && rhs_ty != Ty::ERROR {
                     self.unify(rhs_ty, lhs_ty, span);
@@ -1906,7 +1940,8 @@ impl<'a> FnCtxt<'a> {
                     .map(|e| e.ty)
                     .or_else(|| end_expr.as_ref().map(|e| e.ty))
                     .unwrap_or_else(|| self.ctx.error_ty());
-                let adt_id = glyim_core::def_id::AdtId::from_raw(if *inclusive { 1001 } else { 1000 });
+                let adt_id =
+                    glyim_core::def_id::AdtId::from_raw(if *inclusive { 1001 } else { 1000 });
                 let substs = self
                     .ctx
                     .intern_substitution(vec![glyim_type::GenericArg::Ty(elem_ty)]);
@@ -1957,8 +1992,7 @@ impl<'a> FnCtxt<'a> {
                 let (operand_expr, operand_ty) = self.check_expr(*operand);
                 let (result_ty, thir_expr) = match self.ctx.ty_kind(operand_ty) {
                     TyKind::Adt(_adt_id, substs) => {
-                        let args: Vec<GenericArg> =
-                            self.ctx.substitution_args(*substs).to_vec();
+                        let args: Vec<GenericArg> = self.ctx.substitution_args(*substs).to_vec();
                         match args.first() {
                             Some(GenericArg::Ty(t)) => {
                                 // Constrain the enclosing function's error type:
@@ -1974,10 +2008,8 @@ impl<'a> FnCtxt<'a> {
                                             self.ctx.ty_kind(self.return_ty)
                                         {
                                             let _ = ret_id;
-                                            let ret_args: Vec<GenericArg> = self
-                                                .ctx
-                                                .substitution_args(*ret_substs)
-                                                .to_vec();
+                                            let ret_args: Vec<GenericArg> =
+                                                self.ctx.substitution_args(*ret_substs).to_vec();
                                             if ret_args.len() >= 2 {
                                                 if let GenericArg::Ty(ret_err) = &ret_args[1] {
                                                     if *ret_err != Ty::ERROR && *err_ty != Ty::ERROR
@@ -2085,7 +2117,9 @@ impl<'a> FnCtxt<'a> {
                 // `&str` is `&[u8]`: route it to the `str` (1061) builtin
                 // method table rather than the generic slice (1060) one, so
                 // `Display`-style inherent methods like `to_string` resolve.
-                TyKind::Slice(elem) if matches!(self.ctx.ty_kind(*elem), TyKind::Uint(UintTy::U8)) => {
+                TyKind::Slice(elem)
+                    if matches!(self.ctx.ty_kind(*elem), TyKind::Uint(UintTy::U8)) =>
+                {
                     (Some(AdtId::from_raw(1061)), Some(*elem))
                 }
                 TyKind::Slice(elem) => (Some(AdtId::from_raw(1060)), Some(*elem)),
@@ -2098,10 +2132,7 @@ impl<'a> FnCtxt<'a> {
         // Primitive receiver (u32/u64/usize/…): consult the primitive method
         // table before the ADT-keyed one. Primitives are not ADTs so they
         // cannot be reached through `lookup_builtin_method`.
-        if matches!(
-            self.ctx.ty_kind(step_ty),
-            TyKind::Int(_) | TyKind::Uint(_)
-        ) {
+        if matches!(self.ctx.ty_kind(step_ty), TyKind::Int(_) | TyKind::Uint(_)) {
             if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(step_ty, method_name) {
                 let output = sig.output;
                 return Some((output, fn_id));
@@ -2169,7 +2200,10 @@ impl<'a> FnCtxt<'a> {
         }
         for i in missing {
             let v = self.infer.new_ty_var(self.ctx);
-            subst.insert(i, GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
+            subst.insert(
+                i,
+                GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))),
+            );
         }
         let output = self.ctx.subst_ty(sig.output, &subst);
         // Register the *instantiated* signature under the same `FnDefId` so
@@ -2202,7 +2236,12 @@ impl<'a> FnCtxt<'a> {
         Some((output, fn_id))
     }
 
-    fn resolve_method_call(&mut self, recv_ty: Ty, method_name: Name, span: Span) -> (Ty, Option<MethodDispatch>) {
+    fn resolve_method_call(
+        &mut self,
+        recv_ty: Ty,
+        method_name: Name,
+        span: Span,
+    ) -> (Ty, Option<MethodDispatch>) {
         // §9.1 / §9.2: collect *every* impl whose Self type unifies with the
         // receiver and that defines `method_name`. If more than one matches,
         // this is an ambiguous method call — surface all candidates (rustc's
@@ -2247,9 +2286,7 @@ impl<'a> FnCtxt<'a> {
                     let mut param_map: HashMap<Name, Ty> = HashMap::new();
                     for (i, gp) in impl_item.generic_params.iter().enumerate() {
                         let var = this.infer.new_ty_var(this.ctx);
-                        let ty = this
-                            .ctx
-                            .mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                        let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
                         // Index and name both key the map: `resolve_type_ref`
                         // looks up by `Name`.
                         let _ = i;
@@ -2292,20 +2329,19 @@ impl<'a> FnCtxt<'a> {
                     }
                     for method in &impl_item.methods {
                         if method.name == method_name {
-                            let return_ty =
-                                if let Some(return_ty_ref) = &method.return_ty {
-                                    crate::tyconv::resolve_type_ref(
-                                        this.ctx,
-                                        this.infer,
-                                        this.def_map,
-                                        this.diagnostics,
-                                        return_ty_ref,
-                                        &param_map,
-                                        span,
-                                    )
-                                } else {
-                                    Ty::UNIT
-                                };
+                            let return_ty = if let Some(return_ty_ref) = &method.return_ty {
+                                crate::tyconv::resolve_type_ref(
+                                    this.ctx,
+                                    this.infer,
+                                    this.def_map,
+                                    this.diagnostics,
+                                    return_ty_ref,
+                                    &param_map,
+                                    span,
+                                )
+                            } else {
+                                Ty::UNIT
+                            };
                             // Resolve the impl method's `FnDefId` from
                             // `body_owner_map` (populated by the typeck pass as
                             // it walks impl items). If this call site is checked
@@ -2320,26 +2356,28 @@ impl<'a> FnCtxt<'a> {
                             // table (`TyCtx::impl_method_fns`), populated for
                             // *every* impl — including desugar-generated ones —
                             // by the time mono runs.
-                            let fn_def_id: Option<FnDefId> = method
-                                .body
-                                .and_then(|bid| {
-                                    this.body_owner_map
-                                        .get(&bid)
-                                        .copied()
-                                        .map(|local| FnDefId::from_raw(local.to_raw()))
-                                });
+                            let fn_def_id: Option<FnDefId> = method.body.and_then(|bid| {
+                                this.body_owner_map
+                                    .get(&bid)
+                                    .copied()
+                                    .map(|local| FnDefId::from_raw(local.to_raw()))
+                            });
                             let dispatch = fn_def_id.map(MethodDispatch::Static).or_else(|| {
                                 // Desugar-generated or not-yet-walked body: use
                                 // the impl's trait identity so mono can
                                 // devirtualize against the concrete receiver.
-                                impl_item.trait_ref.as_ref().and_then(|tp| {
-                                    crate::tyconv::resolve_path_to_trait_def_id(
-                                        this.def_map,
-                                        this.ctx,
-                                        tp,
-                                        span,
-                                    )
-                                }).map(MethodDispatch::Virtual)
+                                impl_item
+                                    .trait_ref
+                                    .as_ref()
+                                    .and_then(|tp| {
+                                        crate::tyconv::resolve_path_to_trait_def_id(
+                                            this.def_map,
+                                            this.ctx,
+                                            tp,
+                                            span,
+                                        )
+                                    })
+                                    .map(MethodDispatch::Virtual)
                             });
                             found.push((impl_self_ty, return_ty, dispatch));
                         }
@@ -2553,7 +2591,11 @@ impl<'a> FnCtxt<'a> {
                                         } else {
                                             Ty::UNIT
                                         };
-                                        candidates.push((recv_ty, return_ty, Some(MethodDispatch::Virtual(tid))));
+                                        candidates.push((
+                                            recv_ty,
+                                            return_ty,
+                                            Some(MethodDispatch::Virtual(tid)),
+                                        ));
                                         break;
                                     }
                                 }
@@ -2581,16 +2623,13 @@ impl<'a> FnCtxt<'a> {
                 let recv_name = PrintTy::new(recv_ty, &*self.ctx).to_string();
                 for item in self.hir.items.iter() {
                     if let glyim_hir::ItemKind::Trait(trait_item) = &item.kind {
-                        if trait_item
-                            .methods
-                            .iter()
-                            .any(|m| m.name == method_name)
-                        {
-                            self.diagnostics.push(GlyimDiagnostic::trait_not_implemented(
-                                span,
-                                self.ctx.name_str(item.name),
-                                recv_name.clone(),
-                            ));
+                        if trait_item.methods.iter().any(|m| m.name == method_name) {
+                            self.diagnostics
+                                .push(GlyimDiagnostic::trait_not_implemented(
+                                    span,
+                                    self.ctx.name_str(item.name),
+                                    recv_name.clone(),
+                                ));
                             break;
                         }
                     }
@@ -2670,10 +2709,8 @@ impl<'a> FnCtxt<'a> {
                     if impl_trait_id != trait_def_id {
                         continue;
                     }
-                    let param_map = crate::tyconv::build_param_tys(
-                        self.ctx,
-                        &impl_item.generic_params,
-                    );
+                    let param_map =
+                        crate::tyconv::build_param_tys(self.ctx, &impl_item.generic_params);
                     let impl_self_ty = crate::tyconv::resolve_type_ref(
                         self.ctx,
                         self.infer,
@@ -2688,9 +2725,12 @@ impl<'a> FnCtxt<'a> {
                     // `FnCtxt::unify` pushes to the diagnostics vec. The
                     // receiver may match `Self`, `&Self` (for `&self`
                     // methods), or `&mut Self`.
-                    let ref_self = self.ctx.mk_ref(Region::Erased, impl_self_ty, Mutability::Not);
+                    let ref_self = self
+                        .ctx
+                        .mk_ref(Region::Erased, impl_self_ty, Mutability::Not);
                     let ref_mut_self =
-                        self.ctx.mk_ref(Region::Erased, impl_self_ty, Mutability::Mut);
+                        self.ctx
+                            .mk_ref(Region::Erased, impl_self_ty, Mutability::Mut);
                     let infer = &mut *self.infer;
                     let recv_steps = steps
                         .iter()
@@ -2758,4 +2798,3 @@ impl<'a> FnCtxt<'a> {
         }
     }
 }
-

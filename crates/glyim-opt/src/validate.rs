@@ -29,9 +29,9 @@ use std::fmt;
 /// A single well-formedness violation found by the validator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MirValidationError {
-/// Struct.
+    /// Struct.
     pub kind: MirValidationErrorKind,
-/// Struct.
+    /// Struct.
     pub span: Span,
 }
 
@@ -43,7 +43,7 @@ pub enum MirValidationErrorKind {
     /// A `Drop` terminator whose place type does not need drop glue, per the
     /// canonical `TyCtx::needs_drop` (plan §15.1). Holding the offending place
     /// and type makes the diagnostic actionable and lets tests assert on it.
-/// Struct.
+    /// Struct.
     UnnecessaryDrop {
         /// place field.
         place: Place,
@@ -113,8 +113,12 @@ pub fn validate_body(ctx: &TyCtx, body: &Body) -> Result<(), MirValidationError>
                     });
                 }
             }
-            TerminatorKind::Drop { target, cleanup, .. }
-            | TerminatorKind::Assert { target, cleanup, .. } => {
+            TerminatorKind::Drop {
+                target, cleanup, ..
+            }
+            | TerminatorKind::Assert {
+                target, cleanup, ..
+            } => {
                 if !block_exists(*target) {
                     return Err(MirValidationError {
                         kind: MirValidationErrorKind::UnknownTarget(*target),
@@ -122,12 +126,13 @@ pub fn validate_body(ctx: &TyCtx, body: &Body) -> Result<(), MirValidationError>
                     });
                 }
                 if let Some(c) = cleanup
-                    && !block_exists(*c) {
-                        return Err(MirValidationError {
-                            kind: MirValidationErrorKind::UnknownTarget(*c),
-                            span: bb.terminator.source_info.span,
-                        });
-                    }
+                    && !block_exists(*c)
+                {
+                    return Err(MirValidationError {
+                        kind: MirValidationErrorKind::UnknownTarget(*c),
+                        span: bb.terminator.source_info.span,
+                    });
+                }
                 // Drop-needs-drop consistency (plan §15.1). `needs_drop` is now
                 // the single canonical implementation (`TyCtx::needs_drop`, §7.1),
                 // so this assertion is safe to enable: a `Drop` terminator whose
@@ -162,21 +167,25 @@ pub fn validate_body(ctx: &TyCtx, body: &Body) -> Result<(), MirValidationError>
                     }
                 }
             }
-            TerminatorKind::Call { target, cleanup, .. } => {
+            TerminatorKind::Call {
+                target, cleanup, ..
+            } => {
                 if let Some(t) = target
-                    && !block_exists(*t) {
-                        return Err(MirValidationError {
-                            kind: MirValidationErrorKind::UnknownTarget(*t),
-                            span: bb.terminator.source_info.span,
-                        });
-                    }
+                    && !block_exists(*t)
+                {
+                    return Err(MirValidationError {
+                        kind: MirValidationErrorKind::UnknownTarget(*t),
+                        span: bb.terminator.source_info.span,
+                    });
+                }
                 if let Some(c) = cleanup
-                    && !block_exists(*c) {
-                        return Err(MirValidationError {
-                            kind: MirValidationErrorKind::UnknownTarget(*c),
-                            span: bb.terminator.source_info.span,
-                        });
-                    }
+                    && !block_exists(*c)
+                {
+                    return Err(MirValidationError {
+                        kind: MirValidationErrorKind::UnknownTarget(*c),
+                        span: bb.terminator.source_info.span,
+                    });
+                }
             }
             TerminatorKind::Return | TerminatorKind::Unreachable => {}
         }
@@ -199,22 +208,34 @@ pub fn validate_no_subslice(body: &Body) -> Result<(), MirValidationError> {
         for stmt in &bb.statements {
             if let StatementKind::Assign(_, rvalue) = &stmt.kind
                 && let Some(place) = rvalue_place(rvalue)
-                    && place.projection.iter().any(|e| matches!(e, ProjectionElem::Subslice { .. })) {
-                        return Err(MirValidationError {
-                            kind: MirValidationErrorKind::SubsliceAfterDesugar,
-                            span: bb.statements.first().map(|s| s.source_info.span).unwrap_or(Span::DUMMY),
-                        });
-                    }
+                && place
+                    .projection
+                    .iter()
+                    .any(|e| matches!(e, ProjectionElem::Subslice { .. }))
+            {
+                return Err(MirValidationError {
+                    kind: MirValidationErrorKind::SubsliceAfterDesugar,
+                    span: bb
+                        .statements
+                        .first()
+                        .map(|s| s.source_info.span)
+                        .unwrap_or(Span::DUMMY),
+                });
+            }
         }
         // Terminator operands / places don't carry Subslice (only statement
         // Assign RHS places do in this MIR), but scan defensively anyway.
         if let TerminatorKind::Drop { place, .. } = &bb.terminator.kind
-            && place.projection.iter().any(|e| matches!(e, ProjectionElem::Subslice { .. })) {
-                return Err(MirValidationError {
-                    kind: MirValidationErrorKind::SubsliceAfterDesugar,
-                    span: bb.terminator.source_info.span,
-                });
-            }
+            && place
+                .projection
+                .iter()
+                .any(|e| matches!(e, ProjectionElem::Subslice { .. }))
+        {
+            return Err(MirValidationError {
+                kind: MirValidationErrorKind::SubsliceAfterDesugar,
+                span: bb.terminator.source_info.span,
+            });
+        }
     }
     Ok(())
 }
@@ -327,14 +348,18 @@ mod tests {
 
     #[test]
     fn validates_trivial_return_body() {
-        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32)));
+        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| {
+            c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32))
+        });
         let body = empty_body(i32_ty, i32_ty);
         assert!(validate_body(&ctx, &body).is_ok());
     }
 
     #[test]
     fn rejects_drop_to_missing_block() {
-        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32)));
+        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| {
+            c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32))
+        });
         let mut body = empty_body(i32_ty, i32_ty);
         // Inject a Drop terminator whose target block does not exist.
         body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)].terminator = Terminator {
@@ -370,7 +395,9 @@ mod tests {
     #[test]
     fn flags_drop_on_non_droppable_type() {
         // i32 needs no drop glue; a Drop terminator over it is a compiler bug.
-        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32)));
+        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| {
+            c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32))
+        });
         let body = body_with_drop(i32_ty, i32_ty);
         let err = validate_body(&ctx, &body).expect_err("Drop on i32 should be flagged");
         match err.kind {
@@ -387,12 +414,17 @@ mod tests {
         // String needs drop glue; a Drop terminator over it is correct.
         let (ctx, str_ty) = with_fresh_ty_ctx(|c| c.mk_ty(glyim_type::TyKind::String));
         let body = body_with_drop(str_ty, str_ty);
-        assert!(validate_body(&ctx, &body).is_ok(), "Drop on String must be allowed");
+        assert!(
+            validate_body(&ctx, &body).is_ok(),
+            "Drop on String must be allowed"
+        );
     }
 
     #[test]
     fn rejects_terminator_to_missing_block() {
-        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32)));
+        let (ctx, i32_ty) = with_fresh_ty_ctx(|c| {
+            c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32))
+        });
         let mut body = empty_body(i32_ty, i32_ty);
         body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)].terminator = Terminator {
             kind: TerminatorKind::Goto {
@@ -425,17 +457,22 @@ mod tests {
         // Inject an `Assign` whose RHS reads a place with a `Subslice` projection.
         let subslice_place = Place {
             local: glyim_mir::LocalIdx::from_raw(0),
-            projection: Box::new([glyim_mir::ProjectionElem::Subslice { from: 1, to: 2, from_end: false }]),
+            projection: Box::new([glyim_mir::ProjectionElem::Subslice {
+                from: 1,
+                to: 2,
+                from_end: false,
+            }]),
         };
-        body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)].statements.push(Statement {
-            kind: StatementKind::Assign(
-                Place::new(glyim_mir::LocalIdx::from_raw(0)),
-                Rvalue::Use(Operand::Copy(subslice_place)),
-            ),
-            source_info: SourceInfo::new(Span::DUMMY),
-        });
-        let err = validate_no_subslice(&body)
-            .expect_err("surviving Subslice should be flagged");
+        body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)]
+            .statements
+            .push(Statement {
+                kind: StatementKind::Assign(
+                    Place::new(glyim_mir::LocalIdx::from_raw(0)),
+                    Rvalue::Use(Operand::Copy(subslice_place)),
+                ),
+                source_info: SourceInfo::new(Span::DUMMY),
+            });
+        let err = validate_no_subslice(&body).expect_err("surviving Subslice should be flagged");
         assert_eq!(err.kind, MirValidationErrorKind::SubsliceAfterDesugar);
         // The general validate_body (pre-pass) must NOT flag a terminal Subslice.
         assert!(validate_body(&ctx, &body).is_ok());

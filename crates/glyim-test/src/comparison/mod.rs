@@ -6,7 +6,7 @@ use glyim_diag::{DiagSeverity, GlyimDiagnostic};
 
 /// DiagSeverityExt.
 pub trait DiagSeverityExt {
-/// display_name.
+    /// display_name.
     fn display_name(self) -> &'static str;
 }
 
@@ -24,16 +24,16 @@ impl DiagSeverityExt for DiagSeverity {
 #[derive(Clone, Debug)]
 /// NormalizedDiag.
 pub struct NormalizedDiag {
-/// Struct.
+    /// Struct.
     pub severity: DiagSeverity,
-/// Struct.
+    /// Struct.
     pub line: usize,
-/// Struct.
+    /// Struct.
     pub message: String,
 }
 
 impl NormalizedDiag {
-/// from_glyim_diag.
+    /// from_glyim_diag.
     pub fn from_glyim_diag(diag: &GlyimDiagnostic, source: &str) -> Self {
         let line = byte_offset_to_line(source, diag.span.primary.lo.to_usize());
         Self {
@@ -47,20 +47,20 @@ impl NormalizedDiag {
 #[derive(Clone, Debug)]
 /// ComparisonResult.
 pub struct ComparisonResult {
-/// Struct.
+    /// Struct.
     pub matched: Vec<MatchedPair>,
-/// Struct.
+    /// Struct.
     pub missing: Vec<Annotation>,
-/// Struct.
+    /// Struct.
     pub unexpected: Vec<NormalizedDiag>,
-/// Struct.
+    /// Struct.
     pub wrong_severity: Vec<SeverityMismatch>,
-/// Struct.
+    /// Struct.
     pub optional_unmatched: Vec<Annotation>,
 }
 
 impl ComparisonResult {
-/// passed.
+    /// passed.
     pub fn passed(&self) -> bool {
         self.missing.is_empty() && self.unexpected.is_empty() && self.wrong_severity.is_empty()
     }
@@ -69,22 +69,22 @@ impl ComparisonResult {
 #[derive(Clone, Debug)]
 /// MatchedPair.
 pub struct MatchedPair {
-/// Struct.
+    /// Struct.
     pub annotation: Annotation,
-/// Struct.
+    /// Struct.
     pub diagnostic: NormalizedDiag,
 }
 
 #[derive(Clone, Debug)]
 /// SeverityMismatch.
 pub struct SeverityMismatch {
-/// Struct.
+    /// Struct.
     pub annotation: Annotation,
-/// Struct.
+    /// Struct.
     pub diagnostic: NormalizedDiag,
-/// Struct.
+    /// Struct.
     pub expected: DiagSeverity,
-/// Struct.
+    /// Struct.
     pub actual: DiagSeverity,
 }
 

@@ -5,33 +5,33 @@ use std::str::FromStr;
 #[derive(Clone, Debug)]
 /// TestConfig.
 pub struct TestConfig {
-/// Struct.
+    /// Struct.
     pub mode: TestMode,
-/// Struct.
+    /// Struct.
     pub revisions: Vec<String>,
-/// Struct.
+    /// Struct.
     pub revision_compile_flags: HashMap<String, Vec<String>>,
-/// Struct.
+    /// Struct.
     pub compile_flags: Vec<String>,
-/// Struct.
+    /// Struct.
     pub error_patterns: Vec<String>,
-/// Struct.
+    /// Struct.
     pub needs_llvm: bool,
-/// Struct.
+    /// Struct.
     pub min_version: Option<String>,
-/// Struct.
+    /// Struct.
     pub ignore: bool,
-/// Struct.
+    /// Struct.
     pub only_target: Option<String>,
-/// Struct.
+    /// Struct.
     pub aux_files: Vec<PathBuf>,
-/// Struct.
+    /// Struct.
     pub timeout_secs: u64,
-/// Struct.
+    /// Struct.
     pub check_stdout: Option<String>,
-/// Struct.
+    /// Struct.
     pub check_stderr: Option<String>,
-/// Struct.
+    /// Struct.
     pub expected_exit_code: Option<i32>,
 }
 
@@ -59,15 +59,15 @@ impl Default for TestConfig {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// TestMode.
 pub enum TestMode {
-/// Variant.
+    /// Variant.
     CompilePass,
-/// Variant.
+    /// Variant.
     CompileFail,
-/// Variant.
+    /// Variant.
     Ui,
-/// Variant.
+    /// Variant.
     RunPass,
-/// Variant.
+    /// Variant.
     RunFail,
 }
 
@@ -89,11 +89,11 @@ impl FromStr for TestMode {
 }
 
 impl TestMode {
-/// from_str_exact.
+    /// from_str_exact.
     pub fn from_str_exact(s: &str) -> Result<Self, String> {
         s.parse()
     }
-/// dir_name.
+    /// dir_name.
     pub fn dir_name(self) -> &'static str {
         match self {
             Self::CompilePass => "compile-pass",
@@ -107,9 +107,9 @@ impl TestMode {
 
 /// ParsedConfig.
 pub struct ParsedConfig {
-/// Struct.
+    /// Struct.
     pub config: TestConfig,
-/// Struct.
+    /// Struct.
     pub has_explicit_mode: bool,
 }
 

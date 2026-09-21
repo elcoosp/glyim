@@ -150,8 +150,9 @@ fn main() {
     let _c = A { x: 3 };
 }
 "#;
-    compile_and_run_struct_with_drop(src)
-        .expect("struct-with-multiple-drop-impls must compile + run without the cross-context OOB panic");
+    compile_and_run_struct_with_drop(src).expect(
+        "struct-with-multiple-drop-impls must compile + run without the cross-context OOB panic",
+    );
 }
 
 /// Compile + run a `for`-loop program and return `main`'s integer result.
@@ -203,24 +204,22 @@ fn compile_and_run_for_loop(src: &str) -> Result<i128, String> {
     for b in &bodies {
         interp.add_function(b.owner, (**b).clone());
     }
-    interp
-        .run_body(main_body)
-        .map_err(|e| {
-            let mut s = String::new();
-            s.push_str(&format!("interpreter error: {}\n", e));
-            for b in &bodies {
-                s.push_str(&format!(
-                    "BODY owner={:?} arg_count={} n_locals={}:\n{:#?}\n",
-                    b.owner,
-                    b.arg_count,
-                    b.locals.len(),
-                    b
-                ));
-            }
-            s.push_str(&format!("MAIN BODY:\n{:#?}\n", main_body));
-            eprintln!("{}", s);
-            s
-        })?;
+    interp.run_body(main_body).map_err(|e| {
+        let mut s = String::new();
+        s.push_str(&format!("interpreter error: {}\n", e));
+        for b in &bodies {
+            s.push_str(&format!(
+                "BODY owner={:?} arg_count={} n_locals={}:\n{:#?}\n",
+                b.owner,
+                b.arg_count,
+                b.locals.len(),
+                b
+            ));
+        }
+        s.push_str(&format!("MAIN BODY:\n{:#?}\n", main_body));
+        eprintln!("{}", s);
+        s
+    })?;
 
     let ret = interp
         .get_return_value()
@@ -284,4 +283,3 @@ fn main() -> i32 {
         "for-loop must iterate 0..5 via the iterator (sum 10), not the one-shot fallback (sum 0)"
     );
 }
-

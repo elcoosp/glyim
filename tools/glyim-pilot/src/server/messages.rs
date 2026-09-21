@@ -6,65 +6,65 @@ use serde::{Deserialize, Serialize};
 /// ExtensionMessage.
 pub enum ExtensionMessage {
     #[serde(rename = "session.ready", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     SessionReady {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         provider_id: String,
-/// Struct.
+        /// Struct.
         tab_id: u64,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "ops.ready", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     OpsReady {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         content: String,
-/// Struct.
+        /// Struct.
         turn: u32,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "stream.complete", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     StreamComplete {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         turn: u32,
-/// Struct.
+        /// Struct.
         full_response: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "error.detected", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     ErrorDetected {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         error_type: String,
-/// Struct.
+        /// Struct.
         error_message: String,
-/// Struct.
+        /// Struct.
         recoverable: bool,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "pong")]
-/// Variant.
+    /// Variant.
     Pong {
         /// timestamp field.
         timestamp: u64,
@@ -74,7 +74,7 @@ pub enum ExtensionMessage {
 }
 
 impl ExtensionMessage {
-/// version.
+    /// version.
     pub fn version(&self) -> u32 {
         match self {
             Self::SessionReady { v, .. }
@@ -84,7 +84,7 @@ impl ExtensionMessage {
             | Self::Pong { v, .. } => *v,
         }
     }
-/// session_id.
+    /// session_id.
     pub fn session_id(&self) -> Option<&str> {
         match self {
             Self::SessionReady { session_id, .. }
@@ -94,7 +94,7 @@ impl ExtensionMessage {
             Self::Pong { .. } => None,
         }
     }
-/// trace_id.
+    /// trace_id.
     pub fn trace_id(&self) -> Option<&str> {
         match self {
             Self::SessionReady { trace_id, .. }
@@ -104,7 +104,7 @@ impl ExtensionMessage {
             Self::Pong { .. } => None,
         }
     }
-/// validate_version.
+    /// validate_version.
     pub fn validate_version(&self) -> Result<(), String> {
         let v = self.version();
         if v == 0 {
@@ -122,81 +122,81 @@ impl ExtensionMessage {
 /// CliMessage.
 pub enum CliMessage {
     #[serde(rename = "session.start", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     SessionStart {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         provider_id: String,
-/// Struct.
+        /// Struct.
         prompt: String,
-/// Struct.
+        /// Struct.
         system_prompt: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "feedback.send", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     FeedbackSend {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         message: String,
-/// Struct.
+        /// Struct.
         turn: u32,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "feedback.continue", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     FeedbackContinue {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "retry.prompt", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     RetryPrompt {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         message: String,
-/// Struct.
+        /// Struct.
         delay: u64,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "session.pause", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     SessionPause {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "session.abort", rename_all = "camelCase")]
-/// Variant.
+    /// Variant.
     SessionAbort {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         v: u32,
     },
     #[serde(rename = "ping")]
-/// Struct.
+    /// Struct.
     Ping {
         /// timestamp field.
         timestamp: u64,

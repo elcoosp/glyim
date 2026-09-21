@@ -11,11 +11,11 @@
 
 use crate::completion::provide_completions;
 use crate::database::{AnalysisDatabase, SourceMap};
+use glyim_core::Visibility;
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
 use glyim_core::interner::Name;
 use glyim_core::primitives::IntTy;
-use glyim_core::Visibility;
 use glyim_hir::{
     Body, CrateHir, Expr, ExprId, FnItem, ImplItem, ImplMethod, Item, ItemId, ItemKind, Path,
     TypeRef,
@@ -230,7 +230,8 @@ fn main() {
             is_const: false,
             generic_params: vec![],
             where_clauses: vec![],
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Inherited,
         span: span_for(0, source.len()),
     };
@@ -245,7 +246,9 @@ fn main() {
         interner: Default::default(),
     };
     db.hirs.write().insert(file_id, hir.clone());
-    db.symbol_index.write().build_from_hir(file_id, &hir, &interner);
+    db.symbol_index
+        .write()
+        .build_from_hir(file_id, &hir, &interner);
 
     // Type the receiver `x` as `i32`.
     let mut ty_ctx_mut = TyCtxMut::new(interner.clone());
@@ -422,7 +425,9 @@ fn main() {
         interner: Default::default(),
     };
     db.hirs.write().insert(file_id, hir.clone());
-    db.symbol_index.write().build_from_hir(file_id, &hir, &interner);
+    db.symbol_index
+        .write()
+        .build_from_hir(file_id, &hir, &interner);
 
     // Type the receiver `x` as `i32`.
     let mut ty_ctx_mut = TyCtxMut::new(interner.clone());

@@ -1,16 +1,18 @@
 use crate::adt_def::*;
 use crate::auto_trait::*;
 use crate::display::TypeLookup;
-use crate::type_arena::TypeArena;
-use crate::ty_ctx_mut::TyCtxMut;
 use crate::flags::*;
 use crate::fn_sig::FnSig;
 use crate::lang_items::LangItems;
 use crate::region::*;
 use crate::substitution::*;
 use crate::ty::*;
+use crate::ty_ctx_mut::TyCtxMut;
+use crate::type_arena::TypeArena;
 use glyim_core::arena::IndexVec;
-use glyim_core::def_id::{AdtId, ClosureId, ConstDefId, FnDefId, LocalDefId, OpaqueTyId, TraitDefId};
+use glyim_core::def_id::{
+    AdtId, ClosureId, ConstDefId, FnDefId, LocalDefId, OpaqueTyId, TraitDefId,
+};
 use glyim_core::interner::{Interner, Name};
 use glyim_core::primitives::Mutability;
 use std::collections::{HashMap, HashSet};
@@ -32,7 +34,7 @@ pub struct TyCtx {
     /// instead of assuming zero auto traits.
     pub(crate) opaque_hidden: HashMap<OpaqueTyId, Ty>,
     pub(crate) interior_mutable_adt_ids: HashSet<AdtId>,
-/// Struct.
+    /// Struct.
     pub adt_defs: HashMap<AdtId, AdtDef>,
     /// Maps an ADT's (HIR-interned) name to its `AdtId`. Populated by
     /// `register_adt_with_name` during typeck so ADT type resolution by name
@@ -54,8 +56,7 @@ pub struct TyCtx {
     /// recover per-capture member types from a `TyKind::Closure`.
     pub(crate) closure_adt_map: HashMap<ClosureId, AdtId>,
     /// Concrete associated-type projection table (see `TyCtxMut::impl_assoc_types`).
-    pub(crate) impl_assoc_types:
-        HashMap<(Ty, glyim_core::def_id::TraitDefId), Vec<(Name, Ty)>>,
+    pub(crate) impl_assoc_types: HashMap<(Ty, glyim_core::def_id::TraitDefId), Vec<(Name, Ty)>>,
     pub(crate) body_tys: HashMap<LocalDefId, Ty>,
     pub(crate) lang_items: LangItems,
     /// `AdtId`s that have an explicit `Drop` impl (or are owning builtins such as
@@ -75,7 +76,7 @@ pub struct TyCtx {
 }
 
 impl TyCtx {
-/// to_mut.
+    /// to_mut.
     /// Produce a fresh `TyCtxMut` that **shares the same canonical type arena**
     /// as this frozen context. Any type/substitution allocated through the
     /// returned mutator is valid when read back through this (or any other)
@@ -88,7 +89,7 @@ impl TyCtx {
         TyCtxMut::from_ty_ctx(self)
     }
 
-/// ty_kind.
+    /// ty_kind.
     pub fn ty_kind(&self, ty: Ty) -> &TyKind {
         self.arena.ty_kind(ty)
     }
@@ -98,12 +99,12 @@ impl TyCtx {
         &self.lang_items
     }
 
-/// ty_flags.
+    /// ty_flags.
     pub fn ty_flags(&self, ty: Ty) -> TypeFlags {
         self.arena.ty_flags(ty)
     }
 
-/// substitution_args.
+    /// substitution_args.
     pub fn substitution_args(&self, sub: Substitution) -> &[GenericArg] {
         self.arena.substitution_args(sub)
     }
@@ -137,17 +138,17 @@ impl TyCtx {
         self.adt_by_name.get(&name).copied()
     }
 
-/// region.
+    /// region.
     pub fn region(&self, vid: RegionVid) -> &Region {
         &self.regions[vid]
     }
 
-/// resolver.
+    /// resolver.
     pub fn resolver(&self) -> &Interner {
         &self.resolver
     }
 
-/// name_str.
+    /// name_str.
     pub fn name_str(&self, name: Name) -> &str {
         self.resolver.resolve(name)
     }
@@ -220,24 +221,19 @@ impl TyCtx {
                 continue;
             }
             for (n, ty) in entries.iter() {
-                if *n == assoc_name
-                    && found != Some(*ty) {
-                        if found.is_some() {
-                            ambiguous = true;
-                            break;
-                        }
-                        found = Some(*ty);
+                if *n == assoc_name && found != Some(*ty) {
+                    if found.is_some() {
+                        ambiguous = true;
+                        break;
                     }
+                    found = Some(*ty);
+                }
             }
             if ambiguous {
                 break;
             }
         }
-        if ambiguous {
-            None
-        } else {
-            found
-        }
+        if ambiguous { None } else { found }
     }
 
     /// Resolve an associated-type projection `Self::Item` / `Type::Item` to its
@@ -268,10 +264,7 @@ impl TyCtx {
                     Some(a) => matches!(self.ty_kind(*sty), TyKind::Adt(b, _) if b == &a),
                     None => *sty == self_ty,
                 };
-                sty_matches
-                    && entries
-                        .iter()
-                        .any(|(n, _)| self.name_str(*n) == assoc_name)
+                sty_matches && entries.iter().any(|(n, _)| self.name_str(*n) == assoc_name)
             })
             .and_then(|((_, _), entries)| {
                 entries
@@ -281,12 +274,7 @@ impl TyCtx {
             })
     }
 
-
-    pub fn resolve_associated_type_by_self_ty(
-        &self,
-        self_ty: Ty,
-        assoc_name: Name,
-    ) -> Option<Ty> {
+    pub fn resolve_associated_type_by_self_ty(&self, self_ty: Ty, assoc_name: Name) -> Option<Ty> {
         let self_adt = match self.ty_kind(self_ty) {
             TyKind::Adt(adt_id, _) => Some(*adt_id),
             _ => None,
@@ -308,7 +296,7 @@ impl TyCtx {
             })
     }
 
-/// is_copy.
+    /// is_copy.
     pub fn is_copy(&self, ty: Ty) -> bool {
         match self.ty_kind(ty) {
             TyKind::Bool | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Char => {
@@ -343,23 +331,18 @@ impl TyCtx {
         match self.ty_kind(ty) {
             TyKind::Slice(_) | TyKind::Dynamic(..) | TyKind::Opaque(..) => false,
             TyKind::Array(inner, _) => self.is_sized(*inner),
-            TyKind::Tuple(substs) => {
-                self.substitution_args(*substs)
-                    .iter()
-                    .all(|arg| match arg {
-                        GenericArg::Ty(t) => self.is_sized(*t),
-                        _ => true,
-                    })
-            }
+            TyKind::Tuple(substs) => self.substitution_args(*substs).iter().all(|arg| match arg {
+                GenericArg::Ty(t) => self.is_sized(*t),
+                _ => true,
+            }),
             TyKind::Adt(adt_id, _) => {
                 if let Some(adt_def) = self.adt_def(*adt_id) {
                     // An ADT is sized unless it has a field that is unsized
                     // (the lang-level rule for the by-value-last-field DST).
-                    adt_def.variants.iter().all(|v| {
-                        v.fields
-                            .iter()
-                            .all(|f| self.is_sized(f.ty))
-                    })
+                    adt_def
+                        .variants
+                        .iter()
+                        .all(|v| v.fields.iter().all(|f| self.is_sized(f.ty)))
                 } else {
                     // Unknown/unregistered ADT: conservatively treat as
                     // *un*sized so generic `T: Sized` bounds and codegen do not
@@ -377,47 +360,47 @@ impl TyCtx {
         }
     }
 
-/// error_ty.
+    /// error_ty.
     pub fn error_ty(&self) -> Ty {
         Ty::ERROR
     }
 
-/// never_ty.
+    /// never_ty.
     pub fn never_ty(&self) -> Ty {
         Ty::NEVER
     }
 
-/// unit_ty.
+    /// unit_ty.
     pub fn unit_ty(&self) -> Ty {
         Ty::UNIT
     }
 
-/// bool_ty.
+    /// bool_ty.
     pub fn bool_ty(&self) -> Ty {
         Ty::BOOL
     }
 
-/// ty_is_error.
+    /// ty_is_error.
     pub fn ty_is_error(&self, ty: Ty) -> bool {
         self.ty_flags(ty).contains(TypeFlags::HAS_ERROR)
     }
 
-/// ty_has_depth_overflow.
+    /// ty_has_depth_overflow.
     pub fn ty_has_depth_overflow(&self, ty: Ty) -> bool {
         self.ty_flags(ty).contains(TypeFlags::HAS_DEPTH_OVERFLOW)
     }
 
-/// auto_trait_flags.
+    /// auto_trait_flags.
     pub fn auto_trait_flags(&self, ty: Ty) -> AutoTraitFlags {
         compute_auto_traits(ty, self, &self.auto_trait_registry, &self.adt_reprs)
     }
 
-/// implements_auto_trait.
+    /// implements_auto_trait.
     pub fn implements_auto_trait(&self, ty: Ty, auto_trait: AutoTrait) -> bool {
         self.auto_trait_flags(ty).contains(auto_trait.flag())
     }
 
-/// has_negative_impl.
+    /// has_negative_impl.
     pub fn has_negative_impl(&self, adt_id: AdtId, auto_trait: AutoTrait) -> bool {
         self.auto_trait_registry
             .has_negative_impl(adt_id, auto_trait)
@@ -448,10 +431,11 @@ impl TyCtx {
                 // `Deref` impls use `type Target = T`.
                 if let Some((_self_params, target)) = self.deref_registry.template(*adt_id)
                     && let TyKind::Param(p) = self.ty_kind(*target)
-                        && let Some(arg) = self.substitution_args(*sub).get(p.index as usize)
-                            && let GenericArg::Ty(t) = arg {
-                                return Some(*t);
-                            }
+                    && let Some(arg) = self.substitution_args(*sub).get(p.index as usize)
+                    && let GenericArg::Ty(t) = arg
+                {
+                    return Some(*t);
+                }
                 None
             }
             _ => None,
@@ -468,17 +452,17 @@ impl TyCtx {
             .map(|(_self_params, target)| *target)
     }
 
-/// has_manual_impl.
+    /// has_manual_impl.
     pub fn has_manual_impl(&self, adt_id: AdtId, auto_trait: AutoTrait) -> bool {
         self.auto_trait_registry.has_manual_impl(adt_id, auto_trait)
     }
 
-/// adt_repr.
+    /// adt_repr.
     pub fn adt_repr(&self, adt_id: AdtId) -> Option<&AdtRepr> {
         self.adt_reprs.get(&adt_id)
     }
 
-/// field_ty.
+    /// field_ty.
     pub fn field_ty(&self, adt_id: AdtId, field_idx: usize) -> Ty {
         if let Some(def) = self.adt_defs.get(&adt_id) {
             return def
@@ -498,7 +482,7 @@ impl TyCtx {
         self.error_ty()
     }
 
-/// adt_def.
+    /// adt_def.
     pub fn adt_def(&self, id: AdtId) -> Option<&AdtDef> {
         self.adt_defs.get(&id)
     }
@@ -545,9 +529,10 @@ impl TyCtx {
         for cand in candidates {
             if let TyKind::Adt(adt_id, _) = self.ty_kind(cand)
                 && let Some(methods) = self.impl_method_fns.get(&(trait_def_id, *adt_id))
-                    && let Some(&fn_def_id) = methods.get(&method_name) {
-                        return Some(fn_def_id);
-                    }
+                && let Some(&fn_def_id) = methods.get(&method_name)
+            {
+                return Some(fn_def_id);
+            }
         }
         None
     }
@@ -620,11 +605,9 @@ impl TyCtx {
                         if adt.kind == AdtKind::Union {
                             return true;
                         }
-                        adt.variants.iter().any(|v| {
-                            v.fields
-                                .iter()
-                                .any(|f| self.needs_drop_rec(f.ty, visited))
-                        })
+                        adt.variants
+                            .iter()
+                            .any(|v| v.fields.iter().any(|f| self.needs_drop_rec(f.ty, visited)))
                     }
                     // Unregistered ADT: cannot inspect fields. Err toward no drop
                     // (see doc comment) rather than a spurious destructor.
@@ -637,7 +620,7 @@ impl TyCtx {
         result
     }
 
-/// field_index.
+    /// field_index.
     pub fn field_index(&self, adt_id: AdtId, field_name: Name) -> Option<usize> {
         if let Some(def) = self.adt_defs.get(&adt_id) {
             for (i, field) in def.fields.iter_enumerated() {
@@ -649,7 +632,7 @@ impl TyCtx {
         None
     }
 
-/// fn_sig.
+    /// fn_sig.
     pub fn fn_sig(&self, def_id: FnDefId) -> Option<&FnSig> {
         self.fn_sigs.get(&def_id)
     }
@@ -660,7 +643,7 @@ impl TyCtx {
         self.const_tys.get(&def_id).copied()
     }
 
-/// closure_sig.
+    /// closure_sig.
     pub fn closure_sig(&self, closure_id: ClosureId) -> Option<&FnSig> {
         self.closure_sigs.get(&closure_id)
     }
@@ -670,12 +653,12 @@ impl TyCtx {
         self.closure_adt_map.get(&closure_id).copied()
     }
 
-/// body_ty.
+    /// body_ty.
     pub fn body_ty(&self, def_id: LocalDefId) -> Option<Ty> {
         self.body_tys.get(&def_id).copied()
     }
 
-/// variant_type.
+    /// variant_type.
     pub fn variant_type(&self, adt_id: AdtId, variant_idx: u32) -> Ty {
         self.variant_types
             .get(&adt_id)

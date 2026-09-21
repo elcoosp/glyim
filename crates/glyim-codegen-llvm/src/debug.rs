@@ -10,8 +10,8 @@ use inkwell::debug_info::{
     AsDIScope, DIFile, DIFlags, DIFlagsConstants, DIScope, DISubprogram, DIType, DWARFEmissionKind,
     DWARFSourceLanguage, DebugInfoBuilder,
 };
-use inkwell::values::FunctionValue;
 use inkwell::values::AsValueRef;
+use inkwell::values::FunctionValue;
 use std::collections::HashMap;
 
 /// Walk back through macro expansions to find the original source location.
@@ -362,8 +362,7 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                                 format!("{}_V{}", name, ty_ctx.name_str(variant.name));
                             let mut variant_field_types: Vec<DIType<'ctx>> = Vec::new();
                             for field in variant.fields.iter() {
-                                let field_di =
-                                    self.debug_type_for_ty(context, field.ty, ty_ctx);
+                                let field_di = self.debug_type_for_ty(context, field.ty, ty_ctx);
                                 variant_field_types.push(field_di);
                             }
                             let variant_di = self

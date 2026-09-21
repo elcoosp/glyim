@@ -14,7 +14,7 @@ use glyim_typeck::thir;
 
 impl<'a> MirBuilder<'a> {
     // ---- Statement lowering ----
-/// lower_stmt.
+    /// lower_stmt.
     pub fn lower_stmt(&mut self, stmt: &thir::Stmt) {
         match stmt {
             thir::Stmt::Let {
@@ -80,7 +80,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Expression → Rvalue lowering ----
-/// lower_expr_to_rvalue.
+    /// lower_expr_to_rvalue.
     pub fn lower_expr_to_rvalue(&mut self, expr: &thir::Expr) -> glyim_mir::Rvalue {
         match &expr.kind {
             thir::ExprKind::Literal(lit) => {
@@ -629,10 +629,7 @@ impl<'a> MirBuilder<'a> {
                 // but the MIR local still holds `&mut Counter`, and the
                 // interpreter requires a `Deref` step to reach the pointee.
                 let base_ty = self.locals[base_place.local].ty;
-                let base_place = if matches!(
-                    self.ctx.ty_ctx().ty_kind(base_ty),
-                    TyKind::Ref(..)
-                ) {
+                let base_place = if matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Ref(..)) {
                     self.place_with_projection(base_place, ProjectionElem::Deref)
                 } else {
                     base_place
@@ -961,7 +958,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Expression → Operand lowering ----
-/// lower_expr_to_operand.
+    /// lower_expr_to_operand.
     /// Resolve a THIR `VarRef(LocalVarId)` to the MIR `LocalIdx` allocated
     /// for that binding. The type-checker's `LocalVarId` space is NOT aligned
     /// with the MIR local-index space (temporaries interleave user-variable
@@ -971,7 +968,7 @@ impl<'a> MirBuilder<'a> {
     /// locals 1:1 with `LocalVarId`.
     fn local_for_var(&self, var_id: thir::LocalVarId) -> LocalIdx {
         let hit = self.local_var_map.get(&var_id);
-        
+
         if let Some(&local) = hit {
             local
         } else {
@@ -1006,7 +1003,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Expression → Place lowering ----
-/// lower_expr_to_place.
+    /// lower_expr_to_place.
     pub fn lower_expr_to_place(&mut self, expr: &thir::Expr) -> glyim_mir::Place {
         match &expr.kind {
             thir::ExprKind::VarRef(var_id) => {
@@ -1030,10 +1027,7 @@ impl<'a> MirBuilder<'a> {
                 // but the MIR local still holds `&mut Counter`, and the
                 // interpreter requires a `Deref` step to reach the pointee.
                 let base_ty = self.locals[base_place.local].ty;
-                let base_place = if matches!(
-                    self.ctx.ty_ctx().ty_kind(base_ty),
-                    TyKind::Ref(..)
-                ) {
+                let base_place = if matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Ref(..)) {
                     self.place_with_projection(base_place, ProjectionElem::Deref)
                 } else {
                     base_place
@@ -1051,14 +1045,12 @@ impl<'a> MirBuilder<'a> {
                 // applying the `Index` projection (mirrors Rust indexing,
                 // which peels the reference first).
                 let base_decl_ty = self.locals[base_place.local].ty;
-                let base_place = if matches!(
-                    self.ctx.ty_ctx().ty_kind(base_decl_ty),
-                    TyKind::Ref(..)
-                ) {
-                    self.place_with_projection(base_place, ProjectionElem::Deref)
-                } else {
-                    base_place
-                };
+                let base_place =
+                    if matches!(self.ctx.ty_ctx().ty_kind(base_decl_ty), TyKind::Ref(..)) {
+                        self.place_with_projection(base_place, ProjectionElem::Deref)
+                    } else {
+                        base_place
+                    };
                 let index_local = self.alloc_local(
                     index.ty,
                     glyim_core::primitives::Mutability::Not,
@@ -1096,7 +1088,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Pattern binding ----
-/// bind_pattern.
+    /// bind_pattern.
     pub fn bind_pattern(
         &mut self,
         pat: &thir::Pattern,
@@ -1362,11 +1354,12 @@ impl<'a> MirBuilder<'a> {
             .iter()
             .any(|a| matches!(&a.pat.kind, thir::PatternKind::Slice { .. }));
 
-        let enum_dispatch = if let TyKind::Adt(adt_id, _substs) = self.ctx.ty_ctx().ty_kind(scrutinee.ty) {
-            self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum
-        } else {
-            false
-        };
+        let enum_dispatch =
+            if let TyKind::Adt(adt_id, _substs) = self.ctx.ty_ctx().ty_kind(scrutinee.ty) {
+                self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum
+            } else {
+                false
+            };
 
         // Always materialize the *whole* scrutinee into a local so that
         // match-arm patterns can be bound to MIR locals (mirroring `let`
@@ -1501,17 +1494,12 @@ impl<'a> MirBuilder<'a> {
                 // capture the entire `Start(..)` aggregate. Materializing the
                 // full `scrutinee_place` into `scrut_local` and binding off that
                 // local makes `bind_pattern` project from the enum value itself.
-                let scrut_local = self.alloc_local(
-                    scrutinee.ty,
-                    glyim_core::primitives::Mutability::Not,
-                    span,
-                );
+                let scrut_local =
+                    self.alloc_local(scrutinee.ty, glyim_core::primitives::Mutability::Not, span);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(scrut_local),
-                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
-                            scrutinee_place.clone(),
-                        )),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrutinee_place.clone())),
                     ),
                     span,
                 );
@@ -1729,10 +1717,7 @@ impl<'a> MirBuilder<'a> {
         // peels `&`/`&mut` before applying the index operation). Required for
         // the common `buf[..n]` pattern where `buf: &mut [u8]` / `&[T]`.
         let raw_base_ty = base_place.ty(self.ctx.ty_ctx(), &self.locals);
-        let base_place = if matches!(
-            self.ctx.ty_ctx().ty_kind(raw_base_ty),
-            TyKind::Ref(..)
-        ) {
+        let base_place = if matches!(self.ctx.ty_ctx().ty_kind(raw_base_ty), TyKind::Ref(..)) {
             self.place_with_projection(base_place, ProjectionElem::Deref)
         } else {
             base_place
@@ -1744,9 +1729,7 @@ impl<'a> MirBuilder<'a> {
             // `Vec<T>` (builtin ADT id 1020) also supports dynamic range
             // slicing (via `Index<Range<usize>> -> [T]`). Extract `T` from
             // the substitution so the slice element type lines up.
-            TyKind::Adt(adt_id, substs)
-                if *adt_id == glyim_core::def_id::AdtId::from_raw(1020) =>
-            {
+            TyKind::Adt(adt_id, substs) if *adt_id == glyim_core::def_id::AdtId::from_raw(1020) => {
                 self.ctx
                     .ty_ctx()
                     .substitution_args(*substs)
@@ -1834,10 +1817,7 @@ impl<'a> MirBuilder<'a> {
                 };
                 let add_rval = Rvalue::BinaryOp(
                     BinOp::Add,
-                    Box::new((
-                        Operand::Copy(Place::new(end_local)),
-                        Operand::Constant(one),
-                    )),
+                    Box::new((Operand::Copy(Place::new(end_local)), Operand::Constant(one))),
                 );
                 self.push_stmt(
                     StatementKind::Assign(Place::new(eff_end_local), add_rval),

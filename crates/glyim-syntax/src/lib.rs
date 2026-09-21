@@ -4,401 +4,401 @@
 /// SyntaxKind.
 pub enum SyntaxKind {
     // Keywords
-/// Variant.
+    /// Variant.
     KwFn,
-/// Variant.
+    /// Variant.
     KwLet,
-/// Variant.
+    /// Variant.
     KwStruct,
-/// Variant.
+    /// Variant.
     KwEnum,
-/// Variant.
+    /// Variant.
     KwIf,
-/// Variant.
+    /// Variant.
     KwElse,
-/// Variant.
+    /// Variant.
     KwReturn,
-/// Variant.
+    /// Variant.
     KwMatch,
-/// Variant.
+    /// Variant.
     KwMod,
-/// Variant.
+    /// Variant.
     KwComptime,
-/// Variant.
+    /// Variant.
     KwSelf,
-/// Variant.
+    /// Variant.
     KwSuper,
-/// Variant.
+    /// Variant.
     KwCrate,
-/// Variant.
+    /// Variant.
     KwTrue,
-/// Variant.
+    /// Variant.
     KwFalse,
-/// Variant.
+    /// Variant.
     KwMut,
-/// Variant.
+    /// Variant.
     KwRef,
-/// Variant.
+    /// Variant.
     KwAs,
-/// Variant.
+    /// Variant.
     KwWhile,
-/// Variant.
+    /// Variant.
     KwFor,
-/// Variant.
+    /// Variant.
     KwLoop,
-/// Variant.
+    /// Variant.
     KwIn,
-/// Variant.
+    /// Variant.
     KwBreak,
-/// Variant.
+    /// Variant.
     KwContinue,
-/// Variant.
+    /// Variant.
     KwTrait,
-/// Variant.
+    /// Variant.
     KwImpl,
-/// Variant.
+    /// Variant.
     KwWhere,
-/// Variant.
+    /// Variant.
     KwDyn,
-/// Variant.
+    /// Variant.
     KwType,
-/// Variant.
+    /// Variant.
     KwPub,
-/// Variant.
+    /// Variant.
     KwPriv,
-/// Variant.
+    /// Variant.
     KwExtern,
-/// Variant.
+    /// Variant.
     KwUnsafe,
-/// Variant.
+    /// Variant.
     KwUse,
-/// Variant.
+    /// Variant.
     KwConst,
-/// Variant.
+    /// Variant.
     KwStatic,
-/// Variant.
+    /// Variant.
     KwMove,
-/// Variant.
+    /// Variant.
     KwMacro,
-/// Variant.
+    /// Variant.
     KwMacroRules,
-/// Variant.
+    /// Variant.
     KwAsync,
-/// Variant.
+    /// Variant.
     KwAwait,
-/// Variant.
+    /// Variant.
     Lifetime,
     // Literals
-/// Variant.
+    /// Variant.
     IntLit,
-/// Variant.
+    /// Variant.
     FloatLit,
-/// Variant.
+    /// Variant.
     StringLit,
-/// Variant.
+    /// Variant.
     CharLit,
-/// Variant.
+    /// Variant.
     ByteLit,
-/// Variant.
+    /// Variant.
     BoolLit,
-/// Variant.
+    /// Variant.
     Ident,
     // Operators
-/// Variant.
+    /// Variant.
     Plus,
-/// Variant.
+    /// Variant.
     Minus,
-/// Variant.
+    /// Variant.
     Star,
-/// Variant.
+    /// Variant.
     Slash,
-/// Variant.
+    /// Variant.
     Percent,
-/// Variant.
+    /// Variant.
     Eq,
-/// Variant.
+    /// Variant.
     EqEq,
-/// Variant.
+    /// Variant.
     Bang,
-/// Variant.
+    /// Variant.
     BangEq,
-/// Variant.
+    /// Variant.
     Lt,
-/// Variant.
+    /// Variant.
     Gt,
-/// Variant.
+    /// Variant.
     LtEq,
-/// Variant.
+    /// Variant.
     GtEq,
-/// Variant.
+    /// Variant.
     And,
-/// Variant.
+    /// Variant.
     Or,
-/// Variant.
+    /// Variant.
     AndAnd,
-/// Variant.
+    /// Variant.
     OrOr,
-/// Variant.
+    /// Variant.
     Caret,
-/// Variant.
+    /// Variant.
     Shl,
-/// Variant.
+    /// Variant.
     Shr,
-/// Variant.
+    /// Variant.
     PlusEq,
-/// Variant.
+    /// Variant.
     MinusEq,
-/// Variant.
+    /// Variant.
     StarEq,
-/// Variant.
+    /// Variant.
     SlashEq,
-/// Variant.
+    /// Variant.
     OrEq,
-/// Variant.
+    /// Variant.
     AndEq,
-/// Variant.
+    /// Variant.
     CaretEq,
-/// Variant.
+    /// Variant.
     ShlEq,
-/// Variant.
+    /// Variant.
     ShrEq,
     // Punctuation
-/// Variant.
+    /// Variant.
     Arrow,
-/// Variant.
+    /// Variant.
     FatArrow,
-/// Variant.
+    /// Variant.
     Dot,
-/// Variant.
+    /// Variant.
     DotDot,
-/// Variant.
+    /// Variant.
     DotDotEq,
-/// Variant.
+    /// Variant.
     Comma,
-/// Variant.
+    /// Variant.
     Semicolon,
-/// Variant.
+    /// Variant.
     Colon,
-/// Variant.
+    /// Variant.
     ColonColon,
-/// Variant.
+    /// Variant.
     At,
-/// Variant.
+    /// Variant.
     Hash,
-/// Variant.
+    /// Variant.
     Dollar,
-/// Variant.
+    /// Variant.
     Tilde,
-/// Variant.
+    /// Variant.
     Underscore,
-/// Variant.
+    /// Variant.
     Question,
     // Delimiters
-/// Variant.
+    /// Variant.
     LParen,
-/// Variant.
+    /// Variant.
     RParen,
-/// Variant.
+    /// Variant.
     LBrace,
-/// Variant.
+    /// Variant.
     RBrace,
-/// Variant.
+    /// Variant.
     LBracket,
-/// Variant.
+    /// Variant.
     RBracket,
     // Trivia
-/// Variant.
+    /// Variant.
     Whitespace,
-/// Variant.
+    /// Variant.
     LineComment,
-/// Variant.
+    /// Variant.
     BlockComment,
-/// Variant.
+    /// Variant.
     DocComment,
     // Nodes
-/// Variant.
+    /// Variant.
     SourceFile,
-/// Variant.
+    /// Variant.
     Module,
-/// Variant.
+    /// Variant.
     FnDef,
-/// Variant.
+    /// Variant.
     StructDef,
-/// Variant.
+    /// Variant.
     EnumDef,
-/// Variant.
+    /// Variant.
     TraitDef,
-/// Variant.
+    /// Variant.
     ImplDef,
-/// Variant.
+    /// Variant.
     TypeAlias,
-/// Variant.
+    /// Variant.
     ConstDef,
-/// Variant.
+    /// Variant.
     StaticDef,
-/// Variant.
+    /// Variant.
     UseDecl,
-/// Variant.
+    /// Variant.
     ExternBlock,
-/// Variant.
+    /// Variant.
     ParamList,
-/// Variant.
+    /// Variant.
     Param,
-/// Variant.
+    /// Variant.
     TypeParamList,
-/// Variant.
+    /// Variant.
     TypeParam,
-/// Variant.
+    /// Variant.
     WhereClause,
-/// Variant.
+    /// Variant.
     Block,
-/// Variant.
+    /// Variant.
     LetStmt,
-/// Variant.
+    /// Variant.
     ExprStmt,
-/// Variant.
+    /// Variant.
     IfExpr,
-/// Variant.
+    /// Variant.
     WhileExpr,
-/// Variant.
+    /// Variant.
     LoopExpr,
-/// Variant.
+    /// Variant.
     ForExpr,
-/// Variant.
+    /// Variant.
     MatchExpr,
-/// Variant.
+    /// Variant.
     MatchArmList,
-/// Variant.
+    /// Variant.
     MatchArm,
-/// Variant.
+    /// Variant.
     CallExpr,
-/// Variant.
+    /// Variant.
     MethodCallExpr,
-/// Variant.
+    /// Variant.
     FieldExpr,
-/// Variant.
+    /// Variant.
     IndexExpr,
-/// Variant.
+    /// Variant.
     UnaryExpr,
-/// Variant.
+    /// Variant.
     BinaryExpr,
-/// Variant.
+    /// Variant.
     CastExpr,
-/// Variant.
+    /// Variant.
     RefExpr,
-/// Variant.
+    /// Variant.
     ClosureExpr,
-/// Variant.
+    /// Variant.
     PathExpr,
-/// Variant.
+    /// Variant.
     TryExpr,
-/// Variant.
+    /// Variant.
     AwaitExpr,
-/// Variant.
+    /// Variant.
     ImplTraitType,
-/// Variant.
+    /// Variant.
     LitExpr,
-/// Variant.
+    /// Variant.
     ArrayExpr,
-/// Variant.
+    /// Variant.
     TupleExpr,
-/// Variant.
+    /// Variant.
     StructExpr,
-/// Variant.
+    /// Variant.
     RangeExpr,
-/// Variant.
+    /// Variant.
     BreakExpr,
-/// Variant.
+    /// Variant.
     ContinueExpr,
-/// Variant.
+    /// Variant.
     ReturnExpr,
-/// Variant.
+    /// Variant.
     AssignExpr,
-/// Variant.
+    /// Variant.
     RawPtrType,
-/// Variant.
+    /// Variant.
     PathType,
-/// Variant.
+    /// Variant.
     FnType,
-/// Variant.
+    /// Variant.
     DynType,
-/// Variant.
+    /// Variant.
     RefType,
-/// Variant.
+    /// Variant.
     SliceType,
-/// Variant.
+    /// Variant.
     ArrayType,
-/// Variant.
+    /// Variant.
     TupleType,
-/// Variant.
+    /// Variant.
     NeverType,
-/// Variant.
+    /// Variant.
     InferType,
-/// Variant.
+    /// Variant.
     GenericArgList,
-/// Variant.
+    /// Variant.
     PatIdent,
-/// Variant.
+    /// Variant.
     PatStruct,
-/// Variant.
+    /// Variant.
     PatTuple,
-/// Variant.
+    /// Variant.
     PatRef,
-/// Variant.
+    /// Variant.
     PatOr,
-/// Variant.
+    /// Variant.
     PatLit,
-/// Variant.
+    /// Variant.
     PatRange,
-/// Variant.
+    /// Variant.
     PatWild,
-/// Variant.
+    /// Variant.
     PatSlice,
-/// Variant.
+    /// Variant.
     UsePath,
-/// Variant.
+    /// Variant.
     UseTree,
-/// Variant.
+    /// Variant.
     MacroCall,
-/// Variant.
+    /// Variant.
     TokenTree,
-/// Variant.
+    /// Variant.
     MacroDef,
-/// Variant.
+    /// Variant.
     MacroArm,
-/// Variant.
+    /// Variant.
     MacroPattern,
-/// Variant.
+    /// Variant.
     StructField,
-/// Variant.
+    /// Variant.
     EnumVariant,
-/// Variant.
+    /// Variant.
     FieldList,
-/// Variant.
+    /// Variant.
     VariantList,
     // Error
-/// Variant.
+    /// Variant.
     Error,
     // Visibility qualifiers
-/// Variant.
+    /// Variant.
     Visibility,
-/// Variant.
+    /// Variant.
     VisCrate,
-/// Variant.
+    /// Variant.
     VisSuper,
-/// Variant.
+    /// Variant.
     VisSelf,
-/// Variant.
+    /// Variant.
     VisPath,
     // Where clause components
-/// Variant.
+    /// Variant.
     WherePredicate,
-/// Variant.
+    /// Variant.
     Bound,
     // Macro metavariables
-/// Variant.
+    /// Variant.
     MetaVar,
-/// Variant.
+    /// Variant.
     MetaVarCrate,
 }
 impl SyntaxKind {
@@ -468,13 +468,13 @@ pub use rowan::GreenNode;
 
 /// AstNode.
 pub trait AstNode {
-/// can_cast.
+    /// can_cast.
     fn can_cast(kind: SyntaxKind) -> bool;
-/// cast.
+    /// cast.
     fn cast(node: SyntaxNode) -> Option<Self>
     where
         Self: Sized;
-/// syntax.
+    /// syntax.
     fn syntax(&self) -> &SyntaxNode;
 }
 
@@ -485,7 +485,7 @@ pub fn child_of_kind(node: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxNode> 
 
 macro_rules! ast_node {
     ($name:ident, $kind:expr) => {
-/// Struct.
+        /// Struct.
         pub struct $name(SyntaxNode);
         impl AstNode for $name {
             fn can_cast(kind: SyntaxKind) -> bool {

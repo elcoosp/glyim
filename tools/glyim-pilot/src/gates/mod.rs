@@ -42,8 +42,8 @@ pub use types::{GateResult, GateSideEffect, PipelineResult};
 #[async_trait]
 /// Gate.
 pub trait Gate: Send + Sync {
-/// name.
+    /// name.
     fn name(&self) -> &str;
-/// run.
+    /// run.
     async fn run(&self, ctx: &GateContext) -> Result<GateResult, PilotError>;
 }

@@ -24,7 +24,7 @@ fn make_enum_ty(
             }
             glyim_type::VariantDef {
                 name: ctx.resolver().intern(&format!("V{}", vi)),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+                style: glyim_type::adt_def::VariantStyle::Unit,
                 fields,
             }
         })
@@ -49,7 +49,7 @@ fn make_enum_ty(
         fields: top_fields,
         variants: variant_defs,
         generic_params: vec![],
-};
+    };
     ctx.register_adt(adt_id, def);
     let substs = ctx.intern_substitution(vec![]);
     ctx.mk_adt(adt_id, substs)

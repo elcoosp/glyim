@@ -23,9 +23,9 @@
 //!    phase are treated as shared borrows for conflict purposes.
 
 mod liveness;
+pub use fixedbitset::FixedBitSet;
 pub use liveness::LivenessResult;
 pub use liveness::compute_liveness;
-pub use fixedbitset::FixedBitSet;
 mod move_analysis;
 mod twophase;
 mod visitor;
@@ -47,17 +47,17 @@ use crate::visitor::{
 #[derive(Clone, Debug)]
 /// BorrowckResult.
 pub struct BorrowckResult {
-/// Struct.
+    /// Struct.
     pub errors: Vec<GlyimDiagnostic>,
 }
 
 /// BorrowckCtx.
 pub trait BorrowckCtx {
-/// ty_ctx.
+    /// ty_ctx.
     fn ty_ctx(&self) -> &glyim_type::TyCtx;
-/// local_decl.
+    /// local_decl.
     fn local_decl(&self, local: LocalIdx) -> &glyim_mir::LocalDecl;
-/// is_copy.
+    /// is_copy.
     fn is_copy(&self, ty: glyim_type::Ty) -> bool {
         self.ty_ctx().is_copy(ty)
     }

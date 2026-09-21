@@ -72,7 +72,8 @@ fn definition_preview(db: &AnalysisDatabase, def: &DefinitionLocation) -> Option
     let source_maps = db.source_maps.read();
     let sm = source_maps.get(&def.file_id)?;
     let source = sm.source();
-    let ((start_line, _), (end_line, _)) = sm.span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())?;
+    let ((start_line, _), (end_line, _)) =
+        sm.span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())?;
 
     let mut preview_lines: Vec<&str> = Vec::new();
     for (idx, line) in source.split_inclusive('\n').enumerate() {

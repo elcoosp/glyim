@@ -52,7 +52,9 @@ fn collect_unused_imports(source: &str, used_names: &HashSet<String>) -> Vec<(St
 fn parse_missing_variant_shapes(
     diag: &GlyimDiagnostic,
 ) -> Option<Vec<(String, glyim_diag::VariantShape)>> {
-    diag.structured.as_ref().map(|StructuredDiagnosticData::MissingMatchVariants(shapes)| shapes.clone())
+    diag.structured
+        .as_ref()
+        .map(|StructuredDiagnosticData::MissingMatchVariants(shapes)| shapes.clone())
 }
 
 /// Build the match-arm pattern text for a missing variant given its shape
@@ -83,7 +85,11 @@ fn parse_missing_variants(message: &str) -> Option<Vec<String>> {
             let trimmed = part.trim();
             // Each variant name is wrapped in backticks: `Name`.
             let s = trimmed.trim_start_matches('`').trim_end_matches('`').trim();
-            if s.is_empty() { None } else { Some(s.to_string()) }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
         })
         .collect();
     if names.is_empty() { None } else { Some(names) }
@@ -191,13 +197,18 @@ pub fn provide_code_actions(
             // "Add missing match arm(s)": triggered by a non-exhaustive match
             // diagnostic. Synthesize one arm per missing variant immediately
             // before the match's closing brace.
-            if diag.message.starts_with("non-exhaustive match: missing variants") {
+            if diag
+                .message
+                .starts_with("non-exhaustive match: missing variants")
+            {
                 // Plan §5.2: prefer the typed structured payload (carries each
                 // variant's shape) so we synthesize an arity-correct arm; fall
                 // back to prose-parsed names (unit-style arms) for diagnostics
                 // that predate structured data.
                 let shapes: Vec<(String, glyim_diag::VariantShape)> = raw
-                    .and_then(|r: &Vec<GlyimDiagnostic>| r.get(i).and_then(parse_missing_variant_shapes))
+                    .and_then(|r: &Vec<GlyimDiagnostic>| {
+                        r.get(i).and_then(parse_missing_variant_shapes)
+                    })
                     .unwrap_or_else(|| {
                         parse_missing_variants(&diag.message)
                             .unwrap_or_default()
@@ -233,7 +244,10 @@ pub fn provide_code_actions(
                             start: insert_pos,
                             end: insert_pos,
                         };
-                        let edit = TextEdit { range, new_text: arms };
+                        let edit = TextEdit {
+                            range,
+                            new_text: arms,
+                        };
                         let title = shapes
                             .iter()
                             .map(|(v, _): &(String, glyim_diag::VariantShape)| v.as_str())
@@ -271,7 +285,10 @@ pub fn provide_code_actions(
                     };
                     let new_text = format!("\nimpl {} for {} {{\n}}\n", trait_name, type_name);
                     let edit = TextEdit {
-                        range: Range { start: eof, end: eof },
+                        range: Range {
+                            start: eof,
+                            end: eof,
+                        },
                         new_text,
                     };
                     let action = CodeAction {
@@ -390,10 +407,7 @@ mod tests {
     fn test_variant_pattern_shapes() {
         use glyim_diag::VariantShape;
         assert_eq!(super::variant_pattern("A", &VariantShape::Unit), "A");
-        assert_eq!(
-            super::variant_pattern("B", &VariantShape::Tuple(0)),
-            "B()"
-        );
+        assert_eq!(super::variant_pattern("B", &VariantShape::Tuple(0)), "B()");
         assert_eq!(
             super::variant_pattern("C", &VariantShape::Tuple(2)),
             "C(_, _)"

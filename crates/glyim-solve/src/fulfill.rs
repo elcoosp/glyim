@@ -5,39 +5,39 @@ use std::collections::VecDeque;
 #[derive(Clone, Debug)]
 /// Obligation.
 pub struct Obligation {
-/// Struct.
+    /// Struct.
     pub predicate: Predicate,
-/// Struct.
+    /// Struct.
     pub cause: ObligationCause,
 }
 
 #[derive(Clone, Debug)]
 /// ObligationCause.
 pub struct ObligationCause {
-/// Struct.
+    /// Struct.
     pub span: glyim_span::Span,
-/// Struct.
+    /// Struct.
     pub code: ObligationCauseCode,
 }
 
 #[derive(Clone, Debug)]
 /// ObligationCauseCode.
 pub enum ObligationCauseCode {
-/// Variant.
+    /// Variant.
     WellFormed,
-/// Variant.
+    /// Variant.
     TypeConstruction,
-/// Variant.
+    /// Variant.
     MatchArm,
-/// Variant.
+    /// Variant.
     IfThenElse,
 }
 
 /// FulfillmentCtx.
 pub struct FulfillmentCtx<'a> {
-/// Struct.
+    /// Struct.
     pub solver: &'a mut dyn crate::solver::TraitSolver,
-/// Struct.
+    /// Struct.
     pub ctx: &'a TyCtx,
     obligations: VecDeque<Obligation>,
     processed_count: usize,
@@ -47,9 +47,9 @@ pub struct FulfillmentCtx<'a> {
 #[derive(Clone, Debug)]
 /// OverflowError.
 pub struct OverflowError {
-/// Struct.
+    /// Struct.
     pub predicate: Predicate,
-/// Struct.
+    /// Struct.
     pub depth: usize,
 }
 
@@ -76,8 +76,7 @@ pub fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
         // §6.2: fn-item coercion to fn pointer. A zero-sized function item
         // coerces to `fn(Args) -> Ret` when its signature matches the pointer's.
         (TyKind::FnDef(fn_def_id, _), TyKind::FnPtr(target_sig)) => {
-            ctx.fn_sig(*fn_def_id)
-                .is_some_and(|sig| sig == target_sig)
+            ctx.fn_sig(*fn_def_id).is_some_and(|sig| sig == target_sig)
         }
         // §6.2: closure coercion to fn pointer. A *non-capturing* closure
         // coerces to `fn(Args) -> Ret` when its (parameter, return) signature
@@ -115,7 +114,7 @@ pub fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
 }
 
 impl<'a> FulfillmentCtx<'a> {
-/// new.
+    /// new.
     pub fn new(ctx: &'a TyCtx, solver: &'a mut dyn crate::solver::TraitSolver) -> Self {
         Self {
             solver,
@@ -126,12 +125,12 @@ impl<'a> FulfillmentCtx<'a> {
         }
     }
 
-/// register_obligation.
+    /// register_obligation.
     pub fn register_obligation(&mut self, obligation: Obligation) {
         self.obligations.push_back(obligation);
     }
 
-/// process_obligations.
+    /// process_obligations.
     pub fn process_obligations(&mut self, limit: usize) -> Result<(), OverflowError> {
         while let Some(obligation) = self.obligations.pop_front() {
             self.processed_count += 1;
@@ -166,7 +165,7 @@ impl<'a> FulfillmentCtx<'a> {
         Ok(())
     }
 
-/// into_diagnostics.
+    /// into_diagnostics.
     pub fn into_diagnostics(self) -> Vec<GlyimDiagnostic> {
         self.diagnostics
     }

@@ -1,8 +1,8 @@
+pub(crate) mod lower_async;
 pub(crate) mod lower_expr;
 pub(crate) mod lower_item;
 pub(crate) mod lower_pat;
 pub(crate) mod lower_type;
-pub(crate) mod lower_async;
 
 #[cfg(test)]
 pub(crate) use lower_expr::{lower_expr, lower_literal};
@@ -309,7 +309,9 @@ pub(crate) fn lower_crate_raw(
                 }
             }
             SyntaxKind::TypeAlias => {
-                if let Some(item) = lower_item::lower_type_alias(&child, interner, &mut item_id_counter) {
+                if let Some(item) =
+                    lower_item::lower_type_alias(&child, interner, &mut item_id_counter)
+                {
                     items.push(item);
                 }
             }
@@ -352,7 +354,12 @@ pub(crate) fn lower_crate_raw(
                 crate::ItemKind::TypeAlias(_) => "TypeAlias",
                 _ => "Other",
             };
-            eprintln!("DBG_ITEM[{}]: kind={} name={}", i.index(), kind, interner.resolve(item.name));
+            eprintln!(
+                "DBG_ITEM[{}]: kind={} name={}",
+                i.index(),
+                kind,
+                interner.resolve(item.name)
+            );
         }
     }
 

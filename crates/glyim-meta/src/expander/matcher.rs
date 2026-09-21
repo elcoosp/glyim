@@ -207,13 +207,13 @@ fn matches_fragment_spec(tree: &TokenTree, spec: &FragmentSpec) -> bool {
         FragmentSpec::Lifetime => matches!(tree, TokenTree::Token(SyntaxKind::Lifetime, _)),
         FragmentSpec::Vis => matches!(tree, TokenTree::Token(SyntaxKind::KwPub, _)),
         FragmentSpec::Block => {
-            matches!(tree, TokenTree::Group(SyntaxKind::LBrace, _, SyntaxKind::RBrace))
+            matches!(
+                tree,
+                TokenTree::Group(SyntaxKind::LBrace, _, SyntaxKind::RBrace)
+            )
         }
         FragmentSpec::Tt => true, // `tt` is "exactly one token tree" — `true` is correct here.
-        FragmentSpec::Expr
-        | FragmentSpec::Ty
-        | FragmentSpec::Path
-        | FragmentSpec::Pat => {
+        FragmentSpec::Expr | FragmentSpec::Ty | FragmentSpec::Path | FragmentSpec::Pat => {
             // Reject tokens that can never start this fragment kind, even
             // though we can't yet confirm the whole fragment is valid.
             !matches!(
@@ -349,10 +349,7 @@ fn consume_fragment(
         .position(|t| {
             matches!(
                 t,
-                TokenTree::Token(
-                    SyntaxKind::Comma | SyntaxKind::Semicolon,
-                    _
-                )
+                TokenTree::Token(SyntaxKind::Comma | SyntaxKind::Semicolon, _)
             )
         })
         .unwrap_or(remaining.len());
@@ -733,7 +730,11 @@ mod tests {
         match result {
             MatchResult::FullMatch(bindings) => {
                 let captured = &bindings[&SmolStr::from("t")];
-                assert_eq!(captured.len(), 2, ":ty must capture `Vec<i32>` as two trees");
+                assert_eq!(
+                    captured.len(),
+                    2,
+                    ":ty must capture `Vec<i32>` as two trees"
+                );
             }
             other => panic!("expected FullMatch, got {:?}", other),
         }

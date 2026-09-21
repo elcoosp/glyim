@@ -3,29 +3,29 @@ use std::path::PathBuf;
 #[derive(Debug)]
 /// TestDiscoveryError.
 pub enum TestDiscoveryError {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     RootNotFound(PathBuf),
-/// Variant.
+    /// Variant.
     ReadFailed {
-/// Struct.
+        /// Struct.
         path: PathBuf,
-/// Struct.
+        /// Struct.
         source: std::io::Error,
     },
-/// Variant.
+    /// Variant.
     InvalidConfig {
-/// Struct.
+        /// Struct.
         path: PathBuf,
-/// Struct.
+        /// Struct.
         message: String,
     },
-/// Variant.
+    /// Variant.
     InvalidAnnotation {
-/// Struct.
+        /// Struct.
         path: PathBuf,
-/// Struct.
+        /// Struct.
         line: usize,
-/// Struct.
+        /// Struct.
         message: String,
     },
 }
@@ -65,80 +65,80 @@ impl std::error::Error for TestDiscoveryError {
 #[derive(Clone, Debug)]
 /// FailureReason.
 pub enum FailureReason {
-/// Variant.
+    /// Variant.
     CompilePassUnexpectedErrors {
-/// Struct.
+        /// Struct.
         errors: Vec<String>,
     },
-/// Variant.
+    /// Variant.
     AnnotationParseError {
-/// Struct.
+        /// Struct.
         line: usize,
-/// Struct.
+        /// Struct.
         message: String,
     },
-/// Variant.
+    /// Variant.
     DiagnosticMismatch {
-/// Struct.
+        /// Struct.
         missing_count: usize,
-/// Struct.
+        /// Struct.
         unexpected_count: usize,
-/// Struct.
+        /// Struct.
         wrong_severity_count: usize,
-/// Struct.
+        /// Struct.
         details: String,
     },
-/// Variant.
+    /// Variant.
     ErrorPatternNotFound {
-/// Struct.
+        /// Struct.
         pattern: String,
     },
-/// Variant.
+    /// Variant.
     UiOutputDiffers {
-/// Struct.
+        /// Struct.
         diff: String,
     },
-/// Variant.
+    /// Variant.
     UiNoExpectedFile {
-/// Struct.
+        /// Struct.
         path: PathBuf,
     },
-/// Variant.
+    /// Variant.
     TimeoutExceeded {
-/// Struct.
+        /// Struct.
         timeout_secs: u64,
     },
-/// Variant.
+    /// Variant.
     CompilationFailed {
-/// Struct.
+        /// Struct.
         phase: String,
-/// Struct.
+        /// Struct.
         message: String,
     },
-/// Variant.
+    /// Variant.
     RunFailed {
-/// Struct.
+        /// Struct.
         exit_code: Option<i32>,
-/// Struct.
+        /// Struct.
         expected_exit_code: Option<i32>,
     },
-/// Variant.
+    /// Variant.
     StdoutMismatch {
-/// Struct.
+        /// Struct.
         expected: String,
-/// Struct.
+        /// Struct.
         actual: String,
     },
-/// Variant.
+    /// Variant.
     StderrMismatch {
-/// Struct.
+        /// Struct.
         expected: String,
-/// Struct.
+        /// Struct.
         actual: String,
     },
-/// Variant.
+    /// Variant.
     RunTimeout {
-/// Struct.
+        /// Struct.
         timeout_secs: u64,
     },
 }
@@ -214,7 +214,7 @@ impl std::fmt::Display for FailureReason {
 #[derive(Clone, Debug)]
 /// TimeoutError.
 pub struct TimeoutError {
-/// Struct.
+    /// Struct.
     pub timeout_secs: u64,
 }
 
@@ -228,11 +228,11 @@ impl std::error::Error for TimeoutError {}
 #[derive(Clone, Debug)]
 /// AssertionFailure.
 pub struct AssertionFailure {
-/// Struct.
+    /// Struct.
     pub expected: String,
-/// Struct.
+    /// Struct.
     pub actual: String,
-/// Struct.
+    /// Struct.
     pub ty_description: String,
 }
 

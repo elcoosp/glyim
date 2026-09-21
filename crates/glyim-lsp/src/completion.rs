@@ -146,11 +146,7 @@ pub fn provide_completions(
             })
             .cloned()
             .collect();
-        if methods.is_empty() {
-            symbols
-        } else {
-            methods
-        }
+        if methods.is_empty() { symbols } else { methods }
     } else {
         symbols
     };
@@ -166,9 +162,7 @@ pub fn provide_completions(
     if let Some(prefix) = typed_identifier_prefix(db, file_id, params) {
         if !prefix.is_empty() {
             let source_maps = db.source_maps.read();
-            let src = source_maps
-                .get(&file_id)
-                .map(|sm| sm.source().to_string());
+            let src = source_maps.get(&file_id).map(|sm| sm.source().to_string());
             if let Some(src) = src {
                 for cand in symbol_index.query(&prefix, 50) {
                     if cand.definition.file_id == file_id {
@@ -183,7 +177,8 @@ pub fn provide_completions(
                     else {
                         continue; // already imported (idempotent) or no path.
                     };
-                    let Some((line, col)) = crate::uri::offset_to_position(&src, offset).ok() else {
+                    let Some((line, col)) = crate::uri::offset_to_position(&src, offset).ok()
+                    else {
                         continue;
                     };
                     let mut item = completion_item(cand);

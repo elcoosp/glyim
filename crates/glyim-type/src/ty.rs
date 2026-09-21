@@ -21,43 +21,43 @@ impl Ty {
         Self { raw }
     }
     #[inline]
-/// to_raw.
+    /// to_raw.
     pub fn to_raw(self) -> u32 {
         self.raw
     }
     #[inline]
-/// index.
+    /// index.
     pub fn index(self) -> usize {
         self.raw as usize
     }
 
-/// ERROR.
+    /// ERROR.
     pub const ERROR: Ty = Ty::from_raw(0);
-/// NEVER.
+    /// NEVER.
     pub const NEVER: Ty = Ty::from_raw(1);
-/// UNIT.
+    /// UNIT.
     pub const UNIT: Ty = Ty::from_raw(2);
-/// BOOL.
+    /// BOOL.
     pub const BOOL: Ty = Ty::from_raw(3);
-/// U8.
+    /// U8.
     pub const U8: Ty = Ty::from_raw(4);
-/// U16.
+    /// U16.
     pub const U16: Ty = Ty::from_raw(5);
-/// U32.
+    /// U32.
     pub const U32: Ty = Ty::from_raw(6);
-/// U64.
+    /// U64.
     pub const U64: Ty = Ty::from_raw(7);
-/// USIZE.
+    /// USIZE.
     pub const USIZE: Ty = Ty::from_raw(8);
-/// I8.
+    /// I8.
     pub const I8: Ty = Ty::from_raw(9);
-/// I16.
+    /// I16.
     pub const I16: Ty = Ty::from_raw(10);
-/// I32.
+    /// I32.
     pub const I32: Ty = Ty::from_raw(11);
-/// I64.
+    /// I64.
     pub const I64: Ty = Ty::from_raw(12);
-/// ISIZE.
+    /// ISIZE.
     pub const ISIZE: Ty = Ty::from_raw(13);
 }
 
@@ -81,99 +81,99 @@ pub struct UniverseIndex(pub u32);
 /// Represents a projection type like `<T as Iterator>::Item`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProjectionTy {
-/// Struct.
+    /// Struct.
     pub trait_ref: crate::predicate::TraitRef,
-/// Struct.
+    /// Struct.
     pub item_name: Name,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// TyKind.
 pub enum TyKind {
-/// Variant.
+    /// Variant.
     Never,
-/// Variant.
+    /// Variant.
     Unit,
-/// Variant.
+    /// Variant.
     Bool,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Int(IntTy),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Uint(UintTy),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Float(FloatTy),
-/// Variant.
+    /// Variant.
     Char,
-/// Variant.
+    /// Variant.
     String,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Infer(InferVar),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Adt(AdtId, Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     FnDef(FnDefId, Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Closure(ClosureId, Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     FnPtr(FnSig),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Ref(Region, Ty, Mutability),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     RawPtr(Ty, Mutability),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Slice(Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Array(Ty, Const),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Tuple(Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Dynamic(Binder<Box<[Predicate]>>, Region),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Opaque(OpaqueTyId, Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Projection(ProjectionTy),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Param(ParamTy),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Bound(u32, BoundTy),
-/// Variant.
+    /// Variant.
     Error,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// InferVar.
 pub enum InferVar {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Ty(TyVar),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Int(IntVar),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Float(FloatVar),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// ParamTy.
 pub struct ParamTy {
-/// Struct.
+    /// Struct.
     pub index: u32,
-/// Struct.
+    /// Struct.
     pub name: Name,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// BoundTy.
 pub struct BoundTy {
-/// Struct.
+    /// Struct.
     pub var: u32,
-/// Struct.
+    /// Struct.
     pub kind: BoundTyKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// BoundTyKind.
 pub enum BoundTyKind {
-/// Variant.
+    /// Variant.
     Anon,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Param(Name),
 }

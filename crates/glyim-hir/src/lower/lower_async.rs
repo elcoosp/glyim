@@ -32,16 +32,15 @@
 //! pass delivers is a *real*, compiling `async fn`/`.await` for the supported
 //! subset, not a stub.
 
+use crate::PatId;
 use glyim_core::arena::IndexVec;
 use glyim_core::interner::Interner;
 use glyim_core::primitives::{Mutability, StructKind, Visibility};
-use crate::PatId;
 use glyim_span::Span;
 
 use crate::{
     AssociatedTy, Body, BodyId, EnumItem, Expr, ExprId, Field, ImplItem, ImplMethod, Item, ItemId,
-    ItemKind, MatchArm, Param, Pat, Path, PathKind, PathSegment, StructItem, TypeRef,
-    Variant,
+    ItemKind, MatchArm, Param, Pat, Path, PathKind, PathSegment, StructItem, TypeRef, Variant,
 };
 use glyim_diag::{DiagSeverity, ErrorCategory, ErrorCode, GlyimDiagnostic};
 
@@ -187,9 +186,7 @@ fn collect_suspend_points(body: &Body, root: ExprId, out: &mut Vec<SuspendPoint>
         match &body.exprs[id] {
             Expr::Await { expr } => {
                 walk(body, *expr, out);
-                out.push(SuspendPoint {
-                    await_expr: id,
-                });
+                out.push(SuspendPoint { await_expr: id });
             }
             Expr::Block { stmts, tail } => {
                 for s in stmts {
@@ -236,7 +233,9 @@ fn collect_suspend_points(body: &Body, root: ExprId, out: &mut Vec<SuspendPoint>
                 walk(body, *wb, out);
             }
             Expr::Loop { body: lb } => walk(body, *lb, out),
-            Expr::For { iterable, body: fb, .. } => {
+            Expr::For {
+                iterable, body: fb, ..
+            } => {
                 walk(body, *iterable, out);
                 walk(body, *fb, out);
             }
@@ -305,10 +304,12 @@ fn collect_loop_body_descendants(body: &Body, set: &mut std::collections::HashSe
     // First, gather every loop node's body so we can descend into each.
     let loops: Vec<ExprId> = (0..body.exprs.len())
         .map(|i| ExprId::from_raw(i as u32))
-        .filter(|&id| matches!(
-            body.exprs[id],
-            Expr::While { .. } | Expr::Loop { .. } | Expr::For { .. }
-        ))
+        .filter(|&id| {
+            matches!(
+                body.exprs[id],
+                Expr::While { .. } | Expr::Loop { .. } | Expr::For { .. }
+            )
+        })
         .collect();
     // Recursively add every descendant of each loop body. `add_subtree` itself
     // recurses into nested loops, so deeply nested awaits are covered.
@@ -324,7 +325,11 @@ fn collect_loop_body_descendants(body: &Body, set: &mut std::collections::HashSe
                     add_subtree(body, t, set);
                 }
             }
-            Expr::If { cond, then_branch, else_branch } => {
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
                 add_subtree(body, cond, set);
                 add_subtree(body, then_branch, set);
                 if let Some(e) = else_branch {
@@ -357,7 +362,9 @@ fn collect_loop_body_descendants(body: &Body, set: &mut std::collections::HashSe
                 add_subtree(body, wb, set);
             }
             Expr::Loop { body: lb } => add_subtree(body, lb, set),
-            Expr::For { iterable, body: fb, .. } => {
+            Expr::For {
+                iterable, body: fb, ..
+            } => {
                 add_subtree(body, iterable, set);
                 add_subtree(body, fb, set);
             }
@@ -473,10 +480,9 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     let mut fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
         let field_name = interner.intern(&format!("f{}", i));
-        let ty = p
-            .ty
-            .clone()
-            .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
+        let ty =
+            p.ty.clone()
+                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
         fields.push(Field {
             name: field_name,
             ty,
@@ -501,7 +507,8 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     // `f1`, ...). Inside `poll(&mut self)` the parameters are only reachable
     // via `self.f0`, so every reference to a parameter in the poll body is
     // rewritten to a field access on `self`.
-    let mut param_fields: std::collections::HashMap<crate::Name, crate::Name> = std::collections::HashMap::new();
+    let mut param_fields: std::collections::HashMap<crate::Name, crate::Name> =
+        std::collections::HashMap::new();
     for (i, p) in original_params.iter().enumerate() {
         let field_name = interner.intern(&format!("f{}", i));
         param_fields.insert(p.name, field_name);
@@ -535,7 +542,14 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         b.params.push(self_pat);
         b
     };
-    rewrite_for_poll(interner, &mut poll_body, &param_fields, self_name, ready_id, pending_id);
+    rewrite_for_poll(
+        interner,
+        &mut poll_body,
+        &param_fields,
+        self_name,
+        ready_id,
+        pending_id,
+    );
     let poll_body_owner = poll_body.owner;
     let poll_body_id = hir.bodies.push(poll_body);
     // Keep `body_owners` aligned with `bodies` (indexed by BodyId).
@@ -605,7 +619,12 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         },
         Span::DUMMY,
     );
-    let return_struct = wrapper_body.alloc_expr(Expr::Return { value: Some(struct_lit) }, Span::DUMMY);
+    let return_struct = wrapper_body.alloc_expr(
+        Expr::Return {
+            value: Some(struct_lit),
+        },
+        Span::DUMMY,
+    );
     let _ = return_struct;
     let wrapper_body_owner = wrapper_body.owner;
     let wrapper_body_id = hir.bodies.push(wrapper_body);
@@ -642,10 +661,20 @@ fn rewrite_for_poll(
     pending_id: crate::Name,
 ) {
     // Snapshot expr ids to avoid iterating while mutating.
-    let ids: Vec<ExprId> = (0..body.exprs.len()).map(|i| ExprId::from_raw(i as u32)).collect();
+    let ids: Vec<ExprId> = (0..body.exprs.len())
+        .map(|i| ExprId::from_raw(i as u32))
+        .collect();
     for eid in ids {
         let expr = body.exprs[eid].clone();
-        let new_expr = rewrite_expr(interner, body, expr, param_fields, self_name, ready_id, pending_id);
+        let new_expr = rewrite_expr(
+            interner,
+            body,
+            expr,
+            param_fields,
+            self_name,
+            ready_id,
+            pending_id,
+        );
         body.exprs[eid] = new_expr;
     }
 
@@ -734,8 +763,7 @@ fn compute_live_across_suspends(
 ) -> Vec<std::collections::BTreeSet<crate::Name>> {
     use std::collections::BTreeSet;
 
-    let param_names: BTreeSet<crate::Name> =
-        original_params.iter().map(|p| p.name).collect();
+    let param_names: BTreeSet<crate::Name> = original_params.iter().map(|p| p.name).collect();
 
     // Collect every `Name` referenced anywhere in the body.
     fn collect_names(body: &Body, root: ExprId, out: &mut BTreeSet<crate::Name>) {
@@ -791,7 +819,9 @@ fn compute_live_across_suspends(
                     walk(body, *wb, out);
                 }
                 Expr::Loop { body: lb } => walk(body, *lb, out),
-                Expr::For { iterable, body: fb, .. } => {
+                Expr::For {
+                    iterable, body: fb, ..
+                } => {
                     walk(body, *iterable, out);
                     walk(body, *fb, out);
                 }
@@ -889,10 +919,9 @@ fn build_state_enum(
     let mut start_fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
         let field_name = interner.intern(&format!("f{}", i));
-        let ty = p
-            .ty
-            .clone()
-            .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
+        let ty =
+            p.ty.clone()
+                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
         start_fields.push(Field {
             name: field_name,
             ty,
@@ -1100,8 +1129,11 @@ fn build_future_impl(
 /// proof before declaring M4 fully verified. Shapes whose future type is NOT
 /// statically nameable fall back to the `async-v2` diagnostic (see below).
 #[allow(clippy::too_many_lines)]
-fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mut Vec<GlyimDiagnostic>) {
-
+fn desugar_multi_async_fn(
+    hir: &mut crate::CrateHir,
+    item_id: ItemId,
+    diags: &mut Vec<GlyimDiagnostic>,
+) {
     let mut item = hir.items[item_id].clone();
     let fn_item = match &mut item.kind {
         ItemKind::Fn(f) => f,
@@ -1240,13 +1272,13 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
     }
     // Tail await (rare): if root_tail contains an await, it's the final await.
     let tail_is_await = root_tail
-        .map(|t| await_infos_await_exprs(&work_body).iter().any(|&ai| stmt_contains(&work_body, t, ai)))
+        .map(|t| {
+            await_infos_await_exprs(&work_body)
+                .iter()
+                .any(|&ai| stmt_contains(&work_body, t, ai))
+        })
         .unwrap_or(false);
-    let tail_expr = if tail_is_await {
-        None
-    } else {
-        root_tail
-    };
+    let tail_expr = if tail_is_await { None } else { root_tail };
 
     // 3. Build the poll body. Each `S_k` arm re-drives `fut_k`.
     let mut poll_body = Body {
@@ -1279,7 +1311,8 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         .collect();
     let ready_value_name = interner.intern("__v");
     let arm_rename = |k: usize| -> std::collections::HashMap<crate::Name, crate::Name> {
-        let mut m: std::collections::HashMap<crate::Name, crate::Name> = std::collections::HashMap::new();
+        let mut m: std::collections::HashMap<crate::Name, crate::Name> =
+            std::collections::HashMap::new();
         for (i, p) in original_params.iter().enumerate() {
             m.insert(p.name, interner.intern(&format!("f{}", i)));
         }
@@ -1339,7 +1372,13 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
     let start_body = {
         let mut stmts: Vec<ExprId> = Vec::new();
         for &s in &pre_segments[0] {
-            stmts.push(copy_expr_renamed(&work_body, &mut poll_body, s, &rename, interner));
+            stmts.push(copy_expr_renamed(
+                &work_body,
+                &mut poll_body,
+                s,
+                &rename,
+                interner,
+            ));
         }
         let inner0 = await_infos[0].inner;
         let fut0 = copy_expr_renamed(&work_body, &mut poll_body, inner0, &rename, interner);
@@ -1381,12 +1420,15 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             fields: vec![(v0_name, v0_binding)],
             rest: false,
         });
-        let pending_pat = poll_body.pats.push(Pat::Path(two_seg(interner, "Poll", pending_id)));
+        let pending_pat = poll_body
+            .pats
+            .push(Pat::Path(two_seg(interner, "Poll", pending_id)));
         // Ready(r0): transition to S1, which carries the first result `v0` (= r0)
         // plus `fut1` (the next in-flight future). `S0` is only used on the
         // Pending path (carrying `fut0` to be re-driven on resume).
         let fut1_inner = await_infos[1].inner;
-        let fut1_expr = copy_expr_renamed(&work_body, &mut poll_body, fut1_inner, &rename, interner);
+        let fut1_expr =
+            copy_expr_renamed(&work_body, &mut poll_body, fut1_inner, &rename, interner);
         let fut1_local_name = interner.intern("fut1");
         let fut1_pat = poll_body.pats.push(Pat::Binding {
             name: fut1_local_name,
@@ -1394,7 +1436,11 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             subpattern: None,
         });
         let fut1_let = poll_body.alloc_expr(
-            Expr::Let { pat: fut1_pat, value: fut1_expr, ty: None },
+            Expr::Let {
+                pat: fut1_pat,
+                value: fut1_expr,
+                ty: None,
+            },
             Span::DUMMY,
         );
         let s1_struct = build_state_struct(
@@ -1404,7 +1450,10 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             "S1",
             &original_params,
             &v_names[0..0],
-            &[(v_names[0], ready_value_name), (fut1_local_name, fut1_local_name)],
+            &[
+                (v_names[0], ready_value_name),
+                (fut1_local_name, fut1_local_name),
+            ],
             self_name,
         );
         let assign_s1 = assign_state(&mut poll_body, interner, state_field_name, s1_struct);
@@ -1414,7 +1463,13 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             s.push(fut1_let);
             s.push(assign_s1);
             s.push(continue_expr);
-            poll_body.alloc_expr(Expr::Block { stmts: s, tail: None }, Span::DUMMY)
+            poll_body.alloc_expr(
+                Expr::Block {
+                    stmts: s,
+                    tail: None,
+                },
+                Span::DUMMY,
+            )
         };
         // Pending: self.state = S0; return Poll::Pending
         let s0_struct_p = build_state_struct(
@@ -1438,14 +1493,28 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
             let mut s = Vec::new();
             s.push(assign_s0_p);
             s.push(return_pending);
-            poll_body.alloc_expr(Expr::Block { stmts: s, tail: None }, Span::DUMMY)
+            poll_body.alloc_expr(
+                Expr::Block {
+                    stmts: s,
+                    tail: None,
+                },
+                Span::DUMMY,
+            )
         };
         let match_expr = poll_body.alloc_expr(
             Expr::Match {
                 scrutinee: poll_call,
                 arms: vec![
-                    MatchArm { pat: ready_pat, guard: None, body: ready_arm_body },
-                    MatchArm { pat: pending_pat, guard: None, body: pending_arm_body },
+                    MatchArm {
+                        pat: ready_pat,
+                        guard: None,
+                        body: ready_arm_body,
+                    },
+                    MatchArm {
+                        pat: pending_pat,
+                        guard: None,
+                        body: pending_arm_body,
+                    },
                 ],
             },
             Span::DUMMY,
@@ -1453,7 +1522,11 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         stmts.push(match_expr);
         poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY)
     };
-    arms.push(MatchArm { pat: start_pat, guard: None, body: start_body });
+    arms.push(MatchArm {
+        pat: start_pat,
+        guard: None,
+        body: start_body,
+    });
 
     // --- S_k arms for k in 0..n-1 ---
     for k in 0..n {
@@ -1514,16 +1587,25 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
                 fields: vec![(interner.intern("__v"), ready_binding)],
                 rest: false,
             });
-            let pending_pat = poll_body.pats.push(Pat::Path(two_seg(interner, "Poll", pending_id)));
+            let pending_pat = poll_body
+                .pats
+                .push(Pat::Path(two_seg(interner, "Poll", pending_id)));
 
             if k + 1 < n {
                 // Ready: run pre_{k+1}, create fut_{k+1}, store S_{k+1}, continue
                 let mut stmts: Vec<ExprId> = Vec::new();
                 for &s in &pre_segments[k + 1] {
-                    stmts.push(copy_expr_renamed(&work_body, &mut poll_body, s, &rename_k, interner));
+                    stmts.push(copy_expr_renamed(
+                        &work_body,
+                        &mut poll_body,
+                        s,
+                        &rename_k,
+                        interner,
+                    ));
                 }
                 let inner = await_infos[k + 1].inner;
-                let fut_next = copy_expr_renamed(&work_body, &mut poll_body, inner, &rename_k, interner);
+                let fut_next =
+                    copy_expr_renamed(&work_body, &mut poll_body, inner, &rename_k, interner);
                 let fut_next_name = interner.intern(&format!("fut{}", k + 1));
                 let fut_next_pat = poll_body.pats.push(Pat::Binding {
                     name: fut_next_name,
@@ -1546,23 +1628,37 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
                     &format!("S{}", k + 1),
                     &original_params,
                     &v_names[0..k],
-                    &[(v_names[k], interner.intern("__v")), (fut_next_name, fut_next_name)],
+                    &[
+                        (v_names[k], interner.intern("__v")),
+                        (fut_next_name, fut_next_name),
+                    ],
                     self_name,
                 );
                 let assign_next = assign_state(&mut poll_body, interner, state_field_name, s_next);
                 stmts.push(assign_next);
                 stmts.push(poll_body.alloc_expr(Expr::Continue, Span::DUMMY));
-                let ready_arm_body = poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY);
+                let ready_arm_body =
+                    poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY);
                 let pending_arm_body = poll_body.alloc_expr(
-                    Expr::Return { value: Some(poll_pending_path) },
+                    Expr::Return {
+                        value: Some(poll_pending_path),
+                    },
                     Span::DUMMY,
                 );
                 poll_body.alloc_expr(
                     Expr::Match {
                         scrutinee: poll_call,
                         arms: vec![
-                            MatchArm { pat: ready_pat, guard: None, body: ready_arm_body },
-                            MatchArm { pat: pending_pat, guard: None, body: pending_arm_body },
+                            MatchArm {
+                                pat: ready_pat,
+                                guard: None,
+                                body: ready_arm_body,
+                            },
+                            MatchArm {
+                                pat: pending_pat,
+                                guard: None,
+                                body: pending_arm_body,
+                            },
                         ],
                     },
                     Span::DUMMY,
@@ -1575,7 +1671,10 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
                 } else {
                     // tail itself is the await; the result is the Ready value.
                     poll_body.alloc_expr(
-                        Expr::Path(plain_path(interner, interner.resolve(interner.intern("__v")))),
+                        Expr::Path(plain_path(
+                            interner,
+                            interner.resolve(interner.intern("__v")),
+                        )),
                         Span::DUMMY,
                     )
                 };
@@ -1587,7 +1686,8 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
                     },
                     Span::DUMMY,
                 );
-                let assign_done = assign_state(&mut poll_body, interner, state_field_name, done_struct);
+                let assign_done =
+                    assign_state(&mut poll_body, interner, state_field_name, done_struct);
                 stmts.push(assign_done);
                 // Return Poll::Ready(tail): `tail` is exactly the value we just
                 // stored into `self.state = Done { result: tail }`, so return
@@ -1602,28 +1702,45 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
                     Span::DUMMY,
                 );
                 let return_ready = poll_body.alloc_expr(
-                    Expr::Return { value: Some(ready_call) },
+                    Expr::Return {
+                        value: Some(ready_call),
+                    },
                     Span::DUMMY,
                 );
                 stmts.push(return_ready);
-                let ready_arm_body = poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY);
+                let ready_arm_body =
+                    poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY);
                 let pending_arm_body = poll_body.alloc_expr(
-                    Expr::Return { value: Some(poll_pending_path) },
+                    Expr::Return {
+                        value: Some(poll_pending_path),
+                    },
                     Span::DUMMY,
                 );
                 poll_body.alloc_expr(
                     Expr::Match {
                         scrutinee: poll_call,
                         arms: vec![
-                            MatchArm { pat: ready_pat, guard: None, body: ready_arm_body },
-                            MatchArm { pat: pending_pat, guard: None, body: pending_arm_body },
+                            MatchArm {
+                                pat: ready_pat,
+                                guard: None,
+                                body: ready_arm_body,
+                            },
+                            MatchArm {
+                                pat: pending_pat,
+                                guard: None,
+                                body: pending_arm_body,
+                            },
                         ],
                     },
                     Span::DUMMY,
                 )
             }
         };
-        arms.push(MatchArm { pat: s_pat, guard: None, body: s_body });
+        arms.push(MatchArm {
+            pat: s_pat,
+            guard: None,
+            body: s_body,
+        });
     }
 
     // --- Done arm ---
@@ -1638,7 +1755,8 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         rest: false,
     });
     let done_result_ctor = poll_ready_ctor(&mut poll_body);
-    let done_result_arg = poll_body.alloc_expr(Expr::Path(plain_path(interner, "result")), Span::DUMMY);
+    let done_result_arg =
+        poll_body.alloc_expr(Expr::Path(plain_path(interner, "result")), Span::DUMMY);
     let done_result_call = poll_body.alloc_expr(
         Expr::Call {
             func: done_result_ctor,
@@ -1647,10 +1765,16 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         Span::DUMMY,
     );
     let done_body = poll_body.alloc_expr(
-        Expr::Return { value: Some(done_result_call) },
+        Expr::Return {
+            value: Some(done_result_call),
+        },
         Span::DUMMY,
     );
-    arms.push(MatchArm { pat: done_pat, guard: None, body: done_body });
+    arms.push(MatchArm {
+        pat: done_pat,
+        guard: None,
+        body: done_body,
+    });
 
     let match_expr = poll_body.alloc_expr(
         Expr::Match {
@@ -1659,7 +1783,13 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         },
         Span::DUMMY,
     );
-    let loop_inner = poll_body.alloc_expr(Expr::Block { stmts: Vec::new(), tail: Some(match_expr) }, Span::DUMMY);
+    let loop_inner = poll_body.alloc_expr(
+        Expr::Block {
+            stmts: Vec::new(),
+            tail: Some(match_expr),
+        },
+        Span::DUMMY,
+    );
     let loop_body = poll_body.alloc_expr(Expr::Loop { body: loop_inner }, Span::DUMMY);
     poll_body.alloc_expr(
         Expr::Block {
@@ -1792,7 +1922,11 @@ fn copy_expr_renamed(
                 .collect(),
             tail: tail.map(|t| copy_expr_renamed(src, dst, t, rename, interner)),
         },
-        Expr::If { cond, then_branch, else_branch } => Expr::If {
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => Expr::If {
             cond: copy_expr_renamed(src, dst, *cond, rename, interner),
             then_branch: copy_expr_renamed(src, dst, *then_branch, rename, interner),
             else_branch: else_branch.map(|e| copy_expr_renamed(src, dst, e, rename, interner)),
@@ -1804,7 +1938,11 @@ fn copy_expr_renamed(
         Expr::Loop { body } => Expr::Loop {
             body: copy_expr_renamed(src, dst, *body, rename, interner),
         },
-        Expr::For { pat, iterable, body } => Expr::For {
+        Expr::For {
+            pat,
+            iterable,
+            body,
+        } => Expr::For {
             pat: copy_pat_renamed(src, dst, *pat, rename, interner),
             iterable: copy_expr_renamed(src, dst, *iterable, rename, interner),
             body: copy_expr_renamed(src, dst, *body, rename, interner),
@@ -1815,7 +1953,9 @@ fn copy_expr_renamed(
                 .iter()
                 .map(|a| MatchArm {
                     pat: copy_pat_renamed(src, dst, a.pat, rename, interner),
-                    guard: a.guard.map(|g| copy_expr_renamed(src, dst, g, rename, interner)),
+                    guard: a
+                        .guard
+                        .map(|g| copy_expr_renamed(src, dst, g, rename, interner)),
                     body: copy_expr_renamed(src, dst, a.body, rename, interner),
                 })
                 .collect(),
@@ -1827,7 +1967,11 @@ fn copy_expr_renamed(
                 .map(|a| copy_expr_renamed(src, dst, *a, rename, interner))
                 .collect(),
         },
-        Expr::MethodCall { receiver, method, args } => Expr::MethodCall {
+        Expr::MethodCall {
+            receiver,
+            method,
+            args,
+        } => Expr::MethodCall {
             receiver: copy_expr_renamed(src, dst, *receiver, rename, interner),
             method: *method,
             args: args
@@ -1870,7 +2014,11 @@ fn copy_expr_renamed(
         Expr::Break { value } => Expr::Break {
             value: value.map(|v| copy_expr_renamed(src, dst, v, rename, interner)),
         },
-        Expr::Closure { params, body, is_move } => Expr::Closure {
+        Expr::Closure {
+            params,
+            body,
+            is_move,
+        } => Expr::Closure {
             params: params
                 .iter()
                 .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
@@ -1893,7 +2041,11 @@ fn copy_expr_renamed(
             value: copy_expr_renamed(src, dst, *value, rename, interner),
             ty: ty.clone(),
         },
-        Expr::Struct { path, fields, spread } => Expr::Struct {
+        Expr::Struct {
+            path,
+            fields,
+            spread,
+        } => Expr::Struct {
             path: path.clone(),
             fields: fields
                 .iter()
@@ -1901,7 +2053,11 @@ fn copy_expr_renamed(
                 .collect(),
             spread: spread.map(|s| copy_expr_renamed(src, dst, s, rename, interner)),
         },
-        Expr::Range { start, end, inclusive } => Expr::Range {
+        Expr::Range {
+            start,
+            end,
+            inclusive,
+        } => Expr::Range {
             start: start.map(|s| copy_expr_renamed(src, dst, s, rename, interner)),
             end: end.map(|e| copy_expr_renamed(src, dst, e, rename, interner)),
             inclusive: *inclusive,
@@ -1925,7 +2081,11 @@ fn copy_pat_renamed(
     interner: &Interner,
 ) -> PatId {
     let pat = match &src.pats[pid] {
-        Pat::Binding { name, mutability, subpattern } => Pat::Binding {
+        Pat::Binding {
+            name,
+            mutability,
+            subpattern,
+        } => Pat::Binding {
             name: *name,
             mutability: *mutability,
             subpattern: subpattern.map(|s| copy_pat_renamed(src, dst, s, rename, interner)),
@@ -1938,13 +2098,29 @@ fn copy_pat_renamed(
                 .collect(),
             rest: *rest,
         },
-        Pat::Tuple(ps) => Pat::Tuple(ps.iter().map(|p| copy_pat_renamed(src, dst, *p, rename, interner)).collect()),
-        Pat::Slice(ps) => Pat::Slice(ps.iter().map(|p| copy_pat_renamed(src, dst, *p, rename, interner)).collect()),
-        Pat::Or(ps) => Pat::Or(ps.iter().map(|p| copy_pat_renamed(src, dst, *p, rename, interner)).collect()),
+        Pat::Tuple(ps) => Pat::Tuple(
+            ps.iter()
+                .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
+                .collect(),
+        ),
+        Pat::Slice(ps) => Pat::Slice(
+            ps.iter()
+                .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
+                .collect(),
+        ),
+        Pat::Or(ps) => Pat::Or(
+            ps.iter()
+                .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
+                .collect(),
+        ),
         Pat::Path(p) => Pat::Path(p.clone()),
         Pat::Wild => Pat::Wild,
         Pat::Literal(l) => Pat::Literal(l.clone()),
-        Pat::Range { start, end, inclusive } => Pat::Range {
+        Pat::Range {
+            start,
+            end,
+            inclusive,
+        } => Pat::Range {
             start: start.clone(),
             end: end.clone(),
             inclusive: *inclusive,
@@ -1953,7 +2129,6 @@ fn copy_pat_renamed(
     };
     dst.pats.push(pat)
 }
-
 
 /// Like `copy_expr_renamed`, but when it reaches the `Expr::Await` node whose
 /// id is `await_eid` it emits a path to `subst_name` (the `Ready` payload
@@ -1991,15 +2166,32 @@ fn copy_expr_subst_await(
         Expr::Block { stmts, tail } => Expr::Block {
             stmts: stmts
                 .iter()
-                .map(|s| copy_expr_subst_await(src, dst, *s, rename, interner, await_eid, subst_name))
+                .map(|s| {
+                    copy_expr_subst_await(src, dst, *s, rename, interner, await_eid, subst_name)
+                })
                 .collect(),
-            tail: tail.map(|t| copy_expr_subst_await(src, dst, t, rename, interner, await_eid, subst_name)),
+            tail: tail.map(|t| {
+                copy_expr_subst_await(src, dst, t, rename, interner, await_eid, subst_name)
+            }),
         },
-        Expr::If { cond, then_branch, else_branch } => Expr::If {
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => Expr::If {
             cond: copy_expr_subst_await(src, dst, *cond, rename, interner, await_eid, subst_name),
-            then_branch: copy_expr_subst_await(src, dst, *then_branch, rename, interner, await_eid, subst_name),
-            else_branch: else_branch
-                .map(|e| copy_expr_subst_await(src, dst, e, rename, interner, await_eid, subst_name)),
+            then_branch: copy_expr_subst_await(
+                src,
+                dst,
+                *then_branch,
+                rename,
+                interner,
+                await_eid,
+                subst_name,
+            ),
+            else_branch: else_branch.map(|e| {
+                copy_expr_subst_await(src, dst, e, rename, interner, await_eid, subst_name)
+            }),
         },
         Expr::While { cond, body } => Expr::While {
             cond: copy_expr_subst_await(src, dst, *cond, rename, interner, await_eid, subst_name),
@@ -2008,19 +2200,31 @@ fn copy_expr_subst_await(
         Expr::Loop { body } => Expr::Loop {
             body: copy_expr_subst_await(src, dst, *body, rename, interner, await_eid, subst_name),
         },
-        Expr::For { pat, iterable, body } => Expr::For {
+        Expr::For {
+            pat,
+            iterable,
+            body,
+        } => Expr::For {
             pat: copy_pat_renamed(src, dst, *pat, rename, interner),
-            iterable: copy_expr_subst_await(src, dst, *iterable, rename, interner, await_eid, subst_name),
+            iterable: copy_expr_subst_await(
+                src, dst, *iterable, rename, interner, await_eid, subst_name,
+            ),
             body: copy_expr_subst_await(src, dst, *body, rename, interner, await_eid, subst_name),
         },
         Expr::Match { scrutinee, arms } => Expr::Match {
-            scrutinee: copy_expr_subst_await(src, dst, *scrutinee, rename, interner, await_eid, subst_name),
+            scrutinee: copy_expr_subst_await(
+                src, dst, *scrutinee, rename, interner, await_eid, subst_name,
+            ),
             arms: arms
                 .iter()
                 .map(|a| crate::MatchArm {
                     pat: copy_pat_renamed(src, dst, a.pat, rename, interner),
-                    guard: a.guard.map(|g| copy_expr_subst_await(src, dst, g, rename, interner, await_eid, subst_name)),
-                    body: copy_expr_subst_await(src, dst, a.body, rename, interner, await_eid, subst_name),
+                    guard: a.guard.map(|g| {
+                        copy_expr_subst_await(src, dst, g, rename, interner, await_eid, subst_name)
+                    }),
+                    body: copy_expr_subst_await(
+                        src, dst, a.body, rename, interner, await_eid, subst_name,
+                    ),
                 })
                 .collect(),
         },
@@ -2028,19 +2232,31 @@ fn copy_expr_subst_await(
             func: copy_expr_subst_await(src, dst, *func, rename, interner, await_eid, subst_name),
             args: args
                 .iter()
-                .map(|a| copy_expr_subst_await(src, dst, *a, rename, interner, await_eid, subst_name))
+                .map(|a| {
+                    copy_expr_subst_await(src, dst, *a, rename, interner, await_eid, subst_name)
+                })
                 .collect(),
         },
-        Expr::MethodCall { receiver, method, args } => Expr::MethodCall {
-            receiver: copy_expr_subst_await(src, dst, *receiver, rename, interner, await_eid, subst_name),
+        Expr::MethodCall {
+            receiver,
+            method,
+            args,
+        } => Expr::MethodCall {
+            receiver: copy_expr_subst_await(
+                src, dst, *receiver, rename, interner, await_eid, subst_name,
+            ),
             method: *method,
             args: args
                 .iter()
-                .map(|a| copy_expr_subst_await(src, dst, *a, rename, interner, await_eid, subst_name))
+                .map(|a| {
+                    copy_expr_subst_await(src, dst, *a, rename, interner, await_eid, subst_name)
+                })
                 .collect(),
         },
         Expr::Field { receiver, field } => Expr::Field {
-            receiver: copy_expr_subst_await(src, dst, *receiver, rename, interner, await_eid, subst_name),
+            receiver: copy_expr_subst_await(
+                src, dst, *receiver, rename, interner, await_eid, subst_name,
+            ),
             field: *field,
         },
         Expr::Index { base, index } => Expr::Index {
@@ -2069,12 +2285,20 @@ fn copy_expr_subst_await(
             rhs: copy_expr_subst_await(src, dst, *rhs, rename, interner, await_eid, subst_name),
         },
         Expr::Return { value } => Expr::Return {
-            value: value.map(|v| copy_expr_subst_await(src, dst, v, rename, interner, await_eid, subst_name)),
+            value: value.map(|v| {
+                copy_expr_subst_await(src, dst, v, rename, interner, await_eid, subst_name)
+            }),
         },
         Expr::Break { value } => Expr::Break {
-            value: value.map(|v| copy_expr_subst_await(src, dst, v, rename, interner, await_eid, subst_name)),
+            value: value.map(|v| {
+                copy_expr_subst_await(src, dst, v, rename, interner, await_eid, subst_name)
+            }),
         },
-        Expr::Closure { params, body, is_move } => Expr::Closure {
+        Expr::Closure {
+            params,
+            body,
+            is_move,
+        } => Expr::Closure {
             params: params
                 .iter()
                 .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
@@ -2084,12 +2308,16 @@ fn copy_expr_subst_await(
         },
         Expr::Array(es) => Expr::Array(
             es.iter()
-                .map(|e| copy_expr_subst_await(src, dst, *e, rename, interner, await_eid, subst_name))
+                .map(|e| {
+                    copy_expr_subst_await(src, dst, *e, rename, interner, await_eid, subst_name)
+                })
                 .collect(),
         ),
         Expr::Tuple(es) => Expr::Tuple(
             es.iter()
-                .map(|e| copy_expr_subst_await(src, dst, *e, rename, interner, await_eid, subst_name))
+                .map(|e| {
+                    copy_expr_subst_await(src, dst, *e, rename, interner, await_eid, subst_name)
+                })
                 .collect(),
         ),
         Expr::Await { expr } => {
@@ -2098,10 +2326,12 @@ fn copy_expr_subst_await(
                 Expr::Path(plain_path(interner, interner.resolve(subst_name)))
             } else {
                 Expr::Await {
-                    expr: copy_expr_subst_await(src, dst, *expr, rename, interner, await_eid, subst_name),
+                    expr: copy_expr_subst_await(
+                        src, dst, *expr, rename, interner, await_eid, subst_name,
+                    ),
                 }
             }
-        },
+        }
         Expr::Try { expr } => Expr::Try {
             expr: copy_expr_subst_await(src, dst, *expr, rename, interner, await_eid, subst_name),
         },
@@ -2307,7 +2537,11 @@ fn desugar_loop_async_fn(
     .unwrap_or_else(|| {
         emit_unsupported(
             diags,
-            work_body.expr_spans.get(loop_stmt).copied().unwrap_or(Span::DUMMY),
+            work_body
+                .expr_spans
+                .get(loop_stmt)
+                .copied()
+                .unwrap_or(Span::DUMMY),
         );
         interner.intern("result")
     });
@@ -2391,16 +2625,32 @@ fn desugar_loop_async_fn(
             &[(fut_local_name, fut_local_name)],
             self_name,
         );
-        stmts.push(assign_state(poll_body, interner, state_field_name, s0_struct));
+        stmts.push(assign_state(
+            poll_body,
+            interner,
+            state_field_name,
+            s0_struct,
+        ));
         stmts.push(poll_body.alloc_expr(Expr::Continue, Span::DUMMY));
         let then_branch = poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY);
 
         // else: self.state = Done(result); continue
         let mut else_stmts: Vec<ExprId> = Vec::new();
         let done_struct = build_loop_done_struct(poll_body, interner, state_name, result_local);
-        else_stmts.push(assign_state(poll_body, interner, state_field_name, done_struct));
+        else_stmts.push(assign_state(
+            poll_body,
+            interner,
+            state_field_name,
+            done_struct,
+        ));
         else_stmts.push(poll_body.alloc_expr(Expr::Continue, Span::DUMMY));
-        let else_branch = poll_body.alloc_expr(Expr::Block { stmts: else_stmts, tail: None }, Span::DUMMY);
+        let else_branch = poll_body.alloc_expr(
+            Expr::Block {
+                stmts: else_stmts,
+                tail: None,
+            },
+            Span::DUMMY,
+        );
 
         let cond_expr = copy_expr_renamed(&work_body, poll_body, cond, base_rename, interner);
         poll_body.alloc_expr(
@@ -2438,7 +2688,13 @@ fn desugar_loop_async_fn(
             if *s == loop_stmt {
                 break;
             }
-            stmts.push(copy_expr_renamed(&work_body, &mut poll_body, *s, &base_rename, interner));
+            stmts.push(copy_expr_renamed(
+                &work_body,
+                &mut poll_body,
+                *s,
+                &base_rename,
+                interner,
+            ));
         }
         stmts.push(build_loop_step(
             &mut poll_body,
@@ -2537,7 +2793,11 @@ fn desugar_loop_async_fn(
                             collect_stmts(body, *t, out);
                         }
                     }
-                    Expr::If { then_branch, else_branch, .. } => {
+                    Expr::If {
+                        then_branch,
+                        else_branch,
+                        ..
+                    } => {
                         collect_stmts(body, *then_branch, out);
                         if let Some(e) = else_branch {
                             collect_stmts(body, *e, out);
@@ -2580,7 +2840,13 @@ fn desugar_loop_async_fn(
             result_local,
             loop_cond,
         ));
-        let ready_arm_body = poll_body.alloc_expr(Expr::Block { stmts: ready_stmts, tail: None }, Span::DUMMY);
+        let ready_arm_body = poll_body.alloc_expr(
+            Expr::Block {
+                stmts: ready_stmts,
+                tail: None,
+            },
+            Span::DUMMY,
+        );
 
         // Pending: self.state = S0(...); return Poll::Pending
         let s0_preserve = build_state_struct(
@@ -2594,14 +2860,25 @@ fn desugar_loop_async_fn(
             self_name,
         );
         let mut pend_stmts: Vec<ExprId> = Vec::new();
-        pend_stmts.push(assign_state(&mut poll_body, interner, state_field_name, s0_preserve));
+        pend_stmts.push(assign_state(
+            &mut poll_body,
+            interner,
+            state_field_name,
+            s0_preserve,
+        ));
         pend_stmts.push(poll_body.alloc_expr(
             Expr::Return {
                 value: Some(poll_pending_path),
             },
             Span::DUMMY,
         ));
-        let pending_arm_body = poll_body.alloc_expr(Expr::Block { stmts: pend_stmts, tail: None }, Span::DUMMY);
+        let pending_arm_body = poll_body.alloc_expr(
+            Expr::Block {
+                stmts: pend_stmts,
+                tail: None,
+            },
+            Span::DUMMY,
+        );
 
         poll_body.alloc_expr(
             Expr::Match {
@@ -2640,10 +2917,14 @@ fn desugar_loop_async_fn(
         rest: false,
     });
     let done_result_arg = poll_body.alloc_expr(
-        Expr::Path(plain_path(interner, interner.resolve(interner.intern("result")))),
+        Expr::Path(plain_path(
+            interner,
+            interner.resolve(interner.intern("result")),
+        )),
         Span::DUMMY,
     );
-    let done_ctor = poll_body.alloc_expr(Expr::Path(two_seg(interner, "Poll", ready_id)), Span::DUMMY);
+    let done_ctor =
+        poll_body.alloc_expr(Expr::Path(two_seg(interner, "Poll", ready_id)), Span::DUMMY);
     let done_call = poll_body.alloc_expr(
         Expr::Call {
             func: done_ctor,
@@ -2670,7 +2951,13 @@ fn desugar_loop_async_fn(
         },
         Span::DUMMY,
     );
-    let loop_inner = poll_body.alloc_expr(Expr::Block { stmts: Vec::new(), tail: Some(match_expr) }, Span::DUMMY);
+    let loop_inner = poll_body.alloc_expr(
+        Expr::Block {
+            stmts: Vec::new(),
+            tail: Some(match_expr),
+        },
+        Span::DUMMY,
+    );
     let loop_body = poll_body.alloc_expr(Expr::Loop { body: loop_inner }, Span::DUMMY);
     poll_body.alloc_expr(
         Expr::Block {
@@ -2798,10 +3085,9 @@ fn build_loop_state_enum(
     let mut start_fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
         let fname = interner.intern(&format!("f{}", i));
-        let ty = p
-            .ty
-            .clone()
-            .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
+        let ty =
+            p.ty.clone()
+                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
         start_fields.push(Field {
             name: fname,
             ty,
@@ -2820,10 +3106,9 @@ fn build_loop_state_enum(
         let mut fields = Vec::new();
         for (i, p) in original_params.iter().enumerate() {
             let fname = interner.intern(&format!("f{}", i));
-            let ty = p
-                .ty
-                .clone()
-                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
+            let ty =
+                p.ty.clone()
+                    .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
             fields.push(Field {
                 name: fname,
                 ty,
@@ -2895,13 +3180,19 @@ fn build_state_struct(
         // (see `start_pat` / `s_pat`), so reference it as a bare local.
         fields.push((
             fname,
-            body.alloc_expr(Expr::Path(plain_path(interner, interner.resolve(fname))), Span::DUMMY),
+            body.alloc_expr(
+                Expr::Path(plain_path(interner, interner.resolve(fname))),
+                Span::DUMMY,
+            ),
         ));
     }
     for &v in v_names {
         fields.push((
             v,
-            body.alloc_expr(Expr::Path(plain_path(interner, interner.resolve(v))), Span::DUMMY),
+            body.alloc_expr(
+                Expr::Path(plain_path(interner, interner.resolve(v))),
+                Span::DUMMY,
+            ),
         ));
     }
     // `extra` are (struct_field_name, value_local_name) pairs — e.g. the just
@@ -2911,7 +3202,10 @@ fn build_state_struct(
     for &(field_name, value_name) in extra {
         fields.push((
             field_name,
-            body.alloc_expr(Expr::Path(plain_path(interner, interner.resolve(value_name))), Span::DUMMY),
+            body.alloc_expr(
+                Expr::Path(plain_path(interner, interner.resolve(value_name))),
+                Span::DUMMY,
+            ),
         ));
     }
     body.alloc_expr(
@@ -2925,9 +3219,17 @@ fn build_state_struct(
 }
 
 /// `self.state = <struct_expr>`.
-fn assign_state(body: &mut Body, interner: &Interner, state_field_name: crate::Name, value: ExprId) -> ExprId {
+fn assign_state(
+    body: &mut Body,
+    interner: &Interner,
+    state_field_name: crate::Name,
+    value: ExprId,
+) -> ExprId {
     let self_path = body.alloc_expr(
-        Expr::Path(plain_path(interner, interner.resolve(interner.intern("self")))),
+        Expr::Path(plain_path(
+            interner,
+            interner.resolve(interner.intern("self")),
+        )),
         Span::DUMMY,
     );
     let lhs = body.alloc_expr(
@@ -2959,10 +3261,9 @@ fn build_multi_state_enum(
     let mut start_fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
         let fname = interner.intern(&format!("f{}", i));
-        let ty = p
-            .ty
-            .clone()
-            .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
+        let ty =
+            p.ty.clone()
+                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
         start_fields.push(Field {
             name: fname,
             ty,
@@ -2981,11 +3282,14 @@ fn build_multi_state_enum(
         let mut fields = Vec::new();
         for (i, p) in original_params.iter().enumerate() {
             let fname = interner.intern(&format!("f{}", i));
-            let ty = p
-                .ty
-                .clone()
-                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
-            fields.push(Field { name: fname, ty, span: Span::DUMMY });
+            let ty =
+                p.ty.clone()
+                    .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
+            fields.push(Field {
+                name: fname,
+                ty,
+                span: Span::DUMMY,
+            });
         }
         for j in 0..k {
             let ty = TypeRef::Infer; // result type is the awaited future's Output; infer from Ready payload
@@ -3059,7 +3363,11 @@ fn await_infos_await_exprs(body: &Body) -> Vec<ExprId> {
                     stack.push(*t);
                 }
             }
-            Expr::If { cond, then_branch, else_branch } => {
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
                 stack.push(*cond);
                 stack.push(*then_branch);
                 if let Some(e) = else_branch {
@@ -3118,7 +3426,11 @@ fn stmt_contains(body: &Body, container: ExprId, target: ExprId) -> bool {
                     stack.push(*t);
                 }
             }
-            Expr::If { cond, then_branch, else_branch } => {
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
                 stack.push(*cond);
                 stack.push(*then_branch);
                 if let Some(e) = else_branch {
@@ -3219,7 +3531,13 @@ fn rewrite_expr(
             // single-await stopgap: a genuine Pending should suspend and resume
             // (the v1 state-machine, plan M4), not spin forever. It lets the
             // body type-check end-to-end for the supported single-await shape.
-            let empty_block = body.alloc_expr(Expr::Block { stmts: Vec::new(), tail: None }, Span::DUMMY);
+            let empty_block = body.alloc_expr(
+                Expr::Block {
+                    stmts: Vec::new(),
+                    tail: None,
+                },
+                Span::DUMMY,
+            );
             let pending_body = body.alloc_expr(Expr::Loop { body: empty_block }, Span::DUMMY);
             Expr::Match {
                 scrutinee: poll_call,
@@ -3253,10 +3571,8 @@ fn rewrite_expr(
         }
         Expr::Return { value } => {
             let value = value.map(|v| {
-                let ctor = body.alloc_expr(
-                    Expr::Path(two_seg(interner, "Poll", ready_id)),
-                    Span::DUMMY,
-                );
+                let ctor =
+                    body.alloc_expr(Expr::Path(two_seg(interner, "Poll", ready_id)), Span::DUMMY);
                 body.alloc_expr(
                     Expr::Call {
                         func: ctor,
@@ -3270,25 +3586,98 @@ fn rewrite_expr(
         Expr::Block { stmts, tail } => Expr::Block {
             stmts: stmts
                 .into_iter()
-                .map(|s| rewrite_in_body(interner, body, s, param_fields, self_name, ready_id, pending_id))
+                .map(|s| {
+                    rewrite_in_body(
+                        interner,
+                        body,
+                        s,
+                        param_fields,
+                        self_name,
+                        ready_id,
+                        pending_id,
+                    )
+                })
                 .collect(),
-            tail: tail.map(|t| rewrite_in_body(interner, body, t, param_fields, self_name, ready_id, pending_id)),
+            tail: tail.map(|t| {
+                rewrite_in_body(
+                    interner,
+                    body,
+                    t,
+                    param_fields,
+                    self_name,
+                    ready_id,
+                    pending_id,
+                )
+            }),
         },
-        Expr::If { cond, then_branch, else_branch } => Expr::If {
-            cond: rewrite_in_body(interner, body, cond, param_fields, self_name, ready_id, pending_id),
-            then_branch: rewrite_in_body(interner, body, then_branch, param_fields, self_name, ready_id, pending_id),
-            else_branch: else_branch
-                .map(|e| rewrite_in_body(interner, body, e, param_fields, self_name, ready_id, pending_id)),
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => Expr::If {
+            cond: rewrite_in_body(
+                interner,
+                body,
+                cond,
+                param_fields,
+                self_name,
+                ready_id,
+                pending_id,
+            ),
+            then_branch: rewrite_in_body(
+                interner,
+                body,
+                then_branch,
+                param_fields,
+                self_name,
+                ready_id,
+                pending_id,
+            ),
+            else_branch: else_branch.map(|e| {
+                rewrite_in_body(
+                    interner,
+                    body,
+                    e,
+                    param_fields,
+                    self_name,
+                    ready_id,
+                    pending_id,
+                )
+            }),
         },
         Expr::Match { scrutinee, arms } => Expr::Match {
-            scrutinee: rewrite_in_body(interner, body, scrutinee, param_fields, self_name, ready_id, pending_id),
+            scrutinee: rewrite_in_body(
+                interner,
+                body,
+                scrutinee,
+                param_fields,
+                self_name,
+                ready_id,
+                pending_id,
+            ),
             arms: arms
                 .into_iter()
                 .map(|mut a| {
                     if let Some(g) = a.guard {
-                        a.guard = Some(rewrite_in_body(interner, body, g, param_fields, self_name, ready_id, pending_id));
+                        a.guard = Some(rewrite_in_body(
+                            interner,
+                            body,
+                            g,
+                            param_fields,
+                            self_name,
+                            ready_id,
+                            pending_id,
+                        ));
                     }
-                    a.body = rewrite_in_body(interner, body, a.body, param_fields, self_name, ready_id, pending_id);
+                    a.body = rewrite_in_body(
+                        interner,
+                        body,
+                        a.body,
+                        param_fields,
+                        self_name,
+                        ready_id,
+                        pending_id,
+                    );
                     a
                 })
                 .collect(),
@@ -3307,7 +3696,15 @@ fn rewrite_in_body(
     pending_id: crate::Name,
 ) -> ExprId {
     let expr = body.exprs[eid].clone();
-    let new_expr = rewrite_expr(interner, body, expr, param_fields, self_name, ready_id, pending_id);
+    let new_expr = rewrite_expr(
+        interner,
+        body,
+        expr,
+        param_fields,
+        self_name,
+        ready_id,
+        pending_id,
+    );
     body.exprs[eid] = new_expr;
     eid
 }

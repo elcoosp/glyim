@@ -9,7 +9,7 @@ pub struct Name {
 }
 
 impl Name {
-/// as_symbol.
+    /// as_symbol.
     pub fn as_symbol(self) -> Spur {
         self.symbol
     }
@@ -27,7 +27,7 @@ pub struct Interner {
 }
 
 impl Interner {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             inner: Arc::new(lasso::ThreadedRodeo::new()),
@@ -35,7 +35,7 @@ impl Interner {
     }
 
     #[inline]
-/// intern.
+    /// intern.
     pub fn intern(&self, s: &str) -> Name {
         Name {
             symbol: self.inner.get_or_intern(s),
@@ -43,12 +43,12 @@ impl Interner {
     }
 
     #[inline]
-/// resolve.
+    /// resolve.
     pub fn resolve(&self, name: Name) -> &str {
         self.inner.resolve(&name.symbol)
     }
 
-/// lookup.
+    /// lookup.
     pub fn lookup(&self, s: &str) -> Option<Name> {
         self.inner.get(s).map(|symbol| Name { symbol })
     }

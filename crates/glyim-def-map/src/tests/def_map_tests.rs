@@ -8,7 +8,11 @@ use glyim_span::FileId;
 fn build_map(source: &str) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let file_id = FileId::from_raw(0);
     let parse_result = parse_to_syntax(source, file_id);
-    build_def_map(&parse_result.root, CrateId::from_raw(0), glyim_core::interner::Interner::new())
+    build_def_map(
+        &parse_result.root,
+        CrateId::from_raw(0),
+        glyim_core::interner::Interner::new(),
+    )
 }
 
 fn root_scope(def_map: &CrateDefMap) -> &ItemScope {

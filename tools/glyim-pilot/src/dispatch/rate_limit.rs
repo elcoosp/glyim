@@ -4,38 +4,38 @@ use crate::error::PilotError;
 #[derive(Debug, Clone)]
 /// RateLimitContext.
 pub struct RateLimitContext {
-/// Struct.
+    /// Struct.
     pub stream_id: String,
-/// Struct.
+    /// Struct.
     pub turn: u32,
-/// Struct.
+    /// Struct.
     pub commits: u32,
-/// Struct.
+    /// Struct.
     pub brief_summary: String,
-/// Struct.
+    /// Struct.
     pub max_reassign_attempts: u32,
 }
 
 #[derive(Debug, Clone)]
 /// RateLimitAction.
 pub enum RateLimitAction {
-/// Variant.
+    /// Variant.
     Failover {
-/// Struct.
+        /// Struct.
         new_provider_id: String,
-/// Struct.
+        /// Struct.
         failover_prompt: String,
     },
-/// Variant.
+    /// Variant.
     RetryAfter {
-/// Struct.
+        /// Struct.
         provider_id: String,
-/// Struct.
+        /// Struct.
         delay_secs: u64,
     },
-/// Variant.
+    /// Variant.
     Escalate {
-/// Struct.
+        /// Struct.
         reason: String,
     },
 }

@@ -34,10 +34,7 @@ use std::collections::HashMap;
 /// This is purely a defense-in-depth guard; the caller's `# Safety` contract
 /// remains the source of truth. Reconstructing through these helpers means the
 /// length mistake can only happen once (here), not in every hand-written FFI fn.
-pub(crate) unsafe fn slice_from_raw_parts<'a>(
-    ptr: *const u8,
-    len: usize,
-) -> &'a [u8] {
+pub(crate) unsafe fn slice_from_raw_parts<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
     debug_assert!(
         len <= isize::MAX as usize,
         "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
@@ -48,10 +45,7 @@ pub(crate) unsafe fn slice_from_raw_parts<'a>(
     unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
-pub(crate) unsafe fn slice_from_raw_parts_mut<'a>(
-    ptr: *mut u8,
-    len: usize,
-) -> &'a mut [u8] {
+pub(crate) unsafe fn slice_from_raw_parts_mut<'a>(ptr: *mut u8, len: usize) -> &'a mut [u8] {
     debug_assert!(
         len <= isize::MAX as usize,
         "glyim runtime FFI: slice length {len} exceeds isize::MAX; \

@@ -22,21 +22,21 @@ pub struct Database {
 #[derive(Clone, Debug)]
 /// CrateConfig.
 pub struct CrateConfig {
-/// Struct.
+    /// Struct.
     pub name: String,
-/// Struct.
+    /// Struct.
     pub target_triple: String,
-/// Struct.
+    /// Struct.
     pub opt_level: u8,
 }
 
 impl Database {
-/// intern_mut.
+    /// intern_mut.
     pub fn intern_mut(&mut self) -> &mut Interner {
         &mut self.interner
     }
 
-/// new.
+    /// new.
     pub fn new(config: CrateConfig) -> Self {
         Self {
             interner: Interner::new(),
@@ -48,37 +48,37 @@ impl Database {
         }
     }
 
-/// interner.
+    /// interner.
     pub fn interner(&self) -> &Interner {
         &self.interner
     }
 
-/// vfs.
+    /// vfs.
     pub fn vfs(&self) -> &Vfs {
         &self.vfs
     }
 
-/// krate.
+    /// krate.
     pub fn krate(&self) -> CrateId {
         self.krate
     }
 
-/// set_ty_ctx.
+    /// set_ty_ctx.
     pub fn set_ty_ctx(&self, ctx: glyim_type::TyCtx) {
         *self.ty_ctx.write().unwrap() = Some(Arc::new(ctx));
     }
 
-/// get_ty_ctx.
+    /// get_ty_ctx.
     pub fn get_ty_ctx(&self) -> Option<Arc<glyim_type::TyCtx>> {
         self.ty_ctx.read().unwrap().clone()
     }
 
-/// ty_ctx_handle.
+    /// ty_ctx_handle.
     pub fn ty_ctx_handle(&self) -> TyCtxHandle {
         self.ty_ctx.clone()
     }
 
-/// set_mono_cache.
+    /// set_mono_cache.
     pub fn set_mono_cache(&self, items: Vec<String>) {
         // Plan §3.1: the mono cache must not silently accumulate duplicate items
         // when the same monomorphization is requested more than once. De-duplicate
@@ -92,12 +92,12 @@ impl Database {
         *self.mono_cache.write() = Some(deduped);
     }
 
-/// mono_cache.
+    /// mono_cache.
     pub fn mono_cache(&self) -> parking_lot::RwLockReadGuard<'_, Option<Vec<String>>> {
         self.mono_cache.read()
     }
 
-/// config.
+    /// config.
     pub fn config(&self) -> &CrateConfig {
         &self.config
     }
@@ -146,11 +146,7 @@ mod tests {
         let items = cache.as_ref().expect("cache should be populated");
         assert_eq!(
             items,
-            &vec![
-                "foo".to_string(),
-                "bar".to_string(),
-                "baz".to_string(),
-            ]
+            &vec!["foo".to_string(), "bar".to_string(), "baz".to_string(),]
         );
     }
 }

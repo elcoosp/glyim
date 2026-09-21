@@ -30,14 +30,14 @@ pub mod lower;
 pub mod mono;
 
 // New split modules (private to crate, exposed via lower)
+/// async_state_transform.
+pub mod async_state_transform;
 /// builder.
 pub mod builder;
 /// lower_rvalue.
 pub mod lower_rvalue;
 /// lower_terminator.
 pub mod lower_terminator;
-/// async_state_transform.
-pub mod async_state_transform;
 
 pub use lower::*;
 // IteratorNextInfo is re-exported via pub use lower::*;

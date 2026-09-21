@@ -174,7 +174,10 @@ fn select_best_version(versions: &[String], version_req: Option<&str>) -> Option
         // parse every version, sort by SemVer precedence, and take the highest
         // (plan §4.3: the "pick latest" default must not depend on the index
         // JSON's listing order).
-        let mut parsed: Vec<Version> = versions.iter().filter_map(|v| Version::parse(v).ok()).collect();
+        let mut parsed: Vec<Version> = versions
+            .iter()
+            .filter_map(|v| Version::parse(v).ok())
+            .collect();
         parsed.sort();
         return parsed.last().map(|v| v.to_string());
     };
@@ -490,10 +493,7 @@ impl DependencyResolver {
                 }
             } else {
                 // Index / registry dependency.
-                self.resolve_registry_dep(
-                    &name,
-                    version_req.as_deref(),
-                )?
+                self.resolve_registry_dep(&name, version_req.as_deref())?
             };
 
             lockfile.add_crate(locked);
@@ -894,7 +894,8 @@ fn global_git_cache_dir() -> PathBuf {
     if let Ok(p) = std::env::var("GLYIM_GIT_CACHE") {
         return PathBuf::from(p);
     }
-    let home = std::env::var("HOME").unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned());
+    let home = std::env::var("HOME")
+        .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned());
     PathBuf::from(home).join(".cache").join("glyip").join("git")
 }
 
@@ -956,14 +957,12 @@ impl GitFetcher for GitCommandFetcher {
         // `git ls-remote` resolves the ref to a commit without cloning.
         let output = self.git(&["ls-remote", url, &refspec], None)?;
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let first_line = stdout
-            .lines()
-            .next()
-            .ok_or_else(|| GlyipError::RegistryError(format!("git ls-remote {url} returned no refs")))?;
-        let commit = first_line
-            .split_whitespace()
-            .next()
-            .ok_or_else(|| GlyipError::RegistryError(format!("malformed ls-remote output: {first_line}")))?;
+        let first_line = stdout.lines().next().ok_or_else(|| {
+            GlyipError::RegistryError(format!("git ls-remote {url} returned no refs"))
+        })?;
+        let commit = first_line.split_whitespace().next().ok_or_else(|| {
+            GlyipError::RegistryError(format!("malformed ls-remote output: {first_line}"))
+        })?;
         Ok(commit.to_string())
     }
 
@@ -975,7 +974,12 @@ impl GitFetcher for GitCommandFetcher {
         } else {
             std::fs::create_dir_all(&clone_target)?;
             self.git(
-                &["clone", "--no-checkout", url, clone_target.to_str().unwrap()],
+                &[
+                    "clone",
+                    "--no-checkout",
+                    url,
+                    clone_target.to_str().unwrap(),
+                ],
                 None,
             )?;
         }

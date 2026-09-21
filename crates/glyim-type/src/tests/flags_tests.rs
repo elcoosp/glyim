@@ -59,7 +59,7 @@ fn field_ty_returns_correct_field_type() {
         });
         let variant = VariantDef {
             name: interner.intern("MyStruct"),
-    style: crate::adt_def::VariantStyle::Unit,
+            style: crate::adt_def::VariantStyle::Unit,
             fields: fields.clone(),
         };
         let adt_def = AdtDef {
@@ -67,7 +67,7 @@ fn field_ty_returns_correct_field_type() {
             fields,
             variants: vec![variant],
             generic_params: vec![],
-};
+        };
         ctx_mut.register_adt(adt_id, adt_def);
 
         let ty0 = ctx_mut.field_ty(adt_id, 0);

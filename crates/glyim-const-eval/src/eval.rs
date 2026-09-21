@@ -101,9 +101,9 @@ impl ConstFn {
     pub(crate) fn apply(&self, args: &[ConstValue], span: Span) -> ConstEvalResult<ConstValue> {
         match self {
             ConstFn::Abs => {
-                let x = args.first().ok_or_else(|| {
-                    ConstEvalError::new("abs: expected 1 argument", span)
-                })?;
+                let x = args
+                    .first()
+                    .ok_or_else(|| ConstEvalError::new("abs: expected 1 argument", span))?;
                 match x {
                     ConstValue::Int(v, ty) => Ok(ConstValue::Int(v.abs(), *ty)),
                     _ => Err(ConstEvalError::new(
@@ -143,11 +143,13 @@ impl ConstFn {
                 }
             }
             ConstFn::Sqrt => {
-                let x = args.first().ok_or_else(|| {
-                    ConstEvalError::new("sqrt: expected 1 argument", span)
-                })?;
+                let x = args
+                    .first()
+                    .ok_or_else(|| ConstEvalError::new("sqrt: expected 1 argument", span))?;
                 match x {
-                    ConstValue::Uint(v, ty) => Ok(ConstValue::Uint((*v as f64).sqrt() as u128, *ty)),
+                    ConstValue::Uint(v, ty) => {
+                        Ok(ConstValue::Uint((*v as f64).sqrt() as u128, *ty))
+                    }
                     ConstValue::Int(v, ty) if *v >= 0 => {
                         Ok(ConstValue::Int(((*v as f64).sqrt() as i128).abs(), *ty))
                     }
@@ -177,10 +179,7 @@ impl ConstFn {
 }
 
 /// Helper: pull exactly two arguments out of an evaluated-args slice.
-fn two_args(
-    args: &[ConstValue],
-    span: Span,
-) -> ConstEvalResult<(&ConstValue, &ConstValue)> {
+fn two_args(args: &[ConstValue], span: Span) -> ConstEvalResult<(&ConstValue, &ConstValue)> {
     if args.len() != 2 {
         return Err(ConstEvalError::new(
             "builtin expects exactly 2 arguments",
@@ -249,7 +248,7 @@ fn fallback_interner() -> &'static glyim_core::interner::Interner {
 }
 
 impl<'a> ConstEvaluator<'a> {
-/// new.
+    /// new.
     pub fn new(body: &'a Body) -> Self {
         Self {
             body,
@@ -316,13 +315,13 @@ impl<'a> ConstEvaluator<'a> {
         self
     }
 
-/// with_pointer_width.
+    /// with_pointer_width.
     pub fn with_pointer_width(mut self, width: u32) -> Self {
         self.pointer_width = width;
         self
     }
 
-/// evaluate.
+    /// evaluate.
     pub fn evaluate(&mut self, expr_id: ExprId) -> ConstEvalResult<ConstValue> {
         let span = self.expr_span(expr_id);
         let expr = &self.body.exprs[expr_id];
@@ -359,15 +358,14 @@ impl<'a> ConstEvaluator<'a> {
         // Update the deepest scope that already defines `name` (so mutations of
         // an outer variable persist across block boundaries); if `name` is new
         // everywhere, define it in the innermost scope.
-        if let Some(idx) = self
-            .env
-            .iter()
-            .rposition(|scope| scope.contains_key(&name))
-        {
+        if let Some(idx) = self.env.iter().rposition(|scope| scope.contains_key(&name)) {
             self.env[idx].insert(name, val);
             return;
         }
-        self.env.last_mut().expect("const-eval env is never empty").insert(name, val);
+        self.env
+            .last_mut()
+            .expect("const-eval env is never empty")
+            .insert(name, val);
     }
 
     fn evaluate_expr(
@@ -519,10 +517,7 @@ impl<'a> ConstEvaluator<'a> {
                 //   * a path-named callee that is either a registered
                 //     user-defined `const fn` or a builtin `ConstFn`.
                 let callee = &self.body.exprs[*func];
-                if let Expr::Closure {
-                    params, body, ..
-                } = callee
-                {
+                if let Expr::Closure { params, body, .. } = callee {
                     return self.eval_closure_call(params, *body, args, span, depth);
                 }
                 let name = match callee {
@@ -535,7 +530,7 @@ impl<'a> ConstEvaluator<'a> {
                         return Err(ConstEvalError::new(
                             "only path-named const fns and closures are supported in const eval",
                             span,
-                        ))
+                        ));
                     }
                 };
                 // Evaluate arguments once; shared by user-fn and builtin paths.
@@ -556,10 +551,7 @@ impl<'a> ConstEvaluator<'a> {
                 })?;
                 let name_str = interner.resolve(name);
                 let cf = ConstFn::from_name(name_str).ok_or_else(|| {
-                    ConstEvalError::new(
-                        format!("unknown const fn `{}`", name_str),
-                        span,
-                    )
+                    ConstEvalError::new(format!("unknown const fn `{}`", name_str), span)
                 })?;
                 cf.apply(&arg_vals, span)
             }
@@ -581,10 +573,7 @@ impl<'a> ConstEvaluator<'a> {
                 })?;
                 let method_str = interner.resolve(*method);
                 let cf = ConstFn::from_name(method_str).ok_or_else(|| {
-                    ConstEvalError::new(
-                        format!("unknown const method `{}`", method_str),
-                        span,
-                    )
+                    ConstEvalError::new(format!("unknown const method `{}`", method_str), span)
                 })?;
                 let mut arg_vals = Vec::with_capacity(args.len() + 1);
                 arg_vals.push(recv_val);
@@ -629,7 +618,11 @@ impl<'a> ConstEvaluator<'a> {
                 "a bare closure is not a const value; invoke it immediately, e.g. (|x| x + 1)(2)",
                 span,
             )),
-            Expr::Range { start, end, inclusive } => {
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => {
                 let start_val = match start {
                     Some(id) => Some(Box::new(self.evaluate_at_depth(*id, depth)?)),
                     None => None,
@@ -1355,8 +1348,10 @@ impl<'a> ConstEvaluator<'a> {
         // source type) and fall back to deriving it from the value.
         if let (Some(ctx), Some(map)) = (self.ty_ctx, &self.primitive_tys)
             && let Some(interner) = &self.interner
-            && let (Some(from_ty), Some(to_ty)) =
-                (from_ty.or_else(|| ty_of_value(map, &val)), ty_of_typeref(map, ty, interner))
+            && let (Some(from_ty), Some(to_ty)) = (
+                from_ty.or_else(|| ty_of_value(map, &val)),
+                ty_of_typeref(map, ty, interner),
+            )
             && !glyim_type::is_valid_cast(ctx, from_ty, to_ty)
         {
             return Err(ConstEvalError::new(
@@ -1453,7 +1448,7 @@ fn materialize_elements(
                     return Err(ConstEvalError::new(
                         "const `for` over a range requires concrete `start` and `end` bounds",
                         span,
-                    ))
+                    ));
                 }
             };
             // The element integer type is taken from the range's bound

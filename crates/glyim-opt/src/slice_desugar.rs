@@ -318,7 +318,11 @@ mod tests {
             local: LocalIdx::from_raw(1),
             projection: Box::new([
                 ProjectionElem::Deref,
-                ProjectionElem::Subslice { from: 1, to: 2, from_end: false },
+                ProjectionElem::Subslice {
+                    from: 1,
+                    to: 2,
+                    from_end: false,
+                },
             ]),
         };
         body.basic_blocks[BasicBlockIdx::from_raw(0)]
@@ -356,17 +360,23 @@ mod tests {
             local: LocalIdx::from_raw(1),
             projection: Box::new([
                 ProjectionElem::Deref,
-                ProjectionElem::Subslice { from: 1, to: 2, from_end: false },
+                ProjectionElem::Subslice {
+                    from: 1,
+                    to: 2,
+                    from_end: false,
+                },
                 ProjectionElem::Index(LocalIdx::from_raw(0)),
             ]),
         };
-        body.basic_blocks[BasicBlockIdx::from_raw(0)].statements.push(Statement {
-            kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
-                Rvalue::Use(Operand::Move(place)),
-            ),
-            source_info: SourceInfo::new(Span::DUMMY),
-        });
+        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+            .statements
+            .push(Statement {
+                kind: StatementKind::Assign(
+                    Place::new(LocalIdx::from_raw(2)),
+                    Rvalue::Use(Operand::Move(place)),
+                ),
+                source_info: SourceInfo::new(Span::DUMMY),
+            });
 
         crate::slice_desugar::run(&ctx, &mut body);
 
@@ -390,9 +400,9 @@ mod tests {
             .unwrap();
         if let StatementKind::Assign(dst, _) = &assign.kind {
             assert!(
-                dst.projection.iter().all(|e| {
-                    !matches!(e, ProjectionElem::Subslice { .. })
-                }),
+                dst.projection
+                    .iter()
+                    .all(|e| { !matches!(e, ProjectionElem::Subslice { .. }) }),
                 "RHS subslice must have been moved into the prelude; destination has no subslice"
             );
         }
@@ -438,17 +448,23 @@ mod tests {
             local: LocalIdx::from_raw(1),
             projection: Box::new([
                 ProjectionElem::Deref,
-                ProjectionElem::Subslice { from: 1, to: 2, from_end: false },
+                ProjectionElem::Subslice {
+                    from: 1,
+                    to: 2,
+                    from_end: false,
+                },
                 ProjectionElem::Index(LocalIdx::from_raw(0)),
             ]),
         };
-        body.basic_blocks[BasicBlockIdx::from_raw(0)].statements.push(Statement {
-            kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
-                Rvalue::Ref(place, BorrowKind::Shared),
-            ),
-            source_info: SourceInfo::new(Span::DUMMY),
-        });
+        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+            .statements
+            .push(Statement {
+                kind: StatementKind::Assign(
+                    Place::new(LocalIdx::from_raw(2)),
+                    Rvalue::Ref(place, BorrowKind::Shared),
+                ),
+                source_info: SourceInfo::new(Span::DUMMY),
+            });
 
         crate::slice_desugar::run(&ctx, &mut body);
 

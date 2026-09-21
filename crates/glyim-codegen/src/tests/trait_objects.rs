@@ -193,7 +193,12 @@ fn object_safety_check() {
         has_generic_params: false,
         returns_self: false,
     }];
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: false, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: false,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(violations.is_empty(), "trait should be object-safe");
 
     // Non-object-safe: generic method
@@ -204,7 +209,12 @@ fn object_safety_check() {
         has_generic_params: true,
         returns_self: false,
     }];
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: false, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: false,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(
         !violations.is_empty(),
         "trait with generic method should not be object-safe"
@@ -216,7 +226,12 @@ fn object_safety_check() {
     );
 
     // Non-object-safe: requires Self: Sized
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: true, methods: &[], associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: true,
+        methods: &[],
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(
         violations
             .iter()
@@ -231,7 +246,12 @@ fn object_safety_check() {
         has_generic_params: false,
         returns_self: false,
     }];
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: false, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: false,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(
         violations
             .iter()
@@ -255,7 +275,12 @@ fn object_safety_by_value_self_on_non_sized_trait() {
         returns_self: false,
     }];
     // Trait does not require Self: Sized, so by-value self should be a violation
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: false, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: false,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(
         violations
             .iter()
@@ -263,7 +288,12 @@ fn object_safety_by_value_self_on_non_sized_trait() {
         "by-value self on non-Sized trait should be a violation"
     );
     // If trait requires Self: Sized, by-value self is allowed (but SelfSized violation exists)
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: true, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: true,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(
         violations
             .iter()
@@ -294,7 +324,12 @@ fn object_safety_associated_function_violation() {
         has_generic_params: false,
         returns_self: true,
     }];
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: false, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: false,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert!(
         violations
             .iter()
@@ -328,7 +363,12 @@ fn object_safety_multiple_violations_accumulate() {
             returns_self: false,
         },
     ];
-    let violations = check_object_safety(&TraitObjectSafetyInput { requires_self_sized: false, methods: &methods, associated_types: &[], supertrait_safety: &[] });
+    let violations = check_object_safety(&TraitObjectSafetyInput {
+        requires_self_sized: false,
+        methods: &methods,
+        associated_types: &[],
+        supertrait_safety: &[],
+    });
     assert_eq!(violations.len(), 2, "should have two violations");
     assert!(
         violations

@@ -19,53 +19,53 @@ glyim_core::define_idx!(VariantIdx);
 #[derive(Clone, Debug)]
 /// Body.
 pub struct Body {
-/// Struct.
+    /// Struct.
     pub owner: DefId,
-/// Struct.
+    /// Struct.
     pub basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData>,
-/// Struct.
+    /// Struct.
     pub locals: IndexVec<LocalIdx, LocalDecl>,
-/// Struct.
+    /// Struct.
     pub arg_count: usize,
-/// Struct.
+    /// Struct.
     pub return_ty: Ty,
-/// Struct.
+    /// Struct.
     pub span: Span,
-/// Struct.
+    /// Struct.
     pub var_debug_info: Vec<VarDebugInfo>,
 }
 
 #[derive(Clone, Debug)]
 /// VarDebugInfo.
 pub struct VarDebugInfo {
-/// Struct.
+    /// Struct.
     pub name: Name,
-/// Struct.
+    /// Struct.
     pub value: VarDebugInfoValue,
 }
 
 #[derive(Clone, Debug)]
 /// VarDebugInfoValue.
 pub enum VarDebugInfoValue {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Place(Place),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Const(MirConst),
 }
 
 #[derive(Clone, Debug)]
 /// BasicBlockData.
 pub struct BasicBlockData {
-/// Struct.
+    /// Struct.
     pub statements: Vec<Statement>,
-/// Struct.
+    /// Struct.
     pub terminator: Terminator,
-/// Struct.
+    /// Struct.
     pub is_cleanup: bool,
 }
 
 impl BasicBlockData {
-/// new.
+    /// new.
     pub fn new(terminator: Terminator) -> Self {
         Self {
             statements: Vec::new(),
@@ -78,84 +78,84 @@ impl BasicBlockData {
 #[derive(Clone, Debug)]
 /// Statement.
 pub struct Statement {
-/// Struct.
+    /// Struct.
     pub kind: StatementKind,
-/// Struct.
+    /// Struct.
     pub source_info: SourceInfo,
 }
 
 #[derive(Clone, Debug)]
 /// StatementKind.
 pub enum StatementKind {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Assign(Place, Rvalue),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     StorageLive(LocalIdx),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     StorageDead(LocalIdx),
-/// Variant.
+    /// Variant.
     Nop,
 }
 
 #[derive(Clone, Debug)]
 /// Rvalue.
 pub enum Rvalue {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Use(Operand),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Ref(Place, BorrowKind),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     BinaryOp(BinOp, Box<(Operand, Operand)>),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     UnaryOp(UnOp, Operand),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Aggregate(AggregateKind, Vec<Operand>),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Discriminant(Place),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Len(Place),
 
     /// Dynamic call via vtable.
     Cast(CastKind, Operand, Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Repeat(Operand, MirConst),
 }
 
 #[derive(Clone, Debug)]
 /// AggregateKind.
 pub enum AggregateKind {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Array(Ty),
-/// Variant.
+    /// Variant.
     Tuple,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Adt(AdtId, VariantIdx, Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Closure(ClosureId, Substitution),
 }
 
 #[derive(Clone, Debug)]
 /// Operand.
 pub enum Operand {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Copy(Place),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Move(Place),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Constant(MirConst),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// Place.
 pub struct Place {
-/// Struct.
+    /// Struct.
     pub local: LocalIdx,
-/// Struct.
+    /// Struct.
     pub projection: Box<[ProjectionElem]>,
 }
 
 impl Place {
-/// new.
+    /// new.
     pub fn new(local: LocalIdx) -> Self {
         Self {
             local,
@@ -163,7 +163,7 @@ impl Place {
         }
     }
 
-/// ty.
+    /// ty.
     pub fn ty(&self, ctx: &dyn TypeLookup, local_decls: &IndexVec<LocalIdx, LocalDecl>) -> Ty {
         let mut ty = local_decls[self.local].ty;
         // Tracks the variant selected by a `Downcast`, so that a subsequent
@@ -204,11 +204,8 @@ impl Place {
                             // offset regardless of which variant is active, so a
                             // bare `Field` on the enum local still reads the
                             // right slot). Fall back to the first variant.
-                            let struct_field = adt_def
-                                .fields
-                                .as_slice()
-                                .get(field_idx)
-                                .map(|f| f.ty);
+                            let struct_field =
+                                adt_def.fields.as_slice().get(field_idx).map(|f| f.ty);
                             struct_field
                                 .or_else(|| {
                                     let variant = downcast
@@ -321,11 +318,7 @@ impl Place {
     /// `TypeLookup` is immutable (see plan §11.1).
     ///
     /// For every other projection the behavior is identical to `ty`.
-    pub fn ty_mut(
-        &self,
-        ctx: &mut TyCtxMut,
-        local_decls: &IndexVec<LocalIdx, LocalDecl>,
-    ) -> Ty {
+    pub fn ty_mut(&self, ctx: &mut TyCtxMut, local_decls: &IndexVec<LocalIdx, LocalDecl>) -> Ty {
         let mut ty = local_decls[self.local].ty;
 
         for elem in self.projection.iter() {
@@ -374,11 +367,7 @@ impl Place {
                         ctx.error_ty()
                     }
                 },
-                ProjectionElem::Subslice {
-                    from,
-                    to,
-                    from_end,
-                } => match ctx.ty_kind(ty) {
+                ProjectionElem::Subslice { from, to, from_end } => match ctx.ty_kind(ty) {
                     TyKind::Slice(_) => ty,
                     TyKind::Array(inner, len_const) => {
                         // Subslice of a fixed-size array `[T; N]` yields
@@ -425,32 +414,32 @@ impl Place {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// ProjectionElem.
 pub enum ProjectionElem {
-/// Variant.
+    /// Variant.
     Deref,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Field(FieldIdx),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Index(LocalIdx),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Downcast(VariantIdx),
     /// Fixed index into a slice/array, used by slice patterns.
     /// For arrays, offset is always from the start.
     /// For slices, from_end determines direction.
     ConstantIndex {
-/// Struct.
+        /// Struct.
         offset: u64,
-/// Struct.
+        /// Struct.
         min_length: u64,
-/// Struct.
+        /// Struct.
         from_end: bool,
     },
     /// Represents a subslice in a pattern: [prefix, .., suffix]
     Subslice {
-/// Struct.
+        /// Struct.
         from: u64,
-/// Struct.
+        /// Struct.
         to: u64,
-/// Struct.
+        /// Struct.
         from_end: bool,
     },
 }
@@ -458,45 +447,45 @@ pub enum ProjectionElem {
 #[derive(Clone, Debug)]
 /// LocalDecl.
 pub struct LocalDecl {
-/// Struct.
+    /// Struct.
     pub ty: Ty,
-/// Struct.
+    /// Struct.
     pub mutability: Mutability,
-/// Struct.
+    /// Struct.
     pub source_info: SourceInfo,
 }
 
 #[derive(Clone, Debug)]
 /// MirConst.
 pub struct MirConst {
-/// Struct.
+    /// Struct.
     pub kind: MirConstKind,
-/// Struct.
+    /// Struct.
     pub ty: Ty,
-/// Struct.
+    /// Struct.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
 /// MirConstKind.
 pub enum MirConstKind {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Int(i128),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Uint(u128),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     FloatBits(u64),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Bool(bool),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Char(char),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     String(Name),
-/// Variant.
+    /// Variant.
     Unit,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Fn(FnDefId, Substitution),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     ConstRef(ConstDefId, Substitution),
     /// A trait-method reference that must be devirtualized at
     /// monomorphization (or resolved at interpretation) against the concrete
@@ -513,73 +502,73 @@ pub enum MirConstKind {
     },
     /// Variant.
     Aggregate(Vec<MirConst>),
-/// Variant.
+    /// Variant.
     Error,
 }
 
 #[derive(Clone, Debug)]
 /// Terminator.
 pub struct Terminator {
-/// Struct.
+    /// Struct.
     pub kind: TerminatorKind,
-/// Struct.
+    /// Struct.
     pub source_info: SourceInfo,
 }
 
 #[derive(Clone, Debug)]
 /// TerminatorKind.
 pub enum TerminatorKind {
-/// Variant.
+    /// Variant.
     Goto {
-/// Struct.
+        /// Struct.
         target: BasicBlockIdx,
     },
-/// Variant.
+    /// Variant.
     SwitchInt {
-/// Struct.
+        /// Struct.
         discr: Operand,
-/// Struct.
+        /// Struct.
         switch_ty: Ty,
-/// Struct.
+        /// Struct.
         targets: SwitchTargets,
     },
-/// Variant.
+    /// Variant.
     Return,
-/// Variant.
+    /// Variant.
     Unreachable,
-/// Variant.
+    /// Variant.
     Call {
-/// Struct.
+        /// Struct.
         func: Operand,
-/// Struct.
+        /// Struct.
         args: Vec<Operand>,
-/// Struct.
+        /// Struct.
         destination: Place,
-/// Struct.
+        /// Struct.
         target: Option<BasicBlockIdx>,
-/// Struct.
+        /// Struct.
         cleanup: Option<BasicBlockIdx>,
     },
-/// Variant.
+    /// Variant.
     Assert {
-/// Struct.
+        /// Struct.
         cond: Operand,
-/// Struct.
+        /// Struct.
         expected: bool,
-/// Struct.
+        /// Struct.
         target: BasicBlockIdx,
-/// Struct.
+        /// Struct.
         cleanup: Option<BasicBlockIdx>,
-/// Struct.
+        /// Struct.
         msg: AssertMessage,
     },
-/// Variant.
+    /// Variant.
     Drop {
-/// Struct.
+        /// Struct.
         place: Place,
-/// Struct.
+        /// Struct.
         target: BasicBlockIdx,
-/// Struct.
+        /// Struct.
         cleanup: Option<BasicBlockIdx>,
     },
 }
@@ -587,13 +576,13 @@ pub enum TerminatorKind {
 #[derive(Clone, Debug)]
 /// AssertMessage.
 pub enum AssertMessage {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Overflow(BinOp),
-/// Variant.
+    /// Variant.
     DivisionByZero,
-/// Variant.
+    /// Variant.
     RemainderByZero,
-/// Variant.
+    /// Variant.
     BoundsCheck,
 }
 
@@ -605,22 +594,22 @@ pub struct SwitchTargets {
 }
 
 impl SwitchTargets {
-/// new.
+    /// new.
     pub fn new(branches: Box<[(u128, BasicBlockIdx)]>, otherwise: BasicBlockIdx) -> Self {
         Self {
             branches,
             otherwise,
         }
     }
-/// otherwise.
+    /// otherwise.
     pub fn otherwise(&self) -> BasicBlockIdx {
         self.otherwise
     }
-/// iter.
+    /// iter.
     pub fn iter(&self) -> impl Iterator<Item = (u128, BasicBlockIdx)> + '_ {
         self.branches.iter().copied()
     }
-/// if_switch.
+    /// if_switch.
     pub fn if_switch(then_bb: BasicBlockIdx, else_bb: BasicBlockIdx) -> Self {
         Self {
             branches: Box::new([(1, then_bb)]),
@@ -632,12 +621,12 @@ impl SwitchTargets {
 #[derive(Clone, Debug)]
 /// SourceInfo.
 pub struct SourceInfo {
-/// Struct.
+    /// Struct.
     pub span: Span,
 }
 
 impl SourceInfo {
-/// new.
+    /// new.
     pub fn new(span: Span) -> Self {
         Self { span }
     }
@@ -646,11 +635,11 @@ impl SourceInfo {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// BorrowKind.
 pub enum BorrowKind {
-/// Variant.
+    /// Variant.
     Shared,
-/// Variant.
+    /// Variant.
     Unique,
-/// Variant.
+    /// Variant.
     Mut {
         /// allow_two_phase_borrow field.
         allow_two_phase_borrow: bool,
@@ -660,26 +649,26 @@ pub enum BorrowKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// CastKind.
 pub enum CastKind {
-/// Variant.
+    /// Variant.
     IntToInt,
-/// Variant.
+    /// Variant.
     FloatToInt,
-/// Variant.
+    /// Variant.
     IntToFloat,
-/// Variant.
+    /// Variant.
     FloatToFloat,
-/// Variant.
+    /// Variant.
     PtrToPtr,
-/// Variant.
+    /// Variant.
     FnPtrToPtr,
-/// Variant.
+    /// Variant.
     PtrToInt,
-/// Variant.
+    /// Variant.
     IntToPtr,
 }
 
 impl Body {
-/// dummy.
+    /// dummy.
     pub fn dummy(owner: DefId) -> Self {
         let mut basic_blocks = IndexVec::new();
         let _bb0 = basic_blocks.push(BasicBlockData::new(Terminator {
@@ -705,11 +694,11 @@ impl Body {
         }
     }
 
-/// args.
+    /// args.
     pub fn args(&self) -> &[LocalDecl] {
         &self.locals.as_slice()[1..1 + self.arg_count]
     }
-/// return_place.
+    /// return_place.
     pub fn return_place(&self) -> Place {
         Place::new(LocalIdx::from_raw(0))
     }

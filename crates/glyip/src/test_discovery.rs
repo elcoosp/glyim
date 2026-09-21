@@ -12,12 +12,7 @@ use std::path::{Path, PathBuf};
 /// expressed as a comment. These are matched by exact (case-insensitive)
 /// equality so that ordinary prose comments mentioning "ignore" do not
 /// accidentally mark a test ignored.
-const IGNORE_MARKERS: &[&str] = &[
-    "// #[ignore]",
-    "//#[ignore]",
-    "// ignore",
-    "//#ignore",
-];
+const IGNORE_MARKERS: &[&str] = &["// #[ignore]", "//#[ignore]", "// ignore", "//#ignore"];
 
 /// A single discovered test function.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,10 +68,14 @@ impl FileTestDiscovery {
             // Use an exact allow-list rather than a substring search so ordinary
             // prose comments that merely mention "ignore" (e.g. `// we ignore
             // errors here`) do not accidentally mark a test as ignored.
-            if IGNORE_MARKERS.iter().any(|m| trimmed.eq_ignore_ascii_case(m)) {
+            if IGNORE_MARKERS
+                .iter()
+                .any(|m| trimmed.eq_ignore_ascii_case(m))
+            {
                 pending_ignore_attr = true;
-            } else if let Some(rest) =
-                trimmed.strip_prefix("// #[ignore").or_else(|| trimmed.strip_prefix("//#[ignore"))
+            } else if let Some(rest) = trimmed
+                .strip_prefix("// #[ignore")
+                .or_else(|| trimmed.strip_prefix("//#[ignore"))
             {
                 // Accept the `#[ignore = "reason"]` form (mirrors real Rust's
                 // `#[ignore = "reason"]` for glyim-level comments), so a

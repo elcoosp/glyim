@@ -16,14 +16,14 @@ pub enum GlyipError {
     DependencyCycle(Vec<String>),
     /// Dependency not found.
     DependencyNotFound {
-/// Struct.
+        /// Struct.
         name: String,
-/// Struct.
+        /// Struct.
         version: Option<String>,
     },
     /// Version requirements for a dependency are mutually unsatisfiable.
     DependencyConflict {
-/// Struct.
+        /// Struct.
         name: String,
         /// All version requirements gathered for this dependency across the graph.
         requirements: Vec<String>,

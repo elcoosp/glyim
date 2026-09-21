@@ -3,11 +3,11 @@ use std::path::Path;
 #[derive(Clone, Debug, Default)]
 /// NormalizeRules.
 pub struct NormalizeRules {
-/// Struct.
+    /// Struct.
     pub normalize_slashes: bool,
-/// Struct.
+    /// Struct.
     pub normalize_line_endings: bool,
-/// Struct.
+    /// Struct.
     pub substitute_dir: bool,
 }
 

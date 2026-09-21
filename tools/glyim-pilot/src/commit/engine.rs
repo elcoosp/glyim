@@ -10,31 +10,31 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 /// CommitDecision.
 pub enum CommitDecision {
-/// Variant.
+    /// Variant.
     Committed {
-/// Struct.
+        /// Struct.
         message: String,
-/// Struct.
+        /// Struct.
         new_fix_round: u32,
     },
-/// Variant.
+    /// Variant.
     GateFailed {
-/// Struct.
+        /// Struct.
         new_fix_round: u32,
-/// Struct.
+        /// Struct.
         feedback: String,
     },
-/// Variant.
+    /// Variant.
     Escalated {
-/// Struct.
+        /// Struct.
         new_fix_round: u32,
-/// Struct.
+        /// Struct.
         feedback: String,
     },
 }
 
 impl CommitDecision {
-/// new_fix_round.
+    /// new_fix_round.
     pub fn new_fix_round(&self) -> u32 {
         match self {
             Self::Committed { new_fix_round, .. } => *new_fix_round,
@@ -47,23 +47,23 @@ impl CommitDecision {
 #[derive(Debug, Clone)]
 /// CommitContext.
 pub struct CommitContext {
-/// Struct.
+    /// Struct.
     pub worktree_dir: PathBuf,
-/// Struct.
+    /// Struct.
     pub project_root: PathBuf,
-/// Struct.
+    /// Struct.
     pub stream_id: String,
-/// Struct.
+    /// Struct.
     pub commit_message: String,
-/// Struct.
+    /// Struct.
     pub current_fix_round: u32,
-/// Struct.
+    /// Struct.
     pub timeout_secs: u64,
-/// Struct.
+    /// Struct.
     pub default_branch: String,
-/// Struct.
+    /// Struct.
     pub branch_version: String,
-/// Struct.
+    /// Struct.
     pub changed_files: Vec<String>,
 }
 
@@ -76,7 +76,7 @@ pub struct CommitEngine {
 }
 
 impl CommitEngine {
-/// new.
+    /// new.
     pub fn new(
         gate_config: ResolvedCommitGates,
         max_fix_rounds: u32,
@@ -91,7 +91,7 @@ impl CommitEngine {
         }
     }
 
-/// evaluate_commit.
+    /// evaluate_commit.
     pub async fn evaluate_commit(&self, ctx: &CommitContext) -> Result<CommitDecision, PilotError> {
         let gate_ctx = GateContext::new(
             ctx.worktree_dir.clone(),
@@ -198,7 +198,7 @@ impl CommitEngine {
         }
     }
 
-/// emergency_commit.
+    /// emergency_commit.
     pub async fn emergency_commit(&self, ctx: &CommitContext) -> Result<(), PilotError> {
         emergency_wip_commit(&ctx.worktree_dir, &ctx.stream_id, ctx.timeout_secs).await
     }

@@ -4,6 +4,7 @@ use crate::types::llvm_type_for_ty;
 use glyim_core::TargetInfo;
 use glyim_core::arena::IndexVec;
 use glyim_core::primitives::*;
+use glyim_core::primitives::{Abi, Safety};
 use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_layout::{FieldsShape, LayoutComputer, PassMode, Size, TagEncoding, VariantsShape};
 use glyim_mir::VariantIdx;
@@ -14,9 +15,8 @@ use glyim_mir::{
 use glyim_span::HygieneCtx;
 use glyim_span::{FileId, Span};
 use glyim_type::{
-    ConstKind, FieldIdx, GenericArg, ProjectionTy, TraitRef, Ty, TyCtx, TyCtxMut, TyKind, FnSig,
+    ConstKind, FieldIdx, FnSig, GenericArg, ProjectionTy, TraitRef, Ty, TyCtx, TyCtxMut, TyKind,
 };
-use glyim_core::primitives::{Abi, Safety};
 use inkwell::AddressSpace;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -109,8 +109,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     /// Build an LLVM function type from a Glyim `FnSig`, applying ABI rules.
     fn llvm_fn_type_from_sig(&self, sig: &glyim_type::FnSig) -> inkwell::types::FunctionType<'ctx> {
         let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-        llvm_fn_type_from_sig_inner(self.ty_ctx, &self.target_info, self.context, &layout_computer, sig)
-            .unwrap_or_else(|e| panic!("fn type lowering failed: {:?}", e))
+        llvm_fn_type_from_sig_inner(
+            self.ty_ctx,
+            &self.target_info,
+            self.context,
+            &layout_computer,
+            sig,
+        )
+        .unwrap_or_else(|e| panic!("fn type lowering failed: {:?}", e))
     }
 }
 
@@ -126,7 +132,10 @@ fn llvm_fn_type_from_sig_inner<'ctx>(
     let fn_abi = match layout_computer.fn_abi_of(sig) {
         Ok(a) => a,
         Err(e) => {
-            return Err(vec![GlyimDiagnostic::internal_error(format!("fn_abi_of failed: {:?}", e))]);
+            return Err(vec![GlyimDiagnostic::internal_error(format!(
+                "fn_abi_of failed: {:?}",
+                e
+            ))]);
         }
     };
 
@@ -149,7 +158,12 @@ fn llvm_fn_type_from_sig_inner<'ctx>(
     } else {
         match fn_abi.ret.mode {
             PassMode::Ignore => None,
-            _ => Some(llvm_type_for_ty(ty_ctx, target_info, context, fn_abi.ret.ty)?),
+            _ => Some(llvm_type_for_ty(
+                ty_ctx,
+                target_info,
+                context,
+                fn_abi.ret.ty,
+            )?),
         }
     };
     let metadata_param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
@@ -542,17 +556,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             // `idx` (enums lay the value field out at a fixed offset
                             // regardless of which variant is active, so a bare `Field`
                             // on the enum local still reads the right slot).
-                            
+
                             if let Some(adt_def) = self.ty_ctx.adt_def(*adt_id) {
-                                let struct_field = adt_def
-                                    .fields
-                                    .as_slice()
-                                    .get(field_idx)
-                                    .map(|f| f.ty);
+                                let struct_field =
+                                    adt_def.fields.as_slice().get(field_idx).map(|f| f.ty);
                                 let field_raw = struct_field
                                     .or_else(|| {
                                         let variant = downcast_variant
-                                            .and_then(|vi| adt_def.variants.get(vi.to_raw() as usize))
+                                            .and_then(|vi| {
+                                                adt_def.variants.get(vi.to_raw() as usize)
+                                            })
                                             .or_else(|| {
                                                 adt_def
                                                     .variants
@@ -590,7 +603,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         _ => Ty::ERROR,
                     };
                     if field_ty == Ty::ERROR {
-                        tracing::error!("place_ptr: field type unresolved for current_ty={:?} idx={:?}", self.ty_ctx.ty_kind(current_ty), idx);
+                        tracing::error!(
+                            "place_ptr: field type unresolved for current_ty={:?} idx={:?}",
+                            self.ty_ctx.ty_kind(current_ty),
+                            idx
+                        );
                     }
                     if field_ty != Ty::ERROR {
                         let _field_llvm_ty = self.llvm_type_for_ty(field_ty);
@@ -2393,11 +2410,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // that doesn't catch -- it forwards the exception outward).
                     use crate::seh_ffi::LLVMBuildCleanupRet;
                     unsafe {
-                        LLVMBuildCleanupRet(
-                            self.builder.as_mut_ptr(),
-                            pad,
-                            std::ptr::null_mut(),
-                        );
+                        LLVMBuildCleanupRet(self.builder.as_mut_ptr(), pad, std::ptr::null_mut());
                     }
                 } else {
                     self.builder
@@ -2816,30 +2829,27 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             // impl exists. Retry by self-type + assoc-name alone,
                             // which ignores the trait id (correct for the common
                             // single-impl `Future::Output` case).
-                            match frozen.resolve_associated_type_by_self_ty(
-                                bare_self,
-                                proj.item_name,
-                            ) {
+                            match frozen
+                                .resolve_associated_type_by_self_ty(bare_self, proj.item_name)
+                            {
                                 Some(resolved) => resolved,
                                 None => {
-                            let mut new_subst_args: Vec<GenericArg> = Vec::new();
-                            for a in proj_subst_args.iter() {
-                                match a {
-                                    GenericArg::Ty(t) => {
-                                        new_subst_args
-                                            .push(GenericArg::Ty(subst(*t, map, ctx, frozen)))
+                                    let mut new_subst_args: Vec<GenericArg> = Vec::new();
+                                    for a in proj_subst_args.iter() {
+                                        match a {
+                                            GenericArg::Ty(t) => new_subst_args
+                                                .push(GenericArg::Ty(subst(*t, map, ctx, frozen))),
+                                            other => new_subst_args.push(other.clone()),
+                                        }
                                     }
-                                    other => new_subst_args.push(other.clone()),
-                                }
-                            }
-                            let new_sub = ctx.intern_substitution(new_subst_args);
-                            ctx.mk_ty(TyKind::Projection(ProjectionTy {
-                                trait_ref: TraitRef {
-                                    def_id: proj.trait_ref.def_id,
-                                    substs: new_sub,
-                                },
-                                item_name: proj.item_name,
-                            }))
+                                    let new_sub = ctx.intern_substitution(new_subst_args);
+                                    ctx.mk_ty(TyKind::Projection(ProjectionTy {
+                                        trait_ref: TraitRef {
+                                            def_id: proj.trait_ref.def_id,
+                                            substs: new_sub,
+                                        },
+                                        item_name: proj.item_name,
+                                    }))
                                 }
                             }
                         }
@@ -2867,7 +2877,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // and rebuild `Poll<Output>`. This is exact for the single-impl
         // `Future::Output` case and only triggers when the substitution is empty.
         let output = match ty_ctx.ty_kind(output) {
-            TyKind::Adt(poll_adt, poll_sub) if *poll_adt == glyim_core::def_id::AdtId::from_raw(1) => {
+            TyKind::Adt(poll_adt, poll_sub)
+                if *poll_adt == glyim_core::def_id::AdtId::from_raw(1) =>
+            {
                 if let Some(GenericArg::Ty(self_ty)) = param_map.first() {
                     // `Self` is `&mut Future` here; the impl table is keyed by the bare ADT.
                     let bare_self: Ty = match ty_ctx.ty_kind(*self_ty) {
@@ -2880,19 +2892,19 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // to `Name`-handle corruption across arenas.
                     let r = ty_ctx.resolve_associated_type_by_self_ty_name(bare_self, "Output");
                     if let Some(resolved) = r {
-                            // `resolved` is a `Ty` handle from the impl table,
-                            // which may live in a *different* (leaked) arena than
-                            // the codegen `ty_ctx` — re-interning its *kind* here
-                            // yields a fresh, valid handle in the codegen arena
-                            // (otherwise the dedup lands back on the stale
-                            // `Poll<Subst(4)>` and `fn_abi_of` still fails).
-                            let resolved_fresh = ctx.mk_ty(ty_ctx.ty_kind(resolved).clone());
-                            let new_poll_sub =
-                                ctx.intern_substitution(vec![GenericArg::Ty(resolved_fresh)]);
-                            ctx.mk_ty(TyKind::Adt(*poll_adt, new_poll_sub))
-                        } else {
-                            output
-                        }
+                        // `resolved` is a `Ty` handle from the impl table,
+                        // which may live in a *different* (leaked) arena than
+                        // the codegen `ty_ctx` — re-interning its *kind* here
+                        // yields a fresh, valid handle in the codegen arena
+                        // (otherwise the dedup lands back on the stale
+                        // `Poll<Subst(4)>` and `fn_abi_of` still fails).
+                        let resolved_fresh = ctx.mk_ty(ty_ctx.ty_kind(resolved).clone());
+                        let new_poll_sub =
+                            ctx.intern_substitution(vec![GenericArg::Ty(resolved_fresh)]);
+                        ctx.mk_ty(TyKind::Adt(*poll_adt, new_poll_sub))
+                    } else {
+                        output
+                    }
                 } else {
                     output
                 }
@@ -3511,15 +3523,15 @@ fn lower_unsized_to_fat_ptr(ty_ctx: &TyCtx, ty: Ty) -> Ty {
         let len_ty = ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
         // A 2-field tuple `{ ptr, usize }` is the fat-pointer representation
         // `llvm_type_for_ty` produces for slices (struct { ptr, len }).
-        let substs = ty_ctx.intern_substitution(vec![
-            GenericArg::Ty(ptr_ty),
-            GenericArg::Ty(len_ty),
-        ]);
+        let substs =
+            ty_ctx.intern_substitution(vec![GenericArg::Ty(ptr_ty), GenericArg::Ty(len_ty)]);
         ty_ctx.mk_ty(TyKind::Tuple(substs))
     };
     match ty_ctx.ty_kind(ty) {
         TyKind::Slice(elem) => mk_fat_ptr(*elem),
-        TyKind::String => mk_fat_ptr(ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8))),
+        TyKind::String => {
+            mk_fat_ptr(ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8)))
+        }
         _ => ty,
     }
 }
@@ -3536,10 +3548,7 @@ pub(crate) fn lower_body<'ctx>(
     hygiene: Option<HygieneCtx>,
     entry_main: Option<u32>,
 ) -> CompResult<()> {
-    let fn_name = format!(
-        "__glyim_fn_{}",
-        body.owner.local_id.to_raw()
-    );
+    let fn_name = format!("__glyim_fn_{}", body.owner.local_id.to_raw());
     let layout_computer = FullLayoutComputer::new(ty_ctx, target_info.clone());
     let fn_def_id = glyim_core::def_id::FnDefId::from_raw(body.owner.local_id.to_raw());
     // Build the FnSig from the (already-monomorphized) body so that generic /
@@ -3567,8 +3576,12 @@ pub(crate) fn lower_body<'ctx>(
             .fn_sig(fn_def_id)
             .map(|s| s.abi)
             .unwrap_or(Abi::Glyim);
-        let param_map: Vec<GenericArg> =
-            body.locals.iter().skip(1).map(|l| GenericArg::Ty(l.ty)).collect();
+        let param_map: Vec<GenericArg> = body
+            .locals
+            .iter()
+            .skip(1)
+            .map(|l| GenericArg::Ty(l.ty))
+            .collect();
         let concretized = LoweringCtx::concretize_fn_sig(
             &FnSig {
                 inputs,
@@ -3590,8 +3603,14 @@ pub(crate) fn lower_body<'ctx>(
     };
     // Derive the LLVM function type (including any sret hidden pointer) from the
     // same `fn_sig` so the declared type matches the ABI attributes applied below.
-    let fn_type = llvm_fn_type_from_sig_inner(ty_ctx, &target_info, context, &layout_computer, &fn_sig)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fn type lowering failed: {:?}", e))])?;
+    let fn_type =
+        llvm_fn_type_from_sig_inner(ty_ctx, &target_info, context, &layout_computer, &fn_sig)
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "fn type lowering failed: {:?}",
+                    e
+                ))]
+            })?;
     let function = module
         .get_function(&fn_name)
         .unwrap_or_else(|| module.add_function(&fn_name, fn_type, None));
@@ -3607,7 +3626,7 @@ pub(crate) fn lower_body<'ctx>(
         Abi::C => 0u32,     // LLVMCCallConv::C
         Abi::System => match target_info.abi {
             TargetAbi::X86_64Windows | TargetAbi::AArch64Windows => 64u32, // Win64
-            _ => 0u32,                                              // C
+            _ => 0u32,                                                     // C
         },
     };
     function.set_call_conventions(cc);
@@ -3728,9 +3747,9 @@ pub(crate) fn lower_body<'ctx>(
                 _ => "__gcc_personality_v0",
             };
             let personality_fn_type = context.i32_type().fn_type(&[], true);
-            let personality_fn = module
-                .get_function(personality_name)
-                .unwrap_or_else(|| module.add_function(personality_name, personality_fn_type, None));
+            let personality_fn = module.get_function(personality_name).unwrap_or_else(|| {
+                module.add_function(personality_name, personality_fn_type, None)
+            });
             function.set_personality_function(personality_fn);
             Some(personality_fn)
         }
@@ -3785,11 +3804,7 @@ pub(crate) fn lower_body<'ctx>(
                         .llvm_type_for_ty(body.locals.get(local_idx).map(|l| l.ty).unwrap());
                     let loaded = lowering_ctx
                         .builder
-                        .build_load(
-                            llvm_ty,
-                            param_val.into_pointer_value(),
-                            "param_load",
-                        )
+                        .build_load(llvm_ty, param_val.into_pointer_value(), "param_load")
                         .expect("failed to load byval param");
                     lowering_ctx
                         .builder
@@ -3846,9 +3861,7 @@ pub(crate) fn lower_body<'ctx>(
         let main_entry = context.append_basic_block(main_fn, "entry");
         let main_builder = context.create_builder();
         main_builder.position_at_end(main_entry);
-        let callee = module
-            .get_function(&fn_name)
-            .unwrap_or(function);
+        let callee = module.get_function(&fn_name).unwrap_or(function);
         // The glyim `main` body is normally `fastcc` (conv 8), but the `main`
         // wrapper is `ccc` (conv 0). Calling a `fastcc` fn from a `ccc` call
         // site on AArch64 silently drops the return value (different return

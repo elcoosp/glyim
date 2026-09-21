@@ -16,54 +16,54 @@ use tokio::sync::Mutex;
 #[derive(Clone)]
 /// OrchestratorAction.
 pub enum OrchestratorAction {
-/// Variant.
+    /// Variant.
     Feedback {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         message: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
     },
-/// Variant.
+    /// Variant.
     Continue {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
     },
-/// Variant.
+    /// Variant.
     SelfReview {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         prompt: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
     },
-/// Variant.
+    /// Variant.
     StreamComplete {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         pr_url: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
     },
-/// Variant.
+    /// Variant.
     Escalate {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         reason: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
     },
-/// Variant.
+    /// Variant.
     WaitForResponse {
-/// Struct.
+        /// Struct.
         session_id: String,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
     },
 }
@@ -71,27 +71,27 @@ pub enum OrchestratorAction {
 #[derive(Clone)]
 /// TurnContext.
 pub struct TurnContext {
-/// Struct.
+    /// Struct.
     pub ops_block: String,
-/// Struct.
+    /// Struct.
     pub session_id: String,
-/// Struct.
+    /// Struct.
     pub stream_id: String,
-/// Struct.
+    /// Struct.
     pub worktree_dir: PathBuf,
-/// Struct.
+    /// Struct.
     pub project_root: PathBuf,
-/// Struct.
+    /// Struct.
     pub config: Arc<PilotConfig>,
-/// Struct.
+    /// Struct.
     pub persistence: Arc<StatePersistence>,
-/// Struct.
+    /// Struct.
     pub processing: Arc<Mutex<HashSet<String>>>,
-/// Struct.
+    /// Struct.
     pub turn: u32,
-/// Struct.
+    /// Struct.
     pub trace_id: String,
-/// Struct.
+    /// Struct.
     pub metrics: Arc<dyn Metrics>,
 }
 

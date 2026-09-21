@@ -1,6 +1,8 @@
 use crate::code_action::provide_code_actions;
 use crate::tests::test_utils::setup_test_db;
-use lsp_types::{CodeActionParams, Diagnostic, DiagnosticSeverity, Position, Range, TextDocumentIdentifier};
+use lsp_types::{
+    CodeActionParams, Diagnostic, DiagnosticSeverity, Position, Range, TextDocumentIdentifier,
+};
 
 #[test]
 fn test_code_action_removes_unused_import() {
@@ -49,8 +51,14 @@ fn test_code_action_add_missing_match_arm() {
     // Inject the exact diagnostic `check_expr` emits for a missing variant.
     let diag = Diagnostic {
         range: Range {
-            start: Position { line: 1, character: 4 },
-            end: Position { line: 3, character: 1 },
+            start: Position {
+                line: 1,
+                character: 4,
+            },
+            end: Position {
+                line: 3,
+                character: 1,
+            },
         },
         severity: Some(DiagnosticSeverity::ERROR),
         source: Some("glyim".to_string()),
@@ -70,7 +78,9 @@ fn test_code_action_add_missing_match_arm() {
     let ca = actions
         .iter()
         .find_map(|a| match a {
-            lsp_types::CodeActionOrCommand::CodeAction(c) if c.title.contains("Add missing match arm") => {
+            lsp_types::CodeActionOrCommand::CodeAction(c)
+                if c.title.contains("Add missing match arm") =>
+            {
                 Some(c)
             }
             _ => None,
@@ -85,7 +95,11 @@ fn test_code_action_add_missing_match_arm() {
 
     // Applying the edit must make the match exhaustive (every variant covered).
     let close_brace_offset = source.find('}').unwrap();
-    let inserted = format!("{}    B => unimplemented!(),\n{}", &source[..close_brace_offset], &source[close_brace_offset..]);
+    let inserted = format!(
+        "{}    B => unimplemented!(),\n{}",
+        &source[..close_brace_offset],
+        &source[close_brace_offset..]
+    );
     assert!(inserted.contains("A => 1,"));
     assert!(inserted.contains("B => unimplemented!()"));
     // No variant is left unhandled.
@@ -102,8 +116,14 @@ fn test_code_action_generate_impl() {
 
     let diag = Diagnostic {
         range: Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 0, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 0,
+                character: 0,
+            },
         },
         severity: Some(DiagnosticSeverity::ERROR),
         source: Some("glyim".to_string()),

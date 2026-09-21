@@ -30,14 +30,14 @@ define_def_id!(CrateId, LocalDefId);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 /// DefId.
 pub struct DefId {
-/// Struct.
+    /// Struct.
     pub krate: CrateId,
-/// Struct.
+    /// Struct.
     pub local_id: LocalDefId,
 }
 
 impl DefId {
-/// new.
+    /// new.
     pub fn new(krate: CrateId, local_id: LocalDefId) -> Self {
         Self { krate, local_id }
     }

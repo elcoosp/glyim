@@ -4,22 +4,22 @@ use std::time::Duration;
 #[derive(Debug)]
 /// ProcessError.
 pub struct ProcessError {
-/// Struct.
+    /// Struct.
     pub program: String,
-/// Struct.
+    /// Struct.
     pub cwd: std::path::PathBuf,
-/// Struct.
+    /// Struct.
     pub args: Vec<String>,
-/// Struct.
+    /// Struct.
     pub kind: ProcessErrorKind,
 }
 
 #[derive(Debug)]
 /// ProcessErrorKind.
 pub enum ProcessErrorKind {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     ExecutionFailed(std::io::Error),
-/// Variant.
+    /// Variant.
     TimedOut {
         /// timeout_secs field.
         timeout_secs: u64,

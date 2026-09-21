@@ -30,11 +30,11 @@ fn no_stub_warning_when_adt_def_registered() {
             fields,
             variants: vec![VariantDef {
                 name: name_field,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
 
         ctx.register_adt(adt_id, adt_def);
         let substs = ctx.intern_substitution(vec![]);

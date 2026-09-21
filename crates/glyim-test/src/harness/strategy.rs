@@ -10,7 +10,7 @@ use std::path::Path;
 pub struct CompilePassStrategy;
 
 impl CompilePassStrategy {
-/// evaluate.
+    /// evaluate.
     pub fn evaluate(
         &self,
         diagnostics: &[GlyimDiagnostic],
@@ -35,7 +35,7 @@ impl CompilePassStrategy {
 pub struct CompileFailStrategy;
 
 impl CompileFailStrategy {
-/// evaluate.
+    /// evaluate.
     pub fn evaluate(
         &self,
         diagnostics: &[GlyimDiagnostic],
@@ -89,7 +89,7 @@ impl CompileFailStrategy {
 pub struct UiTestStrategy;
 
 impl UiTestStrategy {
-/// evaluate.
+    /// evaluate.
     pub fn evaluate(
         &self,
         output: &CompileOutput,
@@ -171,7 +171,7 @@ impl UiTestStrategy {
 pub struct RunPassStrategy;
 
 impl RunPassStrategy {
-/// evaluate.
+    /// evaluate.
     pub fn evaluate(
         &self,
         output: &CompileOutput,
@@ -241,7 +241,7 @@ impl RunPassStrategy {
 pub struct RunFailStrategy;
 
 impl RunFailStrategy {
-/// evaluate.
+    /// evaluate.
     pub fn evaluate(
         &self,
         output: &CompileOutput,

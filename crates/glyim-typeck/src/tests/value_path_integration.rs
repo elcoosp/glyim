@@ -7,9 +7,9 @@
 //! `thir::ExprKind::FnRef(math_square)` with type `TyKind::FnDef(math_square, [])`,
 //! and that *calling* it (`math::square()`) yields the registered return type.
 use super::common::*;
-use glyim_core::primitives::{Abi, Safety, Visibility};
 use glyim_core::def_id::{CrateId, DefId, FnDefId, LocalDefId};
 use glyim_core::interner::Name;
+use glyim_core::primitives::{Abi, Safety, Visibility};
 use glyim_def_map::{CrateDefMap, ItemScope, ModuleData, ModuleOrigin, Namespace};
 use glyim_hir::*;
 use glyim_span::Span;
@@ -67,8 +67,8 @@ fn def_map_with_module_fn() -> CrateDefMap {
         modules,
         krate: CrateId::from_raw(0),
         interner: global_interner(),
-    variant_map: Default::default(),
-    max_local_def_id: 0,
+        variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 
@@ -120,7 +120,11 @@ fn multi_segment_function_path_resolves_to_fn_ref() {
         Ty::UNIT,
         &[],
     );
-    assert!(diags.is_empty(), "multi-segment fn path should resolve cleanly: {:?}", diags);
+    assert!(
+        diags.is_empty(),
+        "multi-segment fn path should resolve cleanly: {:?}",
+        diags
+    );
 
     let stmt = &thir_body.stmts[0];
     let expr = match stmt {
@@ -174,7 +178,11 @@ fn multi_segment_function_call_yields_registered_return_type() {
         Ty::UNIT,
         &[],
     );
-    assert!(diags.is_empty(), "multi-segment fn call should resolve cleanly: {:?}", diags);
+    assert!(
+        diags.is_empty(),
+        "multi-segment fn call should resolve cleanly: {:?}",
+        diags
+    );
 
     // The call expression is the second statement.
     let stmt = &thir_body.stmts[1];
@@ -183,7 +191,10 @@ fn multi_segment_function_call_yields_registered_return_type() {
         other => panic!("expected Expr statement, got {:?}", other),
     };
     assert!(
-        matches!(ctx.ty_kind(expr.ty), TyKind::Int(glyim_core::primitives::IntTy::I32)),
+        matches!(
+            ctx.ty_kind(expr.ty),
+            TyKind::Int(glyim_core::primitives::IntTy::I32)
+        ),
         "call to math::square() must yield its registered return type i32"
     );
     let _ = square;

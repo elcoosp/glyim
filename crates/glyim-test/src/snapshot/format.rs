@@ -1,5 +1,5 @@
-use glyim_core::primitives::Mutability;
 use glyim_core::interner::Interner;
+use glyim_core::primitives::Mutability;
 use glyim_mir::{LocalDecl, LocalIdx, VarDebugInfoValue};
 use glyim_type::TyCtx;
 use std::collections::HashMap;
@@ -45,9 +45,13 @@ fn format_mir_body_impl(ctx: &TyCtx, body: &glyim_mir::Body, verbose: bool) -> S
         body.var_debug_info
             .iter()
             .filter_map(|info| match &info.value {
-                VarDebugInfoValue::Place(place) if place.projection.is_empty() => {
-                    Some((place.local, SNAPSHOT_INTERNER.get_or_init(Interner::new).resolve(info.name).to_string()))
-                }
+                VarDebugInfoValue::Place(place) if place.projection.is_empty() => Some((
+                    place.local,
+                    SNAPSHOT_INTERNER
+                        .get_or_init(Interner::new)
+                        .resolve(info.name)
+                        .to_string(),
+                )),
                 _ => None,
             })
             .collect()
@@ -87,7 +91,10 @@ fn format_mir_body_impl(ctx: &TyCtx, body: &glyim_mir::Body, verbose: bool) -> S
             out.push_str(&format!("    {:?}: ", info.name));
             match &info.value {
                 VarDebugInfoValue::Place(place) => {
-                    out.push_str(&format!("{}\n", format_place(place, verbose, ctx, &body.locals)));
+                    out.push_str(&format!(
+                        "{}\n",
+                        format_place(place, verbose, ctx, &body.locals)
+                    ));
                 }
                 VarDebugInfoValue::Const(c) => {
                     out.push_str(&format!("const {}\n", format_const(c)));
@@ -182,7 +189,10 @@ fn format_rvalue(
             )
         }
         glyim_mir::Rvalue::Discriminant(place) => {
-            format!("Discriminant({})", format_place(place, verbose, ctx, locals))
+            format!(
+                "Discriminant({})",
+                format_place(place, verbose, ctx, locals)
+            )
         }
         glyim_mir::Rvalue::Len(place) => {
             format!("Len({})", format_place(place, verbose, ctx, locals))

@@ -1,3 +1,4 @@
+use crate::abi::FullLayoutComputer;
 use glyim_core::primitives::TargetInfo;
 use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_layout::LayoutComputer;
@@ -5,7 +6,6 @@ use glyim_type::{Ty, TyCtx, TyKind};
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, IntType};
 use std::num::NonZeroU32;
-use crate::abi::FullLayoutComputer;
 
 pub(crate) fn llvm_type_for_ty<'ctx>(
     ctx: &TyCtx,
@@ -124,12 +124,10 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             // `resolve_associated_type` path, substituting a `Param` `self` type
             // with the projection's trait substs first.
             let subst_args = ctx.substitution_args(proj.trait_ref.substs);
-            let proj_self = subst_args
-                .first()
-                .and_then(|a| match a {
-                    glyim_type::GenericArg::Ty(t) => Some(*t),
-                    _ => None,
-                });
+            let proj_self = subst_args.first().and_then(|a| match a {
+                glyim_type::GenericArg::Ty(t) => Some(*t),
+                _ => None,
+            });
             let concrete_self = match proj_self {
                 Some(st) => match ctx.ty_kind(st) {
                     TyKind::Param(p) => subst_args
@@ -141,11 +139,14 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                         .unwrap_or(st),
                     _ => st,
                 },
-                None => return Err(vec![GlyimDiagnostic::internal_error(
-                    "internal compiler error: TyKind::Projection with no self type reached LLVM codegen",
-                )]),
+                None => {
+                    return Err(vec![GlyimDiagnostic::internal_error(
+                        "internal compiler error: TyKind::Projection with no self type reached LLVM codegen",
+                    )]);
+                }
             };
-            match ctx.resolve_associated_type(concrete_self, proj.trait_ref.def_id, proj.item_name) {
+            match ctx.resolve_associated_type(concrete_self, proj.trait_ref.def_id, proj.item_name)
+            {
                 Some(resolved) => return llvm_type_for_ty(ctx, target_info, context, resolved),
                 None => {
                     return Err(vec![GlyimDiagnostic::internal_error(
@@ -258,7 +259,10 @@ mod tests {
         // The >16 fallback returns a naturally 1-aligned i8 array (ArrayType),
         // NOT a struct; the real alignment is enforced at the use site.
         let ty = opaque_sized_type(&context, 64, 32);
-        assert!(ty.is_array_type(), "over-aligned fallback should be an i8 array");
+        assert!(
+            ty.is_array_type(),
+            "over-aligned fallback should be an i8 array"
+        );
         let size = target_data.get_store_size(&ty);
         assert_eq!(
             size, 64,
@@ -267,7 +271,10 @@ mod tests {
 
         // align 64, size 100 -> i8 array of 100 elements == 100 bytes.
         let ty = opaque_sized_type(&context, 100, 64);
-        assert!(ty.is_array_type(), "over-aligned fallback should be an i8 array");
+        assert!(
+            ty.is_array_type(),
+            "over-aligned fallback should be an i8 array"
+        );
         let size = target_data.get_store_size(&ty);
         assert_eq!(
             size, 100,

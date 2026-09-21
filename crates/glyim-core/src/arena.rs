@@ -45,7 +45,7 @@ impl<T> fmt::Debug for Idx<T> {
 
 impl<T> Idx<T> {
     #[inline]
-/// from_raw.
+    /// from_raw.
     pub fn from_raw(raw: u32) -> Self {
         Self {
             raw,
@@ -53,12 +53,12 @@ impl<T> Idx<T> {
         }
     }
     #[inline]
-/// to_raw.
+    /// to_raw.
     pub fn to_raw(self) -> u32 {
         self.raw
     }
     #[inline]
-/// index.
+    /// index.
     pub fn index(self) -> usize {
         self.raw as usize
     }
@@ -66,11 +66,11 @@ impl<T> Idx<T> {
 
 /// IdxLike.
 pub trait IdxLike: Copy + Eq + fmt::Debug + 'static {
-/// from_raw.
+    /// from_raw.
     fn from_raw(raw: u32) -> Self;
-/// to_raw.
+    /// to_raw.
     fn to_raw(self) -> u32;
-/// index.
+    /// index.
     fn index(self) -> usize {
         self.to_raw() as usize
     }
@@ -129,46 +129,46 @@ pub struct IndexVec<I: IdxLike, T> {
 }
 
 impl<I: IdxLike, T> IndexVec<I, T> {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             raw: Vec::new(),
             _marker: PhantomData,
         }
     }
-/// with_capacity.
+    /// with_capacity.
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             raw: Vec::with_capacity(cap),
             _marker: PhantomData,
         }
     }
-/// from_raw.
+    /// from_raw.
     pub fn from_raw(raw: Vec<T>) -> Self {
         Self {
             raw,
             _marker: PhantomData,
         }
     }
-/// push.
+    /// push.
     pub fn push(&mut self, val: T) -> I {
         let idx = I::from_raw(self.raw.len() as u32);
         self.raw.push(val);
         idx
     }
-/// reserve.
+    /// reserve.
     pub fn reserve(&mut self, additional: usize) {
         self.raw.reserve(additional);
     }
-/// len.
+    /// len.
     pub fn len(&self) -> usize {
         self.raw.len()
     }
-/// is_empty.
+    /// is_empty.
     pub fn is_empty(&self) -> bool {
         self.raw.is_empty()
     }
-/// get.
+    /// get.
     pub fn get(&self, idx: I) -> Option<&T> {
         debug_assert!(
             idx.index() < self.raw.len(),
@@ -176,45 +176,45 @@ impl<I: IdxLike, T> IndexVec<I, T> {
         );
         self.raw.get(idx.index())
     }
-/// get_mut.
+    /// get_mut.
     pub fn get_mut(&mut self, idx: I) -> Option<&mut T> {
         self.raw.get_mut(idx.index())
     }
-/// iter.
+    /// iter.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.raw.iter()
     }
-/// iter_mut.
+    /// iter_mut.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.raw.iter_mut()
     }
-/// iter_enumerated.
+    /// iter_enumerated.
     pub fn iter_enumerated(&self) -> impl Iterator<Item = (I, &T)> {
         self.raw
             .iter()
             .enumerate()
             .map(|(i, v)| (I::from_raw(i as u32), v))
     }
-/// into_iter_enumerated.
+    /// into_iter_enumerated.
     pub fn into_iter_enumerated(self) -> impl Iterator<Item = (I, T)> {
         self.raw
             .into_iter()
             .enumerate()
             .map(|(i, v)| (I::from_raw(i as u32), v))
     }
-/// into_raw.
+    /// into_raw.
     pub fn into_raw(self) -> Vec<T> {
         self.raw
     }
-/// as_slice.
+    /// as_slice.
     pub fn as_slice(&self) -> &[T] {
         &self.raw
     }
-/// as_mut_slice.
+    /// as_mut_slice.
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         &mut self.raw
     }
-/// last.
+    /// last.
     pub fn last(&self) -> Option<&T> {
         self.raw.last()
     }

@@ -15,28 +15,28 @@ pub mod linker;
 /// CliArgs.
 pub struct CliArgs {
     #[arg(value_name = "INPUT")]
-/// Struct.
+    /// Struct.
     pub input: PathBuf,
     #[arg(short, long)]
-/// Struct.
+    /// Struct.
     pub output: Option<PathBuf>,
     #[arg(long, value_name = "EMIT", default_value = "obj")]
-/// Struct.
+    /// Struct.
     pub emit: String,
     #[arg(short = 'O', long = "opt-level", default_value = "0")]
-/// Struct.
+    /// Struct.
     pub opt_level: u8,
     #[arg(long = "target")]
-/// Struct.
+    /// Struct.
     pub target: Option<String>,
     #[arg(long = "backend", default_value = "llvm")]
-/// Struct.
+    /// Struct.
     pub backend: String,
     #[arg(long = "linker")]
-/// Struct.
+    /// Struct.
     pub linker: Option<String>,
     #[arg(long = "link-flags")]
-/// Struct.
+    /// Struct.
     pub link_flags: Option<String>,
     /// Link-time optimization strategy: `off` (default), `fat` (in-compiler
     /// module merge + optimize), or `thin` (tracked gap — requires linker
@@ -75,9 +75,7 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
     // toolchain must never crash on user input with an unreadable stack trace —
     // an ICE with the compiler version + input + backtrace path is the
     // production-grade behaviour (rustc's `RUST_BACKTRACE` model).
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_with_args(cli_args)
-    }));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_with_args(cli_args)));
     match result {
         Ok(inner) => {
             if let Err(diags) = &inner {
@@ -363,8 +361,8 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                     e
                 ))]
             })?;
-        let thin_objects =
-            linker::thin_lto_link(&bitcode_paths, args.opt_level, &bitcode_dir).map_err(|e| {
+        let thin_objects = linker::thin_lto_link(&bitcode_paths, args.opt_level, &bitcode_dir)
+            .map_err(|e| {
                 vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
                     "ThinLTO thin-link failed: {}",
                     e
@@ -389,12 +387,27 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             );
         }
         let ctx = glyim_type::TyCtxMut::new(db.interner().clone()).freeze();
-        let backend: Box<dyn glyim_codegen::CodegenBackend> =
-            Box::new(BytecodeBackend::with_ty_ctx(std::sync::Arc::new(ctx), target_info));
-        Pipeline::compile_file(&mut db, input, &*backend, &object_path, args.codegen_units, proc_registry.as_ref())?;
+        let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(
+            BytecodeBackend::with_ty_ctx(std::sync::Arc::new(ctx), target_info),
+        );
+        Pipeline::compile_file(
+            &mut db,
+            input,
+            &*backend,
+            &object_path,
+            args.codegen_units,
+            proc_registry.as_ref(),
+        )?;
     } else {
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(llvm);
-        Pipeline::compile_file(&mut db, input, &*backend, &object_path, args.codegen_units, proc_registry.as_ref())?;
+        Pipeline::compile_file(
+            &mut db,
+            input,
+            &*backend,
+            &object_path,
+            args.codegen_units,
+            proc_registry.as_ref(),
+        )?;
     }
 
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
@@ -472,7 +485,12 @@ fn build_proc_macro_dependencies(
         let cdylib_path = compile_proc_macro_dep(dep, &host_triple)?;
         // dlopen it and merge its registered macros into the combined registry.
         let loaded = glyim_proc_macro::load_cdylib(cdylib_path.to_str().unwrap_or_default())
-            .map_err(|e| format!("failed to load proc-macro cdylib for {}: {e}", dep.display()))?;
+            .map_err(|e| {
+                format!(
+                    "failed to load proc-macro cdylib for {}: {e}",
+                    dep.display()
+                )
+            })?;
         combined.merge(&loaded.registry);
     }
     Ok(combined)
@@ -511,7 +529,11 @@ fn compile_proc_macro_dep(
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
             .join("; ");
-        format!("proc-macro dep {} failed to compile: {}", dep.display(), msg)
+        format!(
+            "proc-macro dep {} failed to compile: {}",
+            dep.display(),
+            msg
+        )
     })?;
     Ok(cdylib_path)
 }

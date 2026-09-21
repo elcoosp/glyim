@@ -12,23 +12,23 @@ const EVENT_CHANNEL_CAPACITY: usize = 1024;
 #[derive(Debug, Clone)]
 /// ServerEvent.
 pub enum ServerEvent {
-/// Variant.
+    /// Variant.
     Connected {
-/// Struct.
+        /// Struct.
         addr: SocketAddr,
     },
-/// Variant.
+    /// Variant.
     Message {
-/// Struct.
+        /// Struct.
         session_id: Option<String>,
-/// Struct.
+        /// Struct.
         trace_id: Option<String>,
-/// Struct.
+        /// Struct.
         msg: ExtensionMessage,
     },
-/// Variant.
+    /// Variant.
     Disconnected {
-/// Struct.
+        /// Struct.
         addr: SocketAddr,
     },
 }
@@ -42,7 +42,7 @@ pub struct WsServer {
 }
 
 impl WsServer {
-/// new.
+    /// new.
     pub fn new(host: &str, port: u16) -> Self {
         let addr: SocketAddr = format!("{host}:{port}")
             .parse()
@@ -56,15 +56,15 @@ impl WsServer {
             cli_msg_tx,
         }
     }
-/// take_event_rx.
+    /// take_event_rx.
     pub fn take_event_rx(&mut self) -> Option<mpsc::Receiver<ServerEvent>> {
         self.event_rx.take()
     }
-/// cli_msg_sender.
+    /// cli_msg_sender.
     pub fn cli_msg_sender(&self) -> broadcast::Sender<String> {
         self.cli_msg_tx.clone()
     }
-/// run.
+    /// run.
     pub async fn run(&self) -> Result<(), PilotError> {
         let listener = TcpListener::bind(&self.addr).await?;
         tracing::info!("WebSocket server listening on ws://{}", self.addr);

@@ -13,7 +13,7 @@ pub struct ArchitectureGate {
 }
 
 impl ArchitectureGate {
-/// new.
+    /// new.
     pub fn new(rules: Vec<DependencyRule>) -> Self {
         Self {
             rules: if rules.is_empty() {
@@ -23,7 +23,7 @@ impl ArchitectureGate {
             },
         }
     }
-/// with_default_rules.
+    /// with_default_rules.
     pub fn with_default_rules() -> Self {
         Self::new(default_architecture_rules())
     }

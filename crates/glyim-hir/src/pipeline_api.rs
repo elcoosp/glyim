@@ -21,10 +21,10 @@ pub fn lower_crate_for_pipeline(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use glyim_frontend::parse_to_syntax;
-    use glyim_span::FileId;
     use crate::ItemKind;
     use crate::lower::lower_crate_raw;
+    use glyim_frontend::parse_to_syntax;
+    use glyim_span::FileId;
 
     /// Plan §6.1: `const fn` must lower to an `FnItem` with `is_const == true`,
     /// while a plain `fn` stays `is_const == false`.

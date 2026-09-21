@@ -5,15 +5,15 @@ use std::sync::Arc;
 
 /// AssembledContext.
 pub struct AssembledContext {
-/// Struct.
+    /// Struct.
     pub prompt: String,
-/// Struct.
+    /// Struct.
     pub total_tokens: usize,
-/// Struct.
+    /// Struct.
     pub tier1_tokens: usize,
-/// Struct.
+    /// Struct.
     pub tier2_tokens: usize,
-/// Struct.
+    /// Struct.
     pub tier3_tokens: usize,
 }
 
@@ -24,14 +24,14 @@ pub struct ContextAssembler {
 }
 
 impl ContextAssembler {
-/// new.
+    /// new.
     pub async fn new(project_root: std::path::PathBuf, config: Arc<PilotConfig>) -> Self {
         Self {
             project_root,
             config,
         }
     }
-/// assemble.
+    /// assemble.
     pub async fn assemble(
         &self,
         _stream_id: &str,

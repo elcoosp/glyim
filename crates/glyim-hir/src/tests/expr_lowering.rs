@@ -65,7 +65,11 @@ fn test_lower_closure_expr() {
     )
     .unwrap();
     match &body.exprs[eid] {
-        Expr::Closure { params, body: _, is_move: _ } => {
+        Expr::Closure {
+            params,
+            body: _,
+            is_move: _,
+        } => {
             assert_eq!(params.len(), 1);
             let pat = &body.pats[params[0]];
             match pat {

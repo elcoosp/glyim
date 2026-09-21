@@ -6,7 +6,7 @@
 //! and no longer surface spurious "unsupported" diagnostics. (Full `async`
 //! desugaring into a `Future` state machine remains a separate design-doc
 //! subsystem and is intentionally not asserted here.)
-use glyim_diag::{ErrorCode, ErrorCategory};
+use glyim_diag::{ErrorCategory, ErrorCode};
 use glyim_test::phase::AnalysisTester;
 
 #[test]
@@ -200,7 +200,13 @@ fn multi_await_non_nameable_future_emits_async_v2() {
     let output = compile(src);
     assert!(
         output.diagnostics.iter().any(|d| {
-            matches!(&d.code, ErrorCode { category: ErrorCategory::Type, number: 61 })
+            matches!(
+                &d.code,
+                ErrorCode {
+                    category: ErrorCategory::Type,
+                    number: 61
+                }
+            )
         }),
         "non-nameable multi-await future must emit the async-v2 diagnostic (error 61), got: {:?}",
         output.diagnostics

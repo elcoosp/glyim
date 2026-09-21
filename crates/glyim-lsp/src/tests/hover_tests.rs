@@ -96,7 +96,9 @@ fn hover_includes_definition_preview() {
         let mut file_map = analysis.file_map.write();
         file_map.get_or_create(&path)
     };
-    let source = "fn add(a: i32, b: i32) -> i32 { a + b }\nfn sub(x: i32, y: i32) -> i32 { x - y }\n".to_string();
+    let source =
+        "fn add(a: i32, b: i32) -> i32 { a + b }\nfn sub(x: i32, y: i32) -> i32 { x - y }\n"
+            .to_string();
     // Definition span covers the whole `add` declaration line (0..39 bytes,
     // exclusive of the trailing newline at index 39).
     let span = Span::new(
@@ -156,6 +158,16 @@ fn hover_includes_definition_preview() {
     };
     // Definition preview must contain the source of the `add` declaration and
     // must NOT leak the unrelated `sub` line.
-    assert!(markup.value.contains("fn add(a: i32, b: i32) -> i32 { a + b }"), "{}", markup.value);
-    assert!(!markup.value.contains("fn sub("), "preview leaked unrelated line: {}", markup.value);
+    assert!(
+        markup
+            .value
+            .contains("fn add(a: i32, b: i32) -> i32 { a + b }"),
+        "{}",
+        markup.value
+    );
+    assert!(
+        !markup.value.contains("fn sub("),
+        "preview leaked unrelated line: {}",
+        markup.value
+    );
 }

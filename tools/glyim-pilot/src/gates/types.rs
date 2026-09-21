@@ -4,22 +4,22 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 /// GateContext.
 pub struct GateContext {
-/// Struct.
+    /// Struct.
     pub worktree_dir: PathBuf,
-/// Struct.
+    /// Struct.
     pub project_root: PathBuf,
-/// Struct.
+    /// Struct.
     pub default_branch: String,
-/// Struct.
+    /// Struct.
     pub branch_version: String,
-/// Struct.
+    /// Struct.
     pub timeout_secs: u64,
-/// Struct.
+    /// Struct.
     pub changed_files: Vec<String>,
 }
 
 impl GateContext {
-/// new.
+    /// new.
     pub fn new(
         worktree_dir: PathBuf,
         project_root: PathBuf,
@@ -42,29 +42,29 @@ impl GateContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// GateSideEffect.
 pub struct GateSideEffect {
-/// Struct.
+    /// Struct.
     pub description: String,
-/// Struct.
+    /// Struct.
     pub affected_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// GateResult.
 pub struct GateResult {
-/// Struct.
+    /// Struct.
     pub gate_name: String,
-/// Struct.
+    /// Struct.
     pub passed: bool,
-/// Struct.
+    /// Struct.
     pub message: String,
-/// Struct.
+    /// Struct.
     pub details: Option<String>,
-/// Struct.
+    /// Struct.
     pub side_effects: Vec<GateSideEffect>,
 }
 
 impl GateResult {
-/// pass.
+    /// pass.
     pub fn pass(name: impl Into<String>) -> Self {
         Self {
             gate_name: name.into(),
@@ -74,7 +74,7 @@ impl GateResult {
             side_effects: Vec::new(),
         }
     }
-/// pass_with_note.
+    /// pass_with_note.
     pub fn pass_with_note(name: impl Into<String>, note: impl Into<String>) -> Self {
         Self {
             gate_name: name.into(),
@@ -84,7 +84,7 @@ impl GateResult {
             side_effects: Vec::new(),
         }
     }
-/// pass_with_side_effects.
+    /// pass_with_side_effects.
     pub fn pass_with_side_effects(
         name: impl Into<String>,
         note: impl Into<String>,
@@ -99,7 +99,7 @@ impl GateResult {
             side_effects,
         }
     }
-/// fail.
+    /// fail.
     pub fn fail(name: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             gate_name: name.into(),
@@ -109,7 +109,7 @@ impl GateResult {
             side_effects: Vec::new(),
         }
     }
-/// fail_with_details.
+    /// fail_with_details.
     pub fn fail_with_details(
         name: impl Into<String>,
         message: impl Into<String>,
@@ -123,7 +123,7 @@ impl GateResult {
             side_effects: Vec::new(),
         }
     }
-/// has_side_effects.
+    /// has_side_effects.
     pub fn has_side_effects(&self) -> bool {
         !self.side_effects.is_empty()
     }
@@ -132,23 +132,23 @@ impl GateResult {
 #[derive(Debug, Clone)]
 /// PipelineResult.
 pub struct PipelineResult {
-/// Struct.
+    /// Struct.
     pub gates: Vec<GateResult>,
-/// Struct.
+    /// Struct.
     pub passed: bool,
 }
 
 impl PipelineResult {
-/// from_gates.
+    /// from_gates.
     pub fn from_gates(gates: Vec<GateResult>) -> Self {
         let passed = gates.iter().all(|g| g.passed);
         Self { gates, passed }
     }
-/// first_failure.
+    /// first_failure.
     pub fn first_failure(&self) -> Option<&GateResult> {
         self.gates.iter().find(|g| !g.passed)
     }
-/// failure_message.
+    /// failure_message.
     pub fn failure_message(&self) -> String {
         if let Some(fail) = self.first_failure() {
             let mut msg = format!("**{} failed**: {}", fail.gate_name, fail.message);

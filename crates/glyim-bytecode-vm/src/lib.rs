@@ -55,85 +55,85 @@ impl Value {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Opcode {
-/// Variant.
+    /// Variant.
     LoadConst = 0x01,
-/// Variant.
+    /// Variant.
     Add = 0x02,
-/// Variant.
+    /// Variant.
     Sub = 0x03,
-/// Variant.
+    /// Variant.
     Mul = 0x04,
-/// Variant.
+    /// Variant.
     Div = 0x05,
-/// Variant.
+    /// Variant.
     Rem = 0x06,
-/// Variant.
+    /// Variant.
     Eq = 0x07,
-/// Variant.
+    /// Variant.
     Ne = 0x08,
-/// Variant.
+    /// Variant.
     Lt = 0x09,
-/// Variant.
+    /// Variant.
     Gt = 0x0A,
-/// Variant.
+    /// Variant.
     Le = 0x0B,
-/// Variant.
+    /// Variant.
     Ge = 0x0C,
-/// Variant.
+    /// Variant.
     And = 0x0D,
-/// Variant.
+    /// Variant.
     Or = 0x0E,
-/// Variant.
+    /// Variant.
     Not = 0x0F,
-/// Variant.
+    /// Variant.
     Neg = 0x10,
-/// Variant.
+    /// Variant.
     BitAnd = 0x11,
-/// Variant.
+    /// Variant.
     BitOr = 0x12,
-/// Variant.
+    /// Variant.
     BitXor = 0x13,
-/// Variant.
+    /// Variant.
     Shl = 0x14,
-/// Variant.
+    /// Variant.
     Shr = 0x15,
-/// Variant.
+    /// Variant.
     LoadLocal = 0x16,
-/// Variant.
+    /// Variant.
     StoreLocal = 0x17,
-/// Variant.
+    /// Variant.
     Return = 0x18,
-/// Variant.
+    /// Variant.
     JumpIf = 0x19,
-/// Variant.
+    /// Variant.
     Jump = 0x1A,
-/// Variant.
+    /// Variant.
     Call = 0x1B,
-/// Variant.
+    /// Variant.
     Cast = 0x1C,
-/// Variant.
+    /// Variant.
     Aggregate = 0x1D,
-/// Variant.
+    /// Variant.
     Discriminant = 0x1E,
-/// Variant.
+    /// Variant.
     Len = 0x1F,
-/// Variant.
+    /// Variant.
     SwitchInt = 0x20,
-/// Variant.
+    /// Variant.
     Assert = 0x21,
-/// Variant.
+    /// Variant.
     CallIndirect = 0x22,
-/// Variant.
+    /// Variant.
     LoadLocalAddr = 0x29,
-/// Variant.
+    /// Variant.
     StoreField = 0x2A,
-/// Variant.
+    /// Variant.
     Deref = 0x2B,
-/// Variant.
+    /// Variant.
     Drop = 0x2C,
-/// Variant.
+    /// Variant.
     Repeat = 0x2D,
-/// Variant.
+    /// Variant.
     Trap = 0xFF,
 }
 
@@ -204,7 +204,7 @@ pub struct Function {
 }
 
 impl Function {
-/// new.
+    /// new.
     pub fn new(code: Vec<u8>, n_locals: usize, arg_count: usize) -> Function {
         Function {
             code,
@@ -254,7 +254,7 @@ pub struct Module {
 }
 
 impl Module {
-/// new.
+    /// new.
     pub fn new(functions: Vec<Function>, entry: usize) -> Module {
         Module { functions, entry }
     }
@@ -348,7 +348,10 @@ impl Vm {
     /// Execute a single function (no calls in/out). Convenience used by the
     /// original single-function tests and simple cross-backend checks.
     pub fn run(&mut self, chunk: &Chunk) -> ExecResult<Value> {
-        let module = Module::new(vec![Function::new(chunk.code.clone(), chunk.n_locals, 0)], 0);
+        let module = Module::new(
+            vec![Function::new(chunk.code.clone(), chunk.n_locals, 0)],
+            0,
+        );
         let _ = chunk.entry; // single-function entry is always 0
         self.run_module(&module)
     }
@@ -423,20 +426,17 @@ impl Vm {
                     self.stack.push(Value::Int(v));
                 }
                 Opcode::LoadLocal => {
-                    let idx =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let v = self.local_ref(idx)?.clone();
                     self.stack.push(v);
                 }
                 Opcode::StoreLocal => {
-                    let idx =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let v = self.pop()?;
                     self.set_local(idx, v)?;
                 }
                 Opcode::LoadLocalAddr => {
-                    let idx =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     self.stack.push(Value::Int(idx as i64));
                 }
                 Opcode::StoreField => {
@@ -482,14 +482,12 @@ impl Vm {
                     self.frames[frame_idx].pc += 1;
                 }
                 Opcode::Jump => {
-                    let target =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let off = module.functions[func].resolve_target(target as u32);
                     self.frames[frame_idx].pc = off;
                 }
                 Opcode::JumpIf => {
-                    let target =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let off = module.functions[func].resolve_target(target as u32);
                     let cond = self.pop()?.as_int();
                     if cond != 0 {
@@ -498,8 +496,7 @@ impl Vm {
                 }
                 Opcode::SwitchInt => {
                     let discr = self.pop()?.as_int();
-                    let count =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let count = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let mut taken: Option<usize> = None;
                     for _ in 0..count {
                         let v = Vm::read_i64(code, &mut self.frames[frame_idx].pc)?;
@@ -576,7 +573,8 @@ impl Vm {
                     let caller = self.frames.last_mut().unwrap();
                     let dest = finished.dest_local;
                     let caller_func = caller.func;
-                    let resume = module.functions[caller_func].resolve_target(finished.resume_target);
+                    let resume =
+                        module.functions[caller_func].resolve_target(finished.resume_target);
                     if dest < caller.locals.len() {
                         caller.locals[dest] = retval;
                     }
@@ -589,8 +587,7 @@ impl Vm {
                     // dest_local(u32), then target(u32). `pc` already points
                     // past the opcode, so argc is read next.
                     let argc = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
-                    let dest_local =
-                        Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let dest_local = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)?;
                     let mut args = Vec::with_capacity(argc);
                     for _ in 0..argc {
@@ -725,7 +722,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
-/// new.
+    /// new.
     pub fn new(code: Vec<u8>) -> Chunk {
         Chunk {
             code,
@@ -920,7 +917,10 @@ mod tests {
         a.op(Opcode::Add); // 1 + (-7) = -6
         a.op(Opcode::Return);
         let mut vm = Vm::new();
-        assert_eq!(vm.run(&Chunk::new(a.finish(0, 0).code)).unwrap(), Value::Int(-6));
+        assert_eq!(
+            vm.run(&Chunk::new(a.finish(0, 0).code)).unwrap(),
+            Value::Int(-6)
+        );
     }
 
     #[test]
@@ -1095,4 +1095,3 @@ mod tests {
         assert_eq!(err, VmError::CallFrameOverflow);
     }
 }
-

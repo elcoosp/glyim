@@ -28,24 +28,25 @@ pub(crate) fn rename_text_fallback(
     let lexed = glyim_frontend::lexer::lex(source, file_id);
     let mut edits = Vec::new();
     for tok in &lexed.tokens {
-        if tok.kind == glyim_syntax::SyntaxKind::Ident && tok.text.as_str() == symbol_name
+        if tok.kind == glyim_syntax::SyntaxKind::Ident
+            && tok.text.as_str() == symbol_name
             && let Some(((start_line, start_col), (end_line, end_col))) =
                 sm.span_to_position(tok.span.lo.to_usize(), tok.span.hi.to_usize())
-            {
-                edits.push(TextEdit {
-                    range: lsp_types::Range {
-                        start: lsp_types::Position {
-                            line: start_line as u32,
-                            character: start_col as u32,
-                        },
-                        end: lsp_types::Position {
-                            line: end_line as u32,
-                            character: end_col as u32,
-                        },
+        {
+            edits.push(TextEdit {
+                range: lsp_types::Range {
+                    start: lsp_types::Position {
+                        line: start_line as u32,
+                        character: start_col as u32,
                     },
-                    new_text: new_name.to_string(),
-                });
-            }
+                    end: lsp_types::Position {
+                        line: end_line as u32,
+                        character: end_col as u32,
+                    },
+                },
+                new_text: new_name.to_string(),
+            });
+        }
     }
     if edits.is_empty() { None } else { Some(edits) }
 }

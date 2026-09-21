@@ -86,11 +86,11 @@ fn fuzz_random_adt_layouts() {
             fields: IndexVec::from_raw(fields),
             variants: vec![VariantDef {
                 name: ctx_mut.resolver().intern("v0"),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+                style: glyim_type::adt_def::VariantStyle::Unit,
                 fields: variant_fields,
             }],
             generic_params: vec![],
-};
+        };
         let adt_id = AdtId::from_raw(rng.gen_range(1000..2000));
         ctx_mut.register_adt(adt_id, adt_def.clone());
 
@@ -170,7 +170,7 @@ fn fuzz_random_enum_layouts() {
             }
             variants.push(VariantDef {
                 name: ctx_mut.resolver().intern(&format!("v{}", vi)),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+                style: glyim_type::adt_def::VariantStyle::Unit,
                 fields: variant_fields,
             });
         }
@@ -184,7 +184,7 @@ fn fuzz_random_enum_layouts() {
             fields: IndexVec::from_raw(all_fields),
             variants: variants.clone(),
             generic_params: vec![],
-};
+        };
         let adt_id = AdtId::from_raw(rng.gen_range(3000..4000));
         ctx_mut.register_adt(adt_id, adt_def);
 
@@ -266,13 +266,13 @@ fn test_niche_encoding_option_like() {
     }
     variant_defs.push(VariantDef {
         name: ctx_mut.resolver().intern("Some"),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+        style: glyim_type::adt_def::VariantStyle::Unit,
         fields: some_variant_fields,
     });
     // Variant 1: None
     variant_defs.push(VariantDef {
         name: ctx_mut.resolver().intern("None"),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+        style: glyim_type::adt_def::VariantStyle::Unit,
         fields: IndexVec::new(),
     });
 
@@ -281,7 +281,7 @@ fn test_niche_encoding_option_like() {
         fields: IndexVec::from_raw(all_fields),
         variants: variant_defs,
         generic_params: vec![],
-};
+    };
     let adt_id = AdtId::from_raw(5000);
     ctx_mut.register_adt(adt_id, adt_def);
 

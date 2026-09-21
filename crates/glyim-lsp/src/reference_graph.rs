@@ -7,47 +7,47 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone)]
 /// Reference.
 pub struct Reference {
-/// Struct.
+    /// Struct.
     pub file_id: FileId,
-/// Struct.
+    /// Struct.
     pub span: Span,
-/// Struct.
+    /// Struct.
     pub is_definition: bool,
-/// Struct.
+    /// Struct.
     pub kind: ReferenceKind,
     /// Read/write access. A reference is `Write` when it is the direct LHS of an
     /// `Expr::Assign` or the operand of a `&mut` borrow; everything else is a
     /// `Read`. Mirrors Tier 1.1's `is_mut_use` classification.
     pub access: AccessKind,
-/// Struct.
+    /// Struct.
     pub def_id: Option<glyim_core::def_id::DefId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// AccessKind.
 pub enum AccessKind {
-/// Variant.
+    /// Variant.
     Read,
-/// Variant.
+    /// Variant.
     Write,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// ReferenceKind.
 pub enum ReferenceKind {
-/// Variant.
+    /// Variant.
     Call,
-/// Variant.
+    /// Variant.
     TypeReference,
-/// Variant.
+    /// Variant.
     FieldAccess,
-/// Variant.
+    /// Variant.
     Constructor,
-/// Variant.
+    /// Variant.
     Pattern,
-/// Variant.
+    /// Variant.
     Definition,
-/// Variant.
+    /// Variant.
     Variable,
 }
 
@@ -64,7 +64,7 @@ impl Default for ReferenceGraph {
 }
 
 impl ReferenceGraph {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             references: HashMap::new(),
@@ -72,7 +72,7 @@ impl ReferenceGraph {
         }
     }
 
-/// build_from_hir.
+    /// build_from_hir.
     pub fn build_from_hir(&mut self, file_id: FileId, hir: &CrateHir, interner: &Interner) {
         self.references
             .retain(|_, refs| refs.iter().all(|r| r.file_id != file_id));
@@ -735,9 +735,18 @@ impl ReferenceGraph {
                 // compile error here, forcing a real traversal to be written
                 // (Phase 8.1, unstub-5).
                 Expr::Missing | Expr::Literal(_) | Expr::Continue | Expr::Err => {}
-            Expr::Await { expr } | Expr::Try { expr } => {
-                walk_expr(*expr, body, interner, _file_id, add_ref, function_names, false, AccessKind::Read);
-            }
+                Expr::Await { expr } | Expr::Try { expr } => {
+                    walk_expr(
+                        *expr,
+                        body,
+                        interner,
+                        _file_id,
+                        add_ref,
+                        function_names,
+                        false,
+                        AccessKind::Read,
+                    );
+                }
             }
         }
 
@@ -760,7 +769,7 @@ impl ReferenceGraph {
         }
     }
 
-/// find_references.
+    /// find_references.
     pub fn find_references(&self, symbol_name: &str) -> &[Reference] {
         self.references
             .get(symbol_name)

@@ -199,9 +199,11 @@ fn open_ended_range_index_lowers() {
 /// landing), so an `Unreachable` terminator in the lowered body is the
 /// observable proof that `start <= end` / `end <= len` are asserted.
 fn has_unreachable_terminator(result: &crate::lower::LowerResult) -> bool {
-    result.body.basic_blocks.iter().any(|bb| {
-        matches!(bb.terminator.kind, glyim_mir::TerminatorKind::Unreachable)
-    })
+    result
+        .body
+        .basic_blocks
+        .iter()
+        .any(|bb| matches!(bb.terminator.kind, glyim_mir::TerminatorKind::Unreachable))
 }
 
 #[test]

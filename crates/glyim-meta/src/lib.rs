@@ -56,8 +56,8 @@ pub fn join_tokens_with_spaces(token_stream: &SyntaxNode) -> String {
     for event in token_stream.descendants_with_tokens() {
         if let rowan::NodeOrToken::Token(tok) = event {
             let text = tok.text();
-            let is_word = text.chars().all(|c: char| c.is_alphanumeric() || c == '_')
-                && !text.is_empty();
+            let is_word =
+                text.chars().all(|c: char| c.is_alphanumeric() || c == '_') && !text.is_empty();
             if prev_was_word && is_word {
                 out.push(' ');
             }
@@ -73,17 +73,17 @@ mod expander;
 #[derive(Clone, Debug)]
 /// MacroKind.
 pub enum MacroKind {
-/// Variant.
+    /// Variant.
     Declarative {
         /// name field.
         name: Name,
     },
-/// Variant.
+    /// Variant.
     Proc {
         /// name field.
         name: Name,
     },
-/// Variant.
+    /// Variant.
     Builtin {
         /// name field.
         name: Name,
@@ -95,27 +95,27 @@ pub enum MacroKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// BuiltinMacro.
 pub enum BuiltinMacro {
-/// Variant.
+    /// Variant.
     File,
-/// Variant.
+    /// Variant.
     Line,
-/// Variant.
+    /// Variant.
     Column,
-/// Variant.
+    /// Variant.
     Include,
-/// Variant.
+    /// Variant.
     IncludeStr,
-/// Variant.
+    /// Variant.
     IncludeBytes,
-/// Variant.
+    /// Variant.
     Env,
-/// Variant.
+    /// Variant.
     OptionEnv,
-/// Variant.
+    /// Variant.
     Concat,
-/// Variant.
+    /// Variant.
     ConcatIdents,
-/// Variant.
+    /// Variant.
     Stringify,
     /// `format!(fmt, args..)` — expands to a placeholder empty `String`
     /// literal. The probe only type-checks; real runtime interpolation is a
@@ -142,20 +142,20 @@ pub enum BuiltinMacro {
 #[derive(Clone, Debug)]
 /// MacroDef.
 pub struct MacroDef {
-/// Struct.
+    /// Struct.
     pub name: Name,
-/// Struct.
+    /// Struct.
     pub kind: MacroKind,
-/// Struct.
+    /// Struct.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
 /// ExpansionResult.
 pub struct ExpansionResult {
-/// Struct.
+    /// Struct.
     pub expanded: Option<SyntaxNode>,
-/// Struct.
+    /// Struct.
     pub diagnostics: Vec<GlyimDiagnostic>,
 }
 
@@ -177,7 +177,7 @@ pub struct Expander<'a> {
 }
 
 impl<'a> Expander<'a> {
-/// new.
+    /// new.
     pub fn new(hygiene: &'a mut HygieneCtx) -> Self {
         Self {
             hygiene,
@@ -192,7 +192,10 @@ impl<'a> Expander<'a> {
     /// Provide a procedural-macro [`Registry`](glyim_proc_macro::Registry) so
     /// `MacroKind::Proc` invocations are dispatched to their registered
     /// expansion functions (Phase 9.2). Returns `&mut Self` for chaining.
-    pub fn with_proc_registry(&mut self, registry: Option<&'a glyim_proc_macro::Registry>) -> &mut Self {
+    pub fn with_proc_registry(
+        &mut self,
+        registry: Option<&'a glyim_proc_macro::Registry>,
+    ) -> &mut Self {
         self.proc_registry = registry;
         self
     }
@@ -209,7 +212,7 @@ impl<'a> Expander<'a> {
         self.vfs = Some(vfs);
     }
 
-/// register_macro.
+    /// register_macro.
     pub fn register_macro(&mut self, def: MacroDef) {
         self.macros.push(def);
     }
@@ -223,7 +226,7 @@ impl<'a> Expander<'a> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, args, call_site))]
-/// expand.
+    /// expand.
     pub fn expand(&mut self, name: Name, args: &SyntaxNode, call_site: Span) -> ExpansionResult {
         let (green_opt, diags) = expander::expand_macro_invocation(
             name,
@@ -245,7 +248,7 @@ impl<'a> Expander<'a> {
     }
 
     #[tracing::instrument(level = "info", skip(self, root))]
-/// expand_crate.
+    /// expand_crate.
     pub fn expand_crate(&mut self, root: &SyntaxNode) -> (SyntaxNode, Vec<GlyimDiagnostic>) {
         let (green, diags) = expander::expand_crate(
             root,

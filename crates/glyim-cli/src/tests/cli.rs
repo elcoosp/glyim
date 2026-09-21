@@ -18,7 +18,7 @@ mod tests {
             lto: "off".to_string(),
             codegen_units: None,
             proc_macro_deps: None,
-        error_format: "human".to_string(),
+            error_format: "human".to_string(),
         };
         let result = run_with_args(args);
         assert!(result.is_err());
@@ -53,7 +53,7 @@ mod tests {
             lto: "off".to_string(),
             codegen_units: None,
             proc_macro_deps: None,
-        error_format: "human".to_string(),
+            error_format: "human".to_string(),
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_mir failed: {:?}", result.err());
@@ -82,7 +82,7 @@ mod tests {
             lto: "off".to_string(),
             codegen_units: None,
             proc_macro_deps: None,
-        error_format: "human".to_string(),
+            error_format: "human".to_string(),
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_llvm_ir failed: {:?}", result.err());

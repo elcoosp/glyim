@@ -19,7 +19,8 @@ fn assembled_stdlib_compiles() {
     match compile_file_to_mir(&mut db, &path) {
         Ok(_) => {}
         Err(diags) => {
-            let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            let mut counts: std::collections::HashMap<String, usize> =
+                std::collections::HashMap::new();
             // Precompute module content-start offsets: each `pub mod X {` then
             // content begins after the `{`.
             let mut mods: Vec<(usize, &str)> = Vec::new();
@@ -57,7 +58,11 @@ fn assembled_stdlib_compiles() {
                     let line_no = src[..off].matches('\n').count() + 1;
                     eprintln!(
                         "DETAIL [{}:L{} (assembled L{})] {} | {}",
-                        module, line_in_mod, line_no, d.message, src[line_start..line_end].trim()
+                        module,
+                        line_in_mod,
+                        line_no,
+                        d.message,
+                        src[line_start..line_end].trim()
                     );
                 }
                 let key = d

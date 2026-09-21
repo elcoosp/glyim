@@ -22,15 +22,17 @@ fn element_size_uses_layout_not_one() {
     let tcx = ctx.freeze();
     let interp = Interpreter::new(&tcx);
 
-    let elem_size = interp.element_size_of(i32_ty).expect("i32 must have a layout");
+    let elem_size = interp
+        .element_size_of(i32_ty)
+        .expect("i32 must have a layout");
     assert_eq!(elem_size, 4, "i32 element size must be 4 bytes, not 1");
 
     // Pointer arithmetic for index 2 of an i32 array walks 2 * 4 = 8 bytes.
-    let idx2_offset = interp
-        .element_size_of(i32_ty)
-        .unwrap()
-        * 2;
-    assert_eq!(idx2_offset, 8, "index 2 of [i32; 4] must be 8 bytes from base");
+    let idx2_offset = interp.element_size_of(i32_ty).unwrap() * 2;
+    assert_eq!(
+        idx2_offset, 8,
+        "index 2 of [i32; 4] must be 8 bytes from base"
+    );
 
     // The whole array's size also reflects the real element size.
     let arr_size = match tcx.ty_kind(array_ty) {
@@ -83,12 +85,15 @@ fn write_through_constant_index() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     // Seed the local with an aggregate of 4 slots so the write lands in-bounds.
-    interp.locals = vec![None, Some(InterpValue::Aggregate(vec![
-        InterpValue::Int(0),
-        InterpValue::Int(0),
-        InterpValue::Int(0),
-        InterpValue::Int(0),
-    ]))];
+    interp.locals = vec![
+        None,
+        Some(InterpValue::Aggregate(vec![
+            InterpValue::Int(0),
+            InterpValue::Int(0),
+            InterpValue::Int(0),
+            InterpValue::Int(0),
+        ])),
+    ];
     interp.local_decls = vec![
         LocalDecl {
             ty: Ty::UNIT,
@@ -108,7 +113,10 @@ fn write_through_constant_index() {
         _ => panic!("expected an Assign statement"),
     };
     let result = interp.write_place(&place, interp.eval_rvalue(&rvalue).unwrap());
-    assert!(result.is_ok(), "ConstantIndex write must succeed: {result:?}");
+    assert!(
+        result.is_ok(),
+        "ConstantIndex write must succeed: {result:?}"
+    );
 }
 
 /// Tier 0.2: `Subslice` write splices the new elements into the right range.
@@ -154,12 +162,15 @@ fn write_through_subslice() {
 
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
-    interp.locals = vec![None, Some(InterpValue::Aggregate(vec![
-        InterpValue::Int(0),
-        InterpValue::Int(1),
-        InterpValue::Int(2),
-        InterpValue::Int(3),
-    ]))];
+    interp.locals = vec![
+        None,
+        Some(InterpValue::Aggregate(vec![
+            InterpValue::Int(0),
+            InterpValue::Int(1),
+            InterpValue::Int(2),
+            InterpValue::Int(3),
+        ])),
+    ];
     interp.local_decls = vec![
         LocalDecl {
             ty: Ty::UNIT,

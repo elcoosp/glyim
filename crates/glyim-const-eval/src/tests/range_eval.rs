@@ -1,6 +1,6 @@
 //! Tests for `Expr::Range` constant evaluation (plan §4.4).
 
-use crate::{ConstValue, ConstEvaluator};
+use crate::{ConstEvaluator, ConstValue};
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
 use glyim_core::primitives::IntTy;
@@ -101,6 +101,9 @@ fn range_open_ended_has_no_bounds() {
     let val = eval_ok(&body, range);
     match val {
         ConstValue::Range(None, Some(_), false) => {}
-        other => panic!("expected open-ended range with only an end bound, got {:?}", other),
+        other => panic!(
+            "expected open-ended range with only an end bound, got {:?}",
+            other
+        ),
     }
 }

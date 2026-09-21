@@ -9,7 +9,11 @@ use glyim_span::FileId;
 /// Parse source code and build a def map, returning both the map and any diagnostics.
 pub fn parse_and_build(source: &str) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let parse_result = parse_to_syntax(source, FileId::BOGUS);
-    build_def_map(&parse_result.root, CrateId::from_raw(0), glyim_core::interner::Interner::new())
+    build_def_map(
+        &parse_result.root,
+        CrateId::from_raw(0),
+        glyim_core::interner::Interner::new(),
+    )
 }
 
 /// Create a Resolver for the given module in the def map.

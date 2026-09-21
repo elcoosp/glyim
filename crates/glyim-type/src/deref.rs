@@ -1,5 +1,5 @@
-use crate::ty::Ty;
 use crate::GenericArg;
+use crate::ty::Ty;
 use glyim_core::def_id::AdtId;
 use std::collections::HashMap;
 

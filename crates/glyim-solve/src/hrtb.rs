@@ -351,7 +351,9 @@ fn preds_struct_eq(
     let a = &pa.value;
     let b = &pb.value;
     a.len() == b.len()
-        && a.iter().zip(b.iter()).all(|(p, q)| pred_struct_eq(p, q, ctx, depth + 1))
+        && a.iter()
+            .zip(b.iter())
+            .all(|(p, q)| pred_struct_eq(p, q, ctx, depth + 1))
 }
 
 fn pred_struct_eq(
@@ -372,7 +374,9 @@ fn pred_struct_eq(
         (Predicate::TypeOutlives(tp), Predicate::TypeOutlives(tq)) => {
             ty_struct_eq(tp.ty, tq.ty, ctx, depth + 1) && tp.region == tq.region
         }
-        (Predicate::WellFormed(ta), Predicate::WellFormed(tb)) => ty_struct_eq(*ta, *tb, ctx, depth + 1),
+        (Predicate::WellFormed(ta), Predicate::WellFormed(tb)) => {
+            ty_struct_eq(*ta, *tb, ctx, depth + 1)
+        }
         (Predicate::Coerce(a, b), Predicate::Coerce(c, d)) => {
             ty_struct_eq(*a, *c, ctx, depth + 1) && ty_struct_eq(*b, *d, ctx, depth + 1)
         }
@@ -442,7 +446,10 @@ fn ty_is_concrete_well_formed(ty: Ty, ctx: &TyCtx) -> bool {
     }
     // `dyn Trait` / `impl Trait` (projection) carry where-clauses that this
     // cheap HRTB check cannot verify, so treat them as not-yet-proven.
-    !matches!(ctx.ty_kind(ty), TyKind::Dynamic(_, _) | TyKind::Projection(_))
+    !matches!(
+        ctx.ty_kind(ty),
+        TyKind::Dynamic(_, _) | TyKind::Projection(_)
+    )
 }
 
 /// Check whether a higher-ranked trait bound is satisfied.

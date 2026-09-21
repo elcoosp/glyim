@@ -291,9 +291,19 @@ fn test_pipeline_compiler_surfaces_mir_artifacts() {
     let source = "fn main() {}";
     let output = compiler.compile(source, FileId::from_raw(777), &[]);
 
-    assert!(output.diagnostics.is_empty(), "unexpected diagnostics: {:?}", output.diagnostics);
-    assert!(output.def_map.is_some(), "def_map must be populated, was None");
-    assert!(output.typeck_result.is_some(), "typeck_result must be populated, was None");
+    assert!(
+        output.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        output.diagnostics
+    );
+    assert!(
+        output.def_map.is_some(),
+        "def_map must be populated, was None"
+    );
+    assert!(
+        output.typeck_result.is_some(),
+        "typeck_result must be populated, was None"
+    );
     assert!(
         !output.mir_bodies.is_empty(),
         "mir_bodies must be populated (pipeline used to discard them)"
@@ -306,7 +316,11 @@ fn test_pipeline_compiler_surfaces_mir_artifacts() {
     let calls = mock.calls();
     assert_eq!(calls.len(), 1, "expected one codegen generate call");
     let out = &calls[0].output_path;
-    assert!(out.to_string_lossy().contains("777.o"), "expected per-file temp path, got {:?}", out);
+    assert!(
+        out.to_string_lossy().contains("777.o"),
+        "expected per-file temp path, got {:?}",
+        out
+    );
 }
 
 #[test]
@@ -343,7 +357,11 @@ fn test_run_pass_strategy_executes_provided_executable() {
         &config,
         Duration::from_secs(5),
     );
-    assert!(matches!(outcome, crate::harness::executor::TestOutcome::Passed), "run-pass with /bin/echo should pass, got {:?}", outcome);
+    assert!(
+        matches!(outcome, crate::harness::executor::TestOutcome::Passed),
+        "run-pass with /bin/echo should pass, got {:?}",
+        outcome
+    );
 }
 
 #[test]
@@ -372,10 +390,16 @@ fn test_run_pass_strategy_no_executable_fails() {
         &TestConfig::default(),
         Duration::from_secs(5),
     );
-    assert!(matches!(
-        outcome,
-        crate::harness::executor::TestOutcome::Failed { reason: crate::FailureReason::CompilationFailed { .. } }
-    ), "run-pass with no exe must fail, got {:?}", outcome);
+    assert!(
+        matches!(
+            outcome,
+            crate::harness::executor::TestOutcome::Failed {
+                reason: crate::FailureReason::CompilationFailed { .. }
+            }
+        ),
+        "run-pass with no exe must fail, got {:?}",
+        outcome
+    );
 }
 
 #[test]
@@ -394,7 +418,11 @@ fn test_pipeline_compiler_populates_executable_path_field() {
         Arc::new(MockCodegen::new());
     let compiler = crate::harness::compiler::PipelineCompiler::new(backend);
     let output = compiler.compile("fn main() {}", FileId::from_raw(888), &[]);
-    assert!(output.executable_path.is_none(), "mock backend emits no real object, so linking yields None (got {:?})", output.executable_path);
+    assert!(
+        output.executable_path.is_none(),
+        "mock backend emits no real object, so linking yields None (got {:?})",
+        output.executable_path
+    );
 }
 
 #[test]

@@ -15,11 +15,11 @@ use std::path::Path;
 /// hand control to the linker driver.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LtoKind {
-/// Variant.
+    /// Variant.
     None,
-/// Variant.
+    /// Variant.
     Thin,
-/// Variant.
+    /// Variant.
     Fat,
 }
 
@@ -43,13 +43,11 @@ pub(crate) fn run_lto<'ctx>(
 ) -> Result<(), String> {
     match kind {
         LtoKind::None => Ok(()),
-        LtoKind::Thin => Err(
-            "LtoKind::Thin must not be merged via run_lto; call \
+        LtoKind::Thin => Err("LtoKind::Thin must not be merged via run_lto; call \
              emit_thinlto_bitcode() per-module and let glyim-cli's thin-link \
              driver combine them. run_lto(Thin) is only reachable from a caller \
              bug."
-                .to_string(),
-        ),
+            .to_string()),
         LtoKind::Fat => {
             // Merge every other module into the primary. `link_in_module` takes
             // ownership of `other` (it is `forget`ten inside), so we clone the
@@ -98,10 +96,8 @@ pub fn emit_thinlto_bitcode<'ctx>(
     // thin-link performs cross-module inlining rather than downgrading to a
     // single-module pass.
     unsafe {
-        use llvm_sys::core::{
-            LLVMAddModuleFlag, LLVMGetModuleContext, LLVMMDStringInContext2,
-        };
         use llvm_sys::LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError;
+        use llvm_sys::core::{LLVMAddModuleFlag, LLVMGetModuleContext, LLVMMDStringInContext2};
         use std::os::raw::c_char;
         let ctx = LLVMGetModuleContext(module.as_mut_ptr());
         let value = LLVMMDStringInContext2(ctx, b"1\0".as_ptr() as *const c_char, 1);
@@ -321,8 +317,7 @@ mod tests {
         let ctx = Context::create();
         let (module, tm) = create_test_module(&ctx);
         // Explicit custom pipeline overrides the built-in default<Ox> selection.
-        let result =
-            run_llvm_passes_with(&module, &tm, 3, false, Some("instcombine,simplifycfg"));
+        let result = run_llvm_passes_with(&module, &tm, 3, false, Some("instcombine,simplifycfg"));
         assert!(result.is_ok(), "custom pass pipeline must run");
     }
 
@@ -348,7 +343,9 @@ mod tests {
         let callee = primary.add_function("callee", callee_ty, None);
         let entry = ctx.append_basic_block(callee, "entry");
         builder.position_at_end(entry);
-        builder.build_return(Some(&i32_ty.const_int(7, false))).unwrap();
+        builder
+            .build_return(Some(&i32_ty.const_int(7, false)))
+            .unwrap();
 
         // A second module that calls `callee` (declared, not defined there).
         let other = ctx.create_module("other");
@@ -360,9 +357,7 @@ mod tests {
         let caller = other.add_function("caller", caller_ty, None);
         let centry = ctx.append_basic_block(caller, "entry");
         builder.position_at_end(centry);
-        let call = builder
-            .build_call(other_callee, &[], "call")
-            .unwrap();
+        let call = builder.build_call(other_callee, &[], "call").unwrap();
         builder
             .build_return(Some(&call.try_as_basic_value().basic().unwrap()))
             .unwrap();

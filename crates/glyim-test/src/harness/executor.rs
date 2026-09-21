@@ -18,29 +18,29 @@ fn next_file_id() -> FileId {
 #[derive(Clone, Debug)]
 /// TestOutcome.
 pub enum TestOutcome {
-/// Variant.
+    /// Variant.
     Passed,
-/// Variant.
+    /// Variant.
     Failed {
         /// reason field.
         reason: FailureReason,
     },
-/// Variant.
+    /// Variant.
     Ignored,
 }
 
 #[derive(Clone, Debug)]
 /// TestResult.
 pub struct TestResult {
-/// Struct.
+    /// Struct.
     pub test: Arc<DiscoveredTest>,
-/// Struct.
+    /// Struct.
     pub revision: String,
-/// Struct.
+    /// Struct.
     pub outcome: TestOutcome,
-/// Struct.
+    /// Struct.
     pub duration: Duration,
-/// Struct.
+    /// Struct.
     pub diagnostics: Vec<GlyimDiagnostic>,
 }
 
@@ -56,7 +56,7 @@ pub struct TestExecutor {
 }
 
 impl TestExecutor {
-/// new.
+    /// new.
     pub fn new(
         default_timeout: Duration,
         bless: bool,
@@ -71,9 +71,10 @@ impl TestExecutor {
             // linked and executed for real. Other hosts keep the hermetic
             // `MockCodegen` path.
             let real_llvm = std::env::var("GLYIM_TEST_REAL_LLVM").is_ok();
-            Arc::new(PipelineCompiler::new(Arc::new(
-                crate::mock::MockCodegen::new(),
-            )).with_real_llvm_if(real_llvm))
+            Arc::new(
+                PipelineCompiler::new(Arc::new(crate::mock::MockCodegen::new()))
+                    .with_real_llvm_if(real_llvm),
+            )
         } else {
             Arc::new(FrontendOnlyCompiler)
         };
@@ -88,19 +89,19 @@ impl TestExecutor {
         }
     }
 
-/// with_target_triple.
+    /// with_target_triple.
     pub fn with_target_triple(mut self, triple: impl Into<String>) -> Self {
         self.target_triple = triple.into();
         self
     }
 
-/// with_compiler.
+    /// with_compiler.
     pub fn with_compiler(mut self, compiler: Arc<dyn TestCompiler>) -> Self {
         self.compiler = compiler;
         self
     }
 
-/// run_sequential.
+    /// run_sequential.
     pub fn run_sequential(&self, tests: &[Arc<DiscoveredTest>]) -> Vec<TestResult> {
         tests
             .iter()
@@ -119,7 +120,7 @@ impl TestExecutor {
             .collect()
     }
 
-/// run_parallel.
+    /// run_parallel.
     pub fn run_parallel(&self, tests: &[Arc<DiscoveredTest>]) -> Vec<TestResult> {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(self.max_concurrent)

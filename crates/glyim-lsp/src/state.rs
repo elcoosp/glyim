@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 /// LspState.
 pub struct LspState {
-/// Struct.
+    /// Struct.
     pub db: Database,
     open_files: HashMap<PathBuf, (FileId, i32)>,
     analysis: Arc<AnalysisDatabase>,
@@ -17,7 +17,7 @@ pub struct LspState {
 }
 
 impl LspState {
-/// new.
+    /// new.
     pub fn new(db: Database) -> Self {
         let analysis = Arc::new(AnalysisDatabase::new());
         Self {
@@ -28,7 +28,7 @@ impl LspState {
         }
     }
 
-/// start_driver.
+    /// start_driver.
     pub fn start_driver(&mut self, cache_dir: PathBuf) {
         if self.driver_tx.is_some() {
             return;
@@ -39,7 +39,7 @@ impl LspState {
         self.driver_tx = Some(tx);
     }
 
-/// did_open.
+    /// did_open.
     pub fn did_open(&mut self, path: PathBuf, content: String, version: i32) {
         let file_id = self
             .db
@@ -55,7 +55,7 @@ impl LspState {
         }
     }
 
-/// did_change.
+    /// did_change.
     pub fn did_change(&mut self, path: PathBuf, content: String, version: i32) {
         if let Some(&(file_id, _)) = self.open_files.get(&path) {
             self.db
@@ -74,7 +74,7 @@ impl LspState {
         }
     }
 
-/// did_close.
+    /// did_close.
     pub fn did_close(&mut self, path: &PathBuf) {
         if let Some(tx) = &self.driver_tx {
             let _ = tx.try_send(AnalysisMessage::FileClosed { path: path.clone() });
@@ -82,13 +82,13 @@ impl LspState {
         self.open_files.remove(path);
     }
 
-/// file_content.
+    /// file_content.
     pub fn file_content(&self, path: &PathBuf) -> Option<String> {
         let &(file_id, _) = self.open_files.get(path)?;
         self.db.vfs().file_content(file_id).map(|s| s.to_string())
     }
 
-/// diagnostics_for_file.
+    /// diagnostics_for_file.
     pub fn diagnostics_for_file(&self, path: &PathBuf) -> Vec<GlyimDiagnostic> {
         let file_id = self.file_id(path);
         if let Some(file_id) = file_id {
@@ -103,7 +103,7 @@ impl LspState {
         Vec::new()
     }
 
-/// file_id.
+    /// file_id.
     pub fn file_id(&self, path: &PathBuf) -> Option<FileId> {
         self.open_files.get(path).map(|&(id, _)| id)
     }

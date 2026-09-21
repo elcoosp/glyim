@@ -17,7 +17,7 @@ enum PredicateMatcher {
 }
 
 impl MockSolver {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             responses: Vec::new(),
@@ -26,12 +26,12 @@ impl MockSolver {
             iterator_next_override: None,
         }
     }
-/// default_result.
+    /// default_result.
     pub fn default_result(mut self, result: SolverResult) -> Self {
         self.default = result;
         self
     }
-/// respond_for_trait.
+    /// respond_for_trait.
     pub fn respond_for_trait(
         mut self,
         id: glyim_core::def_id::TraitDefId,
@@ -40,7 +40,7 @@ impl MockSolver {
         self.responses.push((PredicateMatcher::TraitId(id), result));
         self
     }
-/// respond_for_any.
+    /// respond_for_any.
     pub fn respond_for_any(mut self, result: SolverResult) -> Self {
         self.responses.push((PredicateMatcher::Any, result));
         self
@@ -56,11 +56,11 @@ impl MockSolver {
         self.iterator_next_override = Some(Box::new(f));
         self
     }
-/// call_count.
+    /// call_count.
     pub fn call_count(&self) -> usize {
         self.calls.len()
     }
-/// calls.
+    /// calls.
     pub fn calls(&self) -> &[TraitPredicate] {
         &self.calls
     }
@@ -129,7 +129,10 @@ mod tests {
         let solver = MockSolver::new().with_iterator_next(move |_iter, _elem| Some(info.clone()));
         let mut ctx = glyim_type::TyCtxMut::new(glyim_core::interner::Interner::new());
         let got = TraitSolver::iterator_next_info(&solver, &mut ctx, Ty::UNIT, Ty::UNIT);
-        assert!(got.is_some(), "iterator_next_info should return the override's Some(info)");
+        assert!(
+            got.is_some(),
+            "iterator_next_info should return the override's Some(info)"
+        );
         assert_eq!(got.unwrap().fn_def_id, FnDefId::from_raw(0));
     }
 

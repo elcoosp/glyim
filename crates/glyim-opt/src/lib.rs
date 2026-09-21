@@ -37,7 +37,7 @@ mod validate;
 #[derive(Clone, Debug)]
 /// Optimized.
 pub struct Optimized {
-/// Struct.
+    /// Struct.
     pub body: Body,
 }
 

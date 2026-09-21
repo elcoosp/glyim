@@ -77,7 +77,10 @@ fn o1_folds_integer_constants() {
     assert_eq!(bc[0], OP_LOAD_CONST);
     let folded = i64::from_le_bytes(bc[1..9].try_into().unwrap());
     assert_eq!(folded, 8);
-    assert_eq!(bc[9], OP_STORE_LOCAL, "no OP_ADD should remain after folding");
+    assert_eq!(
+        bc[9], OP_STORE_LOCAL,
+        "no OP_ADD should remain after folding"
+    );
 }
 
 /// At O1 the peephole pass runs but must preserve semantics: the executable

@@ -24,7 +24,7 @@ fn mk_struct_def(ctx: &mut TyCtxMut, fields: Vec<(&str, Ty)>) -> AdtDef {
     }
     variant_defs.push(VariantDef {
         name: ctx.resolver().intern(""),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+        style: glyim_type::adt_def::VariantStyle::Unit,
         fields: variant_fields,
     });
     AdtDef {

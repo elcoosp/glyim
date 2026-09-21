@@ -22,7 +22,7 @@
     clippy::needless_lifetimes,
     clippy::collapsible_if
 )]
-use glyim_core::{primitives::TargetInfo, BinOp, CrateId, DefId, LocalDefId, UnOp};
+use glyim_core::{BinOp, CrateId, DefId, LocalDefId, UnOp, primitives::TargetInfo};
 use glyim_layout::{LayoutComputer, SimpleLayoutComputer};
 use glyim_mir::*;
 use glyim_type::{AdtKind, FieldIdx, Substitution, Ty, TyCtx, TyKind};
@@ -50,9 +50,9 @@ pub struct Interpreter<'tcx> {
     /// surfacing `InterpError::Unwind` at the top — it never resumes a caller's
     /// normal continuation for a propagating panic.
     pub panics_unwind: bool,
-/// Struct.
+    /// Struct.
     pub step_limit: usize,
-/// Struct.
+    /// Struct.
     pub recursion_limit: usize,
     step_count: usize,
     recursion_depth: usize,
@@ -105,7 +105,7 @@ struct CallFrame {
 }
 
 impl<'tcx> Interpreter<'tcx> {
-/// new.
+    /// new.
     pub fn new(tcx: &'tcx TyCtx) -> Self {
         Interpreter {
             tcx,
@@ -130,7 +130,7 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
-/// with_step_limit.
+    /// with_step_limit.
     pub fn with_step_limit(mut self, limit: usize) -> Self {
         self.step_limit = limit;
         self
@@ -145,7 +145,7 @@ impl<'tcx> Interpreter<'tcx> {
         self.get_element_size(ty)
     }
 
-/// with_recursion_limit.
+    /// with_recursion_limit.
     pub fn with_recursion_limit(mut self, limit: usize) -> Self {
         self.recursion_limit = limit;
         self
@@ -160,32 +160,32 @@ impl<'tcx> Interpreter<'tcx> {
         self
     }
 
-/// add_function.
+    /// add_function.
     pub fn add_function(&mut self, def_id: DefId, body: Body) {
         self.function_table.insert(def_id, body);
     }
 
-/// step_limit.
+    /// step_limit.
     pub fn step_limit(&self) -> usize {
         self.step_limit
     }
 
-/// recursion_limit.
-pub fn recursion_limit(&self) -> usize {
-    self.recursion_limit
-}
+    /// recursion_limit.
+    pub fn recursion_limit(&self) -> usize {
+        self.recursion_limit
+    }
 
-/// recursion_depth.
-pub fn recursion_depth(&self) -> usize {
-    self.recursion_depth
-}
+    /// recursion_depth.
+    pub fn recursion_depth(&self) -> usize {
+        self.recursion_depth
+    }
 
-/// get_local_value.
+    /// get_local_value.
     pub fn get_local_value(&self, local: LocalIdx) -> Option<&InterpValue> {
         self.locals.get(local.index())?.as_ref()
     }
 
-/// get_return_value.
+    /// get_return_value.
     pub fn get_return_value(&self) -> Option<InterpValue> {
         self.locals.first().and_then(|opt| opt.clone())
     }
@@ -205,7 +205,8 @@ pub fn recursion_depth(&self) -> usize {
         if frame == self.frame_depth {
             Some(&self.locals)
         } else if frame < self.call_stack.len()
-            && self.call_stack[frame].generation == self.frame_generations.get(frame).copied().unwrap_or(0)
+            && self.call_stack[frame].generation
+                == self.frame_generations.get(frame).copied().unwrap_or(0)
         {
             Some(&self.call_stack[frame].locals)
         } else {
@@ -224,7 +225,8 @@ pub fn recursion_depth(&self) -> usize {
         if frame == self.frame_depth {
             Some(&self.local_decls)
         } else if frame < self.call_stack.len()
-            && self.call_stack[frame].generation == self.frame_generations.get(frame).copied().unwrap_or(0)
+            && self.call_stack[frame].generation
+                == self.frame_generations.get(frame).copied().unwrap_or(0)
         {
             Some(self.call_stack[frame].body.locals.as_slice())
         } else {
@@ -234,14 +236,12 @@ pub fn recursion_depth(&self) -> usize {
 
     /// Mutable counterpart of [`Self::locals_for_ref_frame`] for writes through
     /// a `Ref` (e.g. `*r = v` or `*r.field = v).
-    fn write_target_locals_mut(
-        &mut self,
-        frame: usize,
-    ) -> Option<&mut Vec<Option<InterpValue>>> {
+    fn write_target_locals_mut(&mut self, frame: usize) -> Option<&mut Vec<Option<InterpValue>>> {
         if frame == self.frame_depth {
             Some(&mut self.locals)
         } else if frame < self.call_stack.len()
-            && self.call_stack[frame].generation == self.frame_generations.get(frame).copied().unwrap_or(0)
+            && self.call_stack[frame].generation
+                == self.frame_generations.get(frame).copied().unwrap_or(0)
         {
             Some(&mut self.call_stack[frame].locals)
         } else {
@@ -263,7 +263,7 @@ pub fn recursion_depth(&self) -> usize {
             .ok_or_else(|| InterpError::Panic("const-eval produced no return value".into()))
     }
 
-/// run_body.
+    /// run_body.
     pub fn run_body(&mut self, body: &Body) -> InterpResult<()> {
         self.current_body_owner = Some(body.owner);
         self.current_arg_count = body.arg_count;
@@ -393,20 +393,22 @@ pub fn recursion_depth(&self) -> usize {
                     // rest of the call machinery (including `resolve_callee`)
                     // sees a static function.
                     let func = if let Operand::Constant(MirConst {
-                        kind: MirConstKind::VirtualMethod { trait_def_id, method_name },
+                        kind:
+                            MirConstKind::VirtualMethod {
+                                trait_def_id,
+                                method_name,
+                            },
                         span,
                         ..
                     }) = &func
                     {
                         if let Some(recv_ty) = args.first().and_then(|a| self.operand_ty(a)) {
-                            let resolved = self.tcx.resolve_trait_method(*trait_def_id, recv_ty, *method_name);
-                            if let Some(fn_def_id) = resolved
-                            {
+                            let resolved =
+                                self.tcx
+                                    .resolve_trait_method(*trait_def_id, recv_ty, *method_name);
+                            if let Some(fn_def_id) = resolved {
                                 Operand::Constant(MirConst {
-                                    kind: MirConstKind::Fn(
-                                        fn_def_id,
-                                        Substitution::empty(),
-                                    ),
+                                    kind: MirConstKind::Fn(fn_def_id, Substitution::empty()),
                                     ty: recv_ty,
                                     span: *span,
                                 })
@@ -736,9 +738,7 @@ pub fn recursion_depth(&self) -> usize {
                     CastKind::PtrToPtr | CastKind::FnPtrToPtr => Ok(val),
                     CastKind::PtrToInt => match val {
                         InterpValue::Ref { frame, local } => {
-                            Ok(InterpValue::Uint(
-                                ((frame as u128) << 48) | (local as u128),
-                            ))
+                            Ok(InterpValue::Uint(((frame as u128) << 48) | (local as u128)))
                         }
                         _ => Err(InterpError::Panic("PtrToInt on non-reference".into())),
                     },
@@ -813,9 +813,9 @@ pub fn recursion_depth(&self) -> usize {
             MirConstKind::Error => Err(InterpError::Panic("Error const encountered".into())),
             // Devirtualized at the `Call` terminator before being evaluated as a
             // value; should never be reached as an operand constant.
-            MirConstKind::VirtualMethod { .. } => {
-                Err(InterpError::Panic("VirtualMethod const reached eval_const".into()))
-            }
+            MirConstKind::VirtualMethod { .. } => Err(InterpError::Panic(
+                "VirtualMethod const reached eval_const".into(),
+            )),
         }
     }
 
@@ -1013,16 +1013,18 @@ pub fn recursion_depth(&self) -> usize {
                 ProjectionElem::Deref => match val {
                     InterpValue::Ref { frame, local } => {
                         let target = local;
-                        let frame_locals = self
-                            .locals_for_ref_frame(frame)
+                        let frame_locals = self.locals_for_ref_frame(frame).ok_or_else(|| {
+                            InterpError::Panic(format!("deref of Ref from dead frame {frame}"))
+                        })?;
+                        val = frame_locals
+                            .get(target)
+                            .and_then(|opt| opt.as_ref())
+                            .cloned()
                             .ok_or_else(|| {
                                 InterpError::Panic(format!(
-                                    "deref of Ref from dead frame {frame}"
+                                    "deref of uninitialized local {target} (frame {frame})"
                                 ))
                             })?;
-                        val = frame_locals.get(target).and_then(|opt| opt.as_ref()).cloned().ok_or_else(|| {
-                            InterpError::Panic(format!("deref of uninitialized local {target} (frame {frame})"))
-                        })?;
                         // Update current_ty from the *referenced* frame's decls,
                         // not `self.local_decls` (which only holds the current
                         // frame). A cross-frame `&mut self` ref would otherwise
@@ -1050,14 +1052,15 @@ pub fn recursion_depth(&self) -> usize {
                             // an enum must therefore skip the discriminant tag,
                             // exactly like an explicit `Downcast` would. Structs
                             // and tuples have no tag, so they index directly.
-                            let is_enum = if let TyKind::Adt(adt_id, _) = self.tcx.ty_kind(current_ty) {
-                                self.tcx
-                                    .adt_def(*adt_id)
-                                    .map(|d| d.kind == AdtKind::Enum)
-                                    .unwrap_or(false)
-                            } else {
-                                false
-                            };
+                            let is_enum =
+                                if let TyKind::Adt(adt_id, _) = self.tcx.ty_kind(current_ty) {
+                                    self.tcx
+                                        .adt_def(*adt_id)
+                                        .map(|d| d.kind == AdtKind::Enum)
+                                        .unwrap_or(false)
+                                } else {
+                                    false
+                                };
                             let adjusted = if is_enum { fi + 1 } else { fi };
                             val = fields.get(adjusted).cloned().ok_or_else(|| {
                                 InterpError::Panic(format!(
@@ -1225,10 +1228,7 @@ pub fn recursion_depth(&self) -> usize {
                         // We'll just use the index start as a placeholder.
                         InterpValue::Ref { frame: 0, local: 0 }
                     };
-                    val = InterpValue::Aggregate(vec![
-                        data_ptr,
-                        InterpValue::Int(new_len as i128),
-                    ]);
+                    val = InterpValue::Aggregate(vec![data_ptr, InterpValue::Int(new_len as i128)]);
                 }
             }
         }
@@ -1305,9 +1305,10 @@ pub fn recursion_depth(&self) -> usize {
                         ));
                     }
                 };
-                let target_frame_locals = self
-                    .write_target_locals_mut(target.0)
-                    .ok_or_else(|| InterpError::Panic(format!("write through ref to dead frame {}", target.0)))?;
+                let target_frame_locals =
+                    self.write_target_locals_mut(target.0).ok_or_else(|| {
+                        InterpError::Panic(format!("write through ref to dead frame {}", target.0))
+                    })?;
                 if target.1 >= target_frame_locals.len() {
                     return Err(InterpError::Panic(format!(
                         "write through ref to invalid local {}",
@@ -1361,11 +1362,9 @@ pub fn recursion_depth(&self) -> usize {
                             self.write_through_projections_with_locals(inner, rest, val)?;
                         Ok(InterpValue::Aggregate(fields))
                     }
-                    _ => {
-                        Err(InterpError::Panic(
-                            "field projection on non-aggregate".into(),
-                        ))
-                    }
+                    _ => Err(InterpError::Panic(
+                        "field projection on non-aggregate".into(),
+                    )),
                 }
             }
             ProjectionElem::Index(index_local) => {
@@ -1443,17 +1442,16 @@ pub fn recursion_depth(&self) -> usize {
                     )),
                 }
             }
-            ProjectionElem::Subslice {
-                from,
-                to,
-                from_end,
-            } => {
+            ProjectionElem::Subslice { from, to, from_end } => {
                 debug_assert!(
                     rest.is_empty(),
                     "Subslice must be terminal (see slice_desugar invariant)"
                 );
                 match (base, val) {
-                    (InterpValue::Aggregate(mut elems), InterpValue::Aggregate(new_slice_elems)) => {
+                    (
+                        InterpValue::Aggregate(mut elems),
+                        InterpValue::Aggregate(new_slice_elems),
+                    ) => {
                         let len = elems.len() as u64;
                         let end = if *from_end {
                             len.checked_sub(*to).ok_or_else(|| {
@@ -1465,9 +1463,7 @@ pub fn recursion_depth(&self) -> usize {
                             *to
                         } as usize;
                         let (from, end) = (*from as usize, end);
-                        if from > end
-                            || end > elems.len()
-                            || (end - from) != new_slice_elems.len()
+                        if from > end || end > elems.len() || (end - from) != new_slice_elems.len()
                         {
                             return Err(InterpError::Panic(format!(
                                 "Subslice write range [{from}, {end}) doesn't match value length {}",
@@ -1485,7 +1481,11 @@ pub fn recursion_depth(&self) -> usize {
         }
     }
 
-    fn resolve_callee(&self, func: &Operand, args: &[Operand]) -> InterpResult<(DefId, Vec<InterpValue>)> {
+    fn resolve_callee(
+        &self,
+        func: &Operand,
+        args: &[Operand],
+    ) -> InterpResult<(DefId, Vec<InterpValue>)> {
         match func {
             Operand::Constant(c) => match &c.kind {
                 MirConstKind::Fn(def_id, _) => {
@@ -1500,10 +1500,16 @@ pub fn recursion_depth(&self) -> usize {
                     DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(*id as u32)),
                     Vec::new(),
                 )),
-                MirConstKind::VirtualMethod { trait_def_id, method_name } => {
+                MirConstKind::VirtualMethod {
+                    trait_def_id,
+                    method_name,
+                } => {
                     let recv_ty = args.first().and_then(|a| self.operand_ty(a));
                     if let Some(recv_ty) = recv_ty {
-                        if let Some(fn_def_id) = self.tcx.resolve_trait_method(*trait_def_id, recv_ty, *method_name) {
+                        if let Some(fn_def_id) =
+                            self.tcx
+                                .resolve_trait_method(*trait_def_id, recv_ty, *method_name)
+                        {
                             let crate_id = CrateId::from_raw(0);
                             let local_def_id = LocalDefId::from_raw(fn_def_id.to_raw());
                             return Ok((DefId::new(crate_id, local_def_id), Vec::new()));
@@ -1738,9 +1744,7 @@ pub fn recursion_depth(&self) -> usize {
             .layout_of(ty)
             .map(|l| l.size.0 as usize)
             .map_err(|e| {
-                InterpError::Panic(format!(
-                    "cannot size type for pointer arithmetic: {e:?}"
-                ))
+                InterpError::Panic(format!("cannot size type for pointer arithmetic: {e:?}"))
             })
     }
 }

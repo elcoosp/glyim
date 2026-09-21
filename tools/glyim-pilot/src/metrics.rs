@@ -1,32 +1,32 @@
 /// names.
 pub mod names {
-/// OPS_READY_RECEIVED.
+    /// OPS_READY_RECEIVED.
     pub const OPS_READY_RECEIVED: &str = "ops_ready_received";
-/// OPS_APPLIED.
+    /// OPS_APPLIED.
     pub const OPS_APPLIED: &str = "ops_applied";
-/// TURN_PROCESSED.
+    /// TURN_PROCESSED.
     pub const TURN_PROCESSED: &str = "turn_processed";
-/// TURN_PANIC.
+    /// TURN_PANIC.
     pub const TURN_PANIC: &str = "turn_panic";
-/// ORCHESTRATOR_ERROR.
+    /// ORCHESTRATOR_ERROR.
     pub const ORCHESTRATOR_ERROR: &str = "orchestrator_error";
-/// STREAM_COMPLETE.
+    /// STREAM_COMPLETE.
     pub const STREAM_COMPLETE: &str = "stream_complete";
-/// EXTENSION_ERROR.
+    /// EXTENSION_ERROR.
     pub const EXTENSION_ERROR: &str = "extension_error";
-/// COMMIT_DECISION.
+    /// COMMIT_DECISION.
     pub const COMMIT_DECISION: &str = "commit_decision";
-/// DONE_PIPELINE.
+    /// DONE_PIPELINE.
     pub const DONE_PIPELINE: &str = "done_pipeline";
-/// PR_CREATED.
+    /// PR_CREATED.
     pub const PR_CREATED: &str = "pr_created";
 }
 
 /// Metrics.
 pub trait Metrics: Send + Sync {
-/// increment_counter.
+    /// increment_counter.
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]);
-/// record_histogram.
+    /// record_histogram.
     fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]);
 }
 

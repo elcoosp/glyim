@@ -4,15 +4,17 @@ use crate::const_val::*;
 use crate::display::TypeLookup;
 use crate::flags::*;
 use crate::fn_sig::FnSig;
+use crate::lang_items::{LangItem, LangItems};
 use crate::region::*;
 use crate::substitution::*;
 use crate::ty::*;
 use crate::type_arena::TypeArena;
 use glyim_core::arena::IndexVec;
-use glyim_core::def_id::{AdtId, ClosureId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, OpaqueTyId};
+use glyim_core::def_id::{
+    AdtId, ClosureId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, OpaqueTyId,
+};
 use glyim_core::interner::{Interner, Name};
 use glyim_core::primitives::{IntTy, Mutability, UintTy};
-use crate::lang_items::{LangItem, LangItems};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -87,8 +89,7 @@ pub struct TyCtxMut {
     /// loop from `HIR ImplItem.associated_types` so that `Self::Output` /
     /// `Type::Output` can be resolved to its defining type (plan unstub-5 P5).
     /// Resolved via `resolve_associated_type`.
-    pub(crate) impl_assoc_types:
-        HashMap<(Ty, glyim_core::def_id::TraitDefId), Vec<(Name, Ty)>>,
+    pub(crate) impl_assoc_types: HashMap<(Ty, glyim_core::def_id::TraitDefId), Vec<(Name, Ty)>>,
 
     /// Parameter-name → trait-def-ids for generic params bound by
     /// `T: Trait` (inline `fn f<T: Trait>` or `where T: Trait`). Populated
@@ -138,7 +139,7 @@ pub struct TyCtxMut {
 }
 
 impl TyCtxMut {
-/// new.
+    /// new.
     pub fn new(resolver: Interner) -> Self {
         // One canonical type arena per compilation, leaked so its handles stay
         // valid across every TyCtx/TyCtxMut derived from this one.
@@ -306,12 +307,12 @@ impl TyCtxMut {
         self.arena.alloc_ty(kind, flags)
     }
 
-/// alloc_ty.
+    /// alloc_ty.
     pub fn alloc_ty(&mut self, kind: TyKind) -> Ty {
         self.alloc_ty_internal(kind)
     }
 
-/// ty_kind.
+    /// ty_kind.
     pub fn ty_kind(&self, ty: Ty) -> &TyKind {
         self.arena.ty_kind(ty)
     }
@@ -322,22 +323,22 @@ impl TyCtxMut {
         self.freeze().deref_ty(ty)
     }
 
-/// ty_flags.
+    /// ty_flags.
     pub fn ty_flags(&self, ty: Ty) -> TypeFlags {
         self.arena.ty_flags(ty)
     }
 
-/// intern_substitution.
+    /// intern_substitution.
     pub fn intern_substitution(&mut self, args: Vec<GenericArg>) -> Substitution {
         self.arena.intern_substitution(args)
     }
 
-/// substitution_args.
+    /// substitution_args.
     pub fn substitution_args(&self, sub: Substitution) -> &[GenericArg] {
         self.arena.substitution_args(sub)
     }
 
-/// mk_ty.
+    /// mk_ty.
     pub fn mk_ty(&mut self, kind: TyKind) -> Ty {
         self.alloc_ty(kind)
     }
@@ -354,7 +355,7 @@ impl TyCtxMut {
             return ty;
         }
         let kind = self.ty_kind(ty).clone();
-        
+
         match kind {
             TyKind::Param(pt) => {
                 if let Some(repl) = subst.get(&pt.index) {
@@ -502,7 +503,8 @@ impl TyCtxMut {
                     // `new_self` (e.g. `Ready<i32>` -> `T := i32`), otherwise the
                     // projection normalizes to a dangling `Param` and unification
                     // against the caller's concrete type fails.
-                    let impl_subst = self.impl_param_subst(new_self, trait_ref.def_id, proj.item_name);
+                    let impl_subst =
+                        self.impl_param_subst(new_self, trait_ref.def_id, proj.item_name);
                     if !impl_subst.is_empty() {
                         self.subst_ty(resolved, &impl_subst)
                     } else {
@@ -538,57 +540,57 @@ impl TyCtxMut {
         }
     }
 
-/// mk_ref.
+    /// mk_ref.
     pub fn mk_ref(&mut self, region: Region, ty: Ty, mutability: Mutability) -> Ty {
         self.mk_ty(TyKind::Ref(region, ty, mutability))
     }
 
-/// mk_adt.
+    /// mk_adt.
     pub fn mk_adt(&mut self, adt_id: AdtId, substs: Substitution) -> Ty {
         self.mk_ty(TyKind::Adt(adt_id, substs))
     }
 
-/// mk_tuple.
+    /// mk_tuple.
     pub fn mk_tuple(&mut self, substs: Substitution) -> Ty {
         self.mk_ty(TyKind::Tuple(substs))
     }
 
-/// mk_fn_ptr.
+    /// mk_fn_ptr.
     pub fn mk_fn_ptr(&mut self, sig: FnSig) -> Ty {
         self.mk_ty(TyKind::FnPtr(sig))
     }
 
-/// error_ty.
+    /// error_ty.
     pub fn error_ty(&self) -> Ty {
         Ty::ERROR
     }
 
-/// never_ty.
+    /// never_ty.
     pub fn never_ty(&self) -> Ty {
         Ty::NEVER
     }
 
-/// unit_ty.
+    /// unit_ty.
     pub fn unit_ty(&self) -> Ty {
         Ty::UNIT
     }
 
-/// bool_ty.
+    /// bool_ty.
     pub fn bool_ty(&self) -> Ty {
         Ty::BOOL
     }
 
-/// resolver.
+    /// resolver.
     pub fn resolver(&self) -> &Interner {
         &self.resolver
     }
 
-/// name_str.
+    /// name_str.
     pub fn name_str(&self, name: Name) -> &str {
         self.resolver.resolve(name)
     }
 
-/// is_copy.
+    /// is_copy.
     pub fn is_copy(&self, ty: Ty) -> bool {
         match self.ty_kind(ty) {
             TyKind::Bool | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Char => {
@@ -613,39 +615,39 @@ impl TyCtxMut {
         }
     }
 
-/// new_region_var.
+    /// new_region_var.
     pub fn new_region_var(&mut self, initial: Region) -> RegionVid {
         self.regions.push(initial)
     }
 
-/// region_var.
+    /// region_var.
     pub fn region_var(&self, vid: RegionVid) -> &Region {
         &self.regions[vid]
     }
 
-/// region_var_count.
+    /// region_var_count.
     pub fn region_var_count(&self) -> usize {
         self.regions.len()
     }
 
-/// register_adt_repr.
+    /// register_adt_repr.
     pub fn register_adt_repr(&mut self, adt_id: AdtId, field_tys: Vec<Ty>) {
         self.adt_reprs.insert(adt_id, AdtRepr::new(field_tys));
     }
 
-/// register_negative_impl.
+    /// register_negative_impl.
     pub fn register_negative_impl(&mut self, adt_id: AdtId, auto_trait: AutoTrait) {
         self.auto_trait_registry
             .register_negative_impl(adt_id, auto_trait);
     }
 
-/// register_manual_impl.
+    /// register_manual_impl.
     pub fn register_manual_impl(&mut self, adt_id: AdtId, auto_trait: AutoTrait) {
         self.auto_trait_registry
             .register_manual_impl(adt_id, auto_trait);
     }
 
-/// register_deref_impl (Phase 5 GLYIM_DESTUB_PLAN).
+    /// register_deref_impl (Phase 5 GLYIM_DESTUB_PLAN).
     pub fn register_deref_impl(&mut self, self_ty: Ty, target_ty: Ty) {
         self.deref_registry.register_deref_impl(self_ty, target_ty);
         // Also register a generic template keyed by the self ADT id so that
@@ -658,7 +660,7 @@ impl TyCtxMut {
         }
     }
 
-/// register_adt.
+    /// register_adt.
     pub fn register_adt(&mut self, id: AdtId, def: AdtDef) {
         // Compute variant types from variants
         let variant_tys: Vec<Ty> = def
@@ -740,11 +742,11 @@ impl TyCtxMut {
             fields: field_defs.clone(),
             variants: vec![VariantDef {
                 name: self.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: field_defs,
             }],
             generic_params: vec![],
-};
+        };
         self.register_adt(id, def);
         // Record the 1:1 mapping from the synthetic ClosureId (derived from the
         // ADT id) to the ADT so the DWARF debug pass can recover per-capture
@@ -753,7 +755,7 @@ impl TyCtxMut {
             .insert(ClosureId::from_raw(id.to_raw()), id);
         id
     }
-/// adt_def.
+    /// adt_def.
     pub fn adt_def(&self, id: AdtId) -> Option<&AdtDef> {
         self.adt_defs.get(&id)
     }
@@ -792,7 +794,7 @@ impl TyCtxMut {
             .unwrap_or(0)
     }
 
-/// field_index.
+    /// field_index.
     pub fn field_index(&self, adt_id: AdtId, field_name: Name) -> Option<usize> {
         if let Some(def) = self.adt_defs.get(&adt_id) {
             for (i, field) in def.fields.iter_enumerated() {
@@ -804,7 +806,7 @@ impl TyCtxMut {
         None
     }
 
-/// field_ty.
+    /// field_ty.
     pub fn field_ty(&self, adt_id: AdtId, field_idx: usize) -> Ty {
         if let Some(def) = self.adt_defs.get(&adt_id) {
             return def
@@ -824,7 +826,7 @@ impl TyCtxMut {
         self.error_ty()
     }
 
-/// register_fn_sig.
+    /// register_fn_sig.
     pub fn register_fn_sig(&mut self, def_id: FnDefId, sig: FnSig) {
         self.fn_sigs.insert(def_id, sig);
     }
@@ -851,7 +853,8 @@ impl TyCtxMut {
         trait_def_id: glyim_core::def_id::TraitDefId,
         assoc_types: Vec<(Name, Ty)>,
     ) {
-        self.impl_assoc_types.insert((self_ty, trait_def_id), assoc_types);
+        self.impl_assoc_types
+            .insert((self_ty, trait_def_id), assoc_types);
     }
 
     /// Reverse-lookup variant of `resolve_associated_type` that finds the entry
@@ -863,11 +866,7 @@ impl TyCtxMut {
     /// differing only in their `Substitution` index) still resolve. This is the
     /// correct semantics: an impl's associated type is keyed by the self type's
     /// ADT, not by a specific substitution.
-    pub fn resolve_associated_type_by_self_ty(
-        &self,
-        self_ty: Ty,
-        assoc_name: Name,
-    ) -> Option<Ty> {
+    pub fn resolve_associated_type_by_self_ty(&self, self_ty: Ty, assoc_name: Name) -> Option<Ty> {
         let self_adt = match self.ty_kind(self_ty) {
             TyKind::Adt(adt_id, _) => Some(*adt_id),
             _ => None,
@@ -1024,7 +1023,10 @@ impl TyCtxMut {
     /// during `typeck_crate` from `generic_params` / `where_clauses` (plan
     /// unstub-5 P5). Used for associated-type projection and method dispatch
     /// on a generic receiver.
-    pub fn param_bounds_for(&self, name: Name) -> Option<&[(Name, glyim_core::def_id::TraitDefId)]> {
+    pub fn param_bounds_for(
+        &self,
+        name: Name,
+    ) -> Option<&[(Name, glyim_core::def_id::TraitDefId)]> {
         self.param_bounds.get(&name).map(|v| v.as_slice())
     }
 
@@ -1042,7 +1044,10 @@ impl TyCtxMut {
     /// Find a registered trait definition that declares an associated type
     /// with the given name. Used to resolve `Self::Item` to a projection
     /// against the enclosing trait (plan unstub-5 P5). Returns the first match.
-    pub fn find_trait_with_assoc_type(&self, assoc_name: Name) -> Option<glyim_core::def_id::TraitDefId> {
+    pub fn find_trait_with_assoc_type(
+        &self,
+        assoc_name: Name,
+    ) -> Option<glyim_core::def_id::TraitDefId> {
         self.trait_defs
             .iter()
             .find(|(_, def)| def.associated_types.contains(&assoc_name))
@@ -1054,7 +1059,7 @@ impl TyCtxMut {
         self.trait_defs.get(&id)
     }
 
-/// fn_sig.
+    /// fn_sig.
     pub fn fn_sig(&self, def_id: FnDefId) -> Option<&FnSig> {
         self.fn_sigs.get(&def_id)
     }
@@ -1064,12 +1069,12 @@ impl TyCtxMut {
         self.const_tys.get(&def_id).copied()
     }
 
-/// register_closure_sig.
+    /// register_closure_sig.
     pub fn register_closure_sig(&mut self, closure_id: ClosureId, sig: FnSig) {
         self.closure_sigs.insert(closure_id, sig);
     }
 
-/// closure_sig.
+    /// closure_sig.
     pub fn closure_sig(&self, closure_id: ClosureId) -> Option<&FnSig> {
         self.closure_sigs.get(&closure_id)
     }
@@ -1081,17 +1086,17 @@ impl TyCtxMut {
         self.closure_adt_map.get(&closure_id).copied()
     }
 
-/// register_body_ty.
+    /// register_body_ty.
     pub fn register_body_ty(&mut self, def_id: LocalDefId, ty: Ty) {
         self.body_tys.insert(def_id, ty);
     }
 
-/// body_ty.
+    /// body_ty.
     pub fn body_ty(&self, def_id: LocalDefId) -> Option<Ty> {
         self.body_tys.get(&def_id).copied()
     }
 
-/// freeze.
+    /// freeze.
     pub fn freeze(&self) -> super::ty_ctx::TyCtx {
         super::ty_ctx::TyCtx {
             arena: self.arena,
@@ -1119,7 +1124,7 @@ impl TyCtxMut {
         }
     }
 
-/// freeze_owned.
+    /// freeze_owned.
     pub fn freeze_owned(self) -> super::ty_ctx::TyCtx {
         super::ty_ctx::TyCtx {
             arena: self.arena,
@@ -1152,7 +1157,7 @@ impl TyCtxMut {
         &mut self.lang_items
     }
 
-/// mark_adt_interior_mutable.
+    /// mark_adt_interior_mutable.
     pub fn mark_adt_interior_mutable(&mut self, adt_id: AdtId) {
         self.interior_mutable_adt_ids.insert(adt_id);
         self.interior_mutability_cache.insert(adt_id, true);
@@ -1289,41 +1294,46 @@ impl TyCtxMut {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: this.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
 
         // Register Range<T> (start, end) - ID 1000
         let def = make_struct_def(vec![t_var, t_var], self);
         self.register_adt(AdtId::from_raw(1000), def);
-        self.lang_items.register(LangItem::Range, def_id(1000))
+        self.lang_items
+            .register(LangItem::Range, def_id(1000))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeInclusive<T> (start, end) - ID 1001
         let def = make_struct_def(vec![t_var, t_var], self);
         self.register_adt(AdtId::from_raw(1001), def);
-        self.lang_items.register(LangItem::RangeInclusive, def_id(1001))
+        self.lang_items
+            .register(LangItem::RangeInclusive, def_id(1001))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeFrom<T> (start) - ID 1002
         let def = make_struct_def(vec![t_var], self);
         self.register_adt(AdtId::from_raw(1002), def);
-        self.lang_items.register(LangItem::RangeFrom, def_id(1002))
+        self.lang_items
+            .register(LangItem::RangeFrom, def_id(1002))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeTo<T> (end) - ID 1003
         let def = make_struct_def(vec![t_var], self);
         self.register_adt(AdtId::from_raw(1003), def);
-        self.lang_items.register(LangItem::RangeTo, def_id(1003))
+        self.lang_items
+            .register(LangItem::RangeTo, def_id(1003))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeToInclusive<T> (end) - ID 1004
         let def = make_struct_def(vec![t_var], self);
         self.register_adt(AdtId::from_raw(1004), def);
-        self.lang_items.register(LangItem::RangeToInclusive, def_id(1004))
+        self.lang_items
+            .register(LangItem::RangeToInclusive, def_id(1004))
             .expect("builtin lang item registration must not duplicate");
 
         // Register UnsafeCell<T> - ID 1005
@@ -1345,11 +1355,11 @@ impl TyCtxMut {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: self.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         self.register_adt(AdtId::from_raw(1005), unsafe_cell_def);
         // Mark it as interior mutable.
@@ -1369,24 +1379,29 @@ impl TyCtxMut {
             variants: vec![
                 VariantDef {
                     name: self.resolver.intern("None"),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: none_fields,
                 },
                 VariantDef {
                     name: self.resolver.intern("Some"),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: some_fields.clone(),
                 },
             ],
             generic_params: vec![self.resolver.intern("T")],
-};
+        };
         self.register_adt(AdtId::from_raw(1010), option_def.clone());
-        self.lang_items.register(LangItem::Option, def_id(1010))
+        self.lang_items
+            .register(LangItem::Option, def_id(1010))
             .expect("builtin lang item registration must not duplicate");
         // Register `Option` by name so the path type `Option<T>` resolves from
         // user code (the lang-item registration alone only ties it to the
         // `Option` lang item, not the name used in type position).
-        self.register_adt_with_name(self.resolver.intern("Option"), AdtId::from_raw(1010), option_def);
+        self.register_adt_with_name(
+            self.resolver.intern("Option"),
+            AdtId::from_raw(1010),
+            option_def,
+        );
 
         // Register `Vec<T>` - ID 1020.
         // An owning collection. We register only its name + generic arity so the
@@ -1494,7 +1509,8 @@ impl TyCtxMut {
             AdtId::from_raw(1011),
             result_def,
         );
-        self.lang_items.register(LangItem::Result, def_id(1011))
+        self.lang_items
+            .register(LangItem::Result, def_id(1011))
             .expect("builtin lang item registration must not duplicate");
 
         // Register `Ordering` (memory-order enum) - ID 1015.
@@ -1757,7 +1773,8 @@ impl TyCtxMut {
         // carry the element type as `Param(0)` so the caller can instantiate.
         let vec_subst = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
         let vec_ty = self.mk_ty(TyKind::Adt(vec_id, vec_subst));
-        let result_subst = self.intern_substitution(vec![GenericArg::Ty(t_var), GenericArg::Ty(_e_var)]);
+        let result_subst =
+            self.intern_substitution(vec![GenericArg::Ty(t_var), GenericArg::Ty(_e_var)]);
         let result_ty = self.mk_ty(TyKind::Adt(result_id, result_subst));
         // `str::from_utf8(&[u8]) -> Result<&str, E>`: the `&str` element is
         // concrete; the error `E` is left as `Param(1)` so the inferred-output
@@ -1765,10 +1782,8 @@ impl TyCtxMut {
         // (constrained by the caller's `.map_err(Error::new(...))`).
         let str_ref_ty = self.mk_ty(TyKind::Ref(Region::Erased, str_ty, Mutability::Not));
         let ref_slice_u8_ty = self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not));
-        let str_from_utf8_subst = self.intern_substitution(vec![
-            GenericArg::Ty(str_ref_ty),
-            GenericArg::Ty(_e_var),
-        ]);
+        let str_from_utf8_subst =
+            self.intern_substitution(vec![GenericArg::Ty(str_ref_ty), GenericArg::Ty(_e_var)]);
         let str_from_utf8_result = self.mk_ty(TyKind::Adt(result_id, str_from_utf8_subst));
         let str_find_subst = self.intern_substitution(vec![GenericArg::Ty(usize_ty)]);
         let str_find_result = self.mk_ty(TyKind::Adt(option_id, str_find_subst));
@@ -1825,11 +1840,13 @@ impl TyCtxMut {
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1018), s))
         };
         let result_bool_bool = {
-            let s = self.intern_substitution(vec![GenericArg::Ty(bool_ty), GenericArg::Ty(bool_ty)]);
+            let s =
+                self.intern_substitution(vec![GenericArg::Ty(bool_ty), GenericArg::Ty(bool_ty)]);
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
         };
         let result_usize_usize = {
-            let s = self.intern_substitution(vec![GenericArg::Ty(usize_ty), GenericArg::Ty(usize_ty)]);
+            let s =
+                self.intern_substitution(vec![GenericArg::Ty(usize_ty), GenericArg::Ty(usize_ty)]);
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
         };
         let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
@@ -1887,7 +1904,10 @@ impl TyCtxMut {
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
         };
         let tuple_ref_slice_pair = {
-            let s = self.intern_substitution(vec![GenericArg::Ty(ref_slice_t_ty), GenericArg::Ty(ref_slice_t_ty)]);
+            let s = self.intern_substitution(vec![
+                GenericArg::Ty(ref_slice_t_ty),
+                GenericArg::Ty(ref_slice_t_ty),
+            ]);
             self.mk_ty(TyKind::Tuple(s))
         };
         let option_u32_ty = {
@@ -1935,10 +1955,8 @@ impl TyCtxMut {
             }))
         };
         // `Result<T, U>` — the output of `map_err`.
-        let result_t_u_subst = self.intern_substitution(vec![
-            GenericArg::Ty(t_var),
-            GenericArg::Ty(_u_var),
-        ]);
+        let result_t_u_subst =
+            self.intern_substitution(vec![GenericArg::Ty(t_var), GenericArg::Ty(_u_var)]);
         let result_t_u_ty = self.mk_ty(TyKind::Adt(result_id, result_t_u_subst));
 
         let fn_t_to_u = {
@@ -1952,10 +1970,8 @@ impl TyCtxMut {
             }))
         };
         // `Result<U, E>` and `Option<U>` — the outputs of `map`.
-        let result_u_subst = self.intern_substitution(vec![
-            GenericArg::Ty(_u_var),
-            GenericArg::Ty(_e_var),
-        ]);
+        let result_u_subst =
+            self.intern_substitution(vec![GenericArg::Ty(_u_var), GenericArg::Ty(_e_var)]);
         let result_u_ty = self.mk_ty(TyKind::Adt(result_id, result_u_subst));
         let option_u_subst = self.intern_substitution(vec![GenericArg::Ty(_u_var)]);
         let option_u_ty = self.mk_ty(TyKind::Adt(option_id, option_u_subst));
@@ -2017,10 +2033,20 @@ impl TyCtxMut {
             (str_id, "clear", vec![], Ty::UNIT),
             (str_id, "as_ptr", vec![], u8_as_ptr),
             (str_id, "as_mut_ptr", vec![], u8_as_mut_ptr),
-            (str_id, "as_bytes", vec![], self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not))),
+            (
+                str_id,
+                "as_bytes",
+                vec![],
+                self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not)),
+            ),
             (str_id, "contains", vec![u8_ty], bool_ty),
             (str_id, "to_string", vec![], string_ty),
-            (str_id, "from_utf8", vec![ref_slice_u8_ty], str_from_utf8_result),
+            (
+                str_id,
+                "from_utf8",
+                vec![ref_slice_u8_ty],
+                str_from_utf8_result,
+            ),
             (str_id, "find", vec![str_ty], str_find_result),
             // Inherent associated functions (path-style `Vec::new()`, called
             // through `check_path`'s `Adt::fn` branch, not `recv.method()`).
@@ -2032,7 +2058,12 @@ impl TyCtxMut {
             (string_id, "with_capacity", vec![usize_ty], string_ty),
             (string_id, "from", vec![], string_ty),
             (string_id, "from_utf8", vec![], result_ty),
-            (string_id, "from_utf8_lossy", vec![ref_slice_u8_ty], string_ty),
+            (
+                string_id,
+                "from_utf8_lossy",
+                vec![ref_slice_u8_ty],
+                string_ty,
+            ),
             (string_id, "from_str", vec![], result_ty),
             (result_id, "unwrap", vec![], t_var),
             (result_id, "unwrap_or_else", vec![], t_var),
@@ -2054,21 +2085,71 @@ impl TyCtxMut {
             // AtomicBool
             (AdtId::from_raw(1016), "new", vec![bool_ty], atomic_bool_ty),
             (AdtId::from_raw(1016), "load", vec![ordering_ty], bool_ty),
-            (AdtId::from_raw(1016), "store", vec![bool_ty, ordering_ty], Ty::UNIT),
-            (AdtId::from_raw(1016), "compare_exchange", vec![bool_ty, bool_ty, ordering_ty], result_bool_bool),
-            (AdtId::from_raw(1016), "fetch_and", vec![bool_ty, ordering_ty], bool_ty),
-            (AdtId::from_raw(1016), "fetch_or", vec![bool_ty, ordering_ty], bool_ty),
+            (
+                AdtId::from_raw(1016),
+                "store",
+                vec![bool_ty, ordering_ty],
+                Ty::UNIT,
+            ),
+            (
+                AdtId::from_raw(1016),
+                "compare_exchange",
+                vec![bool_ty, bool_ty, ordering_ty],
+                result_bool_bool,
+            ),
+            (
+                AdtId::from_raw(1016),
+                "fetch_and",
+                vec![bool_ty, ordering_ty],
+                bool_ty,
+            ),
+            (
+                AdtId::from_raw(1016),
+                "fetch_or",
+                vec![bool_ty, ordering_ty],
+                bool_ty,
+            ),
             // AtomicUsize
-            (AdtId::from_raw(1017), "new", vec![usize_ty], atomic_usize_ty),
+            (
+                AdtId::from_raw(1017),
+                "new",
+                vec![usize_ty],
+                atomic_usize_ty,
+            ),
             (AdtId::from_raw(1017), "load", vec![ordering_ty], usize_ty),
-            (AdtId::from_raw(1017), "store", vec![usize_ty, ordering_ty], Ty::UNIT),
-            (AdtId::from_raw(1017), "fetch_add", vec![usize_ty, ordering_ty], usize_ty),
-            (AdtId::from_raw(1017), "fetch_sub", vec![usize_ty, ordering_ty], usize_ty),
-            (AdtId::from_raw(1017), "compare_exchange", vec![usize_ty, usize_ty, ordering_ty], result_usize_usize),
+            (
+                AdtId::from_raw(1017),
+                "store",
+                vec![usize_ty, ordering_ty],
+                Ty::UNIT,
+            ),
+            (
+                AdtId::from_raw(1017),
+                "fetch_add",
+                vec![usize_ty, ordering_ty],
+                usize_ty,
+            ),
+            (
+                AdtId::from_raw(1017),
+                "fetch_sub",
+                vec![usize_ty, ordering_ty],
+                usize_ty,
+            ),
+            (
+                AdtId::from_raw(1017),
+                "compare_exchange",
+                vec![usize_ty, usize_ty, ordering_ty],
+                result_usize_usize,
+            ),
             // AtomicU8
             (AdtId::from_raw(1018), "new", vec![u8_ty], atomic_u8_ty),
             (AdtId::from_raw(1018), "load", vec![ordering_ty], u8_ty),
-            (AdtId::from_raw(1018), "store", vec![u8_ty, ordering_ty], Ty::UNIT),
+            (
+                AdtId::from_raw(1018),
+                "store",
+                vec![u8_ty, ordering_ty],
+                Ty::UNIT,
+            ),
             // ExitStatus
             (AdtId::from_raw(1022), "code", vec![], i32_ty),
             (AdtId::from_raw(1022), "success", vec![], bool_ty),
@@ -2098,13 +2179,32 @@ impl TyCtxMut {
             (slice_id, "to_vec", vec![], vec_ty),
             (slice_id, "get", vec![usize_ty], option_ref_t_ty2),
             (slice_id, "split_at", vec![usize_ty], tuple_ref_slice_pair),
-
             // Box<T>
             (box_id, "new", vec![t_var], box_ty),
-            (box_id, "into_raw", vec![box_ty], self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))),
-            (box_id, "from_raw", vec![self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))], box_ty),
-            (box_id, "leak", vec![box_ty], self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Mut))),
-            (box_id, "as_ptr", vec![], self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not))),
+            (
+                box_id,
+                "into_raw",
+                vec![box_ty],
+                self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut)),
+            ),
+            (
+                box_id,
+                "from_raw",
+                vec![self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut))],
+                box_ty,
+            ),
+            (
+                box_id,
+                "leak",
+                vec![box_ty],
+                self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Mut)),
+            ),
+            (
+                box_id,
+                "as_ptr",
+                vec![],
+                self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not)),
+            ),
             // UnsafeCell<T> — used by stdlib's `Mutex`/`RwLock` via
             // `self.inner.get()`/`UnsafeCell::new(...)`. The receiver type is
             // the *builtin* `UnsafeCell` (AdtId 1005), not any user decl, so
@@ -2144,18 +2244,20 @@ impl TyCtxMut {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
-            let inputs_subst = self.intern_substitution(
-                inputs.iter().map(|t| GenericArg::Ty(*t)).collect(),
-            );
+            let inputs_subst =
+                self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
             self.primitive_method_fns.insert(
                 (recv_ty, n),
-                (fn_id, FnSig {
-                    inputs: inputs_subst,
-                    output,
-                    c_variadic: false,
-                    unsafety: glyim_core::primitives::Safety::Safe,
-                    abi: glyim_core::primitives::Abi::Glyim,
-                }),
+                (
+                    fn_id,
+                    FnSig {
+                        inputs: inputs_subst,
+                        output,
+                        c_variadic: false,
+                        unsafety: glyim_core::primitives::Safety::Safe,
+                        abi: glyim_core::primitives::Abi::Glyim,
+                    },
+                ),
             );
         }
 
@@ -2163,9 +2265,8 @@ impl TyCtxMut {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
-            let inputs_subst = self.intern_substitution(
-                inputs.iter().map(|t| GenericArg::Ty(*t)).collect(),
-            );
+            let inputs_subst =
+                self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
             self.builtin_method_fns.insert(
                 (adt_id, n),
                 (
@@ -2188,14 +2289,18 @@ impl TyCtxMut {
     /// args). The caller instantiates the output type against the receiver's
     /// substitution. Returns `None` when no builtin method matches.
     pub fn lookup_builtin_method(&self, adt_id: AdtId, name: Name) -> Option<(FnDefId, FnSig)> {
-        self.builtin_method_fns.get(&(adt_id, name)).map(|(id, sig)| (*id, sig.clone()))
+        self.builtin_method_fns
+            .get(&(adt_id, name))
+            .map(|(id, sig)| (*id, sig.clone()))
     }
 
     /// Look up a builtin inherent method on a *primitive* numeric receiver
     /// (`u64::checked_add`, `u32::saturating_sub`, …). Returns `None` for
     /// non-primitive receivers.
     pub fn lookup_primitive_method(&self, recv_ty: Ty, name: Name) -> Option<(FnDefId, FnSig)> {
-        self.primitive_method_fns.get(&(recv_ty, name)).map(|(id, sig)| (*id, sig.clone()))
+        self.primitive_method_fns
+            .get(&(recv_ty, name))
+            .map(|(id, sig)| (*id, sig.clone()))
     }
 }
 
@@ -2278,11 +2383,11 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut.register_adt(AdtId::from_raw(1006), cell_def);
         let ctx = ctx_mut.freeze();
@@ -2306,7 +2411,9 @@ mod interior_mutability_tests {
         match ctx.ty_kind(option_ty) {
             TyKind::Adt(adt_id, _) => {
                 assert_eq!(*adt_id, AdtId::from_raw(1010));
-                let def = ctx.adt_def(*adt_id).expect("Option ADT should be registered");
+                let def = ctx
+                    .adt_def(*adt_id)
+                    .expect("Option ADT should be registered");
                 assert_eq!(def.variants.len(), 2, "Option has None + Some variants");
                 assert_eq!(ctx.name_str(def.variants[0].name), "None");
                 assert_eq!(ctx.name_str(def.variants[1].name), "Some");
@@ -2331,11 +2438,11 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut.register_adt(AdtId::from_raw(1007), plain_def);
         let ctx = ctx_mut.freeze();
@@ -2365,11 +2472,11 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut.register_adt(AdtId::from_raw(1008), ref_cell_def);
         let ctx = ctx_mut.freeze();
@@ -2398,11 +2505,11 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut.register_adt(AdtId::from_raw(2000), b_def);
 
@@ -2422,16 +2529,19 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut.register_adt(AdtId::from_raw(2001), a_def);
         let ctx = ctx_mut.freeze();
         let a_adt = AdtId::from_raw(2001);
-        assert!(!ctx.is_interior_mutable_adt(a_adt), "A transitively contains plain B -> false");
+        assert!(
+            !ctx.is_interior_mutable_adt(a_adt),
+            "A transitively contains plain B -> false"
+        );
 
         // Now re-open the context and make `B` contain `UnsafeCell` (1005), which
         // is interior-mutable. This must invalidate the cached `false` for A.
@@ -2455,11 +2565,11 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut2.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut2.register_adt(AdtId::from_raw(2000), b2_def);
         let b2_subst = ctx_mut2.intern_substitution(vec![]);
@@ -2476,15 +2586,18 @@ mod interior_mutability_tests {
                 fields: field_defs,
                 variants: vec![VariantDef {
                     name: ctx_mut2.resolver.intern(""),
-    style: crate::adt_def::VariantStyle::Unit,
+                    style: crate::adt_def::VariantStyle::Unit,
                     fields: field_defs_clone,
                 }],
                 generic_params: vec![],
-}
+            }
         };
         ctx_mut2.register_adt(AdtId::from_raw(2001), a2_def);
         let ctx2 = ctx_mut2.freeze();
-        assert!(ctx2.is_interior_mutable_adt(a_adt), "after B gains an UnsafeCell, A must recompute true");
+        assert!(
+            ctx2.is_interior_mutable_adt(a_adt),
+            "after B gains an UnsafeCell, A must recompute true"
+        );
         assert!(ctx2.is_interior_mutable_adt(AdtId::from_raw(2000)));
     }
 }
@@ -2492,9 +2605,9 @@ mod interior_mutability_tests {
 #[cfg(test)]
 mod subst_ty_tests {
     use super::*;
+    use crate::const_val::{Const, ConstKind, ParamConst};
     use glyim_core::interner::Interner;
     use glyim_core::primitives::{IntTy, UintTy};
-    use crate::const_val::{Const, ConstKind, ParamConst};
     use std::collections::HashMap;
 
     /// Phase 2 (GLYIM_DESTUB_PLAN): `subst_ty` must substitute the array
@@ -2552,10 +2665,7 @@ mod subst_ty_tests {
         };
         let subst = HashMap::from([
             (0u32, GenericArg::Ty(i32_ty)),
-            (
-                1u32,
-                GenericArg::Const(concrete_len.clone()),
-            ),
+            (1u32, GenericArg::Const(concrete_len.clone())),
         ]);
         let result = tcx.subst_ty(arr, &subst);
 

@@ -143,7 +143,10 @@ fn completion_generic_function_emits_snippet_with_type_params() {
         is_pub: true,
         documentation: None,
     };
-    analysis.symbol_index.write().insert_test_symbol(file_id, sym);
+    analysis
+        .symbol_index
+        .write()
+        .insert_test_symbol(file_id, sym);
 
     let file_map_guard = analysis.file_map.read();
     let uri = Uri::from_str(
@@ -155,7 +158,10 @@ fn completion_generic_function_emits_snippet_with_type_params() {
     let params = CompletionParams {
         text_document_position: TextDocumentPositionParams {
             text_document: TextDocumentIdentifier { uri },
-            position: Position { line: 0, character: 0 },
+            position: Position {
+                line: 0,
+                character: 0,
+            },
         },
         work_done_progress_params: WorkDoneProgressParams {
             work_done_token: None,
@@ -165,7 +171,8 @@ fn completion_generic_function_emits_snippet_with_type_params() {
         },
         context: None,
     };
-    let response = provide_completions(&analysis, &file_map_guard, &params).expect("completion response");
+    let response =
+        provide_completions(&analysis, &file_map_guard, &params).expect("completion response");
     let list = match response {
         CompletionResponse::List(list) => list,
         _ => panic!("Expected CompletionList"),

@@ -187,15 +187,21 @@ fn ty_mut_subslice_on_array_returns_array_type() {
     // element type `T` and not the full `[T; N]`. Regression test for plan §11.1.
     let (ctx, (expected, got)) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let elem = c.mk_ty(TyKind::Int(IntTy::I32));
-        let arr5 = c.mk_ty(TyKind::Array(elem, Const {
-            kind: ConstKind::Uint(5),
-            ty: Ty::USIZE,
-        }));
+        let arr5 = c.mk_ty(TyKind::Array(
+            elem,
+            Const {
+                kind: ConstKind::Uint(5),
+                ty: Ty::USIZE,
+            },
+        ));
         // `arr[1..3]` has length 3 - 1 = 2.
-        let expected = c.mk_ty(TyKind::Array(elem, Const {
-            kind: ConstKind::Uint(2),
-            ty: Ty::USIZE,
-        }));
+        let expected = c.mk_ty(TyKind::Array(
+            elem,
+            Const {
+                kind: ConstKind::Uint(2),
+                ty: Ty::USIZE,
+            },
+        ));
 
         let local = LocalIdx::from_raw(0);
         let mut locals = IndexVec::new();
@@ -230,14 +236,20 @@ fn ty_mut_subslice_from_end_on_array_returns_array_type() {
     // length = 3 - 1 = 2, so the result is `[i32; 2]`.
     let (ctx, (expected, got)) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let elem = c.mk_ty(TyKind::Int(IntTy::I32));
-        let arr5 = c.mk_ty(TyKind::Array(elem, Const {
-            kind: ConstKind::Uint(5),
-            ty: Ty::USIZE,
-        }));
-        let expected = c.mk_ty(TyKind::Array(elem, Const {
-            kind: ConstKind::Uint(2),
-            ty: Ty::USIZE,
-        }));
+        let arr5 = c.mk_ty(TyKind::Array(
+            elem,
+            Const {
+                kind: ConstKind::Uint(5),
+                ty: Ty::USIZE,
+            },
+        ));
+        let expected = c.mk_ty(TyKind::Array(
+            elem,
+            Const {
+                kind: ConstKind::Uint(2),
+                ty: Ty::USIZE,
+            },
+        ));
 
         let local = LocalIdx::from_raw(0);
         let mut locals = IndexVec::new();

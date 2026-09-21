@@ -32,32 +32,32 @@ type EmitCallback = Box<dyn FnMut(&GlyimDiagnostic)>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// ErrorCode.
 pub struct ErrorCode {
-/// Struct.
+    /// Struct.
     pub category: ErrorCategory,
-/// Struct.
+    /// Struct.
     pub number: u16,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// ErrorCategory.
 pub enum ErrorCategory {
-/// Variant.
+    /// Variant.
     Lex,
-/// Variant.
+    /// Variant.
     Parse,
-/// Variant.
+    /// Variant.
     NameResolution,
-/// Variant.
+    /// Variant.
     Type,
-/// Variant.
+    /// Variant.
     Lifetime,
-/// Variant.
+    /// Variant.
     Borrow,
-/// Variant.
+    /// Variant.
     Comptime,
-/// Variant.
+    /// Variant.
     Io,
-/// Variant.
+    /// Variant.
     Internal,
 }
 
@@ -81,19 +81,19 @@ impl fmt::Display for ErrorCode {
 #[derive(Clone, Debug)]
 /// GlyimDiagnostic.
 pub struct GlyimDiagnostic {
-/// Struct.
+    /// Struct.
     pub code: ErrorCode,
-/// Struct.
+    /// Struct.
     pub severity: DiagSeverity,
-/// Struct.
+    /// Struct.
     pub message: String,
-/// Struct.
+    /// Struct.
     pub span: MultiSpan,
-/// Struct.
+    /// Struct.
     pub sub_diagnostics: Vec<SubDiagnostic>,
-/// Struct.
+    /// Struct.
     pub suggestions: Vec<Suggestion>,
-/// Struct.
+    /// Struct.
     pub source_code: Option<Arc<str>>,
     /// Typed, machine-readable side-data (plan §5.2). Optional so diagnostics
     /// constructed without it remain valid; consumers fall back to parsing the
@@ -104,13 +104,13 @@ pub struct GlyimDiagnostic {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// DiagSeverity.
 pub enum DiagSeverity {
-/// Variant.
+    /// Variant.
     Error,
-/// Variant.
+    /// Variant.
     Warning,
-/// Variant.
+    /// Variant.
     Note,
-/// Variant.
+    /// Variant.
     Help,
 }
 
@@ -127,35 +127,35 @@ impl From<DiagSeverity> for miette::Severity {
 #[derive(Clone, Debug)]
 /// SubDiagnostic.
 pub struct SubDiagnostic {
-/// Struct.
+    /// Struct.
     pub severity: DiagSeverity,
-/// Struct.
+    /// Struct.
     pub message: String,
-/// Struct.
+    /// Struct.
     pub span: Option<MultiSpan>,
 }
 
 #[derive(Clone, Debug)]
 /// Suggestion.
 pub struct Suggestion {
-/// Struct.
+    /// Struct.
     pub message: String,
-#[doc = "field"]
+    #[doc = "field"]
     pub replacements: Vec<(Span, String)>,
-/// Struct.
+    /// Struct.
     pub applicability: Applicability,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Applicability.
 pub enum Applicability {
-/// Variant.
+    /// Variant.
     MachineApplicable,
-/// Variant.
+    /// Variant.
     MaybeIncorrect,
-/// Variant.
+    /// Variant.
     HasPlaceholders,
-/// Variant.
+    /// Variant.
     Unspecified,
 }
 
@@ -203,7 +203,7 @@ impl MietteDiagnostic for GlyimDiagnostic {
 }
 
 impl GlyimDiagnostic {
-/// new.
+    /// new.
     pub fn new(
         code: ErrorCode,
         severity: DiagSeverity,
@@ -222,13 +222,13 @@ impl GlyimDiagnostic {
         }
     }
 
-/// with_source_code.
+    /// with_source_code.
     pub fn with_source_code(mut self, source: Arc<str>) -> Self {
         self.source_code = Some(source);
         self
     }
 
-/// lex_error.
+    /// lex_error.
     pub fn lex_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
             ErrorCode {
@@ -240,7 +240,7 @@ impl GlyimDiagnostic {
             MultiSpan::from_span(span),
         )
     }
-/// parse_error.
+    /// parse_error.
     pub fn parse_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
             ErrorCode {
@@ -252,7 +252,7 @@ impl GlyimDiagnostic {
             MultiSpan::from_span(span),
         )
     }
-/// type_error.
+    /// type_error.
     pub fn type_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
             ErrorCode {
@@ -292,7 +292,9 @@ impl GlyimDiagnostic {
             format!("non-exhaustive match: missing variants {}", list),
             MultiSpan::from_span(span),
         );
-        diag.structured = Some(StructuredDiagnosticData::MissingMatchVariants(shapes.to_vec()));
+        diag.structured = Some(StructuredDiagnosticData::MissingMatchVariants(
+            shapes.to_vec(),
+        ));
         diag
     }
 
@@ -318,7 +320,7 @@ impl GlyimDiagnostic {
             MultiSpan::from_span(span),
         )
     }
-/// borrow_error.
+    /// borrow_error.
     pub fn borrow_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
             ErrorCode {
@@ -330,7 +332,7 @@ impl GlyimDiagnostic {
             MultiSpan::from_span(span),
         )
     }
-/// internal_error.
+    /// internal_error.
     pub fn internal_error(message: impl Into<String>) -> Self {
         Self::new(
             ErrorCode {
@@ -342,7 +344,7 @@ impl GlyimDiagnostic {
             MultiSpan::from_span(Span::DUMMY),
         )
     }
-/// macro_error.
+    /// macro_error.
     pub fn macro_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
             ErrorCode {
@@ -355,17 +357,17 @@ impl GlyimDiagnostic {
         )
     }
 
-/// with_sub.
+    /// with_sub.
     pub fn with_sub(mut self, sub: SubDiagnostic) -> Self {
         self.sub_diagnostics.push(sub);
         self
     }
-/// with_suggestion.
+    /// with_suggestion.
     pub fn with_suggestion(mut self, sug: Suggestion) -> Self {
         self.suggestions.push(sug);
         self
     }
-/// is_error.
+    /// is_error.
     pub fn is_error(&self) -> bool {
         matches!(self.severity, DiagSeverity::Error)
     }
@@ -385,7 +387,7 @@ pub struct DiagSink {
 }
 
 impl DiagSink {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             diagnostics: Vec::new(),
@@ -403,7 +405,7 @@ impl DiagSink {
         }
     }
 
-/// with_error_limit.
+    /// with_error_limit.
     pub fn with_error_limit(limit: usize) -> Self {
         Self {
             error_limit: limit,
@@ -411,7 +413,7 @@ impl DiagSink {
         }
     }
 
-/// with_on_emit.
+    /// with_on_emit.
     pub fn with_on_emit(on_emit: Option<EmitCallback>) -> Self {
         Self {
             on_emit,
@@ -419,7 +421,7 @@ impl DiagSink {
         }
     }
 
-/// emit.
+    /// emit.
     pub fn emit(&mut self, diag: GlyimDiagnostic) {
         if diag.is_error() {
             if self.error_count >= self.error_limit {
@@ -434,16 +436,16 @@ impl DiagSink {
         self.diagnostics.push(diag);
     }
 
-/// has_errors.
+    /// has_errors.
     pub fn has_errors(&self) -> bool {
         self.error_count > 0
     }
-/// diagnostics.
+    /// diagnostics.
     pub fn diagnostics(&self) -> &[GlyimDiagnostic] {
         &self.diagnostics
     }
 
-/// into_diagnostics.
+    /// into_diagnostics.
     pub fn into_diagnostics(mut self) -> Vec<GlyimDiagnostic> {
         if self.suppressed_count > 0 {
             self.diagnostics

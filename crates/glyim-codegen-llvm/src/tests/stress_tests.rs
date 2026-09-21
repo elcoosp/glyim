@@ -12,7 +12,6 @@ fn tpath(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("glyim_test_{}_{}", std::process::id(), name))
 }
 
-
 #[test]
 fn s08_t36_concurrent_generate_independent_backends() {
     let handles: Vec<_> = (0..4)

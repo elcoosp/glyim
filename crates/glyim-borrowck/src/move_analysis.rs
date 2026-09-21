@@ -373,10 +373,11 @@ fn compute_move_dataflow(
         // desugar's poll loop, where every `.await`'s future is a `Call`
         // destination that is immediately moved into the suspended state.
         if let glyim_mir::TerminatorKind::Call { destination, .. } = &block_data.terminator.kind
-            && let Some(mp_idx) = move_paths.find(destination) {
-                record_init(&mut move_paths, mp_idx, &mut block_inits[bi]);
-                record_init(&mut move_paths, mp_idx, &mut block_dead_inits[bi]);
-            }
+            && let Some(mp_idx) = move_paths.find(destination)
+        {
+            record_init(&mut move_paths, mp_idx, &mut block_inits[bi]);
+            record_init(&mut move_paths, mp_idx, &mut block_dead_inits[bi]);
+        }
     }
 
     let mut predecessors: Vec<Vec<BasicBlockIdx>> = vec![Vec::new(); num_blocks];

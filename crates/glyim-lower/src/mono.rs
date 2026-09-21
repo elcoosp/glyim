@@ -11,28 +11,28 @@ glyim_core::define_idx!(MonoItemId);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// MonoItem.
 pub enum MonoItem {
-/// Variant.
+    /// Variant.
     Fn {
-/// Struct.
+        /// Struct.
         def_id: FnDefId,
-/// Struct.
+        /// Struct.
         substs: Substitution,
     },
-/// Variant.
+    /// Variant.
     Const {
-/// Struct.
+        /// Struct.
         def_id: ConstDefId,
-/// Struct.
+        /// Struct.
         substs: Substitution,
     },
-/// Variant.
+    /// Variant.
     Static {
-/// Struct.
+        /// Struct.
         def_id: StaticDefId,
     },
-/// Variant.
+    /// Variant.
     DropGlue {
-/// Struct.
+        /// Struct.
         ty: Ty,
     },
 }
@@ -40,13 +40,13 @@ pub enum MonoItem {
 #[derive(Clone, Debug)]
 /// MonoItemData.
 pub struct MonoItemData {
-/// Struct.
+    /// Struct.
     pub item: MonoItem,
-/// Struct.
+    /// Struct.
     pub body: Arc<glyim_mir::Body>,
-/// Struct.
+    /// Struct.
     pub symbol: String,
-/// Struct.
+    /// Struct.
     pub source_module: u32,
 }
 
@@ -64,7 +64,7 @@ pub struct MonoCtx<'a> {
 }
 
 impl<'a> MonoCtx<'a> {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             items: IndexVec::new(),
@@ -89,7 +89,7 @@ impl<'a> MonoCtx<'a> {
         }
     }
 
-/// collect.
+    /// collect.
     pub fn collect(
         &mut self,
         start: &[MonoItem],
@@ -214,9 +214,7 @@ impl<'a> MonoCtx<'a> {
                                 _ => rt,
                             });
                             let substs = match self_ty {
-                                Some(st) => {
-                                    ty_ctx.intern_substitution(vec![GenericArg::Ty(st)])
-                                }
+                                Some(st) => ty_ctx.intern_substitution(vec![GenericArg::Ty(st)]),
                                 None => Substitution::empty(),
                             };
                             let fn_ty = ty_ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
@@ -306,7 +304,9 @@ impl<'a> MonoCtx<'a> {
                                 TyKind::FnDef(_, s) => {
                                     if let Some(Some(arg0)) = args.first().map(|a| match a {
                                         Operand::Constant(c) => Some(c.ty),
-                                        Operand::Copy(p) | Operand::Move(p) => body.locals.get(p.local).map(|d| d.ty),
+                                        Operand::Copy(p) | Operand::Move(p) => {
+                                            body.locals.get(p.local).map(|d| d.ty)
+                                        }
                                     }) {
                                         let _ = ty_ctx.ty_kind(arg0);
                                     }
@@ -330,11 +330,7 @@ impl<'a> MonoCtx<'a> {
                                                     if matches!(*ty_ctx.ty_kind(t), TyKind::Param(_))
                                             )
                                         });
-                                    if has_param {
-                                        Substitution::empty()
-                                    } else {
-                                        *s
-                                    }
+                                    if has_param { Substitution::empty() } else { *s }
                                 }
                                 _ => Substitution::empty(),
                             },
@@ -344,7 +340,10 @@ impl<'a> MonoCtx<'a> {
                             // fall back to empty here.
                             None => Substitution::empty(),
                         };
-                        self.enqueue(MonoItem::Fn { def_id: *def_id, substs });
+                        self.enqueue(MonoItem::Fn {
+                            def_id: *def_id,
+                            substs,
+                        });
                     }
                 }
                 self.scan_operand(func);
@@ -361,22 +360,22 @@ impl<'a> MonoCtx<'a> {
         }
     }
 
-/// items.
+    /// items.
     pub fn items(&self) -> &[MonoItemData] {
         self.items.as_slice()
     }
 
-/// item_count.
+    /// item_count.
     pub fn item_count(&self) -> usize {
         self.items.len()
     }
 
-/// cache_len.
+    /// cache_len.
     pub fn cache_len(&self) -> usize {
         self.cache.len()
     }
 
-/// lookup.
+    /// lookup.
     pub fn lookup(&self, item: &MonoItem) -> Option<MonoItemId> {
         self.cache.get(item).copied()
     }

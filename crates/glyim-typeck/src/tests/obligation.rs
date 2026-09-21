@@ -107,7 +107,8 @@ fn obligation_fulfilled() {
             is_const: false,
             generic_params: vec![],
             where_clauses: Vec::new(),
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::DUMMY,
     };

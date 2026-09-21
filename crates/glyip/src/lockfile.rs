@@ -14,7 +14,7 @@ const LOCKFILE_NAME: &str = "Glyip.lock";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LockConflict {
     /// A manifest dependency is missing entirely from the lockfile.
-/// Struct.
+    /// Struct.
     Missing {
         /// name field.
         name: String,
@@ -23,11 +23,11 @@ pub enum LockConflict {
     },
     /// A manifest dependency's pinned version does not match the locked one.
     VersionMismatch {
-/// Struct.
+        /// Struct.
         name: String,
-/// Struct.
+        /// Struct.
         manifest_version: String,
-/// Struct.
+        /// Struct.
         locked_version: String,
     },
 }
@@ -55,27 +55,27 @@ impl std::fmt::Display for LockConflict {
 #[serde(tag = "source")]
 pub enum CrateSource {
     /// A local filesystem path.
-/// Struct.
+    /// Struct.
     Path {
         /// path field.
         path: String,
     },
     /// A git repository at a specific revision.
     Git {
-/// Struct.
+        /// Struct.
         url: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-/// Struct.
+        /// Struct.
         rev: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-/// Struct.
+        /// Struct.
         branch: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-/// Struct.
+        /// Struct.
         tag: Option<String>,
     },
     /// A registry (index) entry.
-/// Struct.
+    /// Struct.
     Registry {
         /// url field.
         url: String,
@@ -173,7 +173,10 @@ impl Lockfile {
     /// entry whose version matches the manifest's pinned version (when the
     /// manifest pins an exact version; otherwise presence alone is required).
     /// Returns the list of conflicts — empty means the lockfile is consistent.
-    pub fn validate_against_manifest(&self, manifest: &crate::config::GlyipToml) -> Vec<LockConflict> {
+    pub fn validate_against_manifest(
+        &self,
+        manifest: &crate::config::GlyipToml,
+    ) -> Vec<LockConflict> {
         let mut conflicts = Vec::new();
         for (name, dep) in manifest.all_dependencies() {
             match dep.version() {
@@ -188,11 +191,13 @@ impl Lockfile {
                                 .find(|c| c.name == *name)
                                 .map(|c| c.version.clone());
                             match locked {
-                                Some(locked_version) => conflicts.push(LockConflict::VersionMismatch {
-                                    name: name.clone(),
-                                    manifest_version: manifest_version.to_string(),
-                                    locked_version,
-                                }),
+                                Some(locked_version) => {
+                                    conflicts.push(LockConflict::VersionMismatch {
+                                        name: name.clone(),
+                                        manifest_version: manifest_version.to_string(),
+                                        locked_version,
+                                    })
+                                }
                                 None => conflicts.push(LockConflict::Missing {
                                     name: name.clone(),
                                     version: manifest_version.to_string(),

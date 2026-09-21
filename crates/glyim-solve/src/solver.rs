@@ -10,40 +10,40 @@ use glyim_type::*;
 /// generics with `T: Copy` / `T: Sized` / `T: Send` / `T: Sync` barely work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuiltinTrait {
-/// Variant.
+    /// Variant.
     Copy,
-/// Variant.
+    /// Variant.
     Sized,
-/// Variant.
+    /// Variant.
     Send,
-/// Variant.
+    /// Variant.
     Sync,
-/// Variant.
+    /// Variant.
     Unpin,
 }
 
 /// Information returned by the trait solver for `Iterator::next`.
 #[derive(Clone, Debug)]
 pub struct SolverIteratorNextInfo {
-/// Struct.
+    /// Struct.
     pub fn_def_id: glyim_core::def_id::FnDefId,
-/// Struct.
+    /// Struct.
     pub fn_substs: glyim_type::Substitution,
-/// Struct.
+    /// Struct.
     pub fn_ty: glyim_type::Ty,
-/// Struct.
+    /// Struct.
     pub option_ty: glyim_type::Ty,
-/// Struct.
+    /// Struct.
     pub discr_ty: glyim_type::Ty,
-/// Struct.
+    /// Struct.
     pub ref_iter_ty: glyim_type::Ty,
 }
 
 /// TraitSolver.
 pub trait TraitSolver {
-/// can_prove.
+    /// can_prove.
     fn can_prove(&mut self, ctx: &TyCtx, predicate: &TraitPredicate) -> SolverResult;
-/// evaluate_predicate.
+    /// evaluate_predicate.
     fn evaluate_predicate(&mut self, ctx: &TyCtx, predicate: &Predicate) -> SolverResult;
     /// Get the `Iterator::next` method info for a given iterator type.
     fn iterator_next_info(
@@ -57,11 +57,11 @@ pub trait TraitSolver {
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// SolverResult.
 pub enum SolverResult {
-/// Variant.
+    /// Variant.
     Proven,
-/// Variant.
+    /// Variant.
     Ambiguous,
-/// Variant.
+    /// Variant.
     DefiniteNo,
 }
 
@@ -76,30 +76,30 @@ pub struct TraitContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// TraitDef.
 pub struct TraitDef {
-/// Struct.
+    /// Struct.
     pub def_id: TraitDefId,
-/// Struct.
+    /// Struct.
     pub name: Name,
-/// Struct.
+    /// Struct.
     pub associated_types: Vec<Name>,
-/// Struct.
+    /// Struct.
     pub predicates: Vec<Predicate>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// ImplDef.
 pub struct ImplDef {
-/// Struct.
+    /// Struct.
     pub def_id: ImplDefId,
-/// Struct.
+    /// Struct.
     pub trait_ref: TraitRef,
-/// Struct.
+    /// Struct.
     pub predicates: Vec<Predicate>,
 }
 
 #[allow(dead_code)]
 impl TraitContext {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             trait_defs: Vec::new(),
@@ -108,11 +108,11 @@ impl TraitContext {
             builtin_next_fn_id: None,
         }
     }
-/// register_trait.
+    /// register_trait.
     pub fn register_trait(&mut self, def: TraitDef) {
         self.trait_defs.push(def);
     }
-/// register_impl.
+    /// register_impl.
     pub fn register_impl(&mut self, def: ImplDef) {
         self.impl_defs.push(def);
     }
@@ -128,7 +128,7 @@ impl TraitContext {
     pub fn builtin_trait_kind(&self, def_id: TraitDefId) -> Option<BuiltinTrait> {
         self.lang_traits.get(&def_id).copied()
     }
-/// impls_of_trait.
+    /// impls_of_trait.
     pub fn impls_of_trait(&self, trait_id: TraitDefId) -> impl Iterator<Item = &ImplDef> {
         self.impl_defs
             .iter()
@@ -212,7 +212,7 @@ pub struct SimpleTraitSolver<'a> {
 }
 
 impl<'a> SimpleTraitSolver<'a> {
-/// new.
+    /// new.
     pub fn new(trait_ctx: &'a TraitContext) -> Self {
         Self { trait_ctx }
     }
@@ -371,7 +371,10 @@ impl<'a> SimpleTraitSolver<'a> {
         // existing `is_copy`/`is_sized`/`implements_auto_trait` checks
         // (de-stubbing plan §8.1). This unblocks generics bounded by
         // `T: Copy` / `T: Sized` / `T: Send` / `T: Sync`.
-        if let Some(builtin) = self.trait_ctx.builtin_trait_kind(predicate.trait_ref.def_id) {
+        if let Some(builtin) = self
+            .trait_ctx
+            .builtin_trait_kind(predicate.trait_ref.def_id)
+        {
             if let Some(self_ty) = ctx
                 .substitution_args(predicate.trait_ref.substs)
                 .iter()
@@ -505,13 +508,13 @@ pub(crate) fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
             (mut_a == mut_b)
                 || (*mut_a == glyim_core::primitives::Mutability::Mut
                     && *mut_b == glyim_core::primitives::Mutability::Not)
-                && can_coerce(ctx, *inner_a, *inner_b)
+                    && can_coerce(ctx, *inner_a, *inner_b)
         }
         (TyKind::RawPtr(inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
             (mut_a == mut_b)
                 || (*mut_a == glyim_core::primitives::Mutability::Mut
                     && *mut_b == glyim_core::primitives::Mutability::Not)
-                && can_coerce(ctx, *inner_a, *inner_b)
+                    && can_coerce(ctx, *inner_a, *inner_b)
         }
         (TyKind::Ref(_, inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
             // &T -> *const T (Not -> Not) and &mut T -> *mut T (Mut -> Mut)
@@ -523,8 +526,7 @@ pub(crate) fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
         // §6.2: fn-item coercion to fn pointer. A zero-sized function item
         // coerces to `fn(Args) -> Ret` when its signature matches the pointer's.
         (TyKind::FnDef(fn_def_id, _), TyKind::FnPtr(target_sig)) => {
-            ctx.fn_sig(*fn_def_id)
-                .is_some_and(|sig| sig == target_sig)
+            ctx.fn_sig(*fn_def_id).is_some_and(|sig| sig == target_sig)
         }
         // §6.2: closure coercion to fn pointer. A *non-capturing* closure
         // coerces to `fn(Args) -> Ret` when its (parameter, return) signature

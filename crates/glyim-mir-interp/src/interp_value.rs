@@ -1,25 +1,25 @@
 #[derive(Debug, Clone)]
 /// InterpValue.
 pub enum InterpValue {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Int(i128),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Uint(u128),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Bool(bool),
-/// Variant.
+    /// Variant.
     Unit,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Aggregate(Vec<InterpValue>),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Ref { frame: usize, local: usize },
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Float(f64),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     String(String),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Fn(glyim_core::DefId),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     ConstRef(glyim_core::DefId),
 }
 

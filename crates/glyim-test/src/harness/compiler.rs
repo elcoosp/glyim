@@ -6,17 +6,17 @@ use std::sync::Arc;
 #[derive(Clone, Default)]
 /// CompileOutput.
 pub struct CompileOutput {
-/// Struct.
+    /// Struct.
     pub diagnostics: Vec<GlyimDiagnostic>,
-/// Struct.
+    /// Struct.
     pub syntax_tree: Option<glyim_syntax::SyntaxNode>,
-/// Struct.
+    /// Struct.
     pub def_map: Option<glyim_def_map::CrateDefMap>,
-/// Struct.
+    /// Struct.
     pub typeck_result: Option<glyim_typeck::TypeckResult>,
-/// Struct.
+    /// Struct.
     pub mir_bodies: Vec<Arc<glyim_mir::Body>>,
-/// Struct.
+    /// Struct.
     pub ty_ctx: Option<Arc<glyim_type::TyCtx>>,
     /// Path to a linked executable, populated only when compilation succeeded
     /// AND the produced object file was successfully linked (Tier 7.2). `None`
@@ -42,7 +42,7 @@ impl std::fmt::Debug for CompileOutput {
 
 /// TestCompiler.
 pub trait TestCompiler: Send + Sync {
-/// compile.
+    /// compile.
     fn compile(&self, source: &str, file_id: FileId, flags: &[String]) -> CompileOutput;
 }
 
@@ -82,7 +82,7 @@ pub struct PipelineCompiler {
 }
 
 impl PipelineCompiler {
-/// new.
+    /// new.
     pub fn new(backend: Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>) -> Self {
         Self {
             backend,
@@ -148,8 +148,10 @@ impl TestCompiler for PipelineCompiler {
         };
 
         let mut db = Database::new(config);
-        let path = std::env::temp_dir().join(format!("glyim_test_{}_{}.g", unique_tag, file_id.to_raw()));
-        std::fs::write(&path, source).expect("failed to write temp source file for PipelineCompiler");
+        let path =
+            std::env::temp_dir().join(format!("glyim_test_{}_{}.g", unique_tag, file_id.to_raw()));
+        std::fs::write(&path, source)
+            .expect("failed to write temp source file for PipelineCompiler");
         db.vfs().add_file_content(&path, Arc::from(source));
 
         // Phase 9.2: run macro expansion over the parsed source *before* the
@@ -177,12 +179,14 @@ impl TestCompiler for PipelineCompiler {
             // separators (walking the green token stream so token boundaries
             // are preserved) so rowan reparses it faithfully (Phase 9.2).
             let expanded_src = glyim_meta::join_tokens_with_spaces(&expanded);
-            db.vfs().add_file_content(&path, Arc::from(expanded_src.clone()));
+            db.vfs()
+                .add_file_content(&path, Arc::from(expanded_src.clone()));
             std::fs::write(&path, &expanded_src)
                 .expect("failed to write expanded source for PipelineCompiler");
         }
 
-        let output_path = std::env::temp_dir().join(format!("glyim_test_{}_{}.o", unique_tag, file_id.to_raw()));
+        let output_path =
+            std::env::temp_dir().join(format!("glyim_test_{}_{}.o", unique_tag, file_id.to_raw()));
         let ty_ctx = db.get_ty_ctx();
         let exe_path = output_path.with_extension("");
 
@@ -219,7 +223,7 @@ impl TestCompiler for PipelineCompiler {
             Some(real) => real,
             None => &*self.backend,
         };
-#[cfg(not(feature = "real-llvm"))]
+        #[cfg(not(feature = "real-llvm"))]
         let backend: &dyn glyim_codegen::CodegenBackend = &*self.backend;
 
         match glyim_pipeline::Pipeline::compile_file_with_artifacts(
@@ -236,9 +240,10 @@ impl TestCompiler for PipelineCompiler {
                 // linker is only invoked when codegen produced a real object
                 // (the production LLVM backend does; a mock backend that emits
                 // nothing will fail to link and we fall back to `None`).
-                let executable_path = glyim_cli::linker::invoke_linker(&output_path, &exe_path, None, None, None)
-                    .ok()
-                    .map(|()| exe_path.clone());
+                let executable_path =
+                    glyim_cli::linker::invoke_linker(&output_path, &exe_path, None, None, None)
+                        .ok()
+                        .map(|()| exe_path.clone());
                 CompileOutput {
                     diagnostics: expansion_diags,
                     syntax_tree: None,

@@ -10,8 +10,8 @@
 //! 5. All supertraits are themselves object-safe (computed by the caller, since this
 //!    module deliberately avoids depending on trait-resolution machinery).
 
-use glyim_core::def_id::TraitDefId;
 use glyim_core::Name;
+use glyim_core::def_id::TraitDefId;
 use glyim_span::Span;
 
 /// Reasons a trait is not object-safe.
@@ -20,7 +20,7 @@ pub enum ObjectSafetyViolation {
     /// The trait requires `Self: Sized` (either directly or via a bound).
     SelfSized,
     /// A method has a generic type parameter, which can't be monomorphized through a vtable.
-/// Struct.
+    /// Struct.
     GenericMethod {
         /// method field.
         method: Name,
@@ -28,7 +28,7 @@ pub enum ObjectSafetyViolation {
         span: Span,
     },
     /// A method does not take `self` (no receiver) — static methods cannot be dispatched.
-/// Struct.
+    /// Struct.
     StaticMethod {
         /// method field.
         method: Name,
@@ -36,7 +36,7 @@ pub enum ObjectSafetyViolation {
         span: Span,
     },
     /// A method takes `self` by value on a trait that does not have `Self: Sized`.
-/// Struct.
+    /// Struct.
     ByValueSelf {
         /// method field.
         method: Name,
@@ -44,7 +44,7 @@ pub enum ObjectSafetyViolation {
         span: Span,
     },
     /// An associated function is not callable through a trait object.
-/// Struct.
+    /// Struct.
     AssociatedFunction {
         /// name field.
         name: Name,
@@ -53,7 +53,7 @@ pub enum ObjectSafetyViolation {
     },
     /// The trait has an associated type that is not constrained (mentioned in any method
     /// signature), so it cannot be inferred from the trait object's vtable.
-/// Struct.
+    /// Struct.
     UnconstrainedAssociatedType {
         /// name field.
         name: Name,
@@ -61,7 +61,7 @@ pub enum ObjectSafetyViolation {
         span: Span,
     },
     /// A supertrait of this trait is itself not object-safe.
-/// Struct.
+    /// Struct.
     SupertraitNotObjectSafe {
         /// trait_id field.
         trait_id: TraitDefId,

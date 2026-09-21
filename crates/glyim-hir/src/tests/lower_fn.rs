@@ -42,9 +42,7 @@ fn test_extern_c_fn_gets_c_abi() {
         ItemKind::Fn(fn_item) => {
             assert_eq!(fn_item.params.len(), 2);
             assert!(fn_item.body.is_some());
-            let abi = fn_item
-                .abi
-                .expect("extern \"C\" fn must carry an abi name");
+            let abi = fn_item.abi.expect("extern \"C\" fn must carry an abi name");
             assert_eq!(interner.resolve(abi), "C");
         }
         _ => panic!("expected ItemKind::Fn"),

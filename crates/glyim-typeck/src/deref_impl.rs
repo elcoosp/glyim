@@ -14,10 +14,10 @@
 //! At query time `deref_ty` substitutes the concrete argument into the target
 //! parameter positionally (real `Deref` impls always use `type Target = T`).
 
+use crate::tyconv::{build_param_tys, resolve_type_ref};
 use glyim_core::interner::Name;
 use glyim_hir::ItemKind;
 use glyim_type::{Ty, TyCtxMut, TyKind};
-use crate::tyconv::{build_param_tys, resolve_type_ref};
 
 use crate::{CrateDefMap, GlyimDiagnostic, InferenceTable};
 

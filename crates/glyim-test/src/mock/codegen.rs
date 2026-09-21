@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[derive(Clone, Debug)]
 /// CodegenCall.
 pub struct CodegenCall {
-/// Struct.
+    /// Struct.
     pub body_count: usize,
-/// Struct.
+    /// Struct.
     pub output_path: std::path::PathBuf,
 }
 
@@ -22,18 +22,18 @@ pub struct MockCodegen {
 }
 
 impl MockCodegen {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             calls: Mutex::new(Vec::new()),
             function_calls: AtomicUsize::new(0),
         }
     }
-/// calls.
+    /// calls.
     pub fn calls(&self) -> Vec<CodegenCall> {
         self.calls.lock().clone()
     }
-/// function_call_count.
+    /// function_call_count.
     pub fn function_call_count(&self) -> usize {
         self.function_calls.load(Ordering::Relaxed)
     }

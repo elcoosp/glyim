@@ -101,7 +101,10 @@ impl TypeArena {
         types.push(Box::new(kind.clone()));
         type_flags.push(flags);
         // Re-lock with write access (the read lock from the fast path is dropped).
-        self.type_index.write().unwrap().insert(kind, Ty::from_raw(raw));
+        self.type_index
+            .write()
+            .unwrap()
+            .insert(kind, Ty::from_raw(raw));
         Ty::from_raw(raw)
     }
 
@@ -154,7 +157,10 @@ impl TypeArena {
         let index = data.len() as u32;
         data.push(Box::new(small.clone()));
         // Re-lock with write access (the read lock from the fast path is dropped).
-        self.subst_index.write().unwrap().insert(small, Substitution::from_raw(index, len));
+        self.subst_index
+            .write()
+            .unwrap()
+            .insert(small, Substitution::from_raw(index, len));
         Substitution::from_raw(index, len)
     }
 

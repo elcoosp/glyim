@@ -12,7 +12,6 @@ use glyim_type::{Ty, TyKind};
 use crate::check_body::FnCtxt;
 use crate::thir;
 
-
 impl<'a> FnCtxt<'a> {
     /// Re-map a `Name` taken from the HIR (valid in `self.hir.interner`) into
     /// the type-checker's interner (`self.ctx.resolver()`). The HIR body and
@@ -30,7 +29,12 @@ impl<'a> FnCtxt<'a> {
     /// `LocalVarId` of the (first) binding it introduces. Used for closure
     /// parameters, mirroring how `check_pattern` / `let` statements bind
     /// `Pat::Binding` names into `self.env`.
-    pub fn bind_pattern(&mut self, pat_id: PatId, ty: Ty, mutability: Mutability) -> thir::LocalVarId {
+    pub fn bind_pattern(
+        &mut self,
+        pat_id: PatId,
+        ty: Ty,
+        mutability: Mutability,
+    ) -> thir::LocalVarId {
         let pat = &self.body.pats[pat_id];
         match pat {
             Pat::Binding { name, .. } => {
@@ -38,7 +42,9 @@ impl<'a> FnCtxt<'a> {
                 thir::LocalVarId::from_raw(id.to_raw())
             }
             _ => {
-                let id = self.env.add_binding(self.ctx.resolver().intern("_"), ty, mutability);
+                let id = self
+                    .env
+                    .add_binding(self.ctx.resolver().intern("_"), ty, mutability);
                 thir::LocalVarId::from_raw(id.to_raw())
             }
         }
@@ -90,9 +96,7 @@ impl<'a> FnCtxt<'a> {
                 let local = self.resolve_pat_path_local(path);
                 match local {
                     Some(local) => {
-                        if let Some((enum_local, vidx)) =
-                            self.def_map.variant_map.get(&local)
-                        {
+                        if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
                             let adt_id = AdtId::from_raw(enum_local.to_raw());
                             thir::Pattern {
                                 kind: thir::PatternKind::Struct {
@@ -106,10 +110,7 @@ impl<'a> FnCtxt<'a> {
                             }
                         } else {
                             let label = if let Some(name) = path.as_name() {
-                                format!(
-                                    "unsupported path pattern `{}`",
-                                    self.ctx.name_str(name)
-                                )
+                                format!("unsupported path pattern `{}`", self.ctx.name_str(name))
                             } else {
                                 "unsupported path pattern".to_string()
                             };
@@ -162,7 +163,9 @@ impl<'a> FnCtxt<'a> {
                                 bare_name,
                                 "None" | "Some" | "Ok" | "Err" | "Less" | "Equal" | "Greater"
                             );
-                            if bare_safe && let Some((adt_id, vidx)) = self.ctx.variant_by_name(name) {
+                            if bare_safe
+                                && let Some((adt_id, vidx)) = self.ctx.variant_by_name(name)
+                            {
                                 return thir::Pattern {
                                     kind: thir::PatternKind::Struct {
                                         adt_id,
@@ -177,14 +180,12 @@ impl<'a> FnCtxt<'a> {
                         }
                         // Genuinely unresolved.
                         let label = if let Some(name) = path.as_name() {
-                            format!(
-                                "unresolved path pattern `{}`",
-                                self.ctx.name_str(name)
-                            )
+                            format!("unresolved path pattern `{}`", self.ctx.name_str(name))
                         } else {
                             "unresolved path pattern".to_string()
                         };
-                        self.diagnostics.push(GlyimDiagnostic::type_error(span, label));
+                        self.diagnostics
+                            .push(GlyimDiagnostic::type_error(span, label));
                         thir::Pattern::err(span)
                     }
                 }
@@ -197,9 +198,7 @@ impl<'a> FnCtxt<'a> {
                 let local = self.resolve_pat_path_local(path);
                 let (adt_id, variant_idx, is_variant) = match local {
                     Some(local) => {
-                        if let Some((enum_local, vidx)) =
-                            self.def_map.variant_map.get(&local)
-                        {
+                        if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
                             (
                                 AdtId::from_raw(enum_local.to_raw()),
                                 vidx.index() as u32,
@@ -227,7 +226,8 @@ impl<'a> FnCtxt<'a> {
                             } else {
                                 "unresolved struct path".to_string()
                             };
-                            self.diagnostics.push(GlyimDiagnostic::type_error(span, label));
+                            self.diagnostics
+                                .push(GlyimDiagnostic::type_error(span, label));
                             return thir::Pattern::err(span);
                         }
                     }
@@ -283,7 +283,10 @@ impl<'a> FnCtxt<'a> {
                                         let mut m = std::collections::HashMap::new();
                                         for (idx, arg) in args.iter().enumerate() {
                                             if let glyim_type::GenericArg::Ty(t) = arg {
-                                                m.insert(idx as u32, glyim_type::GenericArg::Ty(*t));
+                                                m.insert(
+                                                    idx as u32,
+                                                    glyim_type::GenericArg::Ty(*t),
+                                                );
                                             }
                                         }
                                         m

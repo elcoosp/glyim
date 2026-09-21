@@ -415,7 +415,10 @@ fn build_async_hir_while_loop_await() -> CrateHir {
         tail: None,
     });
 
-    let while_expr = exprs.push(Expr::While { cond, body: loop_body });
+    let while_expr = exprs.push(Expr::While {
+        cond,
+        body: loop_body,
+    });
     let total_tail = path(total_name, &mut exprs);
     let block = exprs.push(Expr::Block {
         stmts: vec![let_total, let_i, while_expr],
@@ -478,7 +481,6 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     }
 }
 
-
 /// M4/M5 (plan §P2-1): an `.await` inside a `while` loop body, whose awaited
 /// future type is statically nameable, must now desugar to a resumable
 /// `*State` coroutine machine — NOT be rejected. This is the loop-await state
@@ -496,13 +498,10 @@ fn while_loop_await_desugars_to_state_machine() {
         diags
     );
     // It must have produced a `*State` enum (the coroutine state machine).
-    let has_state_enum = hir
-        .items
-        .iter()
-        .any(|it| {
-            let s = hir.interner.resolve(it.name).to_string();
-            s.contains("State") || s.ends_with("Future")
-        });
+    let has_state_enum = hir.items.iter().any(|it| {
+        let s = hir.interner.resolve(it.name).to_string();
+        s.contains("State") || s.ends_with("Future")
+    });
     assert!(
         has_state_enum,
         "while-loop-await must produce a *State/*Future type; items: {:?}",

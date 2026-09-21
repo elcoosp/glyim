@@ -26,9 +26,8 @@ impl MockGitFetcher {
     /// Build a mock whose checkout contains a `Glyip.toml` for `name@version`.
     fn new(name: &str, version: &str) -> Self {
         let dir = TempDir::new().unwrap();
-        let toml = format!(
-            "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
-        );
+        let toml =
+            format!("[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n");
         std::fs::write(dir.path().join("Glyip.toml"), toml).unwrap();
         Self {
             rev: "abc123def456abc123def456abc123def456abc1".to_string(),
@@ -48,7 +47,12 @@ impl GitFetcher for MockGitFetcher {
         }
     }
 
-    fn fetch(&self, _url: &str, _rev: &str, _dest: &std::path::Path) -> crate::error::GlyipResult<PathBuf> {
+    fn fetch(
+        &self,
+        _url: &str,
+        _rev: &str,
+        _dest: &std::path::Path,
+    ) -> crate::error::GlyipResult<PathBuf> {
         Ok(self.checkout_path.clone())
     }
 }
@@ -56,10 +60,7 @@ impl GitFetcher for MockGitFetcher {
 fn root_config(deps: &[(&str, &str)]) -> GlyipToml {
     let mut dependencies = BTreeMap::new();
     for (name, ver) in deps {
-        dependencies.insert(
-            name.to_string(),
-            Dependency::Simple(ver.to_string()),
-        );
+        dependencies.insert(name.to_string(), Dependency::Simple(ver.to_string()));
     }
     GlyipToml {
         package: PackageConfig {
@@ -104,14 +105,22 @@ fn git_branch_dependency_resolves_to_locked_git_source() {
         .find(|c| c.name == "bar")
         .expect("bar is locked");
     match &locked.source {
-        CrateSource::Git { url, rev, branch, .. } => {
+        CrateSource::Git {
+            url, rev, branch, ..
+        } => {
             assert_eq!(url, "https://example.com/foo/bar.git");
-            assert_eq!(rev.as_deref(), Some("abc123def456abc123def456abc123def456abc1"));
+            assert_eq!(
+                rev.as_deref(),
+                Some("abc123def456abc123def456abc123def456abc1")
+            );
             assert_eq!(branch.as_deref(), Some("main"));
         }
         other => panic!("expected CrateSource::Git, got {other:?}"),
     }
-    assert_eq!(locked.version, "0.3.0", "version read from checked-out Glyip.toml");
+    assert_eq!(
+        locked.version, "0.3.0",
+        "version read from checked-out Glyip.toml"
+    );
 }
 
 #[test]
@@ -131,7 +140,9 @@ fn git_rev_dependency_records_exact_rev() {
 
     let fetcher = MockGitFetcher::new("pinned", "1.0.0");
     let resolver = DependencyResolver::new_no_index().with_git_fetcher(Box::new(fetcher));
-    let lockfile = resolver.resolve(&config, std::path::Path::new("/tmp")).unwrap();
+    let lockfile = resolver
+        .resolve(&config, std::path::Path::new("/tmp"))
+        .unwrap();
 
     let locked = lockfile.crates().find(|c| c.name == "pinned").unwrap();
     match &locked.source {
@@ -159,7 +170,9 @@ fn git_dependency_without_branch_tag_uses_default_branch() {
 
     let fetcher = MockGitFetcher::new("def", "2.0.0");
     let resolver = DependencyResolver::new_no_index().with_git_fetcher(Box::new(fetcher));
-    let lockfile = resolver.resolve(&config, std::path::Path::new("/tmp")).unwrap();
+    let lockfile = resolver
+        .resolve(&config, std::path::Path::new("/tmp"))
+        .unwrap();
 
     let locked = lockfile.crates().find(|c| c.name == "def").unwrap();
     match &locked.source {
@@ -227,7 +240,9 @@ fn semver_conflict_between_dependents_is_detected() {
         .expect_err("mutually-incompatible foo requirements must conflict");
 
     match err {
-        GlyipError::DependencyConflict { name, requirements, .. } => {
+        GlyipError::DependencyConflict {
+            name, requirements, ..
+        } => {
             assert_eq!(name, "foo");
             assert!(
                 requirements.contains(&"^1.0.0".to_string()),
@@ -318,13 +333,20 @@ fn resolution_is_deterministic_across_runs() {
         .expect("resolve run 2");
 
     assert_eq!(
-        a.crates().map(|c| (c.name.as_str(), c.version.as_str())).collect::<Vec<_>>(),
-        b.crates().map(|c| (c.name.as_str(), c.version.as_str())).collect::<Vec<_>>(),
+        a.crates()
+            .map(|c| (c.name.as_str(), c.version.as_str()))
+            .collect::<Vec<_>>(),
+        b.crates()
+            .map(|c| (c.name.as_str(), c.version.as_str()))
+            .collect::<Vec<_>>(),
         "two resolutions of the same graph must pick the same versions"
     );
     // Specifically, the highest SemVer version must win, not the listing order.
     let serde = a.crates().find(|c| c.name == "serde").unwrap();
-    assert_eq!(serde.version, "1.0.219", "highest version must be selected, not first-listed");
+    assert_eq!(
+        serde.version, "1.0.219",
+        "highest version must be selected, not first-listed"
+    );
 }
 
 /// Plan §4.3: when requirements genuinely conflict, the diagnostic names *both*
@@ -340,7 +362,12 @@ fn conflict_error_names_both_requesters() {
         .expect_err("mutually-incompatible foo requirements must conflict");
 
     match err {
-        GlyipError::DependencyConflict { name, requirements, requesters, .. } => {
+        GlyipError::DependencyConflict {
+            name,
+            requirements,
+            requesters,
+            ..
+        } => {
             assert_eq!(name, "foo");
             assert!(requirements.contains(&"^1.0.0".to_string()));
             assert!(requirements.contains(&"^2.0.0".to_string()));

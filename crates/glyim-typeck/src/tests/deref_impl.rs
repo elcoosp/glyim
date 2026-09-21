@@ -8,17 +8,15 @@ use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{AdtId, CrateId, LocalDefId};
 use glyim_core::interner::{Interner, Name};
 use glyim_core::path::PathKind;
-use glyim_def_map::{CrateDefMap, ItemScope, ModuleData, ModuleId, ModuleOrigin};
-use glyim_hir::{
-    AssociatedTy, ImplItem, Item, ItemId, ItemKind, Path, PathSegment, TypeRef,
-};
 use glyim_core::primitives::Visibility;
+use glyim_def_map::{CrateDefMap, ItemScope, ModuleData, ModuleId, ModuleOrigin};
+use glyim_hir::{AssociatedTy, ImplItem, Item, ItemId, ItemKind, Path, PathSegment, TypeRef};
 use glyim_solve::SimpleTraitSolver;
 use glyim_span::Span;
-use glyim_type::{TyCtx, TyCtxMut};
 use glyim_type::ty::TyKind;
+use glyim_type::{TyCtx, TyCtxMut};
 
-use crate::{typeck_crate, TypeckResult};
+use crate::{TypeckResult, typeck_crate};
 
 fn intern_name(interner: &Interner, s: &str) -> Name {
     interner.intern(s)
@@ -30,7 +28,11 @@ fn build_def_map(interner: &mut Interner, krate: CrateId, type_names: &[&str]) -
         let name = interner.intern(name_str);
         scope.types.insert(
             name,
-            (LocalDefId::from_raw(i as u32), Visibility::Public, Span::DUMMY),
+            (
+                LocalDefId::from_raw(i as u32),
+                Visibility::Public,
+                Span::DUMMY,
+            ),
         );
     }
     let root_id = ModuleId::from_raw(0);
@@ -105,8 +107,7 @@ fn impl_deref_for_adt_populates_registry() {
     let ctx: TyCtxMut = TyCtxMut::new(interner);
     let trait_ctx = glyim_solve::TraitContext::new();
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
-    let (frozen, result): (TyCtx, TypeckResult) =
-        typeck_crate(ctx, &def_map, &hir, &mut solver);
+    let (frozen, result): (TyCtx, TypeckResult) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
     // The registry must contain a template keyed by the `Wrapper` AdtId (0).
     let wrapper_id = AdtId::from_raw(0);

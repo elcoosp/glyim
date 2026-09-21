@@ -532,14 +532,17 @@ fn proc_macro_invocation_dispatches_through_registry() {
 
     // A proc macro that doubles its input: `double!(x)` -> `x x`.
     let mut registry = Registry::new();
-    registry.register("double", |input: &[(SyntaxKind, String)]| -> Vec<(SyntaxKind, String)> {
-        let mut out = Vec::with_capacity(input.len() * 2);
-        for tok in input {
-            out.push(tok.clone());
-            out.push(tok.clone());
-        }
-        out
-    });
+    registry.register(
+        "double",
+        |input: &[(SyntaxKind, String)]| -> Vec<(SyntaxKind, String)> {
+            let mut out = Vec::with_capacity(input.len() * 2);
+            for tok in input {
+                out.push(tok.clone());
+                out.push(tok.clone());
+            }
+            out
+        },
+    );
     assert!(registry.contains("double"));
 
     let src = r#"
@@ -567,4 +570,3 @@ fn main() {
 fn count_occurrences(haystack: &str, needle: &str) -> usize {
     haystack.matches(needle).count()
 }
-

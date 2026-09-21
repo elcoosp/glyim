@@ -52,9 +52,8 @@ fn test_span_assertions() {
 fn test_pipeline_runs_macro_expansion_builtin() {
     use crate::harness::compiler::TestCompiler;
     let backend = mock::MockCodegen::new();
-    let compiler = harness::compiler::PipelineCompiler::new(
-        std::sync::Arc::new(backend) as std::sync::Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>,
-    );
+    let compiler = harness::compiler::PipelineCompiler::new(std::sync::Arc::new(backend)
+        as std::sync::Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>);
     let src = "fn main() { let _ = stringify!(hello world); }";
     let out = compiler.compile(src, glyim_span::FileId::from_raw(1), &[]);
     assert!(
@@ -80,17 +79,19 @@ fn test_pipeline_runs_proc_macro_via_registry() {
     // not preserved through the expander's green reconstruction, so the output
     // tokens are chosen to need no separator (`4` followed by `;` is valid
     // glyim with no adjacent identifier collision).
-    registry.register("mk", |_input: &[(SyntaxKind, String)]| -> Vec<(SyntaxKind, String)> {
-        vec![
-            (SyntaxKind::IntLit, "4".to_string()),
-            (SyntaxKind::Semicolon, ";".to_string()),
-        ]
-    });
+    registry.register(
+        "mk",
+        |_input: &[(SyntaxKind, String)]| -> Vec<(SyntaxKind, String)> {
+            vec![
+                (SyntaxKind::IntLit, "4".to_string()),
+                (SyntaxKind::Semicolon, ";".to_string()),
+            ]
+        },
+    );
 
     let backend = mock::MockCodegen::new();
-    let compiler = harness::compiler::PipelineCompiler::new(
-        std::sync::Arc::new(backend) as std::sync::Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>,
-    )
+    let compiler = harness::compiler::PipelineCompiler::new(std::sync::Arc::new(backend)
+        as std::sync::Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>)
     .with_proc_registry(Some(std::sync::Arc::new(registry)));
 
     let src = "fn main() { mk!(x) }";

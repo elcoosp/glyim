@@ -64,8 +64,7 @@ mod tests {
 
     #[test]
     fn verbose_mir_includes_resolved_types_and_debug_names() {
-        let (ctx, i32_ty) =
-            crate::with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Int(IntTy::I32)));
+        let (ctx, i32_ty) = crate::with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Int(IntTy::I32)));
 
         let mut body = Body::dummy(def_id());
         let mut locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::new();
@@ -108,16 +107,25 @@ mod tests {
 
         // Default format has no debug variable names and no inline place-type
         // annotations on statements/terminators.
-        assert!(!terse.contains("/* x */"), "terse format must not show debug names");
+        assert!(
+            !terse.contains("/* x */"),
+            "terse format must not show debug names"
+        );
         assert!(
             !terse.contains("$0: i32 ="),
             "terse format must not annotate places inline with types"
         );
-        assert!(terse.contains("$0 = Use(Const(uint(0)))"), "terse statement shape");
+        assert!(
+            terse.contains("$0 = Use(Const(uint(0)))"),
+            "terse statement shape"
+        );
 
         // Verbose format annotates the debug name, the local type, and inline
         // place types on the statement.
-        assert!(verbose.contains("/* x */"), "verbose must show debug name /* x */");
+        assert!(
+            verbose.contains("/* x */"),
+            "verbose must show debug name /* x */"
+        );
         assert!(
             verbose.contains("$0: i32 = Use(Const(uint(0)))"),
             "verbose must annotate the place with its resolved type"
@@ -125,4 +133,3 @@ mod tests {
         assert!(verbose.contains("bb0:"));
     }
 }
-

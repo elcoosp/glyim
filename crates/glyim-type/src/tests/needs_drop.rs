@@ -62,9 +62,13 @@ fn struct_of_primitives_does_not_need_drop() {
         let adt_def = AdtDef {
             kind: AdtKind::Struct,
             fields: fields.clone(),
-            variants: vec![VariantDef { name, fields, style: crate::adt_def::VariantStyle::Unit }],
+            variants: vec![VariantDef {
+                name,
+                fields,
+                style: crate::adt_def::VariantStyle::Unit,
+            }],
             generic_params: vec![],
-};
+        };
         c.register_adt(adt_id, adt_def);
         let substs = c.intern_substitution(vec![]);
         c.mk_adt(adt_id, substs)
@@ -84,11 +88,11 @@ fn struct_containing_droppable_field_needs_drop() {
             fields: IndexVec::new(),
             variants: vec![VariantDef {
                 name: f,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
         c.register_adt(inner_id, inner_def);
         c.mark_has_drop(inner_id);
         let inner_substs = c.intern_substitution(vec![]);
@@ -97,13 +101,20 @@ fn struct_containing_droppable_field_needs_drop() {
         // Outer struct holding the inner type.
         let outer_id = AdtId::from_raw(2);
         let mut of = IndexVec::new();
-        of.push(FieldDef { name: f, ty: inner_ty });
+        of.push(FieldDef {
+            name: f,
+            ty: inner_ty,
+        });
         let outer_def = AdtDef {
             kind: AdtKind::Struct,
             fields: of.clone(),
-            variants: vec![VariantDef { name: f, fields: of, style: crate::adt_def::VariantStyle::Unit }],
+            variants: vec![VariantDef {
+                name: f,
+                fields: of,
+                style: crate::adt_def::VariantStyle::Unit,
+            }],
             generic_params: vec![],
-};
+        };
         c.register_adt(outer_id, outer_def);
         let outer_substs = c.intern_substitution(vec![]);
         let outer_ty = c.mk_adt(outer_id, outer_substs);
@@ -126,11 +137,11 @@ fn array_and_slice_of_droppable_need_drop() {
             fields: IndexVec::new(),
             variants: vec![VariantDef {
                 name: f,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
         c.register_adt(id, def);
         c.mark_has_drop(id);
         let substs = c.intern_substitution(vec![]);
@@ -164,10 +175,8 @@ fn string_owns_and_needs_drop() {
 fn tuple_of_primitives_does_not_need_drop() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
         let i = c.mk_ty(TyKind::Int(IntTy::I32));
-        let substs = c.intern_substitution(vec![
-            crate::GenericArg::Ty(i),
-            crate::GenericArg::Ty(i),
-        ]);
+        let substs =
+            c.intern_substitution(vec![crate::GenericArg::Ty(i), crate::GenericArg::Ty(i)]);
         c.mk_ty(TyKind::Tuple(substs))
     });
     assert!(!ctx.needs_drop(ty));
@@ -183,11 +192,11 @@ fn union_always_needs_drop() {
             fields: IndexVec::new(),
             variants: vec![VariantDef {
                 name: f,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
         c.register_adt(id, def);
         let substs = c.intern_substitution(vec![]);
         c.mk_adt(id, substs)

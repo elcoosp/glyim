@@ -1,26 +1,26 @@
 //! Crate root.
 use glyim_codegen::CodegenBackend;
 use glyim_codegen_llvm::LlvmBackend;
+use glyim_core::def_id::TraitDefId as SolveTraitDefId;
+use glyim_core::interner::Name;
 use glyim_db::Database;
 use glyim_diag::{CompResult, DiagSink, GlyimDiagnostic};
 use glyim_lower::mono::MonoCtx;
+use glyim_lower::partition::partition;
 use glyim_lower::post_mono_checks::{
     check_large_mono_set, check_unsized_locals, check_unused_generic_params,
 };
-use glyim_lower::partition::partition;
 use glyim_mir::Body;
-use glyim_solve::{InferenceTable, SimpleTraitSolver};
 use glyim_solve::solver::ImplDef;
 use glyim_solve::solver::{BuiltinTrait, TraitDef};
-use glyim_core::def_id::TraitDefId as SolveTraitDefId;
-use glyim_core::interner::Name;
+use glyim_solve::{InferenceTable, SimpleTraitSolver};
 use glyim_type::ParamTy;
 use glyim_type::TraitRef;
 use glyim_type::Ty;
 use glyim_type::TyKind;
-use std::collections::HashMap;
 use glyim_typeck::tyconv;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -33,7 +33,10 @@ use std::sync::Arc;
 /// the solver agree on the `TraitDefId`. The five auto/structural traits
 /// (`Copy`/`Sized`/`Send`/`Sync`/`Unpin`) are additionally registered as
 /// lang traits so `prove_trait` can discharge their bounds structurally.
-fn register_builtin_traits(trait_ctx: &mut glyim_solve::TraitContext, interner: &glyim_core::interner::Interner) {
+fn register_builtin_traits(
+    trait_ctx: &mut glyim_solve::TraitContext,
+    interner: &glyim_core::interner::Interner,
+) {
     let mut reg = |id: u32, name: &str| {
         let n = interner.intern(name);
         let tid: SolveTraitDefId = SolveTraitDefId::from_raw(id);
@@ -82,13 +85,13 @@ pub struct Pipeline;
 /// can inspect the mid-pipeline results (def-map, type-check, MIR bodies) that
 /// the standard `compile_file` discards.
 pub struct CompileArtifacts {
-/// Struct.
+    /// Struct.
     pub def_map: glyim_def_map::CrateDefMap,
-/// Struct.
+    /// Struct.
     pub typeck_result: glyim_typeck::TypeckResult,
-/// Struct.
+    /// Struct.
     pub mir_bodies: Vec<Arc<glyim_mir::Body>>,
-/// Struct.
+    /// Struct.
     pub ty_ctx: Arc<glyim_type::TyCtx>,
 }
 
@@ -103,7 +106,10 @@ impl Pipeline {
     /// runs, so the entry `main` must be known up front.
     pub fn entry_main_local_id(db: &mut Database, path: &Path) -> Option<u32> {
         let file_id = db.vfs().add_file_from_disk(path).ok()?;
-        let source = db.vfs().file_content(file_id).unwrap_or_else(|| Arc::from(""));
+        let source = db
+            .vfs()
+            .file_content(file_id)
+            .unwrap_or_else(|| Arc::from(""));
         let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
         if parse_result
             .diagnostics
@@ -135,8 +141,15 @@ impl Pipeline {
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
     ) -> CompResult<()> {
-        Self::compile_file_with_artifacts(db, path, backend, output_path, codegen_units, proc_registry)
-            .map(|_| ())
+        Self::compile_file_with_artifacts(
+            db,
+            path,
+            backend,
+            output_path,
+            codegen_units,
+            proc_registry,
+        )
+        .map(|_| ())
     }
 }
 
@@ -263,7 +276,10 @@ impl Pipeline {
                 // type-checker assigned — the "Adt45 vs Adt2000002" errors.
                 let adt_id = (0..def_map.modules.len())
                     .find_map(|i| {
-                        def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)].scope.types.get(&item.name)
+                        def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)]
+                            .scope
+                            .types
+                            .get(&item.name)
                     })
                     .map(|(id, _, _)| glyim_core::def_id::AdtId::from_raw(id.to_raw()))
                     .or_else(|| ty_ctx_mut.adt_id_by_name(item.name))
@@ -282,42 +298,45 @@ impl Pipeline {
                     },
                 );
             }
-            }
-            // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so
-            // that 1-argument usages like `Result<usize>` expand to
-            // `Result<usize, Error>`. The RHS is resolved to a `Ty` template with
-            // the alias formals left as `TyKind::Param`, stored for later
-            // expansion by `resolve_name_to_adt_ty` (stdlib-completion).
-            {
-                let mut alias_infer = InferenceTable::new();
-                let mut alias_diags = Vec::new();
-                for (_id, item) in hir.items.iter_enumerated() {
-                    if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                        && let Some(rhs) = &alias.ty {
-                            let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                            let mut params: Vec<(u32, Name)> = Vec::new();
-                            for (i, gp) in alias.generic_params.iter().enumerate() {
-                                let pname = gp.name;
-                                let pty = ty_ctx_mut
-                                    .mk_ty(TyKind::Param(ParamTy { index: i as u32, name: pname }));
-                                param_map.insert(pname, pty);
-                                params.push((i as u32, pname));
-                            }
-                            let template = tyconv::resolve_type_ref(
-                                &mut ty_ctx_mut,
-                                &mut alias_infer,
-                                &def_map,
-                                &mut alias_diags,
-                                rhs,
-                                &param_map,
-                                item.span,
-                            );
-                            ty_ctx_mut.register_type_alias(item.name, params, template);
-                        }
+        }
+        // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so
+        // that 1-argument usages like `Result<usize>` expand to
+        // `Result<usize, Error>`. The RHS is resolved to a `Ty` template with
+        // the alias formals left as `TyKind::Param`, stored for later
+        // expansion by `resolve_name_to_adt_ty` (stdlib-completion).
+        {
+            let mut alias_infer = InferenceTable::new();
+            let mut alias_diags = Vec::new();
+            for (_id, item) in hir.items.iter_enumerated() {
+                if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
+                    && let Some(rhs) = &alias.ty
+                {
+                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                    let mut params: Vec<(u32, Name)> = Vec::new();
+                    for (i, gp) in alias.generic_params.iter().enumerate() {
+                        let pname = gp.name;
+                        let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
+                            index: i as u32,
+                            name: pname,
+                        }));
+                        param_map.insert(pname, pty);
+                        params.push((i as u32, pname));
+                    }
+                    let template = tyconv::resolve_type_ref(
+                        &mut ty_ctx_mut,
+                        &mut alias_infer,
+                        &def_map,
+                        &mut alias_diags,
+                        rhs,
+                        &param_map,
+                        item.span,
+                    );
+                    ty_ctx_mut.register_type_alias(item.name, params, template);
                 }
             }
+        }
 
-            {
+        {
             let mut infer = InferenceTable::new();
             let mut impl_diags = Vec::new();
             for (_id, item) in hir.items.iter_enumerated() {
@@ -349,7 +368,9 @@ impl Pipeline {
         let mut solver = SimpleTraitSolver::new(&trait_ctx);
         let (ty_ctx, typeck_result) =
             glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
-        sink_cell.borrow_mut().extend(typeck_result.diagnostics.clone());
+        sink_cell
+            .borrow_mut()
+            .extend(typeck_result.diagnostics.clone());
         if sink_cell.borrow().has_errors() {
             return Err(sink_cell.into_inner().into_diagnostics());
         }
@@ -361,7 +382,8 @@ impl Pipeline {
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
 
-            let lower_ctx = PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
+            let lower_ctx =
+                PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
             let mut bodies = std::collections::HashMap::new();
 
             for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
@@ -389,8 +411,7 @@ impl Pipeline {
                 // as `__glyim_fn_{closure_id}` by codegen.
                 for (_cid, _substs, cbody) in lower_result.closure_bodies {
                     let c_mir_arc = Arc::new(cbody);
-                    let c_borrowck_ctx =
-                        PipelineBorrowckCtx::new(ty_ctx_ref, &c_mir_arc);
+                    let c_borrowck_ctx = PipelineBorrowckCtx::new(ty_ctx_ref, &c_mir_arc);
                     let c_borrowck_result =
                         glyim_borrowck::check_borrows(&c_borrowck_ctx, &c_mir_arc);
                     sink_cell.borrow_mut().extend(c_borrowck_result.errors);
@@ -429,10 +450,7 @@ impl Pipeline {
             // / pathological mono-set sizes surface as diagnostics instead of
             // being silently ignored.
             let mut post_diags = check_unsized_locals(mono_ctx.items(), ty_ctx_ref);
-            post_diags.extend(check_unused_generic_params(
-                mono_ctx.items(),
-                ty_ctx_ref,
-            ));
+            post_diags.extend(check_unused_generic_params(mono_ctx.items(), ty_ctx_ref));
             post_diags.extend(check_large_mono_set(mono_ctx.items(), 1000));
             sink_cell.borrow_mut().extend(post_diags);
             mono_ctx.items().to_vec()
@@ -580,10 +598,8 @@ pub fn compile_file_to_mir(
     let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
     if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
         let dump = expanded_root.text().to_string();
-        let dump_path = std::env::temp_dir().join(format!(
-            "glyim_expanded_{}.g",
-            std::process::id()
-        ));
+        let dump_path =
+            std::env::temp_dir().join(format!("glyim_expanded_{}.g", std::process::id()));
         let _ = std::fs::write(&dump_path, &dump);
         eprintln!("wrote {} bytes to /tmp/glyim_expanded.g", dump.len());
     }
@@ -592,7 +608,8 @@ pub fn compile_file_to_mir(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
-    let (def_map, def_diagnostics) = glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
+    let (def_map, def_diagnostics) =
+        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
@@ -625,27 +642,30 @@ pub fn compile_file_to_mir(
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
             if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty {
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    let mut params: Vec<(u32, Name)> = Vec::new();
-                    for (i, gp) in alias.generic_params.iter().enumerate() {
-                        let pname = gp.name;
-                        let pty = ty_ctx_mut
-                            .mk_ty(TyKind::Param(ParamTy { index: i as u32, name: pname }));
-                        param_map.insert(pname, pty);
-                        params.push((i as u32, pname));
-                    }
-                    let template = tyconv::resolve_type_ref(
-                        &mut ty_ctx_mut,
-                        &mut alias_infer,
-                        &def_map,
-                        &mut alias_diags,
-                        rhs,
-                        &param_map,
-                        item.span,
-                    );
-                    ty_ctx_mut.register_type_alias(item.name, params, template);
+                && let Some(rhs) = &alias.ty
+            {
+                let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                let mut params: Vec<(u32, Name)> = Vec::new();
+                for (i, gp) in alias.generic_params.iter().enumerate() {
+                    let pname = gp.name;
+                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
+                        index: i as u32,
+                        name: pname,
+                    }));
+                    param_map.insert(pname, pty);
+                    params.push((i as u32, pname));
                 }
+                let template = tyconv::resolve_type_ref(
+                    &mut ty_ctx_mut,
+                    &mut alias_infer,
+                    &def_map,
+                    &mut alias_diags,
+                    rhs,
+                    &param_map,
+                    item.span,
+                );
+                ty_ctx_mut.register_type_alias(item.name, params, template);
+            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -692,7 +712,9 @@ pub fn compile_file_to_mir(
         let new_ty_ctx = elaborator.freeze();
         db.set_ty_ctx(new_ty_ctx);
     }
-    let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized after elaboration");
+    let ty_ctx_guard = db
+        .get_ty_ctx()
+        .expect("TyCtx not initialized after elaboration");
 
     Ok(MirCompilation {
         bodies,
@@ -727,7 +749,8 @@ pub fn emit_mir(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
-    let (def_map, def_diagnostics) = glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+    let (def_map, def_diagnostics) =
+        glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
@@ -760,27 +783,30 @@ pub fn emit_mir(
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
             if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty {
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    let mut params: Vec<(u32, Name)> = Vec::new();
-                    for (i, gp) in alias.generic_params.iter().enumerate() {
-                        let pname = gp.name;
-                        let pty = ty_ctx_mut
-                            .mk_ty(TyKind::Param(ParamTy { index: i as u32, name: pname }));
-                        param_map.insert(pname, pty);
-                        params.push((i as u32, pname));
-                    }
-                    let template = tyconv::resolve_type_ref(
-                        &mut ty_ctx_mut,
-                        &mut alias_infer,
-                        &def_map,
-                        &mut alias_diags,
-                        rhs,
-                        &param_map,
-                        item.span,
-                    );
-                    ty_ctx_mut.register_type_alias(item.name, params, template);
+                && let Some(rhs) = &alias.ty
+            {
+                let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                let mut params: Vec<(u32, Name)> = Vec::new();
+                for (i, gp) in alias.generic_params.iter().enumerate() {
+                    let pname = gp.name;
+                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
+                        index: i as u32,
+                        name: pname,
+                    }));
+                    param_map.insert(pname, pty);
+                    params.push((i as u32, pname));
                 }
+                let template = tyconv::resolve_type_ref(
+                    &mut ty_ctx_mut,
+                    &mut alias_infer,
+                    &def_map,
+                    &mut alias_diags,
+                    rhs,
+                    &param_map,
+                    item.span,
+                );
+                ty_ctx_mut.register_type_alias(item.name, params, template);
+            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -844,7 +870,8 @@ pub fn emit_llvm_ir(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
-    let (def_map, def_diagnostics) = glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+    let (def_map, def_diagnostics) =
+        glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
@@ -877,27 +904,30 @@ pub fn emit_llvm_ir(
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
             if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty {
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    let mut params: Vec<(u32, Name)> = Vec::new();
-                    for (i, gp) in alias.generic_params.iter().enumerate() {
-                        let pname = gp.name;
-                        let pty = ty_ctx_mut
-                            .mk_ty(TyKind::Param(ParamTy { index: i as u32, name: pname }));
-                        param_map.insert(pname, pty);
-                        params.push((i as u32, pname));
-                    }
-                    let template = tyconv::resolve_type_ref(
-                        &mut ty_ctx_mut,
-                        &mut alias_infer,
-                        &def_map,
-                        &mut alias_diags,
-                        rhs,
-                        &param_map,
-                        item.span,
-                    );
-                    ty_ctx_mut.register_type_alias(item.name, params, template);
+                && let Some(rhs) = &alias.ty
+            {
+                let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                let mut params: Vec<(u32, Name)> = Vec::new();
+                for (i, gp) in alias.generic_params.iter().enumerate() {
+                    let pname = gp.name;
+                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
+                        index: i as u32,
+                        name: pname,
+                    }));
+                    param_map.insert(pname, pty);
+                    params.push((i as u32, pname));
                 }
+                let template = tyconv::resolve_type_ref(
+                    &mut ty_ctx_mut,
+                    &mut alias_infer,
+                    &def_map,
+                    &mut alias_diags,
+                    rhs,
+                    &param_map,
+                    item.span,
+                );
+                ty_ctx_mut.register_type_alias(item.name, params, template);
+            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -972,7 +1002,8 @@ pub fn emit_asm(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
-    let (def_map, def_diagnostics) = glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+    let (def_map, def_diagnostics) =
+        glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
@@ -1005,27 +1036,30 @@ pub fn emit_asm(
         let mut alias_diags = Vec::new();
         for (_id, item) in hir.items.iter_enumerated() {
             if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty {
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    let mut params: Vec<(u32, Name)> = Vec::new();
-                    for (i, gp) in alias.generic_params.iter().enumerate() {
-                        let pname = gp.name;
-                        let pty = ty_ctx_mut
-                            .mk_ty(TyKind::Param(ParamTy { index: i as u32, name: pname }));
-                        param_map.insert(pname, pty);
-                        params.push((i as u32, pname));
-                    }
-                    let template = tyconv::resolve_type_ref(
-                        &mut ty_ctx_mut,
-                        &mut alias_infer,
-                        &def_map,
-                        &mut alias_diags,
-                        rhs,
-                        &param_map,
-                        item.span,
-                    );
-                    ty_ctx_mut.register_type_alias(item.name, params, template);
+                && let Some(rhs) = &alias.ty
+            {
+                let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                let mut params: Vec<(u32, Name)> = Vec::new();
+                for (i, gp) in alias.generic_params.iter().enumerate() {
+                    let pname = gp.name;
+                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
+                        index: i as u32,
+                        name: pname,
+                    }));
+                    param_map.insert(pname, pty);
+                    params.push((i as u32, pname));
                 }
+                let template = tyconv::resolve_type_ref(
+                    &mut ty_ctx_mut,
+                    &mut alias_infer,
+                    &def_map,
+                    &mut alias_diags,
+                    rhs,
+                    &param_map,
+                    item.span,
+                );
+                ty_ctx_mut.register_type_alias(item.name, params, template);
+            }
         }
     }
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
@@ -1060,9 +1094,12 @@ pub fn emit_asm(
 
     let backend = LlvmBackend::new().with_debug_info(false);
     let arc_bodies: Vec<Arc<Body>> = mir_bodies.into_iter().map(Arc::new).collect();
-    backend
-        .emit_assembly(&arc_bodies, output)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("LLVM assembly generation failed: {:?}", e))])?;
+    backend.emit_assembly(&arc_bodies, output).map_err(|e| {
+        vec![GlyimDiagnostic::internal_error(format!(
+            "LLVM assembly generation failed: {:?}",
+            e
+        ))]
+    })?;
 
     Ok(())
 }

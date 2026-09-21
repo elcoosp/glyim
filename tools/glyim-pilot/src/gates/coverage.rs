@@ -11,7 +11,7 @@ static COVERAGE_PCT_RE: LazyLock<Regex> =
 
 /// CoverageGate.
 pub struct CoverageGate {
-/// Struct.
+    /// Struct.
     pub min_coverage: f64,
 }
 

@@ -8,7 +8,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 /// FileOp.
 pub enum FileOp {
     #[serde(rename = "write")]
-/// Variant.
+    /// Variant.
     Write {
         /// path field.
         path: String,
@@ -16,17 +16,17 @@ pub enum FileOp {
         content: String,
     },
     #[serde(rename = "replace")]
-/// Variant.
+    /// Variant.
     Replace {
-/// Struct.
+        /// Struct.
         path: String,
-/// Struct.
+        /// Struct.
         find: String,
-/// Struct.
+        /// Struct.
         replace: String,
     },
     #[serde(rename = "delete")]
-/// Variant.
+    /// Variant.
     Delete {
         /// path field.
         path: String,
@@ -34,7 +34,7 @@ pub enum FileOp {
 }
 
 impl FileOp {
-/// path.
+    /// path.
     pub fn path(&self) -> &str {
         match self {
             FileOp::Write { path, .. } => path,
@@ -47,20 +47,20 @@ impl FileOp {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// ParsedOps.
 pub struct ParsedOps {
-/// Struct.
+    /// Struct.
     pub ops: Vec<FileOp>,
-/// Struct.
+    /// Struct.
     pub commit_message: Option<String>,
-/// Struct.
+    /// Struct.
     pub incomplete: bool,
-/// Struct.
+    /// Struct.
     pub done: bool,
-/// Struct.
+    /// Struct.
     pub approved: bool,
 }
 
 impl ParsedOps {
-/// empty.
+    /// empty.
     pub fn empty() -> Self {
         Self {
             ops: Vec::new(),
@@ -70,7 +70,7 @@ impl ParsedOps {
             approved: false,
         }
     }
-/// is_empty.
+    /// is_empty.
     pub fn is_empty(&self) -> bool {
         self.ops.is_empty()
             && self.commit_message.is_none()

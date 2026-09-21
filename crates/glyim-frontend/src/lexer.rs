@@ -6,16 +6,16 @@ use smol_str::SmolStr;
 #[derive(Clone, Debug)]
 /// Token.
 pub struct Token {
-/// Struct.
+    /// Struct.
     pub kind: SyntaxKind,
-/// Struct.
+    /// Struct.
     pub span: Span,
-/// Struct.
+    /// Struct.
     pub text: SmolStr,
 }
 
 impl Token {
-/// new.
+    /// new.
     pub fn new(kind: SyntaxKind, span: Span, text: impl AsRef<str>) -> Self {
         Self {
             kind,
@@ -28,9 +28,9 @@ impl Token {
 #[derive(Clone, Debug)]
 /// LexResult.
 pub struct LexResult {
-/// Struct.
+    /// Struct.
     pub tokens: Vec<Token>,
-/// Struct.
+    /// Struct.
     pub diagnostics: Vec<GlyimDiagnostic>,
 }
 
@@ -43,7 +43,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-/// new.
+    /// new.
     pub fn new(source: &'a str, file_id: FileId) -> Self {
         Self {
             source,
@@ -78,7 +78,7 @@ impl<'a> Lexer<'a> {
         ch
     }
 
-/// lex.
+    /// lex.
     /// Lex to a trivia-free token stream (whitespace and comments omitted).
     /// This is the historical `Lexer::lex` behavior; it is preserved for
     /// callers (tests, fragment validation) that want only meaningful tokens.

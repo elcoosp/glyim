@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// ApplyLimits.
 pub struct ApplyLimits {
-/// Struct.
+    /// Struct.
     pub max_file_size: usize,
-/// Struct.
+    /// Struct.
     pub max_total_content: usize,
-/// Struct.
+    /// Struct.
     pub max_ops_per_block: usize,
 }
 
@@ -25,7 +25,7 @@ impl Default for ApplyLimits {
 }
 
 impl ApplyLimits {
-/// strict.
+    /// strict.
     pub fn strict() -> Self {
         Self {
             max_file_size: 1024 * 1024,
@@ -38,14 +38,14 @@ impl ApplyLimits {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// BannedPattern.
 pub struct BannedPattern {
-/// Struct.
+    /// Struct.
     pub pattern: String,
-/// Struct.
+    /// Struct.
     pub description: String,
 }
 
 impl BannedPattern {
-/// new.
+    /// new.
     pub fn new(pattern: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
             pattern: pattern.into(),
@@ -66,11 +66,11 @@ pub fn default_banned_patterns() -> Vec<BannedPattern> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// DependencyRule.
 pub struct DependencyRule {
-/// Struct.
+    /// Struct.
     pub from_crate: String,
-/// Struct.
+    /// Struct.
     pub forbidden_dep: String,
-/// Struct.
+    /// Struct.
     pub reason: String,
 }
 

@@ -11,14 +11,10 @@ fn test_glyim_env_var_home() {
         // HOME may be unset on platforms where it is not conventionally defined
         // (e.g. Windows, which uses USERPROFILE). Tolerate both outcomes.
         if result >= 0 {
-            assert!(
-                !out_ptr.is_null(),
-                "out_ptr should not be null on success"
-            );
+            assert!(!out_ptr.is_null(), "out_ptr should not be null on success");
             assert!(out_len > 0, "out_len should be > 0 for HOME");
             let home = std::slice::from_raw_parts(out_ptr, out_len);
-            let home_str =
-                std::str::from_utf8(home).expect("HOME should be valid UTF-8");
+            let home_str = std::str::from_utf8(home).expect("HOME should be valid UTF-8");
             assert!(!home_str.is_empty(), "HOME should not be empty");
             crate::glyim_free_cstr(out_ptr);
         } else {

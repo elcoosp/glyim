@@ -22,13 +22,13 @@
     clippy::needless_lifetimes,
     clippy::collapsible_if
 )]
+use crate::passes::LtoKind;
 use glyim_codegen::CodegenBackend;
 use glyim_core::TargetInfo;
 use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_mir::Body;
 use glyim_span::{FileId, HygieneCtx};
 use glyim_type::TyCtx;
-use crate::passes::LtoKind;
 use inkwell::context::Context;
 use inkwell::targets::{InitializationConfig, Target, TargetTriple};
 use std::collections::HashMap;
@@ -73,7 +73,7 @@ impl Default for LlvmBackend {
 }
 
 impl LlvmBackend {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Target::initialize_all(&InitializationConfig::default());
         let target_info = TargetInfo::default();
@@ -95,7 +95,7 @@ impl LlvmBackend {
         }
     }
 
-/// with_db.
+    /// with_db.
     pub fn with_db(db: &glyim_db::Database) -> Self {
         Target::initialize_all(&InitializationConfig::default());
         let target_info = TargetInfo::default();
@@ -114,13 +114,13 @@ impl LlvmBackend {
         }
     }
 
-/// with_hygiene_ctx.
+    /// with_hygiene_ctx.
     pub fn with_hygiene_ctx(mut self, hygiene: HygieneCtx) -> Self {
         self.hygiene_ctx = Some(hygiene);
         self
     }
 
-/// lower_bodies_to_module.
+    /// lower_bodies_to_module.
     pub fn lower_bodies_to_module<'ctx>(
         &self,
         context: &'ctx Context,
@@ -145,13 +145,13 @@ impl LlvmBackend {
                 self.debug_info,
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
-            self.entry_main,
+                self.entry_main,
             )?;
         }
         Ok(module)
     }
 
-/// with_target.
+    /// with_target.
     pub fn with_target(mut self, target_triple: impl Into<String>) -> Self {
         let triple = target_triple.into();
         self.target_info = TargetInfo::from_triple(&triple);
@@ -159,38 +159,38 @@ impl LlvmBackend {
         self
     }
 
-/// with_ty_ctx_handle.
+    /// with_ty_ctx_handle.
     pub fn with_ty_ctx_handle(mut self, handle: glyim_db::TyCtxHandle) -> Self {
         self.ty_ctx_handle = Some(handle);
         self
     }
 
-/// with_ty_ctx.
+    /// with_ty_ctx.
     pub fn with_ty_ctx(mut self, ctx: TyCtx) -> Self {
         let handle = Arc::new(std::sync::RwLock::new(Some(Arc::new(ctx))));
         self.ty_ctx_handle = Some(handle);
         self
     }
 
-/// with_debug_info.
+    /// with_debug_info.
     pub fn with_debug_info(mut self, enable: bool) -> Self {
         self.debug_info = enable;
         self
     }
 
-/// with_source_map.
+    /// with_source_map.
     pub fn with_source_map(mut self, map: HashMap<FileId, (String, String)>) -> Self {
         self.source_map = map;
         self
     }
 
-/// with_opt_level.
+    /// with_opt_level.
     pub fn with_opt_level(mut self, level: u8) -> Self {
         self.opt_level = level;
         self
     }
 
-/// with_opt_for_size.
+    /// with_opt_for_size.
     pub fn with_opt_for_size(mut self, size: bool) -> Self {
         self.opt_for_size = size;
         self
@@ -221,7 +221,7 @@ impl LlvmBackend {
         Ok(module.print_to_string().to_string())
     }
 
-/// emit_ir_to_string_with_handle.
+    /// emit_ir_to_string_with_handle.
     pub fn emit_ir_to_string_with_handle(&self, body: &Body) -> CompResult<String> {
         let context = Context::create();
         let ty_ctx = self
@@ -258,11 +258,14 @@ impl LlvmBackend {
                 self.debug_info,
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
-            self.entry_main,
+                self.entry_main,
             )?;
         }
         let target = Target::from_triple(&triple).map_err(|e| {
-            vec![GlyimDiagnostic::internal_error(format!("Target error: {}", e))]
+            vec![GlyimDiagnostic::internal_error(format!(
+                "Target error: {}",
+                e
+            ))]
         })?;
         let opt_level = match self.opt_level {
             0 => inkwell::OptimizationLevel::None,
@@ -280,7 +283,9 @@ impl LlvmBackend {
                 inkwell::targets::CodeModel::Default,
             )
             .ok_or_else(|| {
-                vec![GlyimDiagnostic::internal_error("Failed to create target machine")]
+                vec![GlyimDiagnostic::internal_error(
+                    "Failed to create target machine",
+                )]
             })?;
         self.run_passes_on_module(&module, &target_machine)
             .map_err(|e| vec![GlyimDiagnostic::internal_error(e)])?;
@@ -408,7 +413,12 @@ impl LlvmBackend {
         // the thin-link consumes (via `glyim-cli`'s `llvm-lto2` driver) is
         // well-formed.
         let target_machine = Target::from_triple(&triple)
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("Target error: {}", e))])?
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "Target error: {}",
+                    e
+                ))]
+            })?
             .create_target_machine(
                 &triple,
                 "generic",
@@ -418,7 +428,9 @@ impl LlvmBackend {
                 inkwell::targets::CodeModel::Default,
             )
             .ok_or_else(|| {
-                vec![GlyimDiagnostic::internal_error("Failed to create target machine")]
+                vec![GlyimDiagnostic::internal_error(
+                    "Failed to create target machine",
+                )]
             })?;
         let data_layout = target_machine.get_target_data().get_data_layout();
         for (i, body) in bodies.iter().enumerate() {
@@ -481,7 +493,7 @@ impl CodegenBackend for LlvmBackend {
                 self.debug_info,
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
-            self.entry_main,
+                self.entry_main,
             )?;
         }
         let target = Target::from_triple(&triple).map_err(|e| {

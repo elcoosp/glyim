@@ -47,7 +47,8 @@ fn binary_i32_add_ok() {
             is_const: false,
             generic_params: vec![],
             where_clauses: Vec::new(),
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::DUMMY,
     };
@@ -113,7 +114,8 @@ fn expr_ty_returns_resolved_type() {
             is_const: false,
             generic_params: vec![],
             where_clauses: Vec::new(),
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::DUMMY,
     };

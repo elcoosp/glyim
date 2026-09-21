@@ -23,9 +23,10 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
     // Root module: just contains the `zoo` submodule.
     let mut root_scope = ItemScope::default();
     // The submodule id is 1.
-    root_scope
-        .types
-        .insert(zoo, (LocalDefId::from_raw(1), Visibility::Public, Span::DUMMY));
+    root_scope.types.insert(
+        zoo,
+        (LocalDefId::from_raw(1), Visibility::Public, Span::DUMMY),
+    );
 
     let root = ModuleData {
         parent: None,
@@ -39,9 +40,10 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
 
     // Nested module `zoo`: contains the `Point` ADT (LocalDefId 2).
     let mut zoo_scope = ItemScope::default();
-    zoo_scope
-        .types
-        .insert(point, (LocalDefId::from_raw(2), Visibility::Public, Span::DUMMY));
+    zoo_scope.types.insert(
+        point,
+        (LocalDefId::from_raw(2), Visibility::Public, Span::DUMMY),
+    );
     let zoo_mod = ModuleData {
         parent: Some(ModuleId::from_raw(0)),
         children: vec![],
@@ -61,8 +63,8 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-    variant_map: Default::default(),
-    max_local_def_id: 0,
+        variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 
@@ -102,9 +104,10 @@ fn single_segment_struct_pattern_still_resolves() {
     let point = interner.intern("Point");
     // Single-segment: register directly in root scope.
     let mut root_scope = ItemScope::default();
-    root_scope
-        .types
-        .insert(point, (LocalDefId::from_raw(7), Visibility::Public, Span::DUMMY));
+    root_scope.types.insert(
+        point,
+        (LocalDefId::from_raw(7), Visibility::Public, Span::DUMMY),
+    );
     let root = ModuleData {
         parent: None,
         children: vec![],

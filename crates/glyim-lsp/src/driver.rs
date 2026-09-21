@@ -13,21 +13,21 @@ use tracing::debug;
 
 /// AnalysisMessage.
 pub enum AnalysisMessage {
-/// Variant.
+    /// Variant.
     FileChanged {
-/// Struct.
+        /// Struct.
         path: PathBuf,
-/// Struct.
+        /// Struct.
         content: String,
-/// Struct.
+        /// Struct.
         version: i32,
     },
-/// Variant.
+    /// Variant.
     FileClosed {
-/// Struct.
+        /// Struct.
         path: PathBuf,
     },
-/// Variant.
+    /// Variant.
     Shutdown,
 }
 
@@ -42,7 +42,7 @@ pub struct AnalysisDriver {
 }
 
 impl AnalysisDriver {
-/// new.
+    /// new.
     pub fn new(
         db: Arc<AnalysisDatabase>,
         rx: Receiver<AnalysisMessage>,
@@ -60,7 +60,7 @@ impl AnalysisDriver {
         }
     }
 
-/// run.
+    /// run.
     pub async fn run(mut self) {
         while let Some(msg) = self.rx.recv().await {
             match msg {

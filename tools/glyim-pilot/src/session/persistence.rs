@@ -44,7 +44,7 @@ pub struct StatePersistence {
 }
 
 impl StatePersistence {
-/// get_session_status.
+    /// get_session_status.
     pub async fn get_session_status(&self, session_id: &str) -> Option<String> {
         let p = self.inner.lock().await;
         p.state.sessions.get(session_id).map(|s| {
@@ -67,7 +67,7 @@ impl StatePersistence {
         })
     }
 
-/// set_pr_url.
+    /// set_pr_url.
     pub async fn set_pr_url(&self, stream_id: &str, pr_url: String) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
         if let Some(session) = p.state.sessions.get_mut(stream_id) {
@@ -81,7 +81,7 @@ impl StatePersistence {
         }
     }
 
-/// mark_pr_merged.
+    /// mark_pr_merged.
     pub async fn mark_pr_merged(&self, stream_id: &str) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
         if let Some(session) = p.state.sessions.get_mut(stream_id) {
@@ -95,7 +95,7 @@ impl StatePersistence {
         }
     }
 
-/// get_pr_merged.
+    /// get_pr_merged.
     pub async fn get_pr_merged(&self, stream_id: &str) -> Result<bool, PilotError> {
         let p = self.inner.lock().await;
         if let Some(session) = p.state.sessions.get(stream_id) {
@@ -104,20 +104,20 @@ impl StatePersistence {
             Ok(false) // not merged if not present
         }
     }
-/// load.
+    /// load.
     pub async fn load(project_root: &Path) -> Result<Self, PilotError> {
         let inner = Inner::load(project_root).await?;
         Ok(Self {
             inner: Mutex::new(inner),
         })
     }
-/// add_session.
+    /// add_session.
     pub async fn add_session(&self, session: SessionState) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
         p.state.sessions.insert(session.stream_id.clone(), session);
         p.save().await
     }
-/// try_update_session.
+    /// try_update_session.
     pub async fn try_update_session<F>(&self, stream_id: &str, f: F) -> Result<(), PilotError>
     where
         F: FnOnce(&mut SessionState) -> Result<(), PilotError>,
@@ -135,7 +135,7 @@ impl StatePersistence {
         }
         p.save().await
     }
-/// get_worktree_path.
+    /// get_worktree_path.
     pub async fn get_worktree_path(&self, stream_id: &str) -> Option<String> {
         self.inner
             .lock()
@@ -145,7 +145,7 @@ impl StatePersistence {
             .get(stream_id)
             .map(|s| s.worktree_path.clone())
     }
-/// get_stream_id.
+    /// get_stream_id.
     pub async fn get_stream_id(&self, session_id: &str) -> Option<String> {
         let p = self.inner.lock().await;
         p.state
@@ -154,7 +154,7 @@ impl StatePersistence {
             .find(|s| s.session_id == session_id)
             .map(|s| s.stream_id.clone())
     }
-/// get_fix_round.
+    /// get_fix_round.
     pub async fn get_fix_round(&self, stream_id: &str) -> u32 {
         self.inner
             .lock()
@@ -165,7 +165,7 @@ impl StatePersistence {
             .map(|s| s.fix_round)
             .unwrap_or(0)
     }
-/// all_sessions.
+    /// all_sessions.
     pub async fn all_sessions(&self) -> Vec<SessionState> {
         self.inner
             .lock()

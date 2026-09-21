@@ -1,5 +1,6 @@
 use crate::LlvmBackend;
 use glyim_core::arena::IndexVec;
+use glyim_core::def_id::{AdtId, ClosureId};
 use glyim_core::primitives::*;
 use glyim_core::{CrateId, DefId, Interner, LocalDefId, Name};
 use glyim_mir::{
@@ -10,7 +11,6 @@ use glyim_mir::{
 use glyim_span::{
     ByteIdx, ExpnData, ExpnId, ExpnKind, FileId, HygieneCtx, Span, SyntaxContext, Transparency,
 };
-use glyim_core::def_id::{AdtId, ClosureId};
 use glyim_type::{TyCtxMut, TyKind};
 use inkwell::context::Context;
 use std::collections::HashMap;
@@ -740,8 +740,7 @@ fn tier5_2_reference_debug_type_is_real_pointer() {
         FileId::from_raw(0),
         ("test.g".to_string(), "fn main() {}".to_string()),
     )]);
-    let mut debug_ctx =
-        crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
+    let mut debug_ctx = crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
 
     // Reference, raw pointer, and slice must all emit real DWARF pointer
     // shapes (not opaque blobs). Force retention of the created DI types into
@@ -751,9 +750,7 @@ fn tier5_2_reference_debug_type_is_real_pointer() {
     // the created DI types into the module IR by wrapping each in a global
     // variable expression (which references the DIType and is emitted into
     // the module's metadata), so we can assert on the produced DWARF.
-    let file = debug_ctx
-        .builder
-        .create_file("test.g", ".");
+    let file = debug_ctx.builder.create_file("test.g", ".");
     let ref_di = debug_ctx.debug_type_for_ty(&context, ref_ty, &ctx_mut.freeze());
     let raw_di = debug_ctx.debug_type_for_ty(&context, raw_ty, &ctx_mut.freeze());
     let slice_di = debug_ctx.debug_type_for_ty(&context, slice_ty, &ctx_mut.freeze());
@@ -844,8 +841,7 @@ fn phase6_2_closure_debug_type_has_capture_members() {
         FileId::from_raw(0),
         ("test.g".to_string(), "fn main() {}".to_string()),
     )]);
-    let mut debug_ctx =
-        crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
+    let mut debug_ctx = crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
 
     let file = debug_ctx.builder.create_file("test.g", ".");
     let closure_di = debug_ctx.debug_type_for_ty(&context, closure_ty, &ctx_mut.freeze());

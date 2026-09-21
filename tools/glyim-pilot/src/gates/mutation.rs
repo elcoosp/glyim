@@ -11,7 +11,7 @@ static MUTATION_PCT_RE: LazyLock<Regex> =
 
 /// MutationGate.
 pub struct MutationGate {
-/// Struct.
+    /// Struct.
     pub min_kill_rate: f64,
 }
 

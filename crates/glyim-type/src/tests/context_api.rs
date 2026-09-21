@@ -16,10 +16,7 @@ fn new_creates_context_with_four_sentinels() {
 
 #[test]
 fn first_custom_type_is_resolvable() {
-    let (frozen, custom) = with_fresh_ty_ctx(|c| {
-        
-        c.mk_ty(TyKind::Int(IntTy::I32))
-    });
+    let (frozen, custom) = with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Int(IntTy::I32)));
     // Under the canonical interner, an `i32` maps to the shared `Ty::I32`
     // sentinel handle rather than a fresh index — what matters is that the
     // handle resolves back to the same structural type.

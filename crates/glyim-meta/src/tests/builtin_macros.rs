@@ -214,7 +214,10 @@ fn test_option_env_macro() {
     let name2 = expander2.interner().intern("option_env");
 
     let result2 = expander2.expand(name2, &args2, span);
-    assert!(result2.diagnostics.is_empty(), "option_env! must not error on missing var");
+    assert!(
+        result2.diagnostics.is_empty(),
+        "option_env! must not error on missing var"
+    );
     let text2 = result2.expanded.unwrap().text().to_string();
     assert!(text2.contains("None"), "Expected None, got {}", text2);
 }

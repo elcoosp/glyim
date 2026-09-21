@@ -91,18 +91,94 @@ pub fn std_source_all() -> String {
 /// module's public items are listed explicitly in `MODULE_PUBS`.
 pub fn std_source_assembled() -> String {
     let pubs: &[(&str, &[&str])] = &[
-        ("io", &["Read", "Write", "BufRead", "Error", "ErrorKind", "Stdin", "Stdout", "Stderr", "empty_reader", "stdin", "stdout", "stderr"]),
-        ("fs", &["File", "OpenOption", "read_to_string", "write_to_file", "FileType", "Metadata", "DirEntry", "read_dir"]),
-        ("net", &["TcpStream", "TcpListener", "UdpSocket", "IpAddr", "Ipv4Addr", "Ipv6Addr", "SocketAddr", "SocketAddrV4", "SocketAddrV6", "ToSocketAddrs", "resolve", "connect", "bind"]),
-        ("thread", &["Thread", "ThreadId", "spawn", "sleep", "JoinHandle", "yield_now"]),
-        ("sync", &["Mutex", "RwLock", "Arc", "AtomicBool", "AtomicI32", "AtomicU32", "AtomicUsize", "Condvar", "Barrier"]),
-        ("env", &["args", "var", "set_var", "current_dir", "temp_dir", "home_dir", "args_os"]),
+        (
+            "io",
+            &[
+                "Read",
+                "Write",
+                "BufRead",
+                "Error",
+                "ErrorKind",
+                "Stdin",
+                "Stdout",
+                "Stderr",
+                "empty_reader",
+                "stdin",
+                "stdout",
+                "stderr",
+            ],
+        ),
+        (
+            "fs",
+            &[
+                "File",
+                "OpenOption",
+                "read_to_string",
+                "write_to_file",
+                "FileType",
+                "Metadata",
+                "DirEntry",
+                "read_dir",
+            ],
+        ),
+        (
+            "net",
+            &[
+                "TcpStream",
+                "TcpListener",
+                "UdpSocket",
+                "IpAddr",
+                "Ipv4Addr",
+                "Ipv6Addr",
+                "SocketAddr",
+                "SocketAddrV4",
+                "SocketAddrV6",
+                "ToSocketAddrs",
+                "resolve",
+                "connect",
+                "bind",
+            ],
+        ),
+        (
+            "thread",
+            &[
+                "Thread",
+                "ThreadId",
+                "spawn",
+                "sleep",
+                "JoinHandle",
+                "yield_now",
+            ],
+        ),
+        (
+            "sync",
+            &[
+                "Mutex",
+                "RwLock",
+                "Arc",
+                "AtomicBool",
+                "AtomicI32",
+                "AtomicU32",
+                "AtomicUsize",
+                "Condvar",
+                "Barrier",
+            ],
+        ),
+        (
+            "env",
+            &[
+                "args",
+                "var",
+                "set_var",
+                "current_dir",
+                "temp_dir",
+                "home_dir",
+                "args_os",
+            ],
+        ),
         ("time", &["Duration", "Instant", "SystemTime", "UNIX_EPOCH"]),
         ("process", &["Command", "Child", "Stdio", "exit", "id"]),
-        (
-            "future",
-            &["Poll", "Waker", "Context", "Future"],
-        ),
+        ("future", &["Poll", "Waker", "Context", "Future"]),
         // `cmp.g` (core). Re-export the free `min`/`max` and the comparison
         // traits so bare `min(a, b)` in `io.g` resolves. `Ordering` is
         // DELIBERATELY EXCLUDED: `cmp::Ordering` (`Less`/`Equal`/`Greater`)
@@ -111,7 +187,15 @@ pub fn std_source_assembled() -> String {
         // at the crate root.
         (
             "cmp",
-            &["min", "max", "Ord", "PartialOrd", "Eq", "PartialEq", "Reverse"],
+            &[
+                "min",
+                "max",
+                "Ord",
+                "PartialOrd",
+                "Eq",
+                "PartialEq",
+                "Reverse",
+            ],
         ),
         // `panic.g` (core). Defines the `panic!` / `assert!` / `assert_eq!`
         // / `assert_ne!` / `unimplemented!` / `unreachable!` macros plus
@@ -161,7 +245,9 @@ pub fn std_source_assembled() -> String {
 /// leading keyword of a module-level `fn`/`struct`/`enum`/`trait`/`type`/`const`/
 /// `static` item gains a `pub` if it does not already have one.
 fn make_pub(src: &str) -> String {
-    let item_kws = ["fn ", "struct ", "enum ", "trait ", "type ", "const ", "static "];
+    let item_kws = [
+        "fn ", "struct ", "enum ", "trait ", "type ", "const ", "static ",
+    ];
     let mut out = String::with_capacity(src.len());
     let mut depth: i32 = 0;
     for line in src.lines() {

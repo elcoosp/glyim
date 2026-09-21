@@ -13,11 +13,11 @@ mod ty;
 #[derive(Clone, Debug)]
 /// ParseResult.
 pub struct ParseResult {
-/// Struct.
+    /// Struct.
     pub green_node: GreenNode,
-/// Struct.
+    /// Struct.
     pub diagnostics: Vec<GlyimDiagnostic>,
-/// Struct.
+    /// Struct.
     pub root: SyntaxNode,
 }
 
@@ -303,43 +303,26 @@ pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
         return None;
     }
     let root = parsed.root;
-    let fndef = root
-        .children()
-        .find(|n| n.kind() == SyntaxKind::FnDef)?;
+    let fndef = root.children().find(|n| n.kind() == SyntaxKind::FnDef)?;
     match kind {
         "expr" => {
             // Exactly one expression-bearing child (ExprStmt / LetStmt / tail expr).
-            let block = fndef
-                .children()
-                .find(|n| n.kind() == SyntaxKind::Block)?;
+            let block = fndef.children().find(|n| n.kind() == SyntaxKind::Block)?;
             let stmts: Vec<_> = block
                 .children()
-                .filter(|n| {
-                    matches!(
-                        n.kind(),
-                        SyntaxKind::ExprStmt | SyntaxKind::LetStmt
-                    )
-                })
+                .filter(|n| matches!(n.kind(), SyntaxKind::ExprStmt | SyntaxKind::LetStmt))
                 .collect();
             // Allow a bare tail expression (block with a single non-statement
             // expr child) or a single statement.
             let has_expr = stmts.len() == 1
-                || (stmts.is_empty()
-                    && block.children().any(|n| is_exprish(n.kind())));
+                || (stmts.is_empty() && block.children().any(|n| is_exprish(n.kind())));
             has_expr.then_some(())
         }
         "stmt" => {
-            let block = fndef
-                .children()
-                .find(|n| n.kind() == SyntaxKind::Block)?;
+            let block = fndef.children().find(|n| n.kind() == SyntaxKind::Block)?;
             let stmts: Vec<_> = block
                 .children()
-                .filter(|n| {
-                    matches!(
-                        n.kind(),
-                        SyntaxKind::ExprStmt | SyntaxKind::LetStmt
-                    )
-                })
+                .filter(|n| matches!(n.kind(), SyntaxKind::ExprStmt | SyntaxKind::LetStmt))
                 .collect();
             (stmts.len() == 1).then_some(())
         }
@@ -349,12 +332,9 @@ pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
             // else. We don't compare source text exactly (whitespace inside the
             // block is insignificant), only that a body block exists and the
             // fragment is brace-delimited.
-            let _block = fndef
-                .children()
-                .find(|n| n.kind() == SyntaxKind::Block)?;
+            let _block = fndef.children().find(|n| n.kind() == SyntaxKind::Block)?;
             let src_t = src.trim();
-            (src_t.starts_with('{') && src_t.ends_with('}') && src_t.len() >= 2)
-                .then_some(())
+            (src_t.starts_with('{') && src_t.ends_with('}') && src_t.len() >= 2).then_some(())
         }
         "ty" => {
             let param = fndef
@@ -378,9 +358,7 @@ pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
             has_pat.then_some(())
         }
         "item" => {
-            let block = fndef
-                .children()
-                .find(|n| n.kind() == SyntaxKind::Block)?;
+            let block = fndef.children().find(|n| n.kind() == SyntaxKind::Block)?;
             let items: Vec<_> = block
                 .children()
                 .filter(|n| {

@@ -1,13 +1,10 @@
 use glyim_core::primitives::{IntTy, UintTy};
 use glyim_mir::TerminatorKind;
 use glyim_test::with_fresh_ty_ctx;
-use glyim_type::{
-    substitution::GenericArg, Const, ConstKind, ParamConst, TyKind,
-};
+use glyim_type::{Const, ConstKind, ParamConst, TyKind, substitution::GenericArg};
 
 #[test]
 fn drop_glue_for_i32_generates_body() {
-
     let (ty_ctx, ty) = with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Int(IntTy::I32)));
     let body = crate::mono_cache::generate_drop_glue(ty, &ty_ctx);
     // Just verify the body has at least one block (no panic)
@@ -164,4 +161,3 @@ fn const_generic_array_drop_glue_panics_on_unresolved_length() {
     // `generate_drop_glue` must refuse to silently emit a no-op, per u00a72c.
     let _ = crate::mono_cache::generate_drop_glue(arr_with_param_len, &ty_ctx);
 }
-

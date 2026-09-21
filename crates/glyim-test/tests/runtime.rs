@@ -98,7 +98,10 @@ fn m5_two_step_multi_await_compiles_cleanly() {
         TestOutcome::Passed => { /* the real runtime proof: ran and printed 3 */ }
         TestOutcome::Failed { reason } if !real_llvm => {
             assert!(
-                matches!(reason, glyim_test::error::FailureReason::CompilationFailed { .. }),
+                matches!(
+                    reason,
+                    glyim_test::error::FailureReason::CompilationFailed { .. }
+                ),
                 "without the real LLVM backend the only tolerated failure is the known \
                  codegen gap (CompilationFailed / no executable); got {:?}",
                 reason
@@ -140,7 +143,10 @@ fn m5_one_step_single_await_must_not_miscompile() {
         TestOutcome::Ignored => { /* non-Linux host: executor is Linux-gated */ }
         TestOutcome::Failed { reason } if !real_llvm => {
             assert!(
-                matches!(reason, glyim_test::error::FailureReason::CompilationFailed { .. }),
+                matches!(
+                    reason,
+                    glyim_test::error::FailureReason::CompilationFailed { .. }
+                ),
                 "without the real LLVM backend the only tolerated failure is the known \
                  codegen gap (CompilationFailed / no executable); got {:?}",
                 reason
@@ -178,7 +184,11 @@ fn m5_fixtures_present_and_moded_correctly() {
         .iter()
         .find(|t| t.name.contains("one_step"))
         .expect("one_step fixture");
-    assert_eq!(one.config.mode, TestMode::RunPass, "m5/one_step must be run-pass");
+    assert_eq!(
+        one.config.mode,
+        TestMode::RunPass,
+        "m5/one_step must be run-pass"
+    );
     assert_eq!(
         one.config.only_target.as_deref(),
         Some("x86_64-unknown-linux-gnu"),

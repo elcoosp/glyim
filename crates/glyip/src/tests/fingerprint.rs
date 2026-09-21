@@ -211,7 +211,10 @@ fn has_any_changed_detects_build_config_change() {
     };
     let debug_hash = FingerprintStore::build_config_hash(&debug_opts);
     let release_hash = FingerprintStore::build_config_hash(&release_opts);
-    assert_ne!(debug_hash, release_hash, "different opt-level must yield different hash");
+    assert_ne!(
+        debug_hash, release_hash,
+        "different opt-level must yield different hash"
+    );
 
     // Record a successful debug build: set the active config, persist, then
     // reload so the *recorded* (last build) config is populated.

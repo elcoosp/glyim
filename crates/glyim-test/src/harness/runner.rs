@@ -6,15 +6,15 @@ use std::time::Duration;
 #[derive(Clone, Debug)]
 /// RunResult.
 pub struct RunResult {
-/// Struct.
+    /// Struct.
     pub exit_code: Option<i32>,
-/// Struct.
+    /// Struct.
     pub stdout: String,
-/// Struct.
+    /// Struct.
     pub stderr: String,
-/// Struct.
+    /// Struct.
     pub timed_out: bool,
-/// Struct.
+    /// Struct.
     pub duration: Duration,
 }
 
@@ -27,7 +27,7 @@ pub struct ProgramRunner {
 }
 
 impl ProgramRunner {
-/// new.
+    /// new.
     pub fn new(program: impl Into<PathBuf>) -> Self {
         Self {
             program: program.into(),
@@ -37,31 +37,31 @@ impl ProgramRunner {
         }
     }
 
-/// arg.
+    /// arg.
     pub fn arg(mut self, arg: impl Into<String>) -> Self {
         self.args.push(arg.into());
         self
     }
 
-/// args.
+    /// args.
     pub fn args(mut self, args: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.args.extend(args.into_iter().map(Into::into));
         self
     }
 
-/// stdin.
+    /// stdin.
     pub fn stdin(mut self, input: impl Into<String>) -> Self {
         self.stdin_input = Some(input.into());
         self
     }
 
-/// env.
+    /// env.
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.push((key.into(), value.into()));
         self
     }
 
-/// run.
+    /// run.
     pub fn run(self, timeout: Duration) -> RunResult {
         let start = std::time::Instant::now();
 
@@ -176,39 +176,39 @@ fn run_child_with_timeout(child: std::process::Child, timeout: Duration) -> Chil
 #[derive(Clone, Debug, Default)]
 /// OutputCheck.
 pub struct OutputCheck {
-/// Struct.
+    /// Struct.
     pub expected_stdout: Option<String>,
-/// Struct.
+    /// Struct.
     pub expected_stderr: Option<String>,
-/// Struct.
+    /// Struct.
     pub expected_exit_code: Option<i32>,
 }
 
 impl OutputCheck {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self::default()
     }
 
-/// stdout.
+    /// stdout.
     pub fn stdout(mut self, expected: impl Into<String>) -> Self {
         self.expected_stdout = Some(expected.into());
         self
     }
 
-/// stderr.
+    /// stderr.
     pub fn stderr(mut self, expected: impl Into<String>) -> Self {
         self.expected_stderr = Some(expected.into());
         self
     }
 
-/// exit_code.
+    /// exit_code.
     pub fn exit_code(mut self, code: i32) -> Self {
         self.expected_exit_code = Some(code);
         self
     }
 
-/// check.
+    /// check.
     pub fn check(&self, result: &RunResult) -> Result<(), crate::error::FailureReason> {
         if result.timed_out {
             return Err(crate::error::FailureReason::RunTimeout {

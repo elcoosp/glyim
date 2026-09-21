@@ -11,20 +11,20 @@ pub struct Generator {
 }
 
 impl Generator {
-/// new.
+    /// new.
     pub fn new(seed: u64) -> Self {
         Self {
             rng: StdRng::seed_from_u64(seed),
             max_depth: 4,
         }
     }
-/// with_max_depth.
+    /// with_max_depth.
     pub fn with_max_depth(mut self, depth: u32) -> Self {
         self.max_depth = depth;
         self
     }
 
-/// generate_ty.
+    /// generate_ty.
     pub fn generate_ty(&mut self, ctx: &mut TyCtxMut, depth: u32) -> Ty {
         if depth >= self.max_depth {
             return self.leaf_ty(ctx);
@@ -48,7 +48,7 @@ impl Generator {
         }
     }
 
-/// generate_ty_with_infer.
+    /// generate_ty_with_infer.
     pub fn generate_ty_with_infer(
         &mut self,
         ctx: &mut TyCtxMut,

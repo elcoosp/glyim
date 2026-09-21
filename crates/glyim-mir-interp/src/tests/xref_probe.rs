@@ -25,8 +25,16 @@ fn xref_probe_cross_frame_mut_self_deref() {
     next.return_ty = i32_ty;
     next.arg_count = 1;
     next.locals = IndexVec::from_raw(vec![
-        LocalDecl { ty: i32_ty, mutability: Mutability::Not, source_info: SourceInfo::new(Span::DUMMY) },
-        LocalDecl { ty: ref_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
+        LocalDecl {
+            ty: i32_ty,
+            mutability: Mutability::Not,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        LocalDecl {
+            ty: ref_ty,
+            mutability: Mutability::Mut,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
     ]);
     let nbb0 = BasicBlockIdx::from_raw(0);
     next.basic_blocks = IndexVec::from_raw(vec![BasicBlockData::new(Terminator {
@@ -56,10 +64,26 @@ fn xref_probe_cross_frame_mut_self_deref() {
     let main_ref = LocalIdx::from_raw(2);
     let main_tmp = LocalIdx::from_raw(3);
     main.locals = IndexVec::from_raw(vec![
-        LocalDecl { ty: Ty::UNIT, mutability: Mutability::Not, source_info: SourceInfo::new(Span::DUMMY) },
-        LocalDecl { ty: agg_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-        LocalDecl { ty: ref_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-        LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
+        LocalDecl {
+            ty: Ty::UNIT,
+            mutability: Mutability::Not,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        LocalDecl {
+            ty: agg_ty,
+            mutability: Mutability::Mut,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        LocalDecl {
+            ty: ref_ty,
+            mutability: Mutability::Mut,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        LocalDecl {
+            ty: i32_ty,
+            mutability: Mutability::Mut,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
     ]);
     let bb0 = BasicBlockIdx::from_raw(0);
     let bb1 = BasicBlockIdx::from_raw(1);
@@ -78,10 +102,7 @@ fn xref_probe_cross_frame_mut_self_deref() {
         bb0,
         StatementKind::Assign(
             Place::new(main_agg),
-            Rvalue::Aggregate(
-                AggregateKind::Tuple,
-                vec![const_int(7), const_int(9)],
-            ),
+            Rvalue::Aggregate(AggregateKind::Tuple, vec![const_int(7), const_int(9)]),
         ),
     );
     add_statement(
@@ -89,7 +110,12 @@ fn xref_probe_cross_frame_mut_self_deref() {
         bb0,
         StatementKind::Assign(
             Place::new(main_ref),
-            Rvalue::Ref(Place::new(main_agg), BorrowKind::Mut { allow_two_phase_borrow: false }),
+            Rvalue::Ref(
+                Place::new(main_agg),
+                BorrowKind::Mut {
+                    allow_two_phase_borrow: false,
+                },
+            ),
         ),
     );
     add_statement(
@@ -120,7 +146,10 @@ fn xref_probe_cross_frame_mut_self_deref() {
     let mut interp = Interpreter::new(&tcx);
     let main_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
     interp.add_function(main_id, main);
-    interp.add_function(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)), next);
+    interp.add_function(
+        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        next,
+    );
     let main_body = interp.function_table.get(&main_id).unwrap().clone();
     let res = interp.run_body(&main_body);
     println!("XREF_PROBE_RESULT={:?}", res);

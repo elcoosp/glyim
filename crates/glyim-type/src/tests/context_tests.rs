@@ -1,5 +1,5 @@
-use crate::*;
 use crate::const_val::Const;
+use crate::*;
 use glyim_core::def_id::AdtId;
 use glyim_core::interner::Interner;
 use glyim_core::primitives::*;
@@ -41,7 +41,13 @@ fn test_is_sized_for_primitives_and_slices() {
     let mut ctx = TyCtxMut::new(Interner::new());
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let usize_ty = ctx.mk_ty(TyKind::Uint(UintTy::Usize));
-    let arr_ty = ctx.mk_ty(TyKind::Array(i32_ty, Const { kind: ConstKind::Uint(3), ty: usize_ty }));
+    let arr_ty = ctx.mk_ty(TyKind::Array(
+        i32_ty,
+        Const {
+            kind: ConstKind::Uint(3),
+            ty: usize_ty,
+        },
+    ));
     let slice_ty = ctx.mk_ty(TyKind::Slice(i32_ty));
 
     let frozen = ctx.freeze();

@@ -141,7 +141,8 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                         for variant in &adt_def.variants {
                             let mut field_layouts = Vec::with_capacity(variant.fields.len());
                             for field in variant.fields.iter() {
-                                field_layouts.push(self.layout_of(self.subst_params(field.ty, substs))?);
+                                field_layouts
+                                    .push(self.layout_of(self.subst_params(field.ty, substs))?);
                             }
                             let mut size = Size::ZERO;
                             let mut align = Align::ONE;
@@ -186,8 +187,10 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                         };
 
                         let data_start = tag_size.align_to(tag_align).align_to(max_align);
-                        let mut untagged_offsets: glyim_core::arena::IndexVec<glyim_type::ty::FieldIdx, glyim_layout::Size> =
-                            glyim_core::arena::IndexVec::new();
+                        let mut untagged_offsets: glyim_core::arena::IndexVec<
+                            glyim_type::ty::FieldIdx,
+                            glyim_layout::Size,
+                        > = glyim_core::arena::IndexVec::new();
                         if let Some(layout) = variant_layouts.first() {
                             if let FieldsShape::Arbitrary { offsets } = &layout.fields {
                                 for offset in offsets.iter() {
@@ -234,7 +237,8 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                     } else if let Some(variant) = adt_def.variants.first() {
                         let mut field_layouts = Vec::with_capacity(variant.fields.len());
                         for field in variant.fields.iter() {
-                            field_layouts.push(self.layout_of(self.subst_params(field.ty, substs))?);
+                            field_layouts
+                                .push(self.layout_of(self.subst_params(field.ty, substs))?);
                         }
                         if field_layouts.is_empty() {
                             return Ok(Layout::unit());
@@ -270,13 +274,11 @@ impl LayoutComputer for FullLayoutComputer<'_> {
                         _ => None,
                     });
                 if let Some(self_ty) = self_ty {
-                    if let Some(resolved) =
-                        self.ctx.resolve_associated_type(
-                            self_ty,
-                            proj.trait_ref.def_id,
-                            proj.item_name,
-                        )
-                    {
+                    if let Some(resolved) = self.ctx.resolve_associated_type(
+                        self_ty,
+                        proj.trait_ref.def_id,
+                        proj.item_name,
+                    ) {
                         return self.layout_of(resolved);
                     }
                 }
@@ -342,7 +344,8 @@ impl<'a> FullLayoutComputer<'a> {
             },
             TyKind::Ref(region, inner, mutbl) => {
                 let new_inner = self.subst_params(*inner, substs);
-                self.ctx.mk_ty(TyKind::Ref(region.clone(), new_inner, *mutbl))
+                self.ctx
+                    .mk_ty(TyKind::Ref(region.clone(), new_inner, *mutbl))
             }
             TyKind::RawPtr(inner, mutbl) => {
                 let new_inner = self.subst_params(*inner, substs);
@@ -391,7 +394,6 @@ mod abi_tests {
     use glyim_type::{Ty, TyCtxMut, TyKind};
 
     // Shared test context.
-    
 
     fn classify_with_ctx(ctx: &TyCtx, ty: Ty, target: TargetInfo) -> PassMode {
         let computer = FullLayoutComputer::new(ctx, target);
@@ -410,8 +412,6 @@ mod abi_tests {
         };
         TargetInfo::from_triple(triple)
     }
-
-    
 
     #[test]
     fn test_classify_scalar_i32() {

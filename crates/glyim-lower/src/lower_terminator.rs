@@ -3,7 +3,7 @@ use glyim_span::Span;
 
 /// Extension trait for MirBuilder to allow splitting impls across modules.
 pub trait TerminatorExt {
-/// terminate.
+    /// terminate.
     fn terminate(&mut self, kind: glyim_mir::TerminatorKind, span: Span);
 }
 

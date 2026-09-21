@@ -28,7 +28,7 @@ pub struct Vfs {
 }
 
 impl Vfs {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             inner: RwLock::new(VfsInner {
@@ -40,14 +40,14 @@ impl Vfs {
     }
 
     #[tracing::instrument(skip(self))]
-/// add_file_from_disk.
+    /// add_file_from_disk.
     pub fn add_file_from_disk(&self, path: &Path) -> std::io::Result<FileId> {
         let content = std::fs::read_to_string(path)?;
         Ok(self.add_file_content(path, Arc::from(content)))
     }
 
     #[tracing::instrument(skip(self, content))]
-/// add_file_content.
+    /// add_file_content.
     pub fn add_file_content(&self, path: &Path, content: Arc<str>) -> FileId {
         let mut inner = self.inner.write();
         if let Some(&id) = inner.path_to_id.get(path) {
@@ -66,7 +66,7 @@ impl Vfs {
         id
     }
 
-/// set_file_content.
+    /// set_file_content.
     pub fn set_file_content(&self, file_id: FileId, content: Arc<str>) {
         let mut inner = self.inner.write();
         if let Some(file) = inner.files.get_mut(file_id.index()) {
@@ -74,7 +74,7 @@ impl Vfs {
         }
     }
 
-/// file_content.
+    /// file_content.
     pub fn file_content(&self, file_id: FileId) -> Option<Arc<str>> {
         let inner = self.inner.read();
         inner
@@ -83,7 +83,7 @@ impl Vfs {
             .map(|f| Arc::clone(&f.content))
     }
 
-/// file_content_ref.
+    /// file_content_ref.
     pub fn file_content_ref<R>(&self, file_id: FileId, f: impl FnOnce(&str) -> R) -> Option<R> {
         let inner = self.inner.read();
         inner
@@ -92,23 +92,23 @@ impl Vfs {
             .map(|file| f(&file.content))
     }
 
-/// file_path.
+    /// file_path.
     pub fn file_path(&self, file_id: FileId) -> Option<PathBuf> {
         let inner = self.inner.read();
         inner.files.get(file_id.index()).map(|f| f.path.clone())
     }
 
-/// file_id.
+    /// file_id.
     pub fn file_id(&self, path: &Path) -> Option<FileId> {
         let inner = self.inner.read();
         inner.path_to_id.get(path).copied()
     }
 
-/// len.
+    /// len.
     pub fn len(&self) -> usize {
         self.inner.read().files.len()
     }
-/// is_empty.
+    /// is_empty.
     pub fn is_empty(&self) -> bool {
         self.inner.read().files.is_empty()
     }

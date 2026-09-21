@@ -71,8 +71,7 @@ fn workspace_symbols_fuzzy_search() {
 
 #[test]
 fn workspace_symbols_fuzzy_matching_limit() {
-    let (analysis, _fid) =
-        analysis_with_symbols(&["alpha", "beta", "gamma", "delta", "epsilon"]);
+    let (analysis, _fid) = analysis_with_symbols(&["alpha", "beta", "gamma", "delta", "epsilon"]);
     let params = WorkspaceSymbolParams {
         query: "a".to_string(),
         work_done_progress_params: Default::default(),

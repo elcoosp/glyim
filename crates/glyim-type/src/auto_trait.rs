@@ -21,16 +21,16 @@ bitflags::bitflags! {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// AutoTrait.
 pub enum AutoTrait {
-/// Variant.
+    /// Variant.
     Send,
-/// Variant.
+    /// Variant.
     Sync,
-/// Variant.
+    /// Variant.
     Unpin,
 }
 
 impl AutoTrait {
-/// flag.
+    /// flag.
     pub fn flag(self) -> AutoTraitFlags {
         match self {
             AutoTrait::Send => AutoTraitFlags::SEND,
@@ -39,19 +39,19 @@ impl AutoTrait {
         }
     }
 
-/// ALL.
+    /// ALL.
     pub const ALL: [AutoTrait; 3] = [AutoTrait::Send, AutoTrait::Sync, AutoTrait::Unpin];
 }
 
 #[derive(Clone, Debug, Default)]
 /// AdtRepr.
 pub struct AdtRepr {
-/// Struct.
+    /// Struct.
     pub field_tys: Vec<Ty>,
 }
 
 impl AdtRepr {
-/// new.
+    /// new.
     pub fn new(field_tys: Vec<Ty>) -> Self {
         Self { field_tys }
     }
@@ -65,27 +65,27 @@ pub struct AutoTraitRegistry {
 }
 
 impl AutoTraitRegistry {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self::default()
     }
 
-/// register_negative_impl.
+    /// register_negative_impl.
     pub fn register_negative_impl(&mut self, adt_id: AdtId, auto_trait: AutoTrait) {
         self.negative_impls.insert((adt_id, auto_trait));
     }
 
-/// register_manual_impl.
+    /// register_manual_impl.
     pub fn register_manual_impl(&mut self, adt_id: AdtId, auto_trait: AutoTrait) {
         self.manual_impls.insert((adt_id, auto_trait));
     }
 
-/// has_negative_impl.
+    /// has_negative_impl.
     pub fn has_negative_impl(&self, adt_id: AdtId, auto_trait: AutoTrait) -> bool {
         self.negative_impls.contains(&(adt_id, auto_trait))
     }
 
-/// has_manual_impl.
+    /// has_manual_impl.
     pub fn has_manual_impl(&self, adt_id: AdtId, auto_trait: AutoTrait) -> bool {
         self.manual_impls.contains(&(adt_id, auto_trait))
     }

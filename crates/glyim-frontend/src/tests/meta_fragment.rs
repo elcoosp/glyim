@@ -23,7 +23,10 @@ fn meta_word_path_segmented() {
         "segmented path word meta should be accepted"
     );
     // Explicitly: a two-segment path is a valid Word meta.
-    assert!(accepts("foo::bar"), "segmented path `foo::bar` should be accepted");
+    assert!(
+        accepts("foo::bar"),
+        "segmented path `foo::bar` should be accepted"
+    );
 }
 
 #[test]

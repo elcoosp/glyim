@@ -1,10 +1,10 @@
+use crate::TypeRef;
 use glyim_core::interner::{Interner, Name};
 use glyim_core::path::PathKind;
 use glyim_core::primitives::*;
 use glyim_diag::GlyimDiagnostic;
 use glyim_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use std::collections::HashMap;
-use crate::TypeRef;
 
 /// Checks if a syntax node kind represents a pattern.
 /// This is an exhaustive match to ensure new pattern kinds are added here explicitly.
@@ -27,9 +27,8 @@ use crate::{
 };
 
 use super::{
-    first_ident_text_with_depth, is_expr_node, is_type_node,
-    lower_item::lower_param, lower_pat::lower_pat,
-    lower_type::lower_type_ref, node_span,
+    first_ident_text_with_depth, is_expr_node, is_type_node, lower_item::lower_param,
+    lower_pat::lower_pat, lower_type::lower_type_ref, node_span,
 };
 
 pub(crate) fn lower_block_to_expr(
@@ -157,7 +156,6 @@ pub(crate) fn lower_block_to_expr(
 
     let expr = Expr::Block { stmts, tail };
 
-    
     body.alloc_expr(expr, node_span(node))
 }
 
@@ -335,15 +333,12 @@ pub(crate) fn lower_expr(
                 .and_then(|c| lower_expr(&c, interner, body, diags, struct_field_map));
             let operand = match operand {
                 Some(e) => e,
-                None => {
-                    
-                    body.alloc_expr(Expr::Missing, node_span(node))
-                }
+                None => body.alloc_expr(Expr::Missing, node_span(node)),
             };
             let expr = Expr::Await { expr: operand };
             let eid = body.alloc_expr(expr, node_span(node));
             Some(eid)
-        },
+        }
         // A bare `Path` node (e.g. an identifier inside a macro token tree that
         // the parser didn't wrap in `PathExpr`) is a variable/name reference.
         // Token-tree contents may be `UsePath` nodes (the inner node of a path),
@@ -358,7 +353,9 @@ pub(crate) fn lower_expr(
         // path so the call site is represented; typeck/codegen for builtin macros
         // is handled by the macro-expansion pass that runs before lowering in the
         // full pipeline. See docs/plans/v0.1.0/unstub-5/KNOWN_GAPS.md §8.2.
-        SyntaxKind::MacroCall => lower_macro_call_expr(node, interner, body, diags, struct_field_map),
+        SyntaxKind::MacroCall => {
+            lower_macro_call_expr(node, interner, body, diags, struct_field_map)
+        }
         _ => {
             diags.push(GlyimDiagnostic::internal_error(format!(
                 "Unhandled expression kind: {:?}",
@@ -509,13 +506,13 @@ fn lower_struct_expr(
                         // spread expression.
                         if i + 1 < siblings.len()
                             && let SyntaxElement::Node(next) = &siblings[i + 1]
-                                && let Some(expr_id) =
-                                    lower_expr(next, interner, body, diags, struct_field_map)
-                                {
-                                    *spread = Some(expr_id);
-                                    i += 2;
-                                    continue;
-                                }
+                            && let Some(expr_id) =
+                                lower_expr(next, interner, body, diags, struct_field_map)
+                        {
+                            *spread = Some(expr_id);
+                            i += 2;
+                            continue;
+                        }
                     }
                     i += 1;
                 }
@@ -526,8 +523,7 @@ fn lower_struct_expr(
                             // `Ident` child (`y: expr`); shorthand fields wrap the
                             // name in `PathExpr -> UsePath -> Ident` (`x`), so a
                             // depth-aware scan is required.
-                            let field_name =
-                                first_ident_text_with_depth(node).unwrap_or_default();
+                            let field_name = first_ident_text_with_depth(node).unwrap_or_default();
                             let name = interner.intern(&field_name);
                             // Check if the field has an expression inside it.
                             // Macro calls (`format!(..)`) are valid field values
@@ -536,10 +532,9 @@ fn lower_struct_expr(
                             let expr_inside = node
                                 .children()
                                 .find(|c| is_expr_node(c) || c.kind() == SyntaxKind::MacroCall);
-                            if let Some(expr_id) = expr_inside
-                                .as_ref()
-                                .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map))
-                            {
+                            if let Some(expr_id) = expr_inside.as_ref().and_then(|n| {
+                                lower_expr(n, interner, body, diags, struct_field_map)
+                            }) {
                                 fields.push((name, expr_id));
                                 i += 1;
                                 continue;
@@ -547,17 +542,13 @@ fn lower_struct_expr(
                             // Otherwise, assume the next sibling is the expression
                             if i + 1 < siblings.len()
                                 && let SyntaxElement::Node(next) = &siblings[i + 1]
-                                    && let Some(expr_id) = lower_expr(
-                                        next,
-                                        interner,
-                                        body,
-                                        diags,
-                                        struct_field_map,
-                                    ) {
-                                        fields.push((name, expr_id));
-                                        i += 2;
-                                        continue;
-                                    }
+                                && let Some(expr_id) =
+                                    lower_expr(next, interner, body, diags, struct_field_map)
+                            {
+                                fields.push((name, expr_id));
+                                i += 2;
+                                continue;
+                            }
                             i += 1;
                         }
                         SyntaxKind::PathExpr => {
@@ -685,32 +676,33 @@ fn lower_struct_expr(
     // List *every* missing field at once rather than just the first.
     if spread.is_none()
         && let Some(name) = struct_name
-            && let Some(def_order) = struct_field_map.get(&name) {
-                let provided: std::collections::HashSet<Name> =
-                    ordered_fields.iter().map(|(f, _)| *f).collect();
-                let missing: Vec<&Name> = def_order
-                    .iter()
-                    .filter(|declared| !provided.contains(declared))
-                    .collect();
-                if !missing.is_empty() {
-                    let missing_names: Vec<String> = missing
-                        .iter()
-                        .map(|n| interner.resolve(**n).to_string())
-                        .collect();
-                    let span = node_span(node);
-                    let resolved = struct_name
-                        .map(|n| interner.resolve(n).to_string())
-                        .unwrap_or_else(|| "<none>".to_string());
-                    diags.push(GlyimDiagnostic::type_error(
-                        span,
-                        format!(
-                            "missing field(s) in struct literal `{}`: {}",
-                            resolved,
-                            missing_names.join(", ")
-                        ),
-                    ));
-                }
-            }
+        && let Some(def_order) = struct_field_map.get(&name)
+    {
+        let provided: std::collections::HashSet<Name> =
+            ordered_fields.iter().map(|(f, _)| *f).collect();
+        let missing: Vec<&Name> = def_order
+            .iter()
+            .filter(|declared| !provided.contains(declared))
+            .collect();
+        if !missing.is_empty() {
+            let missing_names: Vec<String> = missing
+                .iter()
+                .map(|n| interner.resolve(**n).to_string())
+                .collect();
+            let span = node_span(node);
+            let resolved = struct_name
+                .map(|n| interner.resolve(n).to_string())
+                .unwrap_or_else(|| "<none>".to_string());
+            diags.push(GlyimDiagnostic::type_error(
+                span,
+                format!(
+                    "missing field(s) in struct literal `{}`: {}",
+                    resolved,
+                    missing_names.join(", ")
+                ),
+            ));
+        }
+    }
 
     let expr = Expr::Struct {
         path: path_struct,
@@ -731,10 +723,7 @@ fn lower_binary_expr(
     let op_token = node
         .children_with_tokens()
         .filter_map(|el| el.into_token())
-        .find(|t| {
-            !t.kind().is_trivia()
-                && is_bin_op_kind(t.kind())
-        });
+        .find(|t| !t.kind().is_trivia() && is_bin_op_kind(t.kind()));
     if let Some(op_token) = op_token {
         let lhs_node = node
             .children_with_tokens()
@@ -897,18 +886,18 @@ fn lower_path_expr(node: &SyntaxNode, interner: &mut Interner, body: &mut Body) 
 
     for el in node.children_with_tokens() {
         match el {
-        glyim_syntax::SyntaxElement::Token(t)
-            if t.kind() == SyntaxKind::Ident
-                || t.kind() == SyntaxKind::KwSelf
-                || t.kind() == SyntaxKind::KwSuper
-                || t.kind() == SyntaxKind::KwCrate =>
-        {
-            flush_pending(&mut segments, &mut pending_args);
-            segments.push(PathSegment {
-                name: interner.intern(t.text()),
-                generic_args: None,
-            });
-        }
+            glyim_syntax::SyntaxElement::Token(t)
+                if t.kind() == SyntaxKind::Ident
+                    || t.kind() == SyntaxKind::KwSelf
+                    || t.kind() == SyntaxKind::KwSuper
+                    || t.kind() == SyntaxKind::KwCrate =>
+            {
+                flush_pending(&mut segments, &mut pending_args);
+                segments.push(PathSegment {
+                    name: interner.intern(t.text()),
+                    generic_args: None,
+                });
+            }
             glyim_syntax::SyntaxElement::Node(n) if n.kind() == SyntaxKind::UsePath => {
                 for t in n.children_with_tokens() {
                     if let glyim_syntax::SyntaxElement::Token(tt) = t

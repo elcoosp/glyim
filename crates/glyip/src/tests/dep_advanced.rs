@@ -30,7 +30,8 @@ fn make_config_with_deps(
 fn resolve_dev_dependencies() {
     let dir = TempDir::new().expect("temp dir");
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "test-util".to_string(),
         versions: vec!["0.1.0".to_string()],
         checksums: HashMap::new(),
@@ -58,7 +59,8 @@ fn resolve_dev_dependencies() {
 fn resolve_multiple_dependencies() {
     let dir = TempDir::new().expect("temp dir");
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "dep-a".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: {
@@ -67,7 +69,8 @@ fn resolve_multiple_dependencies() {
             m
         },
     });
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "dep-b".to_string(),
         versions: vec!["2.0.0".to_string()],
         checksums: {
@@ -95,7 +98,8 @@ fn resolve_multiple_dependencies() {
 fn resolve_deduplicates_same_dep() {
     let dir = TempDir::new().expect("temp dir");
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "shared".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: HashMap::new(),
@@ -124,7 +128,8 @@ fn resolve_deduplicates_same_dep() {
 #[test]
 fn crate_index_insert_and_get() {
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "mylib".to_string(),
         versions: vec!["3.0.0".to_string()],
         checksums: HashMap::new(),
@@ -144,7 +149,8 @@ fn crate_index_missing_entry() {
 #[test]
 fn resolve_version_no_match_is_not_found() {
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "foo".to_string(),
         versions: vec!["5.0.0".to_string(), "4.0.0".to_string()],
         checksums: HashMap::new(),
@@ -231,7 +237,10 @@ fn registry_disabled_gives_actionable_error() {
     // Empty index, no registry client (DependencyResolver::new has None).
     let index = CrateIndex::new();
     let mut deps = BTreeMap::new();
-    deps.insert("remote-crate".to_string(), Dependency::Simple("1.0".to_string()));
+    deps.insert(
+        "remote-crate".to_string(),
+        Dependency::Simple("1.0".to_string()),
+    );
     let config = make_config_with_deps("main", deps, BTreeMap::new());
 
     let resolver = DependencyResolver::new(index);
@@ -283,7 +292,11 @@ fn validate_lockfile_detects_missing_and_mismatched() {
 
     let conflicts = lockfile.validate_against_manifest(&manifest);
     // serde@1.0.0 satisfies the "1.0" pin → OK. log is mismatched.
-    assert_eq!(conflicts.len(), 1, "only log should conflict: {conflicts:?}");
+    assert_eq!(
+        conflicts.len(),
+        1,
+        "only log should conflict: {conflicts:?}"
+    );
     assert!(matches!(
         &conflicts[0],
         LockConflict::VersionMismatch { name, .. } if name == "log"

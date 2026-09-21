@@ -1,6 +1,9 @@
 use crate::*;
 use glyim_core::{CrateId, DefId, FnDefId, IndexVec, IntTy, LocalDefId, Mutability};
-use glyim_mir::{AssertMessage, BasicBlockData, BasicBlockIdx, LocalDecl, LocalIdx, MirConst, MirConstKind, Operand, Place, Rvalue, SourceInfo, Statement, StatementKind, Terminator, TerminatorKind};
+use glyim_mir::{
+    AssertMessage, BasicBlockData, BasicBlockIdx, LocalDecl, LocalIdx, MirConst, MirConstKind,
+    Operand, Place, Rvalue, SourceInfo, Statement, StatementKind, Terminator, TerminatorKind,
+};
 use glyim_span::Span;
 use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
@@ -105,9 +108,17 @@ fn panic_runs_cleanup_block_when_unwinding() {
     let body = build_unwinding_body(&mut tcx_mut);
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx).with_panics_unwind(true);
-    interp.run_body(&body).expect("with unwinding, the cleanup block must absorb the panic");
-    let ran = interp.get_local_value(LocalIdx::from_raw(1)).expect("tracking local must be set");
-    assert_eq!(ran, &InterpValue::Int(42), "cleanup block must have run during unwind");
+    interp
+        .run_body(&body)
+        .expect("with unwinding, the cleanup block must absorb the panic");
+    let ran = interp
+        .get_local_value(LocalIdx::from_raw(1))
+        .expect("tracking local must be set");
+    assert_eq!(
+        ran,
+        &InterpValue::Int(42),
+        "cleanup block must have run during unwind"
+    );
 }
 
 /// Nested-def-id helper so three functions can call each other.
@@ -171,8 +182,16 @@ fn nested_panic_unwinds_through_all_caller_frames() {
     let middle = {
         let mut b = Body::dummy(def_id(1));
         b.locals = IndexVec::from_raw(vec![
-            LocalDecl { ty: Ty::UNIT, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
+            LocalDecl {
+                ty: Ty::UNIT,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
         ]);
         b.basic_blocks = IndexVec::from_raw(vec![
             // BB0: call inner, resume at BB2, unwind at BB1.
@@ -181,7 +200,10 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Fn(FnDefId::from_raw(2), glyim_type::Substitution::empty()),
+                            kind: MirConstKind::Fn(
+                                FnDefId::from_raw(2),
+                                glyim_type::Substitution::empty(),
+                            ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
@@ -208,7 +230,9 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                     source_info: SourceInfo::new(Span::DUMMY),
                 }],
                 terminator: Terminator {
-                    kind: TerminatorKind::Goto { target: BasicBlockIdx::from_raw(3) },
+                    kind: TerminatorKind::Goto {
+                        target: BasicBlockIdx::from_raw(3),
+                    },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: true,
@@ -259,8 +283,16 @@ fn nested_panic_unwinds_through_all_caller_frames() {
     let outer = {
         let mut b = Body::dummy(def_id(0));
         b.locals = IndexVec::from_raw(vec![
-            LocalDecl { ty: Ty::UNIT, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
+            LocalDecl {
+                ty: Ty::UNIT,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
         ]);
         b.basic_blocks = IndexVec::from_raw(vec![
             BasicBlockData {
@@ -268,7 +300,10 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Fn(FnDefId::from_raw(1), glyim_type::Substitution::empty()),
+                            kind: MirConstKind::Fn(
+                                FnDefId::from_raw(1),
+                                glyim_type::Substitution::empty(),
+                            ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
@@ -295,7 +330,9 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                     source_info: SourceInfo::new(Span::DUMMY),
                 }],
                 terminator: Terminator {
-                    kind: TerminatorKind::Goto { target: BasicBlockIdx::from_raw(3) },
+                    kind: TerminatorKind::Goto {
+                        target: BasicBlockIdx::from_raw(3),
+                    },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: true,
@@ -505,8 +542,16 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
     let g = {
         let mut b = Body::dummy(def_id(1));
         b.locals = IndexVec::from_raw(vec![
-            LocalDecl { ty: Ty::UNIT, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
+            LocalDecl {
+                ty: Ty::UNIT,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
         ]);
         b.basic_blocks = IndexVec::from_raw(vec![
             BasicBlockData {
@@ -514,7 +559,10 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Fn(FnDefId::from_raw(2), glyim_type::Substitution::empty()),
+                            kind: MirConstKind::Fn(
+                                FnDefId::from_raw(2),
+                                glyim_type::Substitution::empty(),
+                            ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
@@ -540,7 +588,9 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                     source_info: SourceInfo::new(Span::DUMMY),
                 }],
                 terminator: Terminator {
-                    kind: TerminatorKind::Goto { target: BasicBlockIdx::from_raw(3) },
+                    kind: TerminatorKind::Goto {
+                        target: BasicBlockIdx::from_raw(3),
+                    },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: true,
@@ -587,8 +637,16 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
     let f = {
         let mut b = Body::dummy(def_id(0));
         b.locals = IndexVec::from_raw(vec![
-            LocalDecl { ty: Ty::UNIT, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
+            LocalDecl {
+                ty: Ty::UNIT,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
         ]);
         b.basic_blocks = IndexVec::from_raw(vec![
             BasicBlockData {
@@ -596,7 +654,10 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Fn(FnDefId::from_raw(1), glyim_type::Substitution::empty()),
+                            kind: MirConstKind::Fn(
+                                FnDefId::from_raw(1),
+                                glyim_type::Substitution::empty(),
+                            ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
@@ -622,7 +683,9 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                     source_info: SourceInfo::new(Span::DUMMY),
                 }],
                 terminator: Terminator {
-                    kind: TerminatorKind::Goto { target: BasicBlockIdx::from_raw(3) },
+                    kind: TerminatorKind::Goto {
+                        target: BasicBlockIdx::from_raw(3),
+                    },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: true,
@@ -761,4 +824,3 @@ fn recursion_limit_reflects_unwound_frames() {
         "fresh chain must reach the same depth again (no stale recursion accounting), got {err2:?}"
     );
 }
-

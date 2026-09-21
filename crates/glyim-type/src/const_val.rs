@@ -4,42 +4,42 @@ use glyim_core::interner::Name;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// Const.
 pub struct Const {
-/// Struct.
+    /// Struct.
     pub kind: ConstKind,
-/// Struct.
+    /// Struct.
     pub ty: Ty,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// ConstKind.
 pub enum ConstKind {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Int(i128),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Uint(u128),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     FloatBits(u64),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Bool(bool),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Char(char),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     String(Name),
-/// Variant.
+    /// Variant.
     Unit,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Infer(ConstVar),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Param(ParamConst),
-/// Variant.
+    /// Variant.
     Error,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// ParamConst.
 pub struct ParamConst {
-/// Struct.
+    /// Struct.
     pub index: u32,
-/// Struct.
+    /// Struct.
     pub name: Name,
 }

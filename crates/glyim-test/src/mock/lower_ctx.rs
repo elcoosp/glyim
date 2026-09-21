@@ -31,14 +31,14 @@ pub struct MockLowerCtx<'a> {
 
 /// Operations for span testing.
 pub enum SpanOp {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Push(Span),
-/// Variant.
+    /// Variant.
     Pop,
 }
 
 impl<'a> MockLowerCtx<'a> {
-/// new.
+    /// new.
     pub fn new(ty_ctx: &'a TyCtx) -> Self {
         Self {
             ty_ctx,
@@ -174,9 +174,13 @@ mod tests {
         // so a test can simulate "solver resolved Iterator::next".
         let ctx = test_frozen_ty_ctx();
         let info = sample_info();
-        let mock = MockLowerCtx::new(&ctx).with_iterator_next(move |_iter, _elem| Some(info.clone()));
+        let mock =
+            MockLowerCtx::new(&ctx).with_iterator_next(move |_iter, _elem| Some(info.clone()));
         let got = LowerCtx::iterator_next_fn(&mock, Ty::UNIT, Ty::UNIT);
-        assert!(got.is_some(), "iterator_next_fn should return the override's Some(info)");
+        assert!(
+            got.is_some(),
+            "iterator_next_fn should return the override's Some(info)"
+        );
         assert_eq!(got.unwrap().fn_def_id, FnDefId::from_raw(0));
     }
 

@@ -80,15 +80,18 @@ impl<'a> CoherenceChecker<'a> {
                 if args_a.len() != args_b.len() {
                     return false;
                 }
-                args_a.iter().zip(args_b.iter()).all(|(ga, gb)| match (ga, gb) {
-                    (glyim_type::GenericArg::Ty(ta), glyim_type::GenericArg::Ty(tb)) => {
-                        self.structural_tys_match(ctx, *ta, *tb)
-                    }
-                    // Lifetime/const generics: treat as always-compatible for
-                    // overlap purposes (this crate does not yet model const
-                    // generic values precisely enough to compare them).
-                    _ => true,
-                })
+                args_a
+                    .iter()
+                    .zip(args_b.iter())
+                    .all(|(ga, gb)| match (ga, gb) {
+                        (glyim_type::GenericArg::Ty(ta), glyim_type::GenericArg::Ty(tb)) => {
+                            self.structural_tys_match(ctx, *ta, *tb)
+                        }
+                        // Lifetime/const generics: treat as always-compatible for
+                        // overlap purposes (this crate does not yet model const
+                        // generic values precisely enough to compare them).
+                        _ => true,
+                    })
             }
             (
                 glyim_type::TyKind::Ref(_, inner_a, mut_a),
@@ -133,7 +136,6 @@ impl<'a> CoherenceChecker<'a> {
     }
 
     /// Checks if a type is a blanket impl (contains a type parameter).
-    
 
     /// Resolve a name in any module of the crate, recursively.
     fn resolve_name_in_any_module(&self, name: Name) -> Option<glyim_core::def_id::LocalDefId> {

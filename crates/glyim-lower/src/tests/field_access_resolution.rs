@@ -151,8 +151,10 @@ fn non_copy_field_access_lowers_as_move_with_drop_flag() {
     // (a) the field read must be a Move, not a Copy.
     let found_move = result.body.basic_blocks.iter().any(|bb| {
         bb.statements.iter().any(|stmt| {
-            if let glyim_mir::StatementKind::Assign(_, glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(place))) =
-                &stmt.kind
+            if let glyim_mir::StatementKind::Assign(
+                _,
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(place)),
+            ) = &stmt.kind
             {
                 return place
                     .projection
@@ -171,8 +173,10 @@ fn non_copy_field_access_lowers_as_move_with_drop_flag() {
     //     move site, proving register_partial_move ran.
     let found_flag_clear = result.body.basic_blocks.iter().any(|bb| {
         bb.statements.iter().any(|stmt| {
-            if let glyim_mir::StatementKind::Assign(_, glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(c))) =
-                &stmt.kind
+            if let glyim_mir::StatementKind::Assign(
+                _,
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(c)),
+            ) = &stmt.kind
             {
                 return matches!(c.kind, glyim_mir::MirConstKind::Bool(false));
             }
@@ -220,8 +224,10 @@ fn copy_field_access_lowers_as_copy_without_drop_flag() {
 
     let found_copy = result.body.basic_blocks.iter().any(|bb| {
         bb.statements.iter().any(|stmt| {
-            if let glyim_mir::StatementKind::Assign(_, glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(place))) =
-                &stmt.kind
+            if let glyim_mir::StatementKind::Assign(
+                _,
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(place)),
+            ) = &stmt.kind
             {
                 return place
                     .projection
@@ -231,15 +237,14 @@ fn copy_field_access_lowers_as_copy_without_drop_flag() {
             false
         })
     });
-    assert!(
-        found_copy,
-        "Copy field access must lower to Operand::Copy"
-    );
+    assert!(found_copy, "Copy field access must lower to Operand::Copy");
 
     let found_flag_clear = result.body.basic_blocks.iter().any(|bb| {
         bb.statements.iter().any(|stmt| {
-            if let glyim_mir::StatementKind::Assign(_, glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(c))) =
-                &stmt.kind
+            if let glyim_mir::StatementKind::Assign(
+                _,
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(c)),
+            ) = &stmt.kind
             {
                 return matches!(c.kind, glyim_mir::MirConstKind::Bool(false));
             }

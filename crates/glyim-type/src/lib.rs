@@ -3,11 +3,11 @@
 pub mod adt_def;
 /// auto_trait.
 pub mod auto_trait;
-/// deref.
-pub mod deref;
 /// binder.
 pub mod binder;
 pub mod cast;
+/// deref.
+pub mod deref;
 pub use cast::is_valid_cast;
 /// const_val.
 pub mod const_val;
@@ -58,9 +58,9 @@ mod tests;
 /// Definition of a trait for the type context.
 #[derive(Clone, Debug)]
 pub struct TraitDef {
-/// Struct.
+    /// Struct.
     pub name: glyim_core::interner::Name,
-/// Struct.
+    /// Struct.
     pub methods: Vec<MethodDef>,
     /// Associated-type names declared by the trait (e.g. `Output` in
     /// `trait Future { type Output; }`). Populated during HIR lowering
@@ -72,9 +72,9 @@ pub struct TraitDef {
 /// Definition of a method in a trait.
 #[derive(Clone, Debug)]
 pub struct MethodDef {
-/// Struct.
+    /// Struct.
     pub name: glyim_core::interner::Name,
-/// Struct.
+    /// Struct.
     pub sig: FnSig,
     /// The `FnDefId` of the (canonical, trait-level) method definition.
     /// When a vtable is generated for a concrete impl, this identifies the

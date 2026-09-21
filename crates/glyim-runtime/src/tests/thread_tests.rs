@@ -73,8 +73,8 @@ fn thread_current_id_and_parallelism() {
 /// set, so it covers the previously-missing runtime symbol.
 #[test]
 fn glyim_thread_spawn_named_joins_value() {
-    use std::sync::atomic::{AtomicI32, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicI32, Ordering};
 
     unsafe extern "C" {
         fn glyim_thread_spawn_named(
@@ -107,7 +107,10 @@ fn glyim_thread_spawn_named_joins_value() {
             shared_ptr,
         )
     };
-    assert!(id != 0, "glyim_thread_spawn_named must return a non-zero id");
+    assert!(
+        id != 0,
+        "glyim_thread_spawn_named must return a non-zero id"
+    );
 
     let rc = unsafe { glyim_thread_join(id as u64) };
     assert_eq!(rc, 0, "glyim_thread_join should return 0 for clean exit");

@@ -54,8 +54,8 @@ fn build_def_map_with_names(
         modules,
         krate,
         interner: interner.clone(),
-    variant_map: Default::default(),
-    max_local_def_id: 0,
+        variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 
@@ -100,7 +100,8 @@ fn build_simple_hir(
             is_const: false,
             generic_params,
             where_clauses,
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: dummy_span(),
     };
@@ -164,7 +165,10 @@ impl TraitSolver for RejectSolver {
 fn ty_param(inter: &mut Interner, name: &str) -> GenericParam {
     GenericParam {
         name: inter.intern(name),
-        kind: GenericParamKind::Type { default: None, bounds: Vec::new() },
+        kind: GenericParamKind::Type {
+            default: None,
+            bounds: Vec::new(),
+        },
         span: dummy_span(),
     }
 }
@@ -238,13 +242,13 @@ fn t02_supertrait_impl_satisfies_both() {
             TraitBound {
                 trait_path: Path::from_single(name_copy),
                 span: dummy_span(),
-            fn_shape: None,
-        },
+                fn_shape: None,
+            },
             TraitBound {
                 trait_path: Path::from_single(name_clone),
                 span: dummy_span(),
-            fn_shape: None,
-        },
+                fn_shape: None,
+            },
         ],
         span: dummy_span(),
     };
@@ -291,13 +295,13 @@ fn t04_multiple_where_bounds() {
             TraitBound {
                 trait_path: Path::from_single(name_clone),
                 span: dummy_span(),
-            fn_shape: None,
-        },
+                fn_shape: None,
+            },
             TraitBound {
                 trait_path: Path::from_single(name_debug),
                 span: dummy_span(),
-            fn_shape: None,
-        },
+                fn_shape: None,
+            },
         ],
         span: dummy_span(),
     };
@@ -439,7 +443,11 @@ fn build_def_map_with_nested_trait(
     let mut child_scope = ItemScope::default();
     child_scope.types.insert(
         trait_n,
-        (LocalDefId::from_raw(trait_local_id), Visibility::Public, Span::DUMMY),
+        (
+            LocalDefId::from_raw(trait_local_id),
+            Visibility::Public,
+            Span::DUMMY,
+        ),
     );
     let child_data = ModuleData {
         parent: Some(root_id),
@@ -459,8 +467,8 @@ fn build_def_map_with_nested_trait(
         modules,
         krate,
         interner: interner.clone(),
-    variant_map: Default::default(),
-    max_local_def_id: 0,
+        variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 

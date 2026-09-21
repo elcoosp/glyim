@@ -159,7 +159,8 @@ fn resolve_transitive_dependencies() {
 #[test]
 fn resolve_from_local_index() {
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "foo".to_string(),
         versions: vec!["1.0.0".to_string(), "0.9.0".to_string()],
         checksums: {
@@ -187,7 +188,8 @@ fn resolve_from_local_index() {
 fn resolve_from_registry_fetch() {
     // S12-T01: glyip build fetches dependency from registry.
     let mut mock = MockRegistryClient::new();
-    mock.add_entry(IndexEntry { dependencies: Default::default(),
+    mock.add_entry(IndexEntry {
+        dependencies: Default::default(),
         name: "bar".to_string(),
         versions: vec!["2.1.0".to_string()],
         checksums: {
@@ -214,14 +216,16 @@ fn resolve_from_registry_fetch() {
 #[test]
 fn registry_fallback_on_missing_index_entry() {
     let mut index = CrateIndex::new();
-    index.insert(IndexEntry { dependencies: Default::default(),
+    index.insert(IndexEntry {
+        dependencies: Default::default(),
         name: "foo".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: HashMap::new(),
     });
 
     let mut mock = MockRegistryClient::new();
-    mock.add_entry(IndexEntry { dependencies: Default::default(),
+    mock.add_entry(IndexEntry {
+        dependencies: Default::default(),
         name: "bar".to_string(),
         versions: vec!["3.0.0".to_string()],
         checksums: HashMap::new(),
@@ -319,7 +323,8 @@ fn detect_dependency_cycle() {
 #[test]
 fn download_crate_with_registry() {
     let mut mock = MockRegistryClient::new();
-    mock.add_entry(IndexEntry { dependencies: Default::default(),
+    mock.add_entry(IndexEntry {
+        dependencies: Default::default(),
         name: "qux".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: HashMap::new(),
@@ -381,7 +386,8 @@ fn dependency_not_found_without_registry() {
 #[test]
 fn mock_registry_download_count() {
     let mut mock = MockRegistryClient::new();
-    mock.add_entry(IndexEntry { dependencies: Default::default(),
+    mock.add_entry(IndexEntry {
+        dependencies: Default::default(),
         name: "counted".to_string(),
         versions: vec!["0.1.0".to_string()],
         checksums: HashMap::new(),

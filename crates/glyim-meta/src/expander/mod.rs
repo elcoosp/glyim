@@ -14,14 +14,13 @@ use rowan::Language;
 use smol_str::SmolStr;
 use std::collections::HashMap;
 
+use glyim_proc_macro::Registry;
 use matcher::{MatchResult, Pattern, match_pattern};
 use token_tree::{TokenTree, flatten_token_tree};
-use glyim_proc_macro::Registry;
 
 static RECURSION_LIMIT: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
 
 /// Set the recursion limit for macro expansion.
-
 
 /// Get the current recursion limit, or the default 128.
 fn get_recursion_limit() -> u32 {
@@ -49,7 +48,8 @@ pub(crate) fn expand_crate(
     vfs: Option<&Vfs>,
     proc_registry: Option<&Registry>,
 ) -> (GreenNode, Vec<GlyimDiagnostic>) {
-    let mut expander = ExpanderImpl::new(hygiene, interner.clone(), current_file, vfs, proc_registry);
+    let mut expander =
+        ExpanderImpl::new(hygiene, interner.clone(), current_file, vfs, proc_registry);
     // Register builtins from the public API
     for def in registered {
         if let crate::MacroKind::Builtin { handler, .. } = &def.kind {
@@ -283,13 +283,9 @@ impl<'a> ExpanderImpl<'a> {
                                 // "missing field" diagnostics. The same leak also
                                 // produced stray `{`/`}` in any expansion
                                 // returned from a non-statement position.
-                                for stmt in block
-                                    .children_with_tokens()
-                                    .filter(|el| !matches!(
-                                        el.kind(),
-                                        SyntaxKind::LBrace | SyntaxKind::RBrace
-                                    ))
-                                {
+                                for stmt in block.children_with_tokens().filter(|el| {
+                                    !matches!(el.kind(), SyntaxKind::LBrace | SyntaxKind::RBrace)
+                                }) {
                                     match stmt {
                                         // Unwrap a single-expression `ExprStmt`
                                         // (no trailing semicolon) into its inner
@@ -321,8 +317,7 @@ impl<'a> ExpanderImpl<'a> {
                                                         );
                                                     }
                                                     rowan::NodeOrToken::Token(t) => {
-                                                        let kind =
-                                                            GlyimLang::kind_to_raw(t.kind());
+                                                        let kind = GlyimLang::kind_to_raw(t.kind());
                                                         builder.token(kind, t.text());
                                                     }
                                                 }
@@ -487,8 +482,8 @@ impl<'a> ExpanderImpl<'a> {
                 MatchResult::FullMatch(bindings) => {
                     match substitution::substitute(&arm.expansion, &bindings) {
                         Ok(expanded) => {
-                            let expanded_green =
-                                self.build_expansion_green(&expanded, call_site, depth, name, false);
+                            let expanded_green = self
+                                .build_expansion_green(&expanded, call_site, depth, name, false);
                             return (Some(expanded_green), Vec::new());
                         }
                         Err(unbound) => {
@@ -641,9 +636,7 @@ impl<'a> ExpanderImpl<'a> {
                         };
                         match fs::read_to_string(&resolved) {
                             Ok(content) => {
-                                let escaped = content
-                                    .replace('\\', "\\\\")
-                                    .replace('"', "\\\"");
+                                let escaped = content.replace('\\', "\\\\").replace('"', "\\\"");
                                 let lit = SmolStr::from(format!("\"{}\"", escaped));
                                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
                             }
@@ -764,9 +757,7 @@ impl<'a> ExpanderImpl<'a> {
                         };
                         match fs::read_to_string(&resolved) {
                             Ok(content) => {
-                                let escaped = content
-                                    .replace('\\', "\\\\")
-                                    .replace('"', "\\\"");
+                                let escaped = content.replace('\\', "\\\\").replace('"', "\\\"");
                                 let lit = SmolStr::from(format!("\"{}\"", escaped));
                                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
                             }
@@ -880,10 +871,15 @@ impl<'a> ExpanderImpl<'a> {
                         TokenTree::Token(kind, text) => {
                             let text_str = text.as_str();
                             // Skip punctuation separators (commas, etc.).
-                            if text_str == "," || text_str == ";" || text_str == ":"
-                                || text_str == "(" || text_str == ")"
-                                || text_str == "{" || text_str == "}"
-                                || text_str == "[" || text_str == "]"
+                            if text_str == ","
+                                || text_str == ";"
+                                || text_str == ":"
+                                || text_str == "("
+                                || text_str == ")"
+                                || text_str == "{"
+                                || text_str == "}"
+                                || text_str == "["
+                                || text_str == "]"
                             {
                                 continue;
                             }
@@ -960,7 +956,10 @@ impl<'a> ExpanderImpl<'a> {
                 // `format!(fmt, args..)` — the probe type-checks only, so emit
                 // an empty string literal. Real interpolation needs `Display`
                 // dispatch (out of scope for the stdlib-compile fix).
-                vec![TokenTree::Token(SyntaxKind::StringLit, SmolStr::from("\"\""))]
+                vec![TokenTree::Token(
+                    SyntaxKind::StringLit,
+                    SmolStr::from("\"\""),
+                )]
             }
             BuiltinMacro::Vec => {
                 // `vec![a, b, c]` → `[a, b, c]`.
@@ -1107,23 +1106,24 @@ impl<'a> ExpanderImpl<'a> {
     /// (`lo / 80`, `lo % 80`) for call sites without a VFS/source.
     fn line_col_of(&self, span: Span) -> (u32, u32) {
         if let Some(vfs) = self.vfs
-            && let Some(src) = vfs.file_content(span.file) {
-                let offset = span.lo.to_usize();
-                let mut line = 1u32;
-                let mut col = 1u32;
-                for (i, ch) in src.char_indices() {
-                    if i >= offset {
-                        break;
-                    }
-                    if ch == '\n' {
-                        line += 1;
-                        col = 1;
-                    } else {
-                        col += 1;
-                    }
+            && let Some(src) = vfs.file_content(span.file)
+        {
+            let offset = span.lo.to_usize();
+            let mut line = 1u32;
+            let mut col = 1u32;
+            for (i, ch) in src.char_indices() {
+                if i >= offset {
+                    break;
                 }
-                return (line, col);
+                if ch == '\n' {
+                    line += 1;
+                    col = 1;
+                } else {
+                    col += 1;
+                }
             }
+            return (line, col);
+        }
         // Fallback heuristic when no source is available.
         let lo = span.lo.to_raw();
         (

@@ -3,14 +3,14 @@
 //! Each public function corresponds to a CLI sub-command and orchestrates
 //! configuration loading, dependency resolution, compilation, and output.
 
+use glyim_core::def_id::DefId;
 use glyim_db::{CrateConfig, Database};
 use glyim_pipeline::MirCompilation;
-use glyim_core::def_id::DefId;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::sync::{Arc, Mutex};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::{Arc, Mutex};
 use tracing::info;
 
 use crate::cache::Cache;
@@ -277,7 +277,11 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
             // file to a native executable and run it as an isolated subprocess;
             // pass/fail is determined by the child's exit code. The
             // interpreter loop below is skipped entirely for this mode.
-            match compile_and_run_compiled(&discovered_test.file, &config, std::time::Duration::from_secs(30)) {
+            match compile_and_run_compiled(
+                &discovered_test.file,
+                &config,
+                std::time::Duration::from_secs(30),
+            ) {
                 Ok(()) => passed += 1,
                 Err(e) => {
                     eprintln!("compiled test `{}` failed: {e}", discovered_test.name);
@@ -288,19 +292,21 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
         }
 
         // Compile (or reuse a cached compilation of) the containing file.
-        let mir = mir_cache.entry(discovered_test.file.clone()).or_insert_with(|| {
-            let mut db = make_test_db(&config);
-            match glyim_pipeline::compile_file_to_mir(&mut db, &discovered_test.file) {
-                Ok(m) => Some(m),
-                Err(diags) => {
-                    eprintln!("[DBG] compile error diags:");
-                    for d in &diags {
-                        eprintln!("[DBG]   {:?}", d.message);
+        let mir = mir_cache
+            .entry(discovered_test.file.clone())
+            .or_insert_with(|| {
+                let mut db = make_test_db(&config);
+                match glyim_pipeline::compile_file_to_mir(&mut db, &discovered_test.file) {
+                    Ok(m) => Some(m),
+                    Err(diags) => {
+                        eprintln!("[DBG] compile error diags:");
+                        for d in &diags {
+                            eprintln!("[DBG]   {:?}", d.message);
+                        }
+                        None
                     }
-                    None
                 }
-            }
-        });
+            });
 
         let Some(compilation) = mir else {
             failed += 1;
@@ -398,7 +404,9 @@ fn compile_and_run_compiled(
 
     let output_path = std::env::temp_dir().join(format!(
         "glyim_test_compiled_{}.o",
-        file.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()
+        file.file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default()
     ));
     let exe_path = output_path.with_extension("");
 
@@ -409,18 +417,22 @@ fn compile_and_run_compiled(
         // `main` and the native link fails ("undefined reference to main").
         // Target the host triple so the produced object links and runs on the
         // dev machine (see `host_target_triple`).
-        let mut llvm = glyim_codegen_llvm::LlvmBackend::new()
-            .with_target(host_target_triple());
-        if let Some(main_id) =
-            glyim_pipeline::Pipeline::entry_main_local_id(&mut db, file)
-        {
+        let mut llvm = glyim_codegen_llvm::LlvmBackend::new().with_target(host_target_triple());
+        if let Some(main_id) = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, file) {
             llvm = llvm.with_entry_main(main_id);
         }
         Box::new(llvm)
     };
 
     // Stage 1: compile source -> object file via the full pipeline.
-    match glyim_pipeline::Pipeline::compile_file(&mut db, file, backend.as_ref(), &output_path, None, None) {
+    match glyim_pipeline::Pipeline::compile_file(
+        &mut db,
+        file,
+        backend.as_ref(),
+        &output_path,
+        None,
+        None,
+    ) {
         Ok(_) => {}
         Err(diags) => {
             return Err(format!(
@@ -617,9 +629,12 @@ fn compile_source(
     // Select the codegen backend.
     #[cfg(feature = "llvm")]
     let backend: Box<dyn glyim_codegen::CodegenBackend> = if opts.backend == "llvm" {
-        Box::new(glyim_codegen_llvm::LlvmBackend::new().with_lto(
-            opts.lto.unwrap_or(glyim_codegen_llvm::passes::LtoKind::None),
-        ))
+        Box::new(
+            glyim_codegen_llvm::LlvmBackend::new().with_lto(
+                opts.lto
+                    .unwrap_or(glyim_codegen_llvm::passes::LtoKind::None),
+            ),
+        )
     } else {
         let ctx = glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze();
         Box::new(glyim_codegen::BytecodeBackend::with_ty_ctx(
@@ -630,9 +645,7 @@ fn compile_source(
     #[cfg(not(feature = "llvm"))]
     let backend: Box<dyn glyim_codegen::CodegenBackend> = {
         if opts.backend == "llvm" {
-            tracing::warn!(
-                "LLVM backend requested but not compiled in, falling back to bytecode"
-            );
+            tracing::warn!("LLVM backend requested but not compiled in, falling back to bytecode");
         }
         let ctx = glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze();
         Box::new(glyim_codegen::BytecodeBackend::with_ty_ctx(
@@ -646,7 +659,14 @@ fn compile_source(
     fs::create_dir_all(&output_dir)?;
     let output_path = output_dir.join(&config.package.name);
 
-    match glyim_pipeline::Pipeline::compile_file(&mut db, entry, backend.as_ref(), &output_path, None, None) {
+    match glyim_pipeline::Pipeline::compile_file(
+        &mut db,
+        entry,
+        backend.as_ref(),
+        &output_path,
+        None,
+        None,
+    ) {
         Ok(()) => {
             info!("Compilation succeeded: {}", output_path.display());
             Ok((output_path, 0))
@@ -707,8 +727,7 @@ mod tests {
     fn project_with_main(body: &str) -> (TempDir, GlyipToml, PathBuf) {
         let dir = TempDir::new().expect("temp dir");
         let name = format!("compiled_{}", std::process::id());
-        let project = cmd_new(&name, &NewOptions::default(), Some(dir.path()))
-            .expect("cmd_new");
+        let project = cmd_new(&name, &NewOptions::default(), Some(dir.path())).expect("cmd_new");
         let main = project.path.join("src/main.g");
         std::fs::write(&main, body).expect("write main.g");
         let config = GlyipToml::read_from_dir(&project.path).expect("read config");
@@ -729,11 +748,7 @@ mod tests {
         // link, which we no longer need.)
         let (_dir, config, main) = project_with_main("fn main() {}\n");
 
-        let result = compile_and_run_compiled(
-            &main,
-            &config,
-            std::time::Duration::from_secs(30),
-        );
+        let result = compile_and_run_compiled(&main, &config, std::time::Duration::from_secs(30));
 
         assert!(
             result.is_ok(),
@@ -751,14 +766,9 @@ mod tests {
         // non-Linux host the (host-mismatch) link failure already yields Err.
         // Either way the path must NOT report success — that is the invariant
         // we assert on every host.
-        let (_dir, config, main) =
-            project_with_main("fn main() { undefined_symbol_xyz(); }\n");
+        let (_dir, config, main) = project_with_main("fn main() { undefined_symbol_xyz(); }\n");
 
-        let result = compile_and_run_compiled(
-            &main,
-            &config,
-            std::time::Duration::from_secs(30),
-        );
+        let result = compile_and_run_compiled(&main, &config, std::time::Duration::from_secs(30));
 
         assert!(
             result.is_err(),

@@ -228,11 +228,17 @@ fn impl_assoc_type_projection_resolves() {
 
     // Unknown associated type on a known impl → None.
     let other_name = ctx.resolver().intern("Other");
-    assert_eq!(ctx.resolve_associated_type(self_ty, trait_def_id, other_name), None);
+    assert_eq!(
+        ctx.resolve_associated_type(self_ty, trait_def_id, other_name),
+        None
+    );
 
     // Wrong self type → None (projection is keyed by the concrete self type).
     let other_self = ctx.mk_ty(TyKind::Int(IntTy::I8));
-    assert_eq!(ctx.resolve_associated_type(other_self, trait_def_id, output_name), None);
+    assert_eq!(
+        ctx.resolve_associated_type(other_self, trait_def_id, output_name),
+        None
+    );
 }
 
 #[test]

@@ -5,11 +5,11 @@ use std::collections::VecDeque;
 #[derive(Debug, Clone, PartialEq)]
 /// DispatchStrategy.
 pub enum DispatchStrategy {
-/// Variant.
+    /// Variant.
     MostSlotsFirst,
-/// Variant.
+    /// Variant.
     RoundRobin,
-/// Variant.
+    /// Variant.
     LeastLoaded,
 }
 
@@ -28,9 +28,9 @@ impl std::str::FromStr for DispatchStrategy {
 #[derive(Debug, Clone)]
 /// StreamAssignment.
 pub struct StreamAssignment {
-/// Struct.
+    /// Struct.
     pub stream_id: String,
-/// Struct.
+    /// Struct.
     pub provider_id: String,
 }
 

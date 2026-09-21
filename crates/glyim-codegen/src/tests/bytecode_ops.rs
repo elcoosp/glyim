@@ -10,7 +10,7 @@
 
 use crate::{
     BytecodeBackend, CodegenBackend, LayoutProvider, OP_ADD, OP_AGGREGATE, OP_ASSERT, OP_DEREF,
-    OP_LT, OP_LOAD_CONST, OP_LOAD_LOCAL, OP_LOAD_LOCAL_ADDR, OP_MUL, OP_REPEAT,
+    OP_LOAD_CONST, OP_LOAD_LOCAL, OP_LOAD_LOCAL_ADDR, OP_LT, OP_MUL, OP_REPEAT,
 };
 use glyim_core::primitives::Mutability;
 use glyim_core::{CrateId, DefId, IndexVec, LocalDefId};

@@ -62,16 +62,13 @@ fn async_state_machine_runs_via_interpreter() {
         .expect("async fixture must compile to MIR with zero diagnostics");
     let ty_ctx = mir.ty_ctx;
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = mir.bodies.values().cloned().collect();
-    let main_local = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, &path)
-        .expect("resolve main");
+    let main_local =
+        glyim_pipeline::Pipeline::entry_main_local_id(&mut db, &path).expect("resolve main");
     let main_id = glyim_core::def_id::DefId::new(
         glyim_core::def_id::CrateId::from_raw(0),
         glyim_core::def_id::LocalDefId::from_raw(main_local),
     );
-    let main_body = mir
-        .bodies
-        .get(&main_id)
-        .expect("main body");
+    let main_body = mir.bodies.get(&main_id).expect("main body");
 
     let mut interp = Interpreter::new(ty_ctx.as_ref());
     for b in &bodies {

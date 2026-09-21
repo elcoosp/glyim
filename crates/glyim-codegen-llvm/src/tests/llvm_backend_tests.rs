@@ -10,7 +10,6 @@ fn tpath(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("glyim_test_{}_{}", std::process::id(), name))
 }
 
-
 #[test]
 fn s08_t01_create_backend_without_crash() {
     let backend = LlvmBackend::new();

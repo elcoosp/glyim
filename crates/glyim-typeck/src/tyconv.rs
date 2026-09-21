@@ -358,9 +358,9 @@ pub fn build_param_tys(
 #[derive(Clone, Debug)]
 /// FnSig.
 pub struct FnSig {
-/// Struct.
+    /// Struct.
     pub param_tys: Vec<Ty>,
-/// Struct.
+    /// Struct.
     pub return_ty: Ty,
 }
 
@@ -582,7 +582,8 @@ pub fn resolve_path_type(
         // `ctx` is legal.
         let split: Option<(String, String)> = {
             let s = ctx.name_str(name);
-            s.split_once("::").map(|(q, a)| (q.to_string(), a.to_string()))
+            s.split_once("::")
+                .map(|(q, a)| (q.to_string(), a.to_string()))
         };
         if let Some((qual, assoc)) = split {
             let qname = ctx.resolver().intern(&qual);
@@ -637,7 +638,8 @@ pub fn resolve_path_type(
 
     // Check ADTs (structs, enums, unions)
     if path.as_name().is_some()
-        && let Some(ty) = resolve_name_to_adt_ty(ctx, infer, def_map, diagnostics, path, param_map, span)
+        && let Some(ty) =
+            resolve_name_to_adt_ty(ctx, infer, def_map, diagnostics, path, param_map, span)
     {
         return ty;
     }
@@ -657,8 +659,15 @@ pub fn resolve_path_type(
             segments: vec![first.clone()],
             kind: glyim_core::path::PathKind::Plain,
         };
-        let self_ty =
-            resolve_path_type(ctx, infer, def_map, &mut first_diags, &first_path, param_map, span);
+        let self_ty = resolve_path_type(
+            ctx,
+            infer,
+            def_map,
+            &mut first_diags,
+            &first_path,
+            param_map,
+            span,
+        );
         if !matches!(ctx.ty_kind(self_ty), TyKind::Error) {
             if let Some(ty) = ctx.resolve_associated_type_by_self_ty(self_ty, assoc_name) {
                 return ty;
@@ -799,7 +808,10 @@ pub(crate) fn resolve_path_to_local_def_id(
     // scope defines the bare name. Names are unique in the stdlib, so this
     // resolves cross-module references without disturbing same-module hits.
     if path.segments.len() == 1 && matches!(path.kind, glyim_core::path::PathKind::Plain) {
-        if let Some(res) = def_map.modules[current].scope.resolve(path.segments[0].name) {
+        if let Some(res) = def_map.modules[current]
+            .scope
+            .resolve(path.segments[0].name)
+        {
             return Some(res.0);
         }
         for module in def_map.modules.iter() {
@@ -871,8 +883,15 @@ pub(crate) fn resolve_enum_variant_path(
         kind: glyim_core::path::PathKind::Plain,
     };
     let mut infer = InferenceTable::new();
-    let enum_ty =
-        resolve_path_type(ctx, &mut infer, def_map, &mut Vec::new(), &enum_path, &HashMap::new(), Span::DUMMY);
+    let enum_ty = resolve_path_type(
+        ctx,
+        &mut infer,
+        def_map,
+        &mut Vec::new(),
+        &enum_path,
+        &HashMap::new(),
+        Span::DUMMY,
+    );
     let adt_id = match ctx.ty_kind(enum_ty) {
         TyKind::Adt(adt_id, _) => *adt_id,
         _ => return None,
@@ -989,7 +1008,8 @@ pub(crate) fn resolve_name_to_adt_ty(
             let mut subst: HashMap<u32, GenericArg> = HashMap::new();
             if let Some(args) = caller_args {
                 for (i, arg) in args.iter().enumerate() {
-                    let ty = resolve_type_ref(ctx, infer, def_map, diagnostics, arg, param_map, span);
+                    let ty =
+                        resolve_type_ref(ctx, infer, def_map, diagnostics, arg, param_map, span);
                     subst.insert(params[i].0, GenericArg::Ty(ty));
                 }
             }
@@ -1005,7 +1025,10 @@ pub(crate) fn resolve_name_to_adt_ty(
     // unify (e.g. `ErrorKind::Interrupted` resolving to Adt35 while
     // `Error::kind()` returns Adt63). Fall back to `adt_id_by_name` only for
     // generated types (async future structs) that are not in the def map.
-    let adt_id = match path.as_name().and_then(|name| resolve_name_to_def_id(def_map, name)) {
+    let adt_id = match path
+        .as_name()
+        .and_then(|name| resolve_name_to_def_id(def_map, name))
+    {
         Some(def_id) => AdtId::from_raw(def_id.local_id.to_raw()),
         None => path.as_name().and_then(|name| ctx.adt_id_by_name(name))?,
     };
@@ -1045,8 +1068,7 @@ pub(crate) fn resolve_name_to_adt_ty(
             ));
         }
         for arg in args {
-            let resolved =
-                resolve_type_ref(ctx, infer, def_map, diagnostics, arg, param_map, span);
+            let resolved = resolve_type_ref(ctx, infer, def_map, diagnostics, arg, param_map, span);
             substs.push(GenericArg::Ty(resolved));
         }
     } else {

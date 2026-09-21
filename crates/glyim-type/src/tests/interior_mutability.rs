@@ -28,11 +28,11 @@ fn is_interior_mutable_adt_true_when_marked() {
             fields,
             variants: vec![VariantDef {
                 name: name_field,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
 
         ctx.register_adt(adt_id, adt_def);
         ctx.mark_adt_interior_mutable(adt_id);
@@ -73,11 +73,11 @@ fn is_interior_mutable_adt_true_on_mut_ctx() {
         fields,
         variants: vec![VariantDef {
             name: name_field,
-    style: crate::adt_def::VariantStyle::Unit,
+            style: crate::adt_def::VariantStyle::Unit,
             fields: IndexVec::new(),
         }],
         generic_params: vec![],
-};
+    };
 
     ctx.register_adt(adt_id, adt_def);
     ctx.mark_adt_interior_mutable(adt_id);
@@ -113,11 +113,11 @@ fn is_interior_mutable_adt_false_when_not_marked() {
             fields,
             variants: vec![VariantDef {
                 name: name_field,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
 
         ctx.register_adt(adt_id, adt_def);
         // Do NOT mark as interior mutable

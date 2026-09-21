@@ -7,8 +7,8 @@
 //! golden-pattern (opcode-sequence) assertions are its verification
 //! convention — see `discriminant_len.rs`.
 
-use glyim_core::primitives::*;
 use glyim_core::IndexVec;
+use glyim_core::primitives::*;
 use glyim_mir::*;
 use glyim_span::Span;
 use glyim_type::*;
@@ -126,8 +126,14 @@ fn constant_index_slice_from_end_emits_runtime_len_sub() {
 
     // The backend must read the slice's runtime length (OP_LEN) and subtract
     // the offset, scale by elem_size, then add to the base address.
-    assert!(bc.contains(&OP_LEN), "missing OP_LEN (slice runtime length)");
-    assert!(bc.contains(&OP_SUB), "missing OP_SUB (runtime_len - offset)");
+    assert!(
+        bc.contains(&OP_LEN),
+        "missing OP_LEN (slice runtime length)"
+    );
+    assert!(
+        bc.contains(&OP_SUB),
+        "missing OP_SUB (runtime_len - offset)"
+    );
     assert!(bc.contains(&OP_MUL), "missing OP_MUL (scaled by elem_size)");
     assert!(bc.contains(&OP_ADD), "missing final OP_ADD to base address");
 

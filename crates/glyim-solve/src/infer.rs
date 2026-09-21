@@ -6,31 +6,31 @@ use glyim_type::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// VariableKind.
 pub enum VariableKind {
-/// Variant.
+    /// Variant.
     General,
-/// Variant.
+    /// Variant.
     Integer,
-/// Variant.
+    /// Variant.
     Float,
 }
 
 #[derive(Clone, Debug)]
 /// TypeVariable.
 pub struct TypeVariable {
-/// Struct.
+    /// Struct.
     pub universe: UniverseIndex,
-/// Struct.
+    /// Struct.
     pub value: Option<Ty>,
-/// Struct.
+    /// Struct.
     pub kind: VariableKind,
 }
 
 #[derive(Clone, Debug)]
 /// RegionVariable.
 pub struct RegionVariable {
-/// Struct.
+    /// Struct.
     pub universe: UniverseIndex,
-/// Struct.
+    /// Struct.
     pub value: Option<Region>,
 }
 
@@ -57,7 +57,7 @@ pub struct InferenceTable {
 const MAX_RESOLVE_DEPTH: u32 = 256;
 
 impl InferenceTable {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             ty_vars: IndexVec::new(),
@@ -69,12 +69,12 @@ impl InferenceTable {
         }
     }
 
-/// take_diagnostics.
+    /// take_diagnostics.
     pub fn take_diagnostics(&mut self) -> Vec<GlyimDiagnostic> {
         std::mem::take(&mut *self.diagnostics.borrow_mut())
     }
 
-/// snapshot.
+    /// snapshot.
     pub fn snapshot(&self) -> InferenceSnapshot {
         InferenceSnapshot {
             ty_vars: self.ty_vars.clone(),
@@ -85,7 +85,7 @@ impl InferenceTable {
         }
     }
 
-/// rollback_to.
+    /// rollback_to.
     pub fn rollback_to(&mut self, snapshot: InferenceSnapshot) {
         self.ty_vars = snapshot.ty_vars;
         self.int_vars = snapshot.int_vars;
@@ -94,10 +94,10 @@ impl InferenceTable {
         self.universe = snapshot.universe;
     }
 
-/// commit.
+    /// commit.
     pub fn commit(&mut self, _snapshot: InferenceSnapshot) {}
 
-/// new_ty_var.
+    /// new_ty_var.
     pub fn new_ty_var(&mut self, _ctx: &mut TyCtxMut) -> TyVar {
         self.ty_vars.push(TypeVariable {
             universe: self.universe,
@@ -106,7 +106,7 @@ impl InferenceTable {
         })
     }
 
-/// new_int_var.
+    /// new_int_var.
     pub fn new_int_var(&mut self, _ctx: &mut TyCtxMut) -> IntVar {
         self.int_vars.push(TypeVariable {
             universe: self.universe,
@@ -115,7 +115,7 @@ impl InferenceTable {
         })
     }
 
-/// new_float_var.
+    /// new_float_var.
     pub fn new_float_var(&mut self, _ctx: &mut TyCtxMut) -> FloatVar {
         self.float_vars.push(TypeVariable {
             universe: self.universe,
@@ -124,7 +124,7 @@ impl InferenceTable {
         })
     }
 
-/// new_region_var.
+    /// new_region_var.
     pub fn new_region_var(&mut self, _ctx: &mut TyCtxMut) -> RegionVid {
         self.region_vars.push(RegionVariable {
             universe: self.universe,
@@ -168,32 +168,32 @@ impl InferenceTable {
         }
     }
 
-/// universe.
+    /// universe.
     pub fn universe(&self) -> UniverseIndex {
         self.universe
     }
-/// create_universe.
+    /// create_universe.
     pub fn create_universe(&mut self) -> UniverseIndex {
         self.universe = UniverseIndex(self.universe.0 + 1);
         self.universe
     }
 
-/// probe_ty_var.
+    /// probe_ty_var.
     pub fn probe_ty_var(&self, var: TyVar) -> Option<Ty> {
         self.ty_vars.get(var).and_then(|v| v.value)
     }
 
-/// probe_int_var.
+    /// probe_int_var.
     pub fn probe_int_var(&self, var: IntVar) -> Option<Ty> {
         self.int_vars.get(var).and_then(|v| v.value)
     }
 
-/// probe_float_var.
+    /// probe_float_var.
     pub fn probe_float_var(&self, var: FloatVar) -> Option<Ty> {
         self.float_vars.get(var).and_then(|v| v.value)
     }
 
-/// unify.
+    /// unify.
     pub fn unify(
         &mut self,
         ctx: &mut TyCtxMut,
@@ -276,7 +276,11 @@ impl InferenceTable {
                 // the infer var is the second argument (`b`), the trivial
                 // `occurs(var, Infer(var))` check would otherwise misfire and
                 // report a spurious infinite-type error.
-                let other_ty = if matches!(ctx.ty_kind(a), TyKind::Infer(_)) { b } else { a };
+                let other_ty = if matches!(ctx.ty_kind(a), TyKind::Infer(_)) {
+                    b
+                } else {
+                    a
+                };
                 let tv = &self.ty_vars[var];
                 match tv.kind {
                     VariableKind::General => {
@@ -572,9 +576,7 @@ impl InferenceTable {
                     (ConstKind::Int(a), ConstKind::Int(b)) => a == b,
                     (ConstKind::Uint(a), ConstKind::Uint(b)) => a == b,
                     (ConstKind::Int(a), ConstKind::Uint(b))
-                    | (ConstKind::Uint(b), ConstKind::Int(a)) => {
-                        (*a >= 0) && (*a as u128) == *b
-                    }
+                    | (ConstKind::Uint(b), ConstKind::Int(a)) => (*a >= 0) && (*a as u128) == *b,
                     // Infer / Param lengths only need the same shape; keep the
                     // old behaviour so unresolved generics don't false-positive.
                     (ConstKind::Infer(_), _) | (_, ConstKind::Infer(_)) => true,
@@ -762,7 +764,12 @@ impl InferenceTable {
                     }
                 }
                 if closure_sig.output != Ty::ERROR && sig.output != Ty::ERROR {
-                    constraints.extend(self.unify_tys(ctx, closure_sig.output, sig.output, span)?);
+                    constraints.extend(self.unify_tys(
+                        ctx,
+                        closure_sig.output,
+                        sig.output,
+                        span,
+                    )?);
                 }
                 Ok(constraints)
             }
@@ -1001,20 +1008,18 @@ impl InferenceTable {
                 }
                 Ok(constraints)
             }
-            (_a_k, _b_k) => {
-                Err(vec![GlyimDiagnostic::type_error(
-                    span,
-                    format!(
-                        "mismatched types: {} vs {}",
-                        PrintTy::new(a, ctx),
-                        PrintTy::new(b, ctx)
-                    ),
-                )])
-            }
+            (_a_k, _b_k) => Err(vec![GlyimDiagnostic::type_error(
+                span,
+                format!(
+                    "mismatched types: {} vs {}",
+                    PrintTy::new(a, ctx),
+                    PrintTy::new(b, ctx)
+                ),
+            )]),
         }
     }
 
-/// resolve_ty_shallow.
+    /// resolve_ty_shallow.
     pub fn resolve_ty_shallow(&self, ctx: &dyn TypeLookup, ty: Ty) -> Ty {
         self.resolve_ty_shallow_depth(ctx, ty, 0, &mut std::collections::HashSet::new())
     }
@@ -1026,11 +1031,7 @@ impl InferenceTable {
     /// first would collapse `2 == self.raw` (raw: u32) into `i32 == u32` and
     /// spuriously fail. Final reporting uses `resolve_ty_shallow` (which keeps
     /// the `i32` fallback).
-    pub fn resolve_ty_shallow_preserve_int(
-        &self,
-        ctx: &dyn TypeLookup,
-        ty: Ty,
-    ) -> Ty {
+    pub fn resolve_ty_shallow_preserve_int(&self, ctx: &dyn TypeLookup, ty: Ty) -> Ty {
         match ctx.ty_kind(ty) {
             TyKind::Infer(InferVar::Int(var)) => {
                 if let Some(value) = self.int_vars.get(*var).and_then(|v| v.value) {
@@ -1112,7 +1113,7 @@ impl InferenceTable {
         }
     }
 
-/// fully_resolve.
+    /// fully_resolve.
     pub fn fully_resolve(&self, ctx: &dyn TypeLookup, ty: Ty) -> Result<Ty, Vec<TyVar>> {
         let resolved = self.resolve_ty_shallow(ctx, ty);
         if self.has_unresolved_non_ty_infer(ctx, resolved) {
@@ -1251,28 +1252,28 @@ impl Default for InferenceTable {
 #[derive(Clone, Debug)]
 /// Constraint.
 pub enum Constraint {
-/// Variant.
+    /// Variant.
     TypeEq {
         /// a field.
         a: Ty,
         /// b field.
         b: Ty,
     },
-/// Variant.
+    /// Variant.
     RegionEq {
         /// a field.
         a: Region,
         /// b field.
         b: Region,
     },
-/// Variant.
+    /// Variant.
     RegionOutlives {
         /// a field.
         a: Region,
         /// b field.
         b: Region,
     },
-/// Variant.
+    /// Variant.
     TypeOutlives {
         /// ty field.
         ty: Ty,

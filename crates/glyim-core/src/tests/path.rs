@@ -20,7 +20,10 @@ fn as_name_none() {
     path.kind = PathKind::SelfPath;
     assert_eq!(path.as_name(), None);
     path.kind = PathKind::Plain;
-    path.segments.push(PathSegment { name, generic_args: None });
+    path.segments.push(PathSegment {
+        name,
+        generic_args: None,
+    });
     assert_eq!(path.as_name(), None);
 }
 
@@ -37,12 +40,18 @@ fn generic_args_round_trip() {
     let baz = interner.intern("baz");
 
     let path = Path::from_segments(vec![
-        PathSegment { name: foo, generic_args: None },
+        PathSegment {
+            name: foo,
+            generic_args: None,
+        },
         PathSegment {
             name: bar,
             generic_args: Some(vec![t, u]),
         },
-        PathSegment { name: baz, generic_args: None },
+        PathSegment {
+            name: baz,
+            generic_args: None,
+        },
     ]);
 
     assert_eq!(path.segments.len(), 3);
@@ -60,4 +69,3 @@ fn generic_args_round_trip() {
     assert_eq!(single.segments[0].name, five);
     assert_eq!(single.segments[0].generic_args, Some(vec![t]));
 }
-

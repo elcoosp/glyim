@@ -120,12 +120,7 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
         }
     }
 
-    fn field_index_by_name(
-        &self,
-        adt_id: AdtId,
-        variant_idx: u32,
-        name: Name,
-    ) -> Option<FieldIdx> {
+    fn field_index_by_name(&self, adt_id: AdtId, variant_idx: u32, name: Name) -> Option<FieldIdx> {
         let adt = self.ty_ctx.adt_def(adt_id)?;
         // Structs store their fields at the ADT level; enums store them per
         // variant. Search both: the struct-level `fields` first (covers
@@ -141,11 +136,13 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
             return Some(FieldIdx::from_raw(idx.0.index() as u32));
         }
         if let Some(variant) = adt.variants.get(variant_idx as usize)
-            && let Some(idx) =
-                variant.fields.iter_enumerated().find(|(_, f)| f.name == name)
-            {
-                return Some(FieldIdx::from_raw(idx.0.index() as u32));
-            }
+            && let Some(idx) = variant
+                .fields
+                .iter_enumerated()
+                .find(|(_, f)| f.name == name)
+        {
+            return Some(FieldIdx::from_raw(idx.0.index() as u32));
+        }
         None
     }
 
@@ -303,7 +300,9 @@ impl<'a> PipelineLowerCtx<'a> {
             (TyKind::Ref(_, a_inner, a_mut), TyKind::Ref(_, b_inner, b_mut)) => {
                 a_mut == b_mut && self.ty_struct_eq(*a_inner, *b_inner)
             }
-            (TyKind::Slice(a_inner), TyKind::Slice(b_inner)) => self.ty_struct_eq(*a_inner, *b_inner),
+            (TyKind::Slice(a_inner), TyKind::Slice(b_inner)) => {
+                self.ty_struct_eq(*a_inner, *b_inner)
+            }
             (TyKind::Array(a_inner, _), TyKind::Array(b_inner, _)) => {
                 self.ty_struct_eq(*a_inner, *b_inner)
             }
@@ -364,11 +363,13 @@ impl<'a> PipelineLowerCtx<'a> {
                 let elems = vals
                     .iter()
                     .zip(elem_tys.iter())
-                    .map(|(v, &et)| Some(MirConst {
-                        kind: self.cv_const(v, et)?,
-                        ty: et,
-                        span: Span::DUMMY,
-                    }))
+                    .map(|(v, &et)| {
+                        Some(MirConst {
+                            kind: self.cv_const(v, et)?,
+                            ty: et,
+                            span: Span::DUMMY,
+                        })
+                    })
                     .collect::<Option<Vec<_>>>()?;
                 MirConstKind::Aggregate(elems)
             }
@@ -379,11 +380,13 @@ impl<'a> PipelineLowerCtx<'a> {
                 };
                 let elems = vals
                     .iter()
-                    .map(|v| Some(MirConst {
-                        kind: self.cv_const(v, elem_ty)?,
-                        ty: elem_ty,
-                        span: Span::DUMMY,
-                    }))
+                    .map(|v| {
+                        Some(MirConst {
+                            kind: self.cv_const(v, elem_ty)?,
+                            ty: elem_ty,
+                            span: Span::DUMMY,
+                        })
+                    })
                     .collect::<Option<Vec<_>>>()?;
                 MirConstKind::Aggregate(elems)
             }

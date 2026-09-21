@@ -33,11 +33,11 @@ fn field_ty_returns_correct_type_from_adt_def() {
             fields,
             variants: vec![VariantDef {
                 name: name_a,
-    style: crate::adt_def::VariantStyle::Unit,
+                style: crate::adt_def::VariantStyle::Unit,
                 fields: IndexVec::new(),
             }],
             generic_params: vec![],
-};
+        };
 
         ctx.register_adt(adt_id, adt_def);
         let substs = ctx.intern_substitution(vec![]);
@@ -86,11 +86,11 @@ fn field_ty_mut_returns_correct_type_from_adt_def() {
         fields,
         variants: vec![VariantDef {
             name: name_a,
-    style: crate::adt_def::VariantStyle::Unit,
+            style: crate::adt_def::VariantStyle::Unit,
             fields: IndexVec::new(),
         }],
         generic_params: vec![],
-};
+    };
 
     ctx.register_adt(adt_id, adt_def);
     let substs = ctx.intern_substitution(vec![]);

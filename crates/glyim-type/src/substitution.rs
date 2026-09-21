@@ -19,15 +19,15 @@ impl Substitution {
     pub fn empty() -> Self {
         Self { index: 0, len: 0 }
     }
-/// index.
+    /// index.
     pub fn index(self) -> u32 {
         self.index
     }
-/// len.
+    /// len.
     pub fn len(self) -> u16 {
         self.len
     }
-/// is_empty.
+    /// is_empty.
     pub fn is_empty(self) -> bool {
         self.len == 0
     }
@@ -42,10 +42,10 @@ impl fmt::Debug for Substitution {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// GenericArg.
 pub enum GenericArg {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Ty(Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Lifetime(Region),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Const(Const),
 }

@@ -6,15 +6,15 @@ use std::sync::Arc;
 #[derive(Debug)]
 /// DiscoveredTest.
 pub struct DiscoveredTest {
-/// Struct.
+    /// Struct.
     pub path: PathBuf,
-/// Struct.
+    /// Struct.
     pub name: String,
-/// Struct.
+    /// Struct.
     pub config: TestConfig,
-/// Struct.
+    /// Struct.
     pub source: Arc<str>,
-/// Struct.
+    /// Struct.
     pub revisions: Vec<String>,
 }
 
@@ -24,12 +24,12 @@ pub struct TestCollector<'a> {
 }
 
 impl<'a> TestCollector<'a> {
-/// new.
+    /// new.
     pub fn new(root: &'a Path) -> Self {
         Self { root }
     }
 
-/// collect.
+    /// collect.
     pub fn collect(
         &self,
         filter: Option<&str>,

@@ -845,11 +845,7 @@ pub unsafe extern "C" fn glyim_process_kill(handle: usize, signal: i32) -> i32 {
             };
             // SAFETY: pid is a live child process; signal values are validated.
             let ret = unsafe { libc::kill(pid, sig) };
-            if ret == 0 {
-                0
-            } else {
-                -1
-            }
+            if ret == 0 { 0 } else { -1 }
         } else {
             -1
         }
@@ -862,10 +858,10 @@ pub unsafe extern "C" fn glyim_process_kill(handle: usize, signal: i32) -> i32 {
         // comment on the function for the full signal mapping table).
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::Console::{
-            GenerateConsoleCtrlEvent, CTRL_BREAK_EVENT, CTRL_C_EVENT,
+            CTRL_BREAK_EVENT, CTRL_C_EVENT, GenerateConsoleCtrlEvent,
         };
         use windows_sys::Win32::System::Threading::{
-            OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+            OpenProcess, PROCESS_TERMINATE, TerminateProcess,
         };
 
         if let Some(ref mut child) = registry.children.get_mut(&handle) {
@@ -900,11 +896,7 @@ pub unsafe extern "C" fn glyim_process_kill(handle: usize, signal: i32) -> i32 {
             unsafe {
                 CloseHandle(raw);
             }
-            if ok != 0 {
-                0
-            } else {
-                -1
-            }
+            if ok != 0 { 0 } else { -1 }
         } else {
             -1
         }
@@ -948,7 +940,7 @@ pub extern "C" fn glyim_process_getppid() -> u32 {
     {
         use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
         use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         };
         use windows_sys::Win32::System::Threading::GetCurrentProcessId;

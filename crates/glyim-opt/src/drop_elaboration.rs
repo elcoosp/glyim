@@ -13,10 +13,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use glyim_core::primitives::UintTy;
 use glyim_core::BinOp;
 use glyim_core::IndexVec;
 use glyim_core::Mutability;
+use glyim_core::primitives::UintTy;
 use glyim_mir::*;
 use glyim_span::Span;
 use glyim_type::{Const, ConstKind, Ty, TyCtx, TyCtxMut, TyKind};
@@ -219,10 +219,7 @@ impl DropFlags {
             let init = Statement {
                 kind: StatementKind::Assign(
                     Place::new(flag_arr_local),
-                    Rvalue::Aggregate(
-                        AggregateKind::Array(bool_ty),
-                        false_elems,
-                    ),
+                    Rvalue::Aggregate(AggregateKind::Array(bool_ty), false_elems),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             };
@@ -313,8 +310,10 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                 }
             }
             // §15.2: mark the per-element flag when an array element is assigned.
-            if let Statement { kind: StatementKind::Assign(place, _), .. } =
-                new_stmts.last().unwrap()
+            if let Statement {
+                kind: StatementKind::Assign(place, _),
+                ..
+            } = new_stmts.last().unwrap()
             {
                 if let Some((flag_arr, _)) = flags.per_element.get(&place.local) {
                     let idx_local = place
@@ -323,11 +322,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                         .find(|p| matches!(p, ProjectionElem::Index(_)));
                     if let Some(&ProjectionElem::Index(idx_local)) = idx_local {
                         new_stmts.push(DropFlags::set_flag_stmt_indexed(
-                            *flag_arr,
-                            idx_local,
-                            true,
-                            span,
-                            &tc,
+                            *flag_arr, idx_local, true, span, &tc,
                         ));
                     }
                 }
@@ -514,10 +509,7 @@ fn emit_array_drop_loop(
             kind: TerminatorKind::SwitchInt {
                 discr: Operand::Copy(idx_place.clone()),
                 switch_ty: count_ty,
-                targets: SwitchTargets::new(
-                    vec![(0, exit_block)].into_boxed_slice(),
-                    body_block,
-                ),
+                targets: SwitchTargets::new(vec![(0, exit_block)].into_boxed_slice(), body_block),
             },
             source_info: span.clone(),
         },

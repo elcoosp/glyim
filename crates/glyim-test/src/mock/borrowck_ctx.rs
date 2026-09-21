@@ -4,14 +4,14 @@ use glyim_type::{Ty, TyCtx};
 
 /// MockBorrowckCtx.
 pub struct MockBorrowckCtx<'a> {
-/// Struct.
+    /// Struct.
     pub ty_ctx: &'a TyCtx,
-/// Struct.
+    /// Struct.
     pub body: &'a Body,
 }
 
 impl<'a> MockBorrowckCtx<'a> {
-/// new.
+    /// new.
     pub fn new(ty_ctx: &'a TyCtx, body: &'a Body) -> Self {
         Self { ty_ctx, body }
     }

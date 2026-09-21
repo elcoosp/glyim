@@ -22,8 +22,14 @@ pub(crate) fn collect_generic_params(
     interner: &mut Interner,
 ) -> Vec<GenericParam> {
     let mut generic_params = Vec::new();
-    if let Some(tp_list) = node.children().find(|c| c.kind() == SyntaxKind::TypeParamList) {
-        for tp in tp_list.children().filter(|c| c.kind() == SyntaxKind::TypeParam) {
+    if let Some(tp_list) = node
+        .children()
+        .find(|c| c.kind() == SyntaxKind::TypeParamList)
+    {
+        for tp in tp_list
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::TypeParam)
+        {
             if let Some(name_str) = first_ident_text(&tp) {
                 let name = interner.intern(&name_str);
                 // Capture trait bounds declared after `:`, e.g. the `MyFuture`
@@ -179,8 +185,14 @@ pub(crate) fn lower_fn_def(
     // (not a child node), so use `first_ident_text`, which scans
     // `children_with_tokens`.
     let mut generic_params = Vec::new();
-    if let Some(tp_list) = node.children().find(|c| c.kind() == SyntaxKind::TypeParamList) {
-        for tp in tp_list.children().filter(|c| c.kind() == SyntaxKind::TypeParam) {
+    if let Some(tp_list) = node
+        .children()
+        .find(|c| c.kind() == SyntaxKind::TypeParamList)
+    {
+        for tp in tp_list
+            .children()
+            .filter(|c| c.kind() == SyntaxKind::TypeParam)
+        {
             if let Some(name_str) = first_ident_text(&tp) {
                 let name = interner.intern(&name_str);
                 let bounds: Vec<TypeRef> = tp
@@ -316,10 +328,10 @@ pub(crate) fn lower_param(
             // `self.x = ..` / `self.field_method(..)` reported
             // "mismatched mutability: Not vs Mut".
             if let TypeRef::Ref { inner, mutability } = t {
-                let has_mut = node.children_with_tokens().any(
-                    |c| matches!(&c, glyim_syntax::SyntaxElement::Token(t)
-                        if t.kind() == SyntaxKind::KwMut),
-                );
+                let has_mut = node.children_with_tokens().any(|c| {
+                    matches!(&c, glyim_syntax::SyntaxElement::Token(t)
+                        if t.kind() == SyntaxKind::KwMut)
+                });
                 TypeRef::Ref {
                     inner,
                     mutability: if has_mut { Mutability::Mut } else { mutability },
@@ -479,7 +491,7 @@ pub(crate) fn lower_variant(node: &SyntaxNode, interner: &mut Interner) -> Optio
     let vname_str = first_ident_text(node)?;
     let vname = interner.intern(&vname_str);
     let mut fields = Vec::new();
-    
+
     let mut in_paren = false;
     let mut has_tuple = false;
     for child in node.children_with_tokens() {
@@ -560,9 +572,9 @@ pub(crate) fn lower_impl_def(
     // `impl Trait for Self`. When present, the first type node before `for`
     // is the trait and the first type node after `for` is `Self`. When absent
     // (a plain `impl Foo`), the lone type node is `Self`.
-    let saw_for_token = node
-        .children_with_tokens()
-        .any(|el| matches!(el, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwFor));
+    let saw_for_token = node.children_with_tokens().any(
+        |el| matches!(el, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwFor),
+    );
     if saw_for_token {
         let mut saw_for = false;
         for el in node.children_with_tokens() {
@@ -669,7 +681,10 @@ pub(crate) fn lower_impl_def(
     // resolve against. The parser emits a `TypeAlias` node with an `Ident`
     // (name) and a `Type` (the `=` RHS).
     let mut associated_types = Vec::new();
-    for ta_node in node.children().filter(|c| c.kind() == SyntaxKind::TypeAlias) {
+    for ta_node in node
+        .children()
+        .filter(|c| c.kind() == SyntaxKind::TypeAlias)
+    {
         let name_str = first_ident_text(&ta_node);
         let Some(name_str) = name_str else { continue };
         let name = interner.intern(&name_str);
@@ -688,16 +703,33 @@ pub(crate) fn lower_impl_def(
     if std::env::var("GLYIM_DUMP_IMPL_SPANS").is_ok() {
         let r = node.text_range();
         let self_ty_str = match &self_ty {
-            TypeRef::Path(p) => p.segments.iter().map(|s| interner.resolve(s.name).to_string()).collect::<Vec<_>>().join("::"),
+            TypeRef::Path(p) => p
+                .segments
+                .iter()
+                .map(|s| interner.resolve(s.name).to_string())
+                .collect::<Vec<_>>()
+                .join("::"),
             TypeRef::Slice(inner) => {
-                let i = match &**inner { TypeRef::Path(p) => p.segments.iter().map(|s| interner.resolve(s.name).to_string()).collect::<Vec<_>>().join("::"), _ => "?".into() };
+                let i = match &**inner {
+                    TypeRef::Path(p) => p
+                        .segments
+                        .iter()
+                        .map(|s| interner.resolve(s.name).to_string())
+                        .collect::<Vec<_>>()
+                        .join("::"),
+                    _ => "?".into(),
+                };
                 format!("[{}]", i)
             }
             other => format!("{:?}", other),
         };
-        eprintln!("DBG_IMPL_SPAN: name={} self_ty_str=`{}` lo={} hi={}",
-            interner.resolve(name), self_ty_str,
-            u32::from(r.start()), u32::from(r.end()));
+        eprintln!(
+            "DBG_IMPL_SPAN: name={} self_ty_str=`{}` lo={} hi={}",
+            interner.resolve(name),
+            self_ty_str,
+            u32::from(r.start()),
+            u32::from(r.end())
+        );
     }
     let id = ItemId::from_raw(*item_id_counter);
     *item_id_counter += 1;
@@ -802,7 +834,10 @@ pub(crate) fn lower_trait_def(
     // emits a `TypeAlias` node; the trait form has no RHS (`default = None`),
     // while an impl's `type Output = i32;` (lowered by `lower_impl_def`) does.
     let mut associated_types = Vec::new();
-    for ta_node in node.children().filter(|c| c.kind() == SyntaxKind::TypeAlias) {
+    for ta_node in node
+        .children()
+        .filter(|c| c.kind() == SyntaxKind::TypeAlias)
+    {
         let name_str = first_ident_text(&ta_node);
         let Some(name_str) = name_str else { continue };
         let name = interner.intern(&name_str);
@@ -911,7 +946,11 @@ pub(crate) fn lower_const_def(
     Some(Item {
         id,
         name,
-        kind: ItemKind::Const(ConstItem { ty, body: body_id, root_expr }),
+        kind: ItemKind::Const(ConstItem {
+            ty,
+            body: body_id,
+            root_expr,
+        }),
         visibility: Visibility::Inherited,
         span: node_span(node),
     })

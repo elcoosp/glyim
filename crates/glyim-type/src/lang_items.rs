@@ -15,59 +15,59 @@ use std::collections::HashMap;
 /// language/stdlib depends on. Add variants here as new builtins are required.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LangItem {
-/// Variant.
+    /// Variant.
     Option,
-/// Variant.
+    /// Variant.
     Result,
-/// Variant.
+    /// Variant.
     Range,
-/// Variant.
+    /// Variant.
     RangeInclusive,
-/// Variant.
+    /// Variant.
     RangeFrom,
-/// Variant.
+    /// Variant.
     RangeTo,
-/// Variant.
+    /// Variant.
     RangeToInclusive,
-/// Variant.
+    /// Variant.
     RangeFull,
-/// Variant.
+    /// Variant.
     String,
-/// Variant.
+    /// Variant.
     Str,
-/// Variant.
+    /// Variant.
     Vec,
-/// Variant.
+    /// Variant.
     Box,
-/// Variant.
+    /// Variant.
     Drop,
-/// Variant.
+    /// Variant.
     Deref,
-/// Variant.
+    /// Variant.
     DerefMut,
-/// Variant.
+    /// Variant.
     Send,
-/// Variant.
+    /// Variant.
     Sync,
-/// Variant.
+    /// Variant.
     Copy,
-/// Variant.
+    /// Variant.
     Clone,
-/// Variant.
+    /// Variant.
     Iterator,
-/// Variant.
+    /// Variant.
     IntoIterator,
-/// Variant.
+    /// Variant.
     FnOnce,
-/// Variant.
+    /// Variant.
     FnMut,
-/// Variant.
+    /// Variant.
     Fn,
-/// Variant.
+    /// Variant.
     Future,
-/// Variant.
+    /// Variant.
     GlobalAlloc,
-/// Variant.
+    /// Variant.
     Allocator,
 }
 
@@ -76,11 +76,11 @@ pub enum LangItem {
 pub enum LangItemError {
     /// Two different `DefId`s were registered for the same `LangItem`.
     Duplicate {
-/// Struct.
+        /// Struct.
         item: LangItem,
-/// Struct.
+        /// Struct.
         existing: DefId,
-/// Struct.
+        /// Struct.
         new: DefId,
     },
     /// No `DefId` was registered for the requested `LangItem` (e.g. the core

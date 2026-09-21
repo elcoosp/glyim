@@ -11,12 +11,12 @@ pub struct InterpRunner {
 }
 
 impl InterpRunner {
-/// new.
+    /// new.
     pub fn new(bodies: Vec<Arc<glyim_mir::Body>>, ty_ctx: Arc<glyim_type::TyCtx>) -> Self {
         Self { bodies, ty_ctx }
     }
 
-/// run.
+    /// run.
     pub fn run(self, timeout: Duration) -> super::runner::RunResult {
         let start = std::time::Instant::now();
         let (tx, rx) = std::sync::mpsc::channel();

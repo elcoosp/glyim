@@ -12,7 +12,6 @@ fn tpath(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("glyim_test_{}_{}", std::process::id(), name))
 }
 
-
 #[test]
 fn s08_t40_codegen_backend_name_static() {
     let backend: &dyn CodegenBackend = &LlvmBackend::new();

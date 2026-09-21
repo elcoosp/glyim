@@ -19,7 +19,8 @@ fn create_dummy_hir(interner: &Interner) -> CrateHir {
             is_const: false,
             generic_params: vec![],
             where_clauses: vec![],
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::new(
             FileId::from_raw(1),

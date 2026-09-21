@@ -91,7 +91,12 @@ fn operand_to_const(op: &Operand, locals: &BlockMap) -> Option<MirConst> {
     }
 }
 
-fn evaluate_rvalue_to_const(rv: &Rvalue, locals: &BlockMap, ctx: &TyCtx, ty: Ty) -> Option<MirConst> {
+fn evaluate_rvalue_to_const(
+    rv: &Rvalue,
+    locals: &BlockMap,
+    ctx: &TyCtx,
+    ty: Ty,
+) -> Option<MirConst> {
     match rv {
         Rvalue::Use(op) => operand_to_const(op, locals),
         Rvalue::BinaryOp(op, box_ops) => {
@@ -420,7 +425,8 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
                     out.remove(&place.local);
                     defined.insert(place.local);
                     if place.projection.is_empty()
-                        && let Some(c) = evaluate_rvalue_to_const(rvalue, &out, ctx, body.locals[place.local].ty)
+                        && let Some(c) =
+                            evaluate_rvalue_to_const(rvalue, &out, ctx, body.locals[place.local].ty)
                     {
                         out.insert(place.local, Some(c));
                     }

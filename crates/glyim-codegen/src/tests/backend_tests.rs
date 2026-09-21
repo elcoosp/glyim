@@ -2941,7 +2941,7 @@ fn test_float_constant_emits() {
 // ============================================================================
 #[test]
 fn t99_cross_backend_execution_computes_value() {
-    use glyim_bytecode_vm::{Module, Vm, Value};
+    use glyim_bytecode_vm::{Module, Value, Vm};
 
     // Body computes: l1 = 3; l2 = 4; l3 = l1 + l2; l4 = 2; l5 = l3 * l4;
     // (i.e. (3 + 4) * 2 == 14, stored in local 5). Straight-line, no control
@@ -2993,17 +2993,15 @@ fn t99_cross_backend_execution_computes_value() {
             ),
         )),
     ];
-    let body = make_body(
-        vec![block(stmts, term(TerminatorKind::Return))],
-        locals,
-        0,
-    );
+    let body = make_body(vec![block(stmts, term(TerminatorKind::Return))], locals, 0);
 
     let backend = BytecodeBackend::with_ty_ctx(
         Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
     );
-    let bytes = backend.generate_function(&body).expect("generate_function ok");
+    let bytes = backend
+        .generate_function(&body)
+        .expect("generate_function ok");
 
     // Execute the *emitted* bytecode on the VM. The bare `Return` terminator
     // leaves the stack empty, so we assert the computed value via the

@@ -27,8 +27,8 @@ fn probe_core_modules_parse() {
     let mut fail = 0usize;
     println!("=== core ===");
     for name in [
-        "option", "result", "iter", "slice", "str", "cell", "mem", "ptr", "ops", "cmp",
-        "marker", "panic", "hint", "convert", "default", "future",
+        "option", "result", "iter", "slice", "str", "cell", "mem", "ptr", "ops", "cmp", "marker",
+        "panic", "hint", "convert", "default", "future",
     ] {
         let src = core_source(name).expect("core module present");
         if parse(name, src) {

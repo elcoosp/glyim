@@ -59,19 +59,17 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
             // rejected.
             match ctx.adt_def(*from_id) {
                 Some(adt) => {
-                    if adt.kind == AdtKind::Enum
-                        && adt.variants.iter().all(|v| v.fields.is_empty())
+                    if adt.kind == AdtKind::Enum && adt.variants.iter().all(|v| v.fields.is_empty())
                     {
                         return true;
                     }
-                    if adt.kind == AdtKind::Struct && adt.fields.len() == 1
+                    if adt.kind == AdtKind::Struct
+                        && adt.fields.len() == 1
                         && let Some(f) = adt.fields.iter().next()
-                            && matches!(
-                                ctx.ty_kind(f.ty),
-                                Int(_) | Uint(_) | Char | Bool
-                            ) {
-                                return true;
-                            }
+                        && matches!(ctx.ty_kind(f.ty), Int(_) | Uint(_) | Char | Bool)
+                    {
+                        return true;
+                    }
                     false
                 }
                 None => false,
@@ -141,7 +139,7 @@ mod tests {
         let enum_id = AdtId::from_raw(501);
         let variants = vec![VariantDef {
             name: tcx_mut.resolver().intern("A"),
-    style: crate::adt_def::VariantStyle::Unit,
+            style: crate::adt_def::VariantStyle::Unit,
             fields: IndexVec::new(),
         }];
         let enum_def = AdtDef {
@@ -149,7 +147,7 @@ mod tests {
             fields: IndexVec::new(),
             variants,
             generic_params: vec![],
-};
+        };
         tcx_mut.register_adt(enum_id, enum_def);
         let substs = tcx_mut.intern_substitution(vec![]);
         let enum_ty = tcx_mut.mk_adt(enum_id, substs);
@@ -175,7 +173,7 @@ mod tests {
         field_list.push(field);
         let variants = vec![VariantDef {
             name: tcx_mut.resolver().intern("A"),
-    style: crate::adt_def::VariantStyle::Unit,
+            style: crate::adt_def::VariantStyle::Unit,
             fields: field_list,
         }];
         let enum_def = AdtDef {
@@ -183,7 +181,7 @@ mod tests {
             fields: IndexVec::new(),
             variants,
             generic_params: vec![],
-};
+        };
         tcx_mut.register_adt(enum_id, enum_def);
         let substs = tcx_mut.intern_substitution(vec![]);
         let enum_ty = tcx_mut.mk_adt(enum_id, substs);

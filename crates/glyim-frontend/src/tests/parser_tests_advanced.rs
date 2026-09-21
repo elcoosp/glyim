@@ -32,17 +32,22 @@ fn test_closure_no_args() {
     // parse cleanly (no diagnostics, body reachable).
     let result = parse_to_syntax("fn f() { || 42 }", file_id());
     assert!(result.diagnostics.is_empty());
-    assert!(result
-        .root
-        .descendants()
-        .any(|n| n.kind() == SyntaxKind::ClosureExpr));
+    assert!(
+        result
+            .root
+            .descendants()
+            .any(|n| n.kind() == SyntaxKind::ClosureExpr)
+    );
 }
 
 #[test]
 fn test_closure_no_args_block_body_assigned() {
     // Regression: `let g = || { ... }` must lower to a ClosureExpr bound by
     // the LetStmt, with the block as the closure body (not a stray ExprStmt).
-    let result = parse_to_syntax("fn main() { let g = || { let y = 5; y + 1 }; g(); }", file_id());
+    let result = parse_to_syntax(
+        "fn main() { let g = || { let y = 5; y + 1 }; g(); }",
+        file_id(),
+    );
     assert!(result.diagnostics.is_empty());
     let mut closures = result
         .root
@@ -50,9 +55,7 @@ fn test_closure_no_args_block_body_assigned() {
         .filter(|n| n.kind() == SyntaxKind::ClosureExpr);
     let closure = closures.next().expect("expected a ClosureExpr");
     // Closure body must be a Block, not a bare expression / error node.
-    let has_block = closure
-        .children()
-        .any(|c| c.kind() == SyntaxKind::Block);
+    let has_block = closure.children().any(|c| c.kind() == SyntaxKind::Block);
     assert!(has_block, "closure with || must have a block body");
     assert!(closures.next().is_none(), "only one closure expected");
 }

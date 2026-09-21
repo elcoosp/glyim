@@ -104,13 +104,7 @@ fn binding(p: &str) -> Pat {
 }
 
 fn block(body: &mut Body, stmts: Vec<ExprId>, tail: Option<ExprId>) -> ExprId {
-    body.alloc_expr(
-        Expr::Block {
-            stmts,
-            tail,
-        },
-        dummy_span(),
-    )
+    body.alloc_expr(Expr::Block { stmts, tail }, dummy_span())
 }
 
 fn range(body: &mut Body, lo: i128, hi: i128, inclusive: bool) -> ExprId {

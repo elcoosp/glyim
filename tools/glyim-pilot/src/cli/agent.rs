@@ -18,13 +18,13 @@ pub enum AgentCommands {
     /// Run a single stream (e.g., S01)
     Run {
         #[arg(short, long)]
-/// Struct.
+        /// Struct.
         stream: String,
         #[arg(short, long)]
-/// Struct.
+        /// Struct.
         provider: Option<String>,
         #[arg(short, long, default_value_t = false)]
-/// Struct.
+        /// Struct.
         wait: bool,
     },
     /// Run a wave (all streams in current wave)
@@ -36,7 +36,7 @@ pub enum AgentCommands {
     /// Manually mark a session's PR as merged (fallback for auto-detection)
     MarkMerged {
         #[arg(short, long)]
-/// Struct.
+        /// Struct.
         stream: String,
     },
 }

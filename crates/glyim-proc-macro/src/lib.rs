@@ -24,7 +24,7 @@
 
 use glyim_syntax::SyntaxKind;
 use std::collections::HashMap;
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::ptr;
 
 /// Symbol name a compiled proc-macro cdylib must export as its entry point.
@@ -166,10 +166,12 @@ pub extern "C" fn pm_ts_push(stream: *mut PmTokenStream, token: PmToken) {
 pub extern "C" fn pm_ts_free(stream: *mut PmTokenStream) {
     unsafe {
         let s = &mut *stream;
-        if !s.ptr.is_null() && s.cap > 0
-            && let Ok(layout) = std::alloc::Layout::array::<PmToken>(s.cap as usize) {
-                std::alloc::dealloc(s.ptr as *mut u8, layout);
-            }
+        if !s.ptr.is_null()
+            && s.cap > 0
+            && let Ok(layout) = std::alloc::Layout::array::<PmToken>(s.cap as usize)
+        {
+            std::alloc::dealloc(s.ptr as *mut u8, layout);
+        }
         s.ptr = ptr::null_mut();
         s.len = 0;
         s.cap = 0;
@@ -264,7 +266,11 @@ impl Registry {
     ///
     /// Returns `None` if no such macro is registered (caller should fall back
     /// to declarative expansion or raise an "unresolved macro" diagnostic).
-    pub fn expand(&self, name: &str, input: &[(SyntaxKind, String)]) -> Option<Vec<(SyntaxKind, String)>> {
+    pub fn expand(
+        &self,
+        name: &str,
+        input: &[(SyntaxKind, String)],
+    ) -> Option<Vec<(SyntaxKind, String)>> {
         self.macros.get(name).map(|m| (m.expand)(input))
     }
 
@@ -285,7 +291,9 @@ impl Registry {
     /// registry (Phase 8 / plan §9.2).
     pub fn merge(&mut self, other: &Registry) {
         for (name, pm) in &other.macros {
-            self.macros.entry(name.clone()).or_insert_with(|| pm.clone());
+            self.macros
+                .entry(name.clone())
+                .or_insert_with(|| pm.clone());
         }
     }
 }
@@ -325,17 +333,19 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
     // SAFETY: the symbol is the crate's single C-ABI entry point; we cast it
     // to the exact `PmRegisterMain` fn-pointer type the ABI contract expects.
     let main_fn: PmRegisterMain = unsafe {
-        *lib.get(PROC_MACRO_MAIN_SYMBOL)
-            .map_err(|e| format!("{} not found in {path}: {e}", String::from_utf8_lossy(&PROC_MACRO_MAIN_SYMBOL[..PROC_MACRO_MAIN_SYMBOL.len() - 1])))?
+        *lib.get(PROC_MACRO_MAIN_SYMBOL).map_err(|e| {
+            format!(
+                "{} not found in {path}: {e}",
+                String::from_utf8_lossy(
+                    &PROC_MACRO_MAIN_SYMBOL[..PROC_MACRO_MAIN_SYMBOL.len() - 1]
+                )
+            )
+        })?
     };
 
     let mut registry = Registry::new();
     // The C-ABI register callback that the dylib calls once per macro.
-    extern "C" fn register_cb(
-        reg: *mut RegistryHolder,
-        name: *const c_char,
-        entry: PmMacroFn,
-    ) {
+    extern "C" fn register_cb(reg: *mut RegistryHolder, name: *const c_char, entry: PmMacroFn) {
         unsafe {
             let name = CStr::from_ptr(name).to_string_lossy().into_owned();
             let expand = move |input: &[(SyntaxKind, String)]| -> Vec<(SyntaxKind, String)> {
@@ -380,8 +390,7 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
 }
 
 type PmRegisterMain = extern "C" fn(*mut RegistryHolder, PmRegisterCallback);
-type PmRegisterCallback =
-    extern "C" fn(*mut RegistryHolder, *const c_char, PmMacroFn);
+type PmRegisterCallback = extern "C" fn(*mut RegistryHolder, *const c_char, PmMacroFn);
 
 /// Opaque holder passed to the dylib's main; bundles the registry so the C-ABI
 /// callback can register into it.
@@ -398,8 +407,10 @@ mod tests {
         reg.register("identity", |input| input.to_vec());
         assert!(reg.contains("identity"));
 
-        let input: Vec<(SyntaxKind, String)> =
-            vec![(SyntaxKind::KwFn, "fn".into()), (SyntaxKind::Ident, "main".into())];
+        let input: Vec<(SyntaxKind, String)> = vec![
+            (SyntaxKind::KwFn, "fn".into()),
+            (SyntaxKind::Ident, "main".into()),
+        ];
         let out = reg.expand("identity", &input).expect("macro registered");
         assert_eq!(out, input, "identity macro must return input unchanged");
     }
@@ -476,14 +487,11 @@ mod tests {
     fn load_cdylib_round_trip_compiles_and_expands() {
         // Locate the fixture source relative to this crate root.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let fixture = std::path::Path::new(manifest_dir)
-            .join("tests/fixtures/pm_doubler/src/lib.rs");
+        let fixture =
+            std::path::Path::new(manifest_dir).join("tests/fixtures/pm_doubler/src/lib.rs");
         assert!(fixture.exists(), "fixture missing: {}", fixture.display());
 
-        let out_dir = std::env::temp_dir().join(format!(
-            "glyim_pm_rt_{}",
-            std::process::id()
-        ));
+        let out_dir = std::env::temp_dir().join(format!("glyim_pm_rt_{}", std::process::id()));
         std::fs::create_dir_all(&out_dir).expect("create temp dir");
         // The temp cdylib lives under std::env::temp_dir() and is left for the
         // OS to reap; it is uniquely named per-PID so repeated runs don't clash.
@@ -496,20 +504,21 @@ mod tests {
 
         // Compile the fixture for the HOST triple to a cdylib.
         let status = std::process::Command::new("rustc")
-            .args([
-                "--edition",
-                "2021",
-                "--crate-type",
-                "cdylib",
-                "-O",
-            ])
+            .args(["--edition", "2021", "--crate-type", "cdylib", "-O"])
             .arg(&fixture)
             .arg("-o")
             .arg(&cdylib)
             .status()
             .expect("failed to spawn rustc");
-        assert!(status.success(), "rustc failed to compile the proc-macro fixture");
-        assert!(cdylib.exists(), "compiled cdylib missing: {}", cdylib.display());
+        assert!(
+            status.success(),
+            "rustc failed to compile the proc-macro fixture"
+        );
+        assert!(
+            cdylib.exists(),
+            "compiled cdylib missing: {}",
+            cdylib.display()
+        );
 
         // Load it through the real two-stage loader.
         let loaded = load_cdylib(cdylib.to_str().unwrap())

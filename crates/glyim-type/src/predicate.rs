@@ -6,59 +6,59 @@ use glyim_core::def_id::TraitDefId;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// Predicate.
 pub enum Predicate {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Trait(TraitPredicate),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     RegionOutlives(RegionOutlivesPredicate),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     TypeOutlives(TypeOutlivesPredicate),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     WellFormed(Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Coerce(Ty, Ty),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// TraitPredicate.
 pub struct TraitPredicate {
-/// Struct.
+    /// Struct.
     pub trait_ref: TraitRef,
-/// Struct.
+    /// Struct.
     pub polarity: ImplPolarity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// TraitRef.
 pub struct TraitRef {
-/// Struct.
+    /// Struct.
     pub def_id: TraitDefId,
-/// Struct.
+    /// Struct.
     pub substs: Substitution,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// ImplPolarity.
 pub enum ImplPolarity {
-/// Variant.
+    /// Variant.
     Positive,
-/// Variant.
+    /// Variant.
     Negative,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// RegionOutlivesPredicate.
 pub struct RegionOutlivesPredicate {
-/// Struct.
+    /// Struct.
     pub a: Region,
-/// Struct.
+    /// Struct.
     pub b: Region,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// TypeOutlivesPredicate.
 pub struct TypeOutlivesPredicate {
-/// Struct.
+    /// Struct.
     pub ty: Ty,
-/// Struct.
+    /// Struct.
     pub region: Region,
 }

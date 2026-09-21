@@ -1,7 +1,7 @@
 use super::test_utils::{empty_def_map, make_ty_ctx};
 use crate::tests::test_utils::global_interner;
-use crate::typeck_crate;
 use crate::thir;
+use crate::typeck_crate;
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
 use glyim_core::primitives::*;
@@ -108,7 +108,8 @@ fn closure_captures_enclosing_param() {
             is_const: false,
             generic_params: vec![],
             where_clauses: Vec::new(),
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::DUMMY,
     };
@@ -141,7 +142,11 @@ fn closure_captures_enclosing_param() {
         thir::ExprKind::Closure { captures, .. } => (captures.clone(), closures[0].ty),
         _ => panic!("expected a closure"),
     };
-    assert_eq!(captures.len(), 1, "closure must capture exactly one variable (x)");
+    assert_eq!(
+        captures.len(),
+        1,
+        "closure must capture exactly one variable (x)"
+    );
     // The captured kind must be ByRef (immutable), not ByValue/ByMutRef.
     assert_eq!(
         captures[0].kind,
@@ -212,7 +217,8 @@ fn move_closure_captures_by_value() {
             is_const: false,
             generic_params: vec![],
             where_clauses: Vec::new(),
-        abi: None,}),
+            abi: None,
+        }),
         visibility: Visibility::Public,
         span: Span::DUMMY,
     };
@@ -245,7 +251,11 @@ fn move_closure_captures_by_value() {
         thir::ExprKind::Closure { captures, .. } => (captures.clone(), closures[0].ty),
         _ => panic!("expected a closure"),
     };
-    assert_eq!(captures.len(), 1, "move closure must capture exactly one variable (x)");
+    assert_eq!(
+        captures.len(),
+        1,
+        "move closure must capture exactly one variable (x)"
+    );
     assert_eq!(
         captures[0].kind,
         thir::CaptureKind::ByValue,

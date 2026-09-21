@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 fn index_with(name: &str, _unused: &[&str]) -> CrateIndex {
     let versions: Vec<String> = [
-        "5.0.0", "4.1.0", "4.0.0", "3.2.1", "3.0.0", "2.5.0", "2.0.0", "1.9.9",
-        "1.2.5", "1.2.0", "1.0.0",
+        "5.0.0", "4.1.0", "4.0.0", "3.2.1", "3.0.0", "2.5.0", "2.0.0", "1.9.9", "1.2.5", "1.2.0",
+        "1.0.0",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -28,7 +28,9 @@ fn index_with(name: &str, _unused: &[&str]) -> CrateIndex {
 fn resolve_caret_picks_highest_compatible() {
     // ^1.2.0 means >=1.2.0, <2.0.0 → highest 1.x is 1.9.9.
     let index = index_with("foo", &[]);
-    let v = index.resolve_version("foo", Some("^1.2.0")).expect("resolved");
+    let v = index
+        .resolve_version("foo", Some("^1.2.0"))
+        .expect("resolved");
     assert_eq!(v, "1.9.9");
 }
 
@@ -36,7 +38,9 @@ fn resolve_caret_picks_highest_compatible() {
 fn resolve_caret_excludes_next_major() {
     // ^4.0.0 means >=4.0.0, <5.0.0 → 4.1.0, never 5.0.0.
     let index = index_with("foo", &[]);
-    let v = index.resolve_version("foo", Some("^4.0.0")).expect("resolved");
+    let v = index
+        .resolve_version("foo", Some("^4.0.0"))
+        .expect("resolved");
     assert_eq!(v, "4.1.0");
 }
 
@@ -44,7 +48,9 @@ fn resolve_caret_excludes_next_major() {
 fn resolve_tilde_picks_highest_patch() {
     // ~1.2.0 means >=1.2.0, <1.3.0 → highest patch in 1.2.x is 1.2.5.
     let index = index_with("foo", &[]);
-    let v = index.resolve_version("foo", Some("~1.2.0")).expect("resolved");
+    let v = index
+        .resolve_version("foo", Some("~1.2.0"))
+        .expect("resolved");
     assert_eq!(v, "1.2.5");
 }
 
@@ -52,7 +58,9 @@ fn resolve_tilde_picks_highest_patch() {
 fn resolve_wildcard_picks_highest_minor() {
     // 1.2.* means >=1.2.0, <1.3.0 → 1.2.5.
     let index = index_with("foo", &[]);
-    let v = index.resolve_version("foo", Some("1.2.*")).expect("resolved");
+    let v = index
+        .resolve_version("foo", Some("1.2.*"))
+        .expect("resolved");
     assert_eq!(v, "1.2.5");
 }
 
@@ -70,9 +78,13 @@ fn resolve_comparator_range() {
 fn resolve_exact_version() {
     // =3.2.1 (or bare 3.2.1) matches exactly.
     let index = index_with("foo", &[]);
-    let v = index.resolve_version("foo", Some("=3.2.1")).expect("resolved");
+    let v = index
+        .resolve_version("foo", Some("=3.2.1"))
+        .expect("resolved");
     assert_eq!(v, "3.2.1");
-    let v2 = index.resolve_version("foo", Some("3.2.1")).expect("resolved");
+    let v2 = index
+        .resolve_version("foo", Some("3.2.1"))
+        .expect("resolved");
     assert_eq!(v2, "3.2.1");
 }
 

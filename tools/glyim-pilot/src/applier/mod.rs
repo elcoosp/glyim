@@ -12,44 +12,44 @@ use security::validate_path;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 /// ApplyResult.
 pub struct ApplyResult {
-/// Struct.
+    /// Struct.
     pub path: String,
-/// Struct.
+    /// Struct.
     pub action: ApplyAction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 /// ApplyAction.
 pub enum ApplyAction {
-/// Variant.
+    /// Variant.
     Created,
-/// Variant.
+    /// Variant.
     Modified,
-/// Variant.
+    /// Variant.
     Deleted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 /// PlannedChange.
 pub struct PlannedChange {
-/// Struct.
+    /// Struct.
     pub path: String,
-/// Struct.
+    /// Struct.
     pub action: PlannedAction,
-/// Struct.
+    /// Struct.
     pub current_content_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 /// PlannedAction.
 pub enum PlannedAction {
-/// Variant.
+    /// Variant.
     Create,
-/// Variant.
+    /// Variant.
     Overwrite,
-/// Variant.
+    /// Variant.
     Modify,
-/// Variant.
+    /// Variant.
     Delete,
 }
 

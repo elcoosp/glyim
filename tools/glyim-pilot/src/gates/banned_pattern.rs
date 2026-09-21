@@ -12,7 +12,7 @@ pub struct BannedPatternGate {
 }
 
 impl BannedPatternGate {
-/// new.
+    /// new.
     pub fn new(patterns: Vec<BannedPattern>) -> Self {
         Self {
             patterns: if patterns.is_empty() {
@@ -22,7 +22,7 @@ impl BannedPatternGate {
             },
         }
     }
-/// with_defaults.
+    /// with_defaults.
     pub fn with_defaults() -> Self {
         Self::new(default_banned_patterns())
     }

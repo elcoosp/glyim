@@ -47,22 +47,22 @@ use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{AdtId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, TraitDefId};
 use glyim_core::interner::Name;
 use glyim_core::primitives::{Abi, Mutability, Safety};
-use glyim_diag::GlyimDiagnostic;
-use glyim_hir::{ItemId, ItemKind, ExprId};
 use glyim_def_map::{CrateDefMap, ModuleId, Resolver};
+use glyim_diag::GlyimDiagnostic;
+use glyim_hir::{ExprId, ItemId, ItemKind};
 use glyim_solve::{FulfillmentCtx, InferenceTable, Obligation, ObligationCause, TraitContext};
 use glyim_span::Span;
 use glyim_type::{
-    AdtDef, AdtKind, FieldDef, GenericArg, ImplPolarity, MethodDef, Predicate,
-    TraitDef, TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, VariantDef, FnSig,
+    AdtDef, AdtKind, FieldDef, FnSig, GenericArg, ImplPolarity, MethodDef, Predicate, TraitDef,
+    TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, VariantDef,
 };
 
 #[derive(Clone, Debug)]
 /// TypeckResult.
 pub struct TypeckResult {
-#[doc = "field"]
+    #[doc = "field"]
     pub thir_bodies: Vec<(LocalDefId, thir::Body)>,
-/// Struct.
+    /// Struct.
     pub diagnostics: Vec<GlyimDiagnostic>,
     /// Evaluated values of constant definitions (Part C: const value
     /// materialization). Populated during `typeck_crate` by const-evaluating
@@ -81,20 +81,20 @@ pub struct TypeckResult {
 #[derive(Clone, Debug)]
 /// Adjustment.
 pub struct Adjustment {
-/// Struct.
+    /// Struct.
     pub kind: AdjustKind,
-/// Struct.
+    /// Struct.
     pub target: Ty,
 }
 
 #[derive(Clone, Debug)]
 /// AdjustKind.
 pub enum AdjustKind {
-/// Variant.
+    /// Variant.
     Deref,
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Borrow(Mutability),
-/// Variant.
+    /// Variant.
     NeverToAny,
 }
 
@@ -174,19 +174,38 @@ fn register_adt_item(
                     let mut fields = IndexVec::new();
                     for field in &variant.fields {
                         let field_ty = tyconv::resolve_type_ref(
-                            ctx, infer, def_map, diagnostics, &field.ty, &param_map, field.span,
+                            ctx,
+                            infer,
+                            def_map,
+                            diagnostics,
+                            &field.ty,
+                            &param_map,
+                            field.span,
                         );
-                        fields.push(FieldDef { name: field.name, ty: field_ty });
+                        fields.push(FieldDef {
+                            name: field.name,
+                            ty: field_ty,
+                        });
                     }
                     // Plan §5.1 / §5.2: carry the variant's declared syntax
                     // style so the LSP can synthesize an arity-correct match
                     // arm and the diagnostic can carry structured shape.
                     let style = match variant.kind {
-                        glyim_core::primitives::StructKind::Record => glyim_type::adt_def::VariantStyle::Struct,
-                        glyim_core::primitives::StructKind::Tuple => glyim_type::adt_def::VariantStyle::Tuple,
-                        glyim_core::primitives::StructKind::Unit => glyim_type::adt_def::VariantStyle::Unit,
+                        glyim_core::primitives::StructKind::Record => {
+                            glyim_type::adt_def::VariantStyle::Struct
+                        }
+                        glyim_core::primitives::StructKind::Tuple => {
+                            glyim_type::adt_def::VariantStyle::Tuple
+                        }
+                        glyim_core::primitives::StructKind::Unit => {
+                            glyim_type::adt_def::VariantStyle::Unit
+                        }
                     };
-                    variants.push(VariantDef { name: variant.name, fields, style });
+                    variants.push(VariantDef {
+                        name: variant.name,
+                        fields,
+                        style,
+                    });
                 }
                 ctx.register_adt_with_name(
                     item.name,
@@ -208,9 +227,18 @@ fn register_adt_item(
                 let mut fields = IndexVec::new();
                 for field in &struct_item.fields {
                     let field_ty = tyconv::resolve_type_ref(
-                        ctx, infer, def_map, diagnostics, &field.ty, &param_map, field.span,
+                        ctx,
+                        infer,
+                        def_map,
+                        diagnostics,
+                        &field.ty,
+                        &param_map,
+                        field.span,
                     );
-                    fields.push(FieldDef { name: field.name, ty: field_ty });
+                    fields.push(FieldDef {
+                        name: field.name,
+                        ty: field_ty,
+                    });
                 }
                 ctx.register_adt_with_name(
                     item.name,
@@ -237,7 +265,6 @@ pub fn typeck_crate(
     hir: &glyim_hir::CrateHir,
     solver: &mut dyn glyim_solve::TraitSolver,
 ) -> (TyCtx, TypeckResult) {
-
     let mut diagnostics = Vec::new();
     let mut infer = InferenceTable::new();
     let mut all_obligations: Vec<Obligation> = Vec::new();
@@ -300,7 +327,8 @@ pub fn typeck_crate(
         // returned 0 and the reference reported
         // "generic type `ArcInner` expects 0 type argument(s), found 1".
         // Seeding arity up front keeps forward references accurate.
-        let (adt_kind, generic_params): (glyim_type::adt_def::AdtKind, Vec<Name>) = match &item.kind {
+        let (adt_kind, generic_params): (glyim_type::adt_def::AdtKind, Vec<Name>) = match &item.kind
+        {
             glyim_hir::ItemKind::Enum(e) => (
                 glyim_type::adt_def::AdtKind::Enum,
                 e.generic_params.iter().map(|p| p.name).collect(),
@@ -377,7 +405,11 @@ pub fn typeck_crate(
                     TraitDef {
                         name: item.name,
                         methods,
-                        associated_types: trait_item.associated_types.iter().map(|a| a.name).collect(),
+                        associated_types: trait_item
+                            .associated_types
+                            .iter()
+                            .map(|a| a.name)
+                            .collect(),
                     },
                 );
             }
@@ -443,32 +475,85 @@ pub fn typeck_crate(
     // trait without a full trait solver. Name-keyed and crate-wide; parameter
     // names are interned and unique within a function.
     {
-        let register_bounds = |ctx: &mut TyCtxMut, params: &[glyim_hir::GenericParam],
-                                   where_clauses: &[glyim_hir::where_clause::WhereClause]| {
-            for gp in params {
-                if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
-                    for bound in bounds {
-                        match bound {
-                            glyim_hir::TypeRef::Path(p) => {
-                                if let Some(name) = p.as_name() {
-                                    if let Some(local) =
-                                        tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
-                                    {
-                                        let tid = TraitDefId::from_raw(local.to_raw());
-                                        ctx.param_bounds
-                                            .entry(gp.name)
-                                            .or_default()
-                                            .push((name, tid));
+        let register_bounds =
+            |ctx: &mut TyCtxMut,
+             params: &[glyim_hir::GenericParam],
+             where_clauses: &[glyim_hir::where_clause::WhereClause]| {
+                for gp in params {
+                    if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
+                        for bound in bounds {
+                            match bound {
+                                glyim_hir::TypeRef::Path(p) => {
+                                    if let Some(name) = p.as_name() {
+                                        if let Some(local) =
+                                            tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
+                                        {
+                                            let tid = TraitDefId::from_raw(local.to_raw());
+                                            ctx.param_bounds
+                                                .entry(gp.name)
+                                                .or_default()
+                                                .push((name, tid));
+                                        }
                                     }
                                 }
+                                glyim_hir::TypeRef::Fn { params: fp, ret } => {
+                                    // Parenthesized `Fn`-trait bound
+                                    // (`F: FnOnce() -> i32`). Record the bound's
+                                    // shape so `Expr::Call` can type `f()` on the
+                                    // param; there is no `FnDefId` for a trait
+                                    // bound. `gp.span` is the type parameter's
+                                    // own span (the closure has no `item`).
+                                    let empty: std::collections::HashMap<Name, Ty> =
+                                        std::collections::HashMap::new();
+                                    let mut infer = glyim_solve::InferenceTable::new();
+                                    let mut diags = Vec::new();
+                                    let mut inputs: Vec<glyim_type::GenericArg> = Vec::new();
+                                    for pt in fp {
+                                        let t = tyconv::resolve_type_ref(
+                                            ctx, &mut infer, def_map, &mut diags, pt, &empty,
+                                            gp.span,
+                                        );
+                                        inputs.push(glyim_type::GenericArg::Ty(t));
+                                    }
+                                    let output = match ret {
+                                        Some(r) => tyconv::resolve_type_ref(
+                                            ctx, &mut infer, def_map, &mut diags, r, &empty,
+                                            gp.span,
+                                        ),
+                                        None => Ty::UNIT,
+                                    };
+                                    let inputs = ctx.intern_substitution(inputs);
+                                    ctx.register_fn_trait_sig(
+                                        gp.name,
+                                        glyim_type::FnSig {
+                                            inputs,
+                                            output,
+                                            c_variadic: false,
+                                            unsafety: Safety::Safe,
+                                            abi: Abi::Glyim,
+                                        },
+                                    );
+                                }
+                                _ => {}
                             }
-                            glyim_hir::TypeRef::Fn { params: fp, ret } => {
-                                // Parenthesized `Fn`-trait bound
-                                // (`F: FnOnce() -> i32`). Record the bound's
-                                // shape so `Expr::Call` can type `f()` on the
-                                // param; there is no `FnDefId` for a trait
-                                // bound. `gp.span` is the type parameter's
-                                // own span (the closure has no `item`).
+                        }
+                    }
+                }
+                for wc in where_clauses {
+                    let wc_ty_name = match &wc.ty {
+                        glyim_hir::TypeRef::Path(p) => p.as_name(),
+                        _ => None,
+                    };
+                    if let Some(pname) = wc_ty_name {
+                        for bound in &wc.bounds {
+                            // Parenthesized Fn bound in a where-clause
+                            // (`where F: FnOnce() -> T`): register a callable
+                            // sig under the bounded param, same as an inline
+                            // `F: FnOnce() -> T` bound. Without this, `f()` on a
+                            // where-bound param reports "call to non-function".
+                            if let Some(glyim_hir::TypeRef::Fn { params: fp, ret }) =
+                                &bound.fn_shape
+                            {
                                 let empty: std::collections::HashMap<Name, Ty> =
                                     std::collections::HashMap::new();
                                 let mut infer = glyim_solve::InferenceTable::new();
@@ -477,20 +562,19 @@ pub fn typeck_crate(
                                 for pt in fp {
                                     let t = tyconv::resolve_type_ref(
                                         ctx, &mut infer, def_map, &mut diags, pt, &empty,
-                                        gp.span,
+                                        bound.span,
                                     );
                                     inputs.push(glyim_type::GenericArg::Ty(t));
                                 }
                                 let output = match ret {
                                     Some(r) => tyconv::resolve_type_ref(
-                                        ctx, &mut infer, def_map, &mut diags, r, &empty,
-                                        gp.span,
+                                        ctx, &mut infer, def_map, &mut diags, r, &empty, bound.span,
                                     ),
                                     None => Ty::UNIT,
                                 };
                                 let inputs = ctx.intern_substitution(inputs);
                                 ctx.register_fn_trait_sig(
-                                    gp.name,
+                                    pname,
                                     glyim_type::FnSig {
                                         inputs,
                                         output,
@@ -499,68 +583,22 @@ pub fn typeck_crate(
                                         abi: Abi::Glyim,
                                     },
                                 );
+                                continue;
                             }
-                            _ => {}
+                            let p = &bound.trait_path;
+                            if let Some(local) =
+                                tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
+                            {
+                                let tid = TraitDefId::from_raw(local.to_raw());
+                                ctx.param_bounds
+                                    .entry(pname)
+                                    .or_default()
+                                    .push((pname, tid));
+                            }
                         }
                     }
                 }
-            }
-            for wc in where_clauses {
-                let wc_ty_name = match &wc.ty {
-                    glyim_hir::TypeRef::Path(p) => p.as_name(),
-                    _ => None,
-                };
-                if let Some(pname) = wc_ty_name {
-                    for bound in &wc.bounds {
-                        // Parenthesized Fn bound in a where-clause
-                        // (`where F: FnOnce() -> T`): register a callable
-                        // sig under the bounded param, same as an inline
-                        // `F: FnOnce() -> T` bound. Without this, `f()` on a
-                        // where-bound param reports "call to non-function".
-                        if let Some(glyim_hir::TypeRef::Fn { params: fp, ret }) =
-                            &bound.fn_shape
-                        {
-                            let empty: std::collections::HashMap<Name, Ty> =
-                                std::collections::HashMap::new();
-                            let mut infer = glyim_solve::InferenceTable::new();
-                            let mut diags = Vec::new();
-                            let mut inputs: Vec<glyim_type::GenericArg> = Vec::new();
-                            for pt in fp {
-                                let t = tyconv::resolve_type_ref(
-                                    ctx, &mut infer, def_map, &mut diags, pt, &empty,
-                                    bound.span,
-                                );
-                                inputs.push(glyim_type::GenericArg::Ty(t));
-                            }
-                            let output = match ret {
-                                Some(r) => tyconv::resolve_type_ref(
-                                    ctx, &mut infer, def_map, &mut diags, r, &empty,
-                                    bound.span,
-                                ),
-                                None => Ty::UNIT,
-                            };
-                            let inputs = ctx.intern_substitution(inputs);
-                            ctx.register_fn_trait_sig(
-                                pname,
-                                glyim_type::FnSig {
-                                    inputs,
-                                    output,
-                                    c_variadic: false,
-                                    unsafety: Safety::Safe,
-                                    abi: Abi::Glyim,
-                                },
-                            );
-                            continue;
-                        }
-                        let p = &bound.trait_path;
-                        if let Some(local) = tyconv::resolve_path_to_local_def_id(ctx, def_map, p) {
-                            let tid = TraitDefId::from_raw(local.to_raw());
-                            ctx.param_bounds.entry(pname).or_default().push((pname, tid));
-                        }
-                    }
-                }
-            }
-        };
+            };
         for (_item_id, item) in hir.items.iter_enumerated() {
             match &item.kind {
                 ItemKind::Fn(f) => {
@@ -592,7 +630,11 @@ pub fn typeck_crate(
                     register_bounds(&mut ctx, &trait_item.generic_params, &[]);
                 }
                 ItemKind::Impl(impl_item) => {
-                    register_bounds(&mut ctx, &impl_item.generic_params, &impl_item.where_clauses);
+                    register_bounds(
+                        &mut ctx,
+                        &impl_item.generic_params,
+                        &impl_item.where_clauses,
+                    );
                     // Also register each *method's* own generic params. A
                     // method-level bound (`impl str { fn parse<T: FromStr>.. }`)
                     // is not part of the impl's params, and without this the
@@ -612,8 +654,7 @@ pub fn typeck_crate(
     // Gather ItemIds that are children of a ModItem so the flat pass skips
     // them — they are handled by the recursive fn walker below, which tracks
     // the def-map module context for correct LocalDefId alignment.
-    let mut child_set: std::collections::HashSet<ItemId> =
-        std::collections::HashSet::new();
+    let mut child_set: std::collections::HashSet<ItemId> = std::collections::HashSet::new();
     for (_id, item) in hir.items.iter_enumerated() {
         if let ItemKind::Mod(m) = &item.kind {
             for c in &m.children {
@@ -654,11 +695,7 @@ pub fn typeck_crate(
             // `Poll<?ty>` instead of the future struct" miscompile). Use the
             // same resolver path so the two ids agree.
             let local_def_id = {
-                let resolver = Resolver::new(
-                    &def_map.modules,
-                    def_map.root,
-                    def_map.root,
-                );
+                let resolver = Resolver::new(&def_map.modules, def_map.root, def_map.root);
                 let core_path = glyim_core::Path {
                     segments: vec![glyim_core::PathSegment {
                         name: item.name,
@@ -683,9 +720,8 @@ pub fn typeck_crate(
                 item.span,
                 None,
             );
-            let inputs = ctx.intern_substitution(
-                sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
-            );
+            let inputs =
+                ctx.intern_substitution(sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect());
             ctx.register_fn_sig(
                 FnDefId::from_raw(local_def_id.to_raw()),
                 FnSig {
@@ -801,9 +837,7 @@ pub fn typeck_crate(
     for (body_id, raw) in &all_expr_types {
         let mut resolved: HashMap<ExprId, Ty> = HashMap::new();
         for (eid, ty) in raw {
-            let ty = infer
-                .fully_resolve(&frozen_ctx, *ty)
-                .unwrap_or(*ty);
+            let ty = infer.fully_resolve(&frozen_ctx, *ty).unwrap_or(*ty);
             resolved.insert(*eid, ty);
         }
         expr_types.insert(*body_id, resolved);
@@ -838,11 +872,7 @@ fn pre_register_fn_sigs_in_module(
         };
         match &item.kind {
             ItemKind::Fn(f) => {
-                let local_def_id = match def_map.modules[module_id]
-                    .scope
-                    .values
-                    .get(&item.name)
-                {
+                let local_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                     Some((id, _, _)) => *id,
                     None => LocalDefId::from_raw(item.id.to_raw()),
                 };
@@ -937,11 +967,7 @@ fn check_fn_items_in_module(
                 // Functions not present in the def-map scope (e.g. `main`,
                 // which the def-map treats specially) fall back to the legacy
                 // per-item counter so they still get checked.
-                let local_def_id = match def_map.modules[module_id]
-                    .scope
-                    .values
-                    .get(&item.name)
-                {
+                let local_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                     Some((id, _, _)) => *id,
                     // Fall back to the HIR `item.id` when the def-map does not
                     // track this item (e.g. `main`). This must match the id
@@ -1055,9 +1081,15 @@ fn check_fn_items_in_module(
                         variants.push(VariantDef {
                             name: variant.name,
                             style: match variant.kind {
-                                glyim_core::primitives::StructKind::Record => glyim_type::adt_def::VariantStyle::Struct,
-                                glyim_core::primitives::StructKind::Tuple => glyim_type::adt_def::VariantStyle::Tuple,
-                                glyim_core::primitives::StructKind::Unit => glyim_type::adt_def::VariantStyle::Unit,
+                                glyim_core::primitives::StructKind::Record => {
+                                    glyim_type::adt_def::VariantStyle::Struct
+                                }
+                                glyim_core::primitives::StructKind::Tuple => {
+                                    glyim_type::adt_def::VariantStyle::Tuple
+                                }
+                                glyim_core::primitives::StructKind::Unit => {
+                                    glyim_type::adt_def::VariantStyle::Unit
+                                }
                             },
                             fields,
                         });
@@ -1068,7 +1100,11 @@ fn check_fn_items_in_module(
                             kind: AdtKind::Enum,
                             fields: IndexVec::new(),
                             variants,
-                            generic_params: enum_item.generic_params.iter().map(|p| p.name).collect(),
+                            generic_params: enum_item
+                                .generic_params
+                                .iter()
+                                .map(|p| p.name)
+                                .collect(),
                         },
                     );
                 }
@@ -1111,7 +1147,11 @@ fn check_fn_items_in_module(
                             kind: AdtKind::Struct,
                             fields,
                             variants: Vec::new(),
-                            generic_params: struct_item.generic_params.iter().map(|p| p.name).collect(),
+                            generic_params: struct_item
+                                .generic_params
+                                .iter()
+                                .map(|p| p.name)
+                                .collect(),
                         },
                     );
                 }
@@ -1164,11 +1204,12 @@ fn check_fn_items_in_module(
                     if let Some(bid) = method.body {
                         body_owner_map.insert(bid, local_def_id);
                     }
-                    let combined_generics: Vec<glyim_hir::GenericParam> =
-                        impl_item.generic_params.iter()
-                            .chain(method.generic_params.iter())
-                            .cloned()
-                            .collect();
+                    let combined_generics: Vec<glyim_hir::GenericParam> = impl_item
+                        .generic_params
+                        .iter()
+                        .chain(method.generic_params.iter())
+                        .cloned()
+                        .collect();
                     let sig = tyconv::resolve_fn_sig(
                         ctx,
                         infer,
@@ -1195,10 +1236,7 @@ fn check_fn_items_in_module(
                     );
                     if let (Some(trait_path), Some(self_ty)) = (&impl_item.trait_ref, self_ty_opt) {
                         if let Some(trait_def_id) = tyconv::resolve_path_to_trait_def_id(
-                            def_map,
-                            ctx,
-                            trait_path,
-                            impl_span,
+                            def_map, ctx, trait_path, impl_span,
                         ) {
                             if let glyim_type::TyKind::Adt(self_adt_id, _) = ctx.ty_kind(self_ty) {
                                 ctx.register_impl_method(
@@ -1266,11 +1304,7 @@ fn check_fn_items_in_module(
                 // The constant's body is not yet evaluated/threaded to codegen
                 // (const value materialization is a follow-up); only its type
                 // is needed for path-resolution type checking.
-                let const_def_id = match def_map.modules[module_id]
-                    .scope
-                    .values
-                    .get(&item.name)
-                {
+                let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                     Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
                     None => {
                         let id = *next_local_def_id;
@@ -1422,31 +1456,35 @@ fn process_where_clauses(
             // Other param bounds (`T: Clone` etc.) still produce an
             // obligation, matching the existing where-clause diagnostics.
             if matches!(ctx.ty_kind(ty), glyim_type::TyKind::Param(_)) {
-                let tname = ctx
-                    .name_str(bound.trait_path.as_name().unwrap_or_else(|| ctx.resolver().intern("")));
+                let tname = ctx.name_str(
+                    bound
+                        .trait_path
+                        .as_name()
+                        .unwrap_or_else(|| ctx.resolver().intern("")),
+                );
                 if matches!(tname, "Fn" | "FnMut" | "FnOnce" | "Send" | "Sync") {
                     continue;
                 }
             }
 
             let trait_path = &bound.trait_path;
-            let trait_def_id = match tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, bound.span)
-            {
-                Some(id) => Some(id),
-                None => {
-                    let path_str = trait_path
-                        .segments
-                        .iter()
-                        .map(|s| ctx.name_str(s.name))
-                        .collect::<Vec<_>>()
-                        .join("::");
-                    diagnostics.push(GlyimDiagnostic::type_error(
-                        bound.span,
-                        format!("unresolved trait `{}` in where clause", path_str),
-                    ));
-                    None
-                }
-            };
+            let trait_def_id =
+                match tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, bound.span) {
+                    Some(id) => Some(id),
+                    None => {
+                        let path_str = trait_path
+                            .segments
+                            .iter()
+                            .map(|s| ctx.name_str(s.name))
+                            .collect::<Vec<_>>()
+                            .join("::");
+                        diagnostics.push(GlyimDiagnostic::type_error(
+                            bound.span,
+                            format!("unresolved trait `{}` in where clause", path_str),
+                        ));
+                        None
+                    }
+                };
 
             if let Some(trait_def_id) = trait_def_id {
                 let trait_ref = TraitRef {
@@ -1467,7 +1505,6 @@ fn process_where_clauses(
             }
         }
     }
-
 }
 
 /// Map an HIR `extern "C"` ABI name (if any) to a `glyim_core::Abi`.
@@ -1530,7 +1567,7 @@ impl TypeckResult {
     pub fn pat_ty(&self, _body_id: LocalDefId, _pat_id: usize) -> Option<Ty> {
         None
     }
-/// adjustments.
+    /// adjustments.
     pub fn adjustments(&self, _body_id: LocalDefId, _expr_id: usize) -> &[Adjustment] {
         &[]
     }

@@ -12,15 +12,15 @@ use std::fmt;
 
 /// TypeLookup.
 pub trait TypeLookup {
-/// ty_kind.
+    /// ty_kind.
     fn ty_kind(&self, ty: Ty) -> &TyKind;
-/// ty_flags.
+    /// ty_flags.
     fn ty_flags(&self, ty: Ty) -> TypeFlags;
-/// substitution_args.
+    /// substitution_args.
     fn substitution_args(&self, sub: Substitution) -> &[GenericArg];
-/// name_str.
+    /// name_str.
     fn name_str(&self, name: Name) -> &str;
-/// error_ty.
+    /// error_ty.
     fn error_ty(&self) -> Ty;
     /// Returns `true` if the given ADT has interior mutability (contains `UnsafeCell`).
     fn is_interior_mutable_adt(&self, _adt_id: AdtId) -> bool {
@@ -62,7 +62,7 @@ pub struct PrintTy<'a, L: TypeLookup> {
 }
 
 impl<'a, L: TypeLookup> PrintTy<'a, L> {
-/// new.
+    /// new.
     pub fn new(ty: Ty, lookup: &'a L) -> Self {
         Self {
             ty,

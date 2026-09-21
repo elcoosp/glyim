@@ -250,10 +250,8 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
 
     // Register the synthetic closure ADT (one captured i32). The closure id
     // convention maps AdtId <-> ClosureId by their raw value.
-    let closure_adt = ctx_mut.register_closure(vec![(
-        ctx_mut.resolver().intern("capture_0"),
-        i32_ty,
-    )]);
+    let closure_adt =
+        ctx_mut.register_closure(vec![(ctx_mut.resolver().intern("capture_0"), i32_ty)]);
     let closure_id = ClosureId::from_raw(closure_adt.to_raw());
     // The closure *value* type is `TyKind::Closure`; its `substs` carry the
     // capture types so the value lays out as a struct of captures (matching the
@@ -264,10 +262,7 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     // Register the closure's full signature so the codegen can recover the
     // `[captures..., params] -> ret` shape at call sites.
     let closure_sig = FnSig {
-        inputs: ctx_mut.intern_substitution(vec![
-            GenericArg::Ty(i32_ty),
-            GenericArg::Ty(i32_ty),
-        ]),
+        inputs: ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty), GenericArg::Ty(i32_ty)]),
         output: i32_ty,
         c_variadic: false,
         unsafety: Safety::Safe,
@@ -382,7 +377,10 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
         is_cleanup: false,
     };
     let closure_body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(closure_id.to_raw())),
+        owner: DefId::new(
+            CrateId::from_raw(0),
+            LocalDefId::from_raw(closure_id.to_raw()),
+        ),
         basic_blocks: IndexVec::from_raw(vec![clo_bb]),
         locals: clo_locals,
         arg_count: 2,
@@ -395,7 +393,10 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     let backend = LlvmBackend::new().with_ty_ctx(ctx);
     let inkwell_ctx = inkwell::context::Context::create();
     let module = backend
-        .lower_bodies_to_module(&inkwell_ctx, &[Arc::new(closure_body), Arc::new(caller_body)])
+        .lower_bodies_to_module(
+            &inkwell_ctx,
+            &[Arc::new(closure_body), Arc::new(caller_body)],
+        )
         .expect("lowering caller + closure body failed");
     let ir = module.print_to_string().to_string();
 

@@ -99,9 +99,10 @@ fn test_auto_import_offers_symbol_from_other_file() {
     let path_a = PathBuf::from("/test/main.g");
     let file_id_a = file_map.get_or_create(&path_a);
     let source_a = "fn main() { Wid }";
-    db.source_maps
-        .write()
-        .insert(file_id_a, SourceMap::new(path_a.clone(), file_id_a, source_a.to_string()));
+    db.source_maps.write().insert(
+        file_id_a,
+        SourceMap::new(path_a.clone(), file_id_a, source_a.to_string()),
+    );
 
     // Other file B: declares `Widget` with a known import path.
     let path_b = PathBuf::from("/test/widgets.g");

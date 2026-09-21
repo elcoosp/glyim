@@ -5,8 +5,8 @@ use glyim_core::interner::Name;
 use glyim_core::primitives::IntTy;
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
-use glyim_span::Span;
 use glyim_solve::InferenceTable;
+use glyim_span::Span;
 use glyim_type::{FieldIdx, FnSig, GenericArg, InferVar, Ty, TyCtxMut, TyKind};
 
 use crate::check_body::FnCtxt;
@@ -179,10 +179,7 @@ impl<'a> FnCtxt<'a> {
                         .map(|v| v.fields.iter().map(|f| f.ty).collect())
                         .unwrap_or_default();
                     let inputs = self.ctx.intern_substitution(
-                        field_tys
-                            .iter()
-                            .map(|t| GenericArg::Ty(*t))
-                            .collect(),
+                        field_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
                     );
                     self.ctx.register_fn_sig(
                         ctor_fn_def_id,
@@ -194,9 +191,7 @@ impl<'a> FnCtxt<'a> {
                             abi: glyim_core::primitives::Abi::Glyim,
                         },
                     );
-                    let fn_ty = self
-                        .ctx
-                        .mk_ty(TyKind::FnDef(ctor_fn_def_id, substs));
+                    let fn_ty = self.ctx.mk_ty(TyKind::FnDef(ctor_fn_def_id, substs));
                     let thir_expr = thir::Expr {
                         kind: thir::ExprKind::VariantCtor {
                             adt_id,
@@ -283,13 +278,18 @@ impl<'a> FnCtxt<'a> {
             // registered constant (e.g. an enum variant, which needs a
             // dedicated `VariantRef` THIR node). Report a clear error.
             {
-                let segs: Vec<String> = path.segments.iter()
+                let segs: Vec<String> = path
+                    .segments
+                    .iter()
                     .map(|s| self.ctx.name_str(s.name).to_string())
                     .collect();
                 self.diagnostics.push(GlyimDiagnostic::type_error(
                     span,
-                    format!("enum-variant value paths are not yet supported: `{}` (local={:?})",
-                        segs.join("::"), local),
+                    format!(
+                        "enum-variant value paths are not yet supported: `{}` (local={:?})",
+                        segs.join("::"),
+                        local
+                    ),
                 ));
             }
             return (thir::Expr::err(span), Ty::ERROR);
@@ -351,12 +351,16 @@ impl<'a> FnCtxt<'a> {
                     _ => None,
                 };
             if let Some((adt_id, adt_ty)) = adt_lookup {
-                if let Some((fn_id, sig)) = self.ctx.lookup_builtin_method(adt_id, path.segments[1].name) {
+                if let Some((fn_id, sig)) = self
+                    .ctx
+                    .lookup_builtin_method(adt_id, path.segments[1].name)
+                {
                     // Instantiate the output type against the *callee* ADT's own
                     // generic substitution (so `Vec::new` yields `Vec<T>` with
                     // `T` left as a fresh inference variable, matching how the
                     // receiver-arg substitution works for method calls).
-                    let mut subst: std::collections::HashMap<u32, GenericArg> = std::collections::HashMap::new();
+                    let mut subst: std::collections::HashMap<u32, GenericArg> =
+                        std::collections::HashMap::new();
                     if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
                         for (i, a) in self.ctx.substitution_args(*s).iter().enumerate() {
                             subst.insert(i as u32, a.clone());
@@ -447,9 +451,7 @@ impl<'a> FnCtxt<'a> {
                         }
                         // Plus the receiver's own substitution (if any).
                         if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
-                            for (i, a) in
-                                self.ctx.substitution_args(*s).iter().enumerate()
-                            {
+                            for (i, a) in self.ctx.substitution_args(*s).iter().enumerate() {
                                 subst.entry(i as u32).or_insert_with(|| a.clone());
                             }
                         }
@@ -550,8 +552,13 @@ impl<'a> FnCtxt<'a> {
                 }],
                 kind: path.kind,
             };
-            if crate::tyconv::resolve_path_to_trait_def_id(self.def_map, self.ctx, &trait_path, span)
-                .is_some()
+            if crate::tyconv::resolve_path_to_trait_def_id(
+                self.def_map,
+                self.ctx,
+                &trait_path,
+                span,
+            )
+            .is_some()
             {
                 return (thir::Expr::err(span), Ty::ERROR);
             }
@@ -582,7 +589,9 @@ impl<'a> FnCtxt<'a> {
                 let mut substs: Vec<GenericArg> = Vec::with_capacity(arity);
                 for _ in 0..arity {
                     let v = self.infer.new_ty_var(self.ctx);
-                    substs.push(GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
+                    substs.push(GenericArg::Ty(
+                        self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v))),
+                    ));
                 }
                 let substs = self.ctx.intern_substitution(substs);
                 let adt_ty = self.ctx.mk_ty(TyKind::Adt(adt_id, substs));
@@ -626,9 +635,7 @@ impl<'a> FnCtxt<'a> {
             .and_then(|adt_ty| {
                 if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(adt_ty) {
                     let def = self.ctx.adt_def(*adt_id);
-                    let is_unit = def
-                        .map(|d| d.fields.is_empty())
-                        .unwrap_or(false);
+                    let is_unit = def.map(|d| d.fields.is_empty()).unwrap_or(false);
                     // `PhantomData` is written as a bare value (`_marker: PhantomData`)
                     // even though it is declared with a `marker: T` field; treat
                     // the builtin zero-sized marker type as a unit value.
@@ -647,7 +654,9 @@ impl<'a> FnCtxt<'a> {
                 let mut substs: Vec<GenericArg> = Vec::with_capacity(arity);
                 for _ in 0..arity {
                     let v = self.infer.new_ty_var(self.ctx);
-                    substs.push(GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))));
+                    substs.push(GenericArg::Ty(
+                        self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v))),
+                    ));
                 }
                 let substs = self.ctx.intern_substitution(substs);
                 let adt_ty = self.ctx.mk_ty(TyKind::Adt(adt_id, substs));
@@ -737,7 +746,10 @@ impl<'a> FnCtxt<'a> {
             );
             let fn_ty = self.ctx.mk_ty(TyKind::FnDef(ctor_fn_def_id, substs));
             let thir_expr = thir::Expr {
-                kind: thir::ExprKind::VariantCtor { adt_id, variant_idx },
+                kind: thir::ExprKind::VariantCtor {
+                    adt_id,
+                    variant_idx,
+                },
                 ty: fn_ty,
                 span,
             };
@@ -790,7 +802,9 @@ pub fn literal_ty(ctx: &mut TyCtxMut, infer: &mut InferenceTable, lit: &Literal)
         // `Some(IntTy::I32)` (the default), so we must treat `Some(I32)` /
         // `Some(Isize)` as inference vars too — only explicitly-suffixed
         // non-default hints stay concrete.
-        Literal::Int(_, Some(IntTy::I32)) | Literal::Int(_, Some(IntTy::Isize)) | Literal::Int(_, None) => {
+        Literal::Int(_, Some(IntTy::I32))
+        | Literal::Int(_, Some(IntTy::Isize))
+        | Literal::Int(_, None) => {
             let var = infer.new_int_var(ctx);
             ctx.mk_ty(TyKind::Infer(InferVar::Int(var)))
         }

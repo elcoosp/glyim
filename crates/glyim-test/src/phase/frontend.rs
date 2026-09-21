@@ -10,7 +10,7 @@ pub struct FrontendTester {
 }
 
 impl FrontendTester {
-/// new.
+    /// new.
     pub fn new(source: impl Into<String>) -> Self {
         let file_id = FileId::from_raw(NEXT_FE_ID.fetch_add(1, Ordering::Relaxed));
         Self {
@@ -18,12 +18,12 @@ impl FrontendTester {
             file_id,
         }
     }
-/// with_file_id.
+    /// with_file_id.
     pub fn with_file_id(mut self, id: FileId) -> Self {
         self.file_id = id;
         self
     }
-/// run.
+    /// run.
     pub fn run(self) -> super::CompilationTrace {
         let mut trace = super::CompilationTrace::default();
         tracing::info!(phase = "parse", file_id = self.file_id.to_raw());
@@ -75,7 +75,7 @@ impl FrontendTester {
 
         trace
     }
-/// parse_only.
+    /// parse_only.
     pub fn parse_only(self) -> glyim_frontend::ParseResult {
         glyim_frontend::parse_to_syntax(&self.source, self.file_id)
     }

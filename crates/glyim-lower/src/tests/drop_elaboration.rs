@@ -166,8 +166,14 @@ fn droppable_local_gets_guarded_drop_via_drop_flag() {
             }
         }
     }
-    assert_eq!(switch_count, 1, "expected exactly one drop-flag guard SwitchInt");
-    assert!(guarded_drop, "expected the SwitchInt to guard a Drop of a different local (real drop-flag)");
+    assert_eq!(
+        switch_count, 1,
+        "expected exactly one drop-flag guard SwitchInt"
+    );
+    assert!(
+        guarded_drop,
+        "expected the SwitchInt to guard a Drop of a different local (real drop-flag)"
+    );
 }
 
 /// §1.8 regression: a function with no moves must keep producing an

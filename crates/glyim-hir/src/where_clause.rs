@@ -5,20 +5,20 @@ use crate::{Path, TypeRef};
 /// A single where clause bound, e.g. `T: Clone + Copy`
 #[derive(Clone, Debug)]
 pub struct WhereClause {
-/// Struct.
+    /// Struct.
     pub ty: TypeRef,
-/// Struct.
+    /// Struct.
     pub bounds: Vec<TraitBound>,
-/// Struct.
+    /// Struct.
     pub span: Span,
 }
 
 /// A trait bound, e.g. `Clone`
 #[derive(Clone, Debug)]
 pub struct TraitBound {
-/// Struct.
+    /// Struct.
     pub trait_path: Path,
-/// Struct.
+    /// Struct.
     pub span: Span,
     /// For a parenthesized `Fn`-family bound (`F: FnOnce() -> R`) the
     /// lowered `TypeRef::Fn { params, ret }` shape, which `trait_path`

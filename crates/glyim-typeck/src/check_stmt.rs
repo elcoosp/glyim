@@ -332,7 +332,11 @@ impl<'a> FnCtxt<'a> {
     /// `check_expr` on statement nodes, hitting the `Expr::Let`/`Expr::Assign`
     /// arms that erroneously returned `thir::Expr::err`, corrupting any
     /// statement nested inside a block/if-body).
-    pub(crate) fn check_stmt_to_thir(&mut self, stmt_id: glyim_hir::ExprId, is_tail: bool) -> thir::Stmt {
+    pub(crate) fn check_stmt_to_thir(
+        &mut self,
+        stmt_id: glyim_hir::ExprId,
+        is_tail: bool,
+    ) -> thir::Stmt {
         let expr = &self.body.exprs[stmt_id];
         let span = self.expr_span(stmt_id);
         match expr {

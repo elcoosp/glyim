@@ -11,7 +11,9 @@ fn def(krate: u32, local: u32) -> DefId {
 fn register_then_require_succeeds() {
     let mut items = LangItems::default();
     let d = def(0, 1000);
-    items.register(LangItem::Range, d).expect("first registration");
+    items
+        .register(LangItem::Range, d)
+        .expect("first registration");
     assert_eq!(items.get(LangItem::Range), Some(d));
     assert_eq!(items.require(LangItem::Range).unwrap(), d);
 }
@@ -50,7 +52,9 @@ fn re_register_same_def_id_is_idempotent() {
     let d = def(1, 42);
     items.register(LangItem::Box, d).unwrap();
     // Re-Registering the identical DefId must succeed (no spurious Duplicate).
-    items.register(LangItem::Box, d).expect("idempotent re-registration");
+    items
+        .register(LangItem::Box, d)
+        .expect("idempotent re-registration");
     assert_eq!(items.require(LangItem::Box).unwrap(), d);
 }
 

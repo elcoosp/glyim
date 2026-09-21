@@ -6,56 +6,56 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 /// SymbolInfo.
 pub struct SymbolInfo {
-/// Struct.
+    /// Struct.
     pub name: String,
-/// Struct.
+    /// Struct.
     pub kind: SymbolKind,
-/// Struct.
+    /// Struct.
     pub definition: DefinitionLocation,
-/// Struct.
+    /// Struct.
     pub type_signature: Option<TypeSignature>,
-/// Struct.
+    /// Struct.
     pub is_pub: bool,
-/// Struct.
+    /// Struct.
     pub documentation: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// SymbolKind.
 pub enum SymbolKind {
-/// Variant.
+    /// Variant.
     Function,
-/// Variant.
+    /// Variant.
     Struct,
-/// Variant.
+    /// Variant.
     Enum,
-/// Variant.
+    /// Variant.
     EnumVariant,
-/// Variant.
+    /// Variant.
     Field,
-/// Variant.
+    /// Variant.
     TypeParameter,
-/// Variant.
+    /// Variant.
     Local,
-/// Variant.
+    /// Variant.
     Module,
 }
 
 #[derive(Debug, Clone)]
 /// DefinitionLocation.
 pub struct DefinitionLocation {
-/// Struct.
+    /// Struct.
     pub file_id: FileId,
-/// Struct.
+    /// Struct.
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 /// TypeSignature.
 pub struct TypeSignature {
-#[doc = "field"]
+    #[doc = "field"]
     pub params: Vec<(String, String)>,
-/// Struct.
+    /// Struct.
     pub return_type: Option<String>,
     /// For method symbols, the resolved receiver (`self`) type, e.g. `"Foo"`.
     /// `None` for free functions / item symbols. Used by Tier 6.4 completion
@@ -74,9 +74,7 @@ fn type_param_names(params: &[glyim_hir::GenericParam], interner: &Interner) -> 
     params
         .iter()
         .filter_map(|p| match p.kind {
-            glyim_hir::GenericParamKind::Type { .. } => {
-                Some(interner.resolve(p.name).to_string())
-            }
+            glyim_hir::GenericParamKind::Type { .. } => Some(interner.resolve(p.name).to_string()),
             _ => None,
         })
         .collect()
@@ -100,7 +98,7 @@ impl Default for SymbolIndex {
 }
 
 impl SymbolIndex {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             by_name: HashMap::new(),
@@ -110,7 +108,7 @@ impl SymbolIndex {
         }
     }
 
-/// build_from_hir.
+    /// build_from_hir.
     pub fn build_from_hir(&mut self, file_id: FileId, hir: &CrateHir, interner: &Interner) {
         self.clear_file(file_id);
 
@@ -127,8 +125,10 @@ impl SymbolIndex {
         }
         for it in hir.items.iter() {
             let path = Self::module_path_of(it.id, &parent, hir, interner);
-            self.import_paths
-                .insert((file_id.to_raw(), interner.resolve(it.name).to_string()), path);
+            self.import_paths.insert(
+                (file_id.to_raw(), interner.resolve(it.name).to_string()),
+                path,
+            );
         }
 
         for item in hir.items.iter() {
@@ -338,7 +338,7 @@ impl SymbolIndex {
             .insert((file_id.to_raw(), info.definition.span.lo.to_usize()), info);
     }
 
-/// lookup_by_name.
+    /// lookup_by_name.
     pub fn lookup_by_name(&self, name: &str) -> Vec<&SymbolInfo> {
         self.by_name
             .get(name)
@@ -346,23 +346,20 @@ impl SymbolIndex {
             .unwrap_or_default()
     }
 
-/// lookup_by_location.
+    /// lookup_by_location.
     pub fn lookup_by_location(&self, file_id: FileId, offset: usize) -> Option<&SymbolInfo> {
         // A hover/click position falls *somewhere inside* a symbol's definition
         // span, not necessarily on its start byte. Match by span containment
         // (lo <= offset < hi) rather than an exact start-offset key, so any
         // position within the symbol resolves to it.
-        self.by_file
-            .get(&file_id)?
-            .iter()
-            .find(|sym| {
-                let lo = sym.definition.span.lo.to_usize();
-                let hi = sym.definition.span.hi.to_usize();
-                offset >= lo && offset < hi
-            })
+        self.by_file.get(&file_id)?.iter().find(|sym| {
+            let lo = sym.definition.span.lo.to_usize();
+            let hi = sym.definition.span.hi.to_usize();
+            offset >= lo && offset < hi
+        })
     }
 
-/// symbols_in_file.
+    /// symbols_in_file.
     pub fn symbols_in_file(&self, file_id: FileId) -> Vec<&SymbolInfo> {
         self.by_file
             .get(&file_id)
@@ -370,7 +367,7 @@ impl SymbolIndex {
             .unwrap_or_default()
     }
 
-/// query.
+    /// query.
     pub fn query(&self, prefix: &str, limit: usize) -> Vec<&SymbolInfo> {
         // Tiered matching (plan §22.3): exact > prefix > contains > fuzzy
         // subsequence. Exact/prefix/contains stay the fast paths; fuzzy is a
@@ -409,11 +406,7 @@ impl SymbolIndex {
                 .iter()
                 .take(limit.saturating_sub(results.len())),
         );
-        results.extend(
-            contains
-                .iter()
-                .take(limit.saturating_sub(results.len())),
-        );
+        results.extend(contains.iter().take(limit.saturating_sub(results.len())));
         if results.len() < limit {
             fuzzy.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.cmp(&b.1.name)));
             results.extend(
@@ -429,78 +422,77 @@ impl SymbolIndex {
     /// Plan §22.6 auto-import: return the fully-qualified import path recorded
     /// for `name` in `file_id` (e.g. `crate::foo::Bar`), if indexed.
     pub fn import_path_for(&self, file_id: FileId, name: &str) -> Option<&String> {
-        self.import_paths
-            .get(&(file_id.to_raw(), name.to_string()))
+        self.import_paths.get(&(file_id.to_raw(), name.to_string()))
     }
 
-/// Plan §22.6 auto-import: derive a fully-qualified import path for `id` by
-/// walking up the module-parent chain (built in `build_from_hir`). An item at
-/// the crate root yields its bare name; a nested item yields
-/// `crate::mod1::mod2::Name`.
-fn module_path_of(
-    id: glyim_hir::ItemId,
-    parent: &HashMap<glyim_hir::ItemId, glyim_hir::ItemId>,
-    hir: &glyim_hir::CrateHir,
-    interner: &glyim_core::Interner,
-) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    let mut cur = Some(id);
-    while let Some(c) = cur {
-        let item = &hir.items[c];
-        parts.push(interner.resolve(item.name).to_string());
-        cur = parent.get(&c).copied();
+    /// Plan §22.6 auto-import: derive a fully-qualified import path for `id` by
+    /// walking up the module-parent chain (built in `build_from_hir`). An item at
+    /// the crate root yields its bare name; a nested item yields
+    /// `crate::mod1::mod2::Name`.
+    fn module_path_of(
+        id: glyim_hir::ItemId,
+        parent: &HashMap<glyim_hir::ItemId, glyim_hir::ItemId>,
+        hir: &glyim_hir::CrateHir,
+        interner: &glyim_core::Interner,
+    ) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let mut cur = Some(id);
+        while let Some(c) = cur {
+            let item = &hir.items[c];
+            parts.push(interner.resolve(item.name).to_string());
+            cur = parent.get(&c).copied();
+        }
+        parts.reverse();
+        if parts.len() <= 1 {
+            parts.join("::")
+        } else {
+            format!("crate::{}", parts.join("::"))
+        }
     }
-    parts.reverse();
-    if parts.len() <= 1 {
-        parts.join("::")
-    } else {
-        format!("crate::{}", parts.join("::"))
-    }
-}
 
-/// Subsequence-based fuzzy scorer (plan §22.3), Sublime-Text-style:
-/// - requires every character of `query` to appear in order in `candidate`;
-/// - consecutive matches and word-boundary (after `_`/start) matches score higher;
-/// - returns `None` when `query` is not a subsequence of `candidate`.
-fn fuzzy_score(query: &str, candidate: &str) -> Option<usize> {
-    if query.is_empty() || query.len() > candidate.len() {
-        return None;
-    }
-    let q: Vec<char> = query.chars().collect();
-    let c: Vec<char> = candidate.chars().collect();
-    let mut qi = 0usize;
-    let mut prev_ci = None::<usize>;
-    let mut score = 0usize;
-    let mut is_first = true;
-    for (ci, &cc) in c.iter().enumerate() {
-        if qi >= q.len() {
-            break;
+    /// Subsequence-based fuzzy scorer (plan §22.3), Sublime-Text-style:
+    /// - requires every character of `query` to appear in order in `candidate`;
+    /// - consecutive matches and word-boundary (after `_`/start) matches score higher;
+    /// - returns `None` when `query` is not a subsequence of `candidate`.
+    fn fuzzy_score(query: &str, candidate: &str) -> Option<usize> {
+        if query.is_empty() || query.len() > candidate.len() {
+            return None;
         }
-        if cc != q[qi] {
-            continue;
-        }
-        score += 1;
-        if let Some(pci) = prev_ci {
-            if pci + 1 == ci {
-                score += 4;
+        let q: Vec<char> = query.chars().collect();
+        let c: Vec<char> = candidate.chars().collect();
+        let mut qi = 0usize;
+        let mut prev_ci = None::<usize>;
+        let mut score = 0usize;
+        let mut is_first = true;
+        for (ci, &cc) in c.iter().enumerate() {
+            if qi >= q.len() {
+                break;
             }
+            if cc != q[qi] {
+                continue;
+            }
+            score += 1;
+            if let Some(pci) = prev_ci {
+                if pci + 1 == ci {
+                    score += 4;
+                }
+            }
+            let at_boundary = is_first || ci == 0 || c[ci - 1] == '_';
+            if at_boundary {
+                score += 3;
+            }
+            prev_ci = Some(ci);
+            is_first = false;
+            qi += 1;
         }
-        let at_boundary = is_first || ci == 0 || c[ci - 1] == '_';
-        if at_boundary {
-            score += 3;
+        if qi == q.len() {
+            Some(score * 100 + (c.len() - q.len()))
+        } else {
+            None
         }
-        prev_ci = Some(ci);
-        is_first = false;
-        qi += 1;
     }
-    if qi == q.len() {
-        Some(score * 100 + (c.len() - q.len()))
-    } else {
-        None
-    }
-}
 
-/// clear_file.
+    /// clear_file.
     pub fn clear_file(&mut self, file_id: FileId) {
         if let Some(symbols) = self.by_file.remove(&file_id) {
             for sym in symbols {
@@ -514,7 +506,8 @@ fn fuzzy_score(query: &str, candidate: &str) -> Option<usize> {
                     .remove(&(file_id.to_raw(), sym.definition.span.lo.to_usize()));
             }
         }
-        self.import_paths.retain(|(fid, _), _| *fid != file_id.to_raw());
+        self.import_paths
+            .retain(|(fid, _), _| *fid != file_id.to_raw());
     }
 
     #[doc(hidden)]

@@ -17,7 +17,7 @@ impl Default for DependencyGraph {
 }
 
 impl DependencyGraph {
-/// new.
+    /// new.
     pub fn new() -> Self {
         Self {
             deps: HashMap::new(),

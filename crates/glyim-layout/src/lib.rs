@@ -12,23 +12,23 @@ use glyim_type::*;
 pub struct Size(pub u64);
 
 impl Size {
-/// ZERO.
+    /// ZERO.
     pub const ZERO: Size = Size(0);
-/// bytes.
+    /// bytes.
     pub fn bytes(b: u64) -> Self {
         Size(b)
     }
-/// bits.
+    /// bits.
     pub fn bits(&self) -> u64 {
         self.0.saturating_mul(8)
     }
-/// align_to.
+    /// align_to.
     pub fn align_to(&self, align: Align) -> Self {
         debug_assert!(align.0 > 0, "alignment must be non-zero");
         let mask = align.0 - 1;
         Size((self.0 + mask) & !mask)
     }
-/// checked_mul.
+    /// checked_mul.
     pub fn checked_mul(self, rhs: u64) -> Option<Size> {
         self.0.checked_mul(rhs).map(Size)
     }
@@ -46,11 +46,11 @@ impl std::ops::Add for Size {
 pub struct Align(pub u64);
 
 impl Align {
-/// ONE.
+    /// ONE.
     pub const ONE: Align = Align(1);
-/// EIGHT.
+    /// EIGHT.
     pub const EIGHT: Align = Align(8);
-/// from_bytes.
+    /// from_bytes.
     pub fn from_bytes(bytes: u64) -> Self {
         debug_assert!(
             bytes.is_power_of_two(),
@@ -58,7 +58,7 @@ impl Align {
         );
         Align(bytes)
     }
-/// max.
+    /// max.
     pub fn max(self, other: Self) -> Self {
         Align(self.0.max(other.0))
     }
@@ -67,20 +67,20 @@ impl Align {
 #[derive(Clone, Debug)]
 /// Layout.
 pub struct Layout {
-/// Struct.
+    /// Struct.
     pub size: Size,
-/// Struct.
+    /// Struct.
     pub align: Align,
-/// Struct.
+    /// Struct.
     pub fields: FieldsShape,
-/// Struct.
+    /// Struct.
     pub variants: VariantsShape,
-/// Struct.
+    /// Struct.
     pub is_unsized: bool,
 }
 
 impl Layout {
-/// scalar.
+    /// scalar.
     pub fn scalar(size: Size, align: Align) -> Self {
         Self {
             size,
@@ -90,7 +90,7 @@ impl Layout {
             is_unsized: false,
         }
     }
-/// unit.
+    /// unit.
     pub fn unit() -> Self {
         Self {
             size: Size::ZERO,
@@ -107,16 +107,16 @@ impl Layout {
 #[derive(Clone, Debug)]
 /// FieldsShape.
 pub enum FieldsShape {
-/// Variant.
+    /// Variant.
     Primitive,
-/// Variant.
+    /// Variant.
     Array {
         /// stride field.
         stride: Size,
         /// count field.
         count: u64,
     },
-/// Struct.
+    /// Struct.
     Arbitrary {
         /// offsets field.
         offsets: IndexVec<FieldIdx, Size>,
@@ -126,24 +126,24 @@ pub enum FieldsShape {
 #[derive(Clone, Debug)]
 /// VariantsShape.
 pub enum VariantsShape {
-/// Variant.
+    /// Variant.
     Single {
-/// Struct.
+        /// Struct.
         index: u32,
     },
-/// Variant.
+    /// Variant.
     Multiple {
-/// Struct.
+        /// Struct.
         tag: Ty,
-/// Struct.
+        /// Struct.
         tag_field: u32,
-/// Struct.
+        /// Struct.
         tag_encoding: TagEncoding,
-/// Struct.
+        /// Struct.
         variants: Vec<Layout>,
-/// Struct.
-        tag_size: Size,   // ← ADDED
-/// Struct.
+        /// Struct.
+        tag_size: Size, // ← ADDED
+        /// Struct.
         tag_align: Align, // ← ADDED
     },
 }
@@ -151,15 +151,15 @@ pub enum VariantsShape {
 #[derive(Clone, Debug)]
 /// TagEncoding.
 pub enum TagEncoding {
-/// Variant.
+    /// Variant.
     Direct,
-/// Variant.
+    /// Variant.
     Niche {
-/// Struct.
+        /// Struct.
         untagged_variant: u32,
-/// Struct.
+        /// Struct.
         niche_variants: std::ops::RangeInclusive<u32>,
-/// Struct.
+        /// Struct.
         niche_start: u128,
     },
 }
@@ -167,54 +167,54 @@ pub enum TagEncoding {
 #[derive(Clone, Debug)]
 /// FnAbi.
 pub struct FnAbi {
-/// Struct.
+    /// Struct.
     pub args: Vec<ArgAbi>,
-/// Struct.
+    /// Struct.
     pub ret: ArgAbi,
-/// Struct.
+    /// Struct.
     pub conv: CallConvention,
-/// Struct.
+    /// Struct.
     pub c_variadic: bool,
 }
 
 #[derive(Clone, Debug)]
 /// ArgAbi.
 pub struct ArgAbi {
-/// Struct.
+    /// Struct.
     pub ty: Ty,
-/// Struct.
+    /// Struct.
     pub layout: Layout,
-/// Struct.
+    /// Struct.
     pub mode: PassMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// PassMode.
 pub enum PassMode {
-/// Variant.
+    /// Variant.
     Direct,
-/// Variant.
+    /// Variant.
     Indirect {
         /// meta_attrs field.
         meta_attrs: bool,
     },
-/// Variant.
+    /// Variant.
     Ignore,
-/// Struct.
+    /// Struct.
     Cast {
         /// to field.
         to: Ty,
         /// cast_int field.
         cast_int: bool,
     },
-/// Struct.
+    /// Struct.
     HomogeneousAggregate {
         /// element_ty field.
         element_ty: Ty,
         /// count field.
         count: u32,
     },
-/// Variant.
+    /// Variant.
     Split {
         /// pieces field.
         pieces: Vec<PassMode>,
@@ -224,11 +224,11 @@ pub enum PassMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// CallConvention.
 pub enum CallConvention {
-/// Variant.
+    /// Variant.
     Glyim,
-/// Variant.
+    /// Variant.
     C,
-/// Variant.
+    /// Variant.
     System,
 }
 
@@ -244,30 +244,30 @@ impl From<Abi> for CallConvention {
 
 /// LayoutComputer.
 pub trait LayoutComputer {
-/// layout_of.
+    /// layout_of.
     fn layout_of(&self, ty: Ty) -> Result<Layout, LayoutError>;
-/// fn_abi_of.
+    /// fn_abi_of.
     fn fn_abi_of(&self, sig: &FnSig) -> Result<FnAbi, LayoutError>;
-/// ptr_size.
+    /// ptr_size.
     fn ptr_size(&self) -> Size;
-/// ptr_align.
+    /// ptr_align.
     fn ptr_align(&self) -> Align;
-/// target_info.
+    /// target_info.
     fn target_info(&self) -> &TargetInfo;
 }
 
 #[derive(Clone, Debug)]
 /// LayoutError.
 pub enum LayoutError {
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     UnknownType(Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     SizeOverflow(Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Unsized(Ty),
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Cycle(Ty),
-/// Struct.
+    /// Struct.
     AlignmentExceedsRuntime {
         /// ty field.
         ty: Ty,
@@ -291,7 +291,7 @@ pub struct SimpleLayoutComputer<'a> {
 }
 
 impl<'a> SimpleLayoutComputer<'a> {
-/// new.
+    /// new.
     pub fn new(ctx: &'a TyCtx, target: TargetInfo) -> Self {
         const _: () = assert!(ALIGN_MAX >= 8, "ALIGN_MAX must be at least 8");
         Self { ctx, target }
@@ -354,7 +354,11 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
-    fn layout_struct(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
+    fn layout_struct(
+        &self,
+        adt_def: &AdtDef,
+        substs: &[GenericArg],
+    ) -> Result<Layout, LayoutError> {
         let mut offsets = IndexVec::new();
         let mut struct_align = Align::ONE;
         let mut current_offset = Size::ZERO;
@@ -395,7 +399,12 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
-    fn layout_enum(&self, adt_def: &AdtDef, outer_ty: Ty, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
+    fn layout_enum(
+        &self,
+        adt_def: &AdtDef,
+        outer_ty: Ty,
+        substs: &[GenericArg],
+    ) -> Result<Layout, LayoutError> {
         let variant_count = adt_def.variants.len();
         if variant_count == 0 {
             return Err(LayoutError::UnknownType(outer_ty));
@@ -415,7 +424,11 @@ impl<'a> SimpleLayoutComputer<'a> {
         Ok(d)
     }
 
-    fn layout_single_variant_enum(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
+    fn layout_single_variant_enum(
+        &self,
+        adt_def: &AdtDef,
+        substs: &[GenericArg],
+    ) -> Result<Layout, LayoutError> {
         let variant_fields = &adt_def.variants[0].fields;
         let mut offsets = IndexVec::new();
         let mut enum_align = Align::ONE;
@@ -588,7 +601,10 @@ impl<'a> SimpleLayoutComputer<'a> {
                     return None;
                 }
                 let layout = self.layout_of(ty).ok()?;
-                let VariantsShape::Multiple { tag, tag_encoding, .. } = &layout.variants else {
+                let VariantsShape::Multiple {
+                    tag, tag_encoding, ..
+                } = &layout.variants
+                else {
                     return None;
                 };
                 let full = self.tag_value_count(*tag)?;
@@ -726,7 +742,8 @@ impl<'a> SimpleLayoutComputer<'a> {
             },
             TyKind::Ref(region, inner, mutbl) => {
                 let new_inner = self.subst_params(*inner, substs);
-                self.ctx.mk_ty(TyKind::Ref(region.clone(), new_inner, *mutbl))
+                self.ctx
+                    .mk_ty(TyKind::Ref(region.clone(), new_inner, *mutbl))
             }
             TyKind::RawPtr(inner, mutbl) => {
                 let new_inner = self.subst_params(*inner, substs);
@@ -902,11 +919,21 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
             TyKind::Tuple(substs) => return self.layout_tuple(*substs),
             TyKind::Array(inner, count) => return self.layout_array(*inner, count, ty),
             TyKind::Adt(adt_id, substs) => return self.layout_adt(*adt_id, *substs, ty),
-            TyKind::Infer(_) => { return Err(LayoutError::UnknownType(ty)); }
-            TyKind::Error => { return Err(LayoutError::UnknownType(ty)); }
-            TyKind::Param(_) | TyKind::Bound(_, _) => { return Err(LayoutError::UnknownType(ty)); }
-            TyKind::Opaque(_, _) => { return Err(LayoutError::UnknownType(ty)); }
-            TyKind::Projection(_) => { return Err(LayoutError::UnknownType(ty)); }
+            TyKind::Infer(_) => {
+                return Err(LayoutError::UnknownType(ty));
+            }
+            TyKind::Error => {
+                return Err(LayoutError::UnknownType(ty));
+            }
+            TyKind::Param(_) | TyKind::Bound(_, _) => {
+                return Err(LayoutError::UnknownType(ty));
+            }
+            TyKind::Opaque(_, _) => {
+                return Err(LayoutError::UnknownType(ty));
+            }
+            TyKind::Projection(_) => {
+                return Err(LayoutError::UnknownType(ty));
+            }
             TyKind::Closure(_, substs) => {
                 let args = self.ctx.substitution_args(*substs);
                 if args.is_empty() {

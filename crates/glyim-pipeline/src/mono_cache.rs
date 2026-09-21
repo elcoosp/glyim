@@ -156,9 +156,7 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     .substitution_args(sig.inputs)
                     .iter()
                     .map(|arg| match arg {
-                        GenericArg::Ty(t) => {
-                            GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen))
-                        }
+                        GenericArg::Ty(t) => GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen)),
                         other => other.clone(),
                     })
                     .collect();
@@ -183,9 +181,7 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                 let new_args: Vec<GenericArg> = args
                     .iter()
                     .map(|arg| match arg {
-                        GenericArg::Ty(t) => {
-                            GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen))
-                        }
+                        GenericArg::Ty(t) => GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen)),
                         other => other.clone(),
                     })
                     .collect();
@@ -205,12 +201,10 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                 // type `Poll<F::Output>` keeps a `Param` after monomorphization
                 // and ICEs at codegen/layout with `UnknownType(Param)`.
                 let proj_subst_args = frozen.substitution_args(proj.trait_ref.substs);
-                let proj_self = proj_subst_args
-                    .first()
-                    .and_then(|a| match a {
-                        GenericArg::Ty(t) => Some(*t),
-                        _ => None,
-                    });
+                let proj_self = proj_subst_args.first().and_then(|a| match a {
+                    GenericArg::Ty(t) => Some(*t),
+                    _ => None,
+                });
                 let concrete_self = match proj_self {
                     Some(st) => match frozen.ty_kind(st) {
                         TyKind::Param(p) => proj_subst_args
@@ -237,7 +231,8 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                 // `poll` (tag/value at the wrong byte offset) → silent infinite
                 // loop. The name-string resolver is immune to arena corruption.
                 let item_name_str = frozen.name_str(proj.item_name).to_string();
-                let resolved = frozen.resolve_associated_type_by_self_ty_name(concrete_self, &item_name_str);
+                let resolved =
+                    frozen.resolve_associated_type_by_self_ty_name(concrete_self, &item_name_str);
                 match resolved {
                     Some(resolved) => resolved,
                     None => {
@@ -286,8 +281,7 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                         *fn_substs = substitute_substitution(*fn_substs, substs, ctx, frozen);
                     }
                     glyim_mir::MirConstKind::ConstRef(_, const_substs) => {
-                        *const_substs =
-                            substitute_substitution(*const_substs, substs, ctx, frozen);
+                        *const_substs = substitute_substitution(*const_substs, substs, ctx, frozen);
                     }
                     _ => {}
                 }
@@ -352,7 +346,9 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     *arg = substitute_operand(arg.clone(), substs, &mut sub_ctx, ty_ctx);
                 }
             }
-            TerminatorKind::SwitchInt { discr, switch_ty, .. } => {
+            TerminatorKind::SwitchInt {
+                discr, switch_ty, ..
+            } => {
                 *discr = substitute_operand(discr.clone(), substs, &mut sub_ctx, ty_ctx);
                 *switch_ty = substitute_ty(*switch_ty, substs, &mut sub_ctx, ty_ctx);
             }
@@ -833,10 +829,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
     if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
         block0.statements.clear();
         block0.statements.push(Statement {
-            kind: StatementKind::Assign(
-                Place::new(len_local),
-                Rvalue::Len(place.clone()),
-            ),
+            kind: StatementKind::Assign(Place::new(len_local), Rvalue::Len(place.clone())),
             source_info: SourceInfo::new(Span::DUMMY),
         });
         block0.statements.push(Statement {
@@ -854,10 +847,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
             kind: TerminatorKind::SwitchInt {
                 discr: Operand::Copy(Place::new(idx_local)),
                 switch_ty: Ty::USIZE,
-                targets: SwitchTargets::new(
-                    Box::new([(0, exit_bb)]),
-                    body_bb,
-                ),
+                targets: SwitchTargets::new(Box::new([(0, exit_bb)]), body_bb),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };

@@ -75,10 +75,7 @@ fn aggregate_const_folds_to_aggregate_mir_const() {
                     }
                 }
             }
-            if let glyim_mir::TerminatorKind::Call {
-                args, ..
-            } = &bb.terminator.kind
-            {
+            if let glyim_mir::TerminatorKind::Call { args, .. } = &bb.terminator.kind {
                 for arg in args {
                     if let glyim_mir::Operand::Constant(c) = arg {
                         match c.kind {

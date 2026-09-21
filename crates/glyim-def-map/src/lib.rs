@@ -39,13 +39,13 @@ glyim_core::define_idx!(ModuleId);
 #[derive(Clone, Debug)]
 /// CrateDefMap.
 pub struct CrateDefMap {
-/// Struct.
+    /// Struct.
     pub root: ModuleId,
-/// Struct.
+    /// Struct.
     pub modules: IndexVec<ModuleId, ModuleData>,
-/// Struct.
+    /// Struct.
     pub krate: CrateId,
-/// Struct.
+    /// Struct.
     pub interner: Interner,
     /// Reverse map from a variant's value-namespace `LocalDefId` to the
     /// enclosing enum's `LocalDefId` and the variant's index. Populated while
@@ -63,15 +63,15 @@ pub struct CrateDefMap {
 #[derive(Clone, Debug)]
 /// ModuleData.
 pub struct ModuleData {
-/// Struct.
+    /// Struct.
     pub parent: Option<ModuleId>,
-#[doc = "field"]
+    #[doc = "field"]
     pub children: Vec<(Name, ModuleId)>,
-/// Struct.
+    /// Struct.
     pub scope: ItemScope,
-/// Struct.
+    /// Struct.
     pub origin: ModuleOrigin,
-/// Struct.
+    /// Struct.
     pub span: Span,
     /// Every module has a unique `LocalDefId` so it can be referred to by `use` paths
     pub def_id: LocalDefId,
@@ -80,7 +80,7 @@ pub struct ModuleData {
 }
 
 impl ModuleData {
-/// resolve.
+    /// resolve.
     pub fn resolve(&self, name: Name) -> Option<(LocalDefId, Visibility)> {
         self.scope.resolve(name)
     }
@@ -89,33 +89,33 @@ impl ModuleData {
 #[derive(Clone, Debug)]
 /// ModuleOrigin.
 pub enum ModuleOrigin {
-/// Variant.
+    /// Variant.
     File {
         /// file_id field.
         file_id: FileId,
     },
-/// Variant.
+    /// Variant.
     Inline {
         /// span field.
         span: Span,
     },
-/// Variant.
+    /// Variant.
     CrateRoot,
 }
 
 #[derive(Clone, Debug, Default)]
 /// ItemScope.
 pub struct ItemScope {
-#[doc = "field"]
+    #[doc = "field"]
     pub types: IndexMap<Name, (LocalDefId, Visibility, Span)>,
-#[doc = "field"]
+    #[doc = "field"]
     pub values: IndexMap<Name, (LocalDefId, Visibility, Span)>,
-#[doc = "field"]
+    #[doc = "field"]
     pub macros: IndexMap<Name, (LocalDefId, Visibility, Span)>,
 }
 
 impl ItemScope {
-/// resolve.
+    /// resolve.
     pub fn resolve(&self, name: Name) -> Option<(LocalDefId, Visibility)> {
         if let Some((id, vis, _)) = self.types.get(&name) {
             return Some((*id, vis.clone()));
@@ -126,7 +126,7 @@ impl ItemScope {
         None
     }
 
-/// declare.
+    /// declare.
     pub fn declare(
         &mut self,
         name: Name,
@@ -153,31 +153,31 @@ impl ItemScope {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Namespace.
 pub enum Namespace {
-/// Variant.
+    /// Variant.
     Types,
-/// Variant.
+    /// Variant.
     Values,
-/// Variant.
+    /// Variant.
     Macros,
 }
 
 #[derive(Clone, Debug, Default)]
 /// PerNs.
 pub struct PerNs {
-#[doc = "field"]
+    #[doc = "field"]
     pub types: Option<(LocalDefId, Visibility)>,
-#[doc = "field"]
+    #[doc = "field"]
     pub values: Option<(LocalDefId, Visibility)>,
-#[doc = "field"]
+    #[doc = "field"]
     pub macros: Option<(LocalDefId, Visibility)>,
 }
 
 impl PerNs {
-/// is_none.
+    /// is_none.
     pub fn is_none(&self) -> bool {
         self.types.is_none() && self.values.is_none() && self.macros.is_none()
     }
-/// from_types.
+    /// from_types.
     pub fn from_types(id: LocalDefId, vis: Visibility) -> Self {
         Self {
             types: Some((id, vis)),
@@ -195,7 +195,7 @@ pub struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-/// new.
+    /// new.
     pub fn new(
         modules: &'a IndexVec<ModuleId, ModuleData>,
         root: ModuleId,
@@ -208,7 +208,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-/// resolve_path.
+    /// resolve_path.
     pub fn resolve_path(&self, path: &Path) -> PerNs {
         let mut current_module = self.module;
         let start_idx = match path.kind {
@@ -292,12 +292,12 @@ impl<'a> Resolver<'a> {
         PerNs::default()
     }
 
-/// def_map.
+    /// def_map.
     pub fn def_map(&self) -> &IndexVec<ModuleId, ModuleData> {
         self.modules
     }
 
-/// Module.
+    /// Module.
     pub fn module(&self) -> ModuleId {
         self.module
     }
@@ -436,7 +436,10 @@ fn extract_path_from_syntax(node: &SyntaxNode, interner: &Interner) -> Option<Pa
                     }
                     SyntaxKind::Ident => {
                         let name = interner.intern(token.text());
-                        segments.push(PathSegment { name, generic_args: None });
+                        segments.push(PathSegment {
+                            name,
+                            generic_args: None,
+                        });
                     }
                     // Non-path tokens (punctuation, whitespace, etc.) are silently
                     // skipped — only identifiers and keywords contribute to the path.
@@ -892,8 +895,7 @@ fn collect_items(
                             vspan,
                             Namespace::Values,
                         );
-                        variant_map
-                            .insert(vlocal, (enum_local, VariantIdx::from_raw(variant_idx)));
+                        variant_map.insert(vlocal, (enum_local, VariantIdx::from_raw(variant_idx)));
                         variant_idx += 1;
                     }
                 }
@@ -1054,13 +1056,7 @@ fn collect_extern_imports(
                     // error (which would abort def-map construction and hide every
                     // downstream type error).
                     if !scope.values.contains_key(&name) {
-                        scope.declare(
-                            name,
-                            id,
-                            Visibility::Public,
-                            span,
-                            Namespace::Values,
-                        );
+                        scope.declare(name, id, Visibility::Public, span, Namespace::Values);
                     }
                 }
             }
@@ -1208,7 +1204,10 @@ pub(crate) fn is_accessible_from(
                 &glyim_core::path::Path {
                     segments: path
                         .iter()
-                        .map(|n| glyim_core::path::PathSegment { name: *n, generic_args: None })
+                        .map(|n| glyim_core::path::PathSegment {
+                            name: *n,
+                            generic_args: None,
+                        })
                         .collect(),
                     kind: glyim_core::path::PathKind::Plain,
                 },
@@ -1366,7 +1365,9 @@ fn validate_import_visibility(
 /// Handles `use a::b;`, `pub use a::b;`, and `use a::{b, c};` (returns the
 /// group head `a::{b, c}` so dedup against the exact same group works).
 fn use_line_path(trimmed: &str) -> Option<String> {
-    let rest = trimmed.strip_prefix("pub use ").or_else(|| trimmed.strip_prefix("use "))?;
+    let rest = trimmed
+        .strip_prefix("pub use ")
+        .or_else(|| trimmed.strip_prefix("use "))?;
     let without_semi = rest.strip_suffix(';').unwrap_or(rest).trim();
     if without_semi.is_empty() {
         None
@@ -1425,11 +1426,7 @@ pub fn insert_use_edit(source: &str, import_path: &str) -> Option<(usize, String
     } else {
         // Append after the last existing `use` line (newline-terminated already).
         let last_use = *use_lines.last().unwrap();
-        let offset = lines
-            .iter()
-            .take(last_use + 1)
-            .map(|l| l.len() + 1)
-            .sum();
+        let offset = lines.iter().take(last_use + 1).map(|l| l.len() + 1).sum();
         Some((offset, new_text))
     }
 }

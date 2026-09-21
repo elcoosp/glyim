@@ -134,7 +134,10 @@ fn interpret_indirect_function_call() {
                     kind: StatementKind::Assign(
                         Place::new(fn_ptr_local),
                         Rvalue::Use(Operand::Constant(MirConst {
-                            kind: MirConstKind::Fn(FnDefId::from_raw(0), glyim_type::Substitution::empty()),
+                            kind: MirConstKind::Fn(
+                                FnDefId::from_raw(0),
+                                glyim_type::Substitution::empty(),
+                            ),
                             ty: i32_ty,
                             span: Span::DUMMY,
                         })),
@@ -190,9 +193,21 @@ fn interpret_direct_closure_call_with_capture() {
     let closure_body = {
         let mut body = Body::dummy(closure_id);
         body.locals = IndexVec::from_raw(vec![
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) }, // _0 return
-            LocalDecl { ty: i32_ty, mutability: Mutability::Not, source_info: SourceInfo::new(Span::DUMMY) }, // _1 capture
-            LocalDecl { ty: i32_ty, mutability: Mutability::Not, source_info: SourceInfo::new(Span::DUMMY) }, // _2 param
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            }, // _0 return
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Not,
+                source_info: SourceInfo::new(Span::DUMMY),
+            }, // _1 capture
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Not,
+                source_info: SourceInfo::new(Span::DUMMY),
+            }, // _2 param
         ]);
         // _0 = _1 + _2
         let sum = Rvalue::BinaryOp(
@@ -207,7 +222,10 @@ fn interpret_direct_closure_call_with_capture() {
                 kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), sum),
                 source_info: SourceInfo::new(Span::DUMMY),
             }],
-            terminator: Terminator { kind: TerminatorKind::Return, source_info: SourceInfo::new(Span::DUMMY) },
+            terminator: Terminator {
+                kind: TerminatorKind::Return,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
             is_cleanup: false,
         }]);
         body
@@ -219,9 +237,21 @@ fn interpret_direct_closure_call_with_capture() {
         let mut body = Body::dummy(dummy_def_id());
         let closure_local = LocalIdx::from_raw(2); // holds the closure aggregate
         body.locals = IndexVec::from_raw(vec![
-            LocalDecl { ty: Ty::UNIT, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) },
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) }, // _1 result
-            LocalDecl { ty: i32_ty, mutability: Mutability::Mut, source_info: SourceInfo::new(Span::DUMMY) }, // _2 closure aggregate
+            LocalDecl {
+                ty: Ty::UNIT,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            }, // _1 result
+            LocalDecl {
+                ty: i32_ty,
+                mutability: Mutability::Mut,
+                source_info: SourceInfo::new(Span::DUMMY),
+            }, // _2 closure aggregate
         ]);
         let closure_agg = Rvalue::Aggregate(
             glyim_mir::AggregateKind::Closure(
@@ -234,7 +264,11 @@ fn interpret_direct_closure_call_with_capture() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-                Operand::Constant(MirConst { kind: MirConstKind::Int(10), ty: i32_ty, span: Span::DUMMY }),
+                Operand::Constant(MirConst {
+                    kind: MirConstKind::Int(10),
+                    ty: i32_ty,
+                    span: Span::DUMMY,
+                }),
             ],
         );
         body.basic_blocks = IndexVec::from_raw(vec![
@@ -261,7 +295,10 @@ fn interpret_direct_closure_call_with_capture() {
             },
             BasicBlockData {
                 statements: vec![],
-                terminator: Terminator { kind: TerminatorKind::Return, source_info: SourceInfo::new(Span::DUMMY) },
+                terminator: Terminator {
+                    kind: TerminatorKind::Return,
+                    source_info: SourceInfo::new(Span::DUMMY),
+                },
                 is_cleanup: false,
             },
         ]);
@@ -273,5 +310,9 @@ fn interpret_direct_closure_call_with_capture() {
     interp.add_function(closure_id, closure_body);
     interp.run_body(&caller_body).unwrap();
     let val = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
-    assert_eq!(val, &InterpValue::Int(42), "closure call must add capture (10) and param (32)");
+    assert_eq!(
+        val,
+        &InterpValue::Int(42),
+        "closure call must add capture (10) and param (32)"
+    );
 }

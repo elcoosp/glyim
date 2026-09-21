@@ -64,7 +64,7 @@ fn array_drop_creates_loop() {
     }]);
     let variant = glyim_type::VariantDef {
         name: ctx_mut.resolver().intern("S"),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+        style: glyim_type::adt_def::VariantStyle::Unit,
         fields: field_defs.clone(),
     };
     let adt_def = glyim_type::AdtDef {
@@ -72,7 +72,7 @@ fn array_drop_creates_loop() {
         fields: field_defs.clone(),
         variants: vec![variant],
         generic_params: vec![],
-};
+    };
     ctx_mut.register_adt(adt_id, adt_def);
     let struct_ty = ctx_mut.mk_ty(TyKind::Adt(adt_id, subst));
 
@@ -153,7 +153,12 @@ fn drop_on_projected_place_is_not_skipped() {
     crate::drop_elaboration::run(&mut ctx_mut, &mut body);
 
     // The elaborated block 0 must still be a Drop (not a Goto that skips it).
-    let is_drop = matches!(body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator.kind, TerminatorKind::Drop { .. });
+    let is_drop = matches!(
+        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+            .terminator
+            .kind,
+        TerminatorKind::Drop { .. }
+    );
     assert!(
         is_drop,
         "Drop on a projected place must NOT be turned into Goto (would leak)"
@@ -178,7 +183,7 @@ fn loop_built_array_uses_per_element_flags() {
     }]);
     let variant = glyim_type::VariantDef {
         name: ctx_mut.resolver().intern("S"),
-    style: glyim_type::adt_def::VariantStyle::Unit,
+        style: glyim_type::adt_def::VariantStyle::Unit,
         fields: field_defs.clone(),
     };
     let adt_def = glyim_type::AdtDef {
@@ -186,7 +191,7 @@ fn loop_built_array_uses_per_element_flags() {
         fields: field_defs.clone(),
         variants: vec![variant],
         generic_params: vec![],
-};
+    };
     ctx_mut.register_adt(adt_id, adt_def);
     let struct_ty = ctx_mut.mk_ty(TyKind::Adt(adt_id, subst));
 
@@ -271,7 +276,10 @@ fn loop_built_array_uses_per_element_flags() {
     // The loop body block must gate each element drop behind a SwitchInt on a
     // per-element flag (bool), not drop unconditionally.
     let gated_on_flag = body.basic_blocks.iter().any(|b| {
-        if let TerminatorKind::SwitchInt { discr, switch_ty, .. } = &b.terminator.kind {
+        if let TerminatorKind::SwitchInt {
+            discr, switch_ty, ..
+        } = &b.terminator.kind
+        {
             // The discriminator is `flag_arr[i]` (a bool), not the loop index.
             matches!(discr, Operand::Copy(p) if p.projection
                 .iter()

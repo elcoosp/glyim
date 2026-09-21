@@ -98,8 +98,13 @@ fn for_loop_desugaring_uses_iterator_next() {
         discr_ty,
         ref_iter_ty,
     };
-    let thir_body =
-        create_for_loop_body(iter_ty, i32_ty, thir::LocalVarId::from_raw(0), Span::DUMMY, None);
+    let thir_body = create_for_loop_body(
+        iter_ty,
+        i32_ty,
+        thir::LocalVarId::from_raw(0),
+        Span::DUMMY,
+        None,
+    );
     let frozen_ctx = ctx_mut.freeze();
     let mock_ctx =
         MockLowerCtx::new(&frozen_ctx).with_iterator_next(move |_, _| Some(iter_info.clone()));
@@ -138,8 +143,13 @@ fn for_loop_fallback_when_no_iterator_info() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let iter_ty = i32_ty;
-    let thir_body =
-        create_for_loop_body(iter_ty, i32_ty, thir::LocalVarId::from_raw(0), Span::DUMMY, None);
+    let thir_body = create_for_loop_body(
+        iter_ty,
+        i32_ty,
+        thir::LocalVarId::from_raw(0),
+        Span::DUMMY,
+        None,
+    );
     let frozen_ctx = ctx_mut.freeze();
     let mock_ctx = MockLowerCtx::new(&frozen_ctx);
     let result = lower_body(&mock_ctx, &thir_body);

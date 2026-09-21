@@ -12,9 +12,7 @@ use glyim_core::primitives::Visibility;
 use glyim_def_map::ItemScope;
 use glyim_hir::*;
 use glyim_span::Span;
-use glyim_type::{
-    FnSig, Substitution, Ty, TyCtxMut, TyKind,
-};
+use glyim_type::{FnSig, Substitution, Ty, TyCtxMut, TyKind};
 
 fn i32_ty(ctx: &mut TyCtxMut) -> Ty {
     ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32))
@@ -25,9 +23,10 @@ fn def_map_with_fn_value(nm: Name) -> glyim_def_map::CrateDefMap {
     let mut dm = empty_def_map();
     let root = &mut dm.modules[dm.root];
     let mut scope = ItemScope::default();
-    scope
-        .values
-        .insert(nm, (LocalDefId::from_raw(5), Visibility::Public, Span::DUMMY));
+    scope.values.insert(
+        nm,
+        (LocalDefId::from_raw(5), Visibility::Public, Span::DUMMY),
+    );
     root.scope = scope;
     dm
 }

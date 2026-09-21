@@ -64,14 +64,16 @@ impl Fingerprint {
     /// full `from_file` + `matches` comparison done by `has_changed`.
     pub fn metadata_matches_path(&self, path: &Path) -> bool {
         match fs::metadata(path) {
-            Ok(m) => m.len() == self.size && {
-                m.modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_nanos())
-                    .unwrap_or(0)
-                    == self.mtime
-            },
+            Ok(m) => {
+                m.len() == self.size && {
+                    m.modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0)
+                        == self.mtime
+                }
+            }
             Err(_) => false,
         }
     }
@@ -301,7 +303,9 @@ fn config_files(dir: &Path) -> Vec<PathBuf> {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.extension().is_some_and(|e| e == "toml") && p.file_name().is_some_and(|n| n != "glyim.toml") {
+                if p.extension().is_some_and(|e| e == "toml")
+                    && p.file_name().is_some_and(|n| n != "glyim.toml")
+                {
                     files.push(p);
                 }
             }

@@ -35,7 +35,7 @@ const VALID_TRANSITIONS: &[(StreamStatus, StreamStatus)] = &[
 pub struct TransitionValidator;
 
 impl TransitionValidator {
-/// validate.
+    /// validate.
     pub fn validate(session: &SessionState, new_status: StreamStatus) -> Result<(), PilotError> {
         if session.status == new_status {
             return Ok(());
@@ -52,7 +52,7 @@ impl TransitionValidator {
             )))
         }
     }
-/// transition.
+    /// transition.
     pub fn transition(
         session: &mut SessionState,
         new_status: StreamStatus,

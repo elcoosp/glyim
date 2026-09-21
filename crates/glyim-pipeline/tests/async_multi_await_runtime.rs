@@ -128,14 +128,13 @@ fn successor_idxs(kind: &TerminatorKind) -> Vec<usize> {
     match kind {
         TerminatorKind::Goto { target } => vec![target.index()],
         TerminatorKind::SwitchInt { targets, .. } => {
-            let mut v: Vec<usize> = targets
-                .iter()
-                .map(|(_val, bb)| bb.index())
-                .collect();
+            let mut v: Vec<usize> = targets.iter().map(|(_val, bb)| bb.index()).collect();
             v.push(targets.otherwise().index());
             v
         }
-        TerminatorKind::Call { target, cleanup, .. } => {
+        TerminatorKind::Call {
+            target, cleanup, ..
+        } => {
             let mut v = Vec::new();
             if let Some(t) = target {
                 v.push(t.index());

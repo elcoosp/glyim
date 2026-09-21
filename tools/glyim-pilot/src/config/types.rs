@@ -5,32 +5,32 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 /// PilotConfig.
 pub struct PilotConfig {
-/// Struct.
+    /// Struct.
     pub server: ServerConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub defaults: DefaultsConfig,
-/// Struct.
+    /// Struct.
     pub providers: HashMap<String, ProviderConfig>,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub execution: ExecutionConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub gates: GatesConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub context: ContextConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub dispatch: DispatchConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub limits: ApplyLimits,
 }
 
 impl PilotConfig {
-/// default_for_testing.
+    /// default_for_testing.
     pub fn default_for_testing() -> Self {
         let mut providers = HashMap::new();
         providers.insert("test-provider".into(), ProviderConfig::default());
@@ -51,10 +51,10 @@ impl PilotConfig {
 /// ServerConfig.
 pub struct ServerConfig {
     #[serde(default = "default_port")]
-/// Struct.
+    /// Struct.
     pub port: u16,
     #[serde(default = "default_host")]
-/// Struct.
+    /// Struct.
     pub host: String,
 }
 fn default_port() -> u16 {
@@ -76,19 +76,19 @@ impl Default for ServerConfig {
 /// DefaultsConfig.
 pub struct DefaultsConfig {
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub provider: String,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub auto_execute: bool,
     #[serde(default = "default_max_turns")]
-/// Struct.
+    /// Struct.
     pub max_turns: u32,
     #[serde(default = "default_true")]
-/// Struct.
+    /// Struct.
     pub retry_on_rate_limit: bool,
     #[serde(default = "default_retry_max_wait")]
-/// Struct.
+    /// Struct.
     pub retry_max_wait: u64,
 }
 fn default_max_turns() -> u32 {
@@ -116,34 +116,34 @@ impl Default for DefaultsConfig {
 /// ProviderConfig.
 pub struct ProviderConfig {
     #[serde(default = "default_true")]
-/// Struct.
+    /// Struct.
     pub enabled: bool,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub url: String,
     #[serde(default = "default_max_concurrent")]
-/// Struct.
+    /// Struct.
     pub max_concurrent: usize,
     #[serde(default = "default_cooldown")]
-/// Struct.
+    /// Struct.
     pub rate_limit_cooldown: u64,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub error_patterns: Vec<String>,
     #[serde(default = "default_input_selector")]
-/// Struct.
+    /// Struct.
     pub input_selector: String,
     #[serde(default = "default_send_selector")]
-/// Struct.
+    /// Struct.
     pub send_selector: String,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub streaming_indicator: String,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub assistant_selector: String,
     #[serde(default = "default_code_block_selector")]
-/// Struct.
+    /// Struct.
     pub code_block_selector: String,
 }
 fn default_max_concurrent() -> usize {
@@ -182,25 +182,25 @@ impl Default for ProviderConfig {
 /// ExecutionConfig.
 pub struct ExecutionConfig {
     #[serde(default = "default_worktree_base")]
-/// Struct.
+    /// Struct.
     pub worktree_base: String,
     #[serde(default = "default_require_confirmation")]
-/// Struct.
+    /// Struct.
     pub require_confirmation: String,
     #[serde(default = "default_dangerous_patterns")]
-/// Struct.
+    /// Struct.
     pub dangerous_patterns: Vec<String>,
     #[serde(default = "default_max_fix_rounds")]
-/// Struct.
+    /// Struct.
     pub max_fix_rounds: u32,
     #[serde(default = "default_command_timeout")]
-/// Struct.
+    /// Struct.
     pub command_timeout: u64,
     #[serde(default = "default_branch")]
-/// Struct.
+    /// Struct.
     pub default_branch: String,
     #[serde(default = "default_branch_version")]
-/// Struct.
+    /// Struct.
     pub branch_version: String,
 }
 fn default_worktree_base() -> String {
@@ -249,14 +249,14 @@ impl Default for ExecutionConfig {
 #[derive(Default)]
 /// GateLevel.
 pub enum GateLevel {
-/// Variant.
+    /// Variant.
     Relaxed,
     #[default]
-/// Variant.
+    /// Variant.
     Normal,
-/// Variant.
+    /// Variant.
     Strict,
-/// Variant.
+    /// Variant.
     Production,
 }
 impl std::fmt::Display for GateLevel {
@@ -274,43 +274,43 @@ impl std::fmt::Display for GateLevel {
 /// GatesConfig.
 pub struct GatesConfig {
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub level: GateLevel,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub commit: CommitGatesConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub done: DoneGatesConfig,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub banned_patterns: Vec<BannedPattern>,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub architecture_rules: Vec<DependencyRule>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 /// CommitGatesConfig.
 pub struct CommitGatesConfig {
-/// Struct.
+    /// Struct.
     pub fmt: Option<bool>,
-/// Struct.
+    /// Struct.
     pub check: Option<bool>,
-/// Struct.
+    /// Struct.
     pub clippy: Option<bool>,
-/// Struct.
+    /// Struct.
     pub test: Option<bool>,
-/// Struct.
+    /// Struct.
     pub banned_patterns: Option<bool>,
-/// Struct.
+    /// Struct.
     pub architecture: Option<bool>,
-/// Struct.
+    /// Struct.
     pub contracts: Option<bool>,
 }
 
 impl CommitGatesConfig {
-/// resolve.
+    /// resolve.
     pub fn resolve(
         &self,
         level: GateLevel,
@@ -335,23 +335,23 @@ impl CommitGatesConfig {
 #[derive(Debug, Clone)]
 /// ResolvedCommitGates.
 pub struct ResolvedCommitGates {
-/// Struct.
+    /// Struct.
     pub fmt: bool,
-/// Struct.
+    /// Struct.
     pub check: bool,
-/// Struct.
+    /// Struct.
     pub clippy: bool,
-/// Struct.
+    /// Struct.
     pub test: bool,
-/// Struct.
+    /// Struct.
     pub banned_patterns: bool,
-/// Struct.
+    /// Struct.
     pub architecture: bool,
-/// Struct.
+    /// Struct.
     pub contracts: bool,
-/// Struct.
+    /// Struct.
     pub default_branch: String,
-/// Struct.
+    /// Struct.
     pub branch_version: String,
 }
 
@@ -401,23 +401,23 @@ impl GateLevel {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 /// DoneGatesConfig.
 pub struct DoneGatesConfig {
-/// Struct.
+    /// Struct.
     pub dead_code: Option<bool>,
-/// Struct.
+    /// Struct.
     pub coverage: Option<bool>,
     #[serde(default = "default_coverage_min")]
-/// Struct.
+    /// Struct.
     pub coverage_min: f64,
-/// Struct.
+    /// Struct.
     pub mutation: Option<bool>,
     #[serde(default = "default_mutation_kill_rate")]
-/// Struct.
+    /// Struct.
     pub mutation_kill_rate: f64,
-/// Struct.
+    /// Struct.
     pub workspace_check: Option<bool>,
-/// Struct.
+    /// Struct.
     pub audit: Option<bool>,
-/// Struct.
+    /// Struct.
     pub self_review: Option<bool>,
 }
 fn default_coverage_min() -> f64 {
@@ -442,7 +442,7 @@ impl Default for DoneGatesConfig {
 }
 
 impl DoneGatesConfig {
-/// resolve.
+    /// resolve.
     pub fn resolve(&self, level: GateLevel) -> ResolvedDoneGates {
         let d = level.done_defaults();
         ResolvedDoneGates {
@@ -461,21 +461,21 @@ impl DoneGatesConfig {
 #[derive(Debug, Clone)]
 /// ResolvedDoneGates.
 pub struct ResolvedDoneGates {
-/// Struct.
+    /// Struct.
     pub dead_code: bool,
-/// Struct.
+    /// Struct.
     pub coverage: bool,
-/// Struct.
+    /// Struct.
     pub coverage_min: f64,
-/// Struct.
+    /// Struct.
     pub mutation: bool,
-/// Struct.
+    /// Struct.
     pub mutation_kill_rate: f64,
-/// Struct.
+    /// Struct.
     pub workspace_check: bool,
-/// Struct.
+    /// Struct.
     pub audit: bool,
-/// Struct.
+    /// Struct.
     pub self_review: bool,
 }
 
@@ -531,10 +531,10 @@ impl GateLevel {
 /// ContextConfig.
 pub struct ContextConfig {
     #[serde(default = "default_max_context_tokens")]
-/// Struct.
+    /// Struct.
     pub max_context_tokens: usize,
     #[serde(default)]
-/// Struct.
+    /// Struct.
     pub providers: HashMap<String, ProviderContextConfig>,
 }
 fn default_max_context_tokens() -> usize {
@@ -553,7 +553,7 @@ impl Default for ContextConfig {
 /// ProviderContextConfig.
 pub struct ProviderContextConfig {
     #[serde(default = "default_max_context_tokens")]
-/// Struct.
+    /// Struct.
     pub max_context_tokens: usize,
 }
 impl Default for ProviderContextConfig {
@@ -568,13 +568,13 @@ impl Default for ProviderContextConfig {
 /// DispatchConfig.
 pub struct DispatchConfig {
     #[serde(default = "default_strategy")]
-/// Struct.
+    /// Struct.
     pub strategy: String,
     #[serde(default = "default_true")]
-/// Struct.
+    /// Struct.
     pub fallback_on_rate_limit: bool,
     #[serde(default = "default_max_reassign")]
-/// Struct.
+    /// Struct.
     pub max_reassign_attempts: u32,
 }
 fn default_strategy() -> String {

@@ -36,21 +36,20 @@ fn type_ref_to_ty(
             let is_generic = false; // self-type params aren't expressed here
             let _ = is_generic;
             if let Some(seg) = p.segments.first()
-                && let Some(args) = &seg.generic_args {
-                    // Generic ADT: `Name<Arg1, Arg2, ...>`.
-                    let adt_id = match def_map.modules[def_map.root].scope.resolve(name) {
-                        Some(res) => glyim_core::def_id::AdtId::from_raw(res.0.to_raw()),
-                        None => return Ty::ERROR,
-                    };
-                    let generic_args: Vec<glyim_type::GenericArg> = args
-                        .iter()
-                        .map(|a| {
-                            glyim_type::GenericArg::Ty(type_ref_to_ty(a, interner, ctx, def_map))
-                        })
-                        .collect();
-                    let substs = ctx.intern_substitution(generic_args);
-                    return ctx.mk_ty(TyKind::Adt(adt_id, substs));
-                }
+                && let Some(args) = &seg.generic_args
+            {
+                // Generic ADT: `Name<Arg1, Arg2, ...>`.
+                let adt_id = match def_map.modules[def_map.root].scope.resolve(name) {
+                    Some(res) => glyim_core::def_id::AdtId::from_raw(res.0.to_raw()),
+                    None => return Ty::ERROR,
+                };
+                let generic_args: Vec<glyim_type::GenericArg> = args
+                    .iter()
+                    .map(|a| glyim_type::GenericArg::Ty(type_ref_to_ty(a, interner, ctx, def_map)))
+                    .collect();
+                let substs = ctx.intern_substitution(generic_args);
+                return ctx.mk_ty(TyKind::Adt(adt_id, substs));
+            }
             if let Some(res) = def_map.modules[def_map.root].scope.resolve(name) {
                 let adt_id = glyim_core::def_id::AdtId::from_raw(res.0.to_raw());
                 let substs = ctx.intern_substitution(vec![]);
@@ -177,8 +176,8 @@ fn build_def_map(
         modules,
         krate,
         interner: interner.clone(),
-    variant_map: Default::default(),
-    max_local_def_id: 0,
+        variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 
@@ -203,7 +202,10 @@ fn make_blanket_impl_item(interner: &mut Interner, trait_name: &str, param_name:
         methods: vec![],
         generic_params: vec![GenericParam {
             name: param,
-            kind: GenericParamKind::Type { default: None, bounds: Vec::new() },
+            kind: GenericParamKind::Type {
+                default: None,
+                bounds: Vec::new(),
+            },
             span: Span::DUMMY,
         }],
         where_clauses: vec![],

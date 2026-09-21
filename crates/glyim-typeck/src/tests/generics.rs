@@ -65,7 +65,10 @@ fn generic_param_bounds_are_captured() {
     // Expect the P5 blocker diagnostics (the bound is captured but not yet
     // solved); assert the crate lowered without a hard internal error.
     assert!(
-        !output.diagnostics.iter().any(|d| format!("{}", d).contains("internal error")),
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| format!("{}", d).contains("internal error")),
         "generic bound lowered without internal error"
     );
 }

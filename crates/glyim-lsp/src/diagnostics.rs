@@ -10,26 +10,26 @@ use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 /// [`convert_diagnostics`] (plan §22.4).
 #[derive(Debug, Clone)]
 pub struct ExternalDiagnostic {
-/// Struct.
+    /// Struct.
     pub file_id: FileId,
     /// 0-based line of the primary span.
     pub line: u32,
     /// 0-based column of the primary span.
     pub column: u32,
-/// Struct.
+    /// Struct.
     pub message: String,
-/// Struct.
+    /// Struct.
     pub severity: ExternalSeverity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// ExternalSeverity.
 pub enum ExternalSeverity {
-/// Variant.
+    /// Variant.
     Error,
-/// Variant.
+    /// Variant.
     Warning,
-/// Variant.
+    /// Variant.
     Note,
 }
 
