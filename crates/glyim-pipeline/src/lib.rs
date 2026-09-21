@@ -960,15 +960,28 @@ pub fn emit_llvm_ir(
         )]);
     }
 
-    let backend = LlvmBackend::new().with_debug_info(false);
-    let ir = backend
-        .emit_ir_to_string(ty_ctx_ref, &mir_bodies[0])
-        .map_err(|e| {
-            vec![GlyimDiagnostic::internal_error(format!(
-                "LLVM IR generation failed: {:?}",
-                e
-            ))]
-        })?;
+    // Use the backend that reads the pipeline's published `TyCtx` and the
+    // db's target triple; not `LlvmBackend::new()` (which builds its own
+    // empty type arena and hardcodes a Linux triple).
+    //
+    // Also emit *every* body, not just `mir_bodies[0]`. Emitting a single
+    // body silently dropped the rest of the crate from the IR — a serious
+    // information-loss bug for a user who asked for the IR of their whole
+    // program.
+    let backend = LlvmBackend::with_db(db).with_debug_info(false);
+    let mut ir = String::new();
+    for body in &mir_bodies {
+        let one = backend
+            .emit_ir_to_string(ty_ctx_ref, body)
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "LLVM IR generation failed: {:?}",
+                    e
+                ))]
+            })?;
+        ir.push_str(&one);
+        ir.push('\n');
+    }
     std::fs::write(output, ir).map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
 
     Ok(())
@@ -1092,7 +1105,7 @@ pub fn emit_asm(
         )]);
     }
 
-    let backend = LlvmBackend::new().with_debug_info(false);
+    let backend = LlvmBackend::with_db(db).with_debug_info(false);
     let arc_bodies: Vec<Arc<Body>> = mir_bodies.into_iter().map(Arc::new).collect();
     backend.emit_assembly(&arc_bodies, output).map_err(|e| {
         vec![GlyimDiagnostic::internal_error(format!(

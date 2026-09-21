@@ -98,10 +98,14 @@ impl LlvmBackend {
     /// with_db.
     pub fn with_db(db: &glyim_db::Database) -> Self {
         Target::initialize_all(&InitializationConfig::default());
-        let target_info = TargetInfo::default();
+        // Read the triple from the DB's crate config, not a hardcoded
+        // default. Otherwise every `with_db`-constructed backend emits
+        // artifacts for Linux regardless of `--target`.
+        let target_triple = db.config().target_triple.clone();
+        let target_info = TargetInfo::from_triple(&target_triple);
         Self {
             context: Context::create(),
-            target_triple: "x86_64-unknown-linux-gnu".to_string(),
+            target_triple,
             ty_ctx_handle: Some(db.ty_ctx_handle()),
             target_info,
             debug_info: false,
