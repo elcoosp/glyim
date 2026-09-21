@@ -76,7 +76,9 @@ fn assembled_stdlib_compiles() {
             let total = diags.len();
             eprintln!("ASSEMBLED_FAIL total={total}");
             let mut items: Vec<_> = counts.into_iter().collect();
-            items.sort_by(|a, b| b.1.cmp(&a.1));
+            // Sort by descending count. `sort_by_key` + `Reverse` is the
+            // idiomatic form clippy asks for.
+            items.sort_by_key(|(_k, c)| std::cmp::Reverse(*c));
             for (k, c) in items {
                 eprintln!("  {c:>3}  {k}");
             }
