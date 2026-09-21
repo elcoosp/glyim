@@ -894,6 +894,16 @@ pub(crate) fn resolve_path_to_trait_def_id(
     path: &glyim_hir::Path,
     _span: Span,
 ) -> Option<TraitDefId> {
+    // Prefer a user-declared trait (in the def-map) over the builtin table:
+    // a source file can declare its own `trait Future { .. }` (e.g. the
+    // async runtime fixtures do), and that user trait must take precedence
+    // over the builtin `Future` for both `impl Future for X` registration
+    // AND `f.poll()` call-site dispatch — otherwise the two sides disagree
+    // on the `TraitDefId` and devirtualization fails. Builtins still win
+    // when no user trait of that name exists (the `trait_by_name` fallback).
+    if let Some(local) = resolve_path_to_local_def_id(ctx, def_map, path) {
+        return Some(TraitDefId::from_raw(local.to_raw()));
+    }
     // Builtin/lang traits (Future, Drop, Deref, Clone, …) are not in the
     // def-map; resolve them by name from `TyCtxMut`'s builtin trait table.
     if let Some(name) = path.as_name() {
@@ -901,7 +911,7 @@ pub(crate) fn resolve_path_to_trait_def_id(
             return Some(tid);
         }
     }
-    resolve_path_to_local_def_id(ctx, def_map, path).map(|l| TraitDefId::from_raw(l.to_raw()))
+    None
 }
 
 fn resolve_primitive(ctx: &mut TyCtxMut, name: Name) -> Option<Ty> {
