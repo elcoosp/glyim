@@ -66,18 +66,22 @@ pub fn zonk_bodies(
 /// `typeck_crate` (see module docs).
 pub fn body_has_infer_ints_or_floats(ctx: &TyCtx, body: &thir::Body) -> bool {
     let mut found = false;
-    for stmt in &body.stmts {
-        walk_stmt(ctx, stmt, &mut |ty| {
-            if has_infer_int_or_float(ctx, ty) {
-                found = true;
-            }
-        });
-    }
     if has_infer_int_or_float(ctx, body.return_ty) {
         found = true;
     }
-    for param in &body.params {
+    for param in body.params.iter() {
         if has_infer_int_or_float(ctx, param.ty) {
+            found = true;
+        }
+    }
+    for stmt in body.stmts.iter() {
+        let mut stmt_found = false;
+        walk_stmt(ctx, stmt, &mut |ty| {
+            if has_infer_int_or_float(ctx, ty) {
+                stmt_found = true;
+            }
+        });
+        if stmt_found {
             found = true;
         }
     }
@@ -308,6 +312,12 @@ fn walk_body(ctx: &TyCtx, body: &thir::Body, f: &mut impl FnMut(Ty)) {
 /// child types. `resolve_ty_shallow` is idempotent, so calling it here and
 /// again on children is cheap.
 fn zonk_ty(infer: &InferenceTable, ctx: &TyCtx, ty: Ty) -> Ty {
+    // Resolve the *head* of the type first: a top-level `Infer(_)` must be
+    // folded to its bound value (or its fallback) before we inspect its
+    // `TyKind` for children. Without this, the `TyKind::Infer(_)` arm of the
+    // match below would short-circuit and return the raw var unchanged, and
+    // no child walk would ever happen — which is exactly how a
+    // `Infer(Int(_))` survived zonking to reach codegen.
     let ty = infer.resolve_ty_shallow(ctx, ty);
     match ctx.ty_kind(ty).clone() {
         // Primitive scalars / never / unit / bool / char / string / error
