@@ -114,8 +114,10 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
             // (ErrorCode 60) and skips desugaring, so type-checking rejects the
             // un-lowered `Expr::Await` instead.
             let await_expr = loop_await_await;
-            let span = await_expr
-                .and_then(|eid| hir.bodies[body_id.unwrap()].expr_spans.get(eid).copied())
+            let span = body_id
+                .and_then(|bid| {
+                    await_expr.and_then(|eid| hir.bodies[bid].expr_spans.get(eid).copied())
+                })
                 .unwrap_or(Span::DUMMY);
             diags.push(GlyimDiagnostic::new(
                 ErrorCode {
@@ -1267,7 +1269,9 @@ fn desugar_multi_async_fn(
             await_order.push(ai);
             pre_segments.push(Vec::new());
         } else {
-            pre_segments.last_mut().unwrap().push(*stmt);
+            if let Some(seg) = pre_segments.last_mut() {
+                seg.push(*stmt);
+            }
         }
     }
     // Tail await (rare): if root_tail contains an await, it's the final await.
@@ -3057,13 +3061,6 @@ fn desugar_loop_async_fn(
     hir.items.push(state_enum_item);
     hir.items.push(future_struct_item);
     hir.items.push(future_impl_item);
-    // TEMP DEBUG
-    let mut dbg = String::new();
-    dbg.push_str(&format!("POLL_BODY exprs ({}):\n", poll_body.exprs.len()));
-    for (i, e) in poll_body.exprs.iter_enumerated() {
-        dbg.push_str(&format!("  {}: {:?}\n", i.index(), e));
-    }
-    std::fs::write("/tmp/poll_hir.txt", dbg).unwrap();
     Some(())
 }
 
