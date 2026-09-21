@@ -536,6 +536,25 @@ impl CodegenBackend for LlvmBackend {
                     e
                 ))]
             })?;
+        // `write_to_file` (LLVM's raw_fd_ostream) writes via write(2) then
+        // close(2). On macOS `close(2)` is asynchronous: the file's *length*
+        // is visible to stat(2) immediately, but the page-cache contents may
+        // still be pending, so a linker that mmaps the file can read zeroed
+        // pages and report `ld: file is empty in <path>` even though the file
+        // has bytes. Repro: `cargo run -p glyim-cli -- two_step.g ... --emit
+        // exec` fails ~30% of the time; the same invocation of the built
+        // binary directly fails 0/50.
+        //
+        // Reopen for *read+write* and `sync_all`. Opening read-only (the
+        // obvious first attempt) does NOT work: fsync on a read-only fd is a
+        // no-op on macOS, so the pending pages stay pending.
+        if let Ok(f) = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(output)
+        {
+            let _ = f.sync_all();
+        }
         Ok(())
     }
 
