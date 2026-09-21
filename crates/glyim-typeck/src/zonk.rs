@@ -45,6 +45,7 @@
 //! downstream phase has a chance to misinterpret the raw type.
 
 use glyim_solve::InferenceTable;
+use glyim_core::def_id::AdtId;
 use glyim_type::{GenericArg, Substitution, Ty, TyCtx, TyKind};
 
 use crate::thir;
@@ -682,4 +683,75 @@ fn walk_ty(ctx: &TyCtx, ty: Ty, f: &mut impl FnMut(Ty)) {
         }
         _ => {}
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// ADT definitions
+// ---------------------------------------------------------------------------
+
+/// Zonk every ADT definition registered in `ctx`: each struct/variant field
+/// type is passed through `zonk_ty`, so a definition-time `TypeRef::Infer`
+/// (e.g. the placeholder result slot of a synthetic async state-enum variant)
+/// never survives to codegen. Without this, `glyim-codegen-llvm`'s layout
+/// pass rejects the ADT with `fn_abi_of failed: UnknownType(Infer(Ty(_)))`.
+///
+/// Like [`zonk_bodies`], this runs *after* obligation fulfillment — the
+/// inference table passed in is the same one that produced the ADT field
+/// types, so var bindings established during body type-checking are honoured
+/// here as well.
+pub fn zonk_adt_defs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut) {
+    // Freeze *once* to obtain a `&TyCtx` for the read side of `zonk_ty`
+    // (which expects `&TyCtx`). The frozen snapshot shares the same
+    // `&'static` type arena with `ctx`, so any `Ty` interned via the frozen
+    // view (e.g. a rebuilt `Adt` substitution) is valid in `ctx` — and,
+    // because we take the snapshot before mutating, it also sees the current
+    // (pre-zonk) `AdtDef`s for the field type lookups.
+    let view = ctx.freeze();
+    let ids = view.adt_def_ids();
+    let mut updated: Vec<(AdtId, glyim_type::AdtDef)> = Vec::with_capacity(ids.len());
+    for adt_id in ids {
+        let Some(mut def) = view.adt_def(adt_id).cloned() else {
+            continue;
+        };
+        for field in def.fields.iter_mut() {
+            field.ty = zonk_ty(infer, &view, field.ty);
+        }
+        for variant in def.variants.iter_mut() {
+            for field in variant.fields.iter_mut() {
+                field.ty = zonk_ty(infer, &view, field.ty);
+            }
+        }
+        updated.push((adt_id, def));
+    }
+    // `register_adt` re-inserts and recomputes variant-type metadata; using
+    // it (rather than poking the map directly) keeps the variant_types /
+    // interior-mutability caches consistent.
+    for (adt_id, def) in updated {
+        ctx.register_adt(adt_id, def);
+    }
+}
+
+/// Whether any ADT field in `ctx` still carries an int/float inference
+/// variable. Counterpart to [`body_has_infer_ints_or_floats`] for the
+/// debug-only invariant.
+pub fn adt_defs_have_infer_ints_or_floats(ctx: &TyCtx) -> bool {
+    for adt_id in ctx.adt_def_ids() {
+        let Some(def) = ctx.adt_def(adt_id) else {
+            continue;
+        };
+        for field in def.fields.iter() {
+            if has_infer_int_or_float(ctx, field.ty) {
+                return true;
+            }
+        }
+        for variant in def.variants.iter() {
+            for field in variant.fields.iter() {
+                if has_infer_int_or_float(ctx, field.ty) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }

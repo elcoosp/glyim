@@ -756,6 +756,13 @@ impl TyCtxMut {
         id
     }
     /// adt_def.
+    /// Snapshot of every registered ADT id. Used by post-inference passes
+    /// (`glyim_typeck::zonk`) that fold inference variables out of
+    /// `AdtDef` field types.
+    pub fn adt_def_ids(&self) -> Vec<AdtId> {
+        self.adt_defs.keys().copied().collect()
+    }
+
     pub fn adt_def(&self, id: AdtId) -> Option<&AdtDef> {
         self.adt_defs.get(&id)
     }

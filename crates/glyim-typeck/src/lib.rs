@@ -821,6 +821,19 @@ pub fn typeck_crate(
         &mut body_owner_map,
     );
 
+    // Zonk the ADT definitions' field types through the inference table
+    // *before* freezing. A synthetic enum variant (the async desugar's
+    // state-machine `FooState::S_k { v_k }`) declares its result slot as
+    // `TypeRef::Infer`; the struct-literal unification performed during
+    // body checking (`S1 { v0: __v, .. }`) binds that var in the table but
+    // never updates the `AdtDef` itself. Folding it here means the frozen
+    // `TyCtx` — and thus codegen's layout pass — never sees a raw
+    // `Infer(Ty(_))` in a field type. (Same pattern as the THIR zonk below,
+    // just at a different point in the pipeline: THIR zonk runs after
+    // obligation fulfillment because it may need obligation-bound vars;
+    // ADT field vars are bound during body checking itself.)
+    zonk::zonk_adt_defs(&infer, &mut ctx);
+
     // 3. Obligation fulfillment
     let frozen_ctx = ctx.freeze();
 
@@ -844,18 +857,24 @@ pub fn typeck_crate(
     // though unification had long since bound it to `i32`, and the LLVM
     // backend subsequently ICEd on the raw variable.
     zonk::zonk_bodies(&infer, &frozen_ctx, &mut thir_bodies);
-
     // Debug-only invariant: no THIR body may carry an int/float inference
     // variable after zonking. A failure here means a new `Ty` slot was added
     // to THIR without extending `zonk::walk_*`. Caught at the *source* —
     // before any downstream phase can misinterpret the raw type.
+    for (owner, b) in thir_bodies.iter() {
+        debug_assert!(
+            !zonk::body_has_infer_ints_or_floats(&frozen_ctx, b),
+            "typeck invariant violated: THIR body {:?} still carries an \
+             int/float inference variable after zonk; extend \
+             `glyim_typeck::zonk` to cover the new `Ty` slot",
+            owner,
+        );
+    }
     debug_assert!(
-        thir_bodies
-            .iter()
-            .all(|(_owner, b)| !zonk::body_has_infer_ints_or_floats(&frozen_ctx, b)),
-        "typeck invariant violated: THIR body still carries an int/float \
+        !zonk::adt_defs_have_infer_ints_or_floats(&frozen_ctx),
+        "typeck invariant violated: an ADT field still carries an int/float \
          inference variable after zonk; extend `glyim_typeck::zonk` to cover \
-         the new `Ty` slot",
+         the field",
     );
 
     // Resolve inference variables in the collected per-expression types so the
