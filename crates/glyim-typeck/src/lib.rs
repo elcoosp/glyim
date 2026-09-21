@@ -33,6 +33,7 @@
 // inside `#[cfg(test)]` modules so test helpers stay concise.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod zonk;
 mod check_body;
 mod check_expr;
 mod check_pat;
@@ -834,6 +835,28 @@ pub fn typeck_crate(
     }
 
     diagnostics.extend(fulfill.into_diagnostics());
+
+    // Zonk THIR bodies: fold every `Ty` slot through the now-complete
+    // inference table so that downstream phases (MIR lowering, codegen-llvm,
+    // bytecode VM) never see a raw `Infer(Int(_))` / `Infer(Float(_))`.
+    // Before this pass, an unsuffixed literal such as the `41` in
+    // `add_one(41)` still carried its pre-unification `Infer(Int(_))` even
+    // though unification had long since bound it to `i32`, and the LLVM
+    // backend subsequently ICEd on the raw variable.
+    zonk::zonk_bodies(&infer, &frozen_ctx, &mut thir_bodies);
+
+    // Debug-only invariant: no THIR body may carry an int/float inference
+    // variable after zonking. A failure here means a new `Ty` slot was added
+    // to THIR without extending `zonk::walk_*`. Caught at the *source* —
+    // before any downstream phase can misinterpret the raw type.
+    debug_assert!(
+        thir_bodies
+            .iter()
+            .all(|(_owner, b)| !zonk::body_has_infer_ints_or_floats(&frozen_ctx, b)),
+        "typeck invariant violated: THIR body still carries an int/float \
+         inference variable after zonk; extend `glyim_typeck::zonk` to cover \
+         the new `Ty` slot",
+    );
 
     // Resolve inference variables in the collected per-expression types so the
     // public `expr_ty` query returns concrete types, not `TyKind::Infer(..)`.
