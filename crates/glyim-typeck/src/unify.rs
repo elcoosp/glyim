@@ -441,13 +441,12 @@ impl<'a> FnCtxt<'a> {
                         // `OO::<T>::new() -> OO<T>` becomes `-> OO<?fresh>`.
                         let mut subst: std::collections::HashMap<u32, GenericArg> =
                             std::collections::HashMap::new();
-                        let mut impl_param_idx = 0u32;
-                        for gp in &impl_item.generic_params {
+                        for (impl_param_idx, _gp) in
+                            impl_item.generic_params.iter().enumerate()
+                        {
                             let v = self.infer.new_ty_var(self.ctx);
                             let fresh = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
-                            subst.insert(impl_param_idx, GenericArg::Ty(fresh));
-                            let _ = gp;
-                            impl_param_idx += 1;
+                            subst.insert(impl_param_idx as u32, GenericArg::Ty(fresh));
                         }
                         // Plus the receiver's own substitution (if any).
                         if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
