@@ -18,8 +18,8 @@
 //!     (run and print `3`).
 //!   * `m5/one_step.g` (single-await run-pass) must `Passed` (run and print
 //!     `42`). The MIR interpreter already verifies both shapes end-to-end
-//! (see `glyim-pipeline::async_multi_await_runtime`); this driver enforces the
-//! *native* LLVM-codegen + link + execute proof on Linux.
+//!     (see `glyim-pipeline::async_multi_await_runtime`); this driver enforces
+//!     the *native* LLVM-codegen + link + execute proof on Linux.
 //!
 //! STATUS (2026-08-28): the harness now compiles with the REAL `LlvmBackend`
 //! (feature `real-llvm`, enabled by `GLYIM_TEST_REAL_LLVM` on the Linux job)
