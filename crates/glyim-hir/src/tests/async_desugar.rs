@@ -194,6 +194,7 @@ fn multi_await_is_rejected_with_diagnostic() {
 /// loop body. Phase 3 (GLYIM_DESTUB_PLAN) must reject this shape with a clear
 /// compile-time diagnostic rather than silently miscompiling it into an
 /// infinite-`Pending` hang.
+#[allow(dead_code)]
 fn build_async_hir_with_loop_await() -> CrateHir {
     let interner = Interner::new();
     let bad_name: Name = interner.intern("bad");

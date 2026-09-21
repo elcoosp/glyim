@@ -411,28 +411,28 @@ pub extern "C" fn glyim_fs_close(fd: i32) -> i32 {
     }
 }
 
-/// Read up to `buf_len` bytes from the file into `buf`.
-///
-/// Returns the number of bytes read (0 indicates EOF), or a negative error
-/// code on failure.
-///
-/// # Safety
-///
-/// - `fd` must be a valid file descriptor opened for reading
-/// - `buf` must point to a writable buffer of at least `buf_len` bytes
+// Read up to `buf_len` bytes from the file into `buf`.
+//
+// Returns the number of bytes read (0 indicates EOF), or a negative error
+// code on failure.
+//
+// # Safety
+//
+// - `fd` must be a valid file descriptor opened for reading
+// - `buf` must point to a writable buffer of at least `buf_len` bytes
 glyim_ffi_fn! {
     fn glyim_fs_read(fd: i32, buf: *mut u8, buf_len: usize) -> isize
     read
 }
 
-/// Write `buf_len` bytes from `buf` to the file.
-///
-/// Returns the number of bytes written, or a negative error code on failure.
-///
-/// # Safety
-///
-/// - `fd` must be a valid file descriptor opened for writing
-/// - `buf` must point to readable data of at least `buf_len` bytes
+// Write `buf_len` bytes from `buf` to the file.
+//
+// Returns the number of bytes written, or a negative error code on failure.
+//
+// # Safety
+//
+// - `fd` must be a valid file descriptor opened for writing
+// - `buf` must point to readable data of at least `buf_len` bytes
 glyim_ffi_fn! {
     fn glyim_fs_write(fd: i32, buf: *const u8, buf_len: usize) -> isize
     write

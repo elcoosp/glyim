@@ -51,6 +51,7 @@ fn build_def_map(interner: &mut Interner, krate: CrateId, type_names: &[&str]) -
         krate,
         interner: interner.clone(),
         variant_map: Default::default(),
+        max_local_def_id: 0,
     }
 }
 

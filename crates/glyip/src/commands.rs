@@ -448,7 +448,7 @@ fn compile_and_run_compiled(
     }
 
     // Stage 3: execute the linked binary as an isolated subprocess.
-    let mut child = Command::new(&exe_path)
+    let child = Command::new(&exe_path)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

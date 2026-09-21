@@ -1900,7 +1900,7 @@ impl TyCtxMut {
         // Without a `FnPtr` shape here, the closure arg is typed as bare
         // `Param(0)` and the closure's own param `m` stays a bare inference
         // var — `m.is_file()` then fails ("no method `is_file` on type").
-        let fn_t_to_t = {
+        let _fn_t_to_t = {
             let inputs = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
             self.mk_ty(TyKind::FnPtr(crate::FnSig {
                 inputs,
@@ -1910,7 +1910,7 @@ impl TyCtxMut {
                 abi: glyim_core::primitives::Abi::Glyim,
             }))
         };
-        let fn_t_to_bool = {
+        let _fn_t_to_bool = {
             let inputs = self.intern_substitution(vec![GenericArg::Ty(t_var)]);
             self.mk_ty(TyKind::FnPtr(crate::FnSig {
                 inputs,

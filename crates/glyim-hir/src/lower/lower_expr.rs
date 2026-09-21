@@ -27,7 +27,7 @@ use crate::{
 };
 
 use super::{
-    first_ident_text, first_ident_text_with_depth, is_expr_node, is_type_node,
+    first_ident_text_with_depth, is_expr_node, is_type_node,
     lower_item::lower_param, lower_pat::lower_pat,
     lower_type::lower_type_ref, node_span,
 };

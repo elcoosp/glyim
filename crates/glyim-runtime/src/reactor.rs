@@ -385,7 +385,6 @@ pub unsafe extern "C" fn glyim_reactor_deregister(token: usize) {
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::os::unix::io::IntoRawFd;
 
     #[test]
     fn reactor_wakes_on_socket_readable() {
@@ -400,7 +399,7 @@ mod tests {
         accepted
             .set_nonblocking(true)
             .expect("set non-blocking");
-        let client = unsafe { mio::net::TcpStream::from_std(accepted) };
+        let client = mio::net::TcpStream::from_std(accepted);
 
         let reactor = Reactor::new().expect("reactor starts");
         let token = reactor

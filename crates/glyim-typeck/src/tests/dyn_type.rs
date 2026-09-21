@@ -43,6 +43,7 @@ fn def_map_with_trait(interner: &mut Interner, trait_name: &str) -> (CrateDefMap
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
     variant_map: Default::default(),
+    max_local_def_id: 0,
     };
     (def_map, TraitDefId::from_raw(0))
 }
@@ -147,6 +148,7 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
                 krate: CrateId::from_raw(0),
                 interner: inter.clone(),
             variant_map: Default::default(),
+            max_local_def_id: 0,
             },
             TraitDefId::from_raw(0),
         )
@@ -285,6 +287,7 @@ fn def_map_with_nested_trait(
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
     variant_map: Default::default(),
+    max_local_def_id: 0,
     }
 }
 

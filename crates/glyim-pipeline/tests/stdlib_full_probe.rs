@@ -2,7 +2,6 @@
 //! modular (Option A) stdlib compiles through the real pipeline. Temporarily
 //! raises the diagnostic cap so every error surfaces at once.
 use glyim_db::Database;
-use glyim_diag::ErrorCategory;
 use glyim_lang_std::std_source_assembled;
 use glyim_pipeline::compile_file_to_mir;
 

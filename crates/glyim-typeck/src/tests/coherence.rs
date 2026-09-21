@@ -178,6 +178,7 @@ fn build_def_map(
         krate,
         interner: interner.clone(),
     variant_map: Default::default(),
+    max_local_def_id: 0,
     }
 }
 

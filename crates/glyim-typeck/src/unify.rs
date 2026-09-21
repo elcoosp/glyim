@@ -2,7 +2,7 @@
 
 use glyim_core::def_id::{AdtId, ConstDefId, FnDefId};
 use glyim_core::interner::Name;
-use glyim_core::primitives::{IntTy, UintTy};
+use glyim_core::primitives::IntTy;
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
 use glyim_span::Span;
@@ -11,7 +11,6 @@ use glyim_type::{FieldIdx, FnSig, GenericArg, InferVar, Ty, TyCtxMut, TyKind};
 
 use crate::check_body::FnCtxt;
 use crate::thir;
-use std::collections::HashMap;
 
 impl<'a> FnCtxt<'a> {
     pub fn expr_span(&self, expr_id: ExprId) -> Span {

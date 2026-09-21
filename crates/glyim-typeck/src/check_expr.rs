@@ -13,7 +13,7 @@ use glyim_type::display::PrintTy;
 
 use crate::check_body::FnCtxt;
 use crate::thir;
-use crate::unify::{literal_ty, thir_literal};
+use crate::unify::thir_literal;
 
 /// How a method call (`recv.method(..)`) should be dispatched after
 /// type-checking.
@@ -1343,7 +1343,7 @@ impl<'a> FnCtxt<'a> {
                     }
                 }
                 
-                let (elem_ty, is_str, is_ref) = match get_index_info(self.ctx, base_ty, span, &mut self.diagnostics) {
+                let (elem_ty, is_str, _is_ref) = match get_index_info(self.ctx, base_ty, span, &mut self.diagnostics) {
                     Some(info) => info,
                     None => return (thir::Expr::err(span), Ty::ERROR),
                 };
@@ -1959,7 +1959,7 @@ impl<'a> FnCtxt<'a> {
                 // bound name reported `unresolved name`.
                 let (operand_expr, operand_ty) = self.check_expr(*operand);
                 let (result_ty, thir_expr) = match self.ctx.ty_kind(operand_ty) {
-                    TyKind::Adt(adt_id, substs) => {
+                    TyKind::Adt(_adt_id, substs) => {
                         let args: Vec<GenericArg> =
                             self.ctx.substitution_args(*substs).to_vec();
                         match args.first() {
