@@ -536,7 +536,12 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         b
     };
     rewrite_for_poll(interner, &mut poll_body, &param_fields, self_name, ready_id, pending_id);
+    let poll_body_owner = poll_body.owner;
     let poll_body_id = hir.bodies.push(poll_body);
+    // Keep `body_owners` aligned with `bodies` (indexed by BodyId).
+    // The desugar allocates bodies beyond the parser-lowered range,
+    // so typeck's `body_owners[bid]` lookups would otherwise OOB.
+    hir.body_owners.push(poll_body_owner);
 
     // ---- 3. impl Future for FooFuture ----
     let output_ty = return_ty
@@ -602,7 +607,12 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     );
     let return_struct = wrapper_body.alloc_expr(Expr::Return { value: Some(struct_lit) }, Span::DUMMY);
     let _ = return_struct;
+    let wrapper_body_owner = wrapper_body.owner;
     let wrapper_body_id = hir.bodies.push(wrapper_body);
+    // Keep `body_owners` aligned with `bodies` (indexed by BodyId).
+    // The desugar allocates bodies beyond the parser-lowered range,
+    // so typeck's `body_owners[bid]` lookups would otherwise OOB.
+    hir.body_owners.push(wrapper_body_owner);
 
     // Clear `is_async`: after desugaring, `f` is a synchronous function that
     // constructs and returns the future struct. Keeping `is_async` true would
@@ -1658,7 +1668,12 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         },
         Span::DUMMY,
     );
+    let poll_body_owner = poll_body.owner;
     let poll_body_id = hir.bodies.push(poll_body);
+    // Keep `body_owners` aligned with `bodies` (indexed by BodyId).
+    // The desugar allocates bodies beyond the parser-lowered range,
+    // so typeck's `body_owners[bid]` lookups would otherwise OOB.
+    hir.body_owners.push(poll_body_owner);
 
     // Compute output_ty here (uses hir.interner) BEFORE any mutable hir borrow below.
     let output_ty = return_ty
@@ -1728,7 +1743,12 @@ fn desugar_multi_async_fn(hir: &mut crate::CrateHir, item_id: ItemId, diags: &mu
         },
         Span::DUMMY,
     );
+    let wrapper_body_owner = wrapper_body.owner;
     let wrapper_body_id = hir.bodies.push(wrapper_body);
+    // Keep `body_owners` aligned with `bodies` (indexed by BodyId).
+    // The desugar allocates bodies beyond the parser-lowered range,
+    // so typeck's `body_owners[bid]` lookups would otherwise OOB.
+    hir.body_owners.push(wrapper_body_owner);
 
     fn_item.is_async = false;
     fn_item.body = Some(wrapper_body_id);
@@ -2662,7 +2682,12 @@ fn desugar_loop_async_fn(
         },
         Span::DUMMY,
     );
+    let poll_body_owner = poll_body.owner;
     let poll_body_id = hir.bodies.push(poll_body.clone());
+    // Keep `body_owners` aligned with `bodies` (indexed by BodyId). The
+    // desugar allocates bodies beyond the parser-lowered range, so typeck's
+    // `body_owners[bid]` lookups would otherwise OOB.
+    hir.body_owners.push(poll_body_owner);
 
     let output_ty = return_ty
         .clone()
@@ -2733,7 +2758,12 @@ fn desugar_loop_async_fn(
         },
         Span::DUMMY,
     );
+    let wrapper_body_owner = wrapper_body.owner;
     let wrapper_body_id = hir.bodies.push(wrapper_body);
+    // Keep `body_owners` aligned with `bodies` (indexed by BodyId).
+    // The desugar allocates bodies beyond the parser-lowered range,
+    // so typeck's `body_owners[bid]` lookups would otherwise OOB.
+    hir.body_owners.push(wrapper_body_owner);
 
     fn_item.is_async = false;
     fn_item.body = Some(wrapper_body_id);

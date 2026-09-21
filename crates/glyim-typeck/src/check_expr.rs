@@ -2312,11 +2312,42 @@ impl<'a> FnCtxt<'a> {
                                 } else {
                                     Ty::UNIT
                                 };
-                            let fn_def_id = method
+                            // Resolve the impl method's `FnDefId` from
+                            // `body_owner_map` (populated by the typeck pass as
+                            // it walks impl items). If this call site is checked
+                            // *before* the impl item (e.g. `main` calling
+                            // `f.poll()` where `f`'s `impl Future` is
+                            // desugar-generated and appears later in the item
+                            // list), `body_owner_map` misses — `hir.body_owners`
+                            // is NOT a valid substitute because desugar bodies
+                            // inherit their original owner id. Route through
+                            // `Virtual(trait_id)` instead: monomorphization's
+                            // devirtualizer consults the impl-method dispatch
+                            // table (`TyCtx::impl_method_fns`), populated for
+                            // *every* impl — including desugar-generated ones —
+                            // by the time mono runs.
+                            let fn_def_id: Option<FnDefId> = method
                                 .body
-                                .and_then(|bid| this.body_owner_map.get(&bid).copied())
-                                .map(|local| FnDefId::from_raw(local.to_raw()));
-                            found.push((impl_self_ty, return_ty, fn_def_id.map(MethodDispatch::Static)));
+                                .and_then(|bid| {
+                                    this.body_owner_map
+                                        .get(&bid)
+                                        .copied()
+                                        .map(|local| FnDefId::from_raw(local.to_raw()))
+                                });
+                            let dispatch = fn_def_id.map(MethodDispatch::Static).or_else(|| {
+                                // Desugar-generated or not-yet-walked body: use
+                                // the impl's trait identity so mono can
+                                // devirtualize against the concrete receiver.
+                                impl_item.trait_ref.as_ref().and_then(|tp| {
+                                    crate::tyconv::resolve_path_to_trait_def_id(
+                                        this.def_map,
+                                        this.ctx,
+                                        tp,
+                                        span,
+                                    )
+                                }).map(MethodDispatch::Virtual)
+                            });
+                            found.push((impl_self_ty, return_ty, dispatch));
                         }
                     }
                 }
