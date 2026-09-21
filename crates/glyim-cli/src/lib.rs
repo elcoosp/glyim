@@ -183,21 +183,29 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
 
     // Determine output paths based on emit mode
     let (object_path, final_output_path) = match emit {
-        EmitKind::Obj | EmitKind::Exec => {
+        EmitKind::Obj => {
             let obj = args.output.clone().unwrap_or_else(|| {
                 let mut p = input.clone();
                 p.set_extension("o");
                 p
             });
-            let final_out = if emit == EmitKind::Exec {
-                args.output.clone().unwrap_or_else(|| {
-                    let mut p = input.clone();
-                    p.set_extension("");
-                    p
-                })
-            } else {
-                obj.clone()
-            };
+            (obj.clone(), Some(obj))
+        }
+        EmitKind::Exec => {
+            // For an executable, the LLVM backend writes a *relocatable
+            // object*, which the linker then links into the final binary.
+            // These must be distinct paths: `link_with_args` opens its
+            // output with truncation before reading the input, so using the
+            // same path for both truncates the object to zero bytes before
+            // the linker reads it (`ld: file is empty in <path>`). Derive
+            // the object path from the final output (or the source) with an
+            // `.o` extension so the two never collide.
+            let final_out = args.output.clone().unwrap_or_else(|| {
+                let mut p = input.clone();
+                p.set_extension("");
+                p
+            });
+            let obj = final_out.with_extension("o");
             (obj, Some(final_out))
         }
         EmitKind::Cdylib => {

@@ -472,43 +472,63 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         if let Ok(layout) = layout_computer.layout_of(current_ty) {
                             match &layout.variants {
                                 VariantsShape::Multiple { variants, .. } => {
-                                    // Multi-variant enum: the *writer*
-                                    // (`build_layout_aggregate`) stores each
-                                    // field using the per-variant layout
-                                    // from `variants[v].fields`, offset from
-                                    // a `data_start` the `Downcast`
-                                    // projection has already advanced `ptr`
-                                    // past. Read the field offset from that
-                                    // SAME per-variant layout so reader and
-                                    // writer agree.
+                                    // Two offsets contribute to reading a
+                                    // field of a multi-variant enum:
                                     //
-                                    // `variants[v].fields` is relative to the
-                                    // variant's own base (which `ptr` already
-                                    // points at), so no tag offset is added
-                                    // here — adding one (the previous
-                                    // `tag_field + 1 + idx` scheme) read
-                                    // past the outer enum layout's 2-entry
-                                    // `[tag, data_start]` offsets array and
-                                    // panicked with an OOB for any field
-                                    // index >= 1.
+                                    //   1. `tag_prefix` — the byte distance
+                                    //      from the enum base to the start of
+                                    //      the variant payload. For a
+                                    //      `Downcast`-prefixed projection,
+                                    //      the `Downcast` arm already
+                                    //      advanced `ptr` past the tag, so
+                                    //      this is 0. For a bare `Field`
+                                    //      (common in patterns like
+                                    //      `match e { E::A(v) => v }`, where
+                                    //      the pattern binder reads the
+                                    //      payload without an explicit
+                                    //      `Downcast` in the MIR), `ptr`
+                                    //      still points at the enum base and
+                                    //      we must add the tag-prefix size.
+                                    //      That value is `data_start`, which
+                                    //      `direct_tag_encoding` stores as
+                                    //      `offsets[tag_field + 1]` (always
+                                    //      index 1: it writes exactly
+                                    //      `[0, data_start]`).
                                     //
-                                    // No preceding `Downcast`: this is a
-                                    // bare `Field` on an enum local. The
-                                    // payload of every variant sits at the
-                                    // same `data_start` (see
-                                    // `direct_tag_encoding`), so we can read
-                                    // the field from *any* variant that has
-                                    // an entry at `idx`. Search from the
-                                    // selected (or first) variant and fall
-                                    // through to any later one — a bare
-                                    // `Field(n)` typically carries no variant
-                                    // tag, and the state-machine enums the
-                                    // async desugar emits have variants with
-                                    // different field counts (e.g. `S0 { f0,
-                                    // f1, fut0 }` vs `S1 { f0, f1, v0, fut1
-                                    // }`), so picking variant 0
-                                    // unconditionally reads past the end of
-                                    // `variants[0].fields` for `idx >= 3`.
+                                    //   2. `variant_field_offset` — the byte
+                                    //      distance from the variant payload
+                                    //      base to the field. Read from the
+                                    //      per-variant layout
+                                    //      `variants[v].fields` — the SAME
+                                    //      table `build_layout_aggregate`
+                                    //      writes through, so reader and
+                                    //      writer agree. (An earlier attempt
+                                    //      to fold the tag prefix into a
+                                    //      single `offsets[tag_field + 1 +
+                                    //      idx]` lookup read past the outer
+                                    //      layout's 2-entry offsets array
+                                    //      for `idx >= 1` and panicked with
+                                    //      an OOB.)
+                                    let tag_prefix: u64 = if downcast_variant.is_some() {
+                                        0
+                                    } else {
+                                        match &layout.fields {
+                                            FieldsShape::Arbitrary { offsets } => offsets
+                                                .get(FieldIdx::from_raw(1))
+                                                .map(|s| s.0)
+                                                .unwrap_or(0),
+                                            _ => 0,
+                                        }
+                                    };
+                                    // Search the selected variant first, then
+                                    // every other variant. The state-machine
+                                    // enums the async desugar emits have
+                                    // variants with different field counts
+                                    // (e.g. `S0 { f0, f1, fut0 }` vs
+                                    // `S1 { f0, f1, v0, fut1 }`), so a bare
+                                    // `Field(n)` with `n` beyond the selected
+                                    // variant's field list must fall through
+                                    // to a variant that has it.
                                     let start = downcast_variant
                                         .map(|v| v.to_raw() as usize)
                                         .unwrap_or(0);
@@ -531,10 +551,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                                 &variant.fields
                                             {
                                                 if idx_raw < offsets.len() {
-                                                    found = Some(offsets[FieldIdx::from_raw(
-                                                        idx_raw as u32,
-                                                    )]
-                                                    .0);
+                                                    let per_variant =
+                                                        offsets[FieldIdx::from_raw(
+                                                            idx_raw as u32,
+                                                        )]
+                                                        .0;
+                                                    found = Some(tag_prefix + per_variant);
                                                     break;
                                                 }
                                             }
