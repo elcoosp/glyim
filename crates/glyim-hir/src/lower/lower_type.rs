@@ -162,7 +162,12 @@ pub(crate) fn lower_type_ref(node: &SyntaxNode, interner: &mut Interner) -> Opti
             inner_ref.map(|r| TypeRef::Dyn(Box::new(r)))
         }
         _ => {
-            panic!("unhandled type node {:?}", node.kind());
+            // Unhandled syntax node kind: this function runs on partially
+            // recovered trees where an unexpected node kind is a recoverable
+            // parse artefact, not a fatal invariant violation. Return `None`
+            // so callers fall back to their error-recovery path rather than
+            // panicking the compiler.
+            None
         }
     }
 }
