@@ -470,29 +470,89 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
                     let field_offset_bytes =
                         if let Ok(layout) = layout_computer.layout_of(current_ty) {
-                            match &layout.fields {
-                                FieldsShape::Arbitrary { offsets } => {
-                                    // Enums (Multiple variants) store the
-                                    // discriminant tag at `offsets[tag_field]` and
-                                    // the variant payload fields start at
-                                    // `offsets[tag_field + 1]` (mirrors
-                                    // `direct_tag_encoding` / `build_layout_aggregate`,
-                                    // which write the tag at byte 0 and the payload
-                                    // immediately after it). A bare `Field` on the
-                                    // enum local must therefore skip the tag slot,
-                                    // otherwise it reads the discriminant bytes
-                                    // instead of the variant payload -- e.g.
-                                    // `match f.poll() { Ready(v) => v }` returned
-                                    // the tag, not the value (silent miscompile).
-                                    let adjusted = match &layout.variants {
-                                        VariantsShape::Multiple { tag_field, .. } => {
-                                            *tag_field + 1 + idx.to_raw()
+                            match &layout.variants {
+                                VariantsShape::Multiple { variants, .. } => {
+                                    // Multi-variant enum: the *writer*
+                                    // (`build_layout_aggregate`) stores each
+                                    // field using the per-variant layout
+                                    // from `variants[v].fields`, offset from
+                                    // a `data_start` the `Downcast`
+                                    // projection has already advanced `ptr`
+                                    // past. Read the field offset from that
+                                    // SAME per-variant layout so reader and
+                                    // writer agree.
+                                    //
+                                    // `variants[v].fields` is relative to the
+                                    // variant's own base (which `ptr` already
+                                    // points at), so no tag offset is added
+                                    // here — adding one (the previous
+                                    // `tag_field + 1 + idx` scheme) read
+                                    // past the outer enum layout's 2-entry
+                                    // `[tag, data_start]` offsets array and
+                                    // panicked with an OOB for any field
+                                    // index >= 1.
+                                    //
+                                    // No preceding `Downcast`: this is a
+                                    // bare `Field` on an enum local. The
+                                    // payload of every variant sits at the
+                                    // same `data_start` (see
+                                    // `direct_tag_encoding`), so we can read
+                                    // the field from *any* variant that has
+                                    // an entry at `idx`. Search from the
+                                    // selected (or first) variant and fall
+                                    // through to any later one — a bare
+                                    // `Field(n)` typically carries no variant
+                                    // tag, and the state-machine enums the
+                                    // async desugar emits have variants with
+                                    // different field counts (e.g. `S0 { f0,
+                                    // f1, fut0 }` vs `S1 { f0, f1, v0, fut1
+                                    // }`), so picking variant 0
+                                    // unconditionally reads past the end of
+                                    // `variants[0].fields` for `idx >= 3`.
+                                    let start = downcast_variant
+                                        .map(|v| v.to_raw() as usize)
+                                        .unwrap_or(0);
+                                    let ordered: Vec<usize> = std::iter::once(start)
+                                        .chain(
+                                            (0..variants.len()).filter(|i| *i != start),
+                                        )
+                                        .collect();
+                                    let idx_raw = idx.to_raw() as usize;
+                                    let mut found = None;
+                                    for vi in ordered {
+                                        // `IndexVec::get` carries a
+                                        // `debug_assert!` that fires *before*
+                                        // returning `None`; guard with an
+                                        // explicit length check so a shorter
+                                        // variant's field list doesn't panic
+                                        // in debug builds during the search.
+                                        if let Some(variant) = variants.get(vi) {
+                                            if let FieldsShape::Arbitrary { offsets } =
+                                                &variant.fields
+                                            {
+                                                if idx_raw < offsets.len() {
+                                                    found = Some(offsets[FieldIdx::from_raw(
+                                                        idx_raw as u32,
+                                                    )]
+                                                    .0);
+                                                    break;
+                                                }
+                                            }
                                         }
-                                        _ => idx.to_raw(),
-                                    };
-                                    offsets.get(FieldIdx::from_raw(adjusted)).map(|s| s.0)
+                                    }
+                                    found
                                 }
-                                _ => None,
+                                VariantsShape::Single { .. } => match &layout.fields {
+                                    FieldsShape::Arbitrary { offsets } => {
+                                        let i = idx.to_raw() as usize;
+                                        if i < offsets.len() {
+                                            Some(offsets[*idx].0)
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    _ => None,
+                                },
                             }
                         } else {
                             None
