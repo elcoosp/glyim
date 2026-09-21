@@ -109,18 +109,13 @@ fn evaluate_rvalue_to_const(
                         glyim_core::primitives::BinOp::Sub => l - r,
                         glyim_core::primitives::BinOp::Mul => l * r,
                         glyim_core::primitives::BinOp::Div => {
-                            if r != 0 {
-                                l / r
-                            } else {
-                                0
-                            }
+                            // Division by zero is not folded; the runtime
+                            // operation would trap, so propagate `0` as the
+                            // constant-folded value only when `r != 0`.
+                            l.checked_div(r).unwrap_or(0)
                         }
                         glyim_core::primitives::BinOp::Rem => {
-                            if r != 0 {
-                                l % r
-                            } else {
-                                0
-                            }
+                            l.checked_rem(r).unwrap_or(0)
                         }
                         _ => return None,
                     };
@@ -136,18 +131,13 @@ fn evaluate_rvalue_to_const(
                         glyim_core::primitives::BinOp::Sub => l - r,
                         glyim_core::primitives::BinOp::Mul => l * r,
                         glyim_core::primitives::BinOp::Div => {
-                            if r != 0 {
-                                l / r
-                            } else {
-                                0
-                            }
+                            // Division by zero is not folded; the runtime
+                            // operation would trap, so propagate `0` as the
+                            // constant-folded value only when `r != 0`.
+                            l.checked_div(r).unwrap_or(0)
                         }
                         glyim_core::primitives::BinOp::Rem => {
-                            if r != 0 {
-                                l % r
-                            } else {
-                                0
-                            }
+                            l.checked_rem(r).unwrap_or(0)
                         }
                         _ => return None,
                     };
