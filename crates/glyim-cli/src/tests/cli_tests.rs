@@ -22,6 +22,7 @@ fn test_compile_valid_file() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -50,6 +51,7 @@ fn test_compile_invalid_file() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "Expected compilation to fail");
@@ -120,6 +122,7 @@ fn test_emit_asm_produces_assembly_file() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "asm emit should succeed, got: {:?}", result);
@@ -163,6 +166,7 @@ fn test_lto_fat_compiles_to_object() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -194,6 +198,7 @@ fn test_lto_thin_surfaces_tracked_gap() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -235,6 +240,7 @@ fn test_emit_cdylib_produces_shared_library() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -265,6 +271,7 @@ fn test_lto_invalid_value_rejected() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "invalid --lto value must be rejected");
@@ -302,6 +309,7 @@ fn exec_emit_links_and_runs() {
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "glyim-cli --emit=exec failed: {:?}", result);

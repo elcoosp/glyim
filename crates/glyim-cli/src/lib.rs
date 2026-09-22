@@ -61,9 +61,68 @@ pub struct CliArgs {
     /// Plan §3.4.
     #[arg(long = "error-format", default_value = "human")]
     pub error_format: String,
+    /// Prepend the assembled Glyim standard library (plus a generated
+    /// prelude of `use X::*;` statements) to the input source, so
+    /// `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`,
+    /// `Iterator` and friends resolve without explicit `use` statements.
+    /// Interim CLI-level equivalent of a default prelude; `glyip`'s
+    /// project template will grow a native equivalent in v0.2.
+    #[arg(long = "with-stdlib", default_value_t = false)]
+    pub with_stdlib: bool,
+
 }
 
 /// run.
+
+/// Build a `use X::*;` prelude from every `pub mod X {` block in the
+/// assembled stdlib. `io`/`fs`/`net`/`process` are skipped because their
+/// own `Result`/`Error` aliases would shadow the user-facing core types.
+fn generate_stdlib_prelude(stdlib_src: &str) -> String {
+    const SHADOW: &[&str] = &["io", "fs", "net", "process"];
+    let mut out = String::new();
+    let mut seen = std::collections::HashSet::new();
+    for line in stdlib_src.lines() {
+        let t = line.trim_start();
+        let Some(rest) = t.strip_prefix("pub mod ") else { continue };
+        let name = rest
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        if name.is_empty() { continue; }
+        if SHADOW.contains(&name) { continue; }
+        if !seen.insert(name.to_string()) { continue; }
+        out.push_str(&format!("use {name}::*;\n"));
+    }
+    out
+}
+
+/// If `--with-stdlib` was passed, write a combined source (`assembled stdlib`
+/// + generated prelude + user source) into the VFS at `input`'s path so the
+/// pipeline picks it up instead of the raw file.
+fn inject_assembled_stdlib(
+    db: &mut Database,
+    input: &std::path::Path,
+) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+    let user = std::fs::read_to_string(input).map_err(|e| {
+        vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
+            "read {}: {e}",
+            input.display()
+        ))]
+    })?;
+    let stdlib = glyim_lang_std::std_source_assembled();
+    // NOTE: we deliberately do NOT emit a `use X::*;` prelude here.
+    // `std_source_assembled` already emits a `pub use X::Item;` block at
+    // the crate root for every user-facing name, so bare `Option`,
+    // `Result`, `Iterator`, `println`, … already resolve in the appended
+    // user source. Adding a `use iter::*;`-style glob on top re-imports
+    // those same names via a second path and shadows the module-local
+    // generic definitions (`Once<T>`, `Repeat<T>`, …), causing the
+    // "generic type `Once` expects 0 type argument(s)" cascade.
+    let combined = format!("{stdlib}\n{user}\n");
+    db.vfs().add_file_content(input, std::sync::Arc::from(combined));
+    Ok(())
+}
+
 pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
     // Capture args (incl. `--error-format`) before entering the panic catcher,
     // so we can print any returned diagnostics in the requested format.
@@ -279,6 +338,16 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     };
 
     let mut db = Database::new(config);
+    // Tier 1.1: --with-stdlib prepends the assembled stdlib + prelude
+    if args.with_stdlib {
+        if let Err(diags) = inject_assembled_stdlib(&mut db, input) {
+            for d in diags { eprintln!("{}", d.message); }
+            return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
+                "--with-stdlib: failed to inject assembled stdlib",
+            )]);
+        }
+    }
+
 
     // Phase 8 / plan §9.2: if the user listed proc-macro dependency crates,
     // run the two-stage proc-macro build (compile each for the HOST triple to
@@ -636,6 +705,7 @@ fn compile_proc_macro_dep(
         codegen_units: None,
         proc_macro_deps: None,
         error_format: "human".to_string(),
+        with_stdlib: false,
     };
     run_with_args(args).map_err(|diags| {
         let msg = diags

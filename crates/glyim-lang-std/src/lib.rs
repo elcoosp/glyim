@@ -49,6 +49,26 @@ pub fn std_source(name: &str) -> Option<&'static str> {
         // on primitive receivers. Emitted FLAT (below, via `flat_modules`).
         "str" => Some(include_str!("../../glyim-lang-core/lib/str.g")),
         "slice" => Some(include_str!("../../glyim-lang-core/lib/slice.g")),
+        // --- core module additions (prelude surface) ---
+        "option" => Some(include_str!("../../glyim-lang-core/lib/option.g")),
+        "result" => Some(include_str!("../../glyim-lang-core/lib/result.g")),
+        "iter" => Some(include_str!("../../glyim-lang-core/lib/iter.g")),
+        "ops" => Some(include_str!("../../glyim-lang-core/lib/ops.g")),
+        "default" => Some(include_str!("../../glyim-lang-core/lib/default.g")),
+        "mem" => Some(include_str!("../../glyim-lang-core/lib/mem.g")),
+        "ptr" => Some(include_str!("../../glyim-lang-core/lib/ptr.g")),
+        "cell" => Some(include_str!("../../glyim-lang-core/lib/cell.g")),
+        "marker" => Some(include_str!("../../glyim-lang-core/lib/marker.g")),
+        "convert" => Some(include_str!("../../glyim-lang-core/lib/convert.g")),
+        "hint" => Some(include_str!("../../glyim-lang-core/lib/hint.g")),
+        // --- alloc module additions (prelude surface) ---
+        "vec" => Some(include_str!("../../glyim-lang-alloc/lib/vec.g")),
+        "boxed" => Some(include_str!("../../glyim-lang-alloc/lib/boxed.g")),
+        "rc" => Some(include_str!("../../glyim-lang-alloc/lib/rc.g")),
+        "string" => Some(include_str!("../../glyim-lang-alloc/lib/string.g")),
+        "raw_vec" => Some(include_str!("../../glyim-lang-alloc/lib/raw_vec.g")),
+        "alloc" => Some(include_str!("../../glyim-lang-alloc/lib/alloc.g")),
+
         _ => None,
     }
 }
@@ -90,55 +110,36 @@ pub fn std_source_all() -> String {
 /// Glob re-exports (`use io::*`) are not supported by the resolver, so each
 /// module's public items are listed explicitly in `MODULE_PUBS`.
 pub fn std_source_assembled() -> String {
-    let pubs: &[(&str, &[&str])] = &[
+    
+        // Restored by Script 18 (Script 17 trimmed these for the
+        // wrong reason — modules are interdependent, not standalone).
         (
-            "io",
+            "time",
             &[
-                "Read",
-                "Write",
-                "BufRead",
-                "Error",
-                "ErrorKind",
-                "Stdin",
-                "Stdout",
-                "Stderr",
-                "empty_reader",
-                "stdin",
-                "stdout",
-                "stderr",
+                "Duration",
+                "Instant",
+                "SystemTime",
+                "UNIX_EPOCH",
             ],
         ),
+        // Restored by Script 18 (Script 17 trimmed these for the
+        // wrong reason — modules are interdependent, not standalone).
         (
-            "fs",
+            "rc",
             &[
-                "File",
-                "OpenOption",
-                "read_to_string",
-                "write_to_file",
-                "FileType",
-                "Metadata",
-                "DirEntry",
-                "read_dir",
+                "Rc",
             ],
         ),
+        // Restored by Script 18 (Script 17 trimmed these for the
+        // wrong reason — modules are interdependent, not standalone).
         (
-            "net",
+            "default",
             &[
-                "TcpStream",
-                "TcpListener",
-                "UdpSocket",
-                "IpAddr",
-                "Ipv4Addr",
-                "Ipv6Addr",
-                "SocketAddr",
-                "SocketAddrV4",
-                "SocketAddrV6",
-                "ToSocketAddrs",
-                "resolve",
-                "connect",
-                "bind",
+                "Default",
             ],
         ),
+        // Restored by Script 18 (Script 17 trimmed these for the
+        // wrong reason — modules are interdependent, not standalone).
         (
             "thread",
             &[
@@ -150,6 +151,16 @@ pub fn std_source_assembled() -> String {
                 "yield_now",
             ],
         ),
+        // Restored by Script 18 (Script 17 trimmed these for the
+        // wrong reason — modules are interdependent, not standalone).
+        (
+            "option",
+            &[
+                "Option",
+            ],
+        ),
+        // Restored by Script 18 (Script 17 trimmed these for the
+        // wrong reason — modules are interdependent, not standalone).
         (
             "sync",
             &[
@@ -163,7 +174,8 @@ pub fn std_source_assembled() -> String {
                 "Condvar",
                 "Barrier",
             ],
-        ),
+        ),let pubs: &[(&str, &[&str])] = &[
+        // --- prelude-surface modules (added by Script 6) ---
         (
             "env",
             &[
@@ -174,27 +186,6 @@ pub fn std_source_assembled() -> String {
                 "temp_dir",
                 "home_dir",
                 "args_os",
-            ],
-        ),
-        ("time", &["Duration", "Instant", "SystemTime", "UNIX_EPOCH"]),
-        ("process", &["Command", "Child", "Stdio", "exit", "id"]),
-        ("future", &["Poll", "Waker", "Context", "Future"]),
-        // `cmp.g` (core). Re-export the free `min`/`max` and the comparison
-        // traits so bare `min(a, b)` in `io.g` resolves. `Ordering` is
-        // DELIBERATELY EXCLUDED: `cmp::Ordering` (`Less`/`Equal`/`Greater`)
-        // and `sync::Ordering` (`Relaxed`/`Release`/…) are distinct types —
-        // each module keeps its own, and neither is referenced by bare name
-        // at the crate root.
-        (
-            "cmp",
-            &[
-                "min",
-                "max",
-                "Ord",
-                "PartialOrd",
-                "Eq",
-                "PartialEq",
-                "Reverse",
             ],
         ),
         // `panic.g` (core). Defines the `panic!` / `assert!` / `assert_eq!`

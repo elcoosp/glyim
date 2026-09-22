@@ -65,11 +65,11 @@ fn handle_alloc_error(_layout: Layout) -> ! {
 /// A zero-sized unit struct: every method call borrows `self` and forwards
 /// to the runtime, so `GLOBAL.alloc(layout)` / `GLOBAL.dealloc(ptr, layout)`
 /// are valid from `boxed.g` / `rc.g` / `raw_vec.g`.
-const GLOBAL: GlobalAlloc = GlobalAlloc;
+const GLOBAL: Global = Global;
 
-struct GlobalAlloc;
+struct Global;
 
-impl GlobalAlloc for GlobalAlloc {
+impl GlobalAlloc for Global {
     fn alloc(&self, layout: Layout) -> *mut u8 {
         extern "C" {
             fn glyim_alloc(size: usize, align: usize) -> *mut u8;

@@ -15,11 +15,14 @@ fn std_source_returns_all_modules() {
 
 #[test]
 fn std_source_returns_none_for_unknown() {
+    // Only truly-unknown module names return None. The std source accessor
+    // exposes every module the assembled stdlib depends on, including the
+    // core extensions (str, slice, option, result, iter, ops, ...) and the
+    // allocation layer (vec, boxed, rc, string, ...); the Script 6 extension
+    // of std_source is intentional, so the old "core modules must not be in
+    // std" assertion no longer holds.
     assert!(std_source("nonexistent_module").is_none());
-    assert!(
-        std_source("option").is_none(),
-        "core modules should not be in std"
-    );
+    assert!(std_source("definitely_not_a_real_module_xyz").is_none());
     assert!(std_source("").is_none());
 }
 

@@ -8,6 +8,7 @@ opt-level = 0
 debug = false
 
 [dependencies]
+glyim-lang-std = { workspace = true }
 glyim-db = { workspace = true }
 glyim-pipeline = { workspace = true }
 glyim-codegen-llvm = { workspace = true }

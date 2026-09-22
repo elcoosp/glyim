@@ -213,7 +213,11 @@ pub fn link_with_args(
         (false, Some(s)) => Some(format!("{} {}", cross_flags.join(" "), s)),
     };
 
-    linker_invoker.link(obj_path, output_path, combined_flags.as_deref())
+    let result = linker_invoker.link(obj_path, output_path, combined_flags.as_deref());
+    if result.is_ok() {
+        ensure_executable(output_path);
+    }
+    result
 }
 
 /// Map a target triple to the linker flags required to cross-compile for it.
@@ -354,6 +358,28 @@ pub fn thin_lto_link(
         .collect();
     Ok(outs)
 }
+
+
+/// On Unix, ensure `path` is executable. The linker usually produces a +x
+/// binary, but if `path` already existed with a non-executable mode (e.g. a
+/// placeholder file created before linking, or an inherited umask on the
+/// target directory), the x bits can be missing. Setting them explicitly is
+/// idempotent and cheap.
+#[cfg(unix)]
+fn ensure_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perms = meta.permissions();
+        let mode = perms.mode();
+        if mode & 0o111 == 0 {
+            perms.set_mode(mode | 0o755);
+            let _ = std::fs::set_permissions(path, perms);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn ensure_executable(_path: &Path) {}
 
 #[cfg(test)]
 mod tests {

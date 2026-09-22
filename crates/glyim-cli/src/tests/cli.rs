@@ -19,7 +19,8 @@ mod tests {
             codegen_units: None,
             proc_macro_deps: None,
             error_format: "human".to_string(),
-        };
+            with_stdlib: false,
+    };
         let result = run_with_args(args);
         assert!(result.is_err());
         let errs = result.unwrap_err();
@@ -54,7 +55,8 @@ mod tests {
             codegen_units: None,
             proc_macro_deps: None,
             error_format: "human".to_string(),
-        };
+            with_stdlib: false,
+    };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_mir failed: {:?}", result.err());
         assert!(output.exists(), "MIR file was not written to {:?}", output);
@@ -83,7 +85,8 @@ mod tests {
             codegen_units: None,
             proc_macro_deps: None,
             error_format: "human".to_string(),
-        };
+            with_stdlib: false,
+    };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_llvm_ir failed: {:?}", result.err());
         assert!(
