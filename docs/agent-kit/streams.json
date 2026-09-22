@@ -1,0 +1,494 @@
+[
+  {
+    "id": "U-Borrowck",
+    "name": "Unstub Borrow Checker — Move Analysis, Two-Phase Borrows, Projection Conflicts",
+    "crate": "glyim-borrowck",
+    "wave": 0,
+    "scope_summary": "Remove all stubs in glyim-borrowck related to move analysis (count_fields, Index projections), two-phase borrow cross-block tracking, and mixed projection conflict detection. Replace with fully functional, production-ready implementations.",
+    "owned_crates": [
+      "glyim-borrowck"
+    ],
+    "owned_files": [
+      "crates/glyim-borrowck/src/move_analysis.rs",
+      "crates/glyim-borrowck/src/twophase.rs",
+      "crates/glyim-borrowck/src/visitor.rs",
+      "crates/glyim-borrowck/src/tests/u_borrowck.rs"
+    ],
+    "shared_files": [
+      "crates/glyim-borrowck/src/tests/mod.rs"
+    ],
+    "read_only_files": [
+      "crates/glyim-borrowck/src/lib.rs",
+      "crates/glyim-borrowck/src/liveness.rs",
+      "crates/glyim-type/src/lib.rs",
+      "crates/glyim-mir/src/lib.rs"
+    ],
+    "locked_interfaces": [
+      "glyim_borrowck::BorrowckResult",
+      "glyim_borrowck::BorrowckCtx",
+      "glyim_borrowck::check_borrows"
+    ],
+    "stub_targets": [
+      {
+        "file": "crates/glyim-borrowck/src/move_analysis.rs",
+        "function": "count_fields",
+        "line_pattern": "TyKind::Adt(_, substs) => Some(u32::from(substs.len()))",
+        "replacement_scope": "Replace substs.len() with AdtDef query: ctx.adt_def(*adt_id).and_then(|adt| adt.variants.first().map(|v| v.fields.len() as u32))"
+      },
+      {
+        "file": "crates/glyim-borrowck/src/move_analysis.rs",
+        "function": "MovePathArena::find",
+        "line_pattern": "ProjectionElem::Index",
+        "replacement_scope": "When Index projection is encountered, return current_idx immediately (root move path). Arrays/slices are moved wholesale."
+      },
+      {
+        "file": "crates/glyim-borrowck/src/twophase.rs",
+        "function": "ReservationAnalysis::is_reservation",
+        "line_pattern": "if block != self.creation_block { return false; }",
+        "replacement_scope": "Replace with forward dataflow analysis: worklist of successor blocks, scan for dest_local reads, track visited (block, stmt_idx) points in per_block BitSet"
+      },
+      {
+        "file": "crates/glyim-borrowck/src/visitor.rs",
+        "function": "places_conflict",
+        "line_pattern": "_ => return true",
+        "replacement_scope": "Replace conservative conflict with: (Field, Index) | (Index, Field) => return false (disjoint physical regions)"
+      }
+    ],
+    "tests": [
+      {
+        "id": "U-Borrowck-T01",
+        "name": "count_fields_uses_adt_def_not_substs",
+        "category": "unit",
+        "description": "count_fields returns the actual field count from AdtDef, not the generic substitution length",
+        "input_code": "struct Point<i32> { x: i32, y: i32 } // 1 type param, 2 fields",
+        "expected": "count_fields returns Some(2), not Some(1)",
+        "edge_cases": [
+          "enum with 0 variants",
+          "tuple with 0 elements",
+          "primitive types return None"
+        ]
+      },
+      {
+        "id": "U-Borrowck-T02",
+        "name": "index_projection_returns_root_move_path",
+        "category": "unit",
+        "description": "Moving arr[i] marks the whole array as moved, so accessing arr[j] later is an error",
+        "input_code": "let arr = [String::new(), String::new()]; let s = arr[0]; let t = arr[1]; // ERROR",
+        "expected": "Use-after-move error on arr[1] because root path is in moved set",
+        "edge_cases": [
+          "copy types in array don't move",
+          "nested index projections arr[i][j]"
+        ]
+      },
+      {
+        "id": "U-Borrowck-T03",
+        "name": "two_phase_cross_block_reservation_survives",
+        "category": "unit",
+        "description": "Two-phase borrow created in BB0, shared borrow in BB1, activation in BB2 — no error because reservation survives across blocks",
+        "input_mir": "BB0: _2 = &mut _1 (two-phase); goto BB1 | BB1: _3 = &shared _1; _4 = copy _3; goto BB2 | BB2: _5 = copy _2; return",
+        "expected": "No borrow conflict error — shared borrow during reservation is allowed",
+        "edge_cases": [
+          "reservation killed by block that reads dest_local",
+          "loops with back-edges"
+        ]
+      },
+      {
+        "id": "U-Borrowck-T04",
+        "name": "mixed_field_index_projections_disjoint",
+        "category": "unit",
+        "description": "arr[0].field and arr.field[0] (if well-typed) are disjoint — no conflict",
+        "input_places": [
+          "Place{local:0, proj:[Index(1), Field(0)]}",
+          "Place{local:0, proj:[Field(0), Index(1)]}"
+        ],
+        "expected": "places_conflict returns false",
+        "edge_cases": [
+          "same projection kind at same depth still conflicts",
+          "prefix projections still conflict"
+        ]
+      },
+      {
+        "id": "U-Borrowck-T05",
+        "name": "move_then_use_array_element_error",
+        "category": "unit",
+        "description": "Moving one array element then using the whole array triggers use-of-moved-value",
+        "input_code": "let arr = [s1, s2]; let x = arr[0]; let y = arr; // ERROR: arr partially moved",
+        "expected": "Error: use of partially moved value",
+        "edge_cases": [
+          "copy element types don't trigger move",
+          "reassigning element clears move flag"
+        ]
+      }
+    ],
+    "mocking": "Use MockBorrowckCtx from glyim-test. For MIR construction, use MirBodyBuilder pattern from existing tests. No external solver needed.",
+    "conflicts_with": [],
+    "conflict_note": "No conflicts. Owns glyim-borrowck exclusively. No other stream touches this crate.",
+    "upstream": [],
+    "downstream": [],
+    "pre_merge_check": [
+      "cargo test -p glyim-borrowck",
+      "cargo clippy -p glyim-borrowck -- -D warnings",
+      "cargo check --workspace"
+    ]
+  },
+  {
+    "id": "U-Codegen",
+    "name": "Unstub LLVM Backend — ABI Layout, Lowering, Drop Glue, Debug Info, Passes",
+    "crate": "glyim-codegen-llvm",
+    "wave": 0,
+    "scope_summary": "Remove all stubs in glyim-codegen-llvm related to ABI enum layout (niche, multi-variant), MIR lowering (fat string pointers, enum tags, slice projections, direct calls, byval args, pointer casts, drop glue with real sizes, StorageLive/Dead), LLVM pass pipeline mapping, and debug info (declare_local). Provide fully functional implementations.",
+    "owned_crates": [
+      "glyim-codegen-llvm"
+    ],
+    "owned_files": [
+      "crates/glyim-codegen-llvm/src/abi.rs",
+      "crates/glyim-codegen-llvm/src/lower.rs",
+      "crates/glyim-codegen-llvm/src/types.rs",
+      "crates/glyim-codegen-llvm/src/passes.rs",
+      "crates/glyim-codegen-llvm/src/debug.rs",
+      "crates/glyim-codegen-llvm/src/tests/u_codegen.rs"
+    ],
+    "shared_files": [
+      "crates/glyim-codegen-llvm/src/tests/mod.rs"
+    ],
+    "read_only_files": [
+      "crates/glyim-codegen-llvm/src/lib.rs",
+      "crates/glyim-layout/src/lib.rs",
+      "crates/glyim-mir/src/lib.rs",
+      "crates/glyim-type/src/lib.rs"
+    ],
+    "locked_interfaces": [
+      "glyim_codegen_llvm::LlvmBackend::new",
+      "glyim_codegen_llvm::LlvmBackend::with_target",
+      "glyim_codegen_llvm::LlvmBackend::generate",
+      "glyim_codegen_llvm::LlvmBackend::generate_function"
+    ],
+    "stub_targets": [
+      {
+        "file": "crates/glyim-codegen-llvm/src/abi.rs",
+        "function": "FullLayoutComputer::layout_of",
+        "line_pattern": "TyKind::Adt(_adt_id, _subst) => { self.simple.layout_of(ty) }",
+        "replacement_scope": "Fetch AdtDef. If 1 variant: layout fields sequentially, VariantsShape::Single. If multiple: compute each variant layout, find max size/align, determine tag size, construct VariantsShape::Multiple with TagEncoding::Direct or Niche."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_const",
+        "line_pattern": "MirConstKind::String(name) => { ... build_bit_cast(global, ptr_type) }",
+        "replacement_scope": "Construct fat pointer struct {i8*, i64}: create global string, build_insert_value at index 0 (ptr) and index 1 (len). Return struct value."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_const",
+        "line_pattern": "MirConstKind::ConstRef(const_def_id, _substs) => { ... no set_initializer }",
+        "replacement_scope": "Call global.set_initializer(&val) before loading. Generate val from the constant kind."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "place_ptr",
+        "line_pattern": "ProjectionElem::Slice { .. } => { return self.context.ptr_type(...).const_null(); }",
+        "replacement_scope": "GEP to start index, load data pointer, construct {ptr, i64} fat pointer struct via build_alloca + build_store, return pointer to temp."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_aggregate",
+        "line_pattern": "AggregateKind::Adt(_adt_id, _variant_idx, _substs) => { ... no tag written }",
+        "replacement_scope": "Fetch layout via FullLayoutComputer. If VariantsShape::Multiple, extract tag_field and tag_size. Store variant_idx at tag_field offset using build_gep + build_store."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_discriminant",
+        "line_pattern": "TagEncoding::Niche { .. } => { ... incomplete decode }",
+        "replacement_scope": "Implement: if tag == niche_start { return untagged_variant } else { return tag - niche_start + niche_variants.start() }. Use build_select for conditional."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_call",
+        "line_pattern": "self.builder.build_indirect_call(fn_type, func_val, &metadata_args, \"call\")",
+        "replacement_scope": "Check if func is Operand::Constant(MirConstKind::Fn). If so, resolve to FunctionValue and use build_call. For indirect args (PassMode::Indirect), add byval attribute via create_type_attribute."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_cast",
+        "line_pattern": "CastKind::PtrToPtr => val,",
+        "replacement_scope": "Emit builder.build_bit_cast(val, target_llvm_ty, \"ptrcast\"). Same for FnPtrToPtr."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_drop",
+        "line_pattern": "let size = self.llvm_int_type(64).const_int(0, false);",
+        "replacement_scope": "Compute real layout: let layout = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone()).layout_of(place_ty).unwrap(); Use layout.size.0 and layout.align.0 as u64."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/lower.rs",
+        "function": "lower_body / lower_statement",
+        "line_pattern": "StatementKind::StorageLive(local) => { tracing::trace!(...) }",
+        "replacement_scope": "Generate per-type drop glue function glyim_drop_in_place_<ty_hash> in lower_body. In StorageDead, call drop glue if type_needs_drop. In StorageLive, emit llvm.lifetime.start."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/passes.rs",
+        "function": "run_llvm_passes",
+        "line_pattern": "eprintln!(\"DEBUG: run_llvm_passes...\")",
+        "replacement_scope": "Remove eprintln. Ensure (2, true) maps to default<Os>. All tuples map correctly."
+      },
+      {
+        "file": "crates/glyim-codegen-llvm/src/debug.rs",
+        "function": "declare_local",
+        "line_pattern": "// Placeholder - not used in this stream's tests",
+        "replacement_scope": "Emit llvm.dbg.declare: create DI type, create parameter variable, build debug location, call self.builder.insert_declare_at_end(alloca, local_var, None, location, block)."
+      }
+    ],
+    "tests": [
+      {
+        "id": "U-Codegen-T01",
+        "name": "string_literal_produces_fat_pointer",
+        "category": "unit",
+        "description": "MirConstKind::String produces {i8*, i64} struct, not bare i8*",
+        "input_mir": "local_1 = \"hello\"; return local_1",
+        "expected_ir": "IR contains insertvalue with i64 length 5 at index 1",
+        "edge_cases": [
+          "empty string has length 0",
+          "string with special characters"
+        ]
+      },
+      {
+        "id": "U-Codegen-T02",
+        "name": "enum_aggregate_writes_discriminant_tag",
+        "category": "unit",
+        "description": "AggregateKind::Adt stores variant index at tag offset",
+        "input_mir": "local_1 = Aggregate(Adt(enum_id, variant=1), [field1]); return local_1",
+        "expected_ir": "IR contains store of variant index at tag_field offset",
+        "edge_cases": [
+          "single-variant enum has no tag",
+          "niche-encoded enum stores niche value"
+        ]
+      },
+      {
+        "id": "U-Codegen-T03",
+        "name": "direct_call_uses_build_call_not_indirect",
+        "category": "unit",
+        "description": "Operand::Constant(MirConstKind::Fn) resolves to direct call",
+        "input_mir": "local_1 = Call(func=Const(Fn(def_id)), args=[]); return local_1",
+        "expected_ir": "IR contains 'call' not 'call void (i8*)*'",
+        "edge_cases": [
+          "function pointer calls still use indirect",
+          "generic function monomorphization"
+        ]
+      },
+      {
+        "id": "U-Codegen-T04",
+        "name": "indirect_arg_has_byval_attribute",
+        "category": "unit",
+        "description": "Large struct argument passed indirectly has byval LLVM attribute",
+        "input_mir": "local_1 = Call(func=fn_ptr, args=[large_struct]); return local_1",
+        "expected_ir": "IR contains 'byval' attribute on call parameter",
+        "edge_cases": [
+          "small args pass direct without byval",
+          "sret return also gets attribute"
+        ]
+      },
+      {
+        "id": "U-Codegen-T05",
+        "name": "pointer_cast_emits_bitcast",
+        "category": "unit",
+        "description": "CastKind::PtrToPtr emits LLVM bitcast instruction",
+        "input_mir": "local_1 = Cast(PtrToPtr, src_ptr, dest_ty); return local_1",
+        "expected_ir": "IR contains 'bitcast' instruction, not bare value passthrough",
+        "edge_cases": [
+          "same-type cast is identity (no bitcast needed)",
+          "address space changes require addr_space_cast"
+        ]
+      },
+      {
+        "id": "U-Codegen-T06",
+        "name": "dealloc_passes_real_size_and_align",
+        "category": "unit",
+        "description": "glyim_dealloc call passes actual layout size/align, not 0",
+        "input_mir": "StorageDead(local_with_drop); return",
+        "expected_ir": "IR contains call to glyim_dealloc with non-zero size and align arguments",
+        "edge_cases": [
+          "zero-sized types skip dealloc",
+          "Copy types skip drop but may still dealloc"
+        ]
+      },
+      {
+        "id": "U-Codegen-T07",
+        "name": "storage_dead_calls_drop_glue",
+        "category": "unit",
+        "description": "StorageDead for a type needing drop calls the generated drop glue function",
+        "input_mir": "local_1 = String::new(); StorageDead(local_1); return",
+        "expected_ir": "IR contains call to glyim_drop_in_place_<hash> before dealloc",
+        "edge_cases": [
+          "Copy types do not call drop glue",
+          "partial moves skip drop on moved fields"
+        ]
+      },
+      {
+        "id": "U-Codegen-T08",
+        "name": "multi_variant_enum_layout_has_tag",
+        "category": "unit",
+        "description": "Layout for enum with >1 variant has VariantsShape::Multiple with tag",
+        "input_ty": "enum Option<i32> { Some(i32), None }",
+        "expected_layout": "layout.variants is Multiple { tag_size > 0, tag_encoding: Direct or Niche }",
+        "edge_cases": [
+          "niche optimization for Option<NonZero>",
+          "repr(C) enum layout",
+          "enum with >256 variants needs larger tag"
+        ]
+      },
+      {
+        "id": "U-Codegen-T09",
+        "name": "slice_projection_returns_fat_pointer_not_null",
+        "category": "unit",
+        "description": "ProjectionElem::Slice returns {ptr, len} struct, not null pointer",
+        "input_mir": "local_2 = &local_1[1..3]; return local_2",
+        "expected_ir": "IR does NOT contain 'inttoptr (i64 0'. Contains GEP to slice start and struct construction.",
+        "edge_cases": [
+          "zero-length slice [0..0]",
+          "full slice [..] copies original fat pointer"
+        ]
+      },
+      {
+        "id": "U-Codegen-T10",
+        "name": "debug_declare_local_emits_llvm_dbg_declare",
+        "category": "unit",
+        "description": "declare_local emits llvm.dbg.declare intrinsic for local variables",
+        "input_mir": "Body with var_debug_info containing one local",
+        "expected_ir": "IR contains 'call void @llvm.dbg.declare'",
+        "edge_cases": [
+          "disabled when debug_info=false",
+          "unit-typed locals skipped (zero-sized)"
+        ]
+      }
+    ],
+    "mocking": "Use LlvmBackend::with_ty_ctx(frozen_ctx) and lower_body_to_module for unit tests. Construct MIR bodies manually using MirBodyBuilder pattern. For layout tests, use FullLayoutComputer::new(&ctx, TargetInfo::default()).",
+    "conflicts_with": [],
+    "conflict_note": "No conflicts. Owns glyim-codegen-llvm exclusively. No other stream touches this crate.",
+    "upstream": [],
+    "downstream": [],
+    "pre_merge_check": [
+      "cargo test -p glyim-codegen-llvm",
+      "cargo clippy -p glyim-codegen-llvm -- -D warnings",
+      "cargo check --workspace"
+    ]
+  },
+  {
+    "id": "U-CLI",
+    "name": "Unstub CLI — Emit Modes (mir, llvm-ir), Linker Invocation, Attribute Fix",
+    "crate": "glyim-cli",
+    "wave": 0,
+    "scope_summary": "Remove all stubs in glyim-cli related to emit modes and linker invocation. Fix duplicate clap attribute bug. Implement --emit mir, --emit llvm-ir, --emit exec. Create linker.rs that shells out to cc to link .o against libc.",
+    "owned_crates": [
+      "glyim-cli"
+    ],
+    "owned_files": [
+      "crates/glyim-cli/src/lib.rs",
+      "crates/glyim-cli/src/main.rs",
+      "crates/glyim-cli/src/linker.rs"
+    ],
+    "shared_files": [],
+    "read_only_files": [
+      "crates/glyim-pipeline/src/lib.rs",
+      "crates/glyim-db/src/lib.rs",
+      "crates/glyim-codegen/src/lib.rs"
+    ],
+    "locked_interfaces": [
+      "glyim_cli::CliArgs",
+      "glyim_cli::run"
+    ],
+    "stub_targets": [
+      {
+        "file": "crates/glyim-cli/src/lib.rs",
+        "function": "CliArgs struct",
+        "line_pattern": "#[arg(long, value_name = \"EMIT\", default_value = \"obj\")]\n#[arg(short = 'O', long = \"opt-level\", default_value = \"0\")]",
+        "replacement_scope": "Remove the duplicate #[arg] line. Only keep #[arg(short = 'O', long = \"opt-level\", default_value = \"0\")] on opt_level field."
+      },
+      {
+        "file": "crates/glyim-cli/src/lib.rs",
+        "function": "run_with_args",
+        "line_pattern": "Pipeline::compile_file(&mut db, &args.input, &*backend, &output_path)?;",
+        "replacement_scope": "Before compile_file, match on args.emit: 'mir' => Pipeline::emit_mir, 'llvm-ir' => Pipeline::emit_llvm_ir. After compile_file, if emit == 'exec', call linker::invoke_linker."
+      }
+    ],
+    "tests": [
+      {
+        "id": "U-CLI-T01",
+        "name": "emit_mir_flag_produces_mir_text",
+        "category": "unit",
+        "description": "--emit mir outputs MIR text and exits before codegen",
+        "input_args": [
+          "glyim",
+          "input.g",
+          "--emit",
+          "mir"
+        ],
+        "expected": "Pipeline::emit_mir is called, no .o file created",
+        "edge_cases": [
+          "--emit mir with --emit conflict",
+          "missing input file still errors"
+        ]
+      },
+      {
+        "id": "U-CLI-T02",
+        "name": "emit_llvm_ir_flag_produces_llvm_text",
+        "category": "unit",
+        "description": "--emit llvm-ir outputs LLVM IR text and exits before object write",
+        "input_args": [
+          "glyim",
+          "input.g",
+          "--emit",
+          "llvm-ir"
+        ],
+        "expected": "Pipeline::emit_llvm_ir is called, no .o file created",
+        "edge_cases": [
+          "--emit llvm-ir with invalid source still type-checks"
+        ]
+      },
+      {
+        "id": "U-CLI-T03",
+        "name": "emit_exec_invokes_linker",
+        "category": "unit",
+        "description": "--emit exec (or default) compiles .o then invokes cc linker to produce executable",
+        "input_args": [
+          "glyim",
+          "input.g",
+          "--emit",
+          "exec",
+          "-o",
+          "output"
+        ],
+        "expected": "After .o generation, linker::invoke_linker is called with cc",
+        "edge_cases": [
+          "linker not found produces error",
+          "linker fails with non-zero exit code"
+        ]
+      },
+      {
+        "id": "U-CLI-T04",
+        "name": "no_duplicate_arg_attribute",
+        "category": "unit",
+        "description": "clap parsing doesn't panic from duplicate #[arg] attributes",
+        "input_args": [
+          "glyim",
+          "input.g",
+          "-O",
+          "2"
+        ],
+        "expected": "opt_level parsed as 2, emit defaults to 'obj'",
+        "edge_cases": [
+          "--opt-level 3",
+          "missing opt_level defaults to 0"
+        ]
+      }
+    ],
+    "mocking": "No mocking needed. Use tempfile::NamedTempFile for input files. For linker tests, mock std::process::Command or just verify the function signature compiles. Do NOT actually invoke cc in unit tests.",
+    "conflicts_with": [],
+    "conflict_note": "No conflicts. Owns glyim-cli exclusively. No other stream touches this crate.",
+    "upstream": [],
+    "downstream": [],
+    "pre_merge_check": [
+      "cargo test -p glyim-cli",
+      "cargo clippy -p glyim-cli -- -D warnings",
+      "cargo check --workspace"
+    ]
+  }
+]
