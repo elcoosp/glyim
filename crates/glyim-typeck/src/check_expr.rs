@@ -298,9 +298,19 @@ impl<'a> FnCtxt<'a> {
                         Ty::BOOL
                     }
                     BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr => {
+                        // Accept an unresolved integer inference variable as
+                        // an integer operand. Two unsuffixed literals
+                        // (`7 & 3`) unify to the *same* `Infer(Int(_))` var,
+                        // which typeck has not yet resolved to a concrete
+                        // `Int`/`Uint` at this point (the zonk pass runs
+                        // later). Rejecting it reported "bitwise operators
+                        // require integer operands" for every literal-to-
+                        // literal bitwise expression.
                         if !matches!(
                             self.ctx.ty_kind(operand_ty),
-                            TyKind::Int(_) | TyKind::Uint(_)
+                            TyKind::Int(_)
+                                | TyKind::Uint(_)
+                                | TyKind::Infer(InferVar::Int(_))
                         ) && operand_ty != Ty::ERROR
                         {
                             self.diagnostics.push(GlyimDiagnostic::type_error(

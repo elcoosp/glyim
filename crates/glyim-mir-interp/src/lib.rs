@@ -654,24 +654,31 @@ impl<'tcx> Interpreter<'tcx> {
                 for op in operands {
                     values.push(self.eval_operand(op)?);
                 }
+                // Enum ADTs are tagged with their variant index as `fields[0]`
+                // so `SwitchInt` and `Rvalue::Discriminant` can read it, and
+                // `read_place`'s `Downcast` projection can strip it to expose
+                // the payload at its natural indices.
+                //
+                // This MUST run before the `values.is_empty()` shortcut below:
+                // a *unit* variant (`Four::C`) constructs an `Aggregate` with
+                // zero operands, and returning `InterpValue::Unit` for it threw
+                // away the variant index — so `Discriminant` read 0 and every
+                // unit-variant `match` selected the first arm. (Reported by the
+                // `match_four_variants` run-pass fixture: `Four::C` matched
+                // `Four::A`.)
+                if let AggregateKind::Adt(adt_id, variant, _substs) = kind {
+                    if let Some(def) = self.tcx.adt_def(*adt_id) {
+                        if def.kind == AdtKind::Enum {
+                            let mut tagged = Vec::with_capacity(values.len() + 1);
+                            tagged.push(InterpValue::Int(variant.index() as i128));
+                            tagged.extend(values);
+                            return Ok(InterpValue::Aggregate(tagged));
+                        }
+                    }
+                }
                 if values.is_empty() {
                     Ok(InterpValue::Unit)
                 } else {
-                    // For enum ADTs, prepend the discriminant as `fields[0]` so that
-                    // `SwitchInt` and `Rvalue::Discriminant` can read the variant
-                    // index from the value. `read_place`'s `Downcast` projection
-                    // strips this tag so the payload remains at its natural field
-                    // indices. Struct/tuple/closure aggregates are left untagged.
-                    if let AggregateKind::Adt(adt_id, variant, _substs) = kind {
-                        if let Some(def) = self.tcx.adt_def(*adt_id) {
-                            if def.kind == AdtKind::Enum {
-                                let mut tagged = Vec::with_capacity(values.len() + 1);
-                                tagged.push(InterpValue::Int(variant.index() as i128));
-                                tagged.extend(values);
-                                return Ok(InterpValue::Aggregate(tagged));
-                            }
-                        }
-                    }
                     Ok(InterpValue::Aggregate(values))
                 }
             }
