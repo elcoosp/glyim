@@ -348,6 +348,7 @@ fn test_run_pass_strategy_executes_provided_executable() {
         mir_bodies: Vec::new(),
         ty_ctx: None,
         executable_path: Some(Path::new("/bin/echo").to_path_buf()),
+        entry_main: None,
     };
 
     let outcome = RunPassStrategy {}.evaluate(
@@ -382,6 +383,7 @@ fn test_run_pass_strategy_no_executable_fails() {
         mir_bodies: Vec::new(),
         ty_ctx: None,
         executable_path: None,
+        entry_main: None,
     };
     let outcome = RunPassStrategy {}.evaluate(
         &output,

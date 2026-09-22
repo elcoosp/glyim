@@ -99,6 +99,16 @@ impl<'a> TestCollector<'a> {
             config.timeout_secs = header_config.timeout_secs;
             config.min_version = header_config.min_version;
             config.only_target = header_config.only_target;
+            // Run-check fields. These were previously dropped: `config` was
+            // created from the directory-mode default (or `TestConfig::default`)
+            // and only a hand-listed subset of the header was copied over, so
+            // `// exit-code:` / `// check-stdout:` / `// check-stderr:` /
+            // `// aux-file:` had no effect — every run-pass fixture was checked
+            // against exit code 0 regardless of what the directive said.
+            config.check_stdout = header_config.check_stdout;
+            config.check_stderr = header_config.check_stderr;
+            config.expected_exit_code = header_config.expected_exit_code;
+            config.aux_files = header_config.aux_files;
 
             let name = path
                 .strip_prefix(self.root)

@@ -192,26 +192,30 @@ impl RunPassStrategy {
             };
         }
 
-        let Some(exe_path) = executable_path else {
+        let result = if let Some(exe_path) = executable_path.filter(|p| p.exists()) {
+            // Native path: a real executable was produced and linked.
+            ProgramRunner::new(exe_path).run(timeout)
+        } else if let (Some(bodies), Some(ty_ctx)) =
+            (output.mir_bodies.first().map(|_| &output.mir_bodies), output.ty_ctx.as_ref())
+        {
+            // Portable fallback: no native executable (mock backend or a host
+            // without LLVM/linker). Drive the MIR interpreter instead. This
+            // exercises the same exit-code / stdout contract as the native
+            // path, and works on every host.
+            crate::harness::interpreter_runner::InterpRunner::new(
+                bodies.clone(),
+                ty_ctx.clone(),
+                output.entry_main,
+            )
+            .run(timeout)
+        } else {
             return super::executor::TestOutcome::Failed {
                 reason: FailureReason::CompilationFailed {
                     phase: "run-pass".to_string(),
-                    message: "no executable produced".to_string(),
+                    message: "no executable and no MIR bodies".to_string(),
                 },
             };
         };
-
-        if !exe_path.exists() {
-            return super::executor::TestOutcome::Failed {
-                reason: FailureReason::CompilationFailed {
-                    phase: "run-pass".to_string(),
-                    message: format!("executable not found: {:?}", exe_path),
-                },
-            };
-        }
-
-        let runner = ProgramRunner::new(exe_path);
-        let result = runner.run(timeout);
 
         if result.timed_out {
             return super::executor::TestOutcome::Failed {
@@ -221,7 +225,11 @@ impl RunPassStrategy {
             };
         }
 
-        let mut check = OutputCheck::new().exit_code(0);
+        // A run-pass fixture may declare `// exit-code: N` to assert that the
+        // program returns N (the common case: `fn main() -> i32 { N }`).
+        // Defaults to 0 (a `main` returning `()`), matching the OS convention.
+        let expected_exit = config.expected_exit_code.unwrap_or(0);
+        let mut check = OutputCheck::new().exit_code(expected_exit);
 
         if let Some(ref expected) = config.check_stdout {
             check = check.stdout(expected);
@@ -262,26 +270,25 @@ impl RunFailStrategy {
             };
         }
 
-        let Some(exe_path) = executable_path else {
+        let result = if let Some(exe_path) = executable_path.filter(|p| p.exists()) {
+            ProgramRunner::new(exe_path).run(timeout)
+        } else if let (Some(bodies), Some(ty_ctx)) =
+            (output.mir_bodies.first().map(|_| &output.mir_bodies), output.ty_ctx.as_ref())
+        {
+            crate::harness::interpreter_runner::InterpRunner::new(
+                bodies.clone(),
+                ty_ctx.clone(),
+                output.entry_main,
+            )
+            .run(timeout)
+        } else {
             return super::executor::TestOutcome::Failed {
                 reason: FailureReason::CompilationFailed {
                     phase: "run-fail".to_string(),
-                    message: "no executable produced".to_string(),
+                    message: "no executable and no MIR bodies".to_string(),
                 },
             };
         };
-
-        if !exe_path.exists() {
-            return super::executor::TestOutcome::Failed {
-                reason: FailureReason::CompilationFailed {
-                    phase: "run-fail".to_string(),
-                    message: format!("executable not found: {:?}", exe_path),
-                },
-            };
-        }
-
-        let runner = ProgramRunner::new(exe_path);
-        let result = runner.run(timeout);
 
         if result.timed_out {
             return super::executor::TestOutcome::Failed {

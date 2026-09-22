@@ -24,6 +24,12 @@ pub struct CompileOutput {
     /// failure) — in which case run-pass/run-fail strategies report "no
     /// executable produced" rather than silently running nothing.
     pub executable_path: Option<PathBuf>,
+    /// Raw `LocalDefId` of the crate's `main`, discovered by the same
+    /// `entry_main_local_id` pre-pass the CLI uses. Populated for both the
+    /// real-LLVM and interpreter paths so the harness can pick `main` out of
+    /// `mir_bodies` — the interpreter runner (used when no native executable
+    /// is produced) needs it to know which body to drive.
+    pub entry_main: Option<u32>,
 }
 
 impl std::fmt::Debug for CompileOutput {
@@ -36,6 +42,7 @@ impl std::fmt::Debug for CompileOutput {
             .field("mir_bodies", &self.mir_bodies)
             .field("ty_ctx", &self.ty_ctx.as_ref().map(|_| "TyCtx"))
             .field("executable_path", &self.executable_path)
+            .field("entry_main", &self.entry_main)
             .finish()
     }
 }
@@ -61,6 +68,7 @@ impl TestCompiler for FrontendOnlyCompiler {
             mir_bodies: Vec::new(),
             ty_ctx: None,
             executable_path: None,
+            entry_main: None,
         }
     }
 }
@@ -226,6 +234,10 @@ impl TestCompiler for PipelineCompiler {
         #[cfg(not(feature = "real-llvm"))]
         let backend: &dyn glyim_codegen::CodegenBackend = &*self.backend;
 
+        // Discover `main`'s LocalDefId the same way the CLI does. Used by
+        // the interpreter fallback path to select which body to run.
+        let entry_main = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, &path);
+
         match glyim_pipeline::Pipeline::compile_file_with_artifacts(
             &mut db,
             &path,
@@ -252,6 +264,7 @@ impl TestCompiler for PipelineCompiler {
                     mir_bodies: artifacts.mir_bodies,
                     ty_ctx: Some(artifacts.ty_ctx),
                     executable_path,
+                    entry_main,
                 }
             }
             Err(mut diags) => {
@@ -264,6 +277,7 @@ impl TestCompiler for PipelineCompiler {
                     mir_bodies: Vec::new(),
                     ty_ctx,
                     executable_path: None,
+                    entry_main,
                 }
             }
         }
