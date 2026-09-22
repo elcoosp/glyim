@@ -1020,6 +1020,8 @@ dependencies = [
  "glyim-type",
  "glyim-vfs",
  "parking_lot",
+ "sha2",
+ "tempfile",
  "tracing",
 ]
 
