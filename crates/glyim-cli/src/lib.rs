@@ -4,7 +4,6 @@ use glyim_codegen::BytecodeBackend;
 use glyim_codegen_llvm::LlvmBackend;
 use glyim_codegen_llvm::passes::LtoKind;
 use glyim_db::{CrateConfig, Database};
-use glyim_pipeline::Pipeline;
 use std::path::PathBuf;
 
 /// linker.
@@ -408,6 +407,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             args.codegen_units,
             proc_registry.as_ref(),
         )?;
+        print_diagnostics(&artifacts.warnings, &args.error_format);
         let bitcode_dir = object_path.with_extension("thin-bc");
         std::fs::create_dir_all(&bitcode_dir).map_err(|e| {
             vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
@@ -459,7 +459,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(
             BytecodeBackend::with_ty_ctx_handle(db.ty_ctx_handle(), target_info),
         );
-        Pipeline::compile_file(
+        let artifacts = glyim_pipeline::Pipeline::compile_file_with_artifacts(
             &mut db,
             input,
             &*backend,
@@ -467,9 +467,10 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             args.codegen_units,
             proc_registry.as_ref(),
         )?;
+        print_diagnostics(&artifacts.warnings, &args.error_format);
     } else {
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(llvm);
-        Pipeline::compile_file(
+        let artifacts = glyim_pipeline::Pipeline::compile_file_with_artifacts(
             &mut db,
             input,
             &*backend,
@@ -477,6 +478,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             args.codegen_units,
             proc_registry.as_ref(),
         )?;
+        print_diagnostics(&artifacts.warnings, &args.error_format);
     }
 
     // Store the produced object in the cache for next time. Only reached

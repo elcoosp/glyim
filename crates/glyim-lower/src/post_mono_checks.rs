@@ -36,6 +36,16 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
             items.len(),
             threshold
         );
+        // No single source location owns a "the mono set is large" warning;
+        // pointing at the first monomorphized item's span is the most useful
+        // real location available (it names *a* function involved, which the
+        // user can act on). Falls back to `Span::DUMMY` only when no item has
+        // a usable span at all.
+        let span = items
+            .iter()
+            .map(|it| it.body.span)
+            .find(|s| !s.is_dummy())
+            .unwrap_or(Span::DUMMY);
         vec![GlyimDiagnostic::new(
             glyim_diag::ErrorCode {
                 category: glyim_diag::ErrorCategory::Internal,
@@ -43,7 +53,7 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
             },
             DiagSeverity::Warning,
             msg,
-            MultiSpan::from_span(Span::DUMMY),
+            MultiSpan::from_span(span),
         )]
     } else {
         vec![]

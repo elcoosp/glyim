@@ -96,6 +96,13 @@ pub struct CompileArtifacts {
     pub mir_bodies: Vec<Arc<glyim_mir::Body>>,
     /// Struct.
     pub ty_ctx: Arc<glyim_type::TyCtx>,
+    /// Non-error diagnostics (warnings, notes) produced during a *successful*
+    /// compile. The pipeline treats these as advisory — they never abort the
+    /// compile — but the caller must render them: a user who never sees
+    /// "unused generic parameter" or "large number of mono items" has no way
+    /// to act on it. Before this field existed the CLI discarded every
+    /// non-error diagnostic on success.
+    pub warnings: Vec<GlyimDiagnostic>,
 }
 
 /// Load a crate's source into the VFS and **flatten its external modules**.
@@ -563,11 +570,17 @@ impl Pipeline {
         }
 
         let ty_ctx = db.get_ty_ctx().expect("TyCtx not initialized");
+        // Partition the accumulated diagnostics: errors would have returned
+        // above (any Error severity short-circuits), so everything left is
+        // advisory. Surface it on the success value so the caller can render
+        // it. Sorted + deduped for a stable user-visible order.
+        let warnings = sink_cell.into_inner().into_diagnostics();
         Ok(CompileArtifacts {
             def_map,
             typeck_result: typeck_result.clone(),
             mir_bodies: all_bodies,
             ty_ctx,
+            warnings,
         })
     }
 }

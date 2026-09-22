@@ -397,11 +397,15 @@ impl DiagSink {
                 .ok()
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(50),
-            on_emit: Some(Box::new(|diag| match diag.severity {
-                DiagSeverity::Error => tracing::warn!("[{}] {}", diag.code, diag.message),
-                DiagSeverity::Warning => tracing::info!("[{}] {}", diag.code, diag.message),
-                DiagSeverity::Note | DiagSeverity::Help => {}
-            })),
+            // No default `on_emit`: diagnostics are *returned* to the caller
+            // (via `into_diagnostics`), and the caller renders them. The
+            // previous default logged every diagnostic through `tracing` at
+            // `WARN`/`INFO`, so a compile printed each warning twice — once as
+            // a `tracing` line and once (if it survived to the CLI) as a real
+            // diagnostic — and printed diagnostics for *intermediate* phases
+            // that the caller might legitimately suppress. Callers that want
+            // live emission can install one via `with_on_emit`.
+            on_emit: None,
         }
     }
 
