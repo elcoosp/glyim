@@ -1,0 +1,8 @@
+// test-mode: run-pass
+// exit-code: 10
+fn main() -> i32 {
+    let mut i = 0;
+    let mut s = 0;
+    while i < 5 { s = s + i; i = i + 1; }
+    s
+}
