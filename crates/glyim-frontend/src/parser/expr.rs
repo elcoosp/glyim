@@ -92,35 +92,32 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_or_expr(&mut self) {
-        let mut cp = self.checkpoint();
+        // The checkpoint is taken ONCE, at the left operand, and NEVER reset.
+        // `start_node_at(cp, BinaryExpr)` therefore wraps the *growing* left
+        // side on each iteration, giving the correct left-associative tree
+        // (`a || b || c` -> `((a || b) || c)`). Resetting `cp` inside the loop
+        // made every iteration after the first start its node at the operator
+        // instead of the left operand, so `a - b - c` became
+        // `(a - b)` followed by a dangling `- c` with no LHS.
+        let cp = self.checkpoint();
         self.parse_and_expr();
         while self.current_kind() == SyntaxKind::OrOr {
-            // `start_node_at(cp, ..)` — NOT `start_node`. The BinaryExpr must
-            // begin at the *left operand*, not at the `||` token. Using
-            // `start_node` produced a node whose span started at the operator
-            // and left the LHS as a sibling (so `a || b` had an empty LHS and
-            // the enclosing expression was structurally malformed — the
-            // `ch >= 48 && ch <= 57` in net.g's `parse_u16_hex` was the first
-            // such chain to surface the bug as "unresolved name `digit`").
             self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
             self.parse_and_expr();
             self.finish_node();
-            cp = self.checkpoint();
         }
     }
 
     pub(crate) fn parse_and_expr(&mut self) {
-        let mut cp = self.checkpoint();
+        // See `parse_or_expr` — checkpoint taken once, never reset.
+        let cp = self.checkpoint();
         self.parse_comparison_expr();
         while self.current_kind() == SyntaxKind::AndAnd {
-            // See `parse_or_expr` above — `start_node_at(cp, ..)` so the
-            // BinaryExpr wraps its left operand.
             self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
             self.parse_comparison_expr();
             self.finish_node();
-            cp = self.checkpoint();
         }
     }
 
@@ -144,7 +141,8 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_bitwise_expr(&mut self) {
-        let mut cp = self.checkpoint();
+        // See `parse_or_expr` — checkpoint taken once, never reset.
+        let cp = self.checkpoint();
         self.parse_additive_expr();
         while matches!(
             self.current_kind(),
@@ -158,24 +156,24 @@ impl<'a> Parser<'a> {
             self.bump();
             self.parse_additive_expr();
             self.finish_node();
-            cp = self.checkpoint();
         }
     }
 
     pub(crate) fn parse_additive_expr(&mut self) {
-        let mut cp = self.checkpoint();
+        // See `parse_or_expr` — checkpoint taken once, never reset.
+        let cp = self.checkpoint();
         self.parse_multiplicative_expr();
         while matches!(self.current_kind(), SyntaxKind::Plus | SyntaxKind::Minus) {
             self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
             self.parse_multiplicative_expr();
             self.finish_node();
-            cp = self.checkpoint();
         }
     }
 
     pub(crate) fn parse_multiplicative_expr(&mut self) {
-        let mut cp = self.checkpoint();
+        // See `parse_or_expr` — checkpoint taken once, never reset.
+        let cp = self.checkpoint();
         self.parse_cast_expr();
         while matches!(
             self.current_kind(),
@@ -185,7 +183,6 @@ impl<'a> Parser<'a> {
             self.bump();
             self.parse_cast_expr();
             self.finish_node();
-            cp = self.checkpoint();
         }
     }
 
