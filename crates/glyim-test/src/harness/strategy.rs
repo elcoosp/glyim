@@ -90,43 +90,24 @@ pub struct UiTestStrategy;
 
 impl UiTestStrategy {
     /// evaluate.
+    ///
+    /// Emits a **rustc-style diagnostic dump**: one block per diagnostic, with
+    /// the message, a `--> path:line:col` location, and a caret-annotated
+    /// source excerpt. This is deliberately *only* the diagnostics — not the
+    /// full CST/DefMap/Typeck, which the previous implementation dumped and
+    /// which made `.expected` files unreviewable. The point of a UI test is to
+    /// freeze the *user-visible* diagnostic, so that is exactly what is
+    /// snapshotted.
+    ///
+    /// `GLYIM_BLESS=1` writes the `.expected` file instead of comparing.
     pub fn evaluate(
         &self,
         output: &CompileOutput,
-        _source: &str,
+        source: &str,
         test_path: &Path,
         bless: bool,
     ) -> super::executor::TestOutcome {
-        let mut text = String::new();
-
-        if let Some(ref tree) = output.syntax_tree {
-            text.push_str("=== CST ===\n");
-            text.push_str(&format!("{:#?}\n", tree));
-        }
-
-        if let Some(ref dm) = output.def_map {
-            text.push_str("=== DefMap ===\n");
-            text.push_str(&crate::snapshot::format::format_def_map(dm));
-        }
-
-        if let Some(ref tc) = output.typeck_result {
-            text.push_str("=== Typeck ===\n");
-            text.push_str(&format!("{:#?}\n", tc));
-        }
-
-        if !output.mir_bodies.is_empty() {
-            text.push_str("=== MIR ===\n");
-        }
-
-        text.push_str("=== Diagnostics ===\n");
-        for diag in &output.diagnostics {
-            text.push_str(&format!(
-                "{}[{}]: {}\n",
-                diag.severity.display_name(),
-                diag.code,
-                diag.message,
-            ));
-        }
+        let text = format_diagnostics(&output.diagnostics, source, test_path);
 
         let normalized =
             crate::comparison::normalize::normalize_output(&text, test_path, &Default::default());
@@ -165,6 +146,79 @@ impl UiTestStrategy {
             }
         }
     }
+}
+
+/// Format a diagnostic set in rustc's `error[CODE]: message` + source excerpt
+/// style. The test file name is normalized to `$FILE` so the snapshot is
+/// portable across machines.
+fn format_diagnostics(
+    diagnostics: &[GlyimDiagnostic],
+    source: &str,
+    test_path: &Path,
+) -> String {
+    let file_name = test_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("$FILE");
+
+    let lines: Vec<&str> = source.lines().collect();
+    // Byte offset -> (line_index_0based, col_index_0based_char)
+    let offset_to_line_col = |off: usize| -> Option<(usize, usize)> {
+        if off > source.len() {
+            return None;
+        }
+        let mut acc = 0usize;
+        for (i, ln) in lines.iter().enumerate() {
+            let end = acc + ln.len();
+            if off <= end {
+                let col = source[acc..off].chars().count();
+                return Some((i, col));
+            }
+            // +1 for the newline the split removed
+            acc = end + 1;
+        }
+        None
+    };
+
+    let mut out = String::new();
+    for diag in diagnostics {
+        out.push_str(&format!(
+            "{}[{}]: {}\n",
+            diag.severity.display_name(),
+            diag.code,
+            diag.message,
+        ));
+
+        let primary = diag.span.primary;
+        if primary == glyim_span::Span::DUMMY {
+            out.push_str("  (no location)\n");
+        } else if let Some((line_i, col_i)) = offset_to_line_col(primary.lo.to_usize()) {
+            out.push_str(&format!(
+                " --> {}:{}:{}\n",
+                file_name,
+                line_i + 1,
+                col_i + 1,
+            ));
+            // Source excerpt with a caret underline.
+            if let Some(src_line) = lines.get(line_i) {
+                let width = line_i + 1;
+                let gutter = " ".repeat(width);
+                out.push_str(&format!("{} |\n", gutter));
+                out.push_str(&format!("{} | {}\n", line_i + 1, src_line));
+                let caret_pad = " ".repeat(col_i);
+                let caret_len = primary
+                    .hi
+                    .to_usize()
+                    .saturating_sub(primary.lo.to_usize())
+                    .max(1);
+                out.push_str(&format!("{} | {}{}\n", gutter, caret_pad, "^".repeat(caret_len)));
+            }
+        }
+        out.push('\n');
+    }
+
+    // Stable across runs, easy to diff.
+    out.trim_end().to_string() + "\n"
 }
 
 /// RunPassStrategy.

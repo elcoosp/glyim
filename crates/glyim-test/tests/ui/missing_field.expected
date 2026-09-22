@@ -1,0 +1,5 @@
+ERROR[T0001]: missing field(s) in struct literal `Point`: y
+ --> missing_field.g:4:13
+     |
+4 |     let p = Point { x: 1 };
+     |             ^^^^^^^^^^^^^^

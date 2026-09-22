@@ -1,0 +1,5 @@
+ERROR[T0001]: no method `bar` found for type
+ --> no_method.g:5:5
+      |
+5 |     f.bar();
+      |     ^^^^^^^
