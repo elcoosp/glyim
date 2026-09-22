@@ -1236,6 +1236,11 @@ impl TyCtxMut {
         visiting: &mut HashSet<AdtId>,
     ) -> bool {
         if visiting.contains(&adt_id) {
+            // Already on the recursion stack: an infinitely-sized type
+            // (`struct Node { next: Node }`) or a mutually-recursive pair
+            // (`struct A { b: B }` / `struct B { a: A }`). Break the cycle.
+            // The result is irrelevant — layout will reject the type as
+            // `LayoutError::Cycle` — but we must not recurse further.
             return false;
         }
         visiting.insert(adt_id);
@@ -1246,11 +1251,22 @@ impl TyCtxMut {
                 visiting.remove(&adt_id);
                 return true;
             }
-            if let TyKind::Adt(child_adt_id, _) = self.ty_kind(field_ty)
-                && self.compute_adt_interior_mutability(*child_adt_id)
-            {
-                visiting.remove(&adt_id);
-                return true;
+            if let TyKind::Adt(child_adt_id, _) = self.ty_kind(field_ty) {
+                // Descend through the SAME `visiting` set. The previous code
+                // called `self.compute_adt_interior_mutability(child)`, which
+                // allocates a fresh `HashSet` — so the guard only covered a
+                // single ADT's own fields and the recursion looped forever on
+                // any cyclic type (`struct Node { next: Node }` overflowed the
+                // host stack, which is an uncatchable abort).
+                let child_id = *child_adt_id;
+                let child_def = match self.adt_defs.get(&child_id) {
+                    Some(d) => d.clone(),
+                    None => continue,
+                };
+                if self.compute_adt_interior_mutability_rec(child_id, &child_def, visiting) {
+                    visiting.remove(&adt_id);
+                    return true;
+                }
             }
         }
         visiting.remove(&adt_id);

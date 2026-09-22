@@ -288,13 +288,26 @@ pub enum LayoutError {
 pub struct SimpleLayoutComputer<'a> {
     ctx: &'a TyCtx,
     target: TargetInfo,
+    /// Types currently being laid out on the recursion stack. A type that
+    /// reappears before its own layout completes is infinitely sized —
+    /// `struct Node { next: Node }` or mutually recursive `struct A { b: B }` /
+    /// `struct B { a: A }` — and must be reported as `LayoutError::Cycle`
+    /// rather than recursing until the host stack overflows. `RefCell` (not
+    /// `Cell`/plain `HashSet`) because `layout_of` takes `&self` and is called
+    /// re-entrantly through the field walk; the borrows are short-lived and
+    /// never overlap.
+    in_progress: std::cell::RefCell<std::collections::HashSet<Ty>>,
 }
 
 impl<'a> SimpleLayoutComputer<'a> {
     /// new.
     pub fn new(ctx: &'a TyCtx, target: TargetInfo) -> Self {
         const _: () = assert!(ALIGN_MAX >= 8, "ALIGN_MAX must be at least 8");
-        Self { ctx, target }
+        Self {
+            ctx,
+            target,
+            in_progress: std::cell::RefCell::new(std::collections::HashSet::new()),
+        }
     }
 
     fn layout_tuple(&self, substs: Substitution) -> Result<Layout, LayoutError> {
@@ -857,6 +870,66 @@ impl<'a> SimpleLayoutComputer<'a> {
 
 impl LayoutComputer for SimpleLayoutComputer<'_> {
     fn layout_of(&self, ty: Ty) -> Result<Layout, LayoutError> {
+        // Cycle guard: a type already on the recursion stack is infinitely
+        // sized. Without this, `struct Node { next: Node }` recurses until the
+        // host stack overflows (an uncatchable abort). Insert on entry, remove
+        // on every exit path; only ADT types can cycle, but checking every
+        // type keeps the guard trivially correct.
+        let already_active = !self.in_progress.borrow_mut().insert(ty);
+        if already_active {
+            return Err(LayoutError::Cycle(ty));
+        }
+        let result = self.layout_of_inner(ty);
+        self.in_progress.borrow_mut().remove(&ty);
+        result
+    }
+
+    fn fn_abi_of(&self, sig: &FnSig) -> Result<FnAbi, LayoutError> {
+        let conv = CallConvention::from(sig.abi);
+        let args = self.ctx.substitution_args(sig.inputs);
+        let arg_abis: Vec<ArgAbi> = args
+            .iter()
+            .filter_map(|arg| {
+                if let GenericArg::Ty(t) = arg {
+                    let layout = self.layout_of(*t).ok()?;
+                    let mode = self.pass_mode_for(*t, &layout, conv);
+                    Some(ArgAbi {
+                        ty: *t,
+                        layout,
+                        mode,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let ret_layout = self.layout_of(sig.output)?;
+        let ret_mode = self.pass_mode_for(sig.output, &ret_layout, conv);
+        Ok(FnAbi {
+            args: arg_abis,
+            ret: ArgAbi {
+                ty: sig.output,
+                layout: ret_layout,
+                mode: ret_mode,
+            },
+            conv,
+            c_variadic: sig.c_variadic,
+        })
+    }
+
+    fn ptr_size(&self) -> Size {
+        Size::bytes(self.target.pointer_size())
+    }
+    fn ptr_align(&self) -> Align {
+        Align::from_bytes(self.target.pointer_align())
+    }
+    fn target_info(&self) -> &TargetInfo {
+        &self.target
+    }
+}
+
+impl SimpleLayoutComputer<'_> {
+    fn layout_of_inner(&self, ty: Ty) -> Result<Layout, LayoutError> {
         let ptr_size = Size::bytes(self.target.pointer_size());
         let ptr_align = Align::from_bytes(self.target.pointer_align());
         let layout = match self.ctx.ty_kind(ty) {
@@ -977,49 +1050,6 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
             });
         }
         Ok(layout)
-    }
-
-    fn fn_abi_of(&self, sig: &FnSig) -> Result<FnAbi, LayoutError> {
-        let conv = CallConvention::from(sig.abi);
-        let args = self.ctx.substitution_args(sig.inputs);
-        let arg_abis: Vec<ArgAbi> = args
-            .iter()
-            .filter_map(|arg| {
-                if let GenericArg::Ty(t) = arg {
-                    let layout = self.layout_of(*t).ok()?;
-                    let mode = self.pass_mode_for(*t, &layout, conv);
-                    Some(ArgAbi {
-                        ty: *t,
-                        layout,
-                        mode,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let ret_layout = self.layout_of(sig.output)?;
-        let ret_mode = self.pass_mode_for(sig.output, &ret_layout, conv);
-        Ok(FnAbi {
-            args: arg_abis,
-            ret: ArgAbi {
-                ty: sig.output,
-                layout: ret_layout,
-                mode: ret_mode,
-            },
-            conv,
-            c_variadic: sig.c_variadic,
-        })
-    }
-
-    fn ptr_size(&self) -> Size {
-        Size::bytes(self.target.pointer_size())
-    }
-    fn ptr_align(&self) -> Align {
-        Align::from_bytes(self.target.pointer_align())
-    }
-    fn target_info(&self) -> &TargetInfo {
-        &self.target
     }
 }
 
