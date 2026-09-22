@@ -51,6 +51,10 @@ pub struct OverflowError {
     pub predicate: Predicate,
     /// Struct.
     pub depth: usize,
+    /// Source location of the obligation that exceeded the limit. Carried so
+    /// the caller can emit the overflow diagnostic at a real span rather than
+    /// `Span::DUMMY`.
+    pub span: glyim_span::Span,
 }
 
 /// can_coerce.
@@ -138,6 +142,7 @@ impl<'a> FulfillmentCtx<'a> {
                 return Err(OverflowError {
                     predicate: obligation.predicate.clone(),
                     depth: self.processed_count,
+                    span: obligation.cause.span,
                 });
             }
             match &obligation.predicate {

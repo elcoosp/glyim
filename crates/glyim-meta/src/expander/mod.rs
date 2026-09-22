@@ -406,10 +406,20 @@ impl<'a> ExpanderImpl<'a> {
         depth: u32,
     ) -> (Option<GreenNode>, Vec<GlyimDiagnostic>) {
         if depth > get_recursion_limit() {
+            // `node` is the macro-call syntax node; use its byte range so the
+            // diagnostic points at the offending expansion instead of
+            // `Span::DUMMY`.
+            let range = node.text_range();
+            let span = glyim_span::Span::new(
+                glyim_span::FileId::from_raw(u32::MAX),
+                glyim_span::ByteIdx::from_raw(u32::from(range.start())),
+                glyim_span::ByteIdx::from_raw(u32::from(range.end())),
+                glyim_span::SyntaxContext::ROOT,
+            );
             return (
                 None,
                 vec![GlyimDiagnostic::type_error(
-                    Span::DUMMY,
+                    span,
                     "macro recursion limit exceeded",
                 )],
             );

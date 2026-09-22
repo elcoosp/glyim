@@ -550,9 +550,15 @@ pub fn build_def_map(
         }
         prev_count = new_count;
         // Guard against non-terminating resolution in pathological inputs.
+        // No single item owns this failure; point at the first module span
+        // that has one, otherwise fall back to the dummy.
         if prev_count > modules.len() * 1024 {
+            let span = modules
+                .iter()
+                .find_map(|m| (!m.span.is_dummy()).then_some(m.span))
+                .unwrap_or(Span::DUMMY);
             diagnostics.push(GlyimDiagnostic::parse_error(
-                Span::DUMMY,
+                span,
                 "import resolution did not reach a fixed point".to_string(),
             ));
             break;

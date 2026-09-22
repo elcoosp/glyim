@@ -841,9 +841,14 @@ pub fn typeck_crate(
     fulfill.extend(all_obligations);
 
     if let Err(overflow) = fulfill.process_obligations(100_000) {
+        // Point at the obligation that blew the limit; fall back to a dummy
+        // span only if the obligation had no location either.
         diagnostics.push(GlyimDiagnostic::type_error(
-            Span::DUMMY,
-            format!("overflow evaluating obligation: {:?}", overflow.predicate),
+            overflow.span,
+            format!(
+                "overflow evaluating obligation after {} steps: {:?}",
+                overflow.depth, overflow.predicate
+            ),
         ));
     }
 
