@@ -290,7 +290,8 @@ fn execute_inner(
     let file_id = next_file_id();
 
     let compile_span = tracing::info_span!("compile", file_id = file_id.to_raw());
-    let output = compile_span.in_scope(|| compiler.compile(&test.source, file_id, &flags));
+    let output = compile_span
+        .in_scope(|| compiler.compile(&test.source, &test.path, file_id, &flags));
 
     let run_timeout = std::time::Duration::from_secs(test.config.timeout_secs);
 

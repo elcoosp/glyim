@@ -11,7 +11,7 @@ use std::sync::Arc;
 fn compile(src: &str) -> CompileOutput {
     let backend = Arc::new(MockCodegen::new());
     let compiler = PipelineCompiler::new(backend);
-    compiler.compile(src, FileId::from_raw(1), &[])
+    compiler.compile(src, std::path::Path::new("test.g"), FileId::from_raw(1), &[])
 }
 
 #[test]

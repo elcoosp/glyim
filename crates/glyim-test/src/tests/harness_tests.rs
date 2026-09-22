@@ -289,7 +289,7 @@ fn test_pipeline_compiler_surfaces_mir_artifacts() {
     let compiler = harness::compiler::PipelineCompiler::new(backend.clone());
 
     let source = "fn main() {}";
-    let output = compiler.compile(source, FileId::from_raw(777), &[]);
+    let output = compiler.compile(source, std::path::Path::new("test.g"), FileId::from_raw(777), &[]);
 
     assert!(
         output.diagnostics.is_empty(),
@@ -419,7 +419,7 @@ fn test_pipeline_compiler_populates_executable_path_field() {
     let backend: Arc<dyn glyim_codegen::CodegenBackend + Send + Sync> =
         Arc::new(MockCodegen::new());
     let compiler = crate::harness::compiler::PipelineCompiler::new(backend);
-    let output = compiler.compile("fn main() {}", FileId::from_raw(888), &[]);
+    let output = compiler.compile("fn main() {}", std::path::Path::new("test.g"), FileId::from_raw(888), &[]);
     assert!(
         output.executable_path.is_none(),
         "mock backend emits no real object, so linking yields None (got {:?})",

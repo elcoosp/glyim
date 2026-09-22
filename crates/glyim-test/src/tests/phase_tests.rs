@@ -12,7 +12,7 @@ fn test_pipeline_compiler_construction() {
 fn test_frontend_only_compiler() {
     use harness::compiler::TestCompiler;
     let compiler = harness::compiler::FrontendOnlyCompiler;
-    let output = compiler.compile("fn main() {}", glyim_span::FileId::from_raw(9999), &[]);
+    let output = compiler.compile("fn main() {}", std::path::Path::new("test.g"), glyim_span::FileId::from_raw(9999), &[]);
     assert!(output.syntax_tree.is_some());
 }
 
@@ -55,7 +55,7 @@ fn test_pipeline_runs_macro_expansion_builtin() {
     let compiler = harness::compiler::PipelineCompiler::new(std::sync::Arc::new(backend)
         as std::sync::Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>);
     let src = "fn main() { let _ = stringify!(hello world); }";
-    let out = compiler.compile(src, glyim_span::FileId::from_raw(1), &[]);
+    let out = compiler.compile(src, std::path::Path::new("test.g"), glyim_span::FileId::from_raw(1), &[]);
     assert!(
         out.diagnostics.is_empty(),
         "builtin-macro source should compile via the live pipeline (expansion ran): {:?}",
@@ -95,7 +95,7 @@ fn test_pipeline_runs_proc_macro_via_registry() {
     .with_proc_registry(Some(std::sync::Arc::new(registry)));
 
     let src = "fn main() { mk!(x) }";
-    let out = compiler.compile(src, glyim_span::FileId::from_raw(1), &[]);
+    let out = compiler.compile(src, std::path::Path::new("test.g"), glyim_span::FileId::from_raw(1), &[]);
     assert!(
         out.diagnostics.is_empty(),
         "proc-macro source should compile via the live pipeline (expansion ran): {:?}",

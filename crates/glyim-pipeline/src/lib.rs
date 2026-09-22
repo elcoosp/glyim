@@ -70,12 +70,15 @@ fn register_builtin_traits(
     trait_ctx.register_lang_trait(unpin, BuiltinTrait::Unpin);
 }
 
+/// External module loading (`mod foo;` -> `foo.g`).
+pub mod mod_loader;
 mod mono_cache;
 mod pipeline_context;
 use mono_cache::{
     PipelineMonoCache, compute_max_cgus, make_drop_glue_provider, make_mir_body_provider,
 };
 use pipeline_context::{PipelineBorrowckCtx, PipelineLowerCtx};
+use glyim_span::FileId;
 
 /// Pipeline.
 pub struct Pipeline;
@@ -95,6 +98,53 @@ pub struct CompileArtifacts {
     pub ty_ctx: Arc<glyim_type::TyCtx>,
 }
 
+/// Load a crate's source into the VFS and **flatten its external modules**.
+///
+/// This is the single entry point every pipeline path (entry discovery,
+/// full compile, MIR-only, `--emit=mir|llvm-ir|asm`) must use to obtain the
+/// crate source. It reads `path` into the VFS, runs
+/// [`mod_loader::flatten_modules`] to splice every bodyless `mod foo;` with
+/// the contents of `foo.g` / `foo/mod.g`, then *writes the flattened source
+/// back into the VFS* so every later `file_content(file_id)` read (codegen,
+/// diagnostic rendering) sees the merged crate.
+///
+/// Centralising this is what keeps the emit paths consistent: previously
+/// only `compile_file_with_artifacts` loaded external modules, so
+/// `--emit=mir` silently produced error-typed MIR and `--emit=llvm-ir` ICEd
+/// on the unresolved module path. Any new pipeline entry point must call this
+/// rather than reading the VFS directly.
+fn load_crate_source(
+    db: &mut Database,
+    path: &Path,
+) -> Result<(FileId, Arc<str>), Vec<GlyimDiagnostic>> {
+    // Prefer the VFS content already registered for `path` (the test harness
+    // and `glyip` push in-memory source, which must NOT be re-read from
+    // disk — the file may not exist there). Fall back to reading from disk
+    // for the CLI path, which points at a real file.
+    let file_id = match db.vfs().file_id(path) {
+        Some(id) if db.vfs().file_content(id).is_some() => id,
+        _ => db
+            .vfs()
+            .add_file_from_disk(path)
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?,
+    };
+    let raw = db
+        .vfs()
+        .file_content(file_id)
+        .unwrap_or_else(|| Arc::from(""));
+
+    let (flattened, mod_diags) = mod_loader::flatten_modules(&raw, path, file_id);
+    if mod_diags
+        .iter()
+        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
+    {
+        return Err(mod_diags);
+    }
+    let flattened: Arc<str> = Arc::from(flattened);
+    db.vfs().set_file_content(file_id, flattened.clone());
+    Ok((file_id, flattened))
+}
+
 impl Pipeline {
     /// Resolve the crate's entry `main` function and return its `LocalDefId`
     /// raw index (or `None` if the program has no `fn main`). Used to tell the
@@ -105,11 +155,7 @@ impl Pipeline {
     /// exists because the backend is constructed *before* the full pipeline
     /// runs, so the entry `main` must be known up front.
     pub fn entry_main_local_id(db: &mut Database, path: &Path) -> Option<u32> {
-        let file_id = db.vfs().add_file_from_disk(path).ok()?;
-        let source = db
-            .vfs()
-            .file_content(file_id)
-            .unwrap_or_else(|| Arc::from(""));
+        let (file_id, source) = load_crate_source(db, path).ok()?;
         let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
         if parse_result
             .diagnostics
@@ -175,15 +221,13 @@ impl Pipeline {
         let sink = DiagSink::new();
         let sink_cell = RefCell::new(sink);
 
-        let file_id = db
-            .vfs()
-            .add_file_from_disk(path)
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?;
-        let source = db
-            .vfs()
-            .file_content(file_id)
-            .unwrap_or_else(|| Arc::from(""));
-
+        let (file_id, source) = match load_crate_source(db, path) {
+            Ok(pair) => pair,
+            Err(mod_diags) => {
+                sink_cell.borrow_mut().extend(mod_diags);
+                return Err(sink_cell.into_inner().into_diagnostics());
+            }
+        };
         let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
         sink_cell
             .borrow_mut()
@@ -571,14 +615,13 @@ pub fn compile_file_to_mir(
     let sink = DiagSink::new();
     let sink_cell = RefCell::new(sink);
 
-    let file_id = db
-        .vfs()
-        .add_file_from_disk(path)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?;
-    let source = db
-        .vfs()
-        .file_content(file_id)
-        .unwrap_or_else(|| Arc::from(""));
+    let (file_id, source) = match load_crate_source(db, path) {
+        Ok(pair) => pair,
+        Err(mod_diags) => {
+            sink_cell.borrow_mut().extend(mod_diags);
+            return Err(sink_cell.into_inner().into_diagnostics());
+        }
+    };
 
     let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
     sink_cell
@@ -736,14 +779,13 @@ pub fn emit_mir(
     let sink = DiagSink::new();
     let sink_cell = RefCell::new(sink);
 
-    let file_id = db
-        .vfs()
-        .add_file_from_disk(input)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?;
-    let source = db
-        .vfs()
-        .file_content(file_id)
-        .unwrap_or_else(|| Arc::from(""));
+    let (file_id, source) = match load_crate_source(db, input) {
+        Ok(pair) => pair,
+        Err(mod_diags) => {
+            sink_cell.borrow_mut().extend(mod_diags);
+            return Err(sink_cell.into_inner().into_diagnostics());
+        }
+    };
 
     let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
     sink_cell
@@ -857,14 +899,13 @@ pub fn emit_llvm_ir(
     let sink = DiagSink::new();
     let sink_cell = RefCell::new(sink);
 
-    let file_id = db
-        .vfs()
-        .add_file_from_disk(input)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?;
-    let source = db
-        .vfs()
-        .file_content(file_id)
-        .unwrap_or_else(|| Arc::from(""));
+    let (file_id, source) = match load_crate_source(db, input) {
+        Ok(pair) => pair,
+        Err(mod_diags) => {
+            sink_cell.borrow_mut().extend(mod_diags);
+            return Err(sink_cell.into_inner().into_diagnostics());
+        }
+    };
 
     let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
     sink_cell
@@ -1002,14 +1043,13 @@ pub fn emit_asm(
     let sink = DiagSink::new();
     let sink_cell = RefCell::new(sink);
 
-    let file_id = db
-        .vfs()
-        .add_file_from_disk(input)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?;
-    let source = db
-        .vfs()
-        .file_content(file_id)
-        .unwrap_or_else(|| Arc::from(""));
+    let (file_id, source) = match load_crate_source(db, input) {
+        Ok(pair) => pair,
+        Err(mod_diags) => {
+            sink_cell.borrow_mut().extend(mod_diags);
+            return Err(sink_cell.into_inner().into_diagnostics());
+        }
+    };
 
     let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
     sink_cell

@@ -50,14 +50,31 @@ impl std::fmt::Debug for CompileOutput {
 /// TestCompiler.
 pub trait TestCompiler: Send + Sync {
     /// compile.
-    fn compile(&self, source: &str, file_id: FileId, flags: &[String]) -> CompileOutput;
+    ///
+    /// `source_path` is the fixture's *original* path on disk. It is used to
+    /// resolve external modules (`mod foo;` → `foo.g`) relative to the file
+    /// that declared them: the harness may compile the source from a copy,
+    /// but `mod` lookup must still see the fixture's sibling files.
+    fn compile(
+        &self,
+        source: &str,
+        source_path: &std::path::Path,
+        file_id: FileId,
+        flags: &[String],
+    ) -> CompileOutput;
 }
 
 /// FrontendOnlyCompiler.
 pub struct FrontendOnlyCompiler;
 
 impl TestCompiler for FrontendOnlyCompiler {
-    fn compile(&self, source: &str, file_id: FileId, _flags: &[String]) -> CompileOutput {
+    fn compile(
+        &self,
+        source: &str,
+        _source_path: &std::path::Path,
+        file_id: FileId,
+        _flags: &[String],
+    ) -> CompileOutput {
         tracing::info!(phase = "parse", file_id = file_id.to_raw());
         let result = glyim_frontend::parse_to_syntax(source, file_id);
         CompileOutput {
@@ -133,7 +150,13 @@ impl PipelineCompiler {
 }
 
 impl TestCompiler for PipelineCompiler {
-    fn compile(&self, source: &str, file_id: FileId, _flags: &[String]) -> CompileOutput {
+    fn compile(
+        &self,
+        source: &str,
+        source_path: &std::path::Path,
+        file_id: FileId,
+        _flags: &[String],
+    ) -> CompileOutput {
         use glyim_db::{CrateConfig, Database};
 
         tracing::info!(phase = "full-pipeline", file_id = file_id.to_raw());
@@ -156,10 +179,13 @@ impl TestCompiler for PipelineCompiler {
         };
 
         let mut db = Database::new(config);
-        let path =
-            std::env::temp_dir().join(format!("glyim_test_{}_{}.g", unique_tag, file_id.to_raw()));
-        std::fs::write(&path, source)
-            .expect("failed to write temp source file for PipelineCompiler");
+
+        // Compile in memory, keyed by the fixture's *real* path. External
+        // modules (`mod foo;`) then resolve relative to that path's directory
+        // — a sibling `foo.g` — with no staging directory and no disk write.
+        // The path is unique per fixture (it is the fixture), so concurrent
+        // tests never collide.
+        let path = source_path.to_path_buf();
         db.vfs().add_file_content(&path, Arc::from(source));
 
         // Phase 9.2: run macro expansion over the parsed source *before* the
@@ -188,9 +214,7 @@ impl TestCompiler for PipelineCompiler {
             // are preserved) so rowan reparses it faithfully (Phase 9.2).
             let expanded_src = glyim_meta::join_tokens_with_spaces(&expanded);
             db.vfs()
-                .add_file_content(&path, Arc::from(expanded_src.clone()));
-            std::fs::write(&path, &expanded_src)
-                .expect("failed to write expanded source for PipelineCompiler");
+                .add_file_content(&path, Arc::from(expanded_src));
         }
 
         let output_path =
