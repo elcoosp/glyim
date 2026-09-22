@@ -4,6 +4,7 @@ edition.workspace = true
 version.workspace = true
 
 [dependencies]
+sha2 = { workspace = true }
 glyim-core = { workspace = true }
 glyim-span = { workspace = true }
 glyim-diag = { workspace = true }
@@ -14,4 +15,5 @@ parking_lot = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+tempfile = "3"
 glyim-test = { workspace = true }

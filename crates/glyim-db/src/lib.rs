@@ -1,4 +1,6 @@
 //! Crate root.
+pub mod cache;
+
 use glyim_core::def_id::CrateId;
 use glyim_core::interner::Interner;
 use glyim_vfs::Vfs;

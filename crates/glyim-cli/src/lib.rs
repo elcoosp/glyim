@@ -332,6 +332,61 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         llvm = llvm.with_entry_main(main_id);
     }
 
+    // ---- Incremental cache (obj / exec, non-Thin) ----
+    //
+    // A whole-crate content-addressed cache. The key is the *flattened* crate
+    // source (external modules already spliced in), the target triple, the
+    // optimization level, and whether a C-ABI `main` wrapper was requested —
+    // every input that changes the produced object. On a hit we copy the
+    // cached object into `object_path` and skip the entire pipeline. On a
+    // miss we compile as usual and store the result.
+    //
+    // Scope: only `obj`/`exec` on the LLVM backend without ThinLTO. The
+    // `mir`/`llvm-ir`/`asm` paths return above; ThinLTO produces per-CGU
+    // bitcode whose combination depends on the link driver, which is out of
+    // this first rung's scope.
+    let cacheable = matches!(emit, EmitKind::Obj | EmitKind::Exec)
+        && args.backend != "bytecode"
+        && lto != LtoKind::Thin;
+    let cache = if cacheable {
+        Some(glyim_db::cache::CompileCache::open_default())
+    } else {
+        None
+    };
+    let mut cache_key: Option<String> = None;
+    if cacheable
+        && let Some(c) = cache.as_ref()
+    {
+        let key = glyim_pipeline::Pipeline::compute_cache_key(
+            &mut db,
+            input,
+            &target_triple,
+            args.opt_level,
+            matches!(emit, EmitKind::Exec) && entry_main.is_some(),
+        );
+        if let Some(k) = key {
+            if let Some(hit) = c.lookup(&k) {
+                // Copy the cached object to the requested path. Best effort:
+                // any I/O error falls through to a fresh compile.
+                if std::fs::copy(&hit, &object_path).is_ok() {
+                    // Unconditional stderr message: a user piping stdout wants
+                    // to know why nothing recompiled, and this must not depend
+                    // on `RUST_LOG` being configured. Matches Cargo's `Fresh`
+                    // line on stderr.
+                    eprintln!("cache hit — skipping compilation");
+                    // Skip the compile blocks; jump straight to link (if any).
+                    return finalize_after_object(
+                        emit,
+                        &object_path,
+                        final_output_path.as_deref(),
+                        &args,
+                    );
+                }
+            }
+            cache_key = Some(k);
+        }
+    }
+
     // ThinLTO: emit one bitcode file per codegen unit, then run the thin-link
     // driver (`thin_lto_link`, which shells out to `llvm-lto2`) to combine them
     // incrementally. The thin-linked object is written to `object_path` for the
@@ -424,6 +479,16 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         )?;
     }
 
+    // Store the produced object in the cache for next time. Only reached
+    // when the pipeline ran (a cache hit returned above), only on the
+    // cacheable paths, and only after the compile succeeded (the `?` above
+    // would have propagated any error before this point).
+    if let (Some(c), Some(k)) = (cache.as_ref(), cache_key.as_ref())
+        && object_path.exists()
+    {
+        c.store(k, &object_path);
+    }
+
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
         let final_path = final_output_path.expect("emit should have final output");
         // `cdylib` produces a position-independent shared library (`-shared`);
@@ -450,6 +515,40 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
 /// Construct the Rust target triple for the build host, used to compile
 /// proc-macro dependencies (which run on the host at compile time). Derived
 /// from `std::env::consts` so it matches the machine executing the compiler.
+
+/// Finish a compile whose object already exists at `object_path` (e.g. a
+/// cache hit): run the link step for `--emit=exec` / `--emit=cdylib`, and
+/// no-op for `--emit=obj`. Mirrors the tail of the normal emit path so the
+/// two are behaviourally identical.
+fn finalize_after_object(
+    emit: EmitKind,
+    object_path: &std::path::Path,
+    final_output_path: Option<&std::path::Path>,
+    args: &CliArgs,
+) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+    if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
+        let final_path = final_output_path.ok_or_else(|| {
+            vec![glyim_diag::GlyimDiagnostic::internal_error(
+                "emit should have a final output path",
+            )]
+        })?;
+        let extra_flags = if emit == EmitKind::Cdylib {
+            Some("-shared")
+        } else {
+            None
+        };
+        linker::invoke_linker(
+            object_path,
+            final_path,
+            args.linker.as_deref(),
+            extra_flags.or(args.link_flags.as_deref()),
+            args.target.as_deref(),
+        )
+        .map_err(|e| vec![glyim_diag::GlyimDiagnostic::internal_error(&e)])?;
+    }
+    Ok(())
+}
+
 fn host_target_triple() -> String {
     let arch = std::env::consts::ARCH;
     let os = std::env::consts::OS;

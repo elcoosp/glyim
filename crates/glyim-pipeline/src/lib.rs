@@ -197,6 +197,32 @@ impl Pipeline {
         )
         .map(|_| ())
     }
+
+    /// Compute the content-addressed cache key for compiling `path` under the
+    /// given build configuration, or `None` when the crate cannot be loaded
+    /// (missing file, module cycle, …). The key incorporates the **flattened**
+    /// crate source — every external module already spliced in — so a change
+    /// to any `.g` file in the crate changes the key and invalidates the
+    /// cached object.
+    ///
+    /// `has_entry_main` must be `true` when the caller will ask the backend
+    /// for a C-ABI `main` wrapper (`--emit=exec`), since that changes the
+    /// produced object.
+    pub fn compute_cache_key(
+        db: &mut Database,
+        path: &Path,
+        target: &str,
+        opt_level: u8,
+        has_entry_main: bool,
+    ) -> Option<String> {
+        let (_, source) = load_crate_source(db, path).ok()?;
+        Some(glyim_db::cache::CompileCache::key(
+            &source,
+            target,
+            opt_level,
+            has_entry_main,
+        ))
+    }
 }
 
 impl Pipeline {
