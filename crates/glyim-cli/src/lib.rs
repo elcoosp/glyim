@@ -512,10 +512,6 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     Ok(())
 }
 
-/// Construct the Rust target triple for the build host, used to compile
-/// proc-macro dependencies (which run on the host at compile time). Derived
-/// from `std::env::consts` so it matches the machine executing the compiler.
-
 /// Finish a compile whose object already exists at `object_path` (e.g. a
 /// cache hit): run the link step for `--emit=exec` / `--emit=cdylib`, and
 /// no-op for `--emit=obj`. Mirrors the tail of the normal emit path so the
@@ -549,6 +545,9 @@ fn finalize_after_object(
     Ok(())
 }
 
+/// Construct the Rust target triple for the build host, used to compile
+/// proc-macro dependencies (which run on the host at compile time). Derived
+/// from `std::env::consts` so it matches the machine executing the compiler.
 fn host_target_triple() -> String {
     let arch = std::env::consts::ARCH;
     let os = std::env::consts::OS;
