@@ -900,17 +900,34 @@ fn lower_path_expr(node: &SyntaxNode, interner: &mut Interner, body: &mut Body) 
             }
             glyim_syntax::SyntaxElement::Node(n) if n.kind() == SyntaxKind::UsePath => {
                 for t in n.children_with_tokens() {
-                    if let glyim_syntax::SyntaxElement::Token(tt) = t
-                        && (tt.kind() == SyntaxKind::Ident
-                            || tt.kind() == SyntaxKind::KwSelf
-                            || tt.kind() == SyntaxKind::KwSuper
-                            || tt.kind() == SyntaxKind::KwCrate)
-                    {
-                        flush_pending(&mut segments, &mut pending_args);
-                        segments.push(PathSegment {
-                            name: interner.intern(tt.text()),
-                            generic_args: None,
-                        });
+                    match t {
+                        glyim_syntax::SyntaxElement::Token(tt)
+                            if tt.kind() == SyntaxKind::Ident
+                                || tt.kind() == SyntaxKind::KwSelf
+                                || tt.kind() == SyntaxKind::KwSuper
+                                || tt.kind() == SyntaxKind::KwCrate =>
+                        {
+                            flush_pending(&mut segments, &mut pending_args);
+                            segments.push(PathSegment {
+                                name: interner.intern(tt.text()),
+                                generic_args: None,
+                            });
+                        }
+                        // Turbofish type args nested *inside* the `UsePath`
+                        // node (`f::<i32>`, `Vec::<T>::new`). The parser
+                        // places the `PathType` node as a sibling of the
+                        // `Ident` token *within* the `UsePath`, so the outer
+                        // `is_type_node` branch below never sees it; without
+                        // this arm the args were silently dropped and the
+                        // path reached typeck with `generic_args: None`
+                        // (`f::<i32>(x)` monomorphized as `f` with no
+                        // substitution).
+                        glyim_syntax::SyntaxElement::Node(nt) if super::is_type_node(&nt) => {
+                            if let Some(ty) = super::lower_type::lower_type_ref(&nt, interner) {
+                                pending_args.push(ty);
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }

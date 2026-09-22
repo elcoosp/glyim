@@ -93,10 +93,18 @@ impl CompileCache {
     /// All inputs that can change the produced object MUST be included. The
     /// `source` is the **flattened** crate source (external modules already
     /// spliced in), so a change to any module's contents changes the key.
+    ///
+    /// The compiler's own version is part of the key: an upgrade that changes
+    /// codegen must not serve an object produced by the previous binary. A
+    /// stale-object bug (upgraded compiler, unchanged source, cache hit on an
+    /// object the old compiler emitted) is exactly the failure mode this
+    /// guards against.
     pub fn key(source: &str, target: &str, opt_level: u8, entry_main: bool) -> String {
         let mut h = Sha256::new();
         // Field separator so `("ab", "c")` and `("a", "bc")` cannot collide.
-        h.update(b"source\x1f");
+        h.update(b"compiler\x1f");
+        h.update(env!("CARGO_PKG_VERSION").as_bytes());
+        h.update(b"\x1fsource\x1f");
         h.update(source.as_bytes());
         h.update(b"\x1ftarget\x1f");
         h.update(target.as_bytes());

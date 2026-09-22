@@ -1035,30 +1035,43 @@ impl<'a> FnCtxt<'a> {
                         // that codegen cannot lower. This is the single-await
                         // `TyKind::Error` gap (generic `Future::Output`/`block_on`).
                         // Build the callee's `FnDef` substitution from the
-                        // *inferred generic parameters* (`subst`), not from
-                        // `inputs`. `inputs` is the formal parameter-type
-                        // list, unrelated to generic arity: `fn dep(x: i32)`
-                        // has `inputs = [i32]` and zero generic params, but an
-                        // element-wise map over `inputs` produced a 1-element
-                        // `FnDef` subst (`substs = [i32]`), making
-                        // monomorphization treat `dep` as generic and the
-                        // post-mono unused-generic check warn spuriously.
+                        // *inferred generic parameters* (`subst`), falling back
+                        // to the callee's own existing substs (which carry the
+                        // turbofish, set in `check_path`).
                         //
-                        // `subst` is keyed by the generic-parameter index that
-                        // instantiation touched, so `max(key) + 1` is the true
-                        // arity: empty for `dep`, `[i32]` for `id::<i32>`.
-                        let arity = subst
-                            .keys()
-                            .copied()
-                            .max()
-                            .map(|k| k as usize + 1)
-                            .unwrap_or(0);
+                        // Why not `inputs`: the formal parameter-type list is
+                        // unrelated to generic arity — `fn dep(x: i32)` has
+                        // `inputs = [i32]` and zero generic params, and an
+                        // element-wise map over `inputs` made every non-generic
+                        // fn look generic.
+                        //
+                        // Why not arg-derived `subst` alone: `id::<i32>(x)`
+                        // where `x` is a generic-typed argument produces
+                        // `subst = {0: <x's type>}`, but `unused::<i32>(1)`
+                        // where the parameter is concrete produces `subst = {}`
+                        // — the explicit turbofish is the *only* source of the
+                        // substitution. Layering both (base = existing FnDef
+                        // substs, override = arg-derived) resolves the arity
+                        // correctly in both cases.
+                        let base_substs: Vec<GenericArg> = match self.ctx.ty_kind(func_ty) {
+                            TyKind::FnDef(_, existing) => {
+                                self.ctx.substitution_args(*existing).to_vec()
+                            }
+                            _ => Vec::new(),
+                        };
+                        let arity = base_substs
+                            .len()
+                            .max(subst.keys().copied().max().map(|k| k as usize + 1).unwrap_or(0));
                         let new_substs = self.ctx.intern_substitution(
                             (0..arity)
                                 .map(|i| {
-                                    subst.get(&(i as u32)).cloned().unwrap_or_else(|| {
-                                        GenericArg::Ty(self.ctx.error_ty())
-                                    })
+                                    subst
+                                        .get(&(i as u32))
+                                        .cloned()
+                                        .or_else(|| base_substs.get(i).cloned())
+                                        .unwrap_or_else(|| {
+                                            GenericArg::Ty(self.ctx.error_ty())
+                                        })
                                 })
                                 .collect(),
                         );

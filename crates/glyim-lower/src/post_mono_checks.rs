@@ -102,7 +102,15 @@ pub fn check_unused_generic_params(
                 .map(|arc| arc.as_ref())
                 .unwrap_or_else(|| item.body.as_ref());
             if !body_uses_any_param(checked_body, ctx) {
-                let msg = format!("unused generic parameter(s) in function `{}`", item.symbol);
+                // `item.symbol` is a Debug-formatted `MonoItem`; not suitable
+                // for a user-facing message. Render the function as
+                // `fn_<local_def_id>` instead, matching the symbol codegen
+                // emits, so the user can cross-reference the object file.
+                let name = match &item.item {
+                    MonoItem::Fn { def_id, .. } => format!("fn_{}", def_id.to_raw()),
+                    _ => item.symbol.clone(),
+                };
+                let msg = format!("unused generic parameter(s) in function `{name}`");
                 diags.push(GlyimDiagnostic::new(
                     glyim_diag::ErrorCode {
                         category: glyim_diag::ErrorCategory::Type,

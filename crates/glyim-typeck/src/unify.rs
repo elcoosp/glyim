@@ -253,7 +253,39 @@ impl<'a> FnCtxt<'a> {
 
             let fn_def_id = FnDefId::from_raw(local.to_raw());
             if self.ctx.fn_sig(fn_def_id).is_some() {
-                let substs = self.ctx.intern_substitution(vec![]);
+                // Turbofish: `path.segments.last().generic_args` carries the
+                // explicit type arguments written after `::<...>`
+                // (`id::<i32>(x)`). Resolve them and build the callee's
+                // `FnDef` substitution from the concrete types, so an
+                // explicitly-instantiated generic fn carries the correct
+                // substs even when no argument infers the parameter
+                // (`fn unused<T>(x: i32)` called as `unused::<i32>(1)`).
+                //
+                // Previously the substs were unconditionally empty here and
+                // the `Call` arm re-derived them from argument types only, so
+                // a turbofish that the arguments did not confirm was dropped:
+                // `unused::<i32>(1)` monomorphized as `unused` with zero
+                // generic args, and the generic-body `T` was lost.
+                let explicit_args: Option<&[glyim_hir::TypeRef]> =
+                    path.segments.last().and_then(|s| s.generic_args.as_deref());
+                let substs = if let Some(args) = explicit_args {
+                    let mut resolved: Vec<GenericArg> = Vec::with_capacity(args.len());
+                    for ty_ref in args {
+                        let ty = crate::tyconv::resolve_type_ref(
+                            self.ctx,
+                            self.infer,
+                            self.def_map,
+                            self.diagnostics,
+                            ty_ref,
+                            &self.param_map,
+                            span,
+                        );
+                        resolved.push(GenericArg::Ty(ty));
+                    }
+                    self.ctx.intern_substitution(resolved)
+                } else {
+                    self.ctx.intern_substitution(vec![])
+                };
                 let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::FnRef(fn_def_id),
