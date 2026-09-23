@@ -709,6 +709,15 @@ impl TyCtxMut {
     /// resolution by name (`resolve_name_to_adt_ty`) can find it regardless of
     /// the def-map interner (plan unstub-5 P5).
     pub fn register_adt_with_name(&mut self, name: Name, id: AdtId, def: AdtDef) {
+        if std::env::var("GLYIM_DBG_GLOBAL_ADT").is_ok() {
+            let name_str = self.resolve_name_for_debug(name);
+            if name_str.contains("Global") || name_str.contains("GLOBAL") {
+                eprintln!(
+                    "[GLOBAL_ADT] name={} id={:?} kind={:?}",
+                    name_str, id, def.kind
+                );
+            }
+        }
         if std::env::var("GLYIM_DBG_REGISTER_ADT").is_ok() {
             let prev_params = self
                 .adt_defs

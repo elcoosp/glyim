@@ -811,7 +811,17 @@ fn resolve_qualified_path(
     // module tree, then build the ADT type with the final segment's generic
     // arguments (if any).
     let local = resolve_path_to_local_def_id(ctx, def_map, path)?;
-    let adt_id = AdtId::from_raw(local.to_raw());
+    let from_defmap = AdtId::from_raw(local.to_raw());
+    // Script 127: same fallback as resolve_name_to_adt_ty — use the
+    // def-map id only if it has an adt_defs entry; otherwise try the
+    // name-keyed id (which Pass 1 has mapped to the builtin AdtId).
+    let adt_id = if ctx.adt_def(from_defmap).is_some() {
+        from_defmap
+    } else if let Some(name) = path.as_name() {
+        ctx.adt_id_by_name(name).unwrap_or(from_defmap)
+    } else {
+        from_defmap
+    };
     let arity = ctx.adt_generic_arity(adt_id);
     // Build the substitution. When the path has an explicit turbofish
     // (`Foo::<i32>`), use the written args. When it doesn't, create fresh
@@ -1140,11 +1150,31 @@ pub(crate) fn resolve_name_to_adt_ty(
     // unify (e.g. `ErrorKind::Interrupted` resolving to Adt35 while
     // `Error::kind()` returns Adt63). Fall back to `adt_id_by_name` only for
     // generated types (async future structs) that are not in the def map.
+    // Script 127: prefer the def-map id, but fall back to `adt_id_by_name`
+    // when the def-map id has no actual `adt_defs` entry. The stdlib declares
+    // `enum Option<T>` in option.g, giving it a low def-map LocalDefId (e.g.
+    // AdtId(9)), but Pass 1's `adt_id_for_item` — with Script 124's builtin
+    // preference — registers the *builtin* AdtId (1010) instead. So
+    // AdtId(9) is never in `adt_defs`; only AdtId(1010) has the enum.
+    // Every use-site resolution must therefore check both and pick the one
+    // that actually has a definition.
     let adt_id = match path
         .as_name()
         .and_then(|name| resolve_name_to_def_id(def_map, name))
     {
-        Some(def_id) => AdtId::from_raw(def_id.local_id.to_raw()),
+        Some(def_id) => {
+            let from_defmap = AdtId::from_raw(def_id.local_id.to_raw());
+            // Prefer the def-map id if it has an adt_defs entry.
+            if ctx.adt_def(from_defmap).is_some() {
+                from_defmap
+            } else if let Some(name) = path.as_name() {
+                // Fall back to the name-keyed id (which Pass 1 has registered
+                // at the canonical builtin AdtId).
+                ctx.adt_id_by_name(name).unwrap_or(from_defmap)
+            } else {
+                from_defmap
+            }
+        }
         None => path.as_name().and_then(|name| ctx.adt_id_by_name(name))?,
     };
     let arity = ctx.adt_generic_arity(adt_id);

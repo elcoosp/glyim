@@ -111,6 +111,24 @@ fn adt_id_for_item(
     module_id: glyim_def_map::ModuleId,
     name: glyim_core::interner::Name,
 ) -> AdtId {
+    // Script 124: the stdlib re-declares `Option`, `Result`, `Vec`, `String`,
+    // `Box`, `Ordering`, etc. as `.g` enums/structs. The compiler's
+    // `register_builtin_ranges` ALSO registers these at canonical synthetic
+    // AdtIds (1010=Option, 1011=Result, 1020=Vec, 1050=String, 1040=Box, ...).
+    // When both exist, the same logical type gets two AdtIds and fails to
+    // unify (`mismatched types: Adt1010 vs Adt9`).
+    //
+    // Rule: if `adt_by_name` has a canonical (>=1000 && <2000) entry for this
+    // name, use it. This makes the stdlib's `Option` an *alias* of the
+    // builtin `Option` (same AdtId everywhere), rather than a second
+    // incompatible type.
+    if let Some(builtin_id) = ctx.adt_id_by_name(name) {
+        let raw = builtin_id.to_raw();
+        if (1000..2000).contains(&raw) {
+            return builtin_id;
+        }
+    }
+
     // Prefer a def-map-derived id (stable across all resolution passes) when
     // the item was lowered from source. For *generated* items (e.g. the future
     // struct produced by `async fn` desugaring) that are not in the def map,
@@ -152,7 +170,16 @@ fn adt_id_for_item(
     if let Some(existing) = ctx.adt_id_by_name(name) {
         return existing;
     }
-    ctx.next_synthetic_adt_id()
+    {
+                        let id = ctx.next_synthetic_adt_id();
+                        if std::env::var("GLYIM_DBG_SYNTH").is_ok() {
+                            eprintln!(
+                                "[SYNTH] name={:?} synthetic_id={:?} module={:?}",
+                                name, id, module_id
+                            );
+                        }
+                        id
+                    }
 }
 
 fn register_adt_item(
