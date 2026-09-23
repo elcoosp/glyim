@@ -486,17 +486,19 @@ pub fn resolve_impl_header(
     let (trait_def_id, trait_name, trait_substs) = match &impl_item.trait_ref {
         Some(path) => {
             if let Some(name) = path.as_name() {
-                match resolve_name_to_def_id(def_map, name) {
-                    Some(def_id) => {
-                        let trait_def_id = TraitDefId::from_raw(def_id.local_id.to_raw());
+                // Script 90: use the trait-def resolver (which now walks every
+                // module scope, Script 89) instead of `resolve_name_to_def_id`
+                // (root-only). `impl GlobalAlloc for Global` inside
+                // `pub mod alloc { ... }` needs `GlobalAlloc` resolved from
+                // `alloc`'s scope, not the crate root.
+                match resolve_path_to_trait_def_id(def_map, ctx, path, span) {
+                    Some(trait_def_id) => {
                         let substs = ctx.intern_substitution(vec![]);
                         (Some(trait_def_id), Some(name), substs)
                     }
                     None => {
-                        // Fall back to builtin/lang traits registered by name
-                        // in `TyCtxMut` (Future, Drop, Deref, Clone, …) so
-                        // `impl Future for X` / `impl Drop for Y` resolve even
-                        // though they are not declared in user source.
+                        // No user trait either; check the builtin table for
+                        // lang traits (Future, Drop, Deref, ...).
                         if let Some(tid) = ctx.trait_by_name.get(&name).copied() {
                             let substs = ctx.intern_substitution(vec![]);
                             (Some(tid), Some(name), substs)
@@ -1057,6 +1059,25 @@ pub(crate) fn resolve_path_to_trait_def_id(
     if let Some(name) = path.as_name() {
         if let Some(tid) = ctx.trait_by_name.get(&name).copied() {
             return Some(tid);
+        }
+    }
+        // Script 89: module-scoped trait fallback. The impl header's trait
+    // path (`impl GlobalAlloc for Global` inside `pub mod alloc { ... }`)
+    // resolves `GlobalAlloc` in the *crate root* scope by default, but the
+    // trait lives in `alloc`'s scope. When the primary lookup fails and
+    // the path is a single-segment `Plain` name, walk every module scope
+    // (matching the fallback `resolve_path_to_local_def_id` already uses).
+    if path.segments.len() == 1
+        && matches!(path.kind, glyim_core::path::PathKind::Plain)
+        && let Some(name) = path.as_name()
+    {
+        for module in def_map.modules.iter() {
+            if let Some((id, _vis, _sp)) = module.scope.types.get(&name) {
+                // Confirm it's a trait (not a struct/enum) by looking for
+                // a registered trait with this id.
+                let tid = TraitDefId::from_raw(id.to_raw());
+                return Some(tid);
+            }
         }
     }
     None
