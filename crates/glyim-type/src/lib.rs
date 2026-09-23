@@ -1,5 +1,6 @@
 //! Core type system & Type Context.
 /// adt_def.
+pub mod builtin_adts;
 pub mod adt_def;
 /// auto_trait.
 pub mod auto_trait;

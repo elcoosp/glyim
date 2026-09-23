@@ -122,23 +122,18 @@ fn adt_id_for_item(
     // instead of the canonical builtin AdtId (1010) — leaving BOTH in
     // `adt_defs` and producing the `Adt1010 vs Adt9` mismatches.
     {
-        // The Name here is *def-map* interned (HIR lowering and build_def_map
-        // share a rodeo). ctx's resolver is a separate rodeo. So resolve
-        // through the def-map's interner, then re-intern through ctx.
-        let name_str = def_map.interner.resolve(name).to_string();
-        if std::env::var("GLYIM_DBG_NAME_RESOLVE").is_ok() {
-            let ctx_attempt = ctx.resolver().resolve(name);
-            eprintln!(
-                "[NAME_RESOLVE] def_map_str={:?} ctx_str_for_same_name={:?}",
-                name_str, ctx_attempt,
-            );
-        }
-        let ctx_name = ctx.resolver().intern(&name_str);
-        if let Some(builtin_id) = ctx.adt_id_by_name(ctx_name) {
-            let raw = builtin_id.to_raw();
-            if (1000..2000).contains(&raw) {
-                return builtin_id;
-            }
+        // If the item's name matches a builtin ADT (which the standard
+        // library re-declares in `.g` source), use the reserved builtin
+        // AdtId instead of the def-map LocalDefId. Otherwise the same
+        // logical type — `Option<T>`, `Result<T, E>`, `Vec<T>`, … — would
+        // exist under two AdtIds, and unify would reject cross-references
+        // as `mismatched types: AdtA vs AdtB`.
+        //
+        // The canonical IDs live in `glyim_type::builtin_adts::BuiltinAdt`,
+        // the single source of truth shared with `register_builtin_ranges`.
+        let name_str = def_map.interner.resolve(name);
+        if let Some(builtin) = glyim_type::builtin_adts::BuiltinAdt::from_name(name_str) {
+            return AdtId::from_raw(builtin.adt_id());
         }
     }
 
