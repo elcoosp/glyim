@@ -1442,6 +1442,9 @@ impl TyCtxMut {
             }
         };
         self.register_adt(AdtId::from_raw(1005), unsafe_cell_def);
+        self.lang_items
+            .register(LangItem::UnsafeCellAdt, def_id(1005))
+            .ok();
         // Mark it as interior mutable.
         self.mark_adt_interior_mutable(AdtId::from_raw(1005));
 
@@ -1508,6 +1511,9 @@ impl TyCtxMut {
             generic_params: vec![self.resolver.intern("T")],
         };
         self.register_adt(AdtId::from_raw(1020), vec_def.clone());
+        self.lang_items
+            .register(LangItem::Vec, def_id(1020))
+            .ok();
         self.register_adt_with_name(self.resolver.intern("Vec"), AdtId::from_raw(1020), vec_def);
         // `Vec` is an owning builtin (it owns a heap buffer) — record that it
         // carries a `Drop` impl so `needs_drop` is correct (see `mark_has_drop`).
@@ -1535,6 +1541,9 @@ impl TyCtxMut {
             generic_params: vec![self.resolver.intern("T")],
         };
         self.register_adt(AdtId::from_raw(1030), pd_def.clone());
+        self.lang_items
+            .register(LangItem::PhantomDataAdt, def_id(1030))
+            .ok();
         self.register_adt_with_name(
             self.resolver.intern("PhantomData"),
             AdtId::from_raw(1030),
@@ -1620,6 +1629,9 @@ impl TyCtxMut {
             generic_params: Vec::new(),
         };
         self.register_adt(AdtId::from_raw(1015), ordering_def.clone());
+        self.lang_items
+            .register(LangItem::Ordering, def_id(1015))
+            .ok();
         self.register_adt_with_name(
             self.resolver.intern("Ordering"),
             AdtId::from_raw(1015),
@@ -1668,6 +1680,9 @@ impl TyCtxMut {
             generic_params: Vec::new(),
         };
         self.register_adt(AdtId::from_raw(1022), exit_status_def.clone());
+        self.lang_items
+            .register(LangItem::ExitStatus, def_id(1022))
+            .ok();
         self.register_adt_with_name(
             self.resolver.intern("ExitStatus"),
             AdtId::from_raw(1022),
@@ -1715,6 +1730,9 @@ impl TyCtxMut {
             generic_params: vec![self.resolver.intern("T")],
         };
         self.register_adt(AdtId::from_raw(1040), box_def.clone());
+        self.lang_items
+            .register(LangItem::BoxAdt, def_id(1040))
+            .ok();
         self.register_adt_with_name(self.resolver.intern("Box"), AdtId::from_raw(1040), box_def);
         self.mark_has_drop(AdtId::from_raw(1040));
 
@@ -1743,6 +1761,9 @@ impl TyCtxMut {
             generic_params: vec![self.resolver.intern("T")],
         };
         self.register_adt(AdtId::from_raw(1050), string_def.clone());
+        self.lang_items
+            .register(LangItem::StringAdt, def_id(1050))
+            .ok();
         self.register_adt_with_name(
             self.resolver.intern("String"),
             AdtId::from_raw(1050),
