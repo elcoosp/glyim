@@ -1173,25 +1173,25 @@ pub(crate) fn resolve_name_to_adt_ty(
     // ctx name lookup resolves to a real AdtDef. The previous fallback
     // `AdtId::from_raw(0)` produced a phantom ADT that unify flagged
     // as `mismatched types: Adt4294967295 vs T`.
-    let adt_id = match name_for_lookup {
-        Some(ctx_name) => {
-            // Try def-map id first.
+    // Script 157: prefer the canonical (name-keyed) AdtId when it has a
+    // real AdtDef. Otherwise fall back to the def-map id if IT has one.
+    // Never return a phantom id.
+    let canonical_id = name_for_lookup.and_then(|ctx_name| {
+        ctx.adt_id_by_name(ctx_name)
+            .filter(|id| ctx.adt_def(*id).is_some())
+    });
+    let adt_id = match canonical_id {
+        Some(id) => id,
+        None => {
             let from_defmap = path
                 .as_name()
                 .and_then(|hir_name| resolve_name_to_def_id(def_map, hir_name))
                 .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
             match from_defmap {
                 Some(id) if ctx.adt_def(id).is_some() => id,
-                _ => match ctx.adt_id_by_name(ctx_name) {
-                    Some(id) if ctx.adt_def(id).is_some() => id,
-                    // Real failure: name resolves to an undefined ADT.
-                    // Return None so the caller can fall through to
-                    // primitive / qualified path resolution.
-                    _ => return None,
-                },
+                _ => return None,
             }
         }
-        None => return None,
     };
     let arity = ctx.adt_generic_arity(adt_id);
 

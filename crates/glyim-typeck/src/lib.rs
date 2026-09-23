@@ -122,7 +122,17 @@ fn adt_id_for_item(
     // instead of the canonical builtin AdtId (1010) — leaving BOTH in
     // `adt_defs` and producing the `Adt1010 vs Adt9` mismatches.
     {
-        let name_str = ctx.resolver().resolve(name).to_string();
+        // The Name here is *def-map* interned (HIR lowering and build_def_map
+        // share a rodeo). ctx's resolver is a separate rodeo. So resolve
+        // through the def-map's interner, then re-intern through ctx.
+        let name_str = def_map.interner.resolve(name).to_string();
+        if std::env::var("GLYIM_DBG_NAME_RESOLVE").is_ok() {
+            let ctx_attempt = ctx.resolver().resolve(name);
+            eprintln!(
+                "[NAME_RESOLVE] def_map_str={:?} ctx_str_for_same_name={:?}",
+                name_str, ctx_attempt,
+            );
+        }
         let ctx_name = ctx.resolver().intern(&name_str);
         if let Some(builtin_id) = ctx.adt_id_by_name(ctx_name) {
             let raw = builtin_id.to_raw();
