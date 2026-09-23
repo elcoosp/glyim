@@ -2424,6 +2424,29 @@ impl<'a> FnCtxt<'a> {
                     if recv_is_param {
                         continue;
                     }
+                    // Script 110: `impl<T> [T]` produces a Slice self_ty in HIR
+                    // whose element `T` is a fresh inference var; that var
+                    // unifies with `String` (the `str` primitive), so the
+                    // slice impl matches a `str`/`&str` receiver and collides
+                    // with `impl str`'s `len`/`as_ptr`/etc. Skip slice impls
+                    // when the receiver's *underlying* type is String — both
+                    // bare `str` and `&str` (`&str` is `Ref(_, String, _)`).
+                    let step_is_str_like = match this.ctx.ty_kind(step_ty) {
+                        TyKind::String => true,
+                        TyKind::Ref(_, inner, _) => {
+                            matches!(this.ctx.ty_kind(*inner), TyKind::String)
+                        }
+                        _ => false,
+                    };
+                    if step_is_str_like
+                        && matches!(
+                            impl_item.self_ty,
+                            glyim_hir::TypeRef::Slice(_)
+                                | glyim_hir::TypeRef::Array { .. }
+                        )
+                    {
+                        continue;
+                    }
                     // Probe whether this impl's `Self` type unifies with the
                     // receiver *without* committing side effects (a non-matching
                     // candidate must not emit a spurious "mismatched types"
@@ -2795,7 +2818,8 @@ impl<'a> FnCtxt<'a> {
                 candidates = concrete;
             }
         }
-if candidates.len() > 1 {
+        if candidates.len() > 1 {
+
             let list: Vec<String> = candidates
                 .iter()
                 .map(|(self_ty, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))
