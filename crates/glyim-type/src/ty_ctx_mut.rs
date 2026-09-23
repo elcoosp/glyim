@@ -1750,7 +1750,66 @@ impl TyCtxMut {
 
         // Populate the builtin inherent-method table (Vec/String/Result/Option
         // methods the stdlib calls but which have no user `impl` block).
-        self.register_builtin_methods();
+                // Script 137: register by name the builtin ADTs that lacked a name
+        // mapping. `adt_id_by_name` is used by use-site ADT resolution
+        // (resolve_name_to_adt_ty, Script 127) to prefer the canonical
+        // builtin AdtId over the def-map's id. Without these name
+        // registrations, `Result`/`String`/`Box`/`PhantomData` had two
+        // AdtIds — the builtin (1011/1050/1040/1030) and the def-map's
+        // (e.g. Adt9 for Option) — producing "Adt1010 vs Adt9" mismatches.
+        {
+            // Result<T, E> at AdtId(1011) — already registered as AdtDef.
+            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1011)).cloned() {
+                self.register_adt_with_name(
+                    self.resolver.intern("Result"),
+                    AdtId::from_raw(1011),
+                    def,
+                );
+            }
+            // Box<T> at AdtId(1040).
+            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1040)).cloned() {
+                self.register_adt_with_name(
+                    self.resolver.intern("Box"),
+                    AdtId::from_raw(1040),
+                    def,
+                );
+            }
+            // Vec<T> at AdtId(1020) — already has a name mapping at line
+            // 1509, but be defensive in case that changes.
+            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1020)).cloned() {
+                self.register_adt_with_name(
+                    self.resolver.intern("Vec"),
+                    AdtId::from_raw(1020),
+                    def,
+                );
+            }
+            // String at AdtId(1050) — has a mapping at line 1744, defensive.
+            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1050)).cloned() {
+                self.register_adt_with_name(
+                    self.resolver.intern("String"),
+                    AdtId::from_raw(1050),
+                    def,
+                );
+            }
+            // PhantomData<T> at AdtId(1030).
+            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1030)).cloned() {
+                self.register_adt_with_name(
+                    self.resolver.intern("PhantomData"),
+                    AdtId::from_raw(1030),
+                    def,
+                );
+            }
+            // UnsafeCell<T> at AdtId(1005).
+            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1005)).cloned() {
+                self.register_adt_with_name(
+                    self.resolver.intern("UnsafeCell"),
+                    AdtId::from_raw(1005),
+                    def,
+                );
+            }
+        }
+
+self.register_builtin_methods();
 
         // Register builtin/lang TRAITS by name so `impl Future for X`,
         // `T: Clone`, `impl Drop for Y`, `T: Deref`, etc. resolve. The
