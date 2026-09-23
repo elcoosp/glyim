@@ -142,7 +142,14 @@ impl<'a> FnCtxt<'a> {
             // variant in the value namespace with a reverse map
             // variant_local -> (enum_local, VariantIdx).
             if let Some((enum_local, variant_idx)) = self.def_map.variant_map.get(&local) {
-                let adt_id = AdtId::from_raw(enum_local.to_raw());
+                // Script 139: canonicalize the enum's AdtId. `enum_local`
+                // is the def-map id (e.g. Adt9 for the stdlib's Option), but
+                // the actual `AdtDef` is registered under the canonical
+                // builtin id (1010). Without this, every `Option::Some(x)`
+                // produced Adt9 which never unified with Adt1010.
+                let adt_id = crate::canonical_enum_adt_id(
+                    self.ctx, self.def_map, *enum_local,
+                );
                 // Plan unstub-5 P5: for a *generic* enum `Poll<T>`, the variant
                 // value/pattern type must carry one inference variable per
                 // generic parameter (so `Poll::Ready(x)` infers `Poll<i32>`

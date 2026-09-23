@@ -286,8 +286,46 @@ fn register_adt_item(
     }
 }
 
+/// Script 139: given a def-map `LocalDefId` that names an enum, return the
+/// canonical (adt_defs-backed) `AdtId` for it. The stdlib declares
+/// `enum Option<T>` in `option.g`, giving it a def-map `LocalDefId`
+/// (e.g. `LocalDefId(9)`); but `register_builtin_ranges` ALSO registers
+/// `Option` at the canonical builtin AdtId 1010. `variant_map` records the
+/// def-map id, so a raw `AdtId::from_raw(enum_local.to_raw())` produces a
+/// phantom AdtId (9) that never unifies with the real definition (1010).
+///
+/// Strategy: reverse-lookup the name by scanning every module's `types`
+/// namespace for a `LocalDefId` equal to `enum_local`, then look up that
+/// name in `ctx.adt_by_name` and return the canonical id if it has an
+/// `AdtDef`.
+fn canonical_enum_adt_id(
+    ctx: &glyim_type::TyCtxMut,
+    def_map: &glyim_def_map::CrateDefMap,
+    enum_local: glyim_core::def_id::LocalDefId,
+) -> glyim_core::def_id::AdtId {
+    let from_defmap = glyim_core::def_id::AdtId::from_raw(enum_local.to_raw());
+    if ctx.adt_def(from_defmap).is_some() {
+        return from_defmap;
+    }
+    // Scan the def-map for a types-namespace entry matching this LocalDefId.
+    for module in def_map.modules.iter() {
+        for (name, (id, _vis, _span)) in &module.scope.types {
+            if *id == enum_local {
+                if let Some(canonical) = ctx.adt_id_by_name(*name) {
+                    if ctx.adt_def(canonical).is_some() {
+                        return canonical;
+                    }
+                }
+                return from_defmap;
+            }
+        }
+    }
+    from_defmap
+}
+
 #[tracing::instrument(level = "info", skip(ctx, solver))]
 /// typeck_crate.
+
 pub fn typeck_crate(
     mut ctx: TyCtxMut,
     def_map: &glyim_def_map::CrateDefMap,

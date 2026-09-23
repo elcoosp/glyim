@@ -97,7 +97,8 @@ impl<'a> FnCtxt<'a> {
                 match local {
                     Some(local) => {
                         if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
-                            let adt_id = AdtId::from_raw(enum_local.to_raw());
+                            // Script 139: canonicalize the enum's AdtId.
+                            let adt_id = crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
                             thir::Pattern {
                                 kind: thir::PatternKind::Struct {
                                     adt_id,
@@ -200,7 +201,7 @@ impl<'a> FnCtxt<'a> {
                     Some(local) => {
                         if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
                             (
-                                AdtId::from_raw(enum_local.to_raw()),
+                                crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local),
                                 vidx.index() as u32,
                                 true,
                             )
