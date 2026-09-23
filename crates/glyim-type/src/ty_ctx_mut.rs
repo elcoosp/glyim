@@ -661,6 +661,8 @@ impl TyCtxMut {
     }
 
     /// register_adt.
+
+
     pub fn register_adt(&mut self, id: AdtId, def: AdtDef) {
         if std::env::var("GLYIM_DBG_REGISTER_ADT").is_ok() {
             let prev_params = self

@@ -69,7 +69,70 @@ pub enum LangItem {
     GlobalAlloc,
     /// Variant.
     Allocator,
+    /// The `String` builtin type.
+    StringAdt,
+    /// The `Box` builtin type.
+    BoxAdt,
+    /// The `PhantomData` builtin type.
+    PhantomDataAdt,
+    /// The `UnsafeCell` builtin type.
+    UnsafeCellAdt,
+    /// The `Ordering` builtin type.
+    Ordering,
+    /// The `ExitStatus` builtin type.
+    ExitStatus,
+
 }
+
+impl LangItem {
+    /// The source-level type name this lang item corresponds to, if any.
+    ///
+    /// Not every `LangItem` is a type — trait lang items (Copy, Sized, ...)
+    /// return `None` here.
+    pub fn source_type_name(self) -> Option<&'static str> {
+        Some(match self {
+            LangItem::Option => "Option",
+            LangItem::Result => "Result",
+            LangItem::Vec => "Vec",
+            LangItem::StringAdt => "String",
+            LangItem::BoxAdt => "Box",
+            LangItem::PhantomDataAdt => "PhantomData",
+            LangItem::UnsafeCellAdt => "UnsafeCell",
+            LangItem::Ordering => "Ordering",
+            LangItem::ExitStatus => "ExitStatus",
+            LangItem::Range => "Range",
+            LangItem::RangeInclusive => "RangeInclusive",
+            LangItem::RangeFrom => "RangeFrom",
+            LangItem::RangeTo => "RangeTo",
+            LangItem::RangeToInclusive => "RangeToInclusive",
+            _ => return None,
+        })
+    }
+
+    /// Reverse of `source_type_name`: find the lang item whose canonical
+    /// type name matches `name`. Returns `None` for names that are not
+    /// compiler-owned builtin types.
+    pub fn from_type_name(name: &str) -> Option<Self> {
+        match name {
+            "Option" => Some(LangItem::Option),
+            "Result" => Some(LangItem::Result),
+            "Vec" => Some(LangItem::Vec),
+            "String" => Some(LangItem::StringAdt),
+            "Box" => Some(LangItem::BoxAdt),
+            "PhantomData" => Some(LangItem::PhantomDataAdt),
+            "UnsafeCell" => Some(LangItem::UnsafeCellAdt),
+            "Ordering" => Some(LangItem::Ordering),
+            "ExitStatus" => Some(LangItem::ExitStatus),
+            "Range" => Some(LangItem::Range),
+            "RangeInclusive" => Some(LangItem::RangeInclusive),
+            "RangeFrom" => Some(LangItem::RangeFrom),
+            "RangeTo" => Some(LangItem::RangeTo),
+            "RangeToInclusive" => Some(LangItem::RangeToInclusive),
+            _ => None,
+        }
+    }
+}
+
 
 /// Error returned when a lang-item registration or lookup fails.
 #[derive(Debug, Clone, PartialEq, Eq)]
