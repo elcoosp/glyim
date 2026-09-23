@@ -111,21 +111,24 @@ fn adt_id_for_item(
     module_id: glyim_def_map::ModuleId,
     name: glyim_core::interner::Name,
 ) -> AdtId {
-    // Script 124: the stdlib re-declares `Option`, `Result`, `Vec`, `String`,
-    // `Box`, `Ordering`, etc. as `.g` enums/structs. The compiler's
-    // `register_builtin_ranges` ALSO registers these at canonical synthetic
-    // AdtIds (1010=Option, 1011=Result, 1020=Vec, 1050=String, 1040=Box, ...).
-    // When both exist, the same logical type gets two AdtIds and fails to
-    // unify (`mismatched types: Adt1010 vs Adt9`).
+    // Script 124/154: if `adt_by_name` has a canonical builtin
+    // (>=1000 && <2000) entry for this name, prefer it over the def-map id.
     //
-    // Rule: if `adt_by_name` has a canonical (>=1000 && <2000) entry for this
-    // name, use it. This makes the stdlib's `Option` an *alias* of the
-    // builtin `Option` (same AdtId everywhere), rather than a second
-    // incompatible type.
-    if let Some(builtin_id) = ctx.adt_id_by_name(name) {
-        let raw = builtin_id.to_raw();
-        if (1000..2000).contains(&raw) {
-            return builtin_id;
+    // Script 154: re-intern `name` through ctx's resolver first — `name` is
+    // HIR-interned while `adt_by_name` is keyed by ctx-interned Names
+    // (separate rodeos). Without re-interning, the lookup silently failed
+    // for every stdlib declaration (Option, Result, Vec, ...), so Pass 1/2
+    // registered their AdtDefs at the def-map LocalDefId (e.g. AdtId(9))
+    // instead of the canonical builtin AdtId (1010) — leaving BOTH in
+    // `adt_defs` and producing the `Adt1010 vs Adt9` mismatches.
+    {
+        let name_str = ctx.resolver().resolve(name).to_string();
+        let ctx_name = ctx.resolver().intern(&name_str);
+        if let Some(builtin_id) = ctx.adt_id_by_name(ctx_name) {
+            let raw = builtin_id.to_raw();
+            if (1000..2000).contains(&raw) {
+                return builtin_id;
+            }
         }
     }
 
