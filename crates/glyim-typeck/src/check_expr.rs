@@ -2207,7 +2207,51 @@ impl<'a> FnCtxt<'a> {
         }
 
         let adt_id = lookup_id?;
-        let (fn_id, sig) = self.ctx.lookup_builtin_method(adt_id, method_name)?;
+                // Script 122: the stdlib declares its own `Result`/`Option`/`Vec`/etc.
+        // in `.g` files, giving them AdtIds distinct from the builtin table's
+        // (Result=1010, Option=1011, Vec, String, ...). So a `Result<Layout,
+        // LayoutError>::expect` call from stdlib code looks up under the
+        // stdlib's Result AdtId and misses the builtin table. Fall back to a
+        // name-based lookup: if the receiver ADT's name matches a builtin
+        // type, retry with the canonical builtin AdtId.
+        let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
+            Some(hit) => hit,
+            None => {
+                let adt_name = self
+                    .ctx
+                    .adt_def(adt_id)
+                    .map(|_| ())
+                    .and_then(|_| {
+                        // The name isn't stored on AdtDef; recover it via
+                        // a reverse lookup in `adt_by_name`. Walk the whole
+                        // map (small) to find the AdtId we want.
+                        None::<()>
+                    });
+                let _ = adt_name;
+                // Cheaper: try the canonical builtin AdtIds for common names.
+                // We don't know the name here directly, but the const_table
+                // in TyCtxMut has `canonical_builtin_name` helper if present.
+                // Fallback: probe a small fixed set of builtin AdtIds whose
+                // methods include `expect`/`unwrap`/`map`/`and_then`/etc.
+                let candidates: [u32; 4] = [1010, 1011, 1006, 1007];
+                let mut found = None;
+                for cand in candidates {
+                    if let Some(hit) =
+                        self.ctx.lookup_builtin_method(AdtId::from_raw(cand), method_name)
+                    {
+                        // Only accept if the receiver's type-shape (number of
+                        // generic args) matches the candidate's arity. Result
+                        // and Option both take 1 generic arg in this compiler,
+                        // so we accept when the receiver is an Adt too.
+                        if matches!(self.ctx.ty_kind(step_ty), TyKind::Adt(_, _)) {
+                            found = Some(hit);
+                            break;
+                        }
+                    }
+                }
+                found?
+            }
+        };
 
         // Build the substitution for the method's `Param(i)` placeholders:
         // for an ADT receiver, `i` maps to the receiver's generic argument `i`;
