@@ -812,13 +812,14 @@ fn resolve_qualified_path(
     // arguments (if any).
     let local = resolve_path_to_local_def_id(ctx, def_map, path)?;
     let from_defmap = AdtId::from_raw(local.to_raw());
-    // Script 127: same fallback as resolve_name_to_adt_ty — use the
-    // def-map id only if it has an adt_defs entry; otherwise try the
-    // name-keyed id (which Pass 1 has mapped to the builtin AdtId).
+    // Script 150: re-intern the name before falling back to `adt_id_by_name`.
+    // Same rodeo mismatch as resolve_name_to_adt_ty.
     let adt_id = if ctx.adt_def(from_defmap).is_some() {
         from_defmap
-    } else if let Some(name) = path.as_name() {
-        ctx.adt_id_by_name(name).unwrap_or(from_defmap)
+    } else if let Some(hir_name) = path.as_name() {
+        let name_str = def_map.interner.resolve(hir_name).to_string();
+        let ctx_name = ctx.resolver().intern(&name_str);
+        ctx.adt_id_by_name(ctx_name).unwrap_or(from_defmap)
     } else {
         from_defmap
     };
@@ -1159,24 +1160,30 @@ pub(crate) fn resolve_name_to_adt_ty(
     // AdtId(9) is never in `adt_defs`; only AdtId(1010) has the enum.
     // Every use-site resolution must therefore check both and pick the one
     // that actually has a definition.
-    let adt_id = match path
-        .as_name()
-        .and_then(|name| resolve_name_to_def_id(def_map, name))
-    {
-        Some(def_id) => {
-            let from_defmap = AdtId::from_raw(def_id.local_id.to_raw());
-            // Prefer the def-map id if it has an adt_defs entry.
-            if ctx.adt_def(from_defmap).is_some() {
-                from_defmap
-            } else if let Some(name) = path.as_name() {
-                // Fall back to the name-keyed id (which Pass 1 has registered
-                // at the canonical builtin AdtId).
-                ctx.adt_id_by_name(name).unwrap_or(from_defmap)
-            } else {
-                from_defmap
+    // Script 150: prefer the def-map id if it has an adt_defs entry; otherwise
+    // re-intern the path's name through ctx's resolver before looking up in
+    // `adt_by_name`. The HIR's Name and the ctx's Name live in separate
+    // interner rodeos, so a raw `adt_id_by_name(hir_name)` silently returns
+    // None for names that the ctx has registered (e.g. "Result", "Option").
+    let name_for_lookup = path.as_name().map(|hir_name| {
+        let name_str = def_map.interner.resolve(hir_name).to_string();
+        ctx.resolver().intern(&name_str)
+    });
+    let adt_id = match name_for_lookup {
+        Some(ctx_name) => {
+            // Try def-map id first.
+            let from_defmap = path
+                .as_name()
+                .and_then(|hir_name| resolve_name_to_def_id(def_map, hir_name))
+                .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
+            match from_defmap {
+                Some(id) if ctx.adt_def(id).is_some() => id,
+                _ => ctx.adt_id_by_name(ctx_name).unwrap_or_else(|| {
+                    from_defmap.unwrap_or(AdtId::from_raw(u32::MAX))
+                }),
             }
         }
-        None => path.as_name().and_then(|name| ctx.adt_id_by_name(name))?,
+        None => return None,
     };
     let arity = ctx.adt_generic_arity(adt_id);
 
