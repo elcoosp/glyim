@@ -1060,7 +1060,13 @@ fn resolve_primitive(ctx: &mut TyCtxMut, name: Name) -> Option<Ty> {
         "bool" => Ty::BOOL,
         "char" => ctx.mk_ty(TyKind::Char),
         "str" => ctx.mk_ty(TyKind::String),
-        "String" => ctx.mk_ty(TyKind::String),
+        // Script 112: `String` is NOT a primitive — it is the ADT struct
+        // declared in the alloc crate's `string.g`. Mapping it to the same
+        // `TyKind::String` as `str` made `impl str { fn len }` and
+        // `impl String { fn len }` indistinguishable, so every `s.len()`
+        // on a `String` receiver saw two candidates. Remove the mapping so
+        // `String` falls through to the ADT lookup (which resolves it to
+        // the real struct).
         _ => return None,
     })
 }

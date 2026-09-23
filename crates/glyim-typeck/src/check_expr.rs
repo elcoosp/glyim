@@ -2513,6 +2513,16 @@ impl<'a> FnCtxt<'a> {
                                     })
                                     .map(MethodDispatch::Virtual)
                             });
+                            if std::env::var("GLYIM_DBG_CAND_PUSH").is_ok() {
+                                let mn = this.ctx.name_str(method_name).to_string();
+                                if mn == "len" {
+                                    let step_kind = format!("{:?}", this.ctx.ty_kind(step_ty));
+                                    let self_kind = format!("{:?}", this.ctx.ty_kind(impl_self_ty));
+                                    let hir_kind = format!("{:?}", impl_item.self_ty);
+                                    eprintln!("[CAND] method={} step_ty={} hir_self={} resolved={}",
+                                        mn, step_kind, hir_kind, self_kind);
+                                }
+                            }
                             found.push((impl_self_ty, return_ty, dispatch));
                         }
                     }
