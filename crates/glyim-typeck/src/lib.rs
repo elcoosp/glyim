@@ -307,11 +307,22 @@ fn canonical_enum_adt_id(
     if ctx.adt_def(from_defmap).is_some() {
         return from_defmap;
     }
-    // Scan the def-map for a types-namespace entry matching this LocalDefId.
+    // The stdlib declares `enum Option<T>` in option.g, giving it a def-map
+    // LocalDefId (e.g. LocalDefId(9)); but `register_builtin_ranges` ALSO
+    // registers `Option` at the canonical builtin AdtId 1010. `variant_map`
+    // records the def-map id, so a raw `AdtId::from_raw(enum_local.to_raw())`
+    // produces a phantom AdtId that never unifies with the real definition.
+    //
+    // Strategy: scan every module's types namespace for a LocalDefId equal to
+    // `enum_local`, recover the name string, **re-intern it through ctx's
+    // resolver** (the def-map and ctx use separate Name interns), then look up
+    // the canonical AdtId via `ctx.adt_id_by_name`.
     for module in def_map.modules.iter() {
         for (name, (id, _vis, _span)) in &module.scope.types {
             if *id == enum_local {
-                if let Some(canonical) = ctx.adt_id_by_name(*name) {
+                let name_str = def_map.interner.resolve(*name).to_string();
+                let ctx_name = ctx.resolver().intern(&name_str);
+                if let Some(canonical) = ctx.adt_id_by_name(ctx_name) {
                     if ctx.adt_def(canonical).is_some() {
                         return canonical;
                     }
