@@ -590,10 +590,6 @@ pub fn typeck_crate(
             |ctx: &mut TyCtxMut,
              params: &[glyim_hir::GenericParam],
              where_clauses: &[glyim_hir::where_clause::WhereClause]| {
-        if std::env::var("GLYIM_DBG_RB").is_ok() {
-            let names: Vec<String> = params.iter().map(|p| ctx.name_str(p.name).to_string()).collect();
-            eprintln!("[RB] params={:?} wh={}", names, where_clauses.len());
-        }
                 for gp in params {
                     if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
                         for bound in bounds {

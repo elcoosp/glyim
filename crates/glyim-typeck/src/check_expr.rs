@@ -2308,11 +2308,6 @@ impl<'a> FnCtxt<'a> {
         method_name: Name,
         span: Span,
     ) -> (Ty, Option<MethodDispatch>) {
-        if std::env::var("GLYIM_DBG_MC").is_ok() {
-            let recv_str = format!("{:?}", self.ctx.ty_kind(recv_ty));
-            let name = self.ctx.name_str(method_name).to_string();
-            eprintln!("[MC] recv_ty={} method={}", recv_str, name);
-        }
         // §9.1 / §9.2: collect *every* impl whose Self type unifies with the
         // receiver and that defines `method_name`. If more than one matches,
         // this is an ambiguous method call — surface all candidates (rustc's
@@ -2725,10 +2720,6 @@ impl<'a> FnCtxt<'a> {
             }
 
             if candidates.is_empty() {
-                if std::env::var("GLYIM_DBG_MC").is_ok() {
-                    eprintln!("[MC-NOT-FOUND] recv_ty={:?} method={}",
-                        self.ctx.ty_kind(recv_ty), self.ctx.name_str(method_name));
-                }
                 self.diagnostics.push(GlyimDiagnostic::type_error(
                     span,
                     format!(

@@ -565,22 +565,6 @@ pub fn resolve_path_type(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Ty {
-    if std::env::var("GLYIM_DBG_RPT2").is_ok() {
-        let segs: Vec<String> = path
-            .segments
-            .iter()
-            .map(|x| ctx.name_str(x.name).to_string())
-            .collect();
-        eprintln!("[RPT2] n={} segs={:?} kind={:?}", path.segments.len(), segs, path.kind);
-    }
-    if std::env::var("GLYIM_DBG_RPT").is_ok() {
-        let segs: Vec<String> = path
-            .segments
-            .iter()
-            .map(|x| ctx.name_str(x.name).to_string())
-            .collect();
-        eprintln!("[RPT] seg_count={} names={:?}", path.segments.len(), segs);
-    }
 
     // Check param_map first for generic params
     if let Some(name) = path.as_name()
@@ -602,31 +586,6 @@ pub fn resolve_path_type(
     // directly. When the first segment is a concrete type (`AddOne::Output`),
     // fall through to the existing single-segment/impl-table path.
     if path.segments.len() == 2 && path.kind == glyim_core::path::PathKind::Plain {
-        if std::env::var("GLYIM_DBG_P2").is_ok() {
-            let q = ctx.name_str(path.segments[0].name).to_string();
-            let a = ctx.name_str(path.segments[1].name).to_string();
-            let bp = ctx.param_bounds_for(path.segments[0].name).is_some();
-            let bc = ctx.param_bounds_for(path.segments[0].name).map(|b| b.len()).unwrap_or(0);
-            let sm = param_map.contains_key(&path.segments[0].name);
-            static COUNT: std::sync::atomic::AtomicUsize =
-                std::sync::atomic::AtomicUsize::new(0);
-            let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let bt = std::backtrace::Backtrace::force_capture();
-            let bt_str = format!("{}", bt);
-            // Only the first 4 stack frames that mention glyim-*
-            let top_frames: Vec<&str> = bt_str
-                .lines()
-                .filter(|l| l.contains("glyim_"))
-                .take(4)
-                .collect();
-            eprintln!(
-                "[P2 #{}] q={} a={} bounds_present={} bounds_count={} self_in_pm={}",
-                n, q, a, bp, bc, sm
-            );
-            for f in top_frames {
-                eprintln!("[P2 #{} site] {}", n, f.trim());
-            }
-        }
         let qname = path.segments[0].name;
         let aname = path.segments[1].name;
         let qname_str = ctx.name_str(qname).to_string();
