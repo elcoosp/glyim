@@ -1169,6 +1169,10 @@ pub(crate) fn resolve_name_to_adt_ty(
         let name_str = def_map.interner.resolve(hir_name).to_string();
         ctx.resolver().intern(&name_str)
     });
+    // Script 155: properly return None when neither the def-map id nor the
+    // ctx name lookup resolves to a real AdtDef. The previous fallback
+    // `AdtId::from_raw(0)` produced a phantom ADT that unify flagged
+    // as `mismatched types: Adt4294967295 vs T`.
     let adt_id = match name_for_lookup {
         Some(ctx_name) => {
             // Try def-map id first.
@@ -1178,9 +1182,13 @@ pub(crate) fn resolve_name_to_adt_ty(
                 .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
             match from_defmap {
                 Some(id) if ctx.adt_def(id).is_some() => id,
-                _ => ctx.adt_id_by_name(ctx_name).unwrap_or_else(|| {
-                    from_defmap.unwrap_or(AdtId::from_raw(u32::MAX))
-                }),
+                _ => match ctx.adt_id_by_name(ctx_name) {
+                    Some(id) if ctx.adt_def(id).is_some() => id,
+                    // Real failure: name resolves to an undefined ADT.
+                    // Return None so the caller can fall through to
+                    // primitive / qualified path resolution.
+                    _ => return None,
+                },
             }
         }
         None => return None,

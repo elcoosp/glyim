@@ -739,6 +739,10 @@ impl<'a> FnCtxt<'a> {
         variant_idx: glyim_core::def_id::VariantIdx,
         span: Span,
     ) -> (thir::Expr, Ty) {
+
+        if std::env::var("GLYIM_DBG_VEXPR").is_ok() {
+            eprintln!("[VEXPR] adt_id={:?} variant_idx={:?}", adt_id, variant_idx);
+        }
         let arity = self.ctx.adt_generic_arity(adt_id);
         let substs: Vec<GenericArg> = (0..arity)
             .map(|_| {
