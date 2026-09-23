@@ -33,7 +33,17 @@ use glyim_core::def_id::AdtId;
 ///   * a fieldless (C-like) enum ↔ int/uint
 ///   * identical types are always allowed
 pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
+
     use TyKind::*;
+
+    // Script 94: int <-> raw-pointer casts. Both directions are legal in
+    // standard Rust — `0 as *mut u8` (null_mut) and `ptr as usize` (addr).
+    // The stdlib's allocator machinery relies on both.
+    match (ctx.ty_kind(from), ctx.ty_kind(to)) {
+        (TyKind::Int(_) | TyKind::Uint(_), TyKind::RawPtr(_, _)) => return true,
+        (TyKind::RawPtr(_, _), TyKind::Int(_) | TyKind::Uint(_)) => return true,
+        _ => {}
+    }
     let from_k = ctx.ty_kind(from);
     let to_k = ctx.ty_kind(to);
     match (from_k, to_k) {
