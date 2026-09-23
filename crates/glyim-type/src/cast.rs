@@ -36,12 +36,27 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
 
     use TyKind::*;
 
-    // Script 94: int <-> raw-pointer casts. Both directions are legal in
+    // Script 97: int <-> raw-pointer casts. Both directions are legal in
     // standard Rust — `0 as *mut u8` (null_mut) and `ptr as usize` (addr).
     // The stdlib's allocator machinery relies on both.
+    //
+    // The source may still be an unresolved numeric inference var at this
+    // point (`0` from `a as *mut T;` context), so accept `Infer(Int(_))`
+    // as an integer-shaped source too. (InferVar has only Int and Float
+    // variants; unsigned literals are `Infer(Int(_))` until zonked.)
     match (ctx.ty_kind(from), ctx.ty_kind(to)) {
-        (TyKind::Int(_) | TyKind::Uint(_), TyKind::RawPtr(_, _)) => return true,
-        (TyKind::RawPtr(_, _), TyKind::Int(_) | TyKind::Uint(_)) => return true,
+        (
+            TyKind::Int(_)
+                | TyKind::Uint(_)
+                | TyKind::Infer(InferVar::Int(_)),
+            TyKind::RawPtr(_, _),
+        ) => return true,
+        (
+            TyKind::RawPtr(_, _),
+            TyKind::Int(_)
+                | TyKind::Uint(_)
+                | TyKind::Infer(InferVar::Int(_)),
+        ) => return true,
         _ => {}
     }
     let from_k = ctx.ty_kind(from);
