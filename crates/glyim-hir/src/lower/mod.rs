@@ -103,6 +103,21 @@ pub(crate) fn is_expr_node(node: &SyntaxNode) -> bool {
             | SyntaxKind::TryExpr
     )
 }
+/// Returns true if `node` is one of the HIR pattern syntax kinds.
+pub(crate) fn is_pat_node(node: &SyntaxNode) -> bool {
+    matches!(
+        node.kind(),
+        SyntaxKind::PatIdent
+            | SyntaxKind::PatWild
+            | SyntaxKind::PatLit
+            | SyntaxKind::PatRange
+            | SyntaxKind::PatTuple
+            | SyntaxKind::PatStruct
+            | SyntaxKind::PatOr
+            | SyntaxKind::PatSlice
+    )
+}
+
 
 pub(crate) fn node_span(node: &SyntaxNode) -> Span {
     let range = node.text_range();

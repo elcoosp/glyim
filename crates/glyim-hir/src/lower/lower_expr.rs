@@ -26,10 +26,7 @@ use crate::{
     Body, Expr, ExprId, Literal, MatchArm, Pat, PatId, Path as HirPath, PathSegment, Span,
 };
 
-use super::{
-    first_ident_text_with_depth, is_expr_node, is_type_node, lower_item::lower_param,
-    lower_pat::lower_pat, lower_type::lower_type_ref, node_span,
-};
+use super::{ first_ident_text_with_depth, is_expr_node, is_type_node, lower_item::lower_param, lower_pat::lower_pat, lower_type::lower_type_ref, node_span, is_pat_node };
 
 pub(crate) fn lower_block_to_expr(
     node: &SyntaxNode,
@@ -1484,6 +1481,96 @@ fn lower_while_expr(
     diags: &mut Vec<GlyimDiagnostic>,
     struct_field_map: &HashMap<Name, Vec<Name>>,
 ) -> Option<ExprId> {
+
+    // Script 118: distinguish `while let PAT = EXPR { BODY }` from plain
+    // `while COND { BODY }`. The parser emits `KwLet` as a token child of
+    // the WhileExpr node for the let form (see `parse_while_expr`); plain
+    // while has no such token. We must handle the let form separately:
+    // the pattern binds variables into the body's scope, and the condition
+    // is a *pattern match*, not a boolean expression.
+    let has_let = node
+        .children_with_tokens()
+        .any(|el| matches!(&el, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwLet));
+
+    if has_let {
+        // `while let PAT = RHS { BODY }` desugars to:
+        //     loop {
+        //         match RHS {
+        //             PAT => BODY,
+        //             _   => break,
+        //         }
+        //     }
+        // We build this directly in HIR. The pattern's bindings are
+        // introduced by the Match arm's pattern-lowering, so `item` in
+        // `while let Some(item) = ... { ... item ... }` resolves correctly.
+        let mut pat_node: Option<SyntaxNode> = None;
+        let mut rhs_node: Option<SyntaxNode> = None;
+        let mut block_node: Option<SyntaxNode> = None;
+
+        let mut after_eq = false;
+        for el in node.children_with_tokens() {
+            match el {
+                glyim_syntax::SyntaxElement::Token(t) => {
+                    if t.kind() == SyntaxKind::Eq {
+                        after_eq = true;
+                    }
+                }
+                glyim_syntax::SyntaxElement::Node(n) => {
+                    if n.kind() == SyntaxKind::Block {
+                        block_node = Some(n.clone());
+                    } else if is_pat_node(&n) && pat_node.is_none() {
+                        pat_node = Some(n.clone());
+                    } else if is_expr_node(&n) && after_eq && rhs_node.is_none() {
+                        rhs_node = Some(n.clone());
+                    }
+                }
+            }
+        }
+
+        let (pat_node, rhs_node, block_node) = match (pat_node, rhs_node, block_node) {
+            (Some(p), Some(r), Some(b)) => (p, r, b),
+            _ => return None,
+        };
+
+        // Lower the RHS expression.
+        let rhs_id = lower_expr(&rhs_node, interner, body, diags, struct_field_map)?;
+        // Lower the pattern via the same helper the match arm uses.
+        let pat_id = super::lower_pat::lower_pat(&pat_node, interner, &mut body.pats, diags)?;
+        // Lower the body block.
+        let body_id = lower_expr(&block_node, interner, body, diags, struct_field_map)?;
+
+        // Build `break` (no value).
+        let break_id = body.alloc_expr(Expr::Break { value: None }, node_span(node));
+        // Wildcard pattern for the "no match" arm.
+        let wild_pat = body.pats.push(Pat::Wild);
+
+        // Build the two arms.
+        let match_arm_ok = MatchArm {
+            pat: pat_id,
+            guard: None,
+            body: body_id,
+        };
+        let match_arm_break = MatchArm {
+            pat: wild_pat,
+            guard: None,
+            body: break_id,
+        };
+
+        // Build the match.
+        let match_id = body.alloc_expr(
+            Expr::Match {
+                scrutinee: rhs_id,
+                arms: vec![match_arm_ok, match_arm_break],
+            },
+            node_span(node),
+        );
+
+        // Wrap in loop.
+        let loop_id = body.alloc_expr(Expr::Loop { body: match_id }, node_span(node));
+        return Some(loop_id);
+    }
+
+    // Plain while: existing behavior.
     let mut children: Vec<SyntaxNode> = node
         .children()
         .filter(|c| is_expr_node(c) || c.kind() == SyntaxKind::Block)
