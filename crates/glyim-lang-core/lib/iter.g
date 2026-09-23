@@ -188,7 +188,7 @@ trait ExactSizeIterator: Iterator {
 // === Iterator Adapters ===
 
 /// An iterator that yields the current count and element during iteration.
-struct Enumerate<I> {
+struct Enumerate<I: Iterator> {
     iter: I,
     count: usize,
 }
@@ -209,7 +209,7 @@ impl<I: Iterator> Iterator for Enumerate<I> {
 }
 
 /// An iterator that filters elements using a predicate.
-struct Filter<I> {
+struct Filter<I: Iterator> {
     iter: I,
     predicate: fn(&I::Item) -> bool,
 }
@@ -228,7 +228,7 @@ impl<I: Iterator> Iterator for Filter<I> {
 }
 
 /// An iterator that maps each element using a closure.
-struct Map<I, B> {
+struct Map<I: Iterator, B> {
     iter: I,
     f: fn(I::Item) -> B,
 }
@@ -245,7 +245,7 @@ impl<B, I: Iterator> Iterator for Map<I, B> {
 }
 
 /// An iterator that skips over `n` elements.
-struct Skip<I> {
+struct Skip<I: Iterator> {
     iter: I,
     n: usize,
 }
@@ -263,7 +263,7 @@ impl<I: Iterator> Iterator for Skip<I> {
 }
 
 /// An iterator that only iterates over the first `n` iterations.
-struct Take<I> {
+struct Take<I: Iterator> {
     iter: I,
     n: usize,
 }

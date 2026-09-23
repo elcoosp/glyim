@@ -404,6 +404,56 @@ pub fn typeck_crate(
         // returned 0 and the reference reported
         // "generic type `ArcInner` expects 0 type argument(s), found 1".
         // Seeding arity up front keeps forward references accurate.
+        // Script 115: register struct/enum generic-param bounds BEFORE
+        // the field-type resolution below (Pass 2). `struct Map<I: Iterator>
+        // { f: fn(I::Item) -> B }` needs `param_bounds_for(I)` to know
+        // which trait declares `Item` when `I::Item` is resolved in the
+        // field type. Without this, `I::Item` reports "unresolved type".
+        match &item.kind {
+            glyim_hir::ItemKind::Struct(s_item) => {
+                for gp in &s_item.generic_params {
+                    if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
+                        for bound in bounds {
+                            if let glyim_hir::TypeRef::Path(p) = bound {
+                                if let Some(name) = p.as_name() {
+                                    if let Some(local) = tyconv::resolve_path_to_local_def_id(
+                                        &ctx, def_map, p,
+                                    ) {
+                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        ctx.param_bounds
+                                            .entry(gp.name)
+                                            .or_default()
+                                            .push((name, tid));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            glyim_hir::ItemKind::Enum(e_item) => {
+                for gp in &e_item.generic_params {
+                    if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
+                        for bound in bounds {
+                            if let glyim_hir::TypeRef::Path(p) = bound {
+                                if let Some(name) = p.as_name() {
+                                    if let Some(local) = tyconv::resolve_path_to_local_def_id(
+                                        &ctx, def_map, p,
+                                    ) {
+                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        ctx.param_bounds
+                                            .entry(gp.name)
+                                            .or_default()
+                                            .push((name, tid));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
         let (adt_kind, generic_params): (glyim_type::adt_def::AdtKind, Vec<Name>) = match &item.kind
         {
             glyim_hir::ItemKind::Enum(e) => (
