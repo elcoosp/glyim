@@ -336,80 +336,6 @@ pub fn typeck_crate(
     // so the ADTs must already be in `TyCtxMut`; otherwise `Poll`/`AddOne`-
     // style types are reported unresolved. Registration is idempotent, so the
     // later `register_adt` calls in `check_fn_items_in_module` are harmless.
-        // Const pre-registration pass (Script 60): register every const's
-    // declared type BEFORE any body checking runs. Without this, bodies in
-    // other modules that reference a const (`GLOBAL.alloc(...)` in boxed.g,
-    // rc.g, raw_vec.g) hit `check_path` -> `const_ty(ConstDefId)` and find
-    // nothing, because `check_fn_items_in_module`'s ItemKind::Const branch
-    // only runs during body-checking — which happens *after* the bodies that
-    // reference the const. Mirroring the ADT Pass 1 pattern: walk all const
-    // items recursively through ItemKind::Mod, resolve their declared type in
-    // their own module scope, and register it in TyCtx. Evaluation of the
-    // const's value is still deferred to the existing branch below.
-    {
-        fn visit_consts<F>(
-            hir: &glyim_hir::CrateHir,
-            items: &[ItemId],
-            def_map: &glyim_def_map::CrateDefMap,
-            module_id: ModuleId,
-            visit: &mut F,
-        ) where
-            F: FnMut(&glyim_hir::Item, ModuleId),
-        {
-            for item_id in items {
-                let Some(item) = hir.items.get(*item_id) else { continue };
-                match &item.kind {
-                    ItemKind::Mod(m) => {
-                        let child_mod = def_map.modules[module_id]
-                            .children
-                            .iter()
-                            .find(|(n, _)| *n == item.name)
-                            .map(|(_, id)| *id)
-                            .unwrap_or(module_id);
-                        visit_consts(hir, &m.children, def_map, child_mod, visit);
-                    }
-                    ItemKind::Const(_) => visit(item, module_id),
-                    _ => {}
-                }
-            }
-        }
-
-        let mut child_set: std::collections::HashSet<ItemId> = std::collections::HashSet::new();
-        for (_id, item) in hir.items.iter_enumerated() {
-            if let ItemKind::Mod(m) = &item.kind {
-                for c in &m.children {
-                    child_set.insert(*c);
-                }
-            }
-        }
-        let top_level_ids: Vec<ItemId> = hir
-            .items
-            .iter_enumerated()
-            .filter(|(id, _)| !child_set.contains(id))
-            .map(|(id, _)| id)
-            .collect();
-
-        let mut register_const_type = |item: &glyim_hir::Item, module_id: ModuleId| {
-            let ItemKind::Const(c) = &item.kind else { return };
-            let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
-                Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
-                None => return, // unregistered const — the later branch handles it
-            };
-            let empty_params: HashMap<Name, Ty> = HashMap::new();
-            let mut local_diags = Vec::new();
-            let const_ty = tyconv::resolve_type_ref(
-                &mut ctx,
-                &mut infer,
-                def_map,
-                &mut local_diags,
-                &c.ty,
-                &empty_params,
-                item.span,
-            );
-            ctx.register_const_ty(const_def_id, const_ty);
-        };
-        visit_consts(hir, &top_level_ids, def_map, def_map.root, &mut register_const_type);
-    }
 
 // Pass 1: register every ADT's name -> id BEFORE resolving any field
     // types. The async state-machine desugar emits a `FooState` enum whose
@@ -523,6 +449,80 @@ pub fn typeck_crate(
             item,
             def_map.root,
         );
+    }
+        // Const pre-registration pass (Script 60): register every const's
+    // declared type BEFORE any body checking runs. Without this, bodies in
+    // other modules that reference a const (`GLOBAL.alloc(...)` in boxed.g,
+    // rc.g, raw_vec.g) hit `check_path` -> `const_ty(ConstDefId)` and find
+    // nothing, because `check_fn_items_in_module`'s ItemKind::Const branch
+    // only runs during body-checking — which happens *after* the bodies that
+    // reference the const. Mirroring the ADT Pass 1 pattern: walk all const
+    // items recursively through ItemKind::Mod, resolve their declared type in
+    // their own module scope, and register it in TyCtx. Evaluation of the
+    // const's value is still deferred to the existing branch below.
+    {
+        fn visit_consts<F>(
+            hir: &glyim_hir::CrateHir,
+            items: &[ItemId],
+            def_map: &glyim_def_map::CrateDefMap,
+            module_id: ModuleId,
+            visit: &mut F,
+        ) where
+            F: FnMut(&glyim_hir::Item, ModuleId),
+        {
+            for item_id in items {
+                let Some(item) = hir.items.get(*item_id) else { continue };
+                match &item.kind {
+                    ItemKind::Mod(m) => {
+                        let child_mod = def_map.modules[module_id]
+                            .children
+                            .iter()
+                            .find(|(n, _)| *n == item.name)
+                            .map(|(_, id)| *id)
+                            .unwrap_or(module_id);
+                        visit_consts(hir, &m.children, def_map, child_mod, visit);
+                    }
+                    ItemKind::Const(_) => visit(item, module_id),
+                    _ => {}
+                }
+            }
+        }
+
+        let mut child_set: std::collections::HashSet<ItemId> = std::collections::HashSet::new();
+        for (_id, item) in hir.items.iter_enumerated() {
+            if let ItemKind::Mod(m) = &item.kind {
+                for c in &m.children {
+                    child_set.insert(*c);
+                }
+            }
+        }
+        let top_level_ids: Vec<ItemId> = hir
+            .items
+            .iter_enumerated()
+            .filter(|(id, _)| !child_set.contains(id))
+            .map(|(id, _)| id)
+            .collect();
+
+        let mut register_const_type = |item: &glyim_hir::Item, module_id: ModuleId| {
+            let ItemKind::Const(c) = &item.kind else { return };
+            let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
+                Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
+                None => return, // unregistered const — the later branch handles it
+            };
+            let empty_params: HashMap<Name, Ty> = HashMap::new();
+            let mut local_diags = Vec::new();
+            let const_ty = tyconv::resolve_type_ref(
+                &mut ctx,
+                &mut infer,
+                def_map,
+                &mut local_diags,
+                &c.ty,
+                &empty_params,
+                item.span,
+            );
+            ctx.register_const_ty(const_def_id, const_ty);
+        };
+        visit_consts(hir, &top_level_ids, def_map, def_map.root, &mut register_const_type);
     }
 
     // 1. Coherence pass
