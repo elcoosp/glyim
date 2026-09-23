@@ -1118,6 +1118,7 @@ pub(crate) fn resolve_name_to_adt_ty(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Option<Ty> {
+
     let name = path.as_name()?;
 
     // stdlib-completion: expand a registered type alias BEFORE falling back to

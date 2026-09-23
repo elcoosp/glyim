@@ -2139,6 +2139,7 @@ impl<'a> FnCtxt<'a> {
     /// `FnDefId` for codegen. `None` if no builtin method matches this receiver
     /// + name (so the caller falls through to user-impl / generic dispatch).
     fn try_builtin_method(&mut self, step_ty: Ty, method_name: Name) -> Option<(Ty, FnDefId)> {
+
         // Universal methods (`into`, `to_owned`, `to_string`, `clone`) resolve
         // for any receiver via a synthetic fn id whose output is either a fresh
         // inference var (context-pinned by the caller, e.g. `.into()` where the
@@ -2468,13 +2469,18 @@ impl<'a> FnCtxt<'a> {
                     if recv_is_param {
                         continue;
                     }
-                    // Script 110: `impl<T> [T]` produces a Slice self_ty in HIR
-                    // whose element `T` is a fresh inference var; that var
-                    // unifies with `String` (the `str` primitive), so the
-                    // slice impl matches a `str`/`&str` receiver and collides
-                    // with `impl str`'s `len`/`as_ptr`/etc. Skip slice impls
-                    // when the receiver's *underlying* type is String — both
-                    // bare `str` and `&str` (`&str` is `Ref(_, String, _)`).
+                    // Script 110/129: skip the slice impl (`impl<T> [T]`) and
+                    // the builtin String impl (which resolves to AdtId 1050)
+                    // when the receiver's *underlying* type is the `str`
+                    // primitive — both bare `str` and `&str` (`&str` is
+                    // `Ref(_, String, _)`). Otherwise every `s.len()` on a
+                    // string literal reports an ambiguity between `str::len`
+                    // and `<[T]>::len` / `String::len`.
+                    //
+                    // The `impl String` case is a bug in unify: it should not
+                    // unify `Adt(1050)` (the builtin String struct) against
+                    // `TyKind::String` (the str primitive). This skip is a
+                    // targeted workaround at the candidate-collection site.
                     let step_is_str_like = match this.ctx.ty_kind(step_ty) {
                         TyKind::String => true,
                         TyKind::Ref(_, inner, _) => {
@@ -2482,14 +2488,19 @@ impl<'a> FnCtxt<'a> {
                         }
                         _ => false,
                     };
-                    if step_is_str_like
-                        && matches!(
+                    if step_is_str_like {
+                        let is_slice_like = matches!(
                             impl_item.self_ty,
                             glyim_hir::TypeRef::Slice(_)
                                 | glyim_hir::TypeRef::Array { .. }
-                        )
-                    {
-                        continue;
+                        );
+                        let is_string_adt = matches!(
+                            this.ctx.ty_kind(impl_self_ty),
+                            TyKind::Adt(id, _) if id.to_raw() == 1050
+                        );
+                        if is_slice_like || is_string_adt {
+                            continue;
+                        }
                     }
                     // Probe whether this impl's `Self` type unifies with the
                     // receiver *without* committing side effects (a non-matching
