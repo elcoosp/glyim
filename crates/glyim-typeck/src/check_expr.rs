@@ -2320,6 +2320,51 @@ impl<'a> FnCtxt<'a> {
         // `Deref` impls require the trait-DB population and fall back to `None`.
         // Once a step yields candidates we stop descending (standard autoref
         // priority), so `x.method()` still prefers `x`'s own impls.
+        // Script 86: raw-pointer intrinsic methods. `*mut T` / `*const T`
+        // need `is_null`, `is_not_null`, `addr`, `add`, `sub` (and the
+        // `as_ptr`/`as_mut_ptr` conversions) without a source-level impl.
+        // A hardcoded table here is cleaner than a stdlib impl because
+        // the compiler's `as` casts between `*mut T` and `usize` don't
+        // compose with method dispatch at stdlib level (Script 81's
+        // attempt added 18 net errors).
+        if let TyKind::RawPtr(inner_ty, mutability) = self.ctx.ty_kind(recv_ty) {
+            let mname = self.ctx.name_str(method_name).to_string();
+            match mname.as_str() {
+                "is_null" | "is_not_null" => {
+                    return (Ty::BOOL, None);
+                }
+                "addr" => {
+                    let usize_ty = self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
+                    return (usize_ty, None);
+                }
+                "add" | "sub" => {
+                    // `p.add(n)` / `p.sub(n)` preserve the receiver's pointer type.
+                    return (recv_ty, None);
+                }
+                "as_ptr" => {
+                    // `*mut T` -> `*const T`; `*const T` -> itself.
+                    let new_ty = match mutability {
+                        glyim_core::primitives::Mutability::Mut => self
+                            .ctx
+                            .mk_ty(TyKind::RawPtr(*inner_ty, glyim_core::primitives::Mutability::Not)),
+                        glyim_core::primitives::Mutability::Not => recv_ty,
+                    };
+                    return (new_ty, None);
+                }
+                "as_mut_ptr" => {
+                    // `*const T` -> `*mut T` (unsafe); `*mut T` -> itself.
+                    let new_ty = match mutability {
+                        glyim_core::primitives::Mutability::Not => self
+                            .ctx
+                            .mk_ty(TyKind::RawPtr(*inner_ty, glyim_core::primitives::Mutability::Mut)),
+                        glyim_core::primitives::Mutability::Mut => recv_ty,
+                    };
+                    return (new_ty, None);
+                }
+                _ => {}
+            }
+        }
+
         let mut steps: Vec<Ty> = Vec::new();
         let mut cur = Some(recv_ty);
         while let Some(t) = cur {
