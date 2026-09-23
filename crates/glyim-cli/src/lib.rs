@@ -109,7 +109,7 @@ fn inject_assembled_stdlib(
             input.display()
         ))]
     })?;
-    let stdlib = glyim_lang_std::std_source_assembled();
+    let stdlib = glyim_lang_std::std_source_assembled_minimal();
     // NOTE: we deliberately do NOT emit a `use X::*;` prelude here.
     // `std_source_assembled` already emits a `pub use X::Item;` block at
     // the crate root for every user-facing name, so bare `Option`,

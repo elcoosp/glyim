@@ -18,3 +18,4 @@ mod lower_type;
 mod number_suffix;
 mod pattern_lowering;
 mod type_lowering;
+mod generic_in_module;

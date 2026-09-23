@@ -26,7 +26,7 @@ fn alloc_g_is_well_formed_g_and_defines_allocator() {
         result.diagnostics
     );
     assert!(
-        src.contains("const GLOBAL: GlobalAlloc = GlobalAlloc;"),
+        src.contains("const GLOBAL: Global = Global;"),
         "alloc.g must define the GLOBAL allocator that Box/Vec lower onto"
     );
     assert!(
@@ -34,7 +34,7 @@ fn alloc_g_is_well_formed_g_and_defines_allocator() {
         "alloc.g must define handle_alloc_error (OOM abort) used by Box/Vec"
     );
     assert!(
-        src.contains("impl GlobalAlloc for GlobalAlloc"),
+        src.contains("impl GlobalAlloc for Global"),
         "alloc.g must wire the GlobalAlloc trait impl onto the GLOBAL value"
     );
 }

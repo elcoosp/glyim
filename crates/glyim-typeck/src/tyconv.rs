@@ -1,4 +1,5 @@
 /// HIR `TypeRef` → `Ty` conversion.
+use glyim_type::InferVar;
 use std::collections::HashMap;
 
 use glyim_core::def_id::{AdtId, DefId, LocalDefId, TraitDefId};
@@ -562,11 +563,114 @@ pub fn resolve_path_type(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Ty {
+    if std::env::var("GLYIM_DBG_RPT2").is_ok() {
+        let segs: Vec<String> = path
+            .segments
+            .iter()
+            .map(|x| ctx.name_str(x.name).to_string())
+            .collect();
+        eprintln!("[RPT2] n={} segs={:?} kind={:?}", path.segments.len(), segs, path.kind);
+    }
+    if std::env::var("GLYIM_DBG_RPT").is_ok() {
+        let segs: Vec<String> = path
+            .segments
+            .iter()
+            .map(|x| ctx.name_str(x.name).to_string())
+            .collect();
+        eprintln!("[RPT] seg_count={} names={:?}", path.segments.len(), segs);
+    }
+
     // Check param_map first for generic params
     if let Some(name) = path.as_name()
         && let Some(&ty) = param_map.get(&name)
     {
         return ty;
+    }
+
+    // Script 63: `I::Item` and `Self::Item` arrive as *two-segment* paths,
+    // not single segments with `::` in the name (confirmed via GLYIM_DBG_RPT:
+    // `seg_count=2 names=["I", "Item"]`). The single-segment branch below
+    // never fires for them, and `resolve_qualified_path` (the two-segment
+    // handler) only knows about module paths (`mod::Type`), not generic-param
+    // projections. Handle the 2-segment projection here, BEFORE either of
+    // those other resolvers.
+    //
+    // When the first segment is a generic parameter (`I` from `impl<I: Iterator>`)
+    // or `Self`, and the second is an associated type, build the projection
+    // directly. When the first segment is a concrete type (`AddOne::Output`),
+    // fall through to the existing single-segment/impl-table path.
+    if path.segments.len() == 2 && path.kind == glyim_core::path::PathKind::Plain {
+        if std::env::var("GLYIM_DBG_P2").is_ok() {
+            let q = ctx.name_str(path.segments[0].name).to_string();
+            let a = ctx.name_str(path.segments[1].name).to_string();
+            let bp = ctx.param_bounds_for(path.segments[0].name).is_some();
+            let bc = ctx.param_bounds_for(path.segments[0].name).map(|b| b.len()).unwrap_or(0);
+            let sm = param_map.contains_key(&path.segments[0].name);
+            static COUNT: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
+            let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let bt = std::backtrace::Backtrace::force_capture();
+            let bt_str = format!("{}", bt);
+            // Only the first 4 stack frames that mention glyim-*
+            let top_frames: Vec<&str> = bt_str
+                .lines()
+                .filter(|l| l.contains("glyim_"))
+                .take(4)
+                .collect();
+            eprintln!(
+                "[P2 #{}] q={} a={} bounds_present={} bounds_count={} self_in_pm={}",
+                n, q, a, bp, bc, sm
+            );
+            for f in top_frames {
+                eprintln!("[P2 #{} site] {}", n, f.trim());
+            }
+        }
+        let qname = path.segments[0].name;
+        let aname = path.segments[1].name;
+        let qname_str = ctx.name_str(qname).to_string();
+
+        // Fast path: if the qualifier is a generic param bound by a trait
+        // declaring `aname`, build `ProjectionTy(param, aname)`.
+        // Extract the bound trait id BEFORE any mutable borrow of `ctx`
+        // (the `param_bounds_for` return borrows ctx immutably).
+        let bound_tid: Option<glyim_core::def_id::TraitDefId> = ctx
+            .param_bounds_for(qname)
+            .and_then(|bounds| bounds.first().map(|(_, tid)| *tid));
+        if let Some(tid) = bound_tid {
+            let self_ty = ctx.mk_ty(TyKind::Param(glyim_type::ParamTy {
+                index: 0,
+                name: qname,
+            }));
+            let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
+            let trait_ref = TraitRef {
+                def_id: tid,
+                substs,
+            };
+            let proj = ProjectionTy {
+                trait_ref,
+                item_name: aname,
+            };
+            return ctx.mk_ty(TyKind::Projection(proj));
+        }
+
+        // `Self::Item` — resolve `Self` via param_map (which has the impl's
+        // self-ty under the `Self` name) and look up its bound trait.
+        if qname_str == "Self" {
+            if let Some(&self_ty) = param_map.get(&qname) {
+                if let Some(tid) = ctx.find_trait_with_assoc_type(aname) {
+                    let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
+                    let trait_ref = TraitRef {
+                        def_id: tid,
+                        substs,
+                    };
+                    let proj = ProjectionTy {
+                        trait_ref,
+                        item_name: aname,
+                    };
+                    return ctx.mk_ty(TyKind::Projection(proj));
+                }
+            }
+        }
     }
 
     // Plan unstub-5 P5: associated-type projection paths (`Self::Output`,
@@ -747,8 +851,17 @@ fn resolve_qualified_path(
     // arguments (if any).
     let local = resolve_path_to_local_def_id(ctx, def_map, path)?;
     let adt_id = AdtId::from_raw(local.to_raw());
+    let arity = ctx.adt_generic_arity(adt_id);
+    // Build the substitution. When the path has an explicit turbofish
+    // (`Foo::<i32>`), use the written args. When it doesn't, create fresh
+    // inference variables for each generic parameter — exactly what
+    // `resolve_name_to_adt_ty` does for single-segment paths. Without this,
+    // `Adt(Foo, [])` is created with an empty substitution for a 1-arity
+    // ADT, so the field type `Param(T)` never unifies with a concrete
+    // value at the call site ("mismatched types: expected integer, found
+    // T"). This is the Script 32 fix for module-scoped generics.
     let substs = if let Some(args) = path.segments.last().and_then(|s| s.generic_args.as_ref()) {
-        let mut arg_tys = Vec::with_capacity(args.len());
+        let mut arg_tys = Vec::with_capacity(arity);
         for arg in args {
             let resolved = resolve_type_ref(
                 ctx,
@@ -764,9 +877,24 @@ fn resolve_qualified_path(
             }
             arg_tys.push(GenericArg::Ty(resolved));
         }
+        // Pad missing args with fresh inference vars so arity matches the
+        // ADT definition even under partial turbofish.
+        while arg_tys.len() < arity {
+            let var = infer.new_ty_var(ctx);
+            let ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+            arg_tys.push(GenericArg::Ty(ty));
+        }
+        arg_tys.truncate(arity);
         ctx.intern_substitution(arg_tys)
     } else {
-        ctx.intern_substitution(vec![])
+        // No explicit args — fresh inference vars for every generic param.
+        let mut arg_tys = Vec::with_capacity(arity);
+        for _ in 0..arity {
+            let var = infer.new_ty_var(ctx);
+            let ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+            arg_tys.push(GenericArg::Ty(ty));
+        }
+        ctx.intern_substitution(arg_tys)
     };
     Some(ctx.mk_ty(TyKind::Adt(adt_id, substs)))
 }
@@ -845,6 +973,7 @@ pub(crate) fn resolve_path_to_local_def_id(
 
     None
 }
+
 
 /// Resolve a (possibly multi‑segment) path to an `AdtId`, walking the module
 /// tree like `resolve_path_to_local_def_id`. Used by struct/variant *patterns*

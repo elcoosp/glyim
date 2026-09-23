@@ -212,14 +212,14 @@ impl<T> DerefMut for RwLockWriteGuard<'_, T> {
 }
 
 /// A synchronization primitive which can be used to run a one-time initialization.
-struct Once {
+struct OnceLock {
     state: AtomicU8,
 }
 
-impl Once {
-    /// Create a new `Once` value.
-    fn new() -> Once {
-        Once {
+impl OnceLock {
+    /// Create a new `OnceLock` value.
+    fn new() -> OnceLock {
+        OnceLock {
             state: AtomicU8::new(0),
         }
     }

@@ -530,12 +530,12 @@ fn sink() -> Sink {
     Sink
 }
 
-/// Repeat a single byte infinitely.
-struct Repeat {
+/// RepeatBytes a single byte infinitely.
+struct RepeatBytes {
     byte: u8,
 }
 
-impl Read for Repeat {
+impl Read for RepeatBytes {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         for b in buf.iter_mut() {
             *b = self.byte;
@@ -545,6 +545,6 @@ impl Read for Repeat {
 }
 
 /// Create a reader that infinitely repeats a single byte.
-fn repeat(byte: u8) -> Repeat {
-    Repeat { byte }
+fn repeat(byte: u8) -> RepeatBytes {
+    RepeatBytes { byte }
 }

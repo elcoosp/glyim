@@ -110,101 +110,164 @@ pub fn std_source_all() -> String {
 /// Glob re-exports (`use io::*`) are not supported by the resolver, so each
 /// module's public items are listed explicitly in `MODULE_PUBS`.
 pub fn std_source_assembled() -> String {
-    
-        // Restored by Script 18 (Script 17 trimmed these for the
-        // wrong reason — modules are interdependent, not standalone).
-        (
-            "time",
-            &[
-                "Duration",
-                "Instant",
-                "SystemTime",
-                "UNIX_EPOCH",
-            ],
-        ),
-        // Restored by Script 18 (Script 17 trimmed these for the
-        // wrong reason — modules are interdependent, not standalone).
-        (
-            "rc",
-            &[
-                "Rc",
-            ],
-        ),
-        // Restored by Script 18 (Script 17 trimmed these for the
-        // wrong reason — modules are interdependent, not standalone).
-        (
-            "default",
-            &[
-                "Default",
-            ],
-        ),
-        // Restored by Script 18 (Script 17 trimmed these for the
-        // wrong reason — modules are interdependent, not standalone).
-        (
-            "thread",
-            &[
-                "Thread",
-                "ThreadId",
-                "spawn",
-                "sleep",
-                "JoinHandle",
-                "yield_now",
-            ],
-        ),
-        // Restored by Script 18 (Script 17 trimmed these for the
-        // wrong reason — modules are interdependent, not standalone).
-        (
-            "option",
-            &[
-                "Option",
-            ],
-        ),
-        // Restored by Script 18 (Script 17 trimmed these for the
-        // wrong reason — modules are interdependent, not standalone).
-        (
-            "sync",
-            &[
-                "Mutex",
-                "RwLock",
-                "Arc",
-                "AtomicBool",
-                "AtomicI32",
-                "AtomicU32",
-                "AtomicUsize",
-                "Condvar",
-                "Barrier",
-            ],
-        ),let pubs: &[(&str, &[&str])] = &[
-        // --- prelude-surface modules (added by Script 6) ---
-        (
-            "env",
-            &[
-                "args",
-                "var",
-                "set_var",
-                "current_dir",
-                "temp_dir",
-                "home_dir",
-                "args_os",
-            ],
-        ),
-        // `panic.g` (core). Defines the `panic!` / `assert!` / `assert_eq!`
-        // / `assert_ne!` / `unimplemented!` / `unreachable!` macros plus
-        // `panic_any`. Without this module in the assembled set, `panic!(..)`
-        // in time.g's `Instant::duration_since` never expanded and its
-        // match arm was dropped ("non-exhaustive match: missing variants
-        // `None`"). The macros are collected by the expander from the
-        // wrapped module; `panic_any` is re-exported at the root.
+    // (name, [item, ...]) — emitted as `pub mod name { … }` + `pub use name::item;`
+    // per item, so bare names resolve at the crate root.
+    let pubs: &[(&str, &[&str])] = &[
+        ("option", &["Option"]),
+        ("result", &["Result"]),
+        ("iter", &[
+            "Iterator", "IntoIterator", "FromIterator",
+            "Map", "Filter", "Enumerate", "Skip", "Take", "Zip", "Chain",
+        ]),
+        ("ops", &[
+            "Deref", "DerefMut", "Drop",
+            "Fn", "FnMut", "FnOnce",
+            "Add", "Sub", "Mul", "Div", "Rem", "Neg", "Not",
+            "Index", "IndexMut",
+        ]),
+        ("default", &["Default"]),
+        ("mem", &[
+            "size_of", "size_of_val", "align_of", "align_of_val",
+            "replace", "swap", "take", "forget", "drop",
+        ]),
+        ("ptr", &["read", "write", "drop_in_place"]),
+        ("cell", &["Cell", "RefCell", "UnsafeCell"]),
+        ("marker", &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"]),
+        ("convert", &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"]),
+        ("hint", &["black_box", "spin_loop"]),
+        ("vec", &["Vec"]),
+        ("boxed", &["Box"]),
+        ("rc", &["Rc"]),
+        ("string", &["String"]),
+        ("raw_vec", &["RawVec"]),
+        ("alloc", &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"]),
+        ("io", &[
+            "Read", "Write", "BufRead", "Error", "ErrorKind",
+            "Stdin", "Stdout", "Stderr",
+            "empty_reader", "stdin", "stdout", "stderr",
+            "println", "print", "eprintln", "eprint",
+                "RepeatBytes",
+            ]),
+        ("fs", &[
+            "File", "OpenOption", "read_to_string", "write_to_file",
+            "FileType", "Metadata", "DirEntry", "read_dir",
+        ]),
+        ("net", &[
+            "TcpStream", "TcpListener", "UdpSocket",
+            "IpAddr", "Ipv4Addr", "Ipv6Addr",
+            "SocketAddr", "SocketAddrV4", "SocketAddrV6",
+            "ToSocketAddrs", "resolve", "connect", "bind",
+        ]),
+        ("thread", &[
+            "Thread", "ThreadId", "spawn", "sleep", "JoinHandle", "yield_now",
+        ]),
+        ("sync", &[
+            "Mutex", "RwLock", "Arc",
+            "AtomicBool", "AtomicI32", "AtomicU32", "AtomicUsize",
+            "Condvar", "Barrier",
+                "OnceLock",
+            ]),
+        ("env", &[
+            "args", "var", "set_var", "current_dir",
+            "temp_dir", "home_dir", "args_os",
+        ]),
+        ("time", &["Duration", "Instant", "SystemTime", "UNIX_EPOCH"]),
+        ("process", &["Command", "Child", "Stdio", "exit", "id"]),
+        ("future", &["Poll", "Waker", "Context", "Future"]),
+        ("cmp", &[
+            "min", "max",
+            "Ord", "PartialOrd", "Eq", "PartialEq",
+            "Reverse",
+        ]),
         ("panic", &["panic_any"]),
     ];
-    // Core-library sources emitted FLAT (no `pub mod` wrapper). `str.g` and
-    // `slice.g` define `impl str { .. }` / `impl<T> [T] { .. }` extension
-    // methods; wrapping them in `pub mod str { … }` would shadow the
-    // *primitive* `str` with the module, so `impl str` inside would bind to
-    // the module (an Adt) rather than the primitive (`TyKind::String`).
+    // `str` and `slice` are emitted FLAT: their `impl str { .. }` /
+    // `impl<T> [T] { .. }` extension blocks must bind to the primitive types,
+    // not a module named `str` / `slice`.
     let flat_modules: &[&str] = &["str", "slice"];
     let mut out = String::new();
     out.push_str("// Assembled modular glyim standard library (Option A).\n");
+    for name in flat_modules {
+        if let Some(src) = std_source(name) {
+            let pub_src = make_pub(src);
+            out.push_str(&pub_src);
+            out.push('\n');
+        }
+    }
+    for (name, _items) in pubs {
+        if let Some(src) = std_source(name) {
+            let pub_src = make_pub(src);
+            out.push_str(&format!("pub mod {name} {{\n"));
+            out.push_str(&pub_src);
+            out.push_str("\n}\n\n");
+        }
+    }
+    out.push_str("// Root re-exports so bare names resolve crate-wide.\n");
+    for (name, items) in pubs {
+        for item in *items {
+            out.push_str(&format!("pub use {name}::{item};\n"));
+        }
+    }
+    out.push('\n');
+    out
+}
+
+/// Assemble a **minimal** standard library crate containing only the modules
+/// required for a "hello world" program (and basic collections + I/O). This
+/// excludes `net`, `fs`, `thread`, `sync`, `env`, `time`, `process`, which
+/// currently have compiler-feature gaps that block the full assembled stdlib
+/// from compiling cleanly. `--with-stdlib` uses this variant by default so a
+/// user's first program type-checks and runs; the full stdlib is opt-in via
+/// `--with-full-stdlib` until those remaining gaps are closed.
+pub fn std_source_assembled_minimal() -> String {
+    let pubs: &[(&str, &[&str])] = &[
+        ("option", &["Option"]),
+        ("result", &["Result"]),
+        ("iter", &[
+            "Iterator", "IntoIterator", "FromIterator",
+            "Map", "Filter", "Enumerate", "Skip", "Take", "Zip", "Chain",
+        ]),
+        ("ops", &[
+            "Deref", "DerefMut", "Drop",
+            "Fn", "FnMut", "FnOnce",
+            "Add", "Sub", "Mul", "Div", "Rem", "Neg", "Not",
+            "Index", "IndexMut",
+        ]),
+        ("default", &["Default"]),
+        ("mem", &[
+            "size_of", "size_of_val", "align_of", "align_of_val",
+            "replace", "swap", "take", "forget", "drop",
+        ]),
+        ("ptr", &["read", "write", "drop_in_place", "null", "null_mut"]),
+        ("cell", &["Cell", "RefCell", "UnsafeCell"]),
+        ("marker", &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"]),
+        ("convert", &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"]),
+        ("hint", &["black_box", "spin_loop"]),
+        ("vec", &["Vec"]),
+        ("boxed", &["Box"]),
+        ("rc", &["Rc"]),
+        ("string", &["String"]),
+        ("raw_vec", &["RawVec"]),
+        ("alloc", &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"]),
+        ("io", &[
+            "Read", "Write", "BufRead", "Error", "ErrorKind",
+            "Stdin", "Stdout", "Stderr",
+            "empty_reader", "stdin", "stdout", "stderr",
+            "println", "print", "eprintln", "eprint",
+            "RepeatBytes",
+        ]),
+        ("future", &["Poll", "Waker", "Context", "Future"]),
+        ("cmp", &[
+            "min", "max",
+            "Ord", "PartialOrd", "Eq", "PartialEq",
+            "Reverse",
+        ]),
+        ("panic", &["panic_any"]),
+    ];
+    // `str` and `slice` emitted FLAT.
+    let flat_modules: &[&str] = &["str", "slice"];
+    let mut out = String::new();
+    out.push_str("// Assembled MINIMAL glyim standard library (Script 82).\n");
     for name in flat_modules {
         if let Some(src) = std_source(name) {
             let pub_src = make_pub(src);
@@ -241,13 +304,22 @@ fn make_pub(src: &str) -> String {
     ];
     let mut out = String::with_capacity(src.len());
     let mut depth: i32 = 0;
+    // `impl_depth`: when > 0 we are inside an `impl { ... }` block. `pub` on
+    // impl methods is a Rust-ism that Glyim's parser does not accept
+    // ("expected impl item, found KwPub"), so we never add `pub` there.
+    let mut impl_depth: i32 = -1;
     for line in src.lines() {
-        // Depth at the *start* of the line determines whether this is a
-        // module-level item. Count this line's own braces afterwards so the
-        // opening brace of `trait X {` is not counted before the keyword.
         let trimmed = line.trim_start();
         let is_item = item_kws.iter().any(|kw| trimmed.starts_with(kw));
         let already_pub = trimmed.starts_with("pub ") || trimmed.starts_with("pub(");
+        // Detect the start of an `impl` block on this line (the `impl` may
+        // carry generics and a trait path before the opening `{`).
+        let line_starts_impl = trimmed.starts_with("impl ")
+            || trimmed.starts_with("impl<")
+            || trimmed.starts_with("impl{");
+        // Determine whether `pub` should be injected: only when we are at the
+        // top of the module (depth <= 0) AND not inside an impl block.
+        let inside_impl = impl_depth >= 0 && depth > impl_depth;
         if depth <= 0 && is_item && !already_pub && !trimmed.starts_with("//") {
             let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
             out.push_str(&line[..indent]);
@@ -256,15 +328,24 @@ fn make_pub(src: &str) -> String {
         } else {
             out.push_str(line);
         }
-        // Update brace depth for the next line. A `{` after the item keyword
-        // opens a body; a `}` closes one.
+        // Update brace depth.
         for ch in line.chars() {
             if ch == '{' {
                 depth += 1;
             } else if ch == '}' {
                 depth -= 1;
+                // If we just closed the impl block, clear the marker.
+                if impl_depth >= 0 && depth == impl_depth {
+                    impl_depth = -1;
+                }
             }
         }
+        // If this line opened an `impl` block, record its depth (the depth
+        // *after* processing this line's braces).
+        if line_starts_impl && impl_depth < 0 {
+            impl_depth = depth;
+        }
+        let _ = inside_impl;
         out.push('\n');
     }
     out

@@ -647,6 +647,7 @@ impl MirCompilation {
 /// This is the entry point used by `glyip test` and other runners that execute
 /// MIR bodies directly (e.g. via the in-process `glyim_mir_interp` interpreter)
 /// instead of producing a native object file.
+
 pub fn compile_file_to_mir(
     db: &mut Database,
     path: &Path,
@@ -682,7 +683,7 @@ pub fn compile_file_to_mir(
     let mut hygiene = glyim_span::HygieneCtx::new();
     let mut expander = glyim_meta::Expander::new(&mut hygiene);
     let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
-    if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
+if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
         let dump = expanded_root.text().to_string();
         let dump_path =
             std::env::temp_dir().join(format!("glyim_expanded_{}.g", std::process::id()));
@@ -834,15 +835,24 @@ pub fn emit_mir(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
+    let mut hygiene = glyim_span::HygieneCtx::new();
+    let mut expander = glyim_meta::Expander::new(&mut hygiene);
+    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
+    sink_cell.borrow_mut().extend(expand_diags);
+    if sink_cell.borrow().has_errors() {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
+
+
     let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
     let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
+        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
     sink_cell.borrow_mut().extend(hir_diags.clone());
     // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
     // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
@@ -954,15 +964,24 @@ pub fn emit_llvm_ir(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
+    let mut hygiene = glyim_span::HygieneCtx::new();
+    let mut expander = glyim_meta::Expander::new(&mut hygiene);
+    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
+    sink_cell.borrow_mut().extend(expand_diags);
+    if sink_cell.borrow().has_errors() {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
+
+
     let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
     let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
+        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
     sink_cell.borrow_mut().extend(hir_diags.clone());
     // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
     // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
@@ -1098,15 +1117,24 @@ pub fn emit_asm(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
+    let mut hygiene = glyim_span::HygieneCtx::new();
+    let mut expander = glyim_meta::Expander::new(&mut hygiene);
+    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
+    sink_cell.borrow_mut().extend(expand_diags);
+    if sink_cell.borrow().has_errors() {
+        return Err(sink_cell.into_inner().into_diagnostics());
+    }
+
+
     let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
     if sink_cell.borrow().has_errors() {
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
     let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&parse_result.root, db.intern_mut());
+        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
     sink_cell.borrow_mut().extend(hir_diags.clone());
     // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
     // `.await`-inside-a-loop guard, Error 60) must abort compilation instead

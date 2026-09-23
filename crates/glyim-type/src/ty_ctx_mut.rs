@@ -662,6 +662,20 @@ impl TyCtxMut {
 
     /// register_adt.
     pub fn register_adt(&mut self, id: AdtId, def: AdtDef) {
+        if std::env::var("GLYIM_DBG_REGISTER_ADT").is_ok() {
+            let prev_params = self
+                .adt_defs
+                .get(&id)
+                .map(|d| d.generic_params.len())
+                .unwrap_or(0);
+            eprintln!(
+                "[REGISTER_ADT_RAW] id={:?} new_params={} prev_params={} kind={:?}",
+                id,
+                def.generic_params.len(),
+                prev_params,
+                def.kind,
+            );
+        }
         // Compute variant types from variants
         let variant_tys: Vec<Ty> = def
             .variants
@@ -695,9 +709,41 @@ impl TyCtxMut {
     /// resolution by name (`resolve_name_to_adt_ty`) can find it regardless of
     /// the def-map interner (plan unstub-5 P5).
     pub fn register_adt_with_name(&mut self, name: Name, id: AdtId, def: AdtDef) {
+        if std::env::var("GLYIM_DBG_REGISTER_ADT").is_ok() {
+            let prev_params = self
+                .adt_defs
+                .get(&id)
+                .map(|d| d.generic_params.len())
+                .unwrap_or(0);
+            let prev_kind = self
+                .adt_defs
+                .get(&id)
+                .map(|d| format!("{:?}", d.kind))
+                .unwrap_or_else(|| "<no-entry>".to_string());
+            let name_str = self.resolve_name_for_debug(name);
+            eprintln!(
+                "[REGISTER_ADT] name={}({:?}) id={:?} new_params={} prev_params={} new_kind={:?} prev_kind={}",
+                name_str,
+                name,
+                id,
+                def.generic_params.len(),
+                prev_params,
+                def.kind,
+                prev_kind,
+            );
+        }
         self.adt_by_name.insert(name, id);
         self.register_adt(id, def);
     }
+
+    /// Best-effort Name-to-string for debug output. Returns "<unknown>" if the
+    /// interner doesn't have an entry — never panics.
+    fn resolve_name_for_debug(&self, name: glyim_core::interner::Name) -> String {
+        // The interner lives inside TyCtxMut; try the most likely field.
+        // If unavailable, fall back to the numeric form.
+        format!("{:?}", name)
+    }
+
 
     /// Allocate a fresh compiler-synthesized `AdtId` that cannot collide with
     /// user-defined ADTs or the builtin fixed-id ADTs (ranges, etc.).

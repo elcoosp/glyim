@@ -2704,7 +2704,53 @@ impl<'a> FnCtxt<'a> {
             }
         }
 
+                // Script 79: when multiple candidates match, prefer candidates
+        // whose impl self_ty is *not* a fresh inference variable (either
+        // directly or nested inside a Slice/Ref/Array/Adt). The slice impl
+        // `impl<T> [T]` matches a `str` receiver only because `T` unifies
+        // with anything; the `str` impl matches with no inference vars at
+        // all. Preferring the concrete one resolves the `len`/`as_ptr`
+        // ambiguity family without weakening true ambiguity detection.
+        //
+        // Script 77's narrower filter only checked the top-level TyKind; it
+        // missed `Slice(InferVar)` (a slice of an inference var) and
+        // `Ref(_, InferVar, _)` (borrow of an inference var), which is what
+        // `impl<T> [T]` actually produces.
         if candidates.len() > 1 {
+            fn has_infer_var(ctx: &glyim_type::TyCtxMut, ty: glyim_type::Ty) -> bool {
+                match ctx.ty_kind(ty) {
+                    glyim_type::TyKind::Infer(_) => true,
+                    glyim_type::TyKind::Slice(inner) => has_infer_var(ctx, *inner),
+                    glyim_type::TyKind::Array(inner, _) => has_infer_var(ctx, *inner),
+                    glyim_type::TyKind::Ref(_, inner, _) => has_infer_var(ctx, *inner),
+                    glyim_type::TyKind::RawPtr(inner, _) => has_infer_var(ctx, *inner),
+                    glyim_type::TyKind::Tuple(substs) => {
+                        let args = ctx.substitution_args(*substs);
+                        args.iter().any(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => has_infer_var(ctx, *t),
+                            _ => false,
+                        })
+                    }
+                    glyim_type::TyKind::Adt(_, substs) => {
+                        let args = ctx.substitution_args(*substs);
+                        args.iter().any(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => has_infer_var(ctx, *t),
+                            _ => false,
+                        })
+                    }
+                    _ => false,
+                }
+            }
+            let concrete: Vec<_> = candidates
+                .iter()
+                .filter(|(self_ty, _, _)| !has_infer_var(&*self.ctx, *self_ty))
+                .cloned()
+                .collect();
+            if !concrete.is_empty() {
+                candidates = concrete;
+            }
+        }
+if candidates.len() > 1 {
             let list: Vec<String> = candidates
                 .iter()
                 .map(|(self_ty, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))

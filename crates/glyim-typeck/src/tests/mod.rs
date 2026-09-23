@@ -40,3 +40,7 @@ mod value_path_integration;
 mod variant_path;
 mod where_clause;
 mod while_loop;
+
+mod generic_in_module_typeck;
+mod const_in_module;
+mod len_ambiguity;

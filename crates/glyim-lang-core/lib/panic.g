@@ -9,8 +9,8 @@ macro panic! {
     ($msg:literal) => {
         panic_any($msg)
     },
-    ($fmt:literal, $($arg:tt)+) => {
-        panic_any(format!($fmt, $($arg)+))
+    ($fmt:literal, $($arg:expr),+) => {
+        panic_any(format!($fmt, $($arg),+))
     },
 }
 
@@ -26,9 +26,9 @@ macro assert! {
             panic!("assertion failed: {}", stringify!($cond));
         }
     },
-    ($cond:expr, $($arg:tt)+) => {
+    ($cond:expr, $($arg:expr),+) => {
         if !$cond {
-            panic!("assertion failed: {}", format!($($arg)+));
+            panic!("assertion failed: {}", format!($($arg),+));
         }
     },
 }

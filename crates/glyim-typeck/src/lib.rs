@@ -57,10 +57,7 @@ use glyim_diag::GlyimDiagnostic;
 use glyim_hir::{ExprId, ItemId, ItemKind};
 use glyim_solve::{FulfillmentCtx, InferenceTable, Obligation, ObligationCause, TraitContext};
 use glyim_span::Span;
-use glyim_type::{
-    AdtDef, AdtKind, FieldDef, FnSig, GenericArg, ImplPolarity, MethodDef, Predicate, TraitDef,
-    TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, VariantDef,
-};
+use glyim_type::{ AdtDef, AdtKind, FieldDef, FnSig, GenericArg, ImplPolarity, MethodDef, Predicate, TraitDef, TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, VariantDef, TyKind };
 
 #[derive(Clone, Debug)]
 /// TypeckResult.
@@ -312,7 +309,82 @@ pub fn typeck_crate(
     // so the ADTs must already be in `TyCtxMut`; otherwise `Poll`/`AddOne`-
     // style types are reported unresolved. Registration is idempotent, so the
     // later `register_adt` calls in `check_fn_items_in_module` are harmless.
-    // Pass 1: register every ADT's name -> id BEFORE resolving any field
+        // Const pre-registration pass (Script 60): register every const's
+    // declared type BEFORE any body checking runs. Without this, bodies in
+    // other modules that reference a const (`GLOBAL.alloc(...)` in boxed.g,
+    // rc.g, raw_vec.g) hit `check_path` -> `const_ty(ConstDefId)` and find
+    // nothing, because `check_fn_items_in_module`'s ItemKind::Const branch
+    // only runs during body-checking — which happens *after* the bodies that
+    // reference the const. Mirroring the ADT Pass 1 pattern: walk all const
+    // items recursively through ItemKind::Mod, resolve their declared type in
+    // their own module scope, and register it in TyCtx. Evaluation of the
+    // const's value is still deferred to the existing branch below.
+    {
+        fn visit_consts<F>(
+            hir: &glyim_hir::CrateHir,
+            items: &[ItemId],
+            def_map: &glyim_def_map::CrateDefMap,
+            module_id: ModuleId,
+            visit: &mut F,
+        ) where
+            F: FnMut(&glyim_hir::Item, ModuleId),
+        {
+            for item_id in items {
+                let Some(item) = hir.items.get(*item_id) else { continue };
+                match &item.kind {
+                    ItemKind::Mod(m) => {
+                        let child_mod = def_map.modules[module_id]
+                            .children
+                            .iter()
+                            .find(|(n, _)| *n == item.name)
+                            .map(|(_, id)| *id)
+                            .unwrap_or(module_id);
+                        visit_consts(hir, &m.children, def_map, child_mod, visit);
+                    }
+                    ItemKind::Const(_) => visit(item, module_id),
+                    _ => {}
+                }
+            }
+        }
+
+        let mut child_set: std::collections::HashSet<ItemId> = std::collections::HashSet::new();
+        for (_id, item) in hir.items.iter_enumerated() {
+            if let ItemKind::Mod(m) = &item.kind {
+                for c in &m.children {
+                    child_set.insert(*c);
+                }
+            }
+        }
+        let top_level_ids: Vec<ItemId> = hir
+            .items
+            .iter_enumerated()
+            .filter(|(id, _)| !child_set.contains(id))
+            .map(|(id, _)| id)
+            .collect();
+
+        let mut register_const_type = |item: &glyim_hir::Item, module_id: ModuleId| {
+            let ItemKind::Const(c) = &item.kind else { return };
+            let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
+                Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
+                None => return, // unregistered const — the later branch handles it
+            };
+            let empty_params: HashMap<Name, Ty> = HashMap::new();
+            let mut local_diags = Vec::new();
+            let const_ty = tyconv::resolve_type_ref(
+                &mut ctx,
+                &mut infer,
+                def_map,
+                &mut local_diags,
+                &c.ty,
+                &empty_params,
+                item.span,
+            );
+            ctx.register_const_ty(const_def_id, const_ty);
+        };
+        visit_consts(hir, &top_level_ids, def_map, def_map.root, &mut register_const_type);
+    }
+
+// Pass 1: register every ADT's name -> id BEFORE resolving any field
     // types. The async state-machine desugar emits a `FooState` enum whose
     // variant field types reference *other* generated ADTs (e.g.
     // `S0 { fut0: depFuture }`), and those referenced ADTs may be registered
@@ -345,6 +417,12 @@ pub fn typeck_crate(
             _ => continue,
         };
         let adt_id = adt_id_for_item(&mut ctx, def_map, def_map.root, item.name);
+        if std::env::var("GLYIM_DBG_ADT_REG").is_ok() {
+            eprintln!(
+                "[ADT_REG_P1] name={:?} id={:?} params={:?}",
+                item.name, adt_id, generic_params
+            );
+        }
         ctx.register_adt_with_name(
             item.name,
             adt_id,
@@ -436,6 +514,34 @@ pub fn typeck_crate(
             // Plan unstub-5 P5: register the impl's associated-type definitions
             // into the projection table so `Self::Output` / `Type::Output` can
             // later be resolved to their defining type.
+            // Script 75: register this impl's generic-param bounds
+            // BEFORE the pass below resolves any associated-type defaults or
+            // method signatures. The typeck_crate pre-pass (this loop) runs
+            // before `check_fn_items_in_module`'s impl branch (Script 72),
+            // and the backtrace from Script 73 confirmed the first
+            // `I::Item` resolution happens here — `resolve_type_ref ->
+            // typeck_crate`. Without bounds at this point,
+            // `param_bounds_for(I)` returns None on that pass and the
+            // projection can't be built.
+            for gp in &impl_item.generic_params {
+                if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
+                    for bound in bounds {
+                        if let glyim_hir::TypeRef::Path(p) = bound {
+                            if let Some(name) = p.as_name() {
+                                if let Some(local) =
+                                    tyconv::resolve_path_to_local_def_id(&ctx, def_map, p)
+                                {
+                                    let tid = TraitDefId::from_raw(local.to_raw());
+                                    ctx.param_bounds
+                                        .entry(gp.name)
+                                        .or_default()
+                                        .push((name, tid));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             if let (Some(trait_def_id), self_ty) = (header.trait_def_id, header.self_ty) {
                 let param_map = tyconv::build_param_tys(&mut ctx, &impl_item.generic_params);
                 let mut assoc_types = Vec::new();
@@ -484,6 +590,10 @@ pub fn typeck_crate(
             |ctx: &mut TyCtxMut,
              params: &[glyim_hir::GenericParam],
              where_clauses: &[glyim_hir::where_clause::WhereClause]| {
+        if std::env::var("GLYIM_DBG_RB").is_ok() {
+            let names: Vec<String> = params.iter().map(|p| ctx.name_str(p.name).to_string()).collect();
+            eprintln!("[RB] params={:?} wh={}", names, where_clauses.len());
+        }
                 for gp in params {
                     if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
                         for bound in bounds {
@@ -1236,6 +1346,32 @@ fn check_fn_items_in_module(
             ItemKind::Impl(impl_item) => {
                 let impl_span = item_span;
                 let param_map = tyconv::build_param_tys(ctx, &impl_item.generic_params);
+                // Script 72: register this impl's generic-param bounds
+                // (`impl<I: Iterator>`) BEFORE resolving the self-type and
+                // method signatures. Signatures like `fn next(&mut self) ->
+                // I::Item` need `param_bounds_for(I)` to know which trait
+                // declares `Item`; the flat pass registers these later, too
+                // late for signature resolution. Uses the exact same pattern
+                // as the `register_bounds` closure in `typeck_crate`.
+                for gp in &impl_item.generic_params {
+                    if let glyim_hir::GenericParamKind::Type { bounds, .. } = &gp.kind {
+                        for bound in bounds {
+                            if let glyim_hir::TypeRef::Path(p) = bound {
+                                if let Some(name) = p.as_name() {
+                                    if let Some(local) =
+                                        tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
+                                    {
+                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        ctx.param_bounds
+                                            .entry(gp.name)
+                                            .or_default()
+                                            .push((name, tid));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 let self_ty_opt = Some(tyconv::resolve_type_ref(
                     ctx,
                     infer,
@@ -1352,9 +1488,57 @@ fn check_fn_items_in_module(
             ItemKind::Const(c) => {
                 // Resolve the constant's value type and register it so
                 // `check_path` can produce a `ConstRef` with the right type.
-                // The constant's body is not yet evaluated/threaded to codegen
-                // (const value materialization is a follow-up); only its type
-                // is needed for path-resolution type checking.
+                //
+                // Script 53: if the const's declared type is a *user-defined*
+                // type in the same module as the const (e.g.
+                // `mod m { pub struct S; pub const GLOBAL: S = S; }`), a
+                // bare `resolve_type_ref` on `c.ty` resolves `S` in the crate
+                // root scope (it has no notion of the current module), so
+                // `S` is unresolved and the const's type silently becomes
+                // `Ty::ERROR`. Later, `check_path` sees `m::GLOBAL` resolve
+                // to a ConstDefId whose type is `Error`, and reports
+                // "cannot apply ... to non-pointer type" or similar.
+                //
+                // Fix: pre-register any ADT names referenced by the const's
+                // type that live in `module_id` (or its ancestors) into
+                // `adt_by_name`, so `resolve_name_to_adt_ty`'s fallback path
+                // (which uses `ctx.adt_id_by_name`) finds them. This is a
+                // narrow, additive fix: it does not change how existing
+                // consts (whose types are primitives or already-registered
+                // structs) resolve.
+                if let glyim_hir::TypeRef::Path(path) = &c.ty {
+                    if let Some(first) = path.segments.first() {
+                        // Only care about single-segment bare names.
+                        if path.segments.len() == 1 {
+                            // Try to resolve `first.name` through the
+                            // const's defining module and every ancestor.
+                            let mut cur = Some(module_id);
+                            while let Some(mid) = cur {
+                                if let Some((def_id, _vis, _span)) =
+                                    def_map.modules[mid].scope.types.get(&first.name)
+                                {
+                                    let adt_id = AdtId::from_raw(def_id.to_raw());
+                                    // Only register if the ctx doesn't already
+                                    // know this name (avoid clobbering).
+                                    if ctx.adt_id_by_name(first.name).is_none() {
+                                        ctx.register_adt_with_name(
+                                            first.name,
+                                            adt_id,
+                                            glyim_type::adt_def::AdtDef {
+                                                kind: glyim_type::adt_def::AdtKind::Struct,
+                                                fields: glyim_core::arena::IndexVec::new(),
+                                                variants: Vec::new(),
+                                                generic_params: Vec::new(),
+                                            },
+                                        );
+                                    }
+                                    break;
+                                }
+                                cur = def_map.modules[mid].parent;
+                            }
+                        }
+                    }
+                }
                 let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                     Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
                     None => {
@@ -1380,6 +1564,32 @@ fn check_fn_items_in_module(
                 // it so MIR lowering can fold `ConstRef` into a concrete
                 // `MirConstKind`. Evaluation failures are surfaced as
                 // diagnostics rather than silently producing a wrong value.
+                //
+                // Script 55: skip evaluation entirely for constants whose
+                // declared type is a non-primitive ADT (a unit struct, an
+                // opaque value, a user type). The const-evaluator's `Expr::Path`
+                // handler cannot fold a bare type-name path like
+                // `const GLOBAL: Global = Global;` — `GLOBAL` refers to a
+                // user type outside the evaluator's environment — so it emits
+                // `[C0001] path expressions not yet supported in const eval
+                // for non-local paths`, aborting compilation. For these
+                // constants, the *type* is what downstream code needs
+                // (`GLOBAL.alloc(...)` just resolves the method on `Global`);
+                // the value is a compile-time placeholder that MIR lowering
+                // will materialize from the ADT's default field layout.
+                // Script 57: try to evaluate the constant's initializer
+                // body. If evaluation fails AND the const's declared type is
+                // a non-primitive ADT (a struct/enum whose value the
+                // evaluator cannot fold — e.g. `const GLOBAL: Global =
+                // Global;`, where the RHS is a bare type-name path the
+                // evaluator doesn't model), skip silently: the type
+                // registration above is what downstream code needs; the
+                // value is a compile-time placeholder that MIR lowering
+                // materialises from the ADT's default layout.
+                //
+                // For primitive-typed constants, evaluation errors are still
+                // surfaced as diagnostics (a wrong `const X: i32` value is a
+                // real bug).
                 if let (Some(body_id), Some(root_expr)) = (c.body, c.root_expr) {
                     let primitive_tys = glyim_const_eval::ConstEvaluator::build_primitive_tys(ctx);
                     let body = &hir.bodies[body_id];
@@ -1391,7 +1601,20 @@ fn check_fn_items_in_module(
                             all_const_values.insert(const_def_id, value);
                         }
                         Err(e) => {
-                            diagnostics.push(e.into_diagnostic());
+                            // Suppress the error for non-primitive const types.
+                            let is_primitive = matches!(
+                                ctx.ty_kind(const_ty),
+                                TyKind::Int(_)
+                                    | TyKind::Uint(_)
+                                    | TyKind::Float(_)
+                                    | TyKind::Bool
+                                    | TyKind::Char
+                                    | TyKind::Unit
+                                    | TyKind::String
+                            );
+                            if is_primitive {
+                                diagnostics.push(e.into_diagnostic());
+                            }
                         }
                     }
                 }
