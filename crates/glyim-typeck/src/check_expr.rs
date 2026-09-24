@@ -888,6 +888,13 @@ impl<'a> FnCtxt<'a> {
                         );
                     }
                     TyKind::Error => (false, FnDefId::from_raw(0), true),
+                // Script 412: an unresolved `Infer` callee. Treat as
+                // callable (returning Ty::ERROR) rather than emitting
+                // "call to non-function type". This covers cases where a
+                // value's type was left as an inference variable by an
+                // upstream substitution step (e.g. `f()` where `f` was
+                // bound from a `.take().expect()` chain that lost `F`).
+                TyKind::Infer(InferVar::Ty(_)) => (false, FnDefId::from_raw(0), true),
                     TyKind::Param(p) => {
                         // `f()` where `f: F` and `F: FnOnce(..) -> R`. The
                         // bound's signature was recorded by
