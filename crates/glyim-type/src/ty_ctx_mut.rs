@@ -1748,29 +1748,23 @@ impl TyCtxMut {
         self.register_adt_with_name(self.resolver.intern("Box"), AdtId::from_raw(1040), box_def);
         self.mark_has_drop(AdtId::from_raw(1040));
 
-        // Register `String` as a builtin ADT (id 1050). The stdlib treats
-        // `String` as a builtin (no `struct String` definition); it exposes
-        // `as_ptr`/`len`/`capacity`/`push`/`to_string`/`as_mut_ptr`/`set_len`.
-        // We register only name + arity so type resolution works; the concrete
-        // layout is irrelevant to type checking.
-        let str_t_var = self.mk_ty(TyKind::Param(ParamTy {
-            index: 0,
-            name: self.resolver.intern("T"),
-        }));
-        let mut str_field_defs = IndexVec::new();
-        str_field_defs.push(FieldDef {
-            name: self.resolver.intern("buf"),
-            ty: str_t_var,
-        });
+        // Register `String` as a builtin ADT (id 1050). The stdlib's
+        // `string.g` declares `struct String { inner: Vec<u8> }` with ZERO
+        // generic params — matching the real-world `String`. The earlier
+        // registration used a single generic `T` placeholder, so when a
+        // user-declared `struct String` was canonicalized to this AdtId the
+        // generic-arity mismatch triggered "mismatched type argument counts"
+        // (1-arg builtin String vs 0-arg user String) during unification.
+        // Register it with 0 params so both agree.
         let string_def = AdtDef {
             kind: AdtKind::Struct,
-            fields: str_field_defs.clone(),
+            fields: IndexVec::new(),
             variants: vec![VariantDef {
                 name: self.resolver.intern(""),
                 style: crate::adt_def::VariantStyle::Unit,
-                fields: str_field_defs,
+                fields: IndexVec::new(),
             }],
-            generic_params: vec![self.resolver.intern("T")],
+            generic_params: Vec::new(),
         };
         self.register_adt(AdtId::from_raw(1050), string_def.clone());
         self.lang_items
@@ -1935,7 +1929,8 @@ self.register_builtin_methods();
         let vec_as_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
         let u8_as_ptr = self.mk_ty(TyKind::RawPtr(u8_ty, Mutability::Not));
         let u8_as_mut_ptr = self.mk_ty(TyKind::RawPtr(u8_ty, Mutability::Mut));
-        let string_subst = self.intern_substitution(vec![GenericArg::Ty(u8_ty)]);
+        // Script 374: `String` now has 0 generic params (matches stdlib decl).
+        let string_subst = self.intern_substitution(vec![]);
         let string_ty = self.mk_ty(TyKind::Adt(string_id, string_subst));
         let slice_as_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not));
         let slice_as_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
