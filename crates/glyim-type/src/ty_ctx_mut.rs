@@ -2052,6 +2052,16 @@ self.register_builtin_methods();
             let s = self.intern_substitution(vec![GenericArg::Ty(u8_ty)]);
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1020), s))
         };
+        // Script 366: `String::from_utf8(Vec<u8>) -> Result<String, Vec<u8>>`.
+        // Precomputed here because `self.mk_ty` needs `&mut self` and cannot
+        // be called inside the entries vec literal (which already borrows it).
+        let string_from_utf8_result = {
+            let s = self.intern_substitution(vec![
+                GenericArg::Ty(string_ty),
+                GenericArg::Ty(vec_u8_ty),
+            ]);
+            self.mk_ty(TyKind::Adt(result_id, s))
+        };
         // `String::as_str` output is `&str`.
         // `Vec<T>::into_iter`/`iter_mut` — skip for now (needs iterator machinery).
         let ref_slice_u8_for_bytes = {
@@ -2229,7 +2239,7 @@ self.register_builtin_methods();
             (string_id, "new", vec![], string_ty),
             (string_id, "with_capacity", vec![usize_ty], string_ty),
             (string_id, "from", vec![], string_ty),
-            (string_id, "from_utf8", vec![], result_ty),
+            (string_id, "from_utf8", vec![vec_u8_ty], string_from_utf8_result),
             (
                 string_id,
                 "from_utf8_lossy",
