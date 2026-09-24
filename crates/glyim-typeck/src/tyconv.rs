@@ -1187,9 +1187,25 @@ pub(crate) fn resolve_name_to_adt_ty(
                 .as_name()
                 .and_then(|hir_name| resolve_name_to_def_id(def_map, hir_name))
                 .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
+            // Script 172: accept a def-map-derived AdtId even when no
+            // `adt_def` is registered yet. The def-map is the authoritative
+            // declaration source; the ADT body is only registered when the
+            // corresponding `ItemKind::Struct`/`ItemKind::Enum` handler runs
+            // (or, for builtins, canonicalized to a reserved id by
+            // `adt_id_for_item`). Callers such as `populate_deref_registry`
+            // legitimately need the AdtId before that registration runs (a
+            // minimal `impl Deref for Wrapper` harness has no struct item).
+            // The previous `if ctx.adt_def(id).is_some()` guard turned those
+            // into `None`, which then made `resolve_type_ref` return
+            // `TyKind::Error` — silently dropping the deref registration.
+            //
+            // The genuinely-dangerous case (def-map id 9 for `Option` vs the
+            // canonical builtin 1010) is already handled above: `canonical_id`
+            // — a name-keyed lookup into `ctx.adt_by_name` — takes precedence
+            // whenever it resolves to an id that has a real `adt_def`.
             match from_defmap {
-                Some(id) if ctx.adt_def(id).is_some() => id,
-                _ => return None,
+                Some(id) => id,
+                None => return None,
             }
         }
     };

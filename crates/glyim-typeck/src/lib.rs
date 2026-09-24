@@ -1345,7 +1345,15 @@ fn check_fn_items_in_module(
                     .and_then(|m| m.scope.types.get(&item.name))
                     .map(|(id, _, _)| *id);
                 if let Some(enum_local) = enum_local {
-                    let adt_id = AdtId::from_raw(enum_local.to_raw());
+                    let adt_id = if let Some(builtin) =
+                    glyim_type::builtin_adts::BuiltinAdt::from_name(
+                        def_map.interner.resolve(item.name),
+                    )
+                {
+                    AdtId::from_raw(builtin.adt_id())
+                } else {
+                    AdtId::from_raw(enum_local.to_raw())
+                };
                     // The enum's own generic params (e.g. `T` in `Poll<T>`) must
                     // be in scope when resolving variant field types, so
                     // `Ready(T)` yields a `TyKind::Param` rather than an
@@ -1411,7 +1419,15 @@ fn check_fn_items_in_module(
                     .and_then(|m| m.scope.types.get(&item.name))
                     .map(|(id, _, _)| *id);
                 if let Some(struct_local) = struct_local {
-                    let adt_id = AdtId::from_raw(struct_local.to_raw());
+                    let adt_id = if let Some(builtin) =
+                    glyim_type::builtin_adts::BuiltinAdt::from_name(
+                        def_map.interner.resolve(item.name),
+                    )
+                {
+                    AdtId::from_raw(builtin.adt_id())
+                } else {
+                    AdtId::from_raw(struct_local.to_raw())
+                };
                     // Generic params of the struct are in scope when resolving
                     // its field types (e.g. `struct S<T> { x: T }`). Build the
                     // param map so `T` resolves to a type parameter.
