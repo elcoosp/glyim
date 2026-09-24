@@ -6,7 +6,7 @@ license.workspace = true
 description = "Language Server Protocol implementation for Glyim"
 
 [dependencies]
-notify = "6.1"
+notify = "8.0"
 crossbeam-channel = "0.5"
 glyim-db = { path = "../glyim-db" }
 glyim-hir = { path = "../glyim-hir" }
