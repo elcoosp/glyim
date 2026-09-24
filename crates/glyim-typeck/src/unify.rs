@@ -387,6 +387,48 @@ impl<'a> FnCtxt<'a> {
                     span,
                 ),
             };
+            // Script 326: primitive associated constants (`usize::MAX`,
+            // `u32::MAX`, `u8::MIN`, …). The 2c branch resolves the type
+            // path via `resolve_name_to_adt_ty` (which does not handle
+            // primitives) and would fall through. Handle the small stdlib-
+            // used set directly, returning a literal of the primitive type.
+            {
+                let first_name = self.ctx.name_str(path.segments[0].name).to_string();
+                let last_name = self.ctx.name_str(path.segments.last().unwrap().name).to_string();
+                let prim_ty_hint = match first_name.as_str() {
+                    "usize" => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize)), true)),
+                    "u64"   => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U64)), true)),
+                    "u32"   => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U32)), true)),
+                    "u16"   => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U16)), true)),
+                    "u8"    => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8)), true)),
+                    "isize" => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::Isize)), false)),
+                    "i64"   => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I64)), false)),
+                    "i32"   => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32)), false)),
+                    "i16"   => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I16)), false)),
+                    "i8"    => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I8)), false)),
+                    _ => None,
+                };
+                if let Some((ty, is_uint)) = prim_ty_hint
+                    && matches!(last_name.as_str(), "MAX" | "MIN")
+                {
+                    // The literal's actual value is not materialized here
+                    // (const-eval produces the real value at MIR). Emit a
+                    // literal placeholder with the right *type* — that's all
+                    // `check_expr` callers consume.
+                    let lit = if is_uint {
+                        thir::Literal::Uint(0, None)
+                    } else {
+                        thir::Literal::Int(0, None)
+                    };
+                    let thir_expr = thir::Expr {
+                        kind: thir::ExprKind::Literal(lit),
+                        ty,
+                        span,
+                    };
+                    return (thir_expr, ty);
+                }
+            }
+
             // Script 266: `Self::method` inside an impl body. The first
             // segment is the literal `Self` keyword; resolve it from the
             // body's `param_map` (seeded by `check_body`) instead of treating
