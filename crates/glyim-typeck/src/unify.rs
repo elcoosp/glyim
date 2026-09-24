@@ -433,8 +433,18 @@ impl<'a> FnCtxt<'a> {
             // segment is the literal `Self` keyword; resolve it from the
             // body's `param_map` (seeded by `check_body`) instead of treating
             // it as a user-visible ADT name.
+            //
+            // Script 328: for a builtin ADT (`Vec`, `Box`, `Result`), the
+            // method may live in the builtin method table; for a *user*
+            // struct (`RawVec`, `String`, ...) the method is a real HIR
+            // `impl` item. Try the builtin table first, and when it misses,
+            // set `self_adt_hint` so the general impl scan below resolves the
+            // method against the correct ADT instead of re-trying to resolve
+            // the literal `Self` name via `resolve_name_to_adt_ty` (which
+            // fails — `Self` is not an ADT name).
             let self_kw = self.ctx.resolver().intern("Self");
             let first_is_self = path.segments[0].name == self_kw;
+            let mut self_adt_hint: Option<(glyim_core::def_id::AdtId, glyim_type::Ty)> = None;
             if first_is_self {
                 if let Some(self_ty) = self.param_map.get(&self_kw).copied() {
                     if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(self_ty) {
@@ -462,8 +472,9 @@ impl<'a> FnCtxt<'a> {
                             );
                             return (thir_expr, fn_ty);
                         }
-                        // Fall through to the general impl-scan (below) with
-                        // the resolved self ADT.
+                        // Builtin table miss: remember the self ADT so the
+                        // impl scan below can find a user-declared method.
+                        self_adt_hint = Some((*adt_id, self_ty));
                     }
                 }
             }
@@ -475,7 +486,13 @@ impl<'a> FnCtxt<'a> {
             // builtin-method table can satisfy the call.
             let first_name_str = self.ctx.name_str(path.segments[0].name).to_string();
             let adt_lookup: Option<(glyim_core::def_id::AdtId, glyim_type::Ty)> =
-                if first_name_str == "slice" {
+                if let Some((adt_id, ty)) = self_adt_hint {
+                    // Script 328: `Self::method` where the method is a
+                    // user-declared inherent fn — bypass `adt_path` resolution
+                    // (which cannot resolve the literal `Self` name) and jump
+                    // straight to the HIR impl scan with the correct AdtId.
+                    Some((adt_id, ty))
+                } else if first_name_str == "slice" {
                     Some((glyim_core::def_id::AdtId::from_raw(1060), adt_ty_resolved))
                 } else {
                     match self.ctx.ty_kind(adt_ty_resolved) {
