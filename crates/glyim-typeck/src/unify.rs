@@ -977,6 +977,22 @@ pub fn literal_ty(ctx: &mut TyCtxMut, infer: &mut InferenceTable, lit: &Literal)
             let var = infer.new_int_var(ctx);
             ctx.mk_ty(TyKind::Infer(InferVar::Int(var)))
         }
+        // Script 347: unsuffixed float literals are float inference
+        // variables (mirroring the Int/Isize arm above). HIR lowering
+        // currently hard-codes every float literal as `FloatTy::F64` — even
+        // ones written `0.0` with no suffix, or `0.0` in a context that
+        // expects `f32` — so `impl Default for f32 { fn default() -> Self
+        // { 0.0 } }` typed the literal as `f64` and reported
+        // "mismatched types: f64 vs f32".
+        //
+        // Treat `F64`-tagged literals as infer vars; only an explicit
+        // `f32` suffix (which HIR lowering would have to preserve — a
+        // follow-up) stays concrete. Unconstrained literals default to
+        // `f64` during inference finalization.
+        Literal::Float(_, glyim_core::primitives::FloatTy::F64) => {
+            let var = infer.new_float_var(ctx);
+            ctx.mk_ty(TyKind::Infer(InferVar::Float(var)))
+        }
         Literal::Float(_, ft) => ctx.mk_ty(TyKind::Float(*ft)),
         Literal::Bool(_) => Ty::BOOL,
         Literal::Char(_) => ctx.mk_ty(TyKind::Char),
