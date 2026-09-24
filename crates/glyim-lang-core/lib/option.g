@@ -207,12 +207,6 @@ impl<T> Option<Option<T>> {
     }
 }
 
-impl<T: Default> Default for Option<T> {
-    fn default() -> Self {
-        Option::None
-    }
-}
-
 impl<T> From<T> for Option<T> {
     fn from(val: T) -> Option<T> {
         Option::Some(val)
