@@ -211,9 +211,18 @@ impl<'a> FnCtxt<'a> {
                 let (inner_expr, inner_ty) = self.check_expr(*operand);
                 let result_ty = match op {
                     UnOp::Neg => {
+                        // Script 283: accept `Infer(Int(_))`/`Infer(Ty(_))` in
+                        // addition to concrete `Int`/`Float`. An unsuffixed
+                        // literal `-1` has operand `Infer(Int(_))` until the
+                        // surrounding context pins it (e.g. `cell.set(-1)` with
+                        // `cell: Cell<isize>`); without this the negation was
+                        // rejected before unification could bind the literal.
                         if matches!(
                             self.ctx.ty_kind(inner_ty),
-                            TyKind::Int(_) | TyKind::Float(_)
+                            TyKind::Int(_)
+                                | TyKind::Float(_)
+                                | TyKind::Infer(InferVar::Int(_))
+                                | TyKind::Infer(InferVar::Ty(_))
                         ) {
                             inner_ty
                         } else {
