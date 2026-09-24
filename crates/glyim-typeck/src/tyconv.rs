@@ -1083,8 +1083,27 @@ fn resolve_primitive(ctx: &mut TyCtxMut, name: Name) -> Option<Ty> {
 }
 
 fn resolve_name_to_def_id(def_map: &glyim_def_map::CrateDefMap, name: Name) -> Option<DefId> {
-    let res = def_map.modules[def_map.root].scope.resolve(name)?;
-    Some(DefId::new(def_map.krate, res.0))
+    // Fast path: the name is in the crate root scope (typical for user
+    // code with no submodules, and for stdlib items that the def-map
+    // builder successfully re-exported to root via `pub use`).
+    if let Some(res) = def_map.modules[def_map.root].scope.resolve(name) {
+        return Some(DefId::new(def_map.krate, res.0));
+    }
+    // Script 185: fallback walk the module tree. The assembled stdlib
+    // declares most types inside `pub mod X { … }` blocks; when a cross-
+    // module reference (e.g. `Result` used inside `mod alloc`) reaches
+    // this function, the name is not in the root scope unless the def-map
+    // builder has processed the re-export AND put it in the type namespace
+    // (which is not always the case for enums inside impl blocks or for
+    // items the re-export pass skips). Walking every module's scope
+    // recovers the defining LocalDefId regardless. Names are unique across
+    // the assembled stdlib, so the first hit is unambiguous.
+    for module in def_map.modules.iter() {
+        if let Some(res) = module.scope.resolve(name) {
+            return Some(DefId::new(def_map.krate, res.0));
+        }
+    }
+    None
 }
 
 /// Infer the object-safety `self` kind of a trait method from its resolved
