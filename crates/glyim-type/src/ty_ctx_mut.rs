@@ -2339,6 +2339,17 @@ self.register_builtin_methods();
             (slice_id, "to_vec", vec![], vec_ty),
             (slice_id, "get", vec![usize_ty], option_ref_t_ty2),
             (slice_id, "split_at", vec![usize_ty], tuple_ref_slice_pair),
+            // Script 266: `<[T]>::from_raw_parts(ptr, len)` — used by vec.g's
+            // `as_slice`. Returns the slice type itself.
+            (
+                slice_id,
+                "from_raw_parts",
+                vec![
+                    self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not)),
+                    usize_ty,
+                ],
+                slice_t,
+            ),
             // Box<T>
             (box_id, "new", vec![t_var], box_ty),
             (

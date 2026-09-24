@@ -1330,6 +1330,7 @@ fn check_fn_items_in_module(
                         all_expr_types,
                         module_id,
                         &f.generic_params,
+                        None,
                     );
                 }
             }
@@ -1619,6 +1620,7 @@ fn check_fn_items_in_module(
                             all_expr_types,
                             module_id,
                             &combined_generics,
+                            self_ty_opt,
                         );
                     } else {
                         diagnostics.push(GlyimDiagnostic::type_error(
@@ -1793,6 +1795,12 @@ fn check_body(
     // inside the body (cast target, struct-literal path, …) against the same
     // param map `resolve_fn_sig` used for the signature.
     generic_params: &[glyim_hir::GenericParam],
+    // Script 266: the enclosing impl's `Self` type, if this body belongs to an
+    // impl method. Seeded into the body param map so `Self::method(...)` and
+    // `Self { .. }` resolve to the impl's self ADT instead of falling through
+    // to "unresolved value path" — 3 stdlib Default impls
+    // (Vec/String/RawVec) hit exactly this.
+    self_ty: Option<Ty>,
 ) {
     let body = &hir.bodies[body_id];
     let env = env::LocalEnv::new();
@@ -1805,7 +1813,11 @@ fn check_body(
     // Build the body's generic param map *before* the `FnCtxt` literal: the
     // literal borrows `ctx` immutably (as a struct field), so the `&mut ctx`
     // that `build_param_tys` needs must complete first.
-    let body_param_map = tyconv::build_param_tys(ctx, generic_params);
+    let mut body_param_map = tyconv::build_param_tys(ctx, generic_params);
+    if let Some(st) = self_ty {
+        let self_name = ctx.resolver().intern("Self");
+        body_param_map.insert(self_name, st);
+    }
     let fn_ctxt = check_body::FnCtxt {
         ctx,
         infer,

@@ -387,18 +387,67 @@ impl<'a> FnCtxt<'a> {
                     span,
                 ),
             };
-            let adt_lookup: Option<(glyim_core::def_id::AdtId, glyim_type::Ty)> =
-                match self.ctx.ty_kind(adt_ty_resolved) {
-                    glyim_type::TyKind::Adt(id, _) => Some((*id, adt_ty_resolved)),
-                    // `str::from_utf8(..)` — the first segment `str` resolves
-                    // to `TyKind::String` (via `resolve_primitive`), not an
-                    // Adt, but the builtin table stores the primitive `str`
-                    // methods under the synthetic id 1061. Route it there so
-                    // path-form associated fns on `str` resolve.
-                    glyim_type::TyKind::String => {
-                        Some((glyim_core::def_id::AdtId::from_raw(1061), adt_ty_resolved))
+            // Script 266: `Self::method` inside an impl body. The first
+            // segment is the literal `Self` keyword; resolve it from the
+            // body's `param_map` (seeded by `check_body`) instead of treating
+            // it as a user-visible ADT name.
+            let self_kw = self.ctx.resolver().intern("Self");
+            let first_is_self = path.segments[0].name == self_kw;
+            if first_is_self {
+                if let Some(self_ty) = self.param_map.get(&self_kw).copied() {
+                    if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(self_ty) {
+                        if let Some((fn_id, sig)) = self
+                            .ctx
+                            .lookup_builtin_method(*adt_id, path.segments.last().unwrap().name)
+                        {
+                            let output = sig.output;
+                            let empty_substs = self.ctx.intern_substitution(vec![]);
+                            let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_id, empty_substs));
+                            let thir_expr = thir::Expr {
+                                kind: thir::ExprKind::FnRef(fn_id),
+                                ty: fn_ty,
+                                span,
+                            };
+                            self.ctx.register_fn_sig(
+                                fn_id,
+                                FnSig {
+                                    inputs: sig.inputs,
+                                    output,
+                                    c_variadic: sig.c_variadic,
+                                    unsafety: sig.unsafety,
+                                    abi: sig.abi,
+                                },
+                            );
+                            return (thir_expr, fn_ty);
+                        }
+                        // Fall through to the general impl-scan (below) with
+                        // the resolved self ADT.
                     }
-                    _ => None,
+                }
+            }
+
+            // Script 266: `slice::from_raw_parts` — `slice` is not an ADT
+            // (it's a primitive type emitted flat), so `resolve_primitive`
+            // returns None and we never map it to the synthetic slice id
+            // (1060). Special-case the module-style prefix `slice` so the
+            // builtin-method table can satisfy the call.
+            let first_name_str = self.ctx.name_str(path.segments[0].name).to_string();
+            let adt_lookup: Option<(glyim_core::def_id::AdtId, glyim_type::Ty)> =
+                if first_name_str == "slice" {
+                    Some((glyim_core::def_id::AdtId::from_raw(1060), adt_ty_resolved))
+                } else {
+                    match self.ctx.ty_kind(adt_ty_resolved) {
+                        glyim_type::TyKind::Adt(id, _) => Some((*id, adt_ty_resolved)),
+                        // `str::from_utf8(..)` — the first segment `str` resolves
+                        // to `TyKind::String` (via `resolve_primitive`), not an
+                        // Adt, but the builtin table stores the primitive `str`
+                        // methods under the synthetic id 1061. Route it there so
+                        // path-form associated fns on `str` resolve.
+                        glyim_type::TyKind::String => {
+                            Some((glyim_core::def_id::AdtId::from_raw(1061), adt_ty_resolved))
+                        }
+                        _ => None,
+                    }
                 };
             if let Some((adt_id, adt_ty)) = adt_lookup {
                 if let Some((fn_id, sig)) = self
