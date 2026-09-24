@@ -2375,6 +2375,92 @@ self.register_builtin_methods();
             (unsafe_cell_id, "into_inner", vec![], t_var),
         ];
 
+        // Bit / power-of-two / zero helper methods on the primitive
+        // numeric types. Registered here (keyed on the primitive `Ty`) so
+        // that `usize::next_power_of_two`, `u32::is_power_of_two`, etc.
+        // resolve inside the stdlib's `raw_vec.g` / `alloc.g` without
+        // requiring a real impl block on a primitive type (which the
+        // language does not permit).
+        let prim_bit_methods: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
+            (usize_ty, "is_power_of_two",  vec![], bool_ty),
+            (usize_ty, "next_power_of_two", vec![], usize_ty),
+            (usize_ty, "leading_zeros",    vec![], u32_ty),
+            (usize_ty, "trailing_zeros",   vec![], u32_ty),
+            (usize_ty, "count_ones",       vec![], u32_ty),
+            (usize_ty, "count_zeros",      vec![], u32_ty),
+            (u32_ty,   "is_power_of_two",  vec![], bool_ty),
+            (u32_ty,   "next_power_of_two", vec![], u32_ty),
+            (u32_ty,   "leading_zeros",    vec![], u32_ty),
+            (u32_ty,   "trailing_zeros",   vec![], u32_ty),
+            (u32_ty,   "count_ones",       vec![], u32_ty),
+            (u64_ty,   "is_power_of_two",  vec![], bool_ty),
+            (u64_ty,   "next_power_of_two", vec![], u64_ty),
+            (u8_ty,    "is_power_of_two",  vec![], bool_ty),
+        ];
+        for (recv_ty, name, inputs, output) in prim_bit_methods {
+            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            self.next_builtin_fn_id += 1;
+            let n = self.resolver.intern(name);
+            let inputs_subst =
+                self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
+            self.primitive_method_fns.insert(
+                (recv_ty, n),
+                (
+                    fn_id,
+                    FnSig {
+                        inputs: inputs_subst,
+                        output,
+                        c_variadic: false,
+                        unsafety: glyim_core::primitives::Safety::Safe,
+                        abi: glyim_core::primitives::Abi::Glyim,
+                    },
+                ),
+            );
+        }
+
+        // Bit / power-of-two / zero helper methods on the primitive
+        // numeric types. Registered here (keyed on the primitive `Ty`) so
+        // that `usize::next_power_of_two`, `u32::is_power_of_two`, etc.
+        // resolve inside the stdlib's `raw_vec.g` / `alloc.g` without
+        // requiring a real impl block on a primitive type (which the
+        // language does not permit).
+        let prim_bit_methods: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
+            (usize_ty, "is_power_of_two",  vec![], bool_ty),
+            (usize_ty, "next_power_of_two", vec![], usize_ty),
+            (usize_ty, "leading_zeros",    vec![], u32_ty),
+            (usize_ty, "trailing_zeros",   vec![], u32_ty),
+            (usize_ty, "count_ones",       vec![], u32_ty),
+            (usize_ty, "count_zeros",      vec![], u32_ty),
+            (u32_ty,   "is_power_of_two",  vec![], bool_ty),
+            (u32_ty,   "next_power_of_two", vec![], u32_ty),
+            (u32_ty,   "leading_zeros",    vec![], u32_ty),
+            (u32_ty,   "trailing_zeros",   vec![], u32_ty),
+            (u32_ty,   "count_ones",       vec![], u32_ty),
+            (u64_ty,   "is_power_of_two",  vec![], bool_ty),
+            (u64_ty,   "next_power_of_two", vec![], u64_ty),
+            (u8_ty,    "is_power_of_two",  vec![], bool_ty),
+        ];
+        for (recv_ty, name, inputs, output) in prim_bit_methods {
+            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            self.next_builtin_fn_id += 1;
+            let n = self.resolver.intern(name);
+            let inputs_subst =
+                self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
+            self.primitive_method_fns.insert(
+                (recv_ty, n),
+                (
+                    fn_id,
+                    FnSig {
+                        inputs: inputs_subst,
+                        output,
+                        c_variadic: false,
+                        unsafety: glyim_core::primitives::Safety::Safe,
+                        abi: glyim_core::primitives::Abi::Glyim,
+                    },
+                ),
+            );
+        }
+
         // Primitive numeric methods (keyed on the primitive `Ty`).
         let prim_entries: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
             // u64
