@@ -1151,7 +1151,14 @@ impl InferenceTable {
                 if let Some(value) = self.float_vars.get(*var).and_then(|v| v.value) {
                     self.resolve_ty_shallow_depth(ctx, value, depth + 1, visited)
                 } else {
-                    ty
+                    // Script 452: unbound unsuffixed float literal defaults to
+                    // `f64`, mirroring `Infer(Int)` → `Ty::I32` above. The
+                    // float-infer change in ad48841c made `1.0` a real
+                    // `Infer(Float)` var; without a default, that var survives
+                    // through zonk and trips the typeck invariant in
+                    // `typeck_crate` (caught by `no_ice_corpus` on
+                    // `huge_float.g`).
+                    Ty::F64
                 }
             }
             _ => ty,

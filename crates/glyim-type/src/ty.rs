@@ -59,6 +59,17 @@ impl Ty {
     pub const I64: Ty = Ty::from_raw(12);
     /// ISIZE.
     pub const ISIZE: Ty = Ty::from_raw(13);
+    /// F32.
+    ///
+    /// Script 452: the primitive float types now have concrete `Ty`
+    /// constants. Previously only ints did, and `Infer(Float)` fallback
+    /// could not return a "default f64" the way `Infer(Int)` returns
+    /// `Ty::I32`. Adding F32/F64 at indices 14/15 keeps them adjacent to
+    /// the other primitives (they are seeded by `TyCtxMut::new` right
+    /// after `ISIZE`).
+    pub const F32: Ty = Ty::from_raw(14);
+    /// F64.
+    pub const F64: Ty = Ty::from_raw(15);
 }
 
 impl fmt::Debug for Ty {

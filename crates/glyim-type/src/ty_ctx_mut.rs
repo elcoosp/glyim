@@ -248,6 +248,20 @@ impl TyCtxMut {
             Ty::ISIZE.to_raw(),
             "Ty::ISIZE sentinel mismatch"
         );
+        // Script 452: seed the float primitives so an unconstrained
+        // unsuffixed float literal (which is now an `Infer(Float)` var,
+        // per commit ad48841c) can default to `Ty::F64` during zonk,
+        // mirroring how `Infer(Int)` defaults to `Ty::I32`.
+        assert_eq!(
+            ctx.alloc_ty_internal(TyKind::Float(glyim_core::primitives::FloatTy::F32)).to_raw(),
+            Ty::F32.to_raw(),
+            "Ty::F32 sentinel mismatch"
+        );
+        assert_eq!(
+            ctx.alloc_ty_internal(TyKind::Float(glyim_core::primitives::FloatTy::F64)).to_raw(),
+            Ty::F64.to_raw(),
+            "Ty::F64 sentinel mismatch"
+        );
         ctx.register_builtin_ranges();
         ctx
     }
