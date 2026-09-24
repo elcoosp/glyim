@@ -2396,6 +2396,22 @@ self.register_builtin_methods();
             (u64_ty,   "is_power_of_two",  vec![], bool_ty),
             (u64_ty,   "next_power_of_two", vec![], u64_ty),
             (u8_ty,    "is_power_of_two",  vec![], bool_ty),
+            // Script 225: min/max/abs/clamp on integer receivers. The stdlib's
+            // raw_vec.g calls `required_cap.next_power_of_two().max(8)`; without
+            // these, the receiver is a valid `Uint(Usize)` but the method
+            // lookup returns None.
+            (usize_ty, "max", vec![usize_ty], usize_ty),
+            (usize_ty, "min", vec![usize_ty], usize_ty),
+            (usize_ty, "clamp", vec![usize_ty, usize_ty], usize_ty),
+            (u64_ty,   "max", vec![u64_ty], u64_ty),
+            (u64_ty,   "min", vec![u64_ty], u64_ty),
+            (u32_ty,   "max", vec![u32_ty], u32_ty),
+            (u32_ty,   "min", vec![u32_ty], u32_ty),
+            (u8_ty,    "max", vec![u8_ty], u8_ty),
+            (u8_ty,    "min", vec![u8_ty], u8_ty),
+            (i32_ty,   "max", vec![i32_ty], i32_ty),
+            (i32_ty,   "min", vec![i32_ty], i32_ty),
+            (i32_ty,   "abs", vec![], i32_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_bit_methods {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
