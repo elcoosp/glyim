@@ -594,9 +594,33 @@ pub fn resolve_path_type(
         // declaring `aname`, build `ProjectionTy(param, aname)`.
         // Extract the bound trait id BEFORE any mutable borrow of `ctx`
         // (the `param_bounds_for` return borrows ctx immutably).
-        let bound_tid: Option<glyim_core::def_id::TraitDefId> = ctx
-            .param_bounds_for(qname)
-            .and_then(|bounds| bounds.first().map(|(_, tid)| *tid));
+        // Script 308: `param_bounds` is a crate-wide flat map keyed by
+        // parameter name, and the same name (`T`, `I`, `U`) accumulates
+        // bounds from every impl/fn in the crate. `.first()` therefore
+        // returns whichever bound was registered first — for `T` in
+        // str.g's `T::Err` that was `Default` (id 86), which does not
+        // declare `Err`, so the projection `<T as Default>::Err` failed
+        // to unify with `<Self as FromStr>::Err`.
+        //
+        // Instead, pick the bound whose trait *actually declares* the
+        // associated type we're projecting. If none does, fall back to
+        // the first bound (preserves the previous best-effort behaviour
+        // for genuinely unrelated projections).
+        let bound_tid: Option<glyim_core::def_id::TraitDefId> = {
+            let candidates = ctx.param_bounds_for(qname).map(|b| b.to_vec());
+            match candidates {
+                Some(list) => {
+                    let matching = list.iter().find(|(_, tid)| {
+                        ctx.trait_def(*tid)
+                            .map(|d| d.associated_types.contains(&aname))
+                            .unwrap_or(false)
+                    });
+                    matching.map(|(_, tid)| *tid)
+                        .or_else(|| list.first().map(|(_, tid)| *tid))
+                }
+                None => None,
+            }
+        };
         if let Some(tid) = bound_tid {
             let self_ty = ctx.mk_ty(TyKind::Param(glyim_type::ParamTy {
                 index: 0,
