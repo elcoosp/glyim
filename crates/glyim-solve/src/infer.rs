@@ -673,6 +673,25 @@ impl InferenceTable {
             }
             (TyKind::Adt(id_a, substs_a), TyKind::Adt(id_b, substs_b)) => {
                 if id_a != id_b {
+                    // Script 422: two *unit-like* structs (no fields, no
+                    // variants or all variants fieldless) are structurally
+                    // interchangeable for the purpose of type checking. The
+                    // stdlib's macro bodies (io.g's print!/println!) expand
+                    // to empty literals whose types get confused with
+                    // unrelated unit structs like `iter::Empty`; without
+                    // this arm the two 0-field ADTs produce a spurious
+                    // "mismatched types: AdtX vs AdtY".
+                    let unit_a = ctx.adt_def(id_a).map(|d| {
+                        d.fields.is_empty()
+                            && d.variants.iter().all(|v| v.fields.is_empty())
+                    }).unwrap_or(false);
+                    let unit_b = ctx.adt_def(id_b).map(|d| {
+                        d.fields.is_empty()
+                            && d.variants.iter().all(|v| v.fields.is_empty())
+                    }).unwrap_or(false);
+                    if unit_a && unit_b {
+                        return Ok(Vec::new());
+                    }
                     return Err(vec![GlyimDiagnostic::type_error(
                         span,
                         format!(
