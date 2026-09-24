@@ -1014,22 +1014,26 @@ pub(crate) fn resolve_path_to_trait_def_id(
     path: &glyim_hir::Path,
     _span: Span,
 ) -> Option<TraitDefId> {
-    // Prefer a user-declared trait (in the def-map) over the builtin table:
-    // a source file can declare its own `trait Future { .. }` (e.g. the
-    // async runtime fixtures do), and that user trait must take precedence
-    // over the builtin `Future` for both `impl Future for X` registration
-    // AND `f.poll()` call-site dispatch — otherwise the two sides disagree
-    // on the `TraitDefId` and devirtualization fails. Builtins still win
-    // when no user trait of that name exists (the `trait_by_name` fallback).
+    // Script 299: prefer the *canonical* trait id recorded in
+    // `trait_by_name` (populated by `register_trait_def` for every user trait
+    // and by `register_builtin_ranges` for the builtins; user traits overwrite
+    // builtin entries of the same name). Every trait path resolution goes
+    // through this function, and using the same canonical id everywhere
+    // eliminates the class of `<Self as TraitA>::X vs <T as TraitB>::X`
+    // mismatches that arose when the def-map walk and the `pub use` walk
+    // disagreed on a trait's LocalDefId.
+    //
+    // Falls back to the def-map walk and (last) the module-scope walk for
+    // traits that were never registered (e.g. a trait declared in a source
+    // file the typeck pass hasn't reached yet, or an unregistered builtin).
+    if let Some(name) = path.as_name()
+        && let Some(tid) = ctx.trait_by_name.get(&name).copied()
+    {
+        return Some(tid);
+    }
+    // Fallback: user-declared trait not yet seen by `register_trait_def`.
     if let Some(local) = resolve_path_to_local_def_id(ctx, def_map, path) {
         return Some(TraitDefId::from_raw(local.to_raw()));
-    }
-    // Builtin/lang traits (Future, Drop, Deref, Clone, …) are not in the
-    // def-map; resolve them by name from `TyCtxMut`'s builtin trait table.
-    if let Some(name) = path.as_name() {
-        if let Some(tid) = ctx.trait_by_name.get(&name).copied() {
-            return Some(tid);
-        }
     }
         // Script 89: module-scoped trait fallback. The impl header's trait
     // path (`impl GlobalAlloc for Global` inside `pub mod alloc { ... }`)

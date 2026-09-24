@@ -905,6 +905,18 @@ impl TyCtxMut {
     /// Register a trait definition (its name and method set) so that vtable
     /// generation and other downstream passes can resolve the trait's methods.
     pub fn register_trait_def(&mut self, id: glyim_core::def_id::TraitDefId, def: crate::TraitDef) {
+        // Script 299: keep `trait_by_name` up to date for *user* traits too,
+        // not just the builtins pre-registered by `register_builtin_ranges`.
+        // Without this, a trait used through a path (e.g. `T: FromStr`) could
+        // resolve to a different LocalDefId depending on the traversal order
+        // (module scope walk vs. `pub use` re-export walk), producing two
+        // `TraitDefId`s for the same logical trait. `resolve_path_to_trait_def_id`
+        // now prefers `trait_by_name` so all lookups agree.
+        //
+        // User traits overwrite builtin entries of the same name — preserving
+        // the "user-declared wins over builtin" preference that
+        // `resolve_path_to_trait_def_id` documents.
+        self.trait_by_name.insert(def.name, id);
         self.trait_defs.insert(id, def);
     }
 
