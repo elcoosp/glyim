@@ -2481,11 +2481,23 @@ impl<'a> FnCtxt<'a> {
                     // unify `Adt(1050)` (the builtin String struct) against
                     // `TyKind::String` (the str primitive). This skip is a
                     // targeted workaround at the candidate-collection site.
+                    // Script 208: also match `TyKind::Adt(1050, _)` (the
+                    // builtin `String` struct), not just `TyKind::String`
+                    // (the str primitive). `impl String { fn len }` in
+                    // string.g registers against Adt(1050), and the
+                    // unrelated `impl str { fn len }` in str.g unifies
+                    // against it too (unify treats the two as compatible);
+                    // without this the receiver `String` produced
+                    // "ambiguous method `len` found in multiple impls for
+                    // type `Adt1050`". Cover references to either form.
                     let step_is_str_like = match this.ctx.ty_kind(step_ty) {
                         TyKind::String => true,
-                        TyKind::Ref(_, inner, _) => {
-                            matches!(this.ctx.ty_kind(*inner), TyKind::String)
-                        }
+                        TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                        TyKind::Ref(_, inner, _) => match this.ctx.ty_kind(*inner) {
+                            TyKind::String => true,
+                            TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                            _ => false,
+                        },
                         _ => false,
                     };
                     if step_is_str_like {
