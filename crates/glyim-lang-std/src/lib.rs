@@ -254,12 +254,17 @@ pub fn std_source_assembled_minimal() -> String {
         ("marker", &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"]),
         ("convert", &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"]),
         ("hint", &["black_box", "spin_loop"]),
+        // Script 434: dependency order — same reorder as the FULL
+        // assembler got in Script 259. `alloc`/`raw_vec` must come before
+        // their consumers (`vec`, `boxed`, `rc`, `string`) or the typeck
+        // walker registers `Layout`'s impl after `Box::new`'s body, which
+        // produces the 7 `no method expect` errors the CLI test hits.
+        ("alloc", &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"]),
+        ("raw_vec", &["RawVec"]),
         ("vec", &["Vec"]),
         ("boxed", &["Box"]),
         ("rc", &["Rc"]),
         ("string", &["String"]),
-        ("raw_vec", &["RawVec"]),
-        ("alloc", &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"]),
         ("io", &[
             "Read", "Write", "BufRead", "Error", "ErrorKind",
             "Stdin", "Stdout", "Stderr",

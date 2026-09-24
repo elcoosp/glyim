@@ -453,6 +453,36 @@ fn copy<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> Result<u64, Error>
 }
 
 /// Print to standard output, with a newline.
+///
+/// Script 438: bare-function form of `println!`. The user-facing prelude
+/// (per the v0.1.0 roadmap) exposes `println`, `print`, `eprintln`, `eprint`
+/// as *functions* — the wave-2 probe wrote `fn main() { println("hi"); }`
+/// and got `unresolved name 'println'` because the stdlib only had the
+/// macro form. These four shims give users the function form; they call
+/// `stdout().write_all` directly (rather than recursing through the macro,
+/// which the current macro matcher rejects for a non-literal argument).
+fn println(s: &str) {
+    stdout().write_all(s.as_bytes()).unwrap();
+    stdout().write_all(b"\n").unwrap();
+}
+
+/// Print to standard output.
+fn print(s: &str) {
+    stdout().write_all(s.as_bytes()).unwrap();
+}
+
+/// Print to standard error, with a newline.
+fn eprintln(s: &str) {
+    stderr().write_all(s.as_bytes()).unwrap();
+    stderr().write_all(b"\n").unwrap();
+}
+
+/// Print to standard error.
+fn eprint(s: &str) {
+    stderr().write_all(s.as_bytes()).unwrap();
+}
+
+/// Print to standard output, with a newline.
 macro println! {
     () => {
         stdout().write_all(b"\n").unwrap();
