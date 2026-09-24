@@ -607,6 +607,20 @@ impl InferenceTable {
             (TyKind::Slice(elem_a), TyKind::Slice(elem_b)) => {
                 self.unify_tys(ctx, elem_a, elem_b, span)
             }
+            // Script 359: array-to-slice unsizing. `<[T]>` and `[U; N]` are
+            // the same "kind" of data (a contiguous sequence); a `&[T]`
+            // value can be produced from an `&[U; N]` when `T == U`. The
+            // stdlib relies on this: vec.g's
+            //     if self.len == 0 { &[] } else { unsafe { slice::from_raw_parts(...) } }
+            // mixes `&[?ty; 0]` (the `&[]` literal) with `&[T]` (the
+            // `from_raw_parts` return) across the `if`/`else` branches.
+            // Without this arm, the two branches failed to unify with
+            // "mismatched types: [?ty; _] vs [T]". Enforce only the element
+            // type; the length is irrelevant for the coercion.
+            (TyKind::Array(elem_a, _), TyKind::Slice(elem_b))
+            | (TyKind::Slice(elem_a), TyKind::Array(elem_b, _)) => {
+                self.unify_tys(ctx, elem_a, elem_b, span)
+            }
             (TyKind::RawPtr(inner_a, _mut_a), TyKind::RawPtr(inner_b, _mut_b)) => {
                 // Raw-pointer *mutability* is not a unification constraint in
                 // this compiler: the stdlib treats `*mut T` / `*const T`
