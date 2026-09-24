@@ -1107,6 +1107,12 @@ fn parse_char_literal(s: &str) -> Option<char> {
             "n" => Some('\n'),
             "r" => Some('\r'),
             "t" => Some('\t'),
+            // Script 350: null byte — used by stdlib's \`impl Default for
+            // char { fn default() -> Self { '\0' } }\`. Missing this escape
+            // made \`parse_char_literal\` return None, which lowered the
+            // literal to \`Literal::Unit\` and produced
+            // "mismatched types: () vs char".
+            "0" => Some('\0'),
             "\\" => Some('\\'),
             "'" => Some('\''),
             "\"" => Some('\"'),
