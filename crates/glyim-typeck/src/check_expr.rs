@@ -2539,6 +2539,27 @@ impl<'a> FnCtxt<'a> {
                     }
                     for method in &impl_item.methods {
                         if method.name == method_name {
+                            // Script 317: `param_map` currently holds only the
+                            // impl's generic params (e.g. `T` from `impl<T>`).
+                            // A method with its OWN generic params
+                            // (`fn map<U>(self, f: fn(T) -> U) -> Option<U>`)
+                            // needs those in scope too — otherwise `U` in the
+                            // return type fell through to "unresolved type U".
+                            //
+                            // Build a per-method param map: impl generics
+                            // (already fresh inference vars from the caller's
+                            // setup) plus method generics as their own fresh
+                            // vars. The `U` here is rigid in the method
+                            // signature, but a fresh var is fine — the return
+                            // type is unified against the call's expected
+                            // return, which pins `U` at the call site.
+                            let mut method_pm = param_map.clone();
+                            for (i, gp) in method.generic_params.iter().enumerate() {
+                                let _ = i;
+                                let v = this.infer.new_ty_var(this.ctx);
+                                let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
+                                method_pm.insert(gp.name, ty);
+                            }
                             let return_ty = if let Some(return_ty_ref) = &method.return_ty {
                                 crate::tyconv::resolve_type_ref(
                                     this.ctx,
@@ -2546,7 +2567,7 @@ impl<'a> FnCtxt<'a> {
                                     this.def_map,
                                     this.diagnostics,
                                     return_ty_ref,
-                                    &param_map,
+                                    &method_pm,
                                     span,
                                 )
                             } else {
