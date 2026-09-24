@@ -341,12 +341,23 @@ impl<'a> FnCtxt<'a> {
         //     segment resolves to a builtin ADT (Vec/String/Result/Option); the
         //     second is looked up in the builtin-method table (which also holds
         //     associated functions registered without a receiver).
-        if path.segments.len() == 2 {
+        if path.segments.len() >= 2 {
+            // Script 220: accept 2+ segment paths. `alloc::Layout::from_size_align`
+            // (3 segments) uses everything before the final segment as the
+            // type path, and the final segment as the method name. Without
+            // this, only `Layout::from_size_align` (2 segments) resolved,
+            // so stdlib code like boxed.g's `Layout::from_size_align(...)`
+            // called from `mod alloc`'s peer modules (which must write
+            // `alloc::Layout::from_size_align`) produced
+            // "unresolved value path" and cascading `.expect()` errors.
             let adt_path = glyim_hir::Path {
-                segments: vec![glyim_hir::PathSegment {
-                    name: path.segments[0].name,
-                    generic_args: None,
-                }],
+                segments: path.segments[..path.segments.len() - 1]
+                    .iter()
+                    .map(|s| glyim_hir::PathSegment {
+                        name: s.name,
+                        generic_args: s.generic_args.clone(),
+                    })
+                    .collect(),
                 kind: glyim_core::path::PathKind::Plain,
             };
             // Try strict ADT resolution first; fall back to the broader
@@ -392,7 +403,7 @@ impl<'a> FnCtxt<'a> {
             if let Some((adt_id, adt_ty)) = adt_lookup {
                 if let Some((fn_id, sig)) = self
                     .ctx
-                    .lookup_builtin_method(adt_id, path.segments[1].name)
+                    .lookup_builtin_method(adt_id, path.segments.last().unwrap().name)
                 {
                     // Instantiate the output type against the *callee* ADT's own
                     // generic substitution (so `Vec::new` yields `Vec<T>` with
@@ -466,7 +477,7 @@ impl<'a> FnCtxt<'a> {
                         continue;
                     }
                     for m in &impl_item.methods {
-                        if m.name != path.segments[1].name {
+                        if m.name != path.segments.last().unwrap().name {
                             continue;
                         }
                         let Some(body_id) = m.body else { continue };
