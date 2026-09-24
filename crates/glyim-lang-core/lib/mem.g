@@ -24,6 +24,21 @@ fn align_of<T>() -> usize {
     // compiler intrinsic
 }
 
+/// Returns the size of the pointed-to value in bytes.
+///
+/// The stdlib uses this from `Drop` impls (`mem::size_of_val(self)` inside
+/// `impl<T> Drop for Box<T>`). The reference is to a sized type, so this is
+/// the size of that referent — equivalent to `size_of::<T>()` here.
+fn size_of_val<T>(_val: &T) -> usize {
+    size_of::<T>()
+}
+
+/// Returns the ABI-required minimum alignment of the type of the value
+/// pointed to by the reference.
+fn align_of_val<T>(_val: &T) -> usize {
+    align_of::<T>()
+}
+
 /// Returns `true` if dropping values of type `T` matters.
 fn needs_drop<T>() -> bool {
     // compiler intrinsic

@@ -113,6 +113,15 @@ pub fn std_source_assembled() -> String {
     // (name, [item, ...]) — emitted as `pub mod name { … }` + `pub use name::item;`
     // per item, so bare names resolve at the crate root.
     let pubs: &[(&str, &[&str])] = &[
+        // Script 259: dependency order. The typeck walker visits modules in
+        // source order and registers an impl method's `body_owner_map`
+        // entry only when it *reaches* that impl's module. `boxed`/`vec`/
+        // `raw_vec`/`string`/`rc` reference `alloc::Layout` methods and
+        // must therefore appear AFTER `alloc` and `raw_vec` in the emitted
+        // source. Before this reorder, `Box::new`'s body ran before
+        // `alloc::Layout::from_size_align` had been registered, producing
+        // cascading `.expect()` "no method" errors on the resulting
+        // `Error` receiver.
         ("option", &["Option"]),
         ("result", &["Result"]),
         ("iter", &[
@@ -135,12 +144,14 @@ pub fn std_source_assembled() -> String {
         ("marker", &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"]),
         ("convert", &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"]),
         ("hint", &["black_box", "spin_loop"]),
+        // --- allocator layer (dependencies of vec/boxed/rc/string) ---
+        ("alloc", &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"]),
+        ("raw_vec", &["RawVec"]),
+        // --- allocator consumers ---
         ("vec", &["Vec"]),
         ("boxed", &["Box"]),
         ("rc", &["Rc"]),
         ("string", &["String"]),
-        ("raw_vec", &["RawVec"]),
-        ("alloc", &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"]),
         ("io", &[
             "Read", "Write", "BufRead", "Error", "ErrorKind",
             "Stdin", "Stdout", "Stderr",
