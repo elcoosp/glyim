@@ -161,7 +161,17 @@ pub enum Applicability {
 
 impl fmt::Display for GlyimDiagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] {}", self.code, self.message)
+        // Script 123: include the primary span's byte range so the human
+        // format can be post-processed to recover file:line. Without this,
+        // every error was just `[CODE] message` with no location — making
+        // it impossible to tell which of 28 concatenated stdlib modules
+        // produced the error.
+        let r = self.span.primary.range();
+        write!(
+            f,
+            "[{}] {} @{}..{}",
+            self.code, self.message, r.start, r.end
+        )
     }
 }
 
