@@ -1179,8 +1179,63 @@ impl<'a> FnCtxt<'a> {
                     Some(MethodDispatch::Static(fn_def_id)) => {
                         // Static dispatch: call the concrete impl function
                         // directly. `self` is the first argument (the
-                        // receiver); the remaining `arg_exprs` are the method's
-                        // explicit parameters.
+                        // receiver); the remaining `arg_exprs` are the
+                        // method's explicit parameters.
+                        //
+                        // Script 560: AUTOREF. The receiver expression is the
+                        // *value* (e.g. `self.value` typed `UnsafeCell<T>`,
+                        // `self.iter` typed `I`), but the impl method's
+                        // declared `self` param is usually `&Self`/`&mut Self`.
+                        // Without wrapping, MIR lowering treated the receiver
+                        // as a partial Move of the place — so a method called
+                        // twice on the same field tripped borrowck
+                        // ('use of partially moved value: local_1.*').
+                        //
+                        // We wrap only when the formal `self` param is a
+                        // reference and the receiver expression is not already
+                        // one — passing an existing `&T`/`&mut T` through
+                        // as-is (both subtype to `&T`).
+                        let recv_for_call = {
+                            let formal_first: Option<Ty> = self
+                                .ctx
+                                .fn_sig(fn_def_id)
+                                .and_then(|sig| {
+                                    self.ctx
+                                        .substitution_args(sig.inputs)
+                                        .first()
+                                        .and_then(|a| match a {
+                                            GenericArg::Ty(t) => Some(*t),
+                                            _ => None,
+                                        })
+                                });
+                            let recv_is_ref = matches!(
+                                self.ctx.ty_kind(recv_expr.ty),
+                                TyKind::Ref(_, _, _),
+                            );
+                            let formal_ref_mutability: Option<glyim_core::primitives::Mutability> =
+                                formal_first.and_then(|t| match self.ctx.ty_kind(t) {
+                                    TyKind::Ref(_, _, m) => Some(*m),
+                                    _ => None,
+                                });
+                            match formal_ref_mutability {
+                                Some(mutab) if !recv_is_ref => {
+                                    let ref_ty = self.ctx.mk_ref(
+                                        glyim_type::Region::Erased,
+                                        recv_expr.ty,
+                                        mutab,
+                                    );
+                                    thir::Expr {
+                                        kind: thir::ExprKind::Ref {
+                                            mutability: mutab,
+                                            operand: Box::new(recv_expr),
+                                        },
+                                        ty: ref_ty,
+                                        span,
+                                    }
+                                }
+                                _ => recv_expr,
+                            }
+                        };
                         let substs = self.ctx.intern_substitution(vec![]);
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {
@@ -1189,7 +1244,7 @@ impl<'a> FnCtxt<'a> {
                             span,
                         };
                         let mut call_args = Vec::with_capacity(arg_exprs.len() + 1);
-                        call_args.push(recv_expr);
+                        call_args.push(recv_for_call);
                         call_args.extend(arg_exprs);
                         thir::Expr {
                             kind: thir::ExprKind::Call {
