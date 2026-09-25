@@ -96,10 +96,14 @@ fn generate_stdlib_prelude(stdlib_src: &str) -> String {
     out
 }
 
-/// If `--with-stdlib` was passed, write a combined source (`assembled stdlib`
-/// + generated prelude + user source) into the VFS at `input`'s path so the
-/// pipeline picks it up instead of the raw file.
-fn inject_assembled_stdlib(
+/// Prepend the assembled minimal standard library to `input`'s VFS content.
+/// After this call the pipeline reads `stdlib + \n + user_source` instead of
+/// the raw file, which puts `println`, `Vec`, `Option`, `Result`, … in scope
+/// without explicit `use` statements.
+///
+/// Public so `glyip build`/`glyip run` can share the same path as
+/// `glyim-cli --with-stdlib`.
+pub fn inject_assembled_stdlib(
     db: &mut Database,
     input: &std::path::Path,
 ) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
