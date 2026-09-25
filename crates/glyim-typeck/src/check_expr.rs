@@ -1260,12 +1260,85 @@ impl<'a> FnCtxt<'a> {
                         // the concrete impl is unknown until monomorphization.
                         // Carry the trait + method identity so the call can be
                         // devirtualized against the instantiated receiver type.
+                        //
+                        // Script 569: for a *field* receiver (`self.iter.next()`
+                        // where `self: &mut Filter<I>`), autoref the field so
+                        // MIR lowering emits a borrow rather than a partial
+                        // move. Local-binding receivers (`fut.poll()` where
+                        // `fut: F`) are left untouched — autoref there breaks
+                        // the async desugar's interpreter path.
+                        let is_field_recv =
+                            matches!(recv_expr.kind, thir::ExprKind::Field { .. });
+                        let recv_for_call = if !is_field_recv {
+                            recv_expr.clone()
+                        } else {
+                            let self_kind = {
+                                let target_local = trait_def_id.to_raw();
+                                let mut found: Option<glyim_hir::TypeRef> = None;
+                                'outer: for (_id, item) in self.hir.items.iter_enumerated() {
+                                    let glyim_hir::ItemKind::Trait(tr) = &item.kind else { continue };
+                                    let tp = glyim_hir::Path {
+                                        segments: vec![glyim_hir::PathSegment {
+                                            name: item.name,
+                                            generic_args: None,
+                                        }],
+                                        kind: glyim_core::path::PathKind::Plain,
+                                    };
+                                    let Some(tid) = crate::tyconv::resolve_path_to_trait_def_id(
+                                        self.def_map, self.ctx, &tp, span,
+                                    ) else { continue };
+                                    if tid.to_raw() != target_local { continue; }
+                                    for m in &tr.methods {
+                                        if m.name == *method
+                                            && let Some(first) = m.params.first()
+                                        {
+                                            found = first.ty.clone();
+                                            break 'outer;
+                                        }
+                                    }
+                                }
+                                found
+                            };
+                            let mutab_opt: Option<glyim_core::primitives::Mutability> =
+                                match self_kind.as_ref() {
+                                    Some(glyim_hir::TypeRef::Ref { mutability, .. }) => {
+                                        Some(*mutability)
+                                    }
+                                    _ => None,
+                                };
+                            match mutab_opt {
+                                Some(mutab) => {
+                                    let already_ref = matches!(
+                                        self.ctx.ty_kind(recv_expr.ty),
+                                        TyKind::Ref(_, _, m) if *m == mutab,
+                                    );
+                                    if already_ref {
+                                        recv_expr.clone()
+                                    } else {
+                                        let ref_ty = self.ctx.mk_ref(
+                                            glyim_type::Region::Erased,
+                                            recv_expr.ty,
+                                            mutab,
+                                        );
+                                        thir::Expr {
+                                            kind: thir::ExprKind::Ref {
+                                                mutability: mutab,
+                                                operand: Box::new(recv_expr.clone()),
+                                            },
+                                            ty: ref_ty,
+                                            span,
+                                        }
+                                    }
+                                }
+                                None => recv_expr.clone(),
+                            }
+                        };
                         let mut dyn_args = Vec::with_capacity(arg_exprs.len() + 1);
-                        dyn_args.push(recv_expr.clone());
+                        dyn_args.push(recv_for_call.clone());
                         dyn_args.extend(arg_exprs);
                         thir::Expr {
                             kind: thir::ExprKind::DynamicCall {
-                                receiver: Box::new(recv_expr),
+                                receiver: Box::new(recv_for_call),
                                 trait_def_id,
                                 method_name: *method,
                                 args: dyn_args,
