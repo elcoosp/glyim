@@ -724,6 +724,17 @@ impl TyCtxMut {
     /// Register an ADT together with its (HIR-interned) name, so that ADT *type*
     /// resolution by name (`resolve_name_to_adt_ty`) can find it regardless of
     /// the def-map interner (plan unstub-5 P5).
+    /// Script 500: register a name → AdtId mapping WITHOUT an AdtDef.
+    ///
+    /// Used by `Pipeline::compile_file_with_artifacts`'s forward-reference
+    /// pre-pass, which needs the name→id mapping (so impl headers can
+    /// resolve their `Self` type) but must NOT shadow the real AdtDef that
+    /// `typeck_crate` will register later. Writing an empty placeholder
+    /// def broke variant matching in the assembled stdlib.
+    pub fn register_adt_name(&mut self, name: Name, id: AdtId) {
+        self.adt_by_name.insert(name, id);
+    }
+
     pub fn register_adt_with_name(&mut self, name: Name, id: AdtId, def: AdtDef) {
         if std::env::var("GLYIM_DBG_GLOBAL_ADT").is_ok() {
             let name_str = self.resolve_name_for_debug(name);

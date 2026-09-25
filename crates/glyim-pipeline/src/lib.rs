@@ -269,27 +269,32 @@ impl Pipeline {
             return Err(sink_cell.into_inner().into_diagnostics());
         }
 
-        // Phase 8 / plan §9.2: expand proc-macro invocations (if a non-empty
-        // registry was supplied) before def-map / HIR lowering. The expander
-        // rewrites the syntax tree; if it returns diagnostics we surface them.
-        // The `None`/`empty` case leaves `parse_result.root` untouched,
-        // preserving prior behavior byte-for-byte.
-        let expanded_root = if let Some(reg) = proc_registry {
-            if !reg.is_empty() {
-                let mut hygiene = glyim_span::HygieneCtx::new();
-                let mut expander = glyim_meta::Expander::new(&mut hygiene);
-                expander.with_proc_registry(Some(reg));
-                let (expanded, expand_diags) = expander.expand_crate(&parse_result.root);
-                sink_cell.borrow_mut().extend(expand_diags);
-                if sink_cell.borrow().has_errors() {
-                    return Err(sink_cell.into_inner().into_diagnostics());
+        // Script 492: ALWAYS run the builtin macro expander (like
+        // `compile_file_to_mir` does). Previously this only ran when a
+        // non-empty proc-macro registry was supplied, which meant the
+        // `obj`/`exec` paths — including `glyip build` — never expanded
+        // `println!`, `format!`, `vec!`, `matches!`, `panic!`, `assert!`,
+        // …. Those calls reached HIR as bare `Path("println")` calls and
+        // cascaded into dozens of unrelated type errors ("mismatched types:
+        // Adt1010<T> vs T" from `Option` mismatches, etc.).
+        //
+        // When a proc-macro registry is supplied we additionally register
+        // it on the same expander, preserving the previous proc-macro
+        // behavior exactly.
+        let expanded_root = {
+            let mut hygiene = glyim_span::HygieneCtx::new();
+            let mut expander = glyim_meta::Expander::new(&mut hygiene);
+            if let Some(reg) = proc_registry {
+                if !reg.is_empty() {
+                    expander.with_proc_registry(Some(reg));
                 }
-                expanded
-            } else {
-                parse_result.root.clone()
             }
-        } else {
-            parse_result.root.clone()
+            let (expanded, expand_diags) = expander.expand_crate(&parse_result.root);
+            sink_cell.borrow_mut().extend(expand_diags);
+            if sink_cell.borrow().has_errors() {
+                return Err(sink_cell.into_inner().into_diagnostics());
+            }
+            expanded
         };
         let (def_map, def_diagnostics) =
             glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
@@ -351,6 +356,22 @@ impl Pipeline {
                 // miss them and mint a spurious synthetic id (e.g.
                 // `Adt2000002`), which then mismatches the real id the
                 // type-checker assigned — the "Adt45 vs Adt2000002" errors.
+                // Script 499: register the NAME ONLY, not a placeholder
+                // empty AdtDef. `register_adt_with_name` inserts into both
+                // `adt_defs` and `adt_by_name`; writing an EMPTY AdtDef here
+                // shadowed the real definition that `typeck_crate` would
+                // later register. The typeck pass's `register_adt` call
+                // writes the real def, but the earlier empty one had
+                // already contributed to `adt_generation` and to
+                // interior-mutability invalidation — and in the assembled
+                // stdlib the empty def for `Option` (etc.) survived in a
+                // way that broke variant matching (`match self { Some, None }`
+                // → 'non-exhaustive match: missing variants None' plus
+                // 'Adt1010<T> vs T').
+                //
+                // The block's actual purpose — making forward-referenced
+                // ADTs visible to impl-header resolution below — only needs
+                // the name→id mapping, which is what we do here.
                 let adt_id = (0..def_map.modules.len())
                     .find_map(|i| {
                         def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)]
@@ -361,19 +382,7 @@ impl Pipeline {
                     .map(|(id, _, _)| glyim_core::def_id::AdtId::from_raw(id.to_raw()))
                     .or_else(|| ty_ctx_mut.adt_id_by_name(item.name))
                     .unwrap_or_else(|| ty_ctx_mut.next_synthetic_adt_id());
-                ty_ctx_mut.register_adt_with_name(
-                    item.name,
-                    adt_id,
-                    glyim_type::AdtDef {
-                        kind: match &item.kind {
-                            glyim_hir::ItemKind::Enum(_) => glyim_type::AdtKind::Enum,
-                            _ => glyim_type::AdtKind::Struct,
-                        },
-                        fields: glyim_core::arena::IndexVec::new(),
-                        variants: Vec::new(),
-                        generic_params: Vec::new(),
-                    },
-                );
+                ty_ctx_mut.register_adt_name(item.name, adt_id);
             }
         }
         // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so
