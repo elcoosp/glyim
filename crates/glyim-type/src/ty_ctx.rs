@@ -303,6 +303,16 @@ impl TyCtx {
                 true
             }
             TyKind::Never | TyKind::Unit => true,
+            // Script 523: function pointers and function items are `Copy`.
+            // Rust treats both `fn()` and non-capturing function items as
+            // Copy; the compiler models non-capturing function items as
+            // `FnDef` and only true closures (with captures) as `Closure`.
+            // Marking `FnPtr` non-Copy made the borrow checker treat
+            // `(self.predicate)(&item)` as a MOVE of the field
+            // `self.predicate`; the second loop iteration then failed with
+            // 'use of partially moved value: `local_1.*`'. This is what
+            // broke `iter::Filter::next` in the stdlib.
+            TyKind::FnPtr(_) | TyKind::FnDef(_, _) => true,
             TyKind::Ref(_, _, _) => false,
             TyKind::RawPtr(_, _) => false,
             TyKind::Slice(_) => false,
