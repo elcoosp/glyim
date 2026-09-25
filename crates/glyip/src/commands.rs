@@ -47,10 +47,22 @@ pub fn cmd_new(name: &str, opts: &NewOptions, dir: Option<&Path>) -> GlyipResult
         return Err(GlyipError::ProjectAlreadyExists(dir));
     }
 
+    // Script 465: the package/bin name must be the FINAL path component of
+    // the target directory, not the raw `name` argument. When the user runs
+    // `glyip new /tmp/hello`, `name` is the absolute path
+    // `/tmp/hello`; using it verbatim as `package.name` later made
+    // `glyip build` do `target/debug.join("/tmp/hello")`, which escapes the
+    // target directory and fails with a bogus "build failed" error.
+    let package_name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| name.to_string());
+
     info!(
         "Creating new {} project '{}' at {}",
         if opts.lib { "library" } else { "binary" },
-        name,
+        package_name,
         dir.display()
     );
 
@@ -61,7 +73,7 @@ pub fn cmd_new(name: &str, opts: &NewOptions, dir: Option<&Path>) -> GlyipResult
     // Write Glyip.toml.
     let config = GlyipToml {
         package: crate::config::PackageConfig {
-            name: name.to_string(),
+            name: package_name.clone(),
             version: "0.1.0".to_string(),
             edition: opts.edition.clone(),
             authors: Vec::new(),
@@ -70,7 +82,7 @@ pub fn cmd_new(name: &str, opts: &NewOptions, dir: Option<&Path>) -> GlyipResult
                 None
             } else {
                 Some(vec![crate::config::BinTarget {
-                    name: name.to_string(),
+                    name: package_name.clone(),
                     path: Some(PathBuf::from("src/main.g")),
                 }])
             },
@@ -103,7 +115,7 @@ pub fn cmd_new(name: &str, opts: &NewOptions, dir: Option<&Path>) -> GlyipResult
     // Create an empty lockfile.
     Lockfile::new().write_to_dir(&dir)?;
 
-    info!("Project '{}' created successfully", name);
+    info!("Project '{}' created successfully", package_name);
     Ok(NewResult { path: dir })
 }
 

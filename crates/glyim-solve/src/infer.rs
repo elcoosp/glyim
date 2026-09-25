@@ -517,6 +517,18 @@ impl InferenceTable {
             (TyKind::Bool, TyKind::Bool) => Ok(Vec::new()),
             (TyKind::Char, TyKind::Char) => Ok(Vec::new()),
             (TyKind::String, TyKind::String) => Ok(Vec::new()),
+            // Script 472: `str` unifies with `&str` in either direction.
+            // A string literal is typed as bare `TyKind::String` by
+            // `literal_ty`; a formal parameter like `push_str(s: &str)`
+            // expects `Ref(_, String, _)`. Coercing here lets a literal
+            // pass without changing the literal's own type (which some
+            // stdlib code depends on when building `String`s).
+            (TyKind::String, TyKind::Ref(_, inner, _))
+            | (TyKind::Ref(_, inner, _), TyKind::String)
+                if matches!(ctx.ty_kind(inner), TyKind::String) =>
+            {
+                Ok(Vec::new())
+            }
             // `String` has two representations in this compiler:
             //   * `TyKind::String` — what `String`/`str` resolve to via
             //     `resolve_primitive`, and
