@@ -93,7 +93,11 @@ impl fmt::Display for GlyipError {
                 Ok(())
             }
             Self::BuildFailed(diags) => {
-                write!(f, "build failed with {} error(s)", diags.len())
+                writeln!(f, "build failed with {} error(s):", diags.len())?;
+                for (i, d) in diags.iter().enumerate() {
+                    writeln!(f, "  [{}] {}", i + 1, d.message)?;
+                }
+                Ok(())
             }
             Self::CacheCorrupted(msg) => write!(f, "cache corrupted: {}", msg),
             Self::ProjectNotFound(path) => {
