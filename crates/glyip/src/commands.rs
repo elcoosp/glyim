@@ -638,6 +638,13 @@ fn compile_source(
     };
     let mut db = Database::new(crate_config);
 
+    // Script 501: prepend the assembled stdlib so user code can write
+    // bare `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`.
+    // Same path `glyim-cli --with-stdlib` uses.
+    if let Err(diags) = glyim_cli::inject_assembled_stdlib(&mut db, entry) {
+        return Err(GlyipError::BuildFailed(diags));
+    }
+
     // Select the codegen backend.
     #[cfg(feature = "llvm")]
     let backend: Box<dyn glyim_codegen::CodegenBackend> = if opts.backend == "llvm" {
