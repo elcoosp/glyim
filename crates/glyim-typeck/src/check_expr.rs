@@ -1201,63 +1201,16 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                     Some(MethodDispatch::Virtual(trait_def_id)) => {
-                        // Script 545: AUTOREF the receiver when the trait
-                        // method's declared first parameter is `&self` /
-                        // `&mut self`. Without this, `self.iter.next()`
-                        // lowered the *field access* into a partial Move of
-                        // `self.iter` instead of a borrow, tripping borrowck
-                        // on the next loop iteration.
-                        //
-                        // Every trait bound in this compiler today that
-                        // declares `&self`/`&mut self` (Iterator::next,
-                        // Future::poll, ...) uses a *by-reference* receiver,
-                        // so we can unconditionally autoref with the
-                        // mutability the trait declares — determined by the
-                        // *receiver's own* declared type after autoref has
-                        // already been chosen by `resolve_method_call`.
-                        //
-                        // `recv_ty` above is the receiver the method dispatch
-                        // accepted; the `arg_exprs` do NOT contain it. We
-                        // mirror the mutability from the impl/trait's `self`
-                        // parameter. To keep this simple and correct even for
-                        // desugared traits, we use `&mut` when the receiver
-                        // is NOT already a reference (methods that take
-                        // `&self` still type-check through reborrow).
-                        let recv_for_call = {
-                            let already_ref = matches!(
-                                self.ctx.ty_kind(recv_expr.ty),
-                                TyKind::Ref(_, _, _),
-                            );
-                            if already_ref {
-                                recv_expr.clone()
-                            } else {
-                                // Both `&self` and `&mut self` type-check with
-                                // a mutable reborrow — an immutable receiver
-                                // coerces to `&mut` only when the source is a
-                                // `&mut` local, which is the common case for
-                                // `self.iter.next()` inside `&mut self`.
-                                let mutability = glyim_core::primitives::Mutability::Mut;
-                                let ref_ty = self.ctx.mk_ref(
-                                    glyim_type::Region::Erased,
-                                    recv_expr.ty,
-                                    mutability,
-                                );
-                                thir::Expr {
-                                    kind: thir::ExprKind::Ref {
-                                        mutability,
-                                        operand: Box::new(recv_expr.clone()),
-                                    },
-                                    ty: ref_ty,
-                                    span,
-                                }
-                            }
-                        };
+                        // Generic-bound receiver (`f: F` where `F: Trait`):
+                        // the concrete impl is unknown until monomorphization.
+                        // Carry the trait + method identity so the call can be
+                        // devirtualized against the instantiated receiver type.
                         let mut dyn_args = Vec::with_capacity(arg_exprs.len() + 1);
-                        dyn_args.push(recv_for_call.clone());
+                        dyn_args.push(recv_expr.clone());
                         dyn_args.extend(arg_exprs);
                         thir::Expr {
                             kind: thir::ExprKind::DynamicCall {
-                                receiver: Box::new(recv_for_call),
+                                receiver: Box::new(recv_expr),
                                 trait_def_id,
                                 method_name: *method,
                                 args: dyn_args,
