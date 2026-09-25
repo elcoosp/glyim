@@ -622,7 +622,8 @@ impl TyCtxMut {
             // broke `iter::Filter::next` in the stdlib.
             TyKind::FnPtr(_) | TyKind::FnDef(_, _) => true,
             TyKind::Ref(_, _, _) => false,
-            TyKind::RawPtr(_, _) => false,
+            // Script 577: raw pointers ARE Copy in Rust.
+            TyKind::RawPtr(_, _) => true,
             TyKind::Slice(_) => false,
             TyKind::Array(inner, _) => self.is_copy(*inner),
             TyKind::Tuple(substs) => {
@@ -2481,6 +2482,9 @@ self.register_builtin_methods();
         ];
         for (recv_ty, name, inputs, output) in prim_bit_methods {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            if std::env::var("GLYIM_DBG_FNID").is_ok() {
+                eprintln!("[FNID] prim_bit fn_id={} name={}", fn_id.to_raw(), name);
+            }
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
             let inputs_subst =
@@ -2570,6 +2574,9 @@ self.register_builtin_methods();
         ];
         for (recv_ty, name, inputs, output) in prim_entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            if std::env::var("GLYIM_DBG_FNID").is_ok() {
+                eprintln!("[FNID] prim fn_id={} name={}", fn_id.to_raw(), name);
+            }
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
             let inputs_subst =
@@ -2591,6 +2598,9 @@ self.register_builtin_methods();
 
         for (adt_id, name, inputs, output) in entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            if std::env::var("GLYIM_DBG_FNID").is_ok() {
+                eprintln!("[FNID] builtin adt={:?} fn_id={} name={}", adt_id, fn_id.to_raw(), name);
+            }
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
             let inputs_subst =

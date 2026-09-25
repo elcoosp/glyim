@@ -1175,6 +1175,27 @@ impl<'a> FnCtxt<'a> {
                     }
                     arg_exprs.push(a_expr);
                 }
+                if std::env::var("GLYIM_DBG_DISP3").is_ok() {
+                    let mn = self.ctx.name_str(*method).to_string();
+                    if mn == "read" || mn == "clear" {
+                        let kind = match &dispatch {
+                            Some(MethodDispatch::Static(_)) => "Static",
+                            Some(MethodDispatch::Virtual(_)) => "Virtual",
+                            Some(MethodDispatch::Builtin(_)) => "Builtin",
+                            None => "None",
+                        };
+                        let rk = format!("{:?}", self.ctx.ty_kind(recv_expr.ty));
+                        let expr_kind = match &recv_expr.kind {
+                            thir::ExprKind::Field { .. } => "Field",
+                            thir::ExprKind::VarRef(_) => "VarRef",
+                            _ => "Other",
+                        };
+                        eprintln!(
+                            "[DISP3] method={} kind={} recv_ty={} expr_kind={}",
+                            mn, kind, rk, expr_kind,
+                        );
+                    }
+                }
                 let thir_expr = match dispatch {
                     Some(MethodDispatch::Static(fn_def_id)) => {
                         // Static dispatch: call the concrete impl function
@@ -1353,6 +1374,48 @@ impl<'a> FnCtxt<'a> {
                         // codegen backend must lower this intrinsic; otherwise it
                         // must emit an explicit "unimplemented builtin method"
                         // error. It is NEVER silently lowered to wrong code.
+                        //
+                        // Script 579: for a *field* receiver (`self.buf.clear()`),
+                        // autoref with `&mut` so MIR emits a borrow of the field
+                        // place rather than a partial move. Builtin methods on
+                        // a `&mut self` receiver (`Vec::clear`, `Vec::push`,
+                        // `String::push_str`, …) require this; the ones that
+                        // take `&self` (`len`, `is_empty`, …) tolerate a `&mut`
+                        // reborrow too (the local is mutable through the outer
+                        // `&mut self`). Non-field receivers (variables, calls,
+                        // literals) are left untouched — they either already
+                        // produce the right value or were being handled
+                        // correctly before.
+                        let is_field_recv =
+                            matches!(recv_expr.kind, thir::ExprKind::Field { .. });
+                        let recv_for_call = if is_field_recv {
+                            // If the field's own type is already a reference,
+                            // pass through. Otherwise autoref by `&mut`.
+                            let already_ref = matches!(
+                                self.ctx.ty_kind(recv_expr.ty),
+                                TyKind::Ref(_, _, _),
+                            );
+                            if already_ref {
+                                recv_expr
+                            } else {
+                                let mutab = glyim_core::primitives::Mutability::Mut;
+                                let ref_ty = self.ctx.mk_ref(
+                                    glyim_type::Region::Erased,
+                                    recv_expr.ty,
+                                    mutab,
+                                );
+                                thir::Expr {
+                                    kind: thir::ExprKind::Ref {
+                                        mutability: mutab,
+                                        operand: Box::new(recv_expr),
+                                    },
+                                    ty: ref_ty,
+                                    span,
+                                }
+                            }
+                        } else {
+                            recv_expr
+                        };
                         let substs = self.ctx.intern_substitution(vec![]);
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {
@@ -1361,7 +1424,7 @@ impl<'a> FnCtxt<'a> {
                             span,
                         };
                         let mut call_args = Vec::with_capacity(arg_exprs.len() + 1);
-                        call_args.push(recv_expr);
+                        call_args.push(recv_for_call);
                         call_args.extend(arg_exprs);
                         thir::Expr {
                             kind: thir::ExprKind::Call {

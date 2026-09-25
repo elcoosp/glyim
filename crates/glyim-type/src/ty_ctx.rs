@@ -314,7 +314,8 @@ impl TyCtx {
             // broke `iter::Filter::next` in the stdlib.
             TyKind::FnPtr(_) | TyKind::FnDef(_, _) => true,
             TyKind::Ref(_, _, _) => false,
-            TyKind::RawPtr(_, _) => false,
+            // Script 577: raw pointers ARE Copy in Rust.
+            TyKind::RawPtr(_, _) => true,
             TyKind::Slice(_) => false,
             TyKind::Array(inner, _) => self.is_copy(*inner),
             TyKind::Tuple(substs) => {

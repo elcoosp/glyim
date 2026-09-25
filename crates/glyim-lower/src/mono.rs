@@ -2,6 +2,14 @@
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{ConstDefId, CrateId, DefId, FnDefId, LocalDefId, StaticDefId};
+
+/// Script 589: the reserved id range for compiler-synthesized builtin
+/// methods (see `TyCtxMut::next_builtin_fn_id`, seeded at 9_000). These
+/// have no HIR body — codegen lowers them as intrinsics — so mono
+/// collection must not enqueue them.
+fn is_builtin_fn_id(def_id: FnDefId) -> bool {
+    def_id.to_raw() >= 9_000
+}
 use glyim_mir::{self, MirConstKind, Operand, Rvalue, StatementKind, TerminatorKind};
 use glyim_type::*;
 use std::sync::Arc;
@@ -271,6 +279,16 @@ impl<'a> MonoCtx<'a> {
     fn scan_const(&mut self, mir_const: &glyim_mir::MirConst) {
         match &mir_const.kind {
             MirConstKind::Fn(def_id, substs) => {
+                // Script 589: builtin methods (`str::as_bytes`, `Vec::push`,
+                // `Result::expect`, …) get synthetic `FnDefId`s in the
+                // reserved 9_000+ range with NO HIR body — they're codegen
+                // intrinsics. Enqueueing them as mono items makes
+                // `make_mir_body_provider` report
+                // 'MIR body not found for DefId(9104)'. Skip them; codegen
+                // emits the intrinsic directly.
+                if is_builtin_fn_id(*def_id) {
+                    return;
+                }
                 // When a type context is present, generic calls are
                 // instantiated from their argument types at the `Call`
                 // terminator (see `scan_terminator`); the callee constant
@@ -311,6 +329,11 @@ impl<'a> MonoCtx<'a> {
                 // codegen gap.
                 if let Operand::Constant(mir_const) = func {
                     if let MirConstKind::Fn(def_id, _) = &mir_const.kind {
+                        // Script 589: builtin-method calls have no HIR body;
+                        // codegen lowers them as intrinsics directly.
+                        if is_builtin_fn_id(*def_id) {
+                            return;
+                        }
                         let substs = match self.ty_ctx {
                             Some(ty_ctx) => match ty_ctx.ty_kind(mir_const.ty) {
                                 TyKind::FnDef(_, s) => {
