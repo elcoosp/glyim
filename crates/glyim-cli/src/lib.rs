@@ -307,10 +307,16 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         }
     };
 
+    // Script 664: default to the *host* triple via the existing
+    // `host_target_triple()` helper (line 626). The previous hardcoded
+    // `x86_64-unknown-linux-gnu` produced an ELF object on every host,
+    // so the local `cc`/`ld64` on macOS/Windows refused to link
+    // (`ld: unknown file type`). Falls back inside the helper to the
+    // historical default if `rustc -vV` cannot be queried.
     let target_triple = args
         .target
         .clone()
-        .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string());
+        .unwrap_or_else(host_target_triple);
 
     // Parse the requested LTO strategy (Phase 10.2). `Thin` is a tracked gap
     // (linker-driver integration); surface it as an explicit error rather than
