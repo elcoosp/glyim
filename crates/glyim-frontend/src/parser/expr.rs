@@ -236,7 +236,26 @@ impl<'a> Parser<'a> {
             // Parse token tree as arguments
             self.parse_token_tree();
             self.finish_node();
-            return;
+            // Script 660: do NOT return here. A macro call is a primary
+            // expression and must accept postfix continuations the same as
+            // any other primary: `format!("x").as_bytes()`,
+            // `vec![1,2,3].len()`, `my_mac!().field`, `foo!(a)[0]`, etc.
+            // Previously the `return` bailed out of `parse_postfix_expr`
+            // before the `loop` below could consume the `.method()` /
+            // `(args)` / `[idx]` / `?` chain, so `format!("x").as_bytes()`
+            // was parsed as a complete `MacroCall` statement followed by a
+            // stray `.as_bytes()` — the latter reached HIR lowering as a
+            // bare `as_bytes` path, producing `unresolved name as_bytes`.
+            //
+            // Fall through into the postfix loop with the same checkpoint
+            // `cp`; the loop's `start_node_at(cp, MethodCallExpr)` will wrap
+            // the just-finished `MacroCall` node as the receiver.
+            //
+            // The macro call consumed its own path, so `last_was_path` is no
+            // longer meaningful for a trailing `{ .. }` block: don't let the
+            // `LBrace if last_was_path` arm misparse `foo!() { .. }` as a
+            // struct literal.
+            self.last_was_path = false;
         }
         loop {
             match self.current_kind() {
