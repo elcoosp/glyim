@@ -390,6 +390,8 @@ pub fn resolve_fn_sig(
 
     let mut param_tys = Vec::with_capacity(params.len());
     let self_name = ctx.resolver().intern("self");
+    // Script 657: running counter for synthetic `impl Trait` params.
+    let mut impl_trait_param_counter: u32 = 0;
     for param in params {
         // Robust `self` / `&self` / `&mut self` receiver typing. Method
         // receivers are always `Self` (by value), `&Self`, or `&mut Self`.
@@ -436,8 +438,27 @@ pub fn resolve_fn_sig(
                 }
             }
         } else {
-            let var = infer.new_ty_var(ctx);
-            ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
+            // Script 657: `impl Trait` in parameter position
+            // (`fn panic_any(msg: impl Display)`) has no `TypeRef`
+            // representation — the HIR lowerer drops the `ImplTraitType`
+            // node so `param.ty` is `None`. Previously this fell through
+            // to a fresh **unbound** `Infer(Ty)` which no pass ever
+            // binds; mono could not substitute it and codegen ICE'd on
+            // `layout_of(Infer)`. A fresh **rigid** `Param(i)` (indexed
+            // after the fn's declared generic params) is the correct
+            // representation: the call-site logic in `check_expr.rs`
+            // already maps `Param(i)` to the actual argument type, so
+            // the sig instantiates correctly.
+            let fresh_index = (generic_params.len() as u32)
+                .wrapping_add(impl_trait_param_counter);
+            impl_trait_param_counter = impl_trait_param_counter.wrapping_add(1);
+            let param_name = ctx
+                .resolver()
+                .intern(&format!("__impl_trait_{fresh_index}"));
+            ctx.mk_ty(TyKind::Param(glyim_type::ParamTy {
+                index: fresh_index,
+                name: param_name,
+            }))
         };
         param_tys.push(ty);
     }

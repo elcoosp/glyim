@@ -496,6 +496,16 @@ impl Pipeline {
                 // MIR bodies that must also be optimized, registered, and emitted
                 // as `__glyim_fn_{closure_id}` by codegen.
                 for (_cid, _substs, cbody) in lower_result.closure_bodies {
+                    // Script 640: skip closures whose locals still reference
+                    // an un-resolved type. These come from *generic* stdlib
+                    // definitions lowered in bulk; they are never
+                    // monomorphized because `main` never reaches them, but
+                    // pushing them unconditionally aborts codegen
+                    // (`fn_abi_of` → `UnknownType`). A reachable closure
+                    // always arrives here with concrete locals.
+                    if closure_body_has_unmonomorphized_ty(&cbody, ty_ctx_ref) {
+                        continue;
+                    }
                     let c_mir_arc = Arc::new(cbody);
                     let c_borrowck_ctx = PipelineBorrowckCtx::new(ty_ctx_ref, &c_mir_arc);
                     let c_borrowck_result =
@@ -1263,3 +1273,32 @@ fn format_body(body: &Body, ctx: &glyim_type::TyCtx) -> String {
 
 #[cfg(test)]
 mod tests;
+
+fn closure_body_has_unmonomorphized_ty(body: &glyim_mir::Body, ctx: &glyim_type::TyCtx) -> bool {
+    body.locals.iter().any(|l| ty_has_unmono(l.ty, ctx))
+}
+
+fn ty_has_unmono(ty: glyim_type::Ty, ctx: &glyim_type::TyCtx) -> bool {
+    use glyim_type::{GenericArg, TyKind};
+    fn go(ty: glyim_type::Ty, ctx: &glyim_type::TyCtx, depth: u32) -> bool {
+        if depth > 64 { return true; }
+        match ctx.ty_kind(ty).clone() {
+            TyKind::Error
+            | TyKind::Param(_)
+            | TyKind::Bound(_, _)
+            | TyKind::Projection(_)
+            | TyKind::Opaque(_, _) => true,
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => go(inner, ctx, depth + 1),
+            TyKind::Slice(inner) | TyKind::Array(inner, _) => go(inner, ctx, depth + 1),
+            TyKind::Tuple(substs) | TyKind::Adt(_, substs) | TyKind::Closure(_, substs) => {
+                ctx.substitution_args(substs).iter().any(|a| match a {
+                    GenericArg::Ty(t) => go(*t, ctx, depth + 1),
+                    _ => false,
+                })
+            }
+            _ => false,
+        }
+    }
+    go(ty, ctx, 0)
+}
+

@@ -320,6 +320,18 @@ fn zonk_ty(infer: &InferenceTable, ctx: &TyCtx, ty: Ty) -> Ty {
     // no child walk would ever happen — which is exactly how a
     // `Infer(Int(_))` survived zonking to reach codegen.
     let ty = infer.resolve_ty_shallow(ctx, ty);
+    // Script 632: an *unbound* `Infer(Ty(_))` reaching zonk means no pass
+    // will ever bind it. Downstream phases (codegen ABI classification,
+    // `layout_of`) have no representation for it and ICE. Fall back to
+    // `Ty::ERROR`, the compiler's explicit "type unknown" sentinel that
+    // every consumer already handles.
+    //
+    // `Infer(Int)`/`Infer(Float)` never reach this arm — `resolve_ty_shallow`
+    // already defaults them to `Ty::I32`/`Ty::F64` (Scripts 442/452).
+    let ty = match ctx.ty_kind(ty) {
+        TyKind::Infer(glyim_type::InferVar::Ty(_)) => return Ty::ERROR,
+        _ => ty,
+    };
     match ctx.ty_kind(ty).clone() {
         // Primitive scalars / never / unit / bool / char / string / error
         // have no children to walk.

@@ -1257,7 +1257,36 @@ impl<'a> FnCtxt<'a> {
                                 _ => recv_expr,
                             }
                         };
-                        let substs = self.ctx.intern_substitution(vec![]);
+                        // Script 655: derive the callee's FnDef substs from the receiver's
+                        // ADT substitution. Generic user `impl` methods (e.g.
+                        // `impl<T, E> Result<T, E> { fn unwrap(self) -> T }`)
+                        // are resolved via `MethodDispatch::Static`, but the
+                        // call site emits `FnDef(id, [])`; mono then enqueues
+                        // the *generic* body with `Param(0)` locals and codegen
+                        // ICEs on `layout_of(Param(0))`. The receiver's own
+                        // generic args — `[(), Adt224]` for `Result<(), Error>`
+                        // — are exactly the impl's type parameters.
+                        //
+                        // Peel `&`/`&mut`/`*`/`*mut` layers to reach the ADT.
+                        // Fall back to slice/array element type, then to empty.
+                        let mut recv_inner = recv_ty;
+                        for _ in 0..8 {
+                            let inner = match self.ctx.ty_kind(recv_inner) {
+                                TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => Some(*i),
+                                _ => None,
+                            };
+                            match inner {
+                                Some(i) => recv_inner = i,
+                                None => break,
+                            }
+                        }
+                        let substs = match self.ctx.ty_kind(recv_inner) {
+                            TyKind::Adt(_, s) if !s.is_empty() => *s,
+                            TyKind::Slice(e) | TyKind::Array(e, _) => self
+                                .ctx
+                                .intern_substitution(vec![GenericArg::Ty(*e)]),
+                            _ => self.ctx.intern_substitution(vec![]),
+                        };
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {
                             kind: thir::ExprKind::FnRef(fn_def_id),
