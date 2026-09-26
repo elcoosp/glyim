@@ -212,7 +212,28 @@ fn matches_fragment_spec(tree: &TokenTree, spec: &FragmentSpec) -> bool {
                 TokenTree::Group(SyntaxKind::LBrace, _, SyntaxKind::RBrace)
             )
         }
-        FragmentSpec::Tt => true, // `tt` is "exactly one token tree" — `true` is correct here.
+        // Script 663: `tt` matches one *token tree* — a token or a
+        // balanced delimiter group. In this expander the argument list is a
+        // *flat* token vector (delimiters are individual tokens, not
+        // wrapping `Group` nodes), so `tt` would otherwise match a bare
+        // `)`/`}`/`]` and let a trailing `$(...)+` consume the closing
+        // delimiter of the enclosing group. That made
+        // `println!("x={}", 42)` fail with `no matching macro arm` — the
+        // repetition ate `RParen`, leaving the pattern's trailing
+        // `Token(RParen)` nothing to match.
+        //
+        // Excluding the closing delimiters gives the intuitive behavior:
+        // `$( $x:tt )+` matches the *contents* of the enclosing group up
+        // to (but not including) its closing delimiter. Opening delimiters
+        // are still matched (a `tt` can be a group in real Rust — here we
+        // simply never reach them as standalone tokens in practice).
+        FragmentSpec::Tt => !matches!(
+            tree,
+            TokenTree::Token(
+                SyntaxKind::RParen | SyntaxKind::RBrace | SyntaxKind::RBracket,
+                _
+            )
+        ),
         FragmentSpec::Expr | FragmentSpec::Ty | FragmentSpec::Path | FragmentSpec::Pat => {
             // Reject tokens that can never start this fragment kind, even
             // though we can't yet confirm the whole fragment is valid.
