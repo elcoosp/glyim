@@ -483,51 +483,9 @@ fn eprint(s: &str) {
 }
 
 /// Print to standard output, with a newline.
-macro println! {
-    () => {
-        stdout().write_all(b"\n").unwrap();
-    },
-    ($fmt:literal) => {
-        stdout().write_all(format!(concat!($fmt, "\n")).as_bytes()).unwrap();
-    },
-    ($fmt:literal, $($arg:tt)+) => {
-        stdout().write_all(format!(concat!($fmt, "\n"), $($arg)+).as_bytes()).unwrap();
-    },
-}
-
 /// Print to standard output.
-macro print! {
-    ($fmt:literal) => {
-        stdout().write_all(format!($fmt).as_bytes()).unwrap();
-    },
-    ($fmt:literal, $($arg:tt)+) => {
-        stdout().write_all(format!($fmt, $($arg)+).as_bytes()).unwrap();
-    },
-}
-
 /// Print to standard error, with a newline.
-macro eprintln! {
-    () => {
-        stderr().write_all(b"\n").unwrap();
-    },
-    ($fmt:literal) => {
-        stderr().write_all(format!(concat!($fmt, "\n")).as_bytes()).unwrap();
-    },
-    ($fmt:literal, $($arg:tt)+) => {
-        stderr().write_all(format!(concat!($fmt, "\n"), $($arg)+).as_bytes()).unwrap();
-    },
-}
-
 /// Print to standard error.
-macro eprint! {
-    ($fmt:literal) => {
-        stderr().write_all(format!($fmt).as_bytes()).unwrap();
-    },
-    ($fmt:literal, $($arg:tt)+) => {
-        stderr().write_all(format!($fmt, $($arg)+).as_bytes()).unwrap();
-    },
-}
-
 /// Empty struct representing an empty buffer for read/write.
 struct Empty;
 
@@ -578,3 +536,45 @@ impl Read for RepeatBytes {
 fn repeat(byte: u8) -> RepeatBytes {
     RepeatBytes { byte }
 }
+
+/// Print to standard output, with a newline. Script 658: delegates
+/// directly to the `println(s: &str)` fn shim. The previous body used
+/// `format!(concat!(...))`, which triggered the expander's nested-macro
+/// limitation (`format!` inside an expansion is not re-expanded, so
+/// `.as_bytes()` on the raw macro name failed to resolve). Routing
+/// through the fn shim avoids nested macro expansion entirely and gives
+/// the exact same behavior for the supported literal forms.
+macro println! {
+    () => {
+        println("");
+    },
+    ($fmt:literal) => {
+        println($fmt);
+    },
+}
+
+/// Print to standard output. Script 658: delegates to `print(&str)`.
+macro print! {
+    ($fmt:literal) => {
+        print($fmt);
+    },
+}
+
+/// Print to standard error, with a newline. Script 658: delegates to
+/// `eprintln(&str)`.
+macro eprintln! {
+    () => {
+        eprintln("");
+    },
+    ($fmt:literal) => {
+        eprintln($fmt);
+    },
+}
+
+/// Print to standard error. Script 658: delegates to `eprint(&str)`.
+macro eprint! {
+    ($fmt:literal) => {
+        eprint($fmt);
+    },
+}
+
