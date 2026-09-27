@@ -1168,6 +1168,15 @@ fn pre_register_fn_sigs_in_module(
                     None => LocalDefId::from_raw(item.id.to_raw()),
                 };
                 let fn_id = FnDefId::from_raw(local_def_id.to_raw());
+
+                // Script 670: extern_fns registered BEFORE the sig-guard.
+                if f.abi == Some(ctx.resolver().intern("C"))
+                    || f.abi == Some(ctx.resolver().intern("c"))
+                {
+                    let name_str = ctx.name_str(item.name).to_string();
+                    ctx.extern_fns.insert(fn_id, name_str);
+                }
+
                 if ctx.fn_sig(fn_id).is_some() {
                     continue;
                 }
@@ -1568,6 +1577,28 @@ fn check_fn_items_in_module(
                             abi: Abi::Glyim,
                         },
                     );
+                    // Script 690 (re-applied): register the inherent-method
+                    // mapping. Use the HIR `self_ty` path's *name* directly
+                    // — the resolved Ty is unreliable (Error/ErrorKind may
+                    // silently become Ty::ERROR if not yet registered in the
+                    // module's type scope when impls are scanned).
+                    let method_name = method.name;
+                    let fn_def_id = FnDefId::from_raw(local_def_id.to_raw());
+                    let self_type_name: Option<Name> = match &impl_item.self_ty {
+                        glyim_hir::TypeRef::Path(p) if p.segments.len() == 1 => {
+                            Some(p.segments[0].name)
+                        }
+                        _ => None,
+                    };
+                    if let Some(tn) = self_type_name {
+                        ctx.inherent_methods_by_name.insert((tn, method_name), fn_def_id);
+                    }
+                    if let Some(self_ty) = self_ty_opt
+                        && let glyim_type::TyKind::Adt(self_adt_id, _) = ctx.ty_kind(self_ty)
+                    {
+                        ctx.inherent_method_fns
+                            .insert((*self_adt_id, method_name), fn_def_id);
+                    }
                     if let (Some(trait_path), Some(self_ty)) = (&impl_item.trait_ref, self_ty_opt) {
                         if let Some(trait_def_id) = tyconv::resolve_path_to_trait_def_id(
                             def_map, ctx, trait_path, impl_span,

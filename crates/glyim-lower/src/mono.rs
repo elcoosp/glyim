@@ -92,6 +92,14 @@ impl<'a> MonoCtx<'a> {
     }
 
     fn enqueue(&mut self, item: MonoItem) {
+        // Script 672b: extern fns have no MIR body.
+        if let MonoItem::Fn { def_id, .. } = &item
+            && let Some(ty_ctx) = self.ty_ctx
+            && ty_ctx.extern_fn_name(*def_id).is_some()
+        {
+            return;
+        }
+
         if !self.seen.contains(&item) && !self.cache.contains_key(&item) {
             self.queue.push_back(item);
         }
@@ -106,6 +114,13 @@ impl<'a> MonoCtx<'a> {
     ) {
         for item in start {
             if self.cache.contains_key(item) || self.seen.contains(item) {
+                continue;
+            }
+            // Script 672b: extern fns have no MIR body — never enqueue.
+            if let MonoItem::Fn { def_id, .. } = item
+                && let Some(ty_ctx) = self.ty_ctx
+                && ty_ctx.extern_fn_name(*def_id).is_some()
+            {
                 continue;
             }
             self.queue.push_back(item.clone());
@@ -279,6 +294,12 @@ impl<'a> MonoCtx<'a> {
     fn scan_const(&mut self, mir_const: &glyim_mir::MirConst) {
         match &mir_const.kind {
             MirConstKind::Fn(def_id, substs) => {
+                // Script 672: extern fns first (no MIR body).
+                if let Some(ty_ctx) = self.ty_ctx
+                    && ty_ctx.extern_fn_name(*def_id).is_some()
+                {
+                    return;
+                }
                 // Script 589: builtin methods (`str::as_bytes`, `Vec::push`,
                 // `Result::expect`, …) get synthetic `FnDefId`s in the
                 // reserved 9_000+ range with NO HIR body — they're codegen

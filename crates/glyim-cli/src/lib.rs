@@ -406,7 +406,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // Only emit a C-ABI `main` entry symbol for `--emit=exec`; a cdylib or
     // plain object must not carry a `main` (it would be an unused/conflicting
     // entry point). `obj`/`cdylib` consumers link `main` themselves if needed.
-    if let (Some(main_id), EmitKind::Exec) = (entry_main, emit) {
+    if let (Some(main_id), EmitKind::Exec | EmitKind::Obj) = (entry_main, emit) {
         llvm = llvm.with_entry_main(main_id);
     }
 

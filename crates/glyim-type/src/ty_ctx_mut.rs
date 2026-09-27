@@ -128,6 +128,18 @@ pub struct TyCtxMut {
     /// (0 = `T`, 1 = `E` for `Result`); the call site instantiates them against
     /// the receiver's substitution. stdlib-completion.
     pub builtin_method_fns: HashMap<(AdtId, Name), (FnDefId, FnSig)>,
+    /// Inherent (non-trait) impl methods: `(Self AdtId, method name) -> FnDefId`.
+    /// Populated during typeck's `impl` scan for `impl Type { fn foo() }`
+    /// blocks (no `trait_ref`). Consulted by path-call resolution to turn
+    /// `Type::foo(args)` into a real `FnRef` instead of an `Err` sentinel.
+    pub inherent_method_fns: HashMap<(AdtId, Name), FnDefId>,
+    /// By-name mirror of `inherent_method_fns`: `(TypeName, MethodName) -> FnDefId`.
+    /// Needed because the same source ADT is sometimes canonicalized to a
+    /// different `AdtId` at registration vs. lookup (or is a `TyKind::String`
+    /// / slice primitive, not an ADT at all).
+    pub inherent_methods_by_name: HashMap<(Name, Name), FnDefId>,
+    /// Extern C symbol names for `extern` function declarations.
+    pub extern_fns: HashMap<FnDefId, String>,
     /// Builtin inherent methods on *primitive* numeric receivers
     /// (`u64::checked_add`, `u32::saturating_sub`, …), keyed on the receiver's
     /// `Ty`. Primitive types are not ADTs, so they cannot share
@@ -174,6 +186,9 @@ impl TyCtxMut {
             drop_impls: HashSet::new(),
             impl_method_fns: HashMap::new(),
             builtin_method_fns: HashMap::new(),
+            inherent_method_fns: HashMap::new(),
+            inherent_methods_by_name: HashMap::new(),
+            extern_fns: HashMap::new(),
             primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
         };
@@ -311,6 +326,9 @@ impl TyCtxMut {
             drop_impls: ctx.drop_impls.clone(),
             impl_method_fns: ctx.impl_method_fns.clone(),
             builtin_method_fns: HashMap::new(),
+            inherent_method_fns: HashMap::new(),
+            inherent_methods_by_name: HashMap::new(),
+            extern_fns: HashMap::new(),
             primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
         }
@@ -867,6 +885,13 @@ impl TyCtxMut {
         self.adt_by_name.get(&name).copied()
     }
 
+    /// Reverse of `adt_id_by_name`: recover an ADT's source name from its id.
+    pub fn adt_name_for_id(&self, id: AdtId) -> Option<Name> {
+        self.adt_by_name
+            .iter()
+            .find_map(|(name, aid)| if *aid == id { Some(*name) } else { None })
+    }
+
     /// Resolve a bare variant constructor/value name (`Ok`, `Err`, `Some`,
     /// `None`, `Ready`, …) to its `(AdtId, VariantIdx)`. The stdlib/pre Rust
     /// prelude references enum variants by their bare name (e.g. `Ok(x)`),
@@ -1233,6 +1258,19 @@ impl TyCtxMut {
             lang_items: self.lang_items.clone(),
             drop_impls: self.drop_impls.clone(),
             impl_method_fns: self.impl_method_fns.clone(),
+            extern_fns: self.extern_fns.clone(),
+            inherent_method_fns: self.inherent_method_fns.clone(),
+            inherent_methods_by_name: self.inherent_methods_by_name.clone(),
+            builtin_fn_index: {
+                let mut m: std::collections::HashMap<FnDefId, (AdtId, Name)> = std::collections::HashMap::new();
+                for ((adt, name), (fn_id, _)) in self.builtin_method_fns.iter() {
+                    m.insert(*fn_id, (*adt, *name));
+                }
+                for ((_recv, name), (fn_id, _)) in self.primitive_method_fns.iter() {
+                    m.insert(*fn_id, (AdtId::from_raw(0), *name));
+                }
+                m
+            },
         }
     }
 
@@ -1261,6 +1299,19 @@ impl TyCtxMut {
             lang_items: self.lang_items,
             drop_impls: self.drop_impls,
             impl_method_fns: self.impl_method_fns,
+            extern_fns: self.extern_fns.clone(),
+            inherent_method_fns: self.inherent_method_fns.clone(),
+            inherent_methods_by_name: self.inherent_methods_by_name.clone(),
+            builtin_fn_index: {
+                let mut m: std::collections::HashMap<FnDefId, (AdtId, Name)> = std::collections::HashMap::new();
+                for ((adt, name), (fn_id, _)) in self.builtin_method_fns.iter() {
+                    m.insert(*fn_id, (*adt, *name));
+                }
+                for ((_recv, name), (fn_id, _)) in self.primitive_method_fns.iter() {
+                    m.insert(*fn_id, (AdtId::from_raw(0), *name));
+                }
+                m
+            },
         }
     }
 
@@ -2630,6 +2681,17 @@ self.register_builtin_methods();
         self.builtin_method_fns
             .get(&(adt_id, name))
             .map(|(id, sig)| (*id, sig.clone()))
+    }
+
+    /// Inherent (non-trait) impl method lookup: `Type::method` for a
+    /// concrete `impl Type { fn method() }` block.
+    pub fn inherent_method(&self, adt_id: AdtId, name: Name) -> Option<FnDefId> {
+        self.inherent_method_fns.get(&(adt_id, name)).copied()
+    }
+
+    /// Name-keyed inherent-method lookup.
+    pub fn inherent_method_by_name(&self, type_name: Name, method_name: Name) -> Option<FnDefId> {
+        self.inherent_methods_by_name.get(&(type_name, method_name)).copied()
     }
 
     /// Look up a builtin inherent method on a *primitive* numeric receiver

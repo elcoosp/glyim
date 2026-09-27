@@ -152,9 +152,28 @@ fn lower_extern_imports(
 ) {
     for child in node.children() {
         if child.kind() == SyntaxKind::ExternBlock {
+            // Script 671: read the enclosing block's ABI ("C" typically).
+            // The inner `FnDef` node itself does not carry the ABI — it's
+            // on the `ExternBlock`. Without propagating it, hoisted extern
+            // fns get `abi = None`, so typeck can't identify them as extern
+            // and codegen emits `__glyim_fn_N` (no body → link failure).
+            let block_abi_name: Option<glyim_core::interner::Name> = {
+                let mut abi_str: Option<String> = None;
+                for tok in child.children_with_tokens() {
+                    if let rowan::NodeOrToken::Token(t) = tok
+                        && t.kind() == SyntaxKind::StringLit
+                    {
+                        let raw = t.text();
+                        // Strip surrounding quotes.
+                        abi_str = Some(raw.trim_matches('"').to_string());
+                        break;
+                    }
+                }
+                abi_str.map(|s| interner.intern(&s))
+            };
             for inner in child.children() {
                 if inner.kind() == SyntaxKind::FnDef {
-                    if let Some(item) = lower_item::lower_fn_def(
+                    if let Some(mut item) = lower_item::lower_fn_def(
                         &inner,
                         interner,
                         local_def_counter,
@@ -164,6 +183,12 @@ fn lower_extern_imports(
                         diags,
                         struct_field_map,
                     ) {
+                        // Propagate the ABI into the hoisted Fn item.
+                        if let crate::ItemKind::Fn(ref mut f) = item.kind
+                            && f.abi.is_none()
+                        {
+                            f.abi = block_abi_name;
+                        }
                         items.push(item);
                     }
                 }

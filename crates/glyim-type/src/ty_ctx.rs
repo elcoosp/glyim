@@ -49,6 +49,17 @@ pub struct TyCtx {
     pub trait_by_name: HashMap<Name, glyim_core::def_id::TraitDefId>,
     pub(crate) variant_types: HashMap<AdtId, Vec<Ty>>,
     pub(crate) fn_sigs: HashMap<FnDefId, FnSig>,
+    /// Reverse index from builtin method FnDefId to (AdtId, Name).
+    pub(crate) builtin_fn_index: HashMap<FnDefId, (AdtId, Name)>,
+    /// Inherent impl methods: `(AdtId, Name) -> FnDefId`. Populated from
+    /// `TyCtxMut::inherent_method_fns` at freeze time.
+    pub(crate) inherent_method_fns: HashMap<(AdtId, Name), FnDefId>,
+    /// Name-keyed mirror of `inherent_method_fns`.
+    pub(crate) inherent_methods_by_name: HashMap<(Name, Name), FnDefId>,
+    /// Maps an FnDefId that names an `extern` C function to its symbol
+    /// name (e.g. `glyim_stdout_write`). Codegen uses this to declare and
+    /// call the C symbol directly rather than emitting `__glyim_fn_{id}`.
+    pub(crate) extern_fns: HashMap<FnDefId, String>,
     pub(crate) const_tys: HashMap<ConstDefId, Ty>,
     pub(crate) closure_sigs: HashMap<ClosureId, FnSig>,
     /// `ClosureId` → synthetic `AdtId` for the closure's captured environment
@@ -653,6 +664,26 @@ impl TyCtx {
     /// fn_sig.
     pub fn fn_sig(&self, def_id: FnDefId) -> Option<&FnSig> {
         self.fn_sigs.get(&def_id)
+    }
+
+    pub fn builtin_fn_id(&self, id: FnDefId) -> Option<(AdtId, Name)> {
+        self.builtin_fn_index.get(&id).copied()
+    }
+
+    /// Inherent (non-trait) impl method lookup for `Type::method(args)`
+    /// path calls on concrete ADTs.
+    pub fn inherent_method(&self, adt_id: AdtId, name: Name) -> Option<FnDefId> {
+        self.inherent_method_fns.get(&(adt_id, name)).copied()
+    }
+
+    /// Name-keyed inherent-method lookup.
+    pub fn inherent_method_by_name(&self, type_name: Name, method_name: Name) -> Option<FnDefId> {
+        self.inherent_methods_by_name.get(&(type_name, method_name)).copied()
+    }
+
+    /// Name of the C symbol for an `extern` function, if this id names one.
+    pub fn extern_fn_name(&self, id: FnDefId) -> Option<&str> {
+        self.extern_fns.get(&id).map(String::as_str)
     }
 
     /// The value type of a constant definition (e.g. `i32` for
