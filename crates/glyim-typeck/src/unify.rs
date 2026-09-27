@@ -589,6 +589,14 @@ impl<'a> FnCtxt<'a> {
                             continue;
                         }
                         let Some(body_id) = m.body else { continue };
+                        // The id was assigned up front by
+                        // `pre_allocate_impl_method_ids`, which runs before
+                        // *any* body check. That makes this lookup succeed
+                        // even when the callee's `impl` block is declared
+                        // later in source order than the body being checked
+                        // (io.g: `Error::last_os_error` calls
+                        // `ErrorKind::from_raw_os_error`, but `impl ErrorKind`
+                        // comes after `impl Error`).
                         let Some(local) = self.body_owner_map.get(&body_id).copied() else {
                             continue;
                         };

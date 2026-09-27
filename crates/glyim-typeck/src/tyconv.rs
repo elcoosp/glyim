@@ -1212,6 +1212,51 @@ pub(crate) fn resolve_name_to_adt_ty(
         }
     }
 
+    // Canonicalize stdlib names that live in `BuiltinAdt` (Option, Result,
+    // Vec, Box, String, ..., and Error/ErrorKind/BufReader/BufWriter) before
+    // the def-map fallbacks. The existing canonical lookup below re-interns
+    // through ctx's resolver (a different rodeo than the HIR-interned
+    // `name`), so `ctx.adt_id_by_name(ctx_name)` missed for stdlib names and
+    // fell through to the def-map path. Different call sites then reached
+    // different def-map ids for the same logical type, producing
+    // `Adt39 vs Adt227` at the struct-literal level in
+    // `Error::last_os_error` and cascading into `Ty::ERROR` at codegen.
+    // `BuiltinAdt::from_name` is keyed by string and cannot miss.
+    {
+        let hir_name_str = def_map.interner.resolve(name);
+        if let Some(builtin) = glyim_type::builtin_adts::BuiltinAdt::from_name(hir_name_str) {
+            let builtin_id = AdtId::from_raw(builtin.adt_id());
+            if ctx.adt_def(builtin_id).is_some() {
+                let arity = ctx.adt_generic_arity(builtin_id);
+                let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
+                let mut substs: Vec<GenericArg> =
+                    Vec::with_capacity(args.map_or(0, |a| a.len()).max(arity));
+                if let Some(args) = args {
+                    for arg in args {
+                        let resolved = resolve_type_ref(
+                            ctx, infer, def_map, diagnostics, arg, param_map, span,
+                        );
+                        substs.push(GenericArg::Ty(resolved));
+                    }
+                } else {
+                    for _ in 0..arity {
+                        let var = infer.new_ty_var(ctx);
+                        let ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                        substs.push(GenericArg::Ty(ty));
+                    }
+                }
+                while substs.len() < arity {
+                    let var = infer.new_ty_var(ctx);
+                    let ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                    substs.push(GenericArg::Ty(ty));
+                }
+                substs.truncate(arity);
+                let substs = ctx.intern_substitution(substs);
+                return Some(ctx.mk_adt(builtin_id, substs));
+            }
+        }
+    }
+
     // Resolve the ADT id. Prefer the *def-map* id (the authoritative source
     // for source-defined types) over `adt_id_by_name`: the latter can hold a
     // stale id minted during an earlier registration pass (e.g. a synthetic id

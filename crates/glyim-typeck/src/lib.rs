@@ -1043,6 +1043,20 @@ pub fn typeck_crate(
         .filter(|(id, _)| !child_set.contains(id))
         .map(|(id, _)| id)
         .collect();
+    // Pre-allocate impl-method ids (and register their sigs) so that
+    // `check_path`'s `Type::method` resolution can find callees whose impl
+    // blocks appear later in source order than the body being checked.
+    pre_allocate_impl_method_ids(
+        &mut ctx,
+        &mut infer,
+        def_map,
+        hir,
+        &top_level_ids,
+        def_map.root,
+        &mut next_local_def_id,
+        &mut body_owner_map,
+    );
+
     check_fn_items_in_module(
         &mut ctx,
         &mut infer,
@@ -1220,6 +1234,110 @@ fn pre_register_fn_sigs_in_module(
                         hir,
                         &m.children,
                         child_mod,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Pre-allocate `LocalDefId`s for every impl method with a direct body, and
+/// pre-register their `FnSig`s. Runs *before* `check_fn_items_in_module` so
+/// that `check_path`'s `Type::method` resolution can find a callee whose impl
+/// block is declared later in source order than the body being checked.
+///
+/// io.g is the motivating case: `impl Error { fn last_os_error }` calls
+/// `ErrorKind::from_raw_os_error(..)`, but `impl ErrorKind` is declared
+/// *after* `impl Error`. Without this pre-pass the callee's id had not yet
+/// been assigned when the caller's body was type-checked, so `check_path`
+/// silently returned `Ty::ERROR` — failing the codegen contract encoded by
+/// `v15_t25_drop_error_type`.
+fn pre_allocate_impl_method_ids(
+    ctx: &mut TyCtxMut,
+    infer: &mut InferenceTable,
+    def_map: &CrateDefMap,
+    hir: &glyim_hir::CrateHir,
+    item_ids: &[ItemId],
+    module_id: ModuleId,
+    next_local_def_id: &mut u32,
+    body_owner_map: &mut HashMap<glyim_hir::BodyId, LocalDefId>,
+) {
+    for item_id in item_ids {
+        let item = match hir.items.get(*item_id) {
+            Some(i) => i,
+            None => continue,
+        };
+        match &item.kind {
+            ItemKind::Impl(impl_item) => {
+                let param_map = tyconv::build_param_tys(ctx, &impl_item.generic_params);
+                let mut throwaway: Vec<GlyimDiagnostic> = Vec::new();
+                let self_ty = tyconv::resolve_type_ref(
+                    ctx,
+                    infer,
+                    def_map,
+                    &mut throwaway,
+                    &impl_item.self_ty,
+                    &param_map,
+                    item.span,
+                );
+                for method in &impl_item.methods {
+                    let Some(bid) = method.body else { continue };
+                    let local_def_id = {
+                        let id = *next_local_def_id;
+                        *next_local_def_id += 1;
+                        LocalDefId::from_raw(id)
+                    };
+                    body_owner_map.insert(bid, local_def_id);
+                    let fn_id = FnDefId::from_raw(local_def_id.to_raw());
+                    let combined_generics: Vec<glyim_hir::GenericParam> = impl_item
+                        .generic_params
+                        .iter()
+                        .chain(method.generic_params.iter())
+                        .cloned()
+                        .collect();
+                    let sig = tyconv::resolve_fn_sig(
+                        ctx,
+                        infer,
+                        def_map,
+                        &mut throwaway,
+                        &method.params,
+                        &method.return_ty,
+                        &combined_generics,
+                        item.span,
+                        Some(self_ty),
+                    );
+                    let inputs = ctx.intern_substitution(
+                        sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
+                    );
+                    ctx.register_fn_sig(
+                        fn_id,
+                        FnSig {
+                            inputs,
+                            output: sig.return_ty,
+                            c_variadic: false,
+                            unsafety: Safety::Safe,
+                            abi: Abi::Glyim,
+                        },
+                    );
+                }
+            }
+            ItemKind::Mod(m) => {
+                let child_mod = def_map.modules[module_id]
+                    .children
+                    .iter()
+                    .find(|(n, _)| *n == item.name)
+                    .map(|(_, id)| *id);
+                if let Some(child_mod) = child_mod {
+                    pre_allocate_impl_method_ids(
+                        ctx,
+                        infer,
+                        def_map,
+                        hir,
+                        &m.children,
+                        child_mod,
+                        next_local_def_id,
+                        body_owner_map,
                     );
                 }
             }
@@ -1538,10 +1656,20 @@ fn check_fn_items_in_module(
                     impl_span,
                 ));
                 for method in &impl_item.methods {
-                    let local_def_id = {
-                        let id = *next_local_def_id;
-                        *next_local_def_id += 1;
-                        LocalDefId::from_raw(id)
+                    // Look up the id assigned by `pre_allocate_impl_method_ids`
+                    // (which runs before any body check); fall back to a fresh
+                    // allocation for methods without a direct body (trait
+                    // defaults, where the pre-pass has no `BodyId` to key on).
+                    let local_def_id = match method
+                        .body
+                        .and_then(|bid| body_owner_map.get(&bid).copied())
+                    {
+                        Some(id) => id,
+                        None => {
+                            let id = *next_local_def_id;
+                            *next_local_def_id += 1;
+                            LocalDefId::from_raw(id)
+                        }
                     };
                     let owner = DefId::new(local_krate, local_def_id);
                     if let Some(bid) = method.body {
@@ -1696,12 +1824,24 @@ fn check_fn_items_in_module(
                                 if let Some((def_id, _vis, _span)) =
                                     def_map.modules[mid].scope.types.get(&first.name)
                                 {
-                                    let adt_id = AdtId::from_raw(def_id.to_raw());
-                                    // Only register if the ctx doesn't already
-                                    // know this name (avoid clobbering).
-                                    if ctx.adt_id_by_name(first.name).is_none() {
+                                    // The lookup must use a *ctx*-interned
+                                    // `Name` (`adt_by_name` is keyed by ctx's
+                                    // interner, not the HIR/def-map interner).
+                                    let name_str =
+                                        def_map.interner.resolve(first.name).to_string();
+                                    let ctx_name = ctx.resolver().intern(&name_str);
+                                    if ctx.adt_id_by_name(ctx_name).is_none() {
+                                        let adt_id = if let Some(builtin) =
+                                            glyim_type::builtin_adts::BuiltinAdt::from_name(
+                                                &name_str,
+                                            )
+                                        {
+                                            AdtId::from_raw(builtin.adt_id())
+                                        } else {
+                                            AdtId::from_raw(def_id.to_raw())
+                                        };
                                         ctx.register_adt_with_name(
-                                            first.name,
+                                            ctx_name,
                                             adt_id,
                                             glyim_type::adt_def::AdtDef {
                                                 kind: glyim_type::adt_def::AdtKind::Struct,

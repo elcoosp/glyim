@@ -39,6 +39,16 @@ pub enum BuiltinAdt {
     PhantomData,
     Box,
     String,
+    // io.g types declared by name in the assembled stdlib. Canonicalizing
+    // them through `BuiltinAdt` gives `adt_id_for_item`,
+    // `resolve_name_to_adt_ty`, and the module walker a single,
+    // order-independent answer. Ids 1070..1073 are disjoint from every other
+    // reservation (1000..1050 builtin ADTs, 1060/1061 slice/str synthetic
+    // ids, 2001+ trait ids, 0x4000_0000+ impl-method ids).
+    Error,
+    ErrorKind,
+    BufReader,
+    BufWriter,
 }
 
 impl BuiltinAdt {
@@ -58,6 +68,10 @@ impl BuiltinAdt {
         Self::PhantomData,
         Self::Box,
         Self::String,
+        Self::Error,
+        Self::ErrorKind,
+        Self::BufReader,
+        Self::BufWriter,
     ];
 
     /// The reserved `AdtId` (as a raw u32) for this builtin.
@@ -77,6 +91,10 @@ impl BuiltinAdt {
             Self::PhantomData => 1030,
             Self::Box => 1040,
             Self::String => 1050,
+            Self::Error => 1070,
+            Self::ErrorKind => 1071,
+            Self::BufReader => 1072,
+            Self::BufWriter => 1073,
         }
     }
 
@@ -98,6 +116,10 @@ impl BuiltinAdt {
             Self::PhantomData => "PhantomData",
             Self::Box => "Box",
             Self::String => "String",
+            Self::Error => "Error",
+            Self::ErrorKind => "ErrorKind",
+            Self::BufReader => "BufReader",
+            Self::BufWriter => "BufWriter",
         }
     }
 

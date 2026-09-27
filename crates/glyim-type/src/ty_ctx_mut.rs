@@ -1864,6 +1864,27 @@ impl TyCtxMut {
         );
         self.mark_has_drop(AdtId::from_raw(1050));
 
+        // stdlib fixed-id ADTs (`Error`, `ErrorKind`, `BufReader`,
+        // `BufWriter`). Pass 1 and Pass 2 (in `glyim-typeck`) overwrite these
+        // placeholders with the real struct/enum bodies from `io.g` at the
+        // same ids.
+        {
+            let placeholder_struct = |this: &mut Self, name: &str, id: AdtId| {
+                let def = AdtDef {
+                    kind: AdtKind::Struct,
+                    fields: IndexVec::new(),
+                    variants: Vec::new(),
+                    generic_params: Vec::new(),
+                };
+                this.register_adt(id, def.clone());
+                this.register_adt_with_name(this.resolver.intern(name), id, def);
+            };
+            placeholder_struct(self, "Error", AdtId::from_raw(1070));
+            placeholder_struct(self, "ErrorKind", AdtId::from_raw(1071));
+            placeholder_struct(self, "BufReader", AdtId::from_raw(1072));
+            placeholder_struct(self, "BufWriter", AdtId::from_raw(1073));
+        }
+
         // Populate the builtin inherent-method table (Vec/String/Result/Option
         // methods the stdlib calls but which have no user `impl` block).
                 // Script 137: register by name the builtin ADTs that lacked a name
