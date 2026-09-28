@@ -99,6 +99,76 @@ Commit (this session) fixed the **`&[T]`** half of the fat-pointer gap:
 Full test suite stays green (4172/4172). The `--emit=exec` ICE is gone; the
 binary now runs and exits 0, but still prints nothing (see below).
 
+## Precise remaining blocker: `&buf[written..]` lowers to an element pointer
+
+The `--emit=exec` binary now:
+- links cleanly against the runtime staticlib;
+- reaches `glyim_stdout_write(fd=1, buf=…)` with the *correct first call*;
+- and codegen's `try_lower_builtin_intrinsic` handles `str::len` /
+  `str::as_bytes` / `str::as_ptr` correctly (verified via
+  `GLYIM_DBG_INTR`).
+
+But the `len` argument to the second call is still garbage. The cause is in
+`crates/glyim-lower/src/lower_rvalue.rs`:
+
+**`&buf[written..]` (open-ended range slice) is lowered to an element
+`Index` projection, not a sub-slice.**
+
+`lower_expr_to_place`'s `Index { base, index }` arm (around line 1069) always
+allocates a local for `index.ty` and emits
+`ProjectionElem::Index(index_local)`. When `index` is a `Range` — the
+`buf[written..]` form — `index.ty` is `Range<usize>` (builtin ADT 1000), so
+the resulting place is `base[Deref, Index(Range<usize>)]`. Codegen interprets
+that as **single-element** indexing (a `&u8`), not a sub-slice, so the
+`&[u8]` the caller expects is actually a pointer to one byte.
+
+The MIR for `Stdout::write_all` shows this directly (from
+`--with-stdlib --emit=mir`):
+
+    Assign($9, Aggregate(Adt(1000), [Copy($4), Constant(MirConst {
+        kind: Error, ty: Ty(8), span: 63111..63120 })]))
+    Assign($10, Ref(Place { local: $2, projection: [Deref, Index($9)] }, Shared))
+    Call { Fn(FnDefId(477)), args: [$1, $10], ... }
+
+`$10` is the `&buf[written..]` argument to `self.write(...)` — a `Ref` of an
+element projection whose index is a `Range`. That should be a fat-pointer
+`&[u8]` (field 1 = `len - written`).
+
+### The correct fix (needs a careful session)
+
+`Place` cannot represent a sub-slice (its type would be the unsized `[T]`),
+so the `Ref { Index { Range } }` pattern must be lowered directly to a
+fat-pointer `Rvalue` — bypassing `Place` entirely. Concretely:
+
+1. In `lower_expr_to_rvalue`'s `Ref { operand, .. }` arm, detect
+   `operand.kind == Index { index: Range, .. }`, call
+   `lower_dynamic_range_slice` to produce the `{data_ptr, new_len}` pair,
+   and return that as the rvalue directly (the caller then stores it into a
+   fat-pointer local).
+
+2. `lower_dynamic_range_slice`'s return value must be the `{ptr, len}`
+   tuple — check whether it currently returns that or a bare pointer; the
+   `--emit=exec` trace shows the *first* call (from `println`'s internal
+   `write_all` on a whole string literal, where no range-slice is involved)
+   is correct, and the second (from `write_all`'s `self.write(&buf[written..])`)
+   is not, so the range-slice path is where the corruption lives.
+
+3. The already-landed fat-pointer work (`0ee6e4b3`, `f2a830e0`) makes the
+   `{ptr, i64}` local representable; the missing piece is only the lowering
+   of `&base[a..b]` to that shape.
+
+### Verified facts (do not re-derive)
+
+- `lower_expr_to_rvalue`'s `Index { base, index: Range }` arm (around line
+  671) *already* calls `lower_dynamic_range_slice` and produces the correct
+  fat-pointer rvalue. The bug is only in the *sibling* `Ref`-wrapped path
+  through `lower_expr_to_place`.
+- `str::as_bytes` / `str::as_ptr` / `str::len` intrinsics are correct
+  (verified via `GLYIM_DBG_INTR`).
+- The three `v15_t*` drop tests pass with `&str` as a fat pointer now.
+
+## Older blocker notes (kept for reference)
+
 ## The remaining blocker for `--emit=exec`
 
 **`&str` is still a thin pointer.** The `as_bytes` intrinsic needs its
