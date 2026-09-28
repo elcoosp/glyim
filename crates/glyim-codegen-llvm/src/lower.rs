@@ -628,6 +628,35 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         }
                     };
                     let field_ty = match self.ty_ctx.ty_kind(current_ty) {
+                        // A slice `[T]` / `str` (`TyKind::String`) is the
+                        // unsized fat-pointer *pointee*; `lower_dynamic_range_slice`
+                        // derefs a `&[T]` (yielding `[T]`) and then projects
+                        // `Field(0)` to read the data pointer. Resolve the two
+                        // fat-pointer slots: `Field(0)` = data pointer
+                        // (`&T` / `*const u8`), `Field(1)` = `usize` length.
+                        TyKind::Slice(elem) if idx.to_raw() == 0 => {
+                            self.ty_ctx.mk_ref(
+                                glyim_type::Region::Static,
+                                *elem,
+                                glyim_core::primitives::Mutability::Not,
+                            )
+                        }
+                        TyKind::Slice(_) => self.ty_ctx.mk_ty(TyKind::Uint(
+                            glyim_core::primitives::UintTy::Usize,
+                        )),
+                        TyKind::String if idx.to_raw() == 0 => {
+                            let u8_ty = self
+                                .ty_ctx
+                                .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8));
+                            self.ty_ctx.mk_ref(
+                                glyim_type::Region::Static,
+                                u8_ty,
+                                glyim_core::primitives::Mutability::Not,
+                            )
+                        }
+                        TyKind::String => self.ty_ctx.mk_ty(TyKind::Uint(
+                            glyim_core::primitives::UintTy::Usize,
+                        )),
                         TyKind::Tuple(subst) => {
                             let args = self.ty_ctx.substitution_args(*subst);
                             args.get(idx.to_raw() as usize)
