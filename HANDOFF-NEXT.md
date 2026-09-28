@@ -93,15 +93,32 @@ return-value convention) rather than the runtime body itself.
   corrupt address.
 - No output is produced (`println("hello")` never emits its bytes).
 
-### Likely suspects
+### Likely suspects — narrowed by lldb
 
-1. **Fat-pointer ABI mismatch.** `str` / `&[u8]` lower to `{ ptr, i64 }`
-   (`mk_fat_ptr`). `glyim_stdout_write(fd: i32, buf: *const u8, len: usize)`
-   is declared with an explicit `(i32, ptr, usize)` signature. Confirm the
-   *caller* in `io.g` (inside `impl Write for Stdout::write_all`, which
-   becomes `__glyim_fn_477`) extracts the **data pointer** and **byte length**
-   from the fat pointer, and passes them as separate scalar args — not the
-   address of the fat-pointer struct.
+**lldb output (this session) is the smoking gun: the binary prints its own
+environment block (`executable_path=…`, `PATH=…`, `HOME=…`) to stdout and
+then exits 0.** That is exactly what `glyim_stdout_write(1, environ,
+huge_len)` would do — so the caller is passing `buf` = pointer to the
+process environment and `len` = a garbage size, not the `hello\n` bytes it
+should be writing. The bug is in the caller-side argument construction for
+the `extern "C"` call, not in the runtime.
+
+Concretely, in `io.g`'s `impl Write for Stdout::write_all(&mut self, buf:
+&[u8])`, the call site is:
+
+    glyim_stdout_write(self._fd, buf.as_ptr(), buf.len())
+
+That becomes MIR `Call { func: Fn(298), args: [<self._fd>, <as_ptr result>,
+<len result>] }`. The three suspects are:
+
+1. **Fat-pointer ABI mismatch (most likely).** `str` / `&[u8]` lower to
+   `{ ptr, i64 }` (`mk_fat_ptr`). The call is emitted with a raw `*const u8`
+   parameter type. Confirm the caller extracts **field 0** (`data pointer`)
+   and **field 1** (`len`) from the fat pointer and passes them as two
+   separate scalars. If instead the caller passes the *address of the
+   fat-pointer struct* as `buf` and reads `len` from the wrong slot, you get
+   exactly this `environ`-dump symptom (the address of `buf` happens to land
+   near the env block on Darwin, and the length slot is huge).
 
 2. **`self._fd` extraction.** `Stdout { _fd: i32 }`; `self._fd` is a field
    read through `&mut self` (a thin pointer to the struct). Confirm the field
