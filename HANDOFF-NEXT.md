@@ -169,7 +169,60 @@ fat-pointer `Rvalue` — bypassing `Place` entirely. Concretely:
 
 ## Older blocker notes (kept for reference)
 
-## The remaining blocker for `--emit=exec`
+## Status: fat-pointer arg passing is the last remaining issue
+
+**What works:**
+- `--emit=obj` produces a valid object (primary objective).
+- `--emit=exec` links and runs to exit 0.
+- The MIR for `Stdout::write` (`fn 477`) is **correct**:
+  `Call(glyim_stdout_write, [$4=self._fd (i32), $6=buf.as_ptr() (*const u8), $8=buf.len() (usize)])`.
+- `str::len` / `str::as_ptr` / `str::as_bytes` intrinsics fire correctly at
+  codegen (verified via `GLYIM_DBG_INTR`; each extracts the right fat-pointer
+  field).
+- `place_ptr`'s `Field` arm now resolves `Slice`/`String` fields (needed by
+  `lower_dynamic_range_slice`). `commit 3c66984c`.
+
+**What's broken:** the runtime receives garbage for the `buf` **and** `len`
+arguments of `glyim_stdout_write`. A trace inside the runtime shows:
+
+    [IO] stdout_write fd=1 buf=0xa0070da06dc68 len=6631507592
+    [IO] stdout_write fd=1 buf=0xa len=0
+
+`fd=1` is right; both `buf` and `len` are wrong. `buf` looks like a stack
+address (not a data pointer), and `len` looks like a pointer value cast to
+`usize` — i.e. the `(data_ptr, i64 len)` fat-pointer *pair* is being passed
+with the wrong register/field mapping somewhere between the caller and the
+callee.
+
+`fn 477`'s own argument setup (from `otool -tvV`) *looks* correct
+(`w0 = fd`, `x1 = buf`, `x2 = len`, then `bl glyim_stdout_write`), so the
+corruption is likely **upstream**: the caller's parameters `$1: &mut Stdout`
+and `$2: &[u8]` are stored into locals by the prologue, and if the prologue's
+byval/`Indirect` detection mis-classifies the `&[u8]` parameter, the fat
+pointer lands in the wrong slot — after which every field read is offset by
+8 bytes.
+
+### Next diagnostic step
+
+Add a codegen trace at the top of `lower_call` for `FnDefId(298)` that prints
+each argument's `Operand`, `Operand::ty`, and lowered LLVM value. Then look at
+the prologue in `lower_body` (`crates/glyim-codegen-llvm/src/lower.rs`, the
+`for i in 1..=body.arg_count` loop) — specifically whether the
+`fn_abi.args[i].mode` for the `&[u8]` parameter is `Indirect` (in which case
+the prologue dereferences a byval pointer that is actually a two-register fat
+pointer, corrupting every subsequent read) or `Direct` (correct).
+
+### Commits landed this session (8)
+
+    3c66984c  fix(codegen-llvm): resolve Slice/String Field projections in place_ptr
+    fc9235e7  fix(typeck,codegen): prefer builtin len/is_empty for slice/str receivers
+    f2a830e0  fix(layout,codegen): &str is also a 16-byte fat pointer
+    0ee6e4b3  fix(layout,codegen): &[T] is a 16-byte fat pointer, not an 8-byte scalar
+    ...
+
+## Older analysis (kept for reference)
+
+
 
 **`&str` is still a thin pointer.** The `as_bytes` intrinsic needs its
 *receiver* (`&str` / `String`) to carry a length; because `Ref(_, String,
