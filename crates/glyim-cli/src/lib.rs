@@ -572,19 +572,28 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
 
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
         let final_path = final_output_path.expect("emit should have final output");
-        // `cdylib` produces a position-independent shared library (`-shared`);
-        // `exec` produces a runnable binary. Phase 9.2: the cdylib is the host
-        // artifact a proc-macro crate compiles to so `load_cdylib` can dlopen it.
-        let extra_flags = if emit == EmitKind::Cdylib {
-            Some("-shared")
-        } else {
-            None
-        };
-        linker::invoke_linker(
+        // `--emit=exec` binaries need the `glyim-runtime` static library for
+        // the stdlib's `extern "C"` hooks (`glyim_stdout_write`,
+        // `glyim_errno`, …). Add it as an extra object, before any
+        // user-supplied flags. `-shared` for cdylib.
+        let runtime_lib = linker::find_runtime_staticlib();
+        let mut link_args = linker::LinkArgs::default();
+        if let Some(lib) = runtime_lib.as_ref() {
+            link_args.objects.push(lib.clone());
+        }
+        if emit == EmitKind::Cdylib {
+            link_args.user_flags.push("-shared".to_string());
+        }
+        if let Some(flags) = args.link_flags.as_deref() {
+            link_args
+                .user_flags
+                .extend(flags.split_whitespace().map(str::to_string));
+        }
+        linker::link_with_args(
             &object_path,
             &final_path,
+            &link_args,
             args.linker.as_deref(),
-            extra_flags.or(args.link_flags.as_deref()),
             args.target.as_deref(),
         )
         .map_err(|e| vec![glyim_diag::GlyimDiagnostic::internal_error(&e)])?;
@@ -609,16 +618,24 @@ fn finalize_after_object(
                 "emit should have a final output path",
             )]
         })?;
-        let extra_flags = if emit == EmitKind::Cdylib {
-            Some("-shared")
-        } else {
-            None
-        };
-        linker::invoke_linker(
+        let runtime_lib = linker::find_runtime_staticlib();
+        let mut link_args = linker::LinkArgs::default();
+        if let Some(lib) = runtime_lib.as_ref() {
+            link_args.objects.push(lib.clone());
+        }
+        if emit == EmitKind::Cdylib {
+            link_args.user_flags.push("-shared".to_string());
+        }
+        if let Some(flags) = args.link_flags.as_deref() {
+            link_args
+                .user_flags
+                .extend(flags.split_whitespace().map(str::to_string));
+        }
+        linker::link_with_args(
             object_path,
             final_path,
+            &link_args,
             args.linker.as_deref(),
-            extra_flags.or(args.link_flags.as_deref()),
             args.target.as_deref(),
         )
         .map_err(|e| vec![glyim_diag::GlyimDiagnostic::internal_error(&e)])?;

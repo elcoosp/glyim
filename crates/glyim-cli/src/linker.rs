@@ -152,6 +152,48 @@ pub fn invoke_linker(
     link_with_args(obj_path, output_path, &args, linker, target_triple)
 }
 
+/// Locate the `glyim-runtime` static library (`libglyim_runtime.a`), which
+/// provides the stdlib's `extern "C"` hooks (`glyim_stdout_write`,
+/// `glyim_errno`, `glyim_alloc`, …) for `--emit=exec` binaries.
+///
+/// Search order:
+/// 1. `GLYIM_RUNTIME_LIB` env var (test override).
+/// 2. `target/<profile>/libglyim_runtime.a` (cwd = repo root).
+/// 3. `../target/<profile>/libglyim_runtime.a` (cwd = a subdirectory).
+/// 4. Walking up from the current executable (handles `cargo run`, where the
+///    process's cwd may not be the repo root).
+pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
+    if let Ok(p) = std::env::var("GLYIM_RUNTIME_LIB") {
+        let path = std::path::PathBuf::from(p);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let candidates = [
+        std::path::PathBuf::from("target").join(profile).join("libglyim_runtime.a"),
+        std::path::PathBuf::from("..").join("target").join(profile).join("libglyim_runtime.a"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return Some(c.clone());
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        for ancestor in exe.ancestors() {
+            let candidate = ancestor.join("libglyim_runtime.a");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+            let sibling = ancestor.join(profile).join("libglyim_runtime.a");
+            if sibling.exists() {
+                return Some(sibling);
+            }
+        }
+    }
+    None
+}
+
 /// Link using structured `LinkArgs` (plan §18.2): emits `-L`/`-l`/objects
 /// before appending any user-supplied flags.
 pub fn link_with_args(

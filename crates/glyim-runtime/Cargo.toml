@@ -3,6 +3,10 @@ name = "glyim-runtime"
 edition.workspace = true
 version.workspace = true
 
+# `staticlib` produces `libglyim_runtime.a` for `--emit=exec` linking.
+[lib]
+crate-type = ["staticlib", "rlib"]
+
 [profile.dev]
 opt-level = 0
 debug = false
