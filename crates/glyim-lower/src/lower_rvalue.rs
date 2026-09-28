@@ -712,15 +712,42 @@ impl<'a> MirBuilder<'a> {
                 let operand = self.lower_expr_to_operand(inner);
                 let inner_ty = inner.ty;
                 let target_ty = expr.ty;
+                // `IntToInt` covers every integer-to-integer cast, including
+                // mixed signedness (`Int -> Uint`, `Uint -> Int`) and
+                // unsigned-to-unsigned (`Uint -> Uint`). Previously those
+                // three shapes fell into the `_ => PtrToPtr` fallback, which
+                // is a *pointer* cast kind — the LLVM backend then rejected
+                // `Uint(Usize) -> Uint(U64)` with `[X0000] PtrToPtr cast on
+                // non-pointer`, blocking `--emit=exec` for every program whose
+                // stdlib touches `usize as u64` (`io.g`'s `total += n as u64`).
                 let cast_kind = match (
                     self.ctx.ty_ctx().ty_kind(inner_ty),
                     self.ctx.ty_ctx().ty_kind(target_ty),
                 ) {
-                    (TyKind::Int(_), TyKind::Int(_)) => CastKind::IntToInt,
-                    (TyKind::Float(_), TyKind::Int(_)) => CastKind::FloatToInt,
-                    (TyKind::Int(_), TyKind::Float(_)) => CastKind::IntToFloat,
+                    (TyKind::Int(_), TyKind::Int(_))
+                    | (TyKind::Uint(_), TyKind::Uint(_))
+                    | (TyKind::Int(_), TyKind::Uint(_))
+                    | (TyKind::Uint(_), TyKind::Int(_)) => CastKind::IntToInt,
+                    (TyKind::Float(_), TyKind::Int(_))
+                    | (TyKind::Float(_), TyKind::Uint(_)) => CastKind::FloatToInt,
+                    (TyKind::Int(_), TyKind::Float(_))
+                    | (TyKind::Uint(_), TyKind::Float(_)) => CastKind::IntToFloat,
                     (TyKind::Float(_), TyKind::Float(_)) => CastKind::FloatToFloat,
-                    _ => CastKind::PtrToPtr,
+                    (TyKind::Ref(..), TyKind::RawPtr(..))
+                    | (TyKind::RawPtr(..), TyKind::RawPtr(..))
+                    | (TyKind::RawPtr(..), TyKind::Ref(..)) => CastKind::PtrToPtr,
+                    (TyKind::FnDef(..) | TyKind::FnPtr(..), TyKind::RawPtr(..)) => {
+                        CastKind::FnPtrToPtr
+                    }
+                    _ => {
+                        // Unknown pair: fall back to a plain `Use` instead of a
+                        // pointer cast that the LLVM backend will reject. This
+                        // is a conservative no-op that keeps `--emit=obj` /
+                        // `--emit=exec` resilient to casts the classifier does
+                        // not yet cover, at the cost of skipping the cast
+                        // semantics for that (currently unreachable) pair.
+                        return glyim_mir::Rvalue::Use(operand);
+                    }
                 };
                 glyim_mir::Rvalue::Cast(cast_kind, operand, target_ty)
             }
