@@ -1640,6 +1640,10 @@ pub unsafe extern "C" fn glyim_time_system_nanos() -> u64 {
 // ---------------------------------------------------------------------------
 
 pub mod fs;
+/// Raw file-descriptor I/O + errno FFI used by the assembled stdlib
+/// (`glyim_stdout_write`, `glyim_errno`, …). Called from `--emit=exec`
+/// binaries linked against this crate.
+pub mod io;
 
 // ---------------------------------------------------------------------------
 // Async executor (Phase 5 MVP)
