@@ -3005,6 +3005,101 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         }
     }
 
+    /// Emit a builtin-intrinsic method inline. Returns `Ok(true)` if `fn_id`
+    /// names a builtin this dispatcher knows how to lower; `Ok(false)`
+    /// otherwise (the caller falls through to the ordinary call lowering).
+    ///
+    /// `str`, `String`'s inner `Vec<u8>`, and `[u8]` all lower to a fat
+    /// pointer `{ ptr, i64 }`. The `as_bytes` / `as_ptr` / `as_mut_ptr`
+    /// family is therefore a layout-level pass-through or a data-pointer
+    /// field extraction:
+    /// - `str::as_bytes(&self) -> &[u8]` — fat pointer in, fat pointer out.
+    /// - `str::as_ptr(&self) -> *const u8` — first field of the fat pointer.
+    /// - `String::as_bytes(&self) -> &[u8]` — `String`'s value is a
+    ///   `{ptr, i64}`-shaped struct; its first field is the data pointer.
+    ///
+    /// Anything else returns `Ok(false)` so future builtins can be added
+    /// incrementally.
+    fn try_lower_builtin_intrinsic(
+        &mut self,
+        fn_id: glyim_core::def_id::FnDefId,
+        args: &[Operand],
+        destination: &Place,
+        target: &Option<BasicBlockIdx>,
+    ) -> CompResult<bool> {
+        let Some((_recv_adt, method_name)) = self.ty_ctx.builtin_fn_id(fn_id) else {
+            return Ok(false);
+        };
+        let method = self.ty_ctx.name_str(method_name).to_string();
+        if !matches!(method.as_str(), "as_bytes" | "as_ptr" | "as_mut_ptr") {
+            return Ok(false);
+        }
+        let Some(recv) = args.first() else {
+            return Ok(false);
+        };
+        let recv_val = self.lower_operand(recv)?;
+        let dest_ptr = self.place_ptr(destination)?;
+        let dest_ty = self
+            .body
+            .locals
+            .get(destination.local)
+            .map(|d| d.ty)
+            .unwrap_or(glyim_type::Ty::UNIT);
+        let dest_llvm_ty = self.llvm_type_for_ty(dest_ty);
+        // Coerce the receiver value to the destination LLVM type:
+        // * same type → pass through
+        // * thin pointer → thin pointer → bitcast
+        // * fat pointer `{ptr, i64}` → thin pointer → extract field 0
+        // (Fat pointer receivers only arise for `as_ptr`-like methods whose
+        // destination is a thin pointer; `as_bytes` keeps the fat pointer.)
+        let mut val = recv_val;
+        if val.get_type() != dest_llvm_ty {
+            if val.is_struct_value() && dest_llvm_ty.is_pointer_type() {
+                val = self
+                    .builder
+                    .build_extract_value(val.into_struct_value(), 0, "fat_data_ptr")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "fat-ptr extract failed: {:?}",
+                            e
+                        ))]
+                    })?;
+            }
+            if val.get_type() != dest_llvm_ty {
+                if val.is_pointer_value() && dest_llvm_ty.is_pointer_type() {
+                    val = self
+                        .builder
+                        .build_bit_cast(val, dest_llvm_ty, "intrinsic_cast")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "intrinsic bitcast failed: {:?}",
+                                e
+                            ))]
+                        })?
+                        .as_basic_value_enum();
+                } else {
+                    return Err(vec![GlyimDiagnostic::internal_error(format!(
+                        "unsupported intrinsic `{}` receiver/destination shape",
+                        method
+                    ))]);
+                }
+            }
+        }
+        self.builder
+            .build_store(dest_ptr, val)
+            .expect("store intrinsic result failed");
+        if let Some(target_bb) = target {
+            let target_block = *self
+                .bb_map
+                .get(target_bb)
+                .expect("builtin intrinsic target block not found");
+            self.builder
+                .build_unconditional_branch(target_block)
+                .expect("branch after builtin intrinsic failed");
+        }
+        Ok(true)
+    }
+
     fn lower_call(
         &mut self,
         func: &Operand,
@@ -3013,6 +3108,21 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         target: &Option<BasicBlockIdx>,
         cleanup: &Option<BasicBlockIdx>,
     ) -> CompResult<()> {
+        // Builtin intrinsic methods (`str::as_bytes`, `String::as_bytes`,
+        // `str::as_ptr`, …) have synthetic FnDefIds in the 9_000+ range with
+        // NO MIR body. Before this dispatcher existed, `lower_call` fell
+        // through to the FnDef arm below, which emitted a *call* to a symbol
+        // `__glyim_fn_{id}` that was never defined — so `nm h.o` reported
+        // `___glyim_fn_9102` / `___glyim_fn_9104` as undefined and the linker
+        // failed. Handle the handful of builtins hello world needs by
+        // emitting the intrinsic inline.
+        if let Operand::Constant(c) = func
+            && let MirConstKind::Fn(fn_id, _) = &c.kind
+            && fn_id.to_raw() >= 9_000
+            && self.try_lower_builtin_intrinsic(*fn_id, args, destination, target)?
+        {
+            return Ok(());
+        }
         // Determine the call target. A function pointer is one form; a closure
         // is carried as an aggregate of its captures with the closure id encoded
         // in the (synthetic ADT) type. For a closure we reconstruct the callee
