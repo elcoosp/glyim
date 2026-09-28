@@ -82,6 +82,56 @@ return-value convention) rather than the runtime body itself.
   both link sites (fresh-compile + cache-hit) through `link_with_args` with
   the runtime archive as an extra object.
 
+## Progress since the last handoff: Slice fat pointers landed
+
+Commit (this session) fixed the **`&[T]`** half of the fat-pointer gap:
+
+- `glyim-layout::layout_of` — `Ref(_, Slice(_), _)` / `RawPtr(Slice(_), _)`
+  now returns a 16-byte `{ptr, i64}` layout (was 8-byte scalar).
+- `glyim-codegen-llvm::types::llvm_type_for_ty` — same arm produces
+  `struct { ptr, i64 }` (was bare `ptr`).
+- `glyim-codegen-llvm::abi::classify_arg` — same arm returns
+  `PassMode::Direct` (correct for two-register passing on AArch64 / SysV).
+- `glyim-codegen-llvm::lower::place_ptr`'s `ProjectionElem::Deref` — when
+  the loaded value is a struct (fat pointer), extract field 0 (the data
+  pointer) rather than calling `into_pointer_value()` (which panicked).
+
+Full test suite stays green (4172/4172). The `--emit=exec` ICE is gone; the
+binary now runs and exits 0, but still prints nothing (see below).
+
+## The remaining blocker for `--emit=exec`
+
+**`&str` is still a thin pointer.** The `as_bytes` intrinsic needs its
+*receiver* (`&str` / `String`) to carry a length; because `Ref(_, String,
+_)` still lowers to a bare `ptr`, codegen cannot synthesize the fat-pointer
+`&[u8]` destination and reports:
+
+    [X0000] unsupported intrinsic `as_bytes` receiver/destination shape
+
+The three `v15_t*` drop tests in `glyim-codegen-llvm::drop_dealloc`
+(`v15_t05_drop_mut_ref_non_copy_emits_dealloc`,
+`v15_t10_drop_raw_ptr_non_copy_type`,
+`v15_t24_drop_mut_ref_with_cleanup_dealloc`) construct `Ref(String, Mut)` /
+`RawPtr(String, Mut)` and assert drop-glue behaviour assuming a thin
+pointer. They must be updated in lockstep with the codegen change, in this
+order:
+
+1. Extend the three codegen sites (`layout.rs`, `types.rs`, `abi.rs`) to
+   also cover `Ref(_, String, _)` / `RawPtr(String, _)`.
+2. Extend `place_ptr`'s `Deref` arm — it already handles the struct case
+   (field 0 extract), so this should just work once `types.rs` returns a
+   struct for `&str`.
+3. Update the three drop tests: their `TerminatorKind::Drop` now drops a
+   16-byte local; the IR assertion (`call void @glyim_drop_in_place` /
+   `@glyim_dealloc`) stays, but the pre-drop `load` changes shape.
+4. Extend `try_lower_builtin_intrinsic`'s `as_bytes` arm to handle a
+   `&str` receiver by taking `(data_ptr, len)` from the fat pointer and
+   storing them as the `{ptr, i64}` destination. For `String::as_bytes`
+   (receiver `&String`, an ADT), the length comes from the inner
+   `Vec`'s len field — a separate small lowering.
+
+## Older diagnosis (kept for reference)
+
 ## The remaining blocker for `--emit=exec`
 
 `./h` (the produced binary) segfaults. Evidence:
