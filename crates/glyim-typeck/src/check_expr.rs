@@ -2855,6 +2855,34 @@ impl<'a> FnCtxt<'a> {
             found
         };
 
+        // For primitive slice/str receivers, consult the builtin method table
+        // *before* the user-impl scan. `slice.g` / `str.g` declare `fn len` as
+        // an empty compiler-intrinsic stub (the real lowering extracts field
+        // 1 of the fat pointer in codegen), and `is_empty` etc. call
+        // `self.len()`. If the impl scan runs first, `self.len()` resolves to
+        // the empty stub body and the caller reads uninitialized memory —
+        // which is what made the `--emit=exec` hello binary print nothing.
+        // The builtin table only contains methods with real intrinsic
+        // lowerings, so falling through to the impl scan on a miss (e.g.
+        // `first`, `get`, `reverse`) is still correct.
+        if matches!(
+            self.ctx.ty_kind(recv_ty),
+            TyKind::Slice(_) | TyKind::Array(..) | TyKind::String
+        ) || matches!(
+            self.ctx.ty_kind(recv_ty),
+            TyKind::Ref(_, inner, _)
+                if matches!(
+                    self.ctx.ty_kind(*inner),
+                    TyKind::Slice(_) | TyKind::Array(..) | TyKind::String
+                )
+        ) {
+            for &step in steps.iter().chain(autoref_steps.iter()) {
+                if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
+                    return (out_ty, Some(MethodDispatch::Builtin(fn_id)));
+                }
+            }
+        }
+
         let mut candidates: Vec<(Ty, Ty, Option<MethodDispatch>)> = Vec::new();
         for &step in steps.iter().chain(autoref_steps.iter()) {
             let found = collect_for(self, step);

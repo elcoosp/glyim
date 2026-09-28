@@ -3099,7 +3099,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             return Ok(false);
         };
         let method = self.ty_ctx.name_str(method_name).to_string();
-        if !matches!(method.as_str(), "as_bytes" | "as_ptr" | "as_mut_ptr") {
+        if !matches!(
+            method.as_str(),
+            "as_bytes" | "as_ptr" | "as_mut_ptr" | "len" | "is_empty"
+        ) {
             return Ok(false);
         }
         let Some(recv) = args.first() else {
@@ -3114,6 +3117,89 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .map(|d| d.ty)
             .unwrap_or(glyim_type::Ty::UNIT);
         let dest_llvm_ty = self.llvm_type_for_ty(dest_ty);
+        // `len` / `is_empty` on a fat pointer `{data_ptr, len}` extract field
+        // 1 (the length). `is_empty` further compares it to 0.
+        if matches!(method.as_str(), "len" | "is_empty") {
+            // The receiver may be a fat pointer directly, or a thin pointer to
+            // a local that holds one. Handle the struct value first; if the
+            // operand loaded a thin pointer, we currently do not chase it
+            // (only fat-pointer receivers reach this arm in practice).
+            if !recv_val.is_struct_value() {
+                return Ok(false);
+            }
+            let len_val = self
+                .builder
+                .build_extract_value(recv_val.into_struct_value(), 1, "fat_len")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "fat-pointer len extract failed: {:?}",
+                        e
+                    ))]
+                })?;
+            let stored = if method == "is_empty" {
+                let zero = self.llvm_int_type(64).const_int(0, false);
+                let is_empty = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, len_val.into_int_value(), zero, "is_empty")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "is_empty compare failed: {:?}",
+                            e
+                        ))]
+                    })?
+                    .as_basic_value_enum();
+                if is_empty.get_type() != dest_llvm_ty {
+                    self.builder
+                        .build_int_z_extend(
+                            is_empty.into_int_value(),
+                            dest_llvm_ty.into_int_type(),
+                            "is_empty_ext",
+                        )
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "is_empty extend failed: {:?}",
+                                e
+                            ))]
+                        })?
+                        .as_basic_value_enum()
+                } else {
+                    is_empty
+                }
+            } else {
+                // `len` returns `usize` (64-bit here); truncate if the dest is
+                // narrower for robustness.
+                if len_val.get_type() != dest_llvm_ty {
+                    self.builder
+                        .build_int_truncate(
+                            len_val.into_int_value(),
+                            dest_llvm_ty.into_int_type(),
+                            "len_trunc",
+                        )
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "len truncate failed: {:?}",
+                                e
+                            ))]
+                        })?
+                        .as_basic_value_enum()
+                } else {
+                    len_val
+                }
+            };
+            self.builder
+                .build_store(dest_ptr, stored)
+                .expect("store len/is_empty failed");
+            if let Some(target_bb) = target {
+                let target_block = *self
+                    .bb_map
+                    .get(target_bb)
+                    .expect("builtin intrinsic target block not found");
+                self.builder
+                    .build_unconditional_branch(target_block)
+                    .expect("branch after len/is_empty failed");
+            }
+            return Ok(true);
+        }
         // Coerce the receiver value to the destination LLVM type:
         // * same type → pass through
         // * thin pointer → thin pointer → bitcast
