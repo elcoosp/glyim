@@ -952,15 +952,12 @@ impl SimpleLayoutComputer<'_> {
             TyKind::Char => Layout::scalar(Size::bytes(4), Align::from_bytes(4)),
             TyKind::Never => Layout::scalar(Size::ZERO, Align::ONE),
             TyKind::Unit => Layout::unit(),
-            // A reference to a slice (`&[T]`) is a fat pointer `{data_ptr,
-            // len}` — 16 bytes. `&str` (a `Ref` with a `TyKind::String`
-            // pointee) is intentionally NOT covered by this arm yet: the
-            // drop tests in `glyim-codegen-llvm::drop_dealloc` still treat
-            // `Ref(String)` as a sized pointer, and changing that scope
-            // independently is a follow-up. The hello-world path only needs
-            // `&[u8]` (slice) to be correct.
+            // A reference / raw pointer to an *unsized* pointee — a slice
+            // `[T]` or `str` (the `TyKind::String` primitive) — is a fat
+            // pointer `{data_ptr, len}`, 16 bytes. Sized references stay
+            // 8-byte scalars.
             TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _)
-                if matches!(self.ctx.ty_kind(*inner), TyKind::Slice(_)) =>
+                if matches!(self.ctx.ty_kind(*inner), TyKind::Slice(_) | TyKind::String) =>
             {
                 let raw = self.target.pointer_size();
                 Layout {

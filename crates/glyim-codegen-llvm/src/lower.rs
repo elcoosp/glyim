@@ -2674,7 +2674,27 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         TyKind::Ref(_, _, _) | TyKind::RawPtr(_, _)
                     ) {
                         let val = self.lower_operand(&Operand::Move(place.clone()))?;
-                        val.into_pointer_value().into()
+                        // A fat pointer (`&str` / `&[T]`) loads as a
+                        // `{data_ptr, len}` struct; `into_pointer_value()`
+                        // would panic on it. Extract field 0 (the data
+                        // pointer) so `glyim_drop_in_place` receives the
+                        // pointee address, exactly like the thin-pointer
+                        // case below. This mirrors the identical extract in
+                        // `place_ptr`'s `ProjectionElem::Deref` arm.
+                        let ptr_val = if val.is_struct_value() {
+                            self.builder
+                                .build_extract_value(val.into_struct_value(), 0, "fat_drop_ptr")
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "fat-pointer data extract for drop failed: {:?}",
+                                        e
+                                    ))]
+                                })?
+                                .into_pointer_value()
+                        } else {
+                            val.into_pointer_value()
+                        };
+                        ptr_val.into()
                     } else {
                         self.place_ptr(place)?.into()
                     };
@@ -2708,7 +2728,26 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     self.module.add_function("glyim_dealloc", fn_type, None)
                                 });
                             let val = self.lower_operand(&Operand::Move(place.clone()))?;
-                            let ptr = val.into_pointer_value();
+                            // A `&str` / `&[T]` fat pointer loads as a
+                            // `{data_ptr, len}` struct; extract field 0 so
+                            // `glyim_dealloc` receives the pointee address.
+                            let ptr = if val.is_struct_value() {
+                                self.builder
+                                    .build_extract_value(
+                                        val.into_struct_value(),
+                                        0,
+                                        "fat_dealloc_ptr",
+                                    )
+                                    .map_err(|e| {
+                                        vec![GlyimDiagnostic::internal_error(format!(
+                                            "fat-pointer data extract for dealloc failed: {:?}",
+                                            e
+                                        ))]
+                                    })?
+                                    .into_pointer_value()
+                            } else {
+                                val.into_pointer_value()
+                            };
                             let pointee_ty = match self.ty_ctx.ty_kind(ty) {
                                 TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                                 _ => unreachable!(),
@@ -2768,7 +2807,26 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     self.module.add_function("glyim_dealloc", fn_type, None)
                                 });
                             let val = self.lower_operand(&Operand::Move(place.clone()))?;
-                            let ptr = val.into_pointer_value();
+                            // A `&str` / `&[T]` fat pointer loads as a
+                            // `{data_ptr, len}` struct; extract field 0 so
+                            // `glyim_dealloc` receives the pointee address.
+                            let ptr = if val.is_struct_value() {
+                                self.builder
+                                    .build_extract_value(
+                                        val.into_struct_value(),
+                                        0,
+                                        "fat_dealloc_ptr",
+                                    )
+                                    .map_err(|e| {
+                                        vec![GlyimDiagnostic::internal_error(format!(
+                                            "fat-pointer data extract for dealloc failed: {:?}",
+                                            e
+                                        ))]
+                                    })?
+                                    .into_pointer_value()
+                            } else {
+                                val.into_pointer_value()
+                            };
                             let pointee_ty = match self.ty_ctx.ty_kind(ty) {
                                 TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                                 _ => unreachable!(),

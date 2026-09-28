@@ -36,11 +36,10 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 .struct_type(&[ptr_ty.into(), len_ty.into()], false)
                 .into()
         }
-        // `&[T]` (a reference to a slice) is a fat pointer `{data_ptr, len}`
-        // — matches `glyim-layout`'s 16-byte layout for the same type.
-        // `&str` is intentionally deferred (see the layout.rs comment).
+        // `&[T]` / `&str` (unsized pointees) lower to a fat pointer
+        // `{data_ptr, len}`, matching `glyim-layout`'s 16-byte layout.
         TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _)
-            if matches!(ctx.ty_kind(*inner), TyKind::Slice(_)) =>
+            if matches!(ctx.ty_kind(*inner), TyKind::Slice(_) | TyKind::String) =>
         {
             let ptr_ty = context.ptr_type(inkwell::AddressSpace::default());
             let len_ty = int_type(context, target_info.pointer_width());
