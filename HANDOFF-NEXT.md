@@ -93,47 +93,85 @@ return-value convention) rather than the runtime body itself.
   corrupt address.
 - No output is produced (`println("hello")` never emits its bytes).
 
-### Likely suspects — narrowed by lldb
+### Precise diagnosis (this session, code-referenced)
 
-**lldb output (this session) is the smoking gun: the binary prints its own
-environment block (`executable_path=…`, `PATH=…`, `HOME=…`) to stdout and
-then exits 0.** That is exactly what `glyim_stdout_write(1, environ,
-huge_len)` would do — so the caller is passing `buf` = pointer to the
-process environment and `len` = a garbage size, not the `hello\n` bytes it
-should be writing. The bug is in the caller-side argument construction for
-the `extern "C"` call, not in the runtime.
+**Root cause: `llvm_type_for_ty` collapses `&[u8]` / `&str` to a bare
+pointer.** `crates/glyim-codegen-llvm/src/types.rs:39`:
 
-Concretely, in `io.g`'s `impl Write for Stdout::write_all(&mut self, buf:
-&[u8])`, the call site is:
+    TyKind::Ref(..) | TyKind::RawPtr(..) => {
+        context.ptr_type(inkwell::AddressSpace::default()).into()
+    }
 
-    glyim_stdout_write(self._fd, buf.as_ptr(), buf.len())
+That arm matches **every** reference, including `&[u8]` and `&str`, which are
+*unsized* pointees and must lower to a **fat pointer** `{ data_ptr, i64 len }`
+(the same shape `TyKind::Slice` / `TyKind::String` already produce at
+`types.rs:72`). Because the local slot for `$2: &[u8]` is allocated as a bare
+8-byte pointer while the *value* stored into it is a 16-byte fat pointer, the
+prologue's `build_store(local_ptr, param_val)` writes 16 bytes into an 8-byte
+slot (or, in the byval path, `build_load(local_ptr, llvm_ty)` reads only 8),
+and every subsequent read of `buf` gets garbage.
 
-That becomes MIR `Call { func: Fn(298), args: [<self._fd>, <as_ptr result>,
-<len result>] }`. The three suspects are:
+The MIR itself is correct — `fn crate[0]::477` (`Stdout::write_all`)
+emits:
 
-1. **Fat-pointer ABI mismatch (most likely).** `str` / `&[u8]` lower to
-   `{ ptr, i64 }` (`mk_fat_ptr`). The call is emitted with a raw `*const u8`
-   parameter type. Confirm the caller extracts **field 0** (`data pointer`)
-   and **field 1** (`len`) from the fat pointer and passes them as two
-   separate scalars. If instead the caller passes the *address of the
-   fat-pointer struct* as `buf` and reads `len` from the wrong slot, you get
-   exactly this `environ`-dump symptom (the address of `buf` happens to land
-   near the env block on Darwin, and the length slot is huge).
+    Call { func: Fn(FnDefId(298)),                 // = glyim_stdout_write
+           args: [Move($4),   // self._fd  : i32
+                  Move($6),   // buf.as_ptr() : *const u8
+                  Move($8)] } // buf.len()    : usize
 
-2. **`self._fd` extraction.** `Stdout { _fd: i32 }`; `self._fd` is a field
-   read through `&mut self` (a thin pointer to the struct). Confirm the field
-   offset is computed as an `i32` load and passed as an `i32`.
+so the typeck side of `as_ptr()` / `len()` already produces the right
+three-argument shape. The corruption is purely in how codegen materializes
+the `&[u8]` receiver into its local slot and then reads the pointer out of it.
 
-3. **Return-value / sret ABI.** `write_all` returns `Result<(), Error>` (a
-   two-variant enum). If its ABI return mode (direct vs. indirect / sret) is
-   misclassified, the caller and callee disagree on the calling convention,
-   and the callee returns to the wrong address. Check `fn_abi_of` for the
-   `write_all` signature vs. what the caller was actually emitted against.
+**Confirmed symptom:** running the `--emit=exec` binary under lldb prints the
+process environment block (`PATH=…`, `HOME=…`, `executable_path=…`) instead
+of `hello`. That is exactly what a call to `glyim_stdout_write(1, environ,
+huge_len)` looks like, i.e. `buf` was read from the wrong slot (it landed on
+the env block on the stack) and `len` was a garbage size.
 
-4. **`main` wrapper.** `lower.rs` emits a C-ABI `main` that calls
-   `__glyim_fn_{id}` for the glyim `main` body. Confirm the wrapper forwards
-   correctly (and, since `--emit=llvm-ir` currently ICEs, add a diagnostic
-   print of the wrapper's body).
+**A one-line fix to `types.rs` is NOT sufficient.** Changing the `Ref` arm to
+produce a fat pointer for slice/str pointees ICEs immediately, because the
+rest of the LLVM backend still assumes `Ref` = bare pointer at ~11 other
+sites in `crates/glyim-codegen-llvm/src/lower.rs`:
+
+   462, 2199, 2703, 2763, 2900, 2971   // `TyKind::Ref(_, inner, _) => *inner`
+   3701                                // `Ref(_, inner, Mut) => ...`
+
+Each of those dereferences/loads/field-projections must be taught about the
+fat-pointer representation in lockstep. The full set of affected places:
+
+1. `types.rs` — `TyKind::Ref(_, inner, _)` when `inner` is `Slice`/`String`
+   → lower to `{ ptr, i64 }` (the change attempted and reverted this session).
+2. `lower.rs:place_ptr` / `ProjectionElem::Deref` — when dereferencing a
+   `&[u8]` / `&str` local, produce a pointer to the **data field** (GEP 0,
+   0), not to the fat-pointer struct.
+3. `lower.rs:lower_operand` for `Place` whose type is `&[u8]` — load the
+   full `{ptr, i64}` struct, not a bare pointer.
+4. `lower.rs:lower_call` — when an argument's type is a fat-pointer `Ref`,
+   split it into `(data_ptr, len)` for ABI purposes (the extern fn
+   `glyim_stdout_write` takes them as two separate scalar parameters, which
+   is why the MIR already has three args).
+5. `lower.rs` prologue (`~line 3976`) — the byval/Indirect detection and
+   the store of `param_val` into the local slot must use the fat-pointer
+   type for unsized `Ref` params.
+6. `abi.rs` (`FullLayoutComputer::fn_abi_of`) — must classify unsized-`Ref`
+   parameters as `PassMode::Pair` (or equivalent) so the ABI is 16 bytes,
+   not 8.
+
+Because (6) is what tells the calling convention how many registers to use,
+getting (1)-(5) right without (6) still produces a mismatched ABI — so the
+correct fix is to start from `abi.rs`, decide the canonical fat-pointer ABI
+for unsized references, then propagate that decision outward through the
+five codegen sites above.
+
+### First concrete step for the next session
+
+Add a diagnostic to `abi.rs`'s `fn_abi_of` (or the codegen-local
+`llvm_fn_type_from_sig`) that prints, for each argument, its `Ty` and the
+resulting `PassMode`. Compile `fn main() { println("hello"); }` and check
+what mode the `&[u8]` argument to `Stdout::write_all` gets today — if it is
+`PassMode::Direct { ty: &[u8] }` with a bare-pointer LLVM type, that is the
+single fact the fix hinges on.
 
 ### Diagnostic commands to start with
 
