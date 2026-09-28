@@ -457,7 +457,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .builder
                         .build_load(llvm_ty, ptr, "deref_load")
                         .expect("deref load failed");
-                    ptr = loaded.into_pointer_value();
+                    // `&[T]` is a fat pointer `{data_ptr, len}`; extracting
+                    // field 0 yields the data pointer. Thin pointers load
+                    // as a `PointerValue` directly and take the else branch.
+                    ptr = if loaded.is_struct_value() {
+                        self.builder
+                            .build_extract_value(loaded.into_struct_value(), 0, "fat_data_ptr")
+                            .expect("fat-pointer field 0 extract failed")
+                            .into_pointer_value()
+                    } else {
+                        loaded.into_pointer_value()
+                    };
                     current_ty = match self.ty_ctx.ty_kind(current_ty) {
                         TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                         _ => {

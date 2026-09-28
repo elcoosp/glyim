@@ -25,6 +25,16 @@ impl<'a> FullLayoutComputer<'a> {
         }
 
         let kind = self.ctx.ty_kind(ty);
+        // `&[T]` (fat pointer, 16 bytes) still uses `PassMode::Direct`, which
+        // is correct for two-register passing on both AArch64 and x86_64
+        // SysV. It is special-cased before the scalar list below so the
+        // aggregate path (which would choose Indirect for AArch64) does not
+        // catch it.
+        if let TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) = kind
+            && matches!(self.ctx.ty_kind(*inner), TyKind::Slice(_))
+        {
+            return PassMode::Direct;
+        }
         let is_scalar = matches!(
             kind,
             TyKind::Bool
