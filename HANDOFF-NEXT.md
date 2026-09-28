@@ -169,7 +169,80 @@ fat-pointer `Rvalue` — bypassing `Place` entirely. Concretely:
 
 ## Older blocker notes (kept for reference)
 
-## Status: fat-pointer arg passing is the last remaining issue
+## Root cause found: `llvm_type_for_ty(&[T])` ≠ `llvm_type_for_ty(Tuple[ptr, usize])`
+
+After landing the `place_ptr` `Field`-Slice fix (`3c66984c`), I re-tried
+routing `&buf[written..]` through `lower_dynamic_range_slice` (the `Ref`
+arm of `lower_expr_to_rvalue`). The **MIR it produces is correct** — verified
+by diffing `--emit=mir` before/after:
+
+    Assign($9,  Len(Place{local:$1, projection:[Deref]}))         ; len
+    Assign($10, Add($14, $15))                                     ; data_ptr + start*1
+    Assign($11, Sub($9, $7))                                       ; len - start
+    Assign($16, Aggregate(Tuple, [$10, $11]))                      ; {ptr, i64}
+    Assign($17, Aggregate(Tuple, [$6, $16]))                       ; (fd, slice)
+    Assign($4,  Aggregate(Adt(1010, Err), [$17]))                  ; Err((fd, slice))
+
+But codegen **ICEs** at `lower.rs:185` (`llvm_type_for_ty` → `TyKind::Error`),
+because the tuple value `{ptr, i64}` is assigned into `$16`, whose *declared
+Ty* is `&[T]`. Two different LLVM types are in play:
+
+- `llvm_type_for_ty(&[T])` → the fat-pointer arm added this session:
+  `context.struct_type(&[ptr, i64], false)` — a **literal** struct type.
+- `llvm_type_for_ty(Tuple[ptr, usize])` → falls into the `TyKind::Tuple`
+  arm, which goes through `SimpleLayoutComputer::layout_of` and
+  `opaque_sized_type(size, align)` — a **different** LLVM type (an
+  `[N x i8]` struct / opaque block) with the same 16-byte size.
+
+Storing an aggregate of one into a local declared as the other is an LLVM
+type mismatch; codegen does not insert a `bitcast` for it, and eventually
+`llvm_type_for_ty` is called on a `Ty::ERROR` that falls out of the failed
+resolution.
+
+### The correct fix (needs a fresh, focused session)
+
+Make the two representations produce the **identical** LLVM type. Two
+candidate approaches:
+
+**(A) Prefer the literal-struct arm for tuple-shaped fat pointers.**
+In `llvm_type_for_ty`, before the general `TyKind::Tuple` arm, detect a
+2-element tuple whose elements are `(Ref(_, X, _), Uint(Usize))` and return
+`context.struct_type(&[ptr, i64], false)` — the same value the `Ref(Slice)`
+/ `Ref(String)` arm returns. Requires `mk_ref`-interned tuples to be
+recognisable (they are: `lower_dynamic_range_slice`'s `mk_fat_ptr` builds
+exactly `Tuple[Ref(elem, Not), Usize]`).
+
+**(B) Return the reference-typed value from `lower_dynamic_range_slice`.**
+Change the helper's `Rvalue::Aggregate(Tuple, …)` to produce a value whose
+`Ty` is `&[T]` rather than a tuple. Since the aggregate's *value* shape is
+already `{ptr, i64}`, and `llvm_type_for_ty(&[T])` is `{ptr, i64}`,
+this makes the assignment type-consistent. This is the smaller change but
+touches the helper's signature (`result_ty` is currently `&[T]` already —
+it is only the produced `AggregateKind` that is wrong).
+
+**(B) is the recommended first attempt**: change
+`Rvalue::Aggregate(glyim_mir::AggregateKind::Tuple, slice_operands)` at the
+end of `lower_dynamic_range_slice` (around line 2010 of
+`lower_rvalue.rs`) to a single-field aggregate that keeps the `&[T]` type,
+or have the caller's `Assign` wrap it. Then re-apply the `Ref`-arm
+delegation (`return self.lower_expr_to_rvalue(operand);` for
+`Ref { Index { Range } }`) — that patch was already verified to produce
+correct MIR and only failed at codegen because of the LLVM-type mismatch.
+
+### Verified-green state at time of writing
+
+- `HEAD` = `974c4a73`; working tree clean.
+- `--emit=obj` on hello world → valid 5008-byte Mach-O arm64 object.
+- Full test suite: 4172/4172 pass.
+- 5 commits ahead of `origin/main` (see the log section below).
+
+The `Ref`-arm patch was tried, produced correct MIR, failed at codegen for
+the LLVM-type-mismatch reason above, and was reverted to preserve the green
+state.
+
+## Older analysis (kept for reference)
+
+
 
 **What works:**
 - `--emit=obj` produces a valid object (primary objective).
