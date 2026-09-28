@@ -349,7 +349,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 }
             }
             MirConstKind::Fn(fn_def_id, _substs) => {
-                let fn_name = format!("__glyim_fn_{}", fn_def_id.to_raw());
+                let fn_name = match self.ty_ctx.extern_fn_name(*fn_def_id) {
+                    Some(ext) => ext.to_string(),
+                    None => format!("__glyim_fn_{}", fn_def_id.to_raw()),
+                };
                 let module = self.module;
                 let callee = module.get_function(&fn_name).unwrap_or_else(|| {
                     let fn_type = if let Some(sig) = self.ty_ctx.fn_sig(*fn_def_id) {
@@ -3062,7 +3065,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     let param_map = self.ty_ctx.substitution_args(substs).to_vec();
                     Self::concretize_fn_sig(&generic_sig, &param_map, self.ty_ctx)
                 };
-                let fn_name = format!("__glyim_fn_{}", def_id.to_raw());
+                let fn_name = match self.ty_ctx.extern_fn_name(def_id) {
+                    Some(ext) => ext.to_string(),
+                    None => format!("__glyim_fn_{}", def_id.to_raw()),
+                };
                 let fn_val = match self.module.get_function(&fn_name) {
                     Some(v) => v,
                     None => {
