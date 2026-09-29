@@ -104,6 +104,30 @@ impl CompileCache {
         // Field separator so `("ab", "c")` and `("a", "bc")` cannot collide.
         h.update(b"compiler\x1f");
         h.update(env!("CARGO_PKG_VERSION").as_bytes());
+        h.update(b"\x1fbin\x1f");
+        // The `CARGO_PKG_VERSION` above is a *constant* (`0.1.0`) for every
+        // dev build, so it cannot distinguish two builds of the same version
+        // — yet those builds can emit different objects (this is exactly how
+        // a stale-object bug appears: fix the compiler, rebuild it, and the
+        // cache serves the pre-fix object because the key is unchanged). Mix
+        // in the *compiler binary's own identity* — its length and mtime —
+        // so any rebuild of the compiler changes the key and invalidates
+        // every cached object it produced. Cheap (one `stat`) and correct for
+        // the dev-build case; a released compiler additionally varies by the
+        // version string. If the executable cannot be stat'd (rare), fall
+        // back to the version-only key so the cache still functions.
+        if let Ok(exe) = std::env::current_exe()
+            && let Ok(meta) = std::fs::metadata(&exe)
+        {
+            h.update(exe.as_os_str().as_encoded_bytes());
+            h.update(b"\x1f");
+            h.update(meta.len().to_le_bytes());
+            if let Ok(mtime) = meta.modified()
+                && let Ok(dur) = mtime.duration_since(std::time::UNIX_EPOCH)
+            {
+                h.update(dur.as_nanos().to_le_bytes());
+            }
+        }
         h.update(b"\x1fsource\x1f");
         h.update(source.as_bytes());
         h.update(b"\x1ftarget\x1f");
