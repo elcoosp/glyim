@@ -1,109 +1,137 @@
-# Handoff — `glyim-v2` stdlib hello-world: **COMPLETE**
+# Handoff — `glyim-v2` status + the param-bound-assoc-call bug
 
-## Status: end-to-end goal achieved
+## Green state at this commit
 
-**`glyim-cli --with-stdlib --emit=obj`** on `fn main() { println("hello"); }`
-produces a valid 5152-byte Mach-O arm64 object.
+`HEAD` = `fd247a85`. Working tree clean. Full suite **4176/4176 pass**.
 
-**`glyim-cli --with-stdlib --emit=exec`** on the same program produces a
-2.2 MB Mach-O arm64 binary that **prints `hello` and exits 0**.
+- `glyim-cli --with-stdlib --emit=obj` on hello world -> valid 5152-byte
+  Mach-O arm64 object.
+- `glyim-cli --with-stdlib --emit=exec` -> 2.2 MB binary that prints `hello`,
+  exits 0.
+- **All five `--emit` modes work** (obj/exec/mir/llvm-ir/asm).
 
-**All 4172/4172 workspace tests pass.** Working tree clean.
+## Commits landed this session (2)
 
-## Commits landed this session (10 ahead of `origin/main`)
+    fd247a85  fix(cache): invalidate on compiler rebuild; add per-emit-mode regression tests
+    b63258ec  refactor(pipeline): share one front half across all emit modes
+    9213df8d  docs: handoff -- hello world runs end-to-end, goal complete
 
-    9199c210  feat: hello world runs end-to-end — `println` prints via --emit=exec
-    9f9887c6  fix(mir): Place::ty/ty_mut resolve Field on Slice/String (fat-pointer slots)
-    a99e3803  docs(handoff): definitive root cause — MIR Place::ty lacks Ref(Slice) Field arm
-    e995ea53  docs(handoff): root cause is llvm_type_for_ty disagreement on fat pointers
-    974c4a73  docs(handoff): narrow remaining exec bug to fat-pointer ABI in prologue
-    3c66984c  fix(codegen-llvm): resolve Slice/String Field projections in place_ptr
-    9c7e2360  docs(handoff): pin remaining exec bug to Ref(Index(Range)) lowering
-    fc9235e7  fix(typeck,codegen): prefer builtin len/is_empty for slice/str receivers
-    f2a830e0  fix(layout,codegen): &str is also a 16-byte fat pointer
-    0ee6e4b3  fix(layout,codegen): &[T] is a 16-byte fat pointer, not an 8-byte scalar
+### b63258ec -- pipeline unification (net -183 lines)
 
-## The three root causes (all fixed)
+Extracted `Pipeline::prepare_compilation` (parse -> expand -> defmap -> hir ->
+typeck -> lower -> borrowck -> opt -> monomorphize) and routed `emit_llvm_ir`
+and `emit_asm` through it. Both previously re-implemented a *partial* chain
+that stopped after `lower_body` and never ran `discover_mono_roots` /
+`MonoCtx::collect`. Result: `--emit=llvm-ir` and `--emit=asm` ICEd on hello
+world with `fn_abi_of failed: UnknownType`, because generic stdlib bodies
+reached codegen with `TyKind::Param` in their locals. Now all five emit modes
+succeed on the same program.
 
-The work was dominated by one theme: **`&[T]` and `&str` are fat pointers
-`{data_ptr, i64 len}`, but the compiler treated them as 8-byte scalars in
-several layers.** A single coherent story:
+`emit_mir` and `compile_file_to_mir` still carry their own copies of the chain
+(they have genuinely different semantics -- see "Follow-ups").
 
-### 1. Fat-pointer representation (commits `0ee6e4b3`, `f2a830e0`)
+### fd247a85 -- cache + regression tests
 
-Three layers lowered every `Ref`/`RawPtr` to a bare 8-byte pointer:
-- `glyim-layout::layout_of` → `Layout::scalar(ptr_size)`.
-- `glyim-codegen-llvm::types::llvm_type_for_ty` → `context.ptr_type()`.
-- `glyim-codegen-llvm::abi::classify_arg` → `PassMode::Direct` scalar.
+**Cache bug (real, shipped):** `CompileCache::key` mixed in
+`env!("CARGO_PKG_VERSION")` = `"0.1.0"` -- a *constant* across every dev build.
+Two builds of the same version could emit different objects, so a
+fix-and-rebuild cycle served the *pre-fix* object. Observed live: after fixing
+the extern-fn symbol naming, `--emit=exec` still failed with `Undefined
+symbols: ___glyim_fn_298` because the cache returned a pre-fix object. Fixed
+by mixing in the compiler binary's path/length/mtime.
 
-For `&[T]` / `&str` this was wrong: the local slot was 8 bytes while the
-stored value was a 16-byte fat pointer, so every read of a slice's length
-returned garbage. Added dedicated arms in all three that produce the
-`{ptr, i64}` shape (16-byte layout, LLVM struct, `PassMode::Direct` for
-two-register passing). Also fixed three drop-glue sites in `lower.rs` that
-called `.into_pointer_value()` on the struct value.
+**Regression tests (`crates/glyim-cli/tests/emit_modes.rs`, 4 new):**
+- `all_emit_modes_succeed_on_hello_world` -- the test that would have caught
+  the `--emit=llvm-ir` monomorphization bug the moment it was introduced.
+- `llvm_ir_output_looks_like_llvm_ir` / `asm_output_looks_like_assembly` --
+  assert real content, not just a written file.
+- `exec_binary_prints_hello` -- full end-to-end (link, run, assert stdout).
+  Its linker-skip is deliberately narrow: a *failed* link fails the test,
+  because an earlier draft that also skipped on `Undefined symbols` silently
+  masked the stale-cache bug.
 
-### 2. Intrinsic `len` (commit `fc9235e7`)
+## The remaining latent bug: param-bound associated calls
 
-`slice.g` / `str.g` declare `fn len` as an empty `{ /* compiler intrinsic */ }`
-stub. Typeck's impl-scan found that stub before the builtin table and
-resolved `self.len()` to it (returning uninitialized memory). Fixed by
-consulting `try_builtin_method` first for primitive slice/str receivers, and
-teaching codegen's `try_lower_builtin_intrinsic` to lower `len` / `is_empty`
-(extract field 1 of the fat pointer).
+`fn main() { let x = "42".parse::<i32>(); }` **ICEs**:
 
-### 3. `&buf[written..]` and fat-pointer deref (commits `9f9887c6`, `9199c210`)
+    fn_abi_of failed: UnknownType(Ty(16))   [Ty(16) = a Param]
 
-`Stdout::write_all` contains `self.write(&buf[written..])`. Two bugs here:
+This is the `T::method(args)` shape -- `str::parse<T: FromStr>` calls
+`T::from_str(self)`, where the receiver is `&str` but the *impl* is selected
+by the generic `T`. It is the one place the stdlib uses a param-bound
+associated function, so it is the sole reachable instance.
 
-- `&base[a..b]` (a sub-slice) was lowered as a `Ref` of an *element* index
-  (`Place{[Deref, Index(range)]}` → a `&u8`), not a sub-slice. Fixed in
-  `lower_expr_to_rvalue`'s `Ref` arm: route the range-slice case through
-  `lower_dynamic_range_slice` (the same path the unwrapped `Index { Range }`
-  uses).
-- `lower_dynamic_range_slice` derefs a `&[T]` to `[T]` and projects
-  `Field(0)`/`Field(1)`. MIR's `Place::ty`/`ty_mut` had no `Field` arm for
-  `Slice`/`String`, returning `Ty::ERROR` (→ codegen ICE). Added the arm
-  (`9f9887c6`).
-- `place_ptr`'s `ProjectionElem::Deref` arm was made to extract field 0 and
-  advance `ptr` to the data address — but a fat pointer's deref must **not**
-  advance `ptr` (the unsized `[T]` is laid out at the fat pointer itself).
-  Advancing broke `Rvalue::Len`, which then read `{ptr, i64}` from the *data
-  address* and returned garbage. Fixed in `9199c210`: only thin-pointer
-  derefs load and advance.
+### What was tried (all reverted -- do not re-derive)
 
-## Verification
+I threaded a `self_ty: Option<Ty>` through the whole chain:
+`thir::ExprKind::DynamicCall` -> `MirConstKind::VirtualMethod` -> codegen /
+interp / mono.devirtualize / mono_cache.substitute_operand -> format. The MIR
+then correctly emitted `VirtualMethod { self_ty: Some(T), .. }`.
 
-    # Object path
-    $ glyim-cli --with-stdlib --emit=obj -o h.o h.g
-    $ file h.o   # → Mach-O 64-bit object arm64 (5152 bytes)
+**But the MIR still showed `self_ty: Some(Ty(16))` -- an unsubstituted
+`Param` -- after monomorphization.** Instrumenting `enqueue`/`collect` in
+`mono.rs` showed the root cause:
 
-    # Executable path
-    $ glyim-cli --with-stdlib --emit=exec -o h h.g
-    $ ./h
-    hello
-    $ echo $?
-    0
+    [COLLECT] Fn(309) substs_len=0     # fn 309 = str::parse<T>
 
-Tested with `println("hello")`, `println("world")`, `println("test")`,
-`println("a")`, and `println("")` — all produce the correct output.
+**`parse<T>` is enqueued with ZERO type arguments.** `substitute_body` is
+therefore never given a substitution to apply (`substitute_body` was never
+even called for it -- instrumentation confirmed 0 calls), so `T` stays a
+`Param` and reaches codegen unresolved.
 
-## Constraints honoured throughout
+### Where the real fix lives
 
-- **`Ty::ERROR` was never lowered at codegen.** The `v15_t25_drop_error_type`
-  `#[should_panic]` contract held; every fix went to the *root*
-  representation issue instead of papering over the error.
-- All fixes in the type/layout/codegen layers, not workarounds.
-- No debug traces committed — every diagnostic was env-gated and reverted.
-- Conventional commit prefixes; remaining blockers documented as they arose.
+The bug is in **mono enqueue/discovery**, not in the `DynamicCall` shape. The
+call `"42".parse::<i32>()` reaches MIR as a call to `parse` whose *operand*
+carries no `[i32]` substitution, so `scan_terminator` enqueues
+`MonoItem::Fn { def_id: 309, substs: <empty> }`. Two candidate causes:
 
-## Known follow-ups (out of scope for this goal)
+1. **typeck does not record the call-site substitution** on the callee
+   `FnDef(id, substs)` for this path. The turbofish `::<i32>` should give
+   `substs = [i32]`. Check `check_expr`'s `Call` arm: for a normal generic
+   call it builds `FnDef(def_id, substs)` from the args/turbofish; the
+   param-bound path may bypass that.
+2. **`discover_mono_roots` does not seed the generic** from the call site.
 
-- `--emit=llvm-ir` ICEs with `fn_abi_of failed: UnknownType(Ty(36317))`.
-  Pre-existing; unrelated to the fat-pointer work.
-- `[X0000] Err expression in THIR during lowering` fires ~10 times per
-  hello-world compile. Each is a silent `thir::Expr::err(span)` not paired
-  with a diagnostic — the pattern that hid the original `--emit=obj` blocker.
-  Audit every `thir::Expr::err` call site and pair it with
+### Suggested next step
+
+Dump the MIR of `main` for the parse program and look at the `Call`
+terminator's `func` operand. If its `MirConstKind::Fn(def_id, substs)` has
+`substs == []`, the fix is in `check_expr` (record the turbofish/inferred args
+on the callee). If it has `[i32]` but mono still enqueues empty, the fix is in
+`mono.rs`'s `scan_terminator` / `enqueue`.
+
+This is a **monomorphization-completeness** issue, not a shape issue. The
+`self_ty` threading I attempted is a *necessary* part of the eventual fix (the
+devirtualizer needs the `Self` type once `T` is substituted), but it cannot
+work until `parse<T>` is instantiated with `[i32]` in the first place. The
+two changes should land together.
+
+## Follow-ups (priority order)
+
+1. **Param-bound associated call instantiation** (above) -- the last known
+   reachable ICE. `"42".parse::<i32>()` must compile.
+2. **`emit_mir` / `compile_file_to_mir` still duplicate the chain.** `emit_mir`
+   is a *debugging dump* of pre-mono MIR (intentionally pre-mono); the
+   interpreter path (`compile_file_to_mir`) monomorphizes on demand and needs
+   drop-glue elaboration. Unify them onto `prepare_compilation` only if those
+   semantics can be preserved via a flag.
+3. **~10 silent `X0000 Err expression in THIR during lowering` warnings** per
+   hello-world compile. Now traced: they come from `check_expr.rs:808` (the
+   param-assoc-call path) and are the same root cause as (1). Fixing (1)
+   should clear most of them; audit the rest against the 23 `thir::Expr::err`
+   sites.
+4. **`Place::ty`/`ty_mut`'s 12 `tracing::error!` sites** each return
+   `Ty::ERROR` with no user diagnostic -- give them a diagnostic sink so a
+   future type bug surfaces as an error at the span instead of an ICE far
+   away.
+5. **Runtime staticlib is ~26 MB (debug)** -- strip / release handling.
+
+## Working-style constraints (still in force)
+
+- **Never** lower `Ty::ERROR` at codegen -- `v15_t25_drop_error_type` is a
+  `#[should_panic]` contract.
+- Prefer fixing type resolution / registration once, everywhere.
+- Every `thir::Expr::err(span)` should be paired with a
   `diagnostics.push(...)`.
-- The runtime staticlib is ~26 MB (debug); strip/release handling is polish.
+- Conventional-commit prefixes; document remaining blockers.
