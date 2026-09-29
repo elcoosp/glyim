@@ -183,6 +183,18 @@ impl Place {
                     }
                 },
                 ProjectionElem::Field(idx) => match ctx.ty_kind(ty) {
+                    // A slice `[T]` / `str` (`TyKind::String`) is represented
+                    // as a fat pointer `{data_ptr, i64 len}`. Reading `Field(0)`
+                    // / `Field(1)` off it yields the data pointer / length —
+                    // both 8 bytes. `TypeLookup` is read-only and cannot intern
+                    // the exact `&T` type, and the only consumer
+                    // (`lower_dynamic_range_slice`) stores the field into a
+                    // `Ty::USIZE` local, so returning `Ty::USIZE` for both
+                    // slots is both correct in size and type-consistent with
+                    // the destination. Needed because
+                    // `lower_dynamic_range_slice` derefs a `&[T]` to `[T]` and
+                    // then projects `Field(0)`.
+                    TyKind::Slice(_) | TyKind::String => Ty::USIZE,
                     TyKind::Tuple(substs) => {
                         let args = ctx.substitution_args(*substs);
                         if let Some(GenericArg::Ty(field_ty)) = args.get(idx.to_raw() as usize) {
@@ -332,6 +344,9 @@ impl Place {
                     }
                 },
                 ProjectionElem::Field(idx) => match ctx.ty_kind(ty) {
+                    // See the `ty` variant above: fat-pointer `Field(0)`/
+                    // `Field(1)` on `[T]`/`str` are both 8-byte slots.
+                    TyKind::Slice(_) | TyKind::String => Ty::USIZE,
                     TyKind::Tuple(substs) => {
                         let args = ctx.substitution_args(*substs);
                         if let Some(GenericArg::Ty(field_ty)) = args.get(idx.to_raw() as usize) {
