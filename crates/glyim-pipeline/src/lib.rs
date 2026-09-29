@@ -105,6 +105,29 @@ pub struct CompileArtifacts {
     pub warnings: Vec<GlyimDiagnostic>,
 }
 
+/// Everything produced by the *front half* of the pipeline — parse → expand →
+/// defmap → hir → typeck → lower → borrowck → opt → monomorphize — before any
+/// code generation runs.
+///
+/// Every emit mode (`--emit=obj|exec|mir|llvm-ir|asm`) and the MIR-only
+/// interpreter path must derive from a `PreparedCompilation` so they all see
+/// the same *monomorphized* bodies. Previously `emit_llvm_ir` / `emit_asm`
+/// re-implemented a partial chain that stopped before monomorphization, so
+/// generic stdlib definitions reached codegen with `TyKind::Param` still in
+/// their locals and `fn_abi_of` ICEd with `UnknownType`.
+pub(crate) struct PreparedCompilation {
+    /// The crate's definition map.
+    pub def_map: glyim_def_map::CrateDefMap,
+    /// Type-check result (const values, THIR bodies, diagnostics).
+    pub typeck_result: glyim_typeck::TypeckResult,
+    /// Frozen type context (also published on the `Database`).
+    pub ty_ctx: Arc<glyim_type::TyCtx>,
+    /// Monomorphized + optimized MIR bodies, ready for codegen.
+    pub all_bodies: Vec<Arc<Body>>,
+    /// Non-error diagnostics accumulated during the front half.
+    pub warnings: Vec<GlyimDiagnostic>,
+}
+
 /// Load a crate's source into the VFS and **flatten its external modules**.
 ///
 /// This is the single entry point every pipeline path (entry discovery,
@@ -243,14 +266,17 @@ impl Pipeline {
     /// expanded by the loaded proc-macro functions before HIR lowering. When
     /// `None` (or empty) the pipeline behaves exactly as before — no expansion
     /// pass runs, so existing non-proc-macro compiles are unaffected.
-    pub fn compile_file_with_artifacts(
+    /// Front half of the pipeline: parse → expand → defmap → hir → typeck →
+    /// lower → borrowck → opt → monomorphize. Returns the monomorphized
+    /// bodies plus the accumulated (non-error) diagnostics, *without* running
+    /// codegen. Every emit mode and the MIR-only path derives from this so
+    /// they all see the same monomorphized bodies.
+    pub(crate) fn prepare_compilation(
         db: &mut Database,
         path: &Path,
-        backend: &dyn CodegenBackend,
-        output_path: &Path,
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
-    ) -> CompResult<CompileArtifacts> {
+    ) -> CompResult<PreparedCompilation> {
         let sink = DiagSink::new();
         let sink_cell = RefCell::new(sink);
 
@@ -578,28 +604,49 @@ impl Pipeline {
         let mut all_bodies = all_bodies;
         all_bodies.extend(closure_bodies_codegen);
 
+        let ty_ctx = db.get_ty_ctx().expect("TyCtx not initialized");
+        // Any Error-severity diagnostic short-circuits above, so everything
+        // left in the sink is advisory. Surface it on the success value so the
+        // caller can render it. Sorted + deduped for a stable order.
+        let warnings = sink_cell.into_inner().into_diagnostics();
+        Ok(PreparedCompilation {
+            def_map,
+            typeck_result,
+            ty_ctx,
+            all_bodies,
+            warnings,
+        })
+    }
+
+    /// Compile `path` to an object via `backend` and return the artifacts.
+    ///
+    /// Thin wrapper over [`Pipeline::prepare_compilation`]: run the front
+    /// half, then hand the monomorphized bodies to the backend. This is the
+    /// **only** entry point that runs codegen; every other emit mode formats
+    /// a `PreparedCompilation` directly.
+    pub fn compile_file_with_artifacts(
+        db: &mut Database,
+        path: &Path,
+        backend: &dyn CodegenBackend,
+        output_path: &Path,
+        codegen_units: Option<usize>,
+        proc_registry: Option<&glyim_proc_macro::Registry>,
+    ) -> CompResult<CompileArtifacts> {
+        let prepared = Self::prepare_compilation(db, path, codegen_units, proc_registry)?;
         let out_path = if output_path.as_os_str().is_empty() {
             Path::new("output.o")
         } else {
             output_path
         };
-
-        if !all_bodies.is_empty() {
-            backend.generate(&all_bodies, out_path)?;
+        if !prepared.all_bodies.is_empty() {
+            backend.generate(&prepared.all_bodies, out_path)?;
         }
-
-        let ty_ctx = db.get_ty_ctx().expect("TyCtx not initialized");
-        // Partition the accumulated diagnostics: errors would have returned
-        // above (any Error severity short-circuits), so everything left is
-        // advisory. Surface it on the success value so the caller can render
-        // it. Sorted + deduped for a stable user-visible order.
-        let warnings = sink_cell.into_inner().into_diagnostics();
         Ok(CompileArtifacts {
-            def_map,
-            typeck_result: typeck_result.clone(),
-            mir_bodies: all_bodies,
-            ty_ctx,
-            warnings,
+            def_map: prepared.def_map,
+            typeck_result: prepared.typeck_result,
+            mir_bodies: prepared.all_bodies,
+            ty_ctx: prepared.ty_ctx,
+            warnings: prepared.warnings,
         })
     }
 }
@@ -964,137 +1011,21 @@ pub fn emit_llvm_ir(
     input: &Path,
     output: &Path,
 ) -> Result<(), Vec<GlyimDiagnostic>> {
-    let sink = DiagSink::new();
-    let sink_cell = RefCell::new(sink);
+    // Route through the shared front half (`prepare_compilation`) so the
+    // bodies are monomorphized. The previous standalone implementation
+    // stopped after `lower_body` — before `discover_mono_roots` /
+    // `MonoCtx::collect` — so generic stdlib definitions reached codegen with
+    // `TyKind::Param` in their locals and `fn_abi_of` ICEd with
+    // `UnknownType`. Any new emit mode MUST go through `prepare_compilation`.
+    let prepared = Pipeline::prepare_compilation(db, input, None, None)?;
 
-    let (file_id, source) = match load_crate_source(db, input) {
-        Ok(pair) => pair,
-        Err(mod_diags) => {
-            sink_cell.borrow_mut().extend(mod_diags);
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-    };
-
-    let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
-    sink_cell
-        .borrow_mut()
-        .extend(parse_result.diagnostics.clone());
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let mut hygiene = glyim_span::HygieneCtx::new();
-    let mut expander = glyim_meta::Expander::new(&mut hygiene);
-    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
-    sink_cell.borrow_mut().extend(expand_diags);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-
-    let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
-    sink_cell.borrow_mut().extend(def_diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags.clone());
-    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
-    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
-    // of silently lowering a miscompiling state machine.
-    if hir_diags
-        .iter()
-        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
-    {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let resolver = db.interner().clone();
-    let mut ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
-    let mut trait_ctx = glyim_solve::TraitContext::new();
-    register_builtin_traits(&mut trait_ctx, db.interner());
-    // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so that
-    // 1-argument usages like `Result<usize>` expand to `Result<usize, Error>`.
-    // The RHS is resolved to a `Ty` template with the alias formals left as
-    // `TyKind::Param`, stored for later expansion by `resolve_name_to_adt_ty`
-    // (stdlib-completion).
-    {
-        let mut alias_infer = InferenceTable::new();
-        let mut alias_diags = Vec::new();
-        for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty
-            {
-                let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                let mut params: Vec<(u32, Name)> = Vec::new();
-                for (i, gp) in alias.generic_params.iter().enumerate() {
-                    let pname = gp.name;
-                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
-                        index: i as u32,
-                        name: pname,
-                    }));
-                    param_map.insert(pname, pty);
-                    params.push((i as u32, pname));
-                }
-                let template = tyconv::resolve_type_ref(
-                    &mut ty_ctx_mut,
-                    &mut alias_infer,
-                    &def_map,
-                    &mut alias_diags,
-                    rhs,
-                    &param_map,
-                    item.span,
-                );
-                ty_ctx_mut.register_type_alias(item.name, params, template);
-            }
-        }
-    }
-    let mut solver = SimpleTraitSolver::new(&trait_ctx);
-    let (ty_ctx, typeck_result) =
-        glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
-    sink_cell.borrow_mut().extend(typeck_result.diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    db.set_ty_ctx(ty_ctx);
-
-    let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
-    let ty_ctx_ref = ty_ctx_guard.as_ref();
-    let lower_ctx = PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
-    let mut mir_bodies = Vec::new();
-
-    for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-        let lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
-        sink_cell.borrow_mut().extend(lower_result.diagnostics);
-        if sink_cell.borrow().has_errors() {
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-        mir_bodies.push(lower_result.body);
-    }
-
-    if mir_bodies.is_empty() {
-        return Err(vec![GlyimDiagnostic::internal_error(
-            "No MIR bodies generated",
-        )]);
-    }
-
-    // Use the backend that reads the pipeline's published `TyCtx` and the
-    // db's target triple; not `LlvmBackend::new()` (which builds its own
-    // empty type arena and hardcodes a Linux triple).
-    //
-    // Also emit *every* body, not just `mir_bodies[0]`. Emitting a single
-    // body silently dropped the rest of the crate from the IR — a serious
-    // information-loss bug for a user who asked for the IR of their whole
-    // program.
+    // Emit *every* monomorphized body (previously only `mir_bodies[0]` was
+    // emitted, silently dropping the rest of the crate from the IR).
     let backend = LlvmBackend::with_db(db).with_debug_info(false);
     let mut ir = String::new();
-    for body in &mir_bodies {
+    for body in &prepared.all_bodies {
         let one = backend
-            .emit_ir_to_string(ty_ctx_ref, body)
+            .emit_ir_to_string(&prepared.ty_ctx, body)
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
                     "LLVM IR generation failed: {:?}",
@@ -1104,8 +1035,8 @@ pub fn emit_llvm_ir(
         ir.push_str(&one);
         ir.push('\n');
     }
-    std::fs::write(output, ir).map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
-
+    std::fs::write(output, ir)
+        .map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
     Ok(())
 }
 
@@ -1117,133 +1048,19 @@ pub fn emit_asm(
     input: &Path,
     output: &Path,
 ) -> Result<(), Vec<GlyimDiagnostic>> {
-    let sink = DiagSink::new();
-    let sink_cell = RefCell::new(sink);
-
-    let (file_id, source) = match load_crate_source(db, input) {
-        Ok(pair) => pair,
-        Err(mod_diags) => {
-            sink_cell.borrow_mut().extend(mod_diags);
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-    };
-
-    let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
-    sink_cell
-        .borrow_mut()
-        .extend(parse_result.diagnostics.clone());
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let mut hygiene = glyim_span::HygieneCtx::new();
-    let mut expander = glyim_meta::Expander::new(&mut hygiene);
-    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
-    sink_cell.borrow_mut().extend(expand_diags);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-
-    let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
-    sink_cell.borrow_mut().extend(def_diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags.clone());
-    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
-    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
-    // of silently lowering a miscompiling state machine.
-    if hir_diags
-        .iter()
-        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
-    {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let resolver = db.interner().clone();
-    let mut ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
-    let mut trait_ctx = glyim_solve::TraitContext::new();
-    register_builtin_traits(&mut trait_ctx, db.interner());
-    // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so that
-    // 1-argument usages like `Result<usize>` expand to `Result<usize, Error>`.
-    // The RHS is resolved to a `Ty` template with the alias formals left as
-    // `TyKind::Param`, stored for later expansion by `resolve_name_to_adt_ty`
-    // (stdlib-completion).
-    {
-        let mut alias_infer = InferenceTable::new();
-        let mut alias_diags = Vec::new();
-        for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty
-            {
-                let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                let mut params: Vec<(u32, Name)> = Vec::new();
-                for (i, gp) in alias.generic_params.iter().enumerate() {
-                    let pname = gp.name;
-                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
-                        index: i as u32,
-                        name: pname,
-                    }));
-                    param_map.insert(pname, pty);
-                    params.push((i as u32, pname));
-                }
-                let template = tyconv::resolve_type_ref(
-                    &mut ty_ctx_mut,
-                    &mut alias_infer,
-                    &def_map,
-                    &mut alias_diags,
-                    rhs,
-                    &param_map,
-                    item.span,
-                );
-                ty_ctx_mut.register_type_alias(item.name, params, template);
-            }
-        }
-    }
-    let mut solver = SimpleTraitSolver::new(&trait_ctx);
-    let (ty_ctx, typeck_result) =
-        glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
-    sink_cell.borrow_mut().extend(typeck_result.diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    db.set_ty_ctx(ty_ctx);
-
-    let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
-    let ty_ctx_ref = ty_ctx_guard.as_ref();
-    let lower_ctx = PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
-    let mut mir_bodies = Vec::new();
-
-    for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-        let lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
-        sink_cell.borrow_mut().extend(lower_result.diagnostics);
-        if sink_cell.borrow().has_errors() {
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-        mir_bodies.push(lower_result.body);
-    }
-
-    if mir_bodies.is_empty() {
-        return Err(vec![GlyimDiagnostic::internal_error(
-            "No MIR bodies generated",
-        )]);
-    }
-
+    // Route through the shared front half (`prepare_compilation`) — see
+    // `emit_llvm_ir` for why the standalone chain was wrong (it skipped
+    // monomorphization, so generic bodies ICEd in `fn_abi_of`).
+    let prepared = Pipeline::prepare_compilation(db, input, None, None)?;
     let backend = LlvmBackend::with_db(db).with_debug_info(false);
-    let arc_bodies: Vec<Arc<Body>> = mir_bodies.into_iter().map(Arc::new).collect();
-    backend.emit_assembly(&arc_bodies, output).map_err(|e| {
-        vec![GlyimDiagnostic::internal_error(format!(
-            "LLVM assembly generation failed: {:?}",
-            e
-        ))]
-    })?;
-
+    backend
+        .emit_assembly(&prepared.all_bodies, output)
+        .map_err(|e| {
+            vec![GlyimDiagnostic::internal_error(format!(
+                "LLVM assembly generation failed: {:?}",
+                e
+            ))]
+        })?;
     Ok(())
 }
 
