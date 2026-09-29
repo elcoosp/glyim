@@ -224,6 +224,17 @@ impl<'a> MirBuilder<'a> {
                 mutability,
                 operand,
             } => {
+                // `&base[a..b]` (a sub-slice) is *not* a `Ref` of a `Place`:
+                // the sub-slice value is itself a fat pointer `{data_ptr, len}`,
+                // so a reference to it is the same fat pointer. `Place` cannot
+                // represent an unsized `[T]`, so route the range-slice case
+                // through `lower_dynamic_range_slice` (via the `Index { Range }`
+                // arm in `lower_expr_to_rvalue`) and return that value directly.
+                if let thir::ExprKind::Index { index, .. } = &operand.kind
+                    && matches!(index.kind, thir::ExprKind::Range { .. })
+                {
+                    return self.lower_expr_to_rvalue(operand);
+                }
                 let place = self.lower_expr_to_place(operand);
                 let borrow_kind = match mutability {
                     glyim_core::primitives::Mutability::Mut => glyim_mir::BorrowKind::Mut {

@@ -452,22 +452,36 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         for elem in place.projection.iter() {
             match elem {
                 ProjectionElem::Deref => {
-                    let llvm_ty = self.llvm_type_for_ty(current_ty);
-                    let loaded = self
-                        .builder
-                        .build_load(llvm_ty, ptr, "deref_load")
-                        .expect("deref load failed");
-                    // `&[T]` is a fat pointer `{data_ptr, len}`; extracting
-                    // field 0 yields the data pointer. Thin pointers load
-                    // as a `PointerValue` directly and take the else branch.
-                    ptr = if loaded.is_struct_value() {
-                        self.builder
-                            .build_extract_value(loaded.into_struct_value(), 0, "fat_data_ptr")
-                            .expect("fat-pointer field 0 extract failed")
-                            .into_pointer_value()
-                    } else {
-                        loaded.into_pointer_value()
+                    // A fat pointer (`&[T]` / `&str`, represented as
+                    // `{data_ptr, i64 len}`) dereferences to the unsized
+                    // `[T]` / `str`, which is laid out *at* the fat pointer
+                    // itself. Do **not** load and advance `ptr` in that case:
+                    // downstream projections (`Field(0)` = data pointer,
+                    // `Field(1)` = length, and `Rvalue::Len`) expect `ptr` to
+                    // still address the fat-pointer struct. Advancing `ptr`
+                    // to the data address (an earlier, incorrect fix) made
+                    // `Rvalue::Len` read `{ptr, i64}` from the *data* — which
+                    // returned garbage lengths and is what produced the
+                    // empty `println` output under `--emit=exec`.
+                    //
+                    // A thin pointer (`&T` where `T` is sized) dereferences to
+                    // a value at the loaded address, so `ptr` becomes the
+                    // loaded pointer.
+                    let pointee_is_fat = match self.ty_ctx.ty_kind(current_ty) {
+                        TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => matches!(
+                            self.ty_ctx.ty_kind(*inner),
+                            TyKind::Slice(_) | TyKind::String
+                        ),
+                        _ => false,
                     };
+                    if !pointee_is_fat {
+                        let llvm_ty = self.llvm_type_for_ty(current_ty);
+                        let loaded = self
+                            .builder
+                            .build_load(llvm_ty, ptr, "deref_load")
+                            .expect("deref load failed");
+                        ptr = loaded.into_pointer_value();
+                    }
                     current_ty = match self.ty_ctx.ty_kind(current_ty) {
                         TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                         _ => {
