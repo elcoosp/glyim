@@ -345,11 +345,15 @@ fn run_reactor(
                 }
             }
         }
-
-        // Bail if shutdown arrived while we were polling.
-        if matches!(rx.try_recv(), Ok(Command::Shutdown)) {
-            return;
-        }
+        // NOTE: there used to be a `if matches!(rx.try_recv(), Ok(Shutdown))
+        // { return; }` check here. That is a bug: `try_recv` *removes* an item
+        // from the channel, so a `Command::RegisterFd` that arrived between the
+        // `poll` above and this line was popped and silently dropped — the fd
+        // was never registered, readiness was never detected, and
+        // `reactor_fd_registration_detects_readiness` failed intermittently
+        // under load. The drain loop at the top of this `loop` already handles
+        // `Command::Shutdown` (it `return`s), so the tail check was redundant
+        // as well as harmful. Loop back and let the top of the loop drain.
     }
 }
 
