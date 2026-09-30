@@ -89,6 +89,7 @@ fn is_literal_works() {
         SyntaxKind::StringLit,
         SyntaxKind::CharLit,
         SyntaxKind::BoolLit,
+        SyntaxKind::ByteLit,
     ];
     for lit in literal_variants {
         assert!(lit.is_literal(), "{:?} should be a literal", lit);

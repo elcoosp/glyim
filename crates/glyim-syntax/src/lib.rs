@@ -422,6 +422,7 @@ impl SyntaxKind {
                 | SyntaxKind::StringLit
                 | SyntaxKind::CharLit
                 | SyntaxKind::BoolLit
+                | SyntaxKind::ByteLit
         )
     }
 
