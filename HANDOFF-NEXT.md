@@ -135,3 +135,59 @@ two changes should land together.
 - Every `thir::Expr::err(span)` should be paired with a
   `diagnostics.push(...)`.
 - Conventional-commit prefixes; document remaining blockers.
+
+
+## Update: turbofish + param-bound-assoc-call threading landed (`253c9794`)
+
+Two real fixes landed since the previous handoff:
+
+1. **Method turbofish is no longer dropped.** `x.parse::<i32>()` parses a
+   `::<...>` list, but `hir::Expr::MethodCall` had no field for it — the
+   `i32` was silently discarded. Added `generic_args: Option<Vec<TypeRef>>`,
+   lowered it in `lower_method_call_expr`, and made
+   `MethodDispatch::Static`'s callee-substs derivation prefer it over the
+   receiver-derived substitution. `FnDef(parse, [])` became
+   `FnDef(parse, [i32])`.
+
+2. **Param-bound associated calls (`T::method(..)`) devirtualize.** Threaded
+   `self_ty: Option<Ty>` through `DynamicCall` -> `VirtualMethod` (and all
+   consumers). Previously the callee was an `Err` node that lowered to
+   `MirConstKind::Error` and was never devirtualized.
+
+Verified: a user-supplied `impl FromStr for MyInt` +
+`"42".parse::<MyInt>()` compiles to a valid object. Full suite 4176/4176.
+
+## Remaining: trait-bound enforcement at call sites (new, separate class)
+
+`"42".parse::<i32>()` still ICEs — but NOT because of turbofish. The stdlib
+declares `trait FromStr` with **no `impl FromStr for i32`**, so the bound
+`T: FromStr` (with `T := i32`) is unsatisfiable. The same ICE fires for a
+purely user-defined case:
+
+    trait Foo { fn foo(&self); }
+    fn needs_foo<T: Foo>(x: T) { x.foo(); }
+    struct Bar;
+    fn main() { needs_foo(Bar); }   // Bar has no `impl Foo`
+    // => [X0000] expected function pointer or closure type for call operand
+
+So the real gap is: **an unsatisfied trait bound at a generic call site is
+not diagnosed; the un-resolvable call reaches codegen and ICEs.** The type
+solver returns `DefiniteNo` (`glyim-solve/src/solver.rs`), and
+`fulfill.rs::process_obligations` handles `DefiniteNo`, but nothing in
+`check_expr`'s generic-call path *registers* the `T: Trait` obligation for
+the call's inferred arguments, so no diagnostic is produced.
+
+### Fix sketch
+
+In `check_expr`'s `Call` arm, when the callee is a generic `FnDef(id, substs)`
+whose signature has param bounds, register an `Obligation::Trait` for each
+bound with the call's concrete substitutions and let
+`FulfillmentCtx::process_obligations` reject `DefiniteNo` with a
+`trait_not_implemented` diagnostic (the same one `resolve_method_call`
+already emits at `check_expr.rs:3164`). That converts every unsatisfied-bound
+ICE into a clean, spanned error.
+
+The `trait_not_implemented` diagnostic constructor already exists and is
+already used for the method-resolution analogue — this is wiring, not new
+machinery. It is the highest-value next item: it closes the entire
+"unsatisfied bound -> codegen ICE" class, not just `parse::<i32>`.
