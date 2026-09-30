@@ -283,6 +283,11 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     glyim_mir::MirConstKind::ConstRef(_, const_substs) => {
                         *const_substs = substitute_substitution(*const_substs, substs, ctx, frozen);
                     }
+                    glyim_mir::MirConstKind::VirtualMethod { self_ty, .. } => {
+                        if let Some(st) = self_ty {
+                            *st = substitute_ty(*st, substs, ctx, frozen);
+                        }
+                    }
                     _ => {}
                 }
                 Operand::Constant(mir_const)

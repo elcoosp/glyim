@@ -397,12 +397,14 @@ impl<'tcx> Interpreter<'tcx> {
                             MirConstKind::VirtualMethod {
                                 trait_def_id,
                                 method_name,
+                                self_ty,
                             },
                         span,
                         ..
                     }) = &func
                     {
-                        if let Some(recv_ty) = args.first().and_then(|a| self.operand_ty(a)) {
+                        let recv = self_ty.or_else(|| args.first().and_then(|a| self.operand_ty(a)));
+                        if let Some(recv_ty) = recv {
                             let resolved =
                                 self.tcx
                                     .resolve_trait_method(*trait_def_id, recv_ty, *method_name);
@@ -1510,8 +1512,9 @@ impl<'tcx> Interpreter<'tcx> {
                 MirConstKind::VirtualMethod {
                     trait_def_id,
                     method_name,
+                    self_ty,
                 } => {
-                    let recv_ty = args.first().and_then(|a| self.operand_ty(a));
+                    let recv_ty = self_ty.or_else(|| args.first().and_then(|a| self.operand_ty(a)));
                     if let Some(recv_ty) = recv_ty {
                         if let Some(fn_def_id) =
                             self.tcx

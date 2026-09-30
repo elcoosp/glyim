@@ -193,6 +193,11 @@ pub enum ExprKind {
         method_name: Name,
         /// Struct.
         args: Vec<Expr>,
+        /// For a param-bound associated call (`T::method(..)`) the concrete
+        /// `Self` type is `T`, which does not appear as a receiver value.
+        /// Carry it so monomorphization resolves the impl against the
+        /// substituted type. `None` for ordinary receiver-method calls.
+        self_ty: Option<Ty>,
     },
     /// Variant.
     If {

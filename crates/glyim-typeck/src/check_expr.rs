@@ -778,7 +778,7 @@ impl<'a> FnCtxt<'a> {
                 // `check_path` fallback would emit a spurious
                 // "unresolved value path" before we get a chance to build the
                 // call. Handle it fully here and return.
-                if let Some((self_ty, _tid, m)) = param_assoc_call {
+                if let Some((self_ty, tid, m)) = param_assoc_call {
                     let self_name = self.ctx.resolver().intern("Self");
                     let mut pm: HashMap<Name, Ty> = HashMap::new();
                     pm.insert(self_name, self_ty);
@@ -799,14 +799,28 @@ impl<'a> FnCtxt<'a> {
                     } else {
                         Ty::UNIT
                     };
-                    // Emit as a call through an error-node callee; MIR
-                    // devirtualization will rewrite once the receiver type
-                    // is concrete.
+                    // `T::method(args)` on a generic param. There is no
+                    // receiver *value* carrying the concrete `Self` type
+                    // (`T::from_str(self)` takes `&str`, not `T`), so emit a
+                    // `DynamicCall` carrying `self_ty = Some(T)` and the trait
+                    // identity. Monomorphization substitutes `T` and
+                    // devirtualizes against the concrete impl. Previously this
+                    // emitted a `Call` with an `Err` callee, hoping MIR
+                    // devirtualization would rewrite it — but `Err` lowers to
+                    // `MirConstKind::Error`, never `VirtualMethod`, so the
+                    // callee was never resolved and codegen ICEd.
                     return (
                         thir::Expr {
-                            kind: thir::ExprKind::Call {
-                                func: Box::new(thir::Expr::err(span)),
+                            kind: thir::ExprKind::DynamicCall {
+                                receiver: Box::new(thir::Expr {
+                                    kind: thir::ExprKind::Err,
+                                    ty: self_ty,
+                                    span,
+                                }),
+                                trait_def_id: tid,
+                                method_name: m.name,
                                 args: arg_exprs,
+                                self_ty: Some(self_ty),
                             },
                             ty: ret_ty,
                             span,
@@ -1130,6 +1144,7 @@ impl<'a> FnCtxt<'a> {
                 receiver,
                 method,
                 args,
+                generic_args,
             } => {
                 let (recv_expr, recv_ty) = self.check_expr(*receiver);
                 // Resolve the method before checking its args: the dispatch's
@@ -1269,23 +1284,47 @@ impl<'a> FnCtxt<'a> {
                         //
                         // Peel `&`/`&mut`/`*`/`*mut` layers to reach the ADT.
                         // Fall back to slice/array element type, then to empty.
-                        let mut recv_inner = recv_ty;
-                        for _ in 0..8 {
-                            let inner = match self.ctx.ty_kind(recv_inner) {
-                                TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => Some(*i),
-                                _ => None,
-                            };
-                            match inner {
-                                Some(i) => recv_inner = i,
-                                None => break,
+                        // Explicit turbofish args (`x.parse::<i32>()`) take
+                        // precedence: for `str::parse<T>` the receiver `&str`
+                        // does NOT determine `T`, so the turbofish is the only
+                        // source. Without this, the callee was `FnDef(id, [])`,
+                        // mono enqueued the generic body with `T`
+                        // unsubstituted, and codegen ICEd.
+                        let substs = if let Some(explicit) = generic_args {
+                            let resolved: Vec<GenericArg> = explicit
+                                .iter()
+                                .map(|tr| {
+                                    GenericArg::Ty(crate::tyconv::resolve_type_ref(
+                                        self.ctx,
+                                        self.infer,
+                                        self.def_map,
+                                        self.diagnostics,
+                                        tr,
+                                        &self.param_map,
+                                        span,
+                                    ))
+                                })
+                                .collect();
+                            self.ctx.intern_substitution(resolved)
+                        } else {
+                            let mut recv_inner = recv_ty;
+                            for _ in 0..8 {
+                                let inner = match self.ctx.ty_kind(recv_inner) {
+                                    TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => Some(*i),
+                                    _ => None,
+                                };
+                                match inner {
+                                    Some(i) => recv_inner = i,
+                                    None => break,
+                                }
                             }
-                        }
-                        let substs = match self.ctx.ty_kind(recv_inner) {
-                            TyKind::Adt(_, s) if !s.is_empty() => *s,
-                            TyKind::Slice(e) | TyKind::Array(e, _) => self
-                                .ctx
-                                .intern_substitution(vec![GenericArg::Ty(*e)]),
-                            _ => self.ctx.intern_substitution(vec![]),
+                            match self.ctx.ty_kind(recv_inner) {
+                                TyKind::Adt(_, s) if !s.is_empty() => *s,
+                                TyKind::Slice(e) | TyKind::Array(e, _) => self
+                                    .ctx
+                                    .intern_substitution(vec![GenericArg::Ty(*e)]),
+                                _ => self.ctx.intern_substitution(vec![]),
+                            }
                         };
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {
@@ -1392,6 +1431,7 @@ impl<'a> FnCtxt<'a> {
                                 trait_def_id,
                                 method_name: *method,
                                 args: dyn_args,
+                                self_ty: None,
                             },
                             ty: ret_ty,
                             span,

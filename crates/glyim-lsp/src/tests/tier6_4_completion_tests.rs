@@ -168,6 +168,7 @@ fn main() {
         receiver: receiver_id,
         method: ping_name,
         args: vec![],
+        generic_args: None,
     });
     let mut expr_spans: IndexVec<ExprId, Span> = IndexVec::new();
     expr_spans.push(span_for(dot_pos, dot_pos + 1)); // receiver `x`
@@ -361,6 +362,7 @@ fn main() {
         receiver: receiver_id,
         method: method_name,
         args: vec![],
+        generic_args: None,
     });
     let mut expr_spans: IndexVec<ExprId, Span> = IndexVec::new();
     expr_spans.push(span_for(dot_pos, dot_pos + 1));

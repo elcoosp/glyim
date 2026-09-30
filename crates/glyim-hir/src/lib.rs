@@ -555,6 +555,12 @@ pub enum Expr {
         method: Name,
         /// Struct.
         args: Vec<ExprId>,
+        /// Turbofish type arguments written after the method name
+        /// (`x.parse::<i32>()`), if any. These are the call-site's explicit
+        /// generic arguments; `check_expr` uses them to build the callee's
+        /// `FnDef` substitution when the receiver's type does not determine
+        /// them (e.g. `str::parse<T>` where `T` is not the receiver type).
+        generic_args: Option<Vec<TypeRef>>,
     },
     /// Variant.
     Field {

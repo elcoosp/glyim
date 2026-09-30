@@ -514,6 +514,10 @@ pub enum MirConstKind {
         trait_def_id: TraitDefId,
         /// The method name within the trait.
         method_name: Name,
+        /// The `Self` type to resolve against, for a call with no receiver
+        /// value carrying it (param-bound `T::method(..)`). `None` = derive
+        /// from the call's first argument.
+        self_ty: Option<Ty>,
     },
     /// Variant.
     Aggregate(Vec<MirConst>),

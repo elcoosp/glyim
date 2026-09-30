@@ -1410,6 +1410,7 @@ fn desugar_multi_async_fn(
                 receiver: fut_path,
                 method: poll_id,
                 args: Vec::new(),
+                generic_args: None,
             },
             Span::DUMMY,
         );
@@ -1578,6 +1579,7 @@ fn desugar_multi_async_fn(
                     receiver: fut_path,
                     method: poll_id,
                     args: Vec::new(),
+                    generic_args: None,
                 },
                 Span::DUMMY,
             );
@@ -1975,6 +1977,7 @@ fn copy_expr_renamed(
             receiver,
             method,
             args,
+            generic_args,
         } => Expr::MethodCall {
             receiver: copy_expr_renamed(src, dst, *receiver, rename, interner),
             method: *method,
@@ -1982,6 +1985,7 @@ fn copy_expr_renamed(
                 .iter()
                 .map(|a| copy_expr_renamed(src, dst, *a, rename, interner))
                 .collect(),
+            generic_args: generic_args.clone(),
         },
         Expr::Field { receiver, field } => Expr::Field {
             receiver: copy_expr_renamed(src, dst, *receiver, rename, interner),
@@ -2245,6 +2249,7 @@ fn copy_expr_subst_await(
             receiver,
             method,
             args,
+            generic_args,
         } => Expr::MethodCall {
             receiver: copy_expr_subst_await(
                 src, dst, *receiver, rename, interner, await_eid, subst_name,
@@ -2256,6 +2261,7 @@ fn copy_expr_subst_await(
                     copy_expr_subst_await(src, dst, *a, rename, interner, await_eid, subst_name)
                 })
                 .collect(),
+            generic_args: generic_args.clone(),
         },
         Expr::Field { receiver, field } => Expr::Field {
             receiver: copy_expr_subst_await(
@@ -2763,6 +2769,7 @@ fn desugar_loop_async_fn(
                 receiver: fut_path,
                 method: poll_id,
                 args: Vec::new(),
+                generic_args: None,
             },
             Span::DUMMY,
         );
@@ -3498,6 +3505,7 @@ fn rewrite_expr(
                     receiver: inner,
                     method: interner.intern("poll"),
                     args: Vec::new(),
+                    generic_args: None,
                 },
                 Span::DUMMY,
             );

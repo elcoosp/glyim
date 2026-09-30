@@ -217,9 +217,11 @@ impl<'a> MonoCtx<'a> {
                     if let MirConstKind::VirtualMethod {
                         trait_def_id,
                         method_name,
+                        self_ty: explicit_self_ty,
                     } = c.kind
                     {
-                        if let Some(fn_def_id) = recv_ty.and_then(|rt| {
+                        let self_ty_resolved = explicit_self_ty.or(recv_ty);
+                        if let Some(fn_def_id) = self_ty_resolved.and_then(|rt| {
                             ty_ctx.resolve_trait_method(trait_def_id, rt, method_name)
                         }) {
                             // Pass the *concrete* receiver `Self` type as the
@@ -232,7 +234,7 @@ impl<'a> MonoCtx<'a> {
                             // `Param`/`Self` type, which then ICEs at codegen
                             // (e.g. `f.poll()` inside `block_on<F>` leaving
                             // `Poll<Self::Output>` unresolved).
-                            let self_ty = recv_ty.map(|rt| match ty_ctx.ty_kind(rt) {
+                            let self_ty = self_ty_resolved.map(|rt| match ty_ctx.ty_kind(rt) {
                                 TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                                 _ => rt,
                             });

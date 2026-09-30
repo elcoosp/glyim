@@ -622,6 +622,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
         receiver: x_ref,
         method: method_name,
         args: vec![],
+        generic_args: None,
     });
     exprs.push(Expr::Return {
         value: Some(method_call),

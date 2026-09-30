@@ -447,6 +447,7 @@ fn format_const(c: &glyim_mir::MirConst) -> String {
         glyim_mir::MirConstKind::VirtualMethod {
             trait_def_id,
             method_name,
+            ..
         } => format!("virtual_method({:?}::{:?})", trait_def_id, method_name),
     }
 }

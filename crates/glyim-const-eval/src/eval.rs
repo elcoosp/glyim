@@ -559,6 +559,7 @@ impl<'a> ConstEvaluator<'a> {
                 receiver,
                 method,
                 args,
+                ..
             } => {
                 // Plan §4.2: const-evaluation of method calls. The builtin
                 // `const fn`s are also available as methods on their receiver

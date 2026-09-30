@@ -244,6 +244,7 @@ fn lower_field_or_method_with_receiver(
             receiver: receiver_id,
             method: name,
             args: arg_ids,
+            generic_args: None,
         };
         let eid = body.alloc_expr(expr, node_span(node));
         Some(eid)
@@ -1307,10 +1308,26 @@ fn lower_method_call_expr(
             arg_ids.push(id);
         }
     }
+    // Turbofish type arguments (`x.parse::<i32>()`): `parse_type_arg_list`
+    // emits the argument *type nodes directly* as children of the
+    // `MethodCallExpr` (it does NOT wrap them in a `GenericArgList`, unlike
+    // the type-position path in `ty.rs`). Collect every direct type-node
+    // child; the only type nodes a method-call expression can contain are its
+    // turbofish arguments.
+    let generic_args = {
+        let collected: Vec<TypeRef> = node
+            .children()
+            .filter(is_type_node)
+            .filter_map(|c| super::lower_type::lower_type_ref(&c, interner))
+            .collect();
+        if collected.is_empty() { None } else { Some(collected) }
+    };
+
     let expr = Expr::MethodCall {
         receiver: receiver_id,
         method,
         args: arg_ids,
+        generic_args,
     };
     let eid = body.alloc_expr(expr, node_span(node));
     Some(eid)

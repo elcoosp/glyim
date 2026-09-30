@@ -86,6 +86,7 @@ fn method_abs_on_negative() {
             receiver: recv,
             method: name("abs"),
             args: vec![],
+            generic_args: None,
         },
         dummy_span(),
     );
@@ -102,6 +103,7 @@ fn method_min_two_ints() {
             receiver: recv,
             method: name("min"),
             args: vec![arg],
+            generic_args: None,
         },
         dummy_span(),
     );
@@ -117,6 +119,7 @@ fn method_sqrt_on_uint() {
             receiver: recv,
             method: name("sqrt"),
             args: vec![],
+            generic_args: None,
         },
         dummy_span(),
     );
@@ -132,6 +135,7 @@ fn unknown_method_errors() {
             receiver: recv,
             method: name("frobnicate"),
             args: vec![],
+            generic_args: None,
         },
         dummy_span(),
     );

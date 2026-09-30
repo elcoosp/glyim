@@ -945,6 +945,7 @@ impl<'a> MirBuilder<'a> {
                 trait_def_id,
                 method_name,
                 args,
+                self_ty,
             } => {
                 // Generic-bound method call (`f.poll()` where `f: F: Trait`).
                 // The concrete impl is unknown until monomorphization, so we
@@ -955,10 +956,12 @@ impl<'a> MirBuilder<'a> {
                 //
                 // `args` already has the receiver as its first element
                 // (typeck prepends it), so we lower them verbatim.
+                let resolved_self_ty = self_ty.or_else(|| args.first().map(|a| a.ty));
                 let func_const = glyim_mir::MirConst {
                     kind: glyim_mir::MirConstKind::VirtualMethod {
                         trait_def_id: *trait_def_id,
                         method_name: *method_name,
+                        self_ty: resolved_self_ty,
                     },
                     ty: expr.ty,
                     span: expr.span,
