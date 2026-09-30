@@ -97,6 +97,7 @@ pub(crate) fn lower_block_to_expr(
                         type_node = Some(inner);
                     }
                 }
+                let mut consumed = false;
                 if let (Some(pat), Some(rhs)) = (pat_node, expr_node.clone())
                     && let Some(pat_id) = lower_pat(&pat, interner, &mut body.pats, diags)
                 {
@@ -115,15 +116,52 @@ pub(crate) fn lower_block_to_expr(
                         stmts.push(let_id);
                         pending = None;
                         last_has_semi = true;
-                        continue;
+                        consumed = true;
+                    } else {
+                        // The pattern lowered but the RHS did not. The old
+                        // code fell through to the plain-statement fallback
+                        // below, which re-lowered the same failing RHS and
+                        // then silently discarded the entire `let`. Every
+                        // later use of the bound name was then reported as a
+                        // misleading `unresolved name` (this is the exact
+                        // shape of the session-3 handoff bug: `let digit:
+                        // i32 = (ch as i32) - (b'0' as i32);` was dropped
+                        // because `b'0'` failed to reach `lower_literal`).
+                        //
+                        // Do not silently swallow: emit an internal
+                        // diagnostic so any future leaf-lowering regression
+                        // surfaces as a compiler-bug report at the `let`
+                        // site, not as a phantom unresolved name further
+                        // down the block.
+                        diags.push(GlyimDiagnostic::internal_error(format!(
+                            "failed to lower the RHS of a `let` binding; \
+                             the binding introduced here will be missing \
+                             from the HIR (span {:?}). This is a compiler \
+                             bug: an expression the parser produced could \
+                             not be lowered.",
+                            node_span(&child)
+                        )));
+                        consumed = true;
                     }
                 }
-                if let Some(rhs) = expr_node {
-                    if let Some(prev) = pending.take() {
-                        stmts.push(prev);
+                if !consumed {
+                    if let Some(rhs) = expr_node {
+                        if let Some(prev) = pending.take() {
+                            stmts.push(prev);
+                        }
+                        let lowered =
+                            lower_expr(&rhs, interner, body, diags, struct_field_map);
+                        if lowered.is_none() {
+                            diags.push(GlyimDiagnostic::internal_error(format!(
+                                "failed to lower a statement's RHS expression; \
+                                 the statement will be missing from the HIR \
+                                 (span {:?})",
+                                node_span(&child)
+                            )));
+                        }
+                        pending = lowered;
+                        last_has_semi = true;
                     }
-                    pending = lower_expr(&rhs, interner, body, diags, struct_field_map);
-                    last_has_semi = true;
                 }
             }
             SyntaxKind::ExternBlock => {
@@ -1510,7 +1548,19 @@ fn lower_match_expr(
                     body: body_id_val,
                 });
             } else {
-                // Arm had neither a pattern nor a body; skip it.
+                // The arm could not be assembled: either its pattern or its
+                // body failed to lower (the `?`-free leaf-lowering of an
+                // inner node returned `None`). Silently skipping the arm
+                // makes the surrounding `match` non-exhaustive at the
+                // typeck stage and produces a misleading diagnostic far
+                // from the real failure. Report it here instead.
+                diags.push(GlyimDiagnostic::internal_error(format!(
+                    "failed to lower a match arm: pattern={}, body={} \
+                     (span {:?})",
+                    pat_id.is_some(),
+                    body_id.is_some(),
+                    node_span(&arm_node),
+                )));
             }
         }
     }
