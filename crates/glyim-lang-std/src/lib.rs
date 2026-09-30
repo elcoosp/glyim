@@ -49,6 +49,10 @@ pub fn std_source(name: &str) -> Option<&'static str> {
         // on primitive receivers. Emitted FLAT (below, via `flat_modules`).
         "str" => Some(include_str!("../../glyim-lang-core/lib/str.g")),
         "slice" => Some(include_str!("../../glyim-lang-core/lib/slice.g")),
+        // `impl FromStr for i32` (and future primitive impls). Emitted FLAT
+        // (see `flat_modules` below) so the `Self` type binds to `i32`, not
+        // to a module named `parse`.
+        "parse" => Some(include_str!("../../glyim-lang-core/lib/parse.g")),
         // --- core module additions (prelude surface) ---
         "option" => Some(include_str!("../../glyim-lang-core/lib/option.g")),
         "result" => Some(include_str!("../../glyim-lang-core/lib/result.g")),
@@ -195,7 +199,7 @@ pub fn std_source_assembled() -> String {
     // `str` and `slice` are emitted FLAT: their `impl str { .. }` /
     // `impl<T> [T] { .. }` extension blocks must bind to the primitive types,
     // not a module named `str` / `slice`.
-    let flat_modules: &[&str] = &["str", "slice"];
+    let flat_modules: &[&str] = &["str", "slice", "parse"];
     let mut out = String::new();
     out.push_str("// Assembled modular glyim standard library (Option A).\n");
     for name in flat_modules {
@@ -281,7 +285,7 @@ pub fn std_source_assembled_minimal() -> String {
         ("panic", &["panic_any"]),
     ];
     // `str` and `slice` emitted FLAT.
-    let flat_modules: &[&str] = &["str", "slice"];
+    let flat_modules: &[&str] = &["str", "slice", "parse"];
     let mut out = String::new();
     out.push_str("// Assembled MINIMAL glyim standard library (Script 82).\n");
     for name in flat_modules {
