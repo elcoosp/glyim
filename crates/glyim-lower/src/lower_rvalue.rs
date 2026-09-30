@@ -697,25 +697,18 @@ impl<'a> MirBuilder<'a> {
                         expr.span,
                     )
                 } else {
-                    // Regular indexing (single element).
-                    let base_place = self.lower_expr_to_place(base);
-                    let index_local = self.alloc_local(
-                        index.ty,
-                        glyim_core::primitives::Mutability::Not,
-                        index.span,
-                    );
-                    let index_rval = self.lower_expr_to_rvalue(index);
-                    self.push_stmt(
-                        glyim_mir::StatementKind::Assign(
-                            glyim_mir::Place::new(index_local),
-                            index_rval,
-                        ),
-                        index.span,
-                    );
-                    let place = self.place_with_projection(
-                        base_place,
-                        glyim_mir::ProjectionElem::Index(index_local),
-                    );
+                    // Regular indexing (single element). Delegate the whole
+                    // `base[index]` to `lower_expr_to_place`, whose `Index`
+                    // arm auto-derefs a `&[T]` / `&mut [T]` / `&Vec<T>` base
+                    // before applying the projection. This arm previously
+                    // rebuilt the projection from just the *base*
+                    // (`lower_expr_to_place(base)` then
+                    // `ProjectionElem::Index`), which skipped that auto-deref:
+                    // `bytes[0]` where `bytes: &[u8]` lowered to
+                    // `Place{[Index]}` on a `Ref`-typed local, and codegen
+                    // ICEd with `Index projection on non-array/slice type`
+                    // (the current type was `Ref(_, [u8])`, not a slice).
+                    let place = self.lower_expr_to_place(expr);
                     glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(place))
                 }
             }
