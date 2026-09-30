@@ -28,6 +28,58 @@ pub fn check_unsized_locals(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDia
     diags
 }
 
+/// Check for `MirConstKind::VirtualMethod` callees that survived
+/// monomorphization undevirtualized.
+///
+/// A `VirtualMethod` constant names a trait method to be resolved against a
+/// concrete receiver type during monomorphization. When the receiver's impl
+/// cannot be found — an unsatisfied trait bound, e.g. `needs_foo::<Bar>(..)`
+/// where `Bar: !Foo`, or `"42".parse::<i32>()` when there is no
+/// `impl FromStr for i32` — the constant survives to codegen, which ICEs with
+/// `MirConstKind::VirtualMethod reached LLVM codegen (not devirtualized)`.
+///
+/// That is an *error in the user's program*, not a compiler bug. Report it
+/// here, at monomorphization time, as a clean spanned diagnostic so it never
+/// reaches codegen. Mirrors rustc's `E0277` ("the trait bound `X: Trait` is
+/// not satisfied").
+pub fn check_unresolved_virtual_methods(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDiagnostic> {
+    let mut diags = Vec::new();
+    for item in items {
+        for block in item.body.basic_blocks.iter() {
+            let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
+                continue;
+            };
+            let Operand::Constant(mir_const) = func else {
+                continue;
+            };
+            let MirConstKind::VirtualMethod {
+                trait_def_id,
+                method_name,
+                self_ty,
+            } = &mir_const.kind
+            else {
+                continue;
+            };
+            let trait_name = ctx
+                .trait_def(*trait_def_id)
+                .map(|t| ctx.name_str(t.name).to_string())
+                .unwrap_or_else(|| format!("#{}", trait_def_id.index()));
+            let self_name = match self_ty {
+                Some(t) => glyim_type::PrintTy::new(*t, ctx).to_string(),
+                None => "<unknown>".to_string(),
+            };
+            let method = ctx.name_str(*method_name);
+            diags.push(GlyimDiagnostic::type_error(
+                mir_const.span,
+                format!(
+                    "the trait bound `{self_name}: {trait_name}` is not satisfied: cannot resolve method `{method}` (no matching impl)"
+                ),
+            ));
+        }
+    }
+    diags
+}
+
 /// Warn if the number of mono items exceeds the given threshold.
 pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<GlyimDiagnostic> {
     if items.len() > threshold {

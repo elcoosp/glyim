@@ -8,7 +8,8 @@ use glyim_diag::{CompResult, DiagSink, GlyimDiagnostic};
 use glyim_lower::mono::MonoCtx;
 use glyim_lower::partition::partition;
 use glyim_lower::post_mono_checks::{
-    check_large_mono_set, check_unsized_locals, check_unused_generic_params,
+    check_large_mono_set, check_unresolved_virtual_methods, check_unsized_locals,
+    check_unused_generic_params,
 };
 use glyim_mir::Body;
 use glyim_solve::solver::ImplDef;
@@ -572,6 +573,7 @@ impl Pipeline {
             // / pathological mono-set sizes surface as diagnostics instead of
             // being silently ignored.
             let mut post_diags = check_unsized_locals(mono_ctx.items(), ty_ctx_ref);
+            post_diags.extend(check_unresolved_virtual_methods(mono_ctx.items(), ty_ctx_ref));
             post_diags.extend(check_unused_generic_params(
                 mono_ctx.items(),
                 Some(&mir_bodies_map),
