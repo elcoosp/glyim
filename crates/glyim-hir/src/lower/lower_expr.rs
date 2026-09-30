@@ -1017,6 +1017,31 @@ pub(crate) fn lower_literal(token: &SyntaxToken, interner: &mut Interner) -> Lit
                 Literal::Unit
             }
         }
+        // Byte literal `b'x'` (e.g. `b'0'`, `b'\n'`). Previously fell into the
+        // catch-all `_ => Literal::Unit`, so `b'0'` became `()` — poisoning
+        // any expression it appeared in (`(ch as i32) - (b'0' as i32)` typed
+        // as `()`, which then made the enclosing `let digit: i32 = …` fail to
+        // bind, surfacing as `unresolved name \`digit\``). A byte literal is
+        // a `u8` value.
+        SyntaxKind::ByteLit => {
+            // Text is `b'…'`; strip the `b` and the quotes, then reuse the
+            // char-escape parser, and use the byte value directly.
+            let after_b = &text[1..];
+            let inner = if after_b.len() >= 2 {
+                &after_b[1..after_b.len() - 1]
+            } else {
+                ""
+            };
+            match parse_char_literal(inner) {
+                Some(c) if (c as u32) <= u8::MAX as u32 => {
+                    Literal::Uint(c as u128, Some(UintTy::U8))
+                }
+                _ => {
+                    tracing::warn!("failed to parse byte literal: {}", text);
+                    Literal::Unit
+                }
+            }
+        }
         SyntaxKind::StringLit => {
             let raw = token.text().trim_start_matches('"').trim_end_matches('"');
             let processed = raw
