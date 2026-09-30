@@ -2204,7 +2204,21 @@ impl<'a> FnCtxt<'a> {
                 // yielding unit.
                 let (_value_expr, value_ty) = self.check_expr(*value);
                 self.check_pattern(*pat, value_ty);
-                (thir::Expr::err(span), Ty::UNIT)
+                // A `let` in expression position evaluates to `()`. Emit a
+                // real unit literal rather than an `Err` node: an `Err` here
+                // lowers to `MirConstKind::Error`, which the LLVM backend
+                // rejects — and it produced a spurious
+                // `[X0000] Err expression in THIR during lowering` warning for
+                // every occurrence. The value is `()`, so a unit literal is
+                // both correct and codegen-safe.
+                (
+                    thir::Expr {
+                        kind: thir::ExprKind::Literal(thir::Literal::Unit),
+                        ty: Ty::UNIT,
+                        span,
+                    },
+                    Ty::UNIT,
+                )
             }
 
             Expr::Assign { lhs, rhs } => {
@@ -2223,7 +2237,16 @@ impl<'a> FnCtxt<'a> {
                 if lhs_ty != Ty::ERROR && rhs_ty != Ty::ERROR {
                     self.unify(rhs_ty, lhs_ty, span);
                 }
-                (thir::Expr::err(span), Ty::UNIT)
+                // An assignment in expression position evaluates to `()` —
+                // same reasoning as the `Expr::Let` arm above.
+                (
+                    thir::Expr {
+                        kind: thir::ExprKind::Literal(thir::Literal::Unit),
+                        ty: Ty::UNIT,
+                        span,
+                    },
+                    Ty::UNIT,
+                )
             }
 
             Expr::Return { value } => {
