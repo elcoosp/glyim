@@ -116,8 +116,12 @@ pub struct TyCtxMut {
     /// Populated during `typeck_crate` from `impl Trait for Type` items;
     /// carried into the frozen `TyCtx` for monomorphization / interpreter
     /// devirtualization.
+    /// Keyed on `(trait, Self type)` rather than `(trait, AdtId)` so that
+    /// `impl Trait for <primitive>` (e.g. `impl FromStr for i32`) is
+    /// representable — primitives have no `AdtId`. Primitive `Ty`s are stable
+    /// const handles (`Ty::I32`, `Ty::U32`, …), so they key correctly.
     pub(crate) impl_method_fns:
-        HashMap<(glyim_core::def_id::TraitDefId, AdtId), HashMap<Name, FnDefId>>,
+        HashMap<(glyim_core::def_id::TraitDefId, Ty), HashMap<Name, FnDefId>>,
 
     /// Builtin inherent-method table: `(receiver_adt_id, method_name)` →
     /// `(synthetic FnDefId, method FnSig)`. Populated in `register_builtin_ranges`
@@ -1350,12 +1354,12 @@ impl TyCtxMut {
     pub fn register_impl_method(
         &mut self,
         trait_def_id: glyim_core::def_id::TraitDefId,
-        adt_id: AdtId,
+        self_ty: Ty,
         method_name: Name,
         fn_def_id: FnDefId,
     ) {
         self.impl_method_fns
-            .entry((trait_def_id, adt_id))
+            .entry((trait_def_id, self_ty))
             .or_default()
             .insert(method_name, fn_def_id);
     }

@@ -83,7 +83,7 @@ pub struct TyCtx {
     /// (`f.poll()` where `f: F: Future`) once the receiver's concrete type is
     /// known, without re-scanning the HIR.
     pub(crate) impl_method_fns:
-        HashMap<(glyim_core::def_id::TraitDefId, AdtId), HashMap<Name, FnDefId>>,
+        HashMap<(glyim_core::def_id::TraitDefId, Ty), HashMap<Name, FnDefId>>,
 }
 
 impl TyCtx {
@@ -544,20 +544,23 @@ impl TyCtx {
         method_name: Name,
     ) -> Option<FnDefId> {
         // Peel any leading reference(s) so the impl lookup sees the underlying
-        // `Self` ADT. A method call `f.poll()` carries a `&mut Self` receiver,
-        // but the `impl Future for TwoFuture` is keyed on `TwoFuture` itself.
+        // `Self` type. A method call `f.poll()` carries a `&mut Self` receiver,
+        // but the `impl Future for TwoFuture` is keyed on `TwoFuture` itself —
+        // and `impl FromStr for i32` on the primitive `i32`.
         let mut base = recv_ty;
         while let TyKind::Ref(_, inner, _) = self.ty_kind(base) {
             base = *inner;
         }
+        // The table is keyed on the exact `Self` type. Look it up directly
+        // (this now covers primitives, which have no `AdtId`), then fall back
+        // to the shared/mut reference forms for impls written on `&T`/`&mut T`.
         let candidates = [
             base,
             self.mk_ref(Region::Erased, base, Mutability::Not),
             self.mk_ref(Region::Erased, base, Mutability::Mut),
         ];
         for cand in candidates {
-            if let TyKind::Adt(adt_id, _) = self.ty_kind(cand)
-                && let Some(methods) = self.impl_method_fns.get(&(trait_def_id, *adt_id))
+            if let Some(methods) = self.impl_method_fns.get(&(trait_def_id, cand))
                 && let Some(&fn_def_id) = methods.get(&method_name)
             {
                 return Some(fn_def_id);

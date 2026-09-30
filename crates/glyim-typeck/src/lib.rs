@@ -1731,14 +1731,15 @@ fn check_fn_items_in_module(
                         if let Some(trait_def_id) = tyconv::resolve_path_to_trait_def_id(
                             def_map, ctx, trait_path, impl_span,
                         ) {
-                            if let glyim_type::TyKind::Adt(self_adt_id, _) = ctx.ty_kind(self_ty) {
-                                ctx.register_impl_method(
-                                    trait_def_id,
-                                    *self_adt_id,
-                                    method.name,
-                                    FnDefId::from_raw(local_def_id.to_raw()),
-                                );
-                            }
+                            // Key on the exact `Self` type — this covers
+                            // primitives (`impl FromStr for i32`), which have
+                            // no `AdtId`, as well as user ADTs.
+                            ctx.register_impl_method(
+                                trait_def_id,
+                                self_ty,
+                                method.name,
+                                FnDefId::from_raw(local_def_id.to_raw()),
+                            );
                         }
                     }
                     process_where_clauses(
