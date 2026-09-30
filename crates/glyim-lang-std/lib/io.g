@@ -322,6 +322,8 @@ type Result<T> = Result<T, Error>;
 enum ErrorKind {
     /// An entity was not found, often a file.
     NotFound,
+    /// A parameter was incorrect.
+    InvalidInput,
     /// The operation lacked the necessary privileges to complete.
     PermissionDenied,
     /// The connection was refused by the remote server.
