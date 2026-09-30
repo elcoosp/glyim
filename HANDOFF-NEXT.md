@@ -191,3 +191,48 @@ The `trait_not_implemented` diagnostic constructor already exists and is
 already used for the method-resolution analogue — this is wiring, not new
 machinery. It is the highest-value next item: it closes the entire
 "unsatisfied bound -> codegen ICE" class, not just `parse::<i32>`.
+
+
+## Update: trait-bound ICE class closed + X0000 warnings eliminated
+
+The two remaining items from the previous handoff are done.
+
+### 1. Unsatisfied trait bounds are now diagnostics, not ICEs (`13c292e5`)
+
+`check_unresolved_virtual_methods` was added to the post-monomorphization
+checks (`glyim-lower/src/post_mono_checks.rs`) and wired into
+`prepare_compilation`. Any `MirConstKind::VirtualMethod` callee that survives
+monomorphization undevirtualized — an unsatisfied bound — is reported as a
+clean, spanned `[T0001] the trait bound ... is not satisfied` diagnostic
+instead of reaching codegen, which used to ICE with
+`MirConstKind::VirtualMethod reached LLVM codegen`. Regression test:
+`crates/glyim-cli/tests/trait_bound_diagnostic.rs`.
+
+### 2. All 10 silent `X0000 Err expression in THIR` warnings eliminated
+
+Three separate causes, each fixed:
+
+- **`Expr::Let` / `Expr::Assign` in expression position** returned
+  `thir::Expr::err` for a value that is really `()`. Now return a real
+  `thir::ExprKind::Literal(thir::Literal::Unit)` (`c277a26b`). Killed 4.
+- **`ErrorKind::InvalidInput` was referenced by `Error::invalid_input` (io.g)
+  but never declared in the `ErrorKind` enum.** Fixed the stdlib source
+  (`0c4f32ae`). Killed the last one.
+- (The turbofish/devirt fixes earlier in the session killed the rest.)
+
+A fresh `--with-stdlib --emit=obj` on hello world now emits **zero**
+`X0000` warnings.
+
+### Still open
+
+- **`"42".parse::<i32>()`** produces the correct
+  `trait bound \`i32: FromStr\` is not satisfied` diagnostic (because the
+  stdlib has no `impl FromStr for i32`) — this is now *correct behaviour*,
+  not a bug. If `parse::<i32>()` should actually work, the missing stdlib
+  `impl` is the thing to add.
+- **`glyim-runtime` reactor test is flaky** (`reactor_fd_registration_detects_readiness`
+  fails intermittently on clean HEAD too; unrelated to compiler work).
+  Worth stabilising: it makes a single `cargo nextest run` unreliable as a
+  green/red gate.
+- The remaining `emit_mir` / `compile_file_to_mir` chain duplication
+  (documented above) — lower priority now that every emit mode works.
