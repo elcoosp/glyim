@@ -540,8 +540,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                         0
                                     } else {
                                         match &layout.fields {
+                                            // `offsets.as_slice().get(..)`
+                                            // (not `offsets.get(FieldIdx)`)
+                                            // because `IndexVec::get` carries
+                                            // a `debug_assert!` that fires on
+                                            // an out-of-range index — the
+                                            // `.unwrap_or(0)` fallback here is
+                                            // *intentional* and must not
+                                            // panic when `data_start` is
+                                            // absent (a single-variant or
+                                            // niche-tagged layout). The slice
+                                            // `get` returns `None` cleanly.
                                             FieldsShape::Arbitrary { offsets } => offsets
-                                                .get(FieldIdx::from_raw(1))
+                                                .as_slice()
+                                                .get(1)
                                                 .map(|s| s.0)
                                                 .unwrap_or(0),
                                             _ => 0,
@@ -1399,7 +1411,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             let niche_value = niche_start.wrapping_add(rel);
                             let tag_offset = match &layout.fields {
                                 FieldsShape::Arbitrary { offsets } => offsets
-                                    .get(FieldIdx::from_raw(*tag_field))
+                                    .as_slice()
+                                    .get(*tag_field as usize)
                                     .map(|s| s.0)
                                     .unwrap_or(0),
                                 _ => 0,
@@ -1528,7 +1541,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             } => {
                 let tag_offset = match &layout.fields {
                     FieldsShape::Arbitrary { offsets } => offsets
-                        .get(FieldIdx::from_raw(*tag_field))
+                        .as_slice()
+                        .get(*tag_field as usize)
                         .map(|s| s.0)
                         .unwrap_or(0),
                     _ => 0,
