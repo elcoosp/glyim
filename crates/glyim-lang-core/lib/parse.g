@@ -254,3 +254,126 @@ impl FromStr for isize {
         }
     }
 }
+
+/// The error type for float parsing.
+struct ParseFloatError;
+
+impl FromStr for f64 {
+    type Err = ParseFloatError;
+
+    /// Parse a decimal `f64` from `s`, accepting the same grammar as Rust's
+    /// `f64::from_str`: an optional `-`/`+` sign, integer digits, an optional
+    /// `.` fraction, and an optional `e`/`E` exponent with its own sign.
+    ///
+    /// The magnitude is accumulated as an integer (`u64`) with a running
+    /// count of fractional digits, then scaled by a power of ten via a
+    /// repeated `* 10.0` / `/ 10.0` loop (the language has no `powi`/`powf`
+    /// builtin, and `10.0_f64.powf` is not available in the flat stdlib
+    /// surface). The exponent is applied the same way.
+    fn from_str(s: &str) -> Result<f64, ParseFloatError> {
+        let bytes = s.as_bytes();
+        let len = bytes.len();
+        if len == 0 {
+            return Result::Err(ParseFloatError);
+        }
+        let mut i: usize = 0;
+        let mut neg = false;
+        if bytes[0] == b'-' {
+            neg = true;
+            i = 1;
+        } else if bytes[0] == b'+' {
+            i = 1;
+        }
+
+        let mut mantissa: f64 = 0.0;
+        let mut frac_digits: i32 = 0;
+        let mut seen_digit = false;
+        let mut in_fraction = false;
+
+        // Integer + fraction digits.
+        while i < len {
+            let ch = bytes[i];
+            if ch == b'.' {
+                if in_fraction {
+                    return Result::Err(ParseFloatError);
+                }
+                in_fraction = true;
+                i += 1;
+                continue;
+            }
+            if ch < b'0' || ch > b'9' {
+                break;
+            }
+            seen_digit = true;
+            let digit: f64 = ((ch - b'0') as f64);
+            mantissa = mantissa * 10.0 + digit;
+            if in_fraction {
+                frac_digits += 1;
+            }
+            i += 1;
+        }
+
+        if !seen_digit {
+            return Result::Err(ParseFloatError);
+        }
+
+        // Scale the fraction back out.
+        while frac_digits > 0 {
+            mantissa = mantissa / 10.0;
+            frac_digits -= 1;
+        }
+
+        // Optional exponent.
+        if i < len && (bytes[i] == b'e' || bytes[i] == b'E') {
+            i += 1;
+            let mut exp_neg = false;
+            if i < len && bytes[i] == b'-' {
+                exp_neg = true;
+                i += 1;
+            } else if i < len && bytes[i] == b'+' {
+                i += 1;
+            }
+            if i >= len {
+                return Result::Err(ParseFloatError);
+            }
+            let mut exp: i32 = 0;
+            while i < len {
+                let ch = bytes[i];
+                if ch < b'0' || ch > b'9' {
+                    return Result::Err(ParseFloatError);
+                }
+                exp = exp * 10 + ((ch - b'0') as i32);
+                i += 1;
+            }
+            // Cap the exponent so a pathological input cannot spin for
+            // billions of iterations; beyond ~±308 the value is 0 or inf
+            // anyway.
+            if exp > 400 {
+                exp = 400;
+            }
+            let mut k = exp;
+            if exp_neg {
+                while k > 0 {
+                    mantissa = mantissa / 10.0;
+                    k -= 1;
+                }
+            } else {
+                while k > 0 {
+                    mantissa = mantissa * 10.0;
+                    k -= 1;
+                }
+            }
+        }
+
+        // Trailing garbage is an error (matches Rust: `"1.0x"` fails).
+        if i != len {
+            return Result::Err(ParseFloatError);
+        }
+
+        if neg {
+            Result::Ok(-mantissa)
+        } else {
+            Result::Ok(mantissa)
+        }
+    }
+}

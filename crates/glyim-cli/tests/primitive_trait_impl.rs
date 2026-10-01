@@ -182,3 +182,101 @@ fn stdlib_fromstr_available_for_all_integer_primitives() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The stdlib's `impl FromStr for f64` (in `parse.g`) must satisfy the
+/// `T: FromStr` bound at `str::parse::<f64>()`, for the full grammar:
+/// integer, fraction, sign, and exponent.
+#[test]
+fn stdlib_fromstr_for_f64_is_available() {
+    let dir = tempdir();
+    let src = dir.join("f.g");
+    let mut f = std::fs::File::create(&src).unwrap();
+    writeln!(
+        f,
+        "fn main() {{\n\
+         \x20   let a = \"3.14\".parse::<f64>(); let _ = a;\n\
+         \x20   let b = \"-2.5\".parse::<f64>(); let _ = b;\n\
+         \x20   let c = \"1e3\".parse::<f64>(); let _ = c;\n\
+         \x20   let d = \"-1.5e-2\".parse::<f64>(); let _ = d;\n\
+         \x20   let e = \"42\".parse::<f64>(); let _ = e;\n\
+         }}"
+    )
+    .unwrap();
+    drop(f);
+
+    let out = dir.join("f.o");
+    let output = Command::new(cli_bin())
+        .args([
+            src.to_str().unwrap(),
+            "--with-stdlib",
+            "--emit=obj",
+            "-o",
+            out.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn glyim-cli");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "the stdlib `impl FromStr for f64` must satisfy the bound; \
+         exit={:?}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
+    assert!(
+        !stderr.contains("is not satisfied") && !stderr.contains("conflicting"),
+        "stdlib `FromStr for f64` must not conflict or miss the bound; got:\n{stderr}",
+    );
+    assert!(out.exists(), "expected an object at {out:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The stdlib's `impl FromStr for f64` (in `parse.g`) must satisfy the
+/// `T: FromStr` bound at `str::parse::<f64>()`, for the full grammar:
+/// integer, fraction, sign, and exponent.
+#[test]
+fn stdlib_fromstr_for_f64_is_available() {
+    let dir = tempdir();
+    let src = dir.join("f.g");
+    let mut f = std::fs::File::create(&src).unwrap();
+    writeln!(
+        f,
+        "fn main() {{\n\
+         \x20   let a = \"3.14\".parse::<f64>(); let _ = a;\n\
+         \x20   let b = \"-2.5\".parse::<f64>(); let _ = b;\n\
+         \x20   let c = \"1e3\".parse::<f64>(); let _ = c;\n\
+         \x20   let d = \"-1.5e-2\".parse::<f64>(); let _ = d;\n\
+         \x20   let e = \"42\".parse::<f64>(); let _ = e;\n\
+         }}"
+    )
+    .unwrap();
+    drop(f);
+
+    let out = dir.join("f.o");
+    let output = Command::new(cli_bin())
+        .args([
+            src.to_str().unwrap(),
+            "--with-stdlib",
+            "--emit=obj",
+            "-o",
+            out.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn glyim-cli");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "the stdlib `impl FromStr for f64` must satisfy the bound; \
+         exit={:?}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
+    assert!(
+        !stderr.contains("is not satisfied") && !stderr.contains("conflicting"),
+        "stdlib `FromStr for f64` must not conflict or miss the bound; got:\n{stderr}",
+    );
+    assert!(out.exists(), "expected an object at {out:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
