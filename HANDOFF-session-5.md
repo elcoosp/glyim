@@ -285,3 +285,117 @@ builder and confirm the `substs` carried there match the ADT's arity.
     58a08fc6 test(hir): pin byte-literal lowering + kitchen-sink arena completeness
 
 Suite: **4184/4184 pass** (2 skipped).
+
+---
+
+## Session 5, part 3: generic-enum bug narrowed (not fixed)
+
+The `[X0000] layout error building aggregate: UnknownType(Ty(0))` bug is
+**narrowed but not fixed**. One attempted fix was made and reverted as
+neutral (see below).
+
+### Root cause, from the `--emit=mir` dump
+
+`Ty(0)` is `Ty::ERROR` (`crates/glyim-type/src/ty.rs:35`). The MIR dump
+shows the typeck phase itself is producing the error — it is *not* a
+codegen bug:
+
+    fn crate[0]::5() {
+      $0: ()
+      $1: Adt1<<error>>      <-- the local's type is already errored
+      ...
+      Aggregate(Adt(AdtId(1), VariantIdx(0), Substitution(index=8, len=1)), ...)
+
+The local that holds `MyOpt::S(7u64)` has type `Adt1<<error>>`: the enum
+ADT with an **unresolved generic argument**. The `Substitution` is present
+but its single element is an inference variable that was never solved to
+`u64`.
+
+### Reduction table (all with `--emit=mir`, then `--emit=obj`)
+
+| Source                                                | Local type    | `--emit=obj` |
+|-------------------------------------------------------|---------------|--------------|
+| `let a = MyOpt::S(7u64);`                              | `Adt1<<error>>` | **fail** |
+| `let a: MyOpt<u64> = MyOpt::S(7);`                     | `Adt1<u64>`     | OK |
+| `let a = MyOpt::<u64>::S(7);`                          | `Adt1<<error>>` | **fail** |
+| `fn make() -> MyOpt<u64> { MyOpt::S(7u64) }` + call    | `Adt1<u64>`     | OK |
+| `fn get(o: MyOpt<u64>) -> u64 { match .. }` + call     | (fn param)      | OK |
+| non-generic enum, data variant                         | ok              | OK |
+| generic enum, **unit** variant (`MyOpt::N`)            | `Adt1<u64>`     | OK |
+| generic **struct** (`Pair { a: 7 }`)                   | `Adt1<u64>`     | OK |
+
+So the bug is specifically: **a generic enum's data-variant constructor
+called at a site with no external type constraint fails to propagate the
+argument type into the enum's generic parameter.** Adding an annotation,
+or a return-type context, fixes it — so the unification between the
+constructor's input type and the enum's parameter is not flowing in the
+bare `let a = MyOpt::S(x);` case.
+
+### Why `MyOpt::<u64>::S(7)` (explicit turbofish) *also* fails
+
+Surprising but confirmed: the turbofish form still leaves `Adt1<<error>>`.
+That suggests the turbofish type args on a *variant path* are not threaded
+into the constructor's `FnDef` substitution in `variant_expr`
+(`crates/glyim-typeck/src/unify.rs:863`) — it builds fresh inference vars
+for every generic param regardless of any explicit args.
+
+### Attempted fix (reverted)
+
+`crates/glyim-lower/src/lower_rvalue.rs` has three `Substitution::empty()`
+sites for enum aggregates (lines 185, 204, 260). Passing the *instantiated*
+substitution instead of empty was tried; it compiled and kept the suite
+green, but did **not** fix the bug — because the substitution reaching MIR
+is already an unsolved var; the MIR-level substs are a symptom, not the
+cause. Reverted to keep the tree clean.
+
+### Where to look next
+
+- `crates/glyim-typeck/src/unify.rs::variant_expr` (~line 863): builds
+  `substs` as fresh `Infer(Ty)` vars unconditionally. The constructor's
+  `FnSig` (`register_fn_sig` at ~line 906) uses the *declared* field types
+  (`f.ty`, e.g. `Param(T)`), not substituted through those fresh vars — so
+  the argument `7u64` unifies against the rigid `T`, not against the fresh
+  var, and nothing links `T := u64`.
+- The fix is likely: substitute each variant field's declared type through
+  the freshly-created `substs` before building `inputs` in
+  `register_fn_sig`, and thread explicit turbofish args (if any) into
+  `substs` rather than discarding them.
+- The non-generic and unit-variant cases work because there is no
+  parameter to solve.
+
+### Test
+
+`crates/glyim-cli/tests/option_match_payload.rs` (committed earlier this
+session) pins the *ICE-free* behavior for a non-generic enum. A new test
+for the generic case should be added once this bug is fixed — it currently
+cannot pass.
+
+## Session 5 -- final state
+
+    git log --oneline -7
+    6343a5b0 docs(handoff): session-5 addendum -- ICE fixed; generic-enum Ty::ERROR tracked
+    b6e348a6 test(cli): regression for the enum-match-payload codegen ICE
+    837638f6 fix(codegen-llvm): bounds-check optional tag-prefix offset reads
+    b5b3b3d0 docs(handoff): session-5 handoff -- all-integer FromStr + tracked ICE
+    b86fc537 feat(stdlib): FromStr impls for all integer primitives
+    c0bf7390 docs(handoff): session-4 handoff -- both session-3 open items closed
+    58a08fc6 test(hir): pin byte-literal lowering + kitchen-sink arena completeness
+
+Suite: **4184/4184 pass** (2 skipped). Working tree clean.
+
+### Open items, priority order
+
+1. **Generic-enum data-variant constructor type inference** (the bug
+   above). Highest value: it blocks `Option<T>` / `Result<T, E>` for any
+   user-declared generic enum, and it is a small, well-isolated typeck fix.
+2. **`FromStr for f64`** (from session 4). Needs a fractional + exponent
+   state machine; check `f64` arithmetic availability in `.g` source.
+3. **Compile-pass/compile-fail `.g` harness is dead.** `harness_tests.rs`
+   was removed in commit `3ea72806` ("I/O issues", May 2026) and is not in
+   `crates/glyim-typeck/src/tests/mod.rs`. The eight `.g` fixtures under
+   `crates/glyim-typeck/tests/` are **not run by any test**. Either
+   resurrect the harness (fix the I/O issue) or migrate the fixtures to
+   CLI tests like the ones in `crates/glyim-cli/tests/`. Until then, adding
+   a `.g` fixture gives false assurance (session 5 made this mistake).
+4. Session-3/4 leftovers: `Ty::ERROR`-at-codegen contract,
+   `thir::Expr::err` span pairing, and the stale `stash@{0}`.
