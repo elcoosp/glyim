@@ -13,6 +13,46 @@ use crate::check_body::FnCtxt;
 use crate::thir;
 
 impl<'a> FnCtxt<'a> {
+    /// Collect the names a HIR pattern binds (recursively). Used by the
+    /// or-pattern binding-consistency check.
+    fn collect_binding_names(
+        pats: &glyim_core::arena::IndexVec<PatId, Pat>,
+        pat_id: PatId,
+        out: &mut std::collections::HashSet<Name>,
+    ) {
+        match &pats[pat_id] {
+            Pat::Binding {
+                name, subpattern, ..
+            } => {
+                out.insert(*name);
+                if let Some(sub) = subpattern {
+                    Self::collect_binding_names(pats, *sub, out);
+                }
+            }
+            Pat::Or(sub) => {
+                for p in sub {
+                    Self::collect_binding_names(pats, *p, out);
+                }
+            }
+            Pat::Struct { fields, .. } => {
+                for (_n, p) in fields {
+                    Self::collect_binding_names(pats, *p, out);
+                }
+            }
+            Pat::Tuple(elems) => {
+                for p in elems {
+                    Self::collect_binding_names(pats, *p, out);
+                }
+            }
+            Pat::Slice(elems) => {
+                for p in elems {
+                    Self::collect_binding_names(pats, *p, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Re-map a `Name` taken from the HIR (valid in `self.hir.interner`) into
     /// the type-checker's interner (`self.ctx.resolver()`). The HIR body and
     /// the `TyCtx` are sometimes built from different `Interner` instances, so
@@ -51,9 +91,13 @@ impl<'a> FnCtxt<'a> {
     }
 
     /// Type-check a pattern, producing the THIR pattern and binding names.
-    pub fn check_pattern(&mut self, pat_id: PatId, expected_ty: Ty) -> thir::Pattern {
+    pub fn check_pattern(
+        &mut self,
+        pat_id: PatId,
+        expected_ty: Ty,
+        span: Span,
+    ) -> thir::Pattern {
         let pat = &self.body.pats[pat_id];
-        let span = Span::DUMMY;
         match pat {
             Pat::Wild => thir::Pattern::wild(expected_ty, span),
             Pat::Binding {
@@ -79,7 +123,7 @@ impl<'a> FnCtxt<'a> {
                     self.env.add_alias(ctx_name, id);
                 }
                 let sub =
-                    subpattern.map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty)));
+                    subpattern.map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty, span)));
                 thir::Pattern {
                     kind: thir::PatternKind::Binding {
                         var_id: thir::LocalVarId::from_raw(id.to_raw()),
@@ -310,7 +354,7 @@ impl<'a> FnCtxt<'a> {
                             }
                             None => expected_ty,
                         };
-                        let field_pat = self.check_pattern(*field_pat_id, field_ty);
+                        let field_pat = self.check_pattern(*field_pat_id, field_ty, span);
                         field_pats.push(thir::FieldPat {
                             field: field_name,
                             pattern: field_pat,
@@ -326,7 +370,7 @@ impl<'a> FnCtxt<'a> {
                             expected_ty
                         };
                         self.env.add_binding(*field_name, field_ty, Mutability::Not);
-                        let field_pat = self.check_pattern(*field_pat_id, field_ty);
+                        let field_pat = self.check_pattern(*field_pat_id, field_ty, span);
                         field_pats.push(thir::FieldPat {
                             field: *field_name,
                             pattern: field_pat,
@@ -379,7 +423,7 @@ impl<'a> FnCtxt<'a> {
                         Some(t) => t,
                         None => self.fresh_infer_ty(),
                     };
-                    thir_pats.push(self.check_pattern(p_id, sub_ty));
+                    thir_pats.push(self.check_pattern(p_id, sub_ty, span));
                 }
                 thir::Pattern {
                     kind: thir::PatternKind::Tuple(thir_pats),
@@ -400,15 +444,57 @@ impl<'a> FnCtxt<'a> {
                 }
             }
             Pat::Or(pats) => {
+                // Every alternative of an or-pattern must bind the *same set*
+                // of names with compatible types (rustc's "variable `x` is not
+                // bound in all patterns" check). Without this, a
+                // `Result::Ok(x) | Result::Err(_)` arm silently accepted `x`
+                // as a binding that only exists on one branch. Collect each
+                // alternative's binding names (and the HIR `Name` from the
+                // pattern) before recursing so we can diff them.
+                let mut alt_bindings: Vec<std::collections::HashSet<Name>> =
+                    Vec::with_capacity(pats.len());
+                for p_id in pats {
+                    let mut names = std::collections::HashSet::new();
+                    Self::collect_binding_names(&self.body.pats, *p_id, &mut names);
+                    alt_bindings.push(names);
+                }
                 let mut thir_pats = Vec::with_capacity(pats.len());
                 let mut first_ty = None;
-                for p_id in pats {
-                    let sub_pat = self.check_pattern(*p_id, expected_ty);
+                for (idx, p_id) in pats.iter().enumerate() {
+                    let sub_pat = self.check_pattern(*p_id, expected_ty, span);
                     if first_ty.is_none() {
                         first_ty = Some(sub_pat.ty);
                     } else if let Some(ty) = first_ty {
                         // All alternatives must have the same type
                         self.unify(ty, sub_pat.ty, span);
+                    }
+                    // Each alternative must bind every name the first
+                    // alternative binds (and vice versa) — checked against the
+                    // *first* alternative so a single diagnostic per missing
+                    // name is emitted.
+                    if let Some(first) = alt_bindings.first() {
+                        if idx > 0 {
+                            for name in first.difference(&alt_bindings[idx]) {
+                                self.diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    format!(
+                                        "variable `{}` is not bound in all patterns \
+                                         of this or-pattern (incompatible patterns)",
+                                        self.ctx.name_str(*name)
+                                    ),
+                                ));
+                            }
+                            for name in alt_bindings[idx].difference(first) {
+                                self.diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    format!(
+                                        "variable `{}` is not bound in all patterns \
+                                         of this or-pattern (incompatible patterns)",
+                                        self.ctx.name_str(*name)
+                                    ),
+                                ));
+                            }
+                        }
                     }
                     thir_pats.push(sub_pat);
                 }
@@ -479,12 +565,12 @@ impl<'a> FnCtxt<'a> {
                     );
                     if !found_slice && is_slice {
                         // This is the `..` or `rest @ ..` pattern.
-                        slice_pat = Some(Box::new(self.check_pattern(sub_id, expected_ty)));
+                        slice_pat = Some(Box::new(self.check_pattern(sub_id, expected_ty, span)));
                         found_slice = true;
                     } else if !found_slice {
-                        prefix.push(self.check_pattern(sub_id, elem_ty));
+                        prefix.push(self.check_pattern(sub_id, elem_ty, span));
                     } else {
-                        suffix.push(self.check_pattern(sub_id, elem_ty));
+                        suffix.push(self.check_pattern(sub_id, elem_ty, span));
                     }
                 }
                 // Fixed-size array patterns without a `..` must name exactly

@@ -44,3 +44,5 @@ mod while_loop;
 mod generic_in_module_typeck;
 mod const_in_module;
 mod len_ambiguity;
+
+mod harness_tests;

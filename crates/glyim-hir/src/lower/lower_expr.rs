@@ -486,30 +486,67 @@ fn lower_struct_expr(
         if (child.kind() == SyntaxKind::PathExpr || child.kind() == SyntaxKind::UsePath)
             && path.is_none()
         {
+            // Same segment + turbofish logic as `lower_path_expr`: generic
+            // args belong to the *preceding* segment (the parser emits the
+            // type-arg nodes as siblings of the `Ident` token). The previous
+            // version built every segment with `generic_args: None`, so the
+            // turbofish on a struct literal (`V::<i32> { .. }`) was silently
+            // dropped and the struct type's parameter stayed a fresh
+            // inference var (`Adt1<<error>>` after codegen's concretization
+            // failed).
             let mut segments = Vec::new();
+            let mut pending_args: Vec<TypeRef> = Vec::new();
+            let flush_pending = |segments: &mut Vec<PathSegment>,
+                                 pending_args: &mut Vec<TypeRef>| {
+                if !pending_args.is_empty()
+                    && let Some(last) = segments.last_mut()
+                {
+                    last.generic_args = Some(std::mem::take(pending_args));
+                }
+            };
             for el in child.children_with_tokens() {
-                if let glyim_syntax::SyntaxElement::Token(t) = el {
-                    if t.kind() == SyntaxKind::Ident {
+                match el {
+                    glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::Ident => {
+                        flush_pending(&mut segments, &mut pending_args);
                         segments.push(PathSegment {
                             name: interner.intern(t.text()),
                             generic_args: None,
                         });
                     }
-                } else if let glyim_syntax::SyntaxElement::Node(n) = el
-                    && n.kind() == SyntaxKind::UsePath
-                {
-                    for t in n.children_with_tokens() {
-                        if let glyim_syntax::SyntaxElement::Token(tt) = t
-                            && tt.kind() == SyntaxKind::Ident
-                        {
-                            segments.push(PathSegment {
-                                name: interner.intern(tt.text()),
-                                generic_args: None,
-                            });
+                    glyim_syntax::SyntaxElement::Node(n) if n.kind() == SyntaxKind::UsePath => {
+                        for t in n.children_with_tokens() {
+                            match t {
+                                glyim_syntax::SyntaxElement::Token(tt)
+                                    if tt.kind() == SyntaxKind::Ident =>
+                                {
+                                    flush_pending(&mut segments, &mut pending_args);
+                                    segments.push(PathSegment {
+                                        name: interner.intern(tt.text()),
+                                        generic_args: None,
+                                    });
+                                }
+                                glyim_syntax::SyntaxElement::Node(nt)
+                                    if super::is_type_node(&nt) =>
+                                {
+                                    if let Some(ty) =
+                                        super::lower_type::lower_type_ref(&nt, interner)
+                                    {
+                                        pending_args.push(ty);
+                                    }
+                                }
+                                _ => {}
+                            }
                         }
                     }
+                    glyim_syntax::SyntaxElement::Node(n) if super::is_type_node(&n) => {
+                        if let Some(ty) = super::lower_type::lower_type_ref(&n, interner) {
+                            pending_args.push(ty);
+                        }
+                    }
+                    _ => {}
                 }
             }
+            flush_pending(&mut segments, &mut pending_args);
             if !segments.is_empty() {
                 path = Some(HirPath {
                     segments,

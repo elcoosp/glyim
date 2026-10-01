@@ -493,7 +493,11 @@ fn type_needs_drop(ty: Ty, ty_ctx: &TyCtx, _visited: &mut HashSet<Ty>) -> bool {
 // ---------------------------------------------------------------------------
 
 fn generate_struct_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, ty_ctx: &TyCtx) {
-    let fields_to_drop: Vec<_> = adt_def.variants[0]
+    // A struct's fields live in `adt_def.fields`; only enums populate
+    // `adt_def.variants`. The previous `adt_def.variants[0].fields` indexed an
+    // empty `variants` vec for every struct and panicked with
+    // `index out of bounds: the len is 0 but the index is 0`.
+    let fields_to_drop: Vec<_> = adt_def
         .fields
         .iter()
         .enumerate()

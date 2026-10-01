@@ -563,7 +563,7 @@ impl<'a> FnCtxt<'a> {
                 // single-iteration path. Bind the pattern and check the body in
                 // the *same* scope.
                 self.env.enter_scope();
-                let pat_thir = self.check_pattern(*pat, item_ty);
+                let pat_thir = self.check_pattern(*pat, item_ty, span);
                 let (body_expr, _) = self.check_expr(*body);
                 self.env.leave_scope();
 
@@ -589,7 +589,7 @@ impl<'a> FnCtxt<'a> {
                 let mut thir_arms = Vec::with_capacity(arms.len());
                 for arm in arms {
                     self.env.enter_scope();
-                    let pat_thir = self.check_pattern(arm.pat, scrut_ty);
+                    let pat_thir = self.check_pattern(arm.pat, scrut_ty, span);
                     let guard_thir = arm
                         .guard
                         .map(|guard_id| Box::new(self.check_expr(guard_id).0));
@@ -2218,7 +2218,7 @@ impl<'a> FnCtxt<'a> {
                 // tail) is rare; evaluate its value and bind the pattern,
                 // yielding unit.
                 let (_value_expr, value_ty) = self.check_expr(*value);
-                self.check_pattern(*pat, value_ty);
+                self.check_pattern(*pat, value_ty, span);
                 // A `let` in expression position evaluates to `()`. Emit a
                 // real unit literal rather than an `Err` node: an `Err` here
                 // lowers to `MirConstKind::Error`, which the LLVM backend
@@ -2426,19 +2426,19 @@ impl<'a> FnCtxt<'a> {
     }
 
     // Helper: substitute generic args in a type (simplified)
-    fn substitute_type(&self, ty: Ty, substs: glyim_type::Substitution, _span: Span) -> Ty {
-        match self.ctx.ty_kind(ty) {
-            TyKind::Param(pt) => {
-                let args = self.ctx.substitution_args(substs);
-                if (pt.index as usize) < args.len()
-                    && let GenericArg::Ty(replacement) = args[pt.index as usize]
-                {
-                    return replacement;
-                }
-                ty
-            }
-            _ => ty,
+    fn substitute_type(&mut self, ty: Ty, substs: glyim_type::Substitution, _span: Span) -> Ty {
+        // Delegate to the shared recursive `subst_ty` (keyed by generic-param
+        // index). The previous hand-rolled version substituted only a
+        // *top-level* `Param`: a field typed `*mut T` (or `&T`, `Box<T>`,
+        // `[T; N]`, `(T, U)`, …) came back with the param intact, so
+        // `Vec::<i32> { data: 0 as *mut i32, .. }` unified `*mut i32`
+        // against `*mut T` and reported "mismatched types: i32 vs T".
+        let mut map: std::collections::HashMap<u32, GenericArg> =
+            std::collections::HashMap::new();
+        for (i, arg) in self.ctx.substitution_args(substs).iter().enumerate() {
+            map.insert(i as u32, arg.clone());
         }
+        self.ctx.subst_ty(ty, &map)
     }
 
     fn is_cast_valid(&self, from: Ty, to: Ty) -> bool {
@@ -3408,8 +3408,15 @@ impl<'a> FnCtxt<'a> {
                 return Ty::ERROR;
             }
         };
-        if let Some(field_def) = adt_def.fields.iter().find(|f| f.name == field_name) {
-            self.substitute_type(field_def.ty, substs, span)
+        // Clone the field type so the `adt_def` borrow ends before the
+        // `&mut self` call to `substitute_type`.
+        let field_ty = adt_def
+            .fields
+            .iter()
+            .find(|f| f.name == field_name)
+            .map(|f| f.ty);
+        if let Some(field_ty) = field_ty {
+            self.substitute_type(field_ty, substs, span)
         } else {
             self.diagnostics.push(GlyimDiagnostic::type_error(
                 span,

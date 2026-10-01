@@ -258,7 +258,7 @@ impl<'a> FnCtxt<'a> {
                         }
                         None => value_ty,
                     };
-                    let pat_thir = self.check_pattern(*pat, value_ty);
+                    let pat_thir = self.check_pattern(*pat, value_ty, span);
                     if is_tail {
                         self.unify(Ty::UNIT, self.return_ty, span);
                     }
@@ -360,7 +360,7 @@ impl<'a> FnCtxt<'a> {
                     }
                     None => value_ty,
                 };
-                let pat_thir = self.check_pattern(*pat, value_ty);
+                let pat_thir = self.check_pattern(*pat, value_ty, span);
                 if is_tail {
                     self.unify(Ty::UNIT, self.return_ty, span);
                 }
