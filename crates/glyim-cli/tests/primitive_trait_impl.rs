@@ -128,3 +128,57 @@ fn stdlib_fromstr_for_i32_is_available() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Every integer primitive's `FromStr` impl (in `parse.g`) must satisfy the
+/// `T: FromStr` bound at `str::parse::<T>()`. Exercises the boundary value of
+/// each type (max for unsigned, min for signed) in a single program.
+#[test]
+fn stdlib_fromstr_available_for_all_integer_primitives() {
+    let dir = tempdir();
+    let src = dir.join("p.g");
+    let mut f = std::fs::File::create(&src).unwrap();
+    writeln!(
+        f,
+        "fn main() {{\n\
+         \x20   let a = \"255\".parse::<u8>(); let _ = a;\n\
+         \x20   let b = \"65535\".parse::<u16>(); let _ = b;\n\
+         \x20   let c = \"4294967295\".parse::<u32>(); let _ = c;\n\
+         \x20   let d = \"18446744073709551615\".parse::<u64>(); let _ = d;\n\
+         \x20   let e = \"42\".parse::<usize>(); let _ = e;\n\
+         \x20   let f = \"-128\".parse::<i8>(); let _ = f;\n\
+         \x20   let g = \"-32768\".parse::<i16>(); let _ = g;\n\
+         \x20   let h = \"-2147483648\".parse::<i32>(); let _ = h;\n\
+         \x20   let i = \"-9223372036854775808\".parse::<i64>(); let _ = i;\n\
+         \x20   let j = \"-42\".parse::<isize>(); let _ = j;\n\
+         }}"
+    )
+    .unwrap();
+    drop(f);
+
+    let out = dir.join("p.o");
+    let output = Command::new(cli_bin())
+        .args([
+            src.to_str().unwrap(),
+            "--with-stdlib",
+            "--emit=obj",
+            "-o",
+            out.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn glyim-cli");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "every stdlib integer FromStr impl must satisfy the bound; \
+         exit={:?}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
+    assert!(
+        !stderr.contains("is not satisfied") && !stderr.contains("conflicting"),
+        "stdlib integer FromStr impls must not conflict or miss the bound; got:\n{stderr}",
+    );
+    assert!(out.exists(), "expected an object at {out:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
