@@ -172,3 +172,116 @@ isolated exercise once the ICE is fixed.
   freshly built binary before bisecting. This session found the ICE only
   after several false starts where the shell captured the wrong exit code
   (`$?` inside a pipeline). Prefer `set +e; cmd >out 2>err; rc=$?; set -e`.
+
+---
+
+## Session 5, continued: the shared-helper ICE is FIXED
+
+The ICE described above is fixed (`fix(codegen-llvm): bounds-check optional
+tag-prefix offset reads`, commit `837638f6`). The inlined form in `parse.g`
+is retained (it is simpler and now no longer needed as a workaround), but
+the shared-helper form *also* compiles.
+
+### Root cause (from `RUST_BACKTRACE=full`)
+
+    IndexVec::get: index out of bounds   at crates/glyim-core/src/arena.rs:173
+    <- LoweringCtx::place_ptr            at glyim-codegen-llvm/src/lower.rs:544
+    <- lower_operand                     at lower.rs:255
+    <- lower_rvalue                      at lower.rs:1126
+    <- lower_statement
+
+`place_ptr`'s `ProjectionElem::Field` arm reads the optional tag-prefix
+offset via
+
+    offsets.get(FieldIdx::from_raw(1)).map(|s| s.0).unwrap_or(0)
+
+where `offsets: IndexVec<FieldIdx, Size>`. The `.unwrap_or(0)` reads as a
+graceful fallback, but **`IndexVec::get` carries a `debug_assert!`** that
+fires on an out-of-range index before returning `None`. So any enum whose
+`layout.fields.offsets` had fewer than two entries panicked at compile
+time.
+
+### Fix
+
+Read through `offsets.as_slice().get(n)` (plain slice `get`, no assert) at
+all three sites that want the optional fallback:
+
+- `lower.rs:544` — tag prefix for a bare `Field` projection.
+- `lower.rs:1401` — niche tag offset.
+- `lower.rs:1530` — direct-tag-encoding tag offset.
+
+`crates/glyim-cli/tests/option_match_payload.rs` pins the shape end-to-end.
+
+### The trigger, reduced
+
+Any `match` on a multi-variant enum that **binds the payload** — nothing to
+do with the stdlib. `match o { Option::Some(v) => v, Option::None => 0 }`
+is enough.
+
+### Footgun worth remembering
+
+**`IndexVec::get` is not a safe optional lookup.** It `debug_assert!`s on
+OOB. Anywhere the codebase wants `Option` semantics from an `IndexVec`,
+go through `.as_slice().get(..)`.
+
+## New bug found (tracked, not fixed): generic enum + data variant -> `Ty::ERROR` at codegen
+
+### Symptom
+
+    [X0000] layout error building aggregate: UnknownType(Ty(0)) @0..0
+
+`Ty(0)` is `Ty::ERROR` (`crates/glyim-type/src/ty.rs:35`). It reaches
+`glyim-codegen-llvm`'s `build_layout_aggregate` (`lower.rs:1311`), whose
+`layout_of(agg_ty)` fails with `LayoutError::UnknownType(Ty::ERROR)`.
+
+### Reduction
+
+| Variant                                                       | Result |
+|---------------------------------------------------------------|--------|
+| non-generic enum with data variant, constructed + matched     | OK     |
+| generic enum, **only the unit variant** constructed           | OK     |
+| generic **struct** constructed                                | OK     |
+| generic enum, **data variant** constructed (with or without turbofish) | **`X0000`** |
+| generic enum, data variant, matched with `_` payload          | **`X0000`** |
+
+So: **a generic enum with a payload-carrying variant, when that variant is
+constructed**, leaves `expected_ty = Ty::ERROR` at the `Rvalue::Aggregate` /
+`AggregateKind::Adt(_, variant, _)` site in `lower_rvalue`
+(`crates/glyim-codegen-llvm/src/lower.rs:1182`).
+
+### Why it matters
+
+The working-style constraint says "Never lower `Ty::ERROR` at codegen —
+`v15_t25_drop_error_type` is a `#[should_panic]` contract." Here the
+`Ty::ERROR` never got substituted with the ADT's concrete instantiation.
+It is a **typeck / monomorphization gap**, not a codegen bug: the codegen
+error is a faithful report of a `Ty::ERROR` it should never have seen.
+
+### Where to look
+
+- `crates/glyim-typeck/src/check_expr.rs` — the `Expr::Struct` /
+  `AggregateKind::Adt` path; the `expected_ty` for a variant constructor
+  (`MyOpt::S(7u64)`) is not being resolved to `MyOpt<u64>`.
+- `crates/glyim-typeck/src/tyconv.rs` — `resolve_enum_variant_path` and the
+  ADT substitution it builds.
+- `crates/glyim-codegen-llvm/src/lower.rs:1180-1186` — the three
+  `AggregateKind` arms; each passes `expected_ty` straight through.
+
+### Suggested first step
+
+Add a typeck assertion: when `check_expr` produces a variant constructor
+expression, its type must not be `Ty::ERROR` unless a diagnostic was also
+pushed. `grep` for where `AggregateKind::Adt` is created in the THIR/MIR
+builder and confirm the `substs` carried there match the ADT's arity.
+
+## Session 5 final state
+
+    git log --oneline -6
+    b6e348a6 test(cli): regression for the enum-match-payload codegen ICE
+    837638f6 fix(codegen-llvm): bounds-check optional tag-prefix offset reads
+    b5b3b3d0 docs(handoff): session-5 handoff -- all-integer FromStr + tracked ICE
+    b86fc537 feat(stdlib): FromStr impls for all integer primitives
+    c0bf7390 docs(handoff): session-4 handoff -- both session-3 open items closed
+    58a08fc6 test(hir): pin byte-literal lowering + kitchen-sink arena completeness
+
+Suite: **4184/4184 pass** (2 skipped).
