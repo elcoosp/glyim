@@ -1006,6 +1006,21 @@ impl<'a> FnCtxt<'a> {
                                 // diagnostic.
                                 if let TyKind::Param(pt) = self.ctx.ty_kind(*param_ty) {
                                     subst.insert(pt.index, GenericArg::Ty(arg_expr.ty));
+                                } else if matches!(
+                                    self.ctx.ty_kind(*param_ty),
+                                    TyKind::Infer(_)
+                                ) && arg_expr.ty != Ty::ERROR
+                                    && !matches!(
+                                        self.ctx.ty_kind(arg_expr.ty),
+                                        TyKind::Infer(_)
+                                    )
+                                {
+                                    // Formal is a fresh inference variable, arg
+                                    // is concrete: unify. This pins the generic
+                                    // argument of a data-variant constructor
+                                    // (`MyOpt::S(7u64)` → `MyOpt<u64>`); see the
+                                    // comment in `check_path`'s variant-ctor arm.
+                                    self.unify(*param_ty, arg_expr.ty, span);
                                 } else {
                                     // Anchor an unsuffixed integer/float literal
                                     // argument to its formal parameter type.

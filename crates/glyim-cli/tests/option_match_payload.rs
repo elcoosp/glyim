@@ -89,3 +89,102 @@ fn enum_match_payload_does_not_ice() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A user-declared generic enum's data-carrying variant, constructed at a
+/// site with no external type constraint, must infer the enum's generic
+/// argument from the constructor argument. Before the fix, the enum's
+/// parameter stayed an unsolved inference var (`Adt1<<error>>` in MIR) and
+/// codegen failed with `[X0000] layout error building aggregate:
+/// UnknownType(Ty(0))`.
+///
+/// Root cause: `check_path`'s inline variant-constructor arm registered the
+/// variant's *declared* field types (e.g. `Param(T)`) as the constructor's
+/// input types without substituting them through the fresh inference vars,
+/// and the call site only unified args against `Infer(Int/Float)` formals,
+/// so a concrete `u64` argument never linked `T := u64`.
+#[test]
+fn generic_enum_data_variant_infers_type_arg() {
+    let dir = tempdir();
+    let src = dir.join("g.g");
+    let mut f = std::fs::File::create(&src).unwrap();
+    writeln!(
+        f,
+        "enum MyOpt<T> {{ S(T), N }}\n\
+         fn main() {{\n\
+         \x20   let a = MyOpt::S(7u64);\n\
+         \x20   let _ = a;\n\
+         }}"
+    )
+    .unwrap();
+    drop(f);
+
+    let out = dir.join("g.o");
+    let output = Command::new(cli_bin())
+        .args([
+            src.to_str().unwrap(),
+            "--emit=obj",
+            "-o",
+            out.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn glyim-cli");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked") && !stderr.contains("ICE"),
+        "compiling a generic enum data-variant constructor must not ICE; got:\n{stderr}",
+    );
+    assert!(
+        output.status.success(),
+        "the generic-enum data-variant shape must compile; exit={:?}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
+    assert!(out.exists(), "expected an object at {out:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A generic enum threaded through a function boundary (param + return type)
+/// must also compile; this exercises the `variant_expr` helper path (used
+/// when the variant local is not in `variant_map`) rather than the inline
+/// `check_path` path.
+#[test]
+fn generic_enum_through_fn_boundary_compiles() {
+    let dir = tempdir();
+    let src = dir.join("g2.g");
+    let mut f = std::fs::File::create(&src).unwrap();
+    writeln!(
+        f,
+        "enum MyOpt<T> {{ S(T), N }}\n\
+         fn get(o: MyOpt<u64>) -> u64 {{\n\
+         \x20   match o {{ MyOpt::S(v) => v, MyOpt::N => 0 }}\n\
+         }}\n\
+         fn main() {{\n\
+         \x20   let a = get(MyOpt::S(7u64));\n\
+         \x20   let _ = a;\n\
+         }}"
+    )
+    .unwrap();
+    drop(f);
+
+    let out = dir.join("g2.o");
+    let output = Command::new(cli_bin())
+        .args([
+            src.to_str().unwrap(),
+            "--emit=obj",
+            "-o",
+            out.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn glyim-cli");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "a generic enum across a fn boundary must compile; exit={:?}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
+    assert!(out.exists(), "expected an object at {out:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

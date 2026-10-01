@@ -157,13 +157,25 @@ impl<'a> FnCtxt<'a> {
                 // Building `Poll<>` here produced a spurious "mismatched type
                 // argument counts" when the expected type was `Poll<i32>`.
                 let arity = self.ctx.adt_generic_arity(adt_id);
-                let substs: Vec<GenericArg> = (0..arity)
-                    .map(|_| {
-                        let var = self.infer.new_ty_var(self.ctx);
-                        GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))))
-                    })
-                    .collect();
-                let substs = self.ctx.intern_substitution(substs);
+                // Fresh inference var per generic parameter, plus a
+                // `param_index -> var` map so the variant's *declared* field
+                // types (`Param(T)`) can be substituted through the vars
+                // before becoming the constructor's input types. Without the
+                // substitution the ctor's formal input stayed the rigid
+                // `Param(T)`; a concrete argument (`7u64`) then never linked
+                // `T := u64`, so `MyOpt::S(7u64)` left the enum's generic
+                // argument unsolved (`Adt1<<error>>` in MIR) and codegen's
+                // `layout_of` failed with `UnknownType(Ty::ERROR)`.
+                let mut subst_map: std::collections::HashMap<u32, GenericArg> =
+                    std::collections::HashMap::new();
+                let mut subst_args: Vec<GenericArg> = Vec::with_capacity(arity);
+                for i in 0..arity {
+                    let var = self.infer.new_ty_var(self.ctx);
+                    let var_ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                    subst_map.insert(i as u32, GenericArg::Ty(var_ty));
+                    subst_args.push(GenericArg::Ty(var_ty));
+                }
+                let substs = self.ctx.intern_substitution(subst_args);
                 let enum_ty = self.ctx.mk_ty(TyKind::Adt(adt_id, substs));
 
                 // Data-carrying variant (has fields) => a constructor value
@@ -179,12 +191,16 @@ impl<'a> FnCtxt<'a> {
 
                 if has_fields {
                     let ctor_fn_def_id = FnDefId::from_raw(local.to_raw());
-                    let field_tys: Vec<Ty> = self
+                    let declared_field_tys: Vec<Ty> = self
                         .ctx
                         .adt_def(adt_id)
                         .and_then(|def| def.variants.get(variant_idx.index()))
                         .map(|v| v.fields.iter().map(|f| f.ty).collect())
                         .unwrap_or_default();
+                    let field_tys: Vec<Ty> = declared_field_tys
+                        .iter()
+                        .map(|t| self.ctx.subst_ty(*t, &subst_map))
+                        .collect();
                     let inputs = self.ctx.intern_substitution(
                         field_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
                     );
