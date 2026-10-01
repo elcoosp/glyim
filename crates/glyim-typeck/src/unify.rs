@@ -166,14 +166,46 @@ impl<'a> FnCtxt<'a> {
                 // `T := u64`, so `MyOpt::S(7u64)` left the enum's generic
                 // argument unsolved (`Adt1<<error>>` in MIR) and codegen's
                 // `layout_of` failed with `UnknownType(Ty::ERROR)`.
+                // Explicit turbofish on the enum segment
+                // (`MyOpt::<u64>::S(x)`): resolve those type args and seed
+                // the substitution with them. Without this the fresh
+                // inference var stood in for `T` and, when the argument
+                // could not pin it (e.g. an integer literal `7` defaulting
+                // to `i32`), the enum's generic argument silently defaulted.
+                // The turbofish is written on the *enum* path segment
+                // (`segments[0]` for `Enum::<..>::Variant`), so read it from
+                // the first segment that carries `generic_args`.
+                let explicit_args: Option<Vec<glyim_hir::TypeRef>> = path
+                    .segments
+                    .iter()
+                    .find_map(|s| s.generic_args.clone());
                 let mut subst_map: std::collections::HashMap<u32, GenericArg> =
                     std::collections::HashMap::new();
                 let mut subst_args: Vec<GenericArg> = Vec::with_capacity(arity);
                 for i in 0..arity {
-                    let var = self.infer.new_ty_var(self.ctx);
-                    let var_ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-                    subst_map.insert(i as u32, GenericArg::Ty(var_ty));
-                    subst_args.push(GenericArg::Ty(var_ty));
+                    let seeded = explicit_args
+                        .as_ref()
+                        .and_then(|args| args.get(i))
+                        .map(|ty_ref| {
+                            crate::tyconv::resolve_type_ref(
+                                self.ctx,
+                                self.infer,
+                                self.def_map,
+                                self.diagnostics,
+                                ty_ref,
+                                &self.param_map,
+                                span,
+                            )
+                        });
+                    let arg_ty = match seeded {
+                        Some(t) if t != Ty::ERROR => t,
+                        _ => {
+                            let var = self.infer.new_ty_var(self.ctx);
+                            self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
+                        }
+                    };
+                    subst_map.insert(i as u32, GenericArg::Ty(arg_ty));
+                    subst_args.push(GenericArg::Ty(arg_ty));
                 }
                 let substs = self.ctx.intern_substitution(subst_args);
                 let enum_ty = self.ctx.mk_ty(TyKind::Adt(adt_id, substs));
