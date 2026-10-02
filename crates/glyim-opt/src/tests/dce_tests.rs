@@ -4,6 +4,7 @@ use super::testutil::*;
 use crate::optimize;
 use glyim_core::Mutability;
 use glyim_mir::*;
+use glyim_span::Span;
 use glyim_test::with_fresh_ty_ctx;
 use std::sync::Arc;
 
@@ -247,4 +248,53 @@ fn dce_preserves_storage_statements() {
         .any(|stmt| matches!(&stmt.kind, StatementKind::StorageDead(l) if *l == local(1)));
     assert!(has_storage_live, "StorageLive should be preserved");
     assert!(has_storage_dead, "StorageDead should be preserved");
+}
+
+/// MIR-6 regression: DCE must treat a `Drop { place }` terminator as a *use*
+/// of `place.local`. Lowering emits scope-exit `Drop` terminators; without
+/// this, DCE deleted the only store feeding the dropped local, so the drop
+/// ran on uninitialized memory.
+#[test]
+fn dce_keeps_store_used_by_drop_terminator() {
+    let (ctx, mut body) = with_fresh_ty_ctx(|ctx| {
+        let i32_ty = ty_i32(ctx);
+        let locals = vec![
+            (i32_ty, Mutability::Mut), // _0 return
+            (i32_ty, Mutability::Mut), // _1 dropped
+        ];
+        // bb0:
+        //   _1 = 42          (the only store feeding the drop)
+        //   Drop(_1) -> bb1
+        // bb1:
+        //   return
+        //
+        // NOTE: this calls `dce::run` directly rather than `optimize`, because
+        // `optimize` runs a validator that rejects a `Drop` on a non-droppable
+        // type (`i32`). The DCE pass itself is the unit under test and must
+        // keep the store regardless of the dropped type.
+        let block0 = make_block(
+            vec![assign_stmt(Place::new(local(1)), const_int_rvalue(42, i32_ty))],
+            Terminator {
+                kind: TerminatorKind::Drop {
+                    place: Place::new(local(1)),
+                    target: bb(1),
+                    cleanup: None,
+                },
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+        );
+        let block1 = make_block(vec![], return_term());
+        build_test_body(locals, vec![block0, block1], 0, i32_ty)
+    });
+
+    crate::dce::run(&ctx, &mut body);
+    let block = &body.basic_blocks[bb(0)];
+
+    let kept = block.statements.iter().any(|stmt| {
+        matches!(&stmt.kind, StatementKind::Assign(p, _) if p.local == local(1))
+    });
+    assert!(
+        kept,
+        "the store feeding `Drop(_1)` must survive DCE"
+    );
 }

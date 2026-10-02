@@ -79,7 +79,7 @@ fn collect_uses_in_terminator(term: &Terminator, used: &mut HashSet<LocalIdx>) {
         TerminatorKind::Call {
             func,
             args,
-            destination: _,
+            destination,
             target: _,
             cleanup: _,
         } => {
@@ -87,12 +87,20 @@ fn collect_uses_in_terminator(term: &Terminator, used: &mut HashSet<LocalIdx>) {
             for arg in args {
                 collect_operand_uses(arg, used);
             }
+            // A call may have side effects; keep its destination slot alive.
+            used.insert(destination.local);
         }
         TerminatorKind::SwitchInt { discr, .. } => {
             collect_operand_uses(discr, used);
         }
         TerminatorKind::Assert { cond, .. } => {
             collect_operand_uses(cond, used);
+        }
+        TerminatorKind::Drop { place, .. } => {
+            // A scope-exit `Drop` terminator reads its place: the local must
+            // stay initialized, or DCE would delete the only store that feeds
+            // it and the drop would run on uninitialized memory (MIR-6).
+            used.insert(place.local);
         }
         _ => {}
     }
