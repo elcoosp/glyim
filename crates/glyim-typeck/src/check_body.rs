@@ -53,4 +53,11 @@ pub struct FnCtxt<'a> {
     /// consumes it to seed the closure's own param/return types from the
     /// expected signature.
     pub pending_closure_expectation: Option<Ty>,
+    /// Set while `check_expr` is being invoked on the *callee* of a `Call`.
+    /// The trait-method path arm of `check_path` returns a benign error node
+    /// (the `Call` arm rewrites it after static/virtual dispatch), but a
+    /// trait-method path used as a *value* (`let x = T::f;`) has no such
+    /// rewrite. This flag lets `check_path` emit a diagnostic for the value
+    /// case only, so the error node never reaches codegen silently.
+    pub in_callee_position: bool,
 }

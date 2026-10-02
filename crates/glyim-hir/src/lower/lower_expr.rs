@@ -1401,8 +1401,15 @@ fn lower_method_call_expr(
         if child == receiver {
             continue;
         }
-        if child.kind() != SyntaxKind::PathExpr
-            && (is_expr_node(&child) || child.kind() == SyntaxKind::Block)
+        // NOTE: do NOT filter out `PathExpr` children here. An earlier guard
+        // (`child.kind() != SyntaxKind::PathExpr`) was meant to avoid
+        // duplicating the receiver, but the `child == receiver` check above
+        // already excludes it. The extra filter dropped every method argument
+        // that was itself a path/variable (`o.set(n)`, `v.push(x)`), leaving
+        // the call one argument short and ICEing codegen with
+        // "argument count mismatch". The receiver is the *first* expr child;
+        // identity comparison against it is the correct exclusion.
+        if (is_expr_node(&child) || child.kind() == SyntaxKind::Block)
             && let Some(id) = lower_expr(&child, interner, body, diags, struct_field_map)
         {
             arg_ids.push(id);

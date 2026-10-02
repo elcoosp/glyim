@@ -352,6 +352,9 @@ enum ErrorKind {
     WriteZero,
     /// An error returned when an operation could not be completed because an end of file was reached prematurely.
     UnexpectedEof,
+    /// A parameter was incorrect (e.g. a byte stream that was not valid
+    /// UTF-8). Matches Rust's `std::io::ErrorKind::InvalidData`.
+    InvalidData,
     /// An operation could not complete because the I/O resource (socket, pipe,
     /// etc.) is not ready yet and the call would block. The caller should retry
     /// after the reactor signals readiness (see `std::task`).

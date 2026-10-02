@@ -709,6 +709,10 @@ impl<'a> FnCtxt<'a> {
             }
         }
 
+        // 2a. Enum variant referenced as a 2-segment path
+        //     (`ErrorKind::InvalidData`). Resolve the enum segment first
+        //     (builtin-aware `resolve_name_to_adt_ty`), then match the
+        //     variant by name.
         if path.segments.len() == 2 {
             let enum_path = glyim_hir::Path {
                 segments: vec![glyim_hir::PathSegment {
@@ -717,8 +721,6 @@ impl<'a> FnCtxt<'a> {
                 }],
                 kind: glyim_core::path::PathKind::Plain,
             };
-            // Resolve the enum type by name (handles both user enums registered
-            // in the def-map and builtin enums like `Result`/`Option`/`Poll`).
             let enum_ty_resolved = crate::tyconv::resolve_name_to_adt_ty(
                 self.ctx,
                 self.infer,
@@ -773,6 +775,38 @@ impl<'a> FnCtxt<'a> {
             )
             .is_some()
             {
+                // The first segment is a *trait*: a path like `T::f` that is
+                // not a call has no receiver to dispatch on, so it is a hard
+                // error. The `Call` arm sets `in_callee_position` while
+                // checking a callee; only the value case (e.g.
+                // `let x = T::f;`) is diagnosed. Without this the benign
+                // error node survived to codegen and ICEd with "Attempted to
+                // lower TyKind::Error".
+                //
+                // NOTE: this arm is only reached when the first segment is a
+                // registered trait. Paths whose first segment is a *type*
+                // (`MetadataRaw::default`, an assoc fn provided by a trait
+                // impl) are handled by the assoc-fn arms above/below; the
+                // permissive `resolve_path_to_trait_def_id` fallback would
+                // otherwise misclassify them. `trait_by_name` is the precise
+                // "is this name a trait" check.
+                let first_seg = path.segments[0].name;
+                let first_is_trait = self
+                    .ctx
+                    .trait_by_name
+                    .get(&first_seg)
+                    .and_then(|tid| self.ctx.trait_def(*tid))
+                    .is_some();
+                if !self.in_callee_position && first_is_trait {
+                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                        span,
+                        format!(
+                            "trait method `{}` cannot be used as a value without \
+                             a receiver",
+                            self.ctx.name_str(path.segments[1].name),
+                        ),
+                    ));
+                }
                 return (thir::Expr::err(span), Ty::ERROR);
             }
         }

@@ -829,7 +829,14 @@ impl<'a> FnCtxt<'a> {
                     );
                 }
 
+                // Mark callee position so a trait-method path callee
+                // (`T::f(..)`) does not emit the "used as a value"
+                // diagnostic; the Call arm rewrites the benign error node via
+                // static/virtual dispatch.
+                let saved_in_callee = self.in_callee_position;
+                self.in_callee_position = true;
                 let (func_expr, func_ty) = self.check_expr(*func);
+                self.in_callee_position = saved_in_callee;
                 let mut arg_exprs = Vec::with_capacity(args.len());
                 for &arg_id in args {
                     arg_exprs.push(self.check_expr(arg_id).0);

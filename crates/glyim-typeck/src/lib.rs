@@ -2008,6 +2008,7 @@ fn check_body(
         body_owner_map,
         param_map: body_param_map,
         pending_closure_expectation: None,
+        in_callee_position: false,
     };
 
     let (thir_body, body_expr_types) = fn_ctxt.check(params);
