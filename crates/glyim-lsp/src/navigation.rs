@@ -7,6 +7,36 @@ use lsp_types::*;
 use std::str::FromStr;
 use url::Url;
 
+/// Extract the identifier covering byte `offset` in `source`, walking on
+/// char boundaries and using BYTE offsets throughout (INF-12). The previous
+/// code collected `Vec<char>` but indexed it with a *byte* offset, which
+/// panicked ("not a char boundary") on any non-ASCII source and used
+/// `is_alphabetic` (excluding digits).
+pub(crate) fn identifier_at_offset(source: &str, offset: usize) -> Option<String> {
+    if offset > source.len() || !source.is_char_boundary(offset) {
+        return None;
+    }
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let start = source[..offset]
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| is_word(*c))
+        .map(|(i, _)| i)
+        .last()
+        .unwrap_or(offset);
+    let end = source[offset..]
+        .char_indices()
+        .take_while(|(_, c)| is_word(*c))
+        .map(|(i, c)| offset + i + c.len_utf8())
+        .last()
+        .unwrap_or(offset);
+    if start == end {
+        None
+    } else {
+        Some(source[start..end].to_string())
+    }
+}
+
 fn get_symbol_name_at_position(
     db: &AnalysisDatabase,
     file_map: &FileMap,
@@ -19,20 +49,7 @@ fn get_symbol_name_at_position(
     let sm = source_maps.get(&file_id)?;
     let offset = sm.line_col_to_offset(position.line as usize, position.character as usize)?;
     let source = sm.source();
-    let chars: Vec<char> = source.chars().collect();
-    let mut start = offset;
-    let mut end = offset;
-    while start > 0 && (chars[start - 1].is_alphabetic() || chars[start - 1] == '_') {
-        start -= 1;
-    }
-    while end < chars.len() && (chars[end].is_alphabetic() || chars[end] == '_') {
-        end += 1;
-    }
-    if start == end {
-        None
-    } else {
-        Some(source[start..end].to_string())
-    }
+    identifier_at_offset(source, offset)
 }
 
 /// goto_definition.

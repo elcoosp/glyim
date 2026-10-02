@@ -164,16 +164,13 @@ pub(crate) fn places_conflict(a: &Place, b: &Place) -> bool {
                 }
             }
 
-            // Index projections: conflict only if the index locals are identical.
-            // Different index locals refer to disjoint elements (e.g., arr[0] vs arr[1]).
-            (ProjectionElem::Index(l1), ProjectionElem::Index(l2)) => {
-                if l1 == l2 {
-                    // Same index local — potential overlap; continue checking rest.
-                    continue;
-                } else {
-                    // Different index locals — disjoint; no conflict.
-                    return false;
-                }
+            // Index projections (MIR-21): two `Index` projections on the same
+            // base MAY alias at runtime — different index locals can hold the
+            // same value (`let i = 0; let j = i; arr[i] vs arr[j]`). The old
+            // code treated different locals as disjoint, which is unsound.
+            // Be conservative: keep checking the rest of the projection list.
+            (ProjectionElem::Index(_), ProjectionElem::Index(_)) => {
+                continue;
             }
 
             // ConstantIndex projections: statically known offsets.

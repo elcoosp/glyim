@@ -112,3 +112,32 @@ fn test_workspace_symbols_empty_query_returns_none_or_all() {
         );
     }
 }
+
+/// INF-12 regression: identifier extraction must use byte offsets on char
+/// boundaries. The old code indexed `Vec<char>` with a *byte* offset and
+/// panicked ("not a char boundary") on any non-ASCII source.
+#[test]
+fn identifier_at_offset_handles_non_ascii_without_panic() {
+    // "é" is 2 bytes; the identifier `ident` follows it.
+    let src = "let é = ident;";
+    // byte offset of `i` in `ident` (é is 2 bytes).
+    let off = src.find("ident").unwrap();
+    assert_eq!(
+        crate::navigation::identifier_at_offset(src, off).as_deref(),
+        Some("ident"),
+    );
+    // A position *inside* the multibyte `é` must return None, not panic.
+    let inside = src.find('é').unwrap() + 1; // second byte of é
+    assert_eq!(crate::navigation::identifier_at_offset(src, inside), None);
+}
+
+/// Digits are part of an identifier (`foo1`), unlike the old `is_alphabetic`.
+#[test]
+fn identifier_at_offset_includes_digits() {
+    let src = "let foo1 = 0;";
+    let off = src.find("foo1").unwrap() + 2;
+    assert_eq!(
+        crate::navigation::identifier_at_offset(src, off).as_deref(),
+        Some("foo1"),
+    );
+}

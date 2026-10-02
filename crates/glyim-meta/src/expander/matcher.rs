@@ -485,8 +485,11 @@ fn match_pieces(
                     let mut rep_bindings: HashMap<SmolStr, Vec<TokenTree>> = HashMap::new();
                     match match_pieces(inner, input, i, &mut rep_bindings) {
                         Ok((new_i, _matched_count)) => {
-                            // Require at least one token matched if inner is non-empty
-                            if new_i == i && !inner.is_empty() {
+                            // Stop when no progress was made — including the
+                            // empty-body case `$()*` (HIR-1), where the old
+                            // `!inner.is_empty()` condition never fired and the
+                            // loop grew `repetitions` forever (hang/OOM).
+                            if new_i == i {
                                 break;
                             }
                             i = new_i;
@@ -546,6 +549,33 @@ mod tests {
 
     fn tok(kind: SyntaxKind, text: &str) -> TokenTree {
         TokenTree::Token(kind, SmolStr::from(text))
+    }
+
+    #[test]
+    fn test_empty_repetition_terminates() {
+        // HIR-1: `$()*` (an empty repetition body) previously looped forever —
+        // `match_pieces(&[], …)` always "succeeded" with no progress, so the
+        // `!inner.is_empty()` guard never fired. The guard is now just
+        // `new_i == i`, so an empty body matches zero iterations and returns.
+        let pattern = Pattern::new(vec![PatternPiece::Repetition {
+            inner: Vec::new(),
+            separator: None,
+            kind: RepetitionKind::ZeroOrMore,
+        }]);
+        let input = vec![tok(SyntaxKind::IntLit, "42")];
+        // Must return promptly (not hang). Zero repetitions match, so the
+        // overall pattern matches the input as-is.
+        // The point is that this *returns at all* (the pre-fix code hung).
+        // An empty repetition consumes nothing, so the pattern is exhausted
+        // while input remains -> a determinate `PartialMatch`.
+        let result = match_pattern(&pattern, &input);
+        assert!(
+            matches!(
+                result,
+                MatchResult::FullMatch(_) | MatchResult::PartialMatch | MatchResult::NoMatch
+            ),
+            "empty repetition must terminate with a determinate result, got {result:?}"
+        );
     }
 
     #[test]

@@ -20,19 +20,9 @@ pub fn goto_definition(
     let offset = sm.line_col_to_offset(pos.line as usize, pos.character as usize)?;
     let source = sm.source();
 
-    let chars: Vec<char> = source.chars().collect();
-    let mut start = offset;
-    let mut end = offset;
-    while start > 0 && (chars[start - 1].is_alphabetic() || chars[start - 1] == '_') {
-        start -= 1;
-    }
-    while end < chars.len() && (chars[end].is_alphabetic() || chars[end] == '_') {
-        end += 1;
-    }
-    if start == end {
-        return None;
-    }
-    let symbol_name = &source[start..end];
+    // Byte-offset, char-boundary-safe identifier extraction (INF-12).
+    let symbol_name = crate::navigation::identifier_at_offset(source, offset)?;
+    let symbol_name = symbol_name.as_str();
 
     let symbol_index = db.symbol_index.read();
     let symbols = symbol_index.lookup_by_name(symbol_name);

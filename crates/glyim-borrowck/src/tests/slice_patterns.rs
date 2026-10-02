@@ -19,8 +19,9 @@ fn slice_pattern_disjoint_elements_no_conflict() {
         local,
         projection: Box::new([ProjectionElem::Index(idx1)]),
     };
-    // Different index locals → no conflict
-    assert!(!places_conflict(&place0, &place1));
+    // MIR-21: different index locals on the same base MAY alias at runtime
+    // (the index values are unknown here), so they conservatively conflict.
+    assert!(places_conflict(&place0, &place1));
 }
 
 #[test]

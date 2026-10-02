@@ -3,8 +3,10 @@ use glyim_mir::{LocalIdx, Place, ProjectionElem};
 use glyim_type::FieldIdx;
 
 #[test]
-fn different_indices_no_conflict() {
-    // arr[0] and arr[1] should not conflict
+fn different_index_locals_may_alias_and_conflict() {
+    // MIR-21: two `Index` projections on the same base with DIFFERENT index
+    // locals may still alias at runtime (`let i = 0; let j = i; arr[i]` vs
+    // `arr[j]`), so they must conservatively conflict.
     let local = LocalIdx::from_raw(0);
     let idx0 = LocalIdx::from_raw(1);
     let idx1 = LocalIdx::from_raw(2);
@@ -16,8 +18,8 @@ fn different_indices_no_conflict() {
         local,
         projection: Box::new([ProjectionElem::Index(idx1)]),
     };
-    assert!(!places_conflict(&place0, &place1));
-    assert!(!places_conflict(&place1, &place0));
+    assert!(places_conflict(&place0, &place1));
+    assert!(places_conflict(&place1, &place0));
 }
 
 #[test]
@@ -64,7 +66,8 @@ fn disjoint_fields_no_conflict_with_indices() {
     };
     // Field and Index are different projection kinds -> conservatively conflict
     assert!(!places_conflict(&field0, &elem0));
-    // Two different indices on same base but with additional projections after
+    // Two different index locals on the same base, even with matching
+    // following projections, may alias at runtime (MIR-21) -> conflict.
     let elem0_field = Place {
         local,
         projection: Box::new([
@@ -79,5 +82,5 @@ fn disjoint_fields_no_conflict_with_indices() {
             ProjectionElem::Field(FieldIdx::from_raw(0)),
         ]),
     };
-    assert!(!places_conflict(&elem0_field, &elem1_field));
+    assert!(places_conflict(&elem0_field, &elem1_field));
 }

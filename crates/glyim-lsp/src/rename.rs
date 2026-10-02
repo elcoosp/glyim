@@ -71,21 +71,9 @@ pub fn rename_symbol(
     let offset = sm.line_col_to_offset(pos.line as usize, pos.character as usize)?;
     let source = sm.source();
 
-    // Find symbol name at cursor
-    let chars: Vec<char> = source.chars().collect();
-
-    let mut start = offset;
-    let mut end = offset;
-    while start > 0 && (chars[start - 1].is_alphabetic() || chars[start - 1] == '_') {
-        start -= 1;
-    }
-    while end < chars.len() && (chars[end].is_alphabetic() || chars[end] == '_') {
-        end += 1;
-    }
-    if start == end {
-        return None;
-    }
-    let symbol_name = &source[start..end];
+    // Find symbol name at cursor (byte-offset, char-boundary-safe; INF-12).
+    let symbol_name = crate::navigation::identifier_at_offset(source, offset)?;
+    let symbol_name = symbol_name.as_str();
 
     // Primary path: use the reference graph. Per Phase 8.2 (unstub-5) this
     // graph is the authoritative rename source for ordinary expressions.
