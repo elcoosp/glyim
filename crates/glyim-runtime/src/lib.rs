@@ -53,7 +53,10 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{
+    Arc, Mutex, OnceLock,
+    atomic::AtomicUsize,
+};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -1401,22 +1404,51 @@ pub unsafe extern "C" fn glyim_net_udp_recv(fd: i32, buf: *mut u8, count: usize)
 
 type ThreadId = usize;
 
+thread_local! {
+    /// The current thread's id in the `ThreadStore` id space. `0` means
+    /// "not yet assigned". Spawned threads set this at entry to the id
+    /// `glyim_thread_spawn` returned; other threads (the process main thread,
+    /// runtime helper threads) get one lazily on first `current_id()`.
+    static CURRENT_ID: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Monotonic thread-id allocator, independent of the store lock so an id can
+/// be reserved *before* spawning (the closure needs it). Id `1` is reserved
+/// for the process main thread.
+static NEXT_THREAD_ID: AtomicUsize = AtomicUsize::new(2);
+
 struct ThreadInfo {
-    handle: JoinHandle<()>,
+    /// `None` for the process main thread (or any thread we did not spawn —
+    /// it cannot be joined).
+    handle: Option<JoinHandle<()>>,
     thread: Arc<std::thread::Thread>,
 }
 struct ThreadStore {
-    next_id: ThreadId,
     infos: HashMap<ThreadId, ThreadInfo>,
 }
 
 fn threads() -> &'static Mutex<ThreadStore> {
     static THREADS: OnceLock<Mutex<ThreadStore>> = OnceLock::new();
-    THREADS.get_or_init(|| {
-        Mutex::new(ThreadStore {
-            next_id: 1,
-            infos: HashMap::new(),
-        })
+    THREADS.get_or_init(|| Mutex::new(ThreadStore { infos: HashMap::new() }))
+}
+
+/// Allocate an id for a thread we did not spawn (the main thread) and register
+/// it so `glyim_thread_unpark` can wake it. Idempotent per thread via the
+/// `CURRENT_ID` thread-local.
+fn ensure_current_thread_registered() -> ThreadId {
+    CURRENT_ID.with(|c| {
+        let existing = c.get();
+        if existing != 0 {
+            return existing;
+        }
+        let id = NEXT_THREAD_ID.fetch_add(1, Ordering::Relaxed);
+        let info = ThreadInfo {
+            handle: None,
+            thread: Arc::new(std::thread::current()),
+        };
+        threads().lock().unwrap().infos.insert(id, info);
+        c.set(id);
+        id
     })
 }
 
@@ -1425,19 +1457,20 @@ fn threads() -> &'static Mutex<ThreadStore> {
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_thread_spawn(f: extern "C" fn(*mut u8), arg: *mut u8) -> usize {
     let arg_usize = arg as usize;
+    // Reserve the id BEFORE spawning so the closure can install it as the
+    // thread's `CURRENT_ID` (RT-21): the reactor unparks by this id.
+    let id = NEXT_THREAD_ID.fetch_add(1, Ordering::Relaxed);
     let handle = thread::spawn(move || {
+        CURRENT_ID.with(|c| c.set(id));
         let arg_ptr = arg_usize as *mut u8;
         f(arg_ptr);
     });
     let thread = handle.thread().clone();
     let info = ThreadInfo {
-        handle,
+        handle: Some(handle),
         thread: Arc::new(thread),
     };
-    let mut store = threads().lock().unwrap();
-    let id = store.next_id;
-    store.next_id += 1;
-    store.infos.insert(id, info);
+    threads().lock().unwrap().infos.insert(id, info);
     id
 }
 
@@ -1465,7 +1498,9 @@ pub unsafe extern "C" fn glyim_thread_spawn_named(
     if stack_size > 0 {
         builder = builder.stack_size(stack_size);
     }
+    let id = NEXT_THREAD_ID.fetch_add(1, Ordering::Relaxed);
     let spawned = builder.spawn(move || {
+        CURRENT_ID.with(|c| c.set(id));
         let arg_ptr = arg_usize as *mut u8;
         f(arg_ptr);
     });
@@ -1475,13 +1510,10 @@ pub unsafe extern "C" fn glyim_thread_spawn_named(
     };
     let thread = handle.thread().clone();
     let info = ThreadInfo {
-        handle,
+        handle: Some(handle),
         thread: Arc::new(thread),
     };
-    let mut store = threads().lock().unwrap();
-    let id = store.next_id;
-    store.next_id += 1;
-    store.infos.insert(id, info);
+    threads().lock().unwrap().infos.insert(id, info);
     id
 }
 
@@ -1493,9 +1525,13 @@ pub unsafe extern "C" fn glyim_thread_join(handle: usize) -> i32 {
     let mut store = threads().lock().unwrap();
     if let Some(info) = store.infos.remove(&handle_id) {
         drop(store);
-        match info.handle.join() {
-            Ok(()) => 0,
-            Err(_) => -1,
+        match info.handle {
+            Some(h) => match h.join() {
+                Ok(()) => 0,
+                Err(_) => -1,
+            },
+            // The main thread (or an unjoined runtime thread) has no handle.
+            None => -1,
         }
     } else {
         -1
@@ -1553,22 +1589,18 @@ pub unsafe extern "C" fn glyim_thread_unpark(handle: usize) {
 /// # Safety
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_thread_current_id() -> usize {
-    // Use libc::pthread_self() for a numeric thread ID (Unix).
-    #[cfg(unix)]
-    {
-        // libc::pthread_self() returns pthread_t (u64 on Linux x86_64, u64 on
-        // macOS arm64). Cast to usize; on 64-bit targets this is a no-op that
-        // satisfies the type checker across both platforms.
-        unsafe { libc::pthread_self() as usize }
-    }
-    #[cfg(not(unix))]
-    {
-        use std::hash::{Hash, Hasher};
-        let id = thread::current().id();
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        id.hash(&mut hasher);
-        hasher.finish() as usize
-    }
+    // Return the thread's `ThreadStore` id — the SAME id space
+    // `glyim_thread_unpark` looks up (RT-21). The previous implementation
+    // returned `pthread_self()`, an address that is never a store key, so
+    // `reactor`-driven wake-ups (`net.g`'s Read/WriteFuture) silently failed
+    // and all async socket I/O hung. Spawned threads install their id at
+    // entry; the main thread gets one lazily here.
+    CURRENT_ID.with(|c| {
+        if c.get() == 0 {
+            ensure_current_thread_registered();
+        }
+        c.get()
+    })
 }
 
 #[unsafe(no_mangle)]
