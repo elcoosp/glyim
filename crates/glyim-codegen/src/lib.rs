@@ -225,6 +225,21 @@ impl BytecodeBackend {
 
     /// Resolve the current `Arc<TyCtx>` from the handle, or `None` if the
     /// pipeline has not published it yet.
+    /// RT-13: the ELEMENT type of an array/slice container type. The index
+    /// stride must use the element size, not the container size (which gave
+    /// `[i32; 4]` a stride of 16 and made every `a[i]` read neighbouring
+    /// memory). Falls back to `container` if it is not an array/slice.
+    fn element_ty_of(&self, container: Ty) -> Ty {
+        if let Some(ctx) = self.resolve_ty_ctx() {
+            match ctx.ty_kind(container) {
+                glyim_type::TyKind::Array(elem, _) | glyim_type::TyKind::Slice(elem) => *elem,
+                _ => container,
+            }
+        } else {
+            container
+        }
+    }
+
     fn resolve_ty_ctx(&self) -> Option<Arc<TyCtx>> {
         self.ty_ctx
             .as_ref()
@@ -289,7 +304,9 @@ impl BytecodeBackend {
                     bc.push(OP_ADD);
                 }
                 ProjectionElem::Index(local) => {
-                    let elem_size = self.layout_provider.size_of(current_ty);
+                    let elem_size = self
+                        .layout_provider
+                        .size_of(self.element_ty_of(current_ty));
                     if elem_size == 0 {
                         // ZST array/slice element: every element aliases the same
                         // base address, so the byte offset is always 0. This is
@@ -374,7 +391,9 @@ impl BytecodeBackend {
                     min_length: _,
                     from_end,
                 } => {
-                    let elem_size = self.layout_provider.size_of(current_ty);
+                    let elem_size = self
+                        .layout_provider
+                        .size_of(self.element_ty_of(current_ty));
                     let index_val = if *from_end {
                         // For arrays the length is known at compile time, so the
                         // from-end index can be resolved to a constant offset.
@@ -436,7 +455,9 @@ impl BytecodeBackend {
                     to: _,
                     from_end: _,
                 } => {
-                    let elem_size = self.layout_provider.size_of(current_ty);
+                    let elem_size = self
+                        .layout_provider
+                        .size_of(self.element_ty_of(current_ty));
                     let byte_offset = *from * elem_size;
                     bc.push(OP_LOAD_CONST);
                     bc.extend_from_slice(&(byte_offset as i64).to_le_bytes());

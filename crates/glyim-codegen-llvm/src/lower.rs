@@ -772,12 +772,29 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 }
                 ProjectionElem::Index(local_idx) => {
                     let index_ptr = self.get_local_ptr(*local_idx);
-                    let i64_ty = self.llvm_int_type(64);
-                    let index_val = self
+                    // LL-5: load the index local at its DECLARED width, then
+                    // extend to i64. Loading 8 bytes from a 4-byte `i32` slot
+                    // pulled adjacent stack bytes into the high bits and drove
+                    // the GEP out of bounds.
+                    let local_ty = local_ty(self.body, *local_idx);
+                    let local_llvm_ty = self.llvm_type_for_ty(local_ty);
+                    let raw = self
                         .builder
-                        .build_load(i64_ty, index_ptr, "index_load")
+                        .build_load(local_llvm_ty, index_ptr, "index_load")
                         .expect("index load failed")
                         .into_int_value();
+                    let i64_ty = self.llvm_int_type(64);
+                    let index_val = if local_llvm_ty == i64_ty.as_basic_type_enum() {
+                        raw
+                    } else if self.is_signed_int_ty(local_ty) {
+                        self.builder
+                            .build_int_s_extend(raw, i64_ty, "idx_sext")
+                            .expect("sext failed")
+                    } else {
+                        self.builder
+                            .build_int_z_extend(raw, i64_ty, "idx_zext")
+                            .expect("zext failed")
+                    };
                     let elem_ty = match self.ty_ctx.ty_kind(current_ty) {
                         TyKind::Array(elem, _) => *elem,
                         TyKind::Slice(elem) => *elem,

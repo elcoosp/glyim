@@ -277,6 +277,21 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_token_tree(&mut self) {
+        // FE-6: nested token trees `((((…))))` in a macro body are a
+        // stack-overflow vector; bound them.
+        if self.recursion_depth > super::MAX_EXPR_DEPTH {
+            self.error("token tree nested too deeply");
+            if self.current().is_some() {
+                self.bump();
+            }
+            return;
+        }
+        self.recursion_depth += 1;
+        self.parse_token_tree_impl();
+        self.recursion_depth -= 1;
+    }
+
+    fn parse_token_tree_impl(&mut self) {
         match self.current_kind() {
             SyntaxKind::LParen => {
                 self.start_node(SyntaxKind::TokenTree);

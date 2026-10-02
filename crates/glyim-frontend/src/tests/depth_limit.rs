@@ -38,3 +38,46 @@ fn modestly_nested_expr_still_parses() {
         result.diagnostics
     );
 }
+
+/// FE-6 regression: deeply nested unary / array / block constructs must be
+/// rejected with a diagnostic, not crash the compiler with a stack overflow.
+/// The old guard covered only `(...)`.
+///
+/// Depth is kept just over `MAX_EXPR_DEPTH` (256) — enough to prove the guard
+/// fires, without pathological memory/CPU (a 5000-deep input can make the
+/// parser append diagnostics in a loop).
+const OVER: usize = 300;
+
+#[test]
+fn deep_unary_chain_is_bounded_not_a_crash() {
+    let src = format!("fn main() {{ let _ = {}1; }}", "- ".repeat(OVER));
+    let result = parse_to_syntax(&src, FileId::BOGUS);
+    assert!(
+        !result.diagnostics.is_empty(),
+        "deeply nested unary chain must emit a depth diagnostic"
+    );
+}
+
+#[test]
+fn deep_array_nesting_is_bounded_not_a_crash() {
+    let src = format!(
+        "fn main() {{ let _ = {}0{}; }}",
+        "[".repeat(OVER),
+        "]".repeat(OVER)
+    );
+    let result = parse_to_syntax(&src, FileId::BOGUS);
+    assert!(
+        !result.diagnostics.is_empty(),
+        "deeply nested arrays must emit a depth diagnostic"
+    );
+}
+
+#[test]
+fn deep_block_nesting_is_bounded_not_a_crash() {
+    let src = format!("fn main() {} {}", "{".repeat(OVER), "}".repeat(OVER));
+    let result = parse_to_syntax(&src, FileId::BOGUS);
+    assert!(
+        !result.diagnostics.is_empty(),
+        "deeply nested blocks must emit a depth diagnostic"
+    );
+}

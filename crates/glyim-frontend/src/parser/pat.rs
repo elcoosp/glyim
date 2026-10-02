@@ -63,6 +63,20 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_pat_inner(&mut self) {
+        // FE-6: nested patterns are a stack-overflow vector; bound them.
+        if self.recursion_depth > super::MAX_EXPR_DEPTH {
+            self.error("pattern nested too deeply");
+            if self.current().is_some() {
+                self.bump();
+            }
+            return;
+        }
+        self.recursion_depth += 1;
+        self.parse_pat_inner_impl();
+        self.recursion_depth -= 1;
+    }
+
+    fn parse_pat_inner_impl(&mut self) {
         match self.current_kind() {
             SyntaxKind::LBracket => {
                 self.start_node(SyntaxKind::PatSlice);

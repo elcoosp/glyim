@@ -70,9 +70,9 @@ fn ctx_with_array_and_slice() -> (Arc<glyim_type::TyCtx>, Ty, Ty) {
 #[test]
 fn constant_index_array_from_end_is_constant_offset() {
     let (ctx, arr_ty, _slice) = ctx_with_array_and_slice();
-    // elem_size is forced to 4 by the layout provider.
+    // RT-13: the index stride uses the ELEMENT size. Register 4 for i32.
     let backend = BytecodeBackend::with_ty_ctx(ctx, glyim_core::TargetInfo::default())
-        .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(arr_ty, 4)));
+        .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(Ty::I32, 4)));
     let local_tys = IndexVec::from_raw(vec![LocalDecl {
         ty: arr_ty,
         mutability: Mutability::Not,
@@ -102,9 +102,9 @@ fn constant_index_array_from_end_is_constant_offset() {
 #[test]
 fn constant_index_slice_from_end_emits_runtime_len_sub() {
     let (ctx, _arr, slice_ty) = ctx_with_array_and_slice();
-    // elem_size is forced to 4 by the layout provider for the slice type.
+    // RT-13: register the ELEMENT (i32) size, not the container's.
     let backend = BytecodeBackend::with_ty_ctx(ctx, glyim_core::TargetInfo::default())
-        .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(slice_ty, 4)));
+        .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(Ty::I32, 4)));
     let local_tys = IndexVec::from_raw(vec![LocalDecl {
         ty: slice_ty,
         mutability: Mutability::Not,
@@ -153,4 +153,45 @@ fn constant_index_slice_from_end_emits_runtime_len_sub() {
     expected.push(OP_MUL);
     expected.push(OP_ADD);
     assert_eq!(bc, expected);
+}
+
+/// RT-13 regression: an `Index(local)` projection must stride by the ELEMENT
+/// size, not the container size. On `[i32; 4]` the old code used the array's
+/// size (16) as the stride, so `a[i]` read `base + i*16` — neighbouring memory.
+#[test]
+fn index_projection_strides_by_element_size() {
+    let (ctx, arr_ty, _slice) = ctx_with_array_and_slice();
+    // Element (i32) size = 4; container (array) size would be 16.
+    let backend = BytecodeBackend::with_ty_ctx(ctx, glyim_core::TargetInfo::default())
+        .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(Ty::I32, 4)));
+    let idx_local = LocalIdx::from_raw(1);
+    let local_tys = IndexVec::from_raw(vec![
+        LocalDecl {
+            ty: arr_ty,
+            mutability: Mutability::Not,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        LocalDecl {
+            ty: Ty::ISIZE,
+            mutability: Mutability::Not,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+    ]);
+    let place = Place {
+        local: LocalIdx::from_raw(0),
+        projection: Box::new([ProjectionElem::Index(idx_local)]),
+    };
+    let mut bc = Vec::new();
+    backend
+        .emit_place_address(&mut bc, &place, &local_tys)
+        .expect("Index projection must lower");
+    // The stride constant (4) must appear; the container size (16) must not.
+    assert!(
+        bc.windows(8).any(|w| w == 4i64.to_le_bytes()),
+        "expected element-size stride 4 in bytecode: {bc:?}"
+    );
+    assert!(
+        !bc.windows(8).any(|w| w == 16i64.to_le_bytes()),
+        "stride must NOT be the container size 16: {bc:?}"
+    );
 }

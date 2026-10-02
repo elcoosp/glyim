@@ -4,11 +4,21 @@ use rowan::Language;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_block(&mut self) {
+        // FE-6: nested blocks `{{{{…}}}}` are a stack-overflow vector; bound them.
+        if self.recursion_depth > super::MAX_EXPR_DEPTH {
+            self.error("block nested too deeply");
+            if self.current().is_some() {
+                self.bump();
+            }
+            return;
+        }
+        self.recursion_depth += 1;
         self.start_node(SyntaxKind::Block);
         self.expect(SyntaxKind::LBrace);
         self.parse_block_inner();
         self.expect(SyntaxKind::RBrace);
         self.finish_node();
+        self.recursion_depth -= 1;
     }
 
     pub(crate) fn parse_block_inner(&mut self) {
@@ -18,7 +28,24 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_expr(&mut self) {
+        // FE-6: bound recursion here — every nested construct (unary chains,
+        // blocks, arrays, `if`/`match`) reaches the parser through `parse_expr`.
+        // A TRUE depth counter (inc + dec) is used, not the monotonic counter
+        // the old single `(` guard used, so wide-but-shallow sources do not
+        // falsely trip it.
+        if self.recursion_depth > super::MAX_EXPR_DEPTH {
+            self.error("expression nested too deeply");
+            // Consume one token so any enclosing loop (e.g. a unary chain)
+            // makes forward progress instead of spinning and appending
+            // diagnostics until OOM.
+            if self.current().is_some() {
+                self.bump();
+            }
+            return;
+        }
+        self.recursion_depth += 1;
         self.parse_assignment_expr();
+        self.recursion_depth -= 1;
     }
 
     pub(crate) fn parse_assignment_expr(&mut self) {
@@ -206,10 +233,20 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_unary_expr(&mut self) {
+        // FE-6: a unary chain (`- - - … x`) recurses here directly, NOT
+        // through `parse_expr`, so the guard must live at this entry too.
+        if self.recursion_depth > super::MAX_EXPR_DEPTH {
+            self.error("expression nested too deeply");
+            if self.current().is_some() {
+                self.bump();
+            }
+            return;
+        }
         if matches!(
             self.current_kind(),
             SyntaxKind::Bang | SyntaxKind::Minus | SyntaxKind::Star | SyntaxKind::And
         ) {
+            self.recursion_depth += 1;
             self.start_node(SyntaxKind::UnaryExpr);
             self.bump();
             // For mutable borrows (`&mut x`), consume the `mut` keyword here so
@@ -222,6 +259,7 @@ impl<'a> Parser<'a> {
             }
             self.parse_unary_expr();
             self.finish_node();
+            self.recursion_depth -= 1;
         } else {
             self.parse_postfix_expr();
         }
@@ -625,7 +663,7 @@ impl<'a> Parser<'a> {
                     self.error("expression nested too deeply");
                     return;
                 }
-                self.recursion_depth += 1;
+                // (parse_expr owns the depth counter now — no increment here.)
                 let cp = self.checkpoint();
                 self.bump(); // (
                 if self.current_kind() == SyntaxKind::RParen {
