@@ -1263,7 +1263,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             Rvalue::Cast(kind, operand, target_ty) => {
                 let val = self.lower_operand(operand)?;
-                self.lower_cast(*kind, val, *target_ty)
+                self.lower_cast(*kind, val, self.operand_ty(operand), *target_ty)
             }
             Rvalue::Repeat(operand, count_const) => {
                 let val = self.lower_operand(operand)?;
@@ -1941,9 +1941,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::Lt => {
                 if l.is_int_value() && r.is_int_value() {
+                    // Use the *unsigned* predicate when the operand type is
+                    // unsigned (LL-1): a `u32`/`u64`/`usize` comparison of a
+                    // value >= 2^63 was miscompiled as signed.
+                    let cmp_pred = if self.is_signed_int_ty(operand_ty) {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::ULT
+                    };
                     self.builder
                         .build_int_compare(
-                            IntPredicate::SLT,
+                            cmp_pred,
                             l.into_int_value(),
                             r.into_int_value(),
                             "lt",
@@ -1978,9 +1986,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::Gt => {
                 if l.is_int_value() && r.is_int_value() {
+                    // Use the *unsigned* predicate when the operand type is
+                    // unsigned (LL-1): a `u32`/`u64`/`usize` comparison of a
+                    // value >= 2^63 was miscompiled as signed.
+                    let cmp_pred = if self.is_signed_int_ty(operand_ty) {
+                        IntPredicate::SGT
+                    } else {
+                        IntPredicate::UGT
+                    };
                     self.builder
                         .build_int_compare(
-                            IntPredicate::SGT,
+                            cmp_pred,
                             l.into_int_value(),
                             r.into_int_value(),
                             "gt",
@@ -2015,9 +2031,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::LtEq => {
                 if l.is_int_value() && r.is_int_value() {
+                    // Use the *unsigned* predicate when the operand type is
+                    // unsigned (LL-1): a `u32`/`u64`/`usize` comparison of a
+                    // value >= 2^63 was miscompiled as signed.
+                    let cmp_pred = if self.is_signed_int_ty(operand_ty) {
+                        IntPredicate::SLE
+                    } else {
+                        IntPredicate::ULE
+                    };
                     self.builder
                         .build_int_compare(
-                            IntPredicate::SLE,
+                            cmp_pred,
                             l.into_int_value(),
                             r.into_int_value(),
                             "le",
@@ -2052,9 +2076,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::GtEq => {
                 if l.is_int_value() && r.is_int_value() {
+                    // Use the *unsigned* predicate when the operand type is
+                    // unsigned (LL-1): a `u32`/`u64`/`usize` comparison of a
+                    // value >= 2^63 was miscompiled as signed.
+                    let cmp_pred = if self.is_signed_int_ty(operand_ty) {
+                        IntPredicate::SGE
+                    } else {
+                        IntPredicate::UGE
+                    };
                     self.builder
                         .build_int_compare(
-                            IntPredicate::SGE,
+                            cmp_pred,
                             l.into_int_value(),
                             r.into_int_value(),
                             "ge",
@@ -2287,6 +2319,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         &self,
         kind: CastKind,
         val: BasicValueEnum<'ctx>,
+        src_ty: Ty,
         target_ty: Ty,
     ) -> CompResult<BasicValueEnum<'ctx>> {
         let target_llvm_ty = self.llvm_type_for_ty(target_ty);
@@ -2301,8 +2334,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     if target_bits == src_bits {
                         Ok(int_val.as_basic_value_enum())
                     } else if target_bits > src_bits {
-                        self.builder
-                            .build_int_z_extend(int_val, target_llvm_ty.into_int_type(), "zext")
+                        // Sign-extend a signed source, zero-extend otherwise
+                        // (LL-2). Widening `i32(-1)` to `i64` must be sext.
+                        if self.is_signed_int_ty(src_ty) {
+                            self.builder
+                                .build_int_s_extend(int_val, target_llvm_ty.into_int_type(), "sext")
+                        } else {
+                            self.builder
+                                .build_int_z_extend(int_val, target_llvm_ty.into_int_type(), "zext")
+                        }
                             .map(|v| v.as_basic_value_enum())
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
@@ -2330,12 +2370,23 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             CastKind::FloatToInt => {
                 if val.is_float_value() && target_llvm_ty.is_int_type() {
                     let float_val = val.into_float_value();
-                    self.builder
-                        .build_float_to_signed_int(
-                            float_val,
-                            target_llvm_ty.into_int_type(),
-                            "fptosi",
-                        )
+                    // `fptoui` for an unsigned target, `fptosi` otherwise
+                    // (LL-3): `1e19 as u64` was UB / wrong via fptosi.
+                    if matches!(self.ty_ctx.ty_kind(target_ty), TyKind::Uint(_)) {
+                        self.builder
+                            .build_float_to_unsigned_int(
+                                float_val,
+                                target_llvm_ty.into_int_type(),
+                                "fptoui",
+                            )
+                    } else {
+                        self.builder
+                            .build_float_to_signed_int(
+                                float_val,
+                                target_llvm_ty.into_int_type(),
+                                "fptosi",
+                            )
+                    }
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
@@ -2352,12 +2403,24 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             CastKind::IntToFloat => {
                 if val.is_int_value() && target_llvm_ty.is_float_type() {
                     let int_val = val.into_int_value();
-                    self.builder
-                        .build_signed_int_to_float(
-                            int_val,
-                            target_llvm_ty.into_float_type(),
-                            "sitofp",
-                        )
+                    // `uitofp` for an unsigned source, `sitofp` otherwise
+                    // (LL-4): a `u64` >= 2^63 converted via sitofp gave a
+                    // negative float.
+                    if matches!(self.ty_ctx.ty_kind(src_ty), TyKind::Uint(_)) {
+                        self.builder
+                            .build_unsigned_int_to_float(
+                                int_val,
+                                target_llvm_ty.into_float_type(),
+                                "uitofp",
+                            )
+                    } else {
+                        self.builder
+                            .build_signed_int_to_float(
+                                int_val,
+                                target_llvm_ty.into_float_type(),
+                                "sitofp",
+                            )
+                    }
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(

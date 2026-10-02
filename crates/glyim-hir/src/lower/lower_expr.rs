@@ -1119,12 +1119,34 @@ pub(crate) fn lower_literal(token: &SyntaxToken, interner: &mut Interner) -> Lit
         }
         SyntaxKind::StringLit => {
             let raw = token.text().trim_start_matches('"').trim_end_matches('"');
-            let processed = raw
-                .replace("\\n", "\n")
-                .replace("\\t", "\t")
-                .replace("\\\\", "\\")
-                .replace("\\'", "'")
-                .replace("\\\"", "\"");
+            // Single left-to-right scan. Chained `.replace()` calls applied
+            // the backslash-escape rules in the wrong order: for source
+            // `"a\\nb"` (escaped backslash then `n`) the `\\n` rule matched
+            // the second backslash + `n` and produced a literal newline
+            // instead of `\` + `n` (HIR-14).
+            let mut processed = String::with_capacity(raw.len());
+            let mut chars = raw.chars();
+            while let Some(ch) = chars.next() {
+                if ch != '\\' {
+                    processed.push(ch);
+                    continue;
+                }
+                match chars.next() {
+                    Some('n') => processed.push('\n'),
+                    Some('t') => processed.push('\t'),
+                    Some('r') => processed.push('\r'),
+                    Some('0') => processed.push('\0'),
+                    Some('\\') => processed.push('\\'),
+                    Some('\'') => processed.push('\''),
+                    Some('"') => processed.push('"'),
+                    Some(other) => {
+                        // Unknown escape: keep it verbatim.
+                        processed.push('\\');
+                        processed.push(other);
+                    }
+                    None => processed.push('\\'),
+                }
+            }
             Literal::String(interner.intern(&processed))
         }
         _ => Literal::Unit,

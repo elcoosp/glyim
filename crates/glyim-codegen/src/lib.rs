@@ -400,9 +400,8 @@ impl BytecodeBackend {
                                 // opcodes, which is this backend's verification
                                 // convention.)
                                 let slice_local = place.local;
-                                bc.push(OP_LOAD_LOCAL);
-                                bc.extend_from_slice(&slice_local.to_raw().to_le_bytes());
                                 bc.push(OP_LEN);
+                                bc.extend_from_slice(&slice_local.to_raw().to_le_bytes());
                                 bc.push(OP_LOAD_CONST);
                                 bc.extend_from_slice(&(*offset as i64).to_le_bytes());
                                 bc.push(OP_SUB);
@@ -893,8 +892,11 @@ impl BytecodeBackend {
                 Ok(())
             }
             Rvalue::Len(place) => {
-                self.emit_operand(bc, &Operand::Copy(place.clone()), local_tys)?;
+                // `OP_LEN + u32 local` (RT-4). The previous form emitted a
+                // bare `OP_LEN` after loading the operand, which disagreed with
+                // the slice-projection site below and desynced the VM stream.
                 bc.push(OP_LEN);
+                bc.extend_from_slice(&place.local.to_raw().to_le_bytes());
                 Ok(())
             }
             Rvalue::Cast(kind, operand, _) => {

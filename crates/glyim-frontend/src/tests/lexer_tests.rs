@@ -351,3 +351,28 @@ fn multiple_tokens_with_invalid_suffix() {
     assert_eq!(result.tokens[0].text, "42invalid");
     assert_eq!(result.tokens[1].text, "123");
 }
+
+/// FE-1 regression: `%=` was lexed as `Percent` then `Eq`, and no
+/// `PercentEq` SyntaxKind existed, so `x %= 2` failed to parse.
+#[test]
+fn lex_percent_eq_is_one_token() {
+    let tokens = test_lex("x %= 2");
+    let kinds: Vec<_> = tokens.iter().map(|t| t.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![SyntaxKind::Ident, SyntaxKind::PercentEq, SyntaxKind::IntLit],
+        "`%=` must lex as a single PercentEq token, got {kinds:?}"
+    );
+    assert_eq!(tokens[1].text, "%=");
+}
+
+/// A bare `%` (remainder) must still lex as `Percent`.
+#[test]
+fn lex_percent_alone_still_works() {
+    let tokens = test_lex("x % 2");
+    let kinds: Vec<_> = tokens.iter().map(|t| t.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![SyntaxKind::Ident, SyntaxKind::Percent, SyntaxKind::IntLit]
+    );
+}

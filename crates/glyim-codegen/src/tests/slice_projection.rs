@@ -141,9 +141,10 @@ fn constant_index_slice_from_end_emits_runtime_len_sub() {
     // the per-element arithmetic: push slice value, OP_LEN, push offset,
     // OP_SUB, push elem_size, OP_MUL, OP_ADD.
     let mut expected = vec![OP_LOAD_LOCAL_ADDR, 0, 0, 0, 0];
-    expected.push(OP_LOAD_LOCAL);
-    expected.extend_from_slice(&0u32.to_le_bytes());
+    // RT-4: `OP_LEN` now carries the local index (it previously emitted a
+    // separate `OP_LOAD_LOCAL` first, which desynced the VM stream).
     expected.push(OP_LEN);
+    expected.extend_from_slice(&0u32.to_le_bytes());
     expected.push(OP_LOAD_CONST);
     expected.extend_from_slice(&1i64.to_le_bytes());
     expected.push(OP_SUB);

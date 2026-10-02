@@ -31,6 +31,7 @@ impl<'a> Parser<'a> {
                 | SyntaxKind::MinusEq
                 | SyntaxKind::StarEq
                 | SyntaxKind::SlashEq
+                | SyntaxKind::PercentEq
                 | SyntaxKind::OrEq
                 | SyntaxKind::AndEq
                 | SyntaxKind::CaretEq

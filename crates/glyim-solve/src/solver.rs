@@ -505,16 +505,16 @@ pub(crate) fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
     match (ctx.ty_kind(a), ctx.ty_kind(b)) {
         (TyKind::Array(elem_a, _), TyKind::Slice(elem_b)) if elem_a == elem_b => true,
         (TyKind::Ref(_, inner_a, mut_a), TyKind::Ref(_, inner_b, mut_b)) => {
-            (mut_a == mut_b)
+            ((mut_a == mut_b)
                 || (*mut_a == glyim_core::primitives::Mutability::Mut
-                    && *mut_b == glyim_core::primitives::Mutability::Not)
-                    && can_coerce(ctx, *inner_a, *inner_b)
+                    && *mut_b == glyim_core::primitives::Mutability::Not))
+                && can_coerce(ctx, *inner_a, *inner_b)
         }
         (TyKind::RawPtr(inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
-            (mut_a == mut_b)
+            ((mut_a == mut_b)
                 || (*mut_a == glyim_core::primitives::Mutability::Mut
-                    && *mut_b == glyim_core::primitives::Mutability::Not)
-                    && can_coerce(ctx, *inner_a, *inner_b)
+                    && *mut_b == glyim_core::primitives::Mutability::Not))
+                && can_coerce(ctx, *inner_a, *inner_b)
         }
         (TyKind::Ref(_, inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
             // &T -> *const T (Not -> Not) and &mut T -> *mut T (Mut -> Mut)

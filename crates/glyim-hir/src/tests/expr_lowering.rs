@@ -165,3 +165,55 @@ fn test_lower_cast_expr() {
         _ => panic!("expected Cast expr"),
     }
 }
+
+/// HIR-14 regression: `"a\\nb"` (an escaped backslash followed by `n`) was
+/// mis-unescaped to `a<newline>b` because the `\\n` replacement ran before the
+/// `\\\\` one. The single-pass scanner must produce `a\nb` (backslash + n).
+#[test]
+fn test_string_unescape_backslash_before_n() {
+    // Source text is: "a\\nb"  (4 chars: a, backslash, backslash, n, b
+    // between the quotes). After unescaping it must be `a` `\` `n` `b`.
+    let node = parse_expr(r#""a\\nb""#);
+    let mut interner = Interner::default();
+    let mut body = make_body();
+    let eid = lower_expr_fn(
+        &node,
+        &mut interner,
+        &mut body,
+        &mut Vec::new(),
+        &HashMap::new(),
+    )
+    .unwrap();
+    match &body.exprs[eid] {
+        Expr::Literal(crate::Literal::String(name)) => {
+            let s = interner.resolve(*name);
+            assert_eq!(
+                s, "a\\nb",
+                "escaped-backslash + n must stay `\\n`, not become a newline"
+            );
+        }
+        other => panic!("expected String literal, got {:?}", other),
+    }
+}
+
+/// A genuine `"\n"` escape still becomes a real newline.
+#[test]
+fn test_string_unescape_newline() {
+    let node = parse_expr(r#""a\nb""#);
+    let mut interner = Interner::default();
+    let mut body = make_body();
+    let eid = lower_expr_fn(
+        &node,
+        &mut interner,
+        &mut body,
+        &mut Vec::new(),
+        &HashMap::new(),
+    )
+    .unwrap();
+    match &body.exprs[eid] {
+        Expr::Literal(crate::Literal::String(name)) => {
+            assert_eq!(interner.resolve(*name), "a\nb");
+        }
+        other => panic!("expected String literal, got {:?}", other),
+    }
+}

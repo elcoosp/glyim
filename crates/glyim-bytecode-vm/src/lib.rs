@@ -525,8 +525,13 @@ impl Vm {
                     self.frames[frame_idx].pc = off;
                 }
                 Opcode::Len => {
-                    let _local = Vm::read_u32(code, &mut self.frames[frame_idx].pc)?;
-                    self.stack.push(Value::Int(0));
+                    let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let v = self.local_ref(idx)?.clone();
+                    let len = match &v {
+                        Value::Tuple(elems) => elems.len() as i64,
+                        _ => 0,
+                    };
+                    self.stack.push(Value::Int(len));
                 }
                 Opcode::Discriminant => {
                     let v = self.pop()?;
@@ -547,9 +552,10 @@ impl Vm {
                 }
                 Opcode::Drop => {
                     let _addr = self.pop()?;
-                    let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)?;
-                    let off = module.functions[func].resolve_target(target);
-                    self.frames[frame_idx].pc = off;
+                    // The emitter writes `DROP; JUMP u32`. Do NOT consume the
+                    // following opcode here — let `OP_JUMP` execute normally
+                    // (RT-3: the old code ate the JUMP opcode + target as one
+                    // u32 and jumped to garbage).
                 }
                 Opcode::Repeat => {
                     let value = self.pop()?;
@@ -859,6 +865,31 @@ mod tests {
         let mut vm = Vm::new();
         let result = vm.run(&Chunk::new(a.finish(0, 0).code)).unwrap();
         assert_eq!(result, Value::Int(1));
+    }
+
+    #[test]
+    fn run_len_reads_tuple_length() {
+        // RT-4: `OP_LEN <local>` reads the length of the local's tuple value.
+        // (Previously OP_LEN pushed Int(0) and ate a stale encoding.)
+        let mut a = Asm::new();
+        a.op(Opcode::Aggregate);
+        a.u32(3); // build a 3-element tuple from three pushed constants
+        a.op(Opcode::Return);
+
+        // Simpler: store a tuple directly via Aggregate of 3 constants.
+        let mut b = Asm::new();
+        b.load_const(7);
+        b.load_const(8);
+        b.load_const(9);
+        b.op(Opcode::Aggregate);
+        b.u32(3);
+        b.store_local(0);
+        b.op(Opcode::Len);
+        b.u32(0);
+        b.op(Opcode::Return);
+        let module = Module::new(vec![b.finish(1, 0)], 0);
+        let result = module.run().unwrap();
+        assert_eq!(result, Value::Int(3), "OP_LEN must push the tuple length");
     }
 
     #[test]

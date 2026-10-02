@@ -320,11 +320,20 @@ impl<'a> Lexer<'a> {
                 }
                 '%' => {
                     self.advance();
-                    tokens.push(Token::new(
-                        SyntaxKind::Percent,
-                        self.span(start, self.pos),
-                        "%",
-                    ));
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        tokens.push(Token::new(
+                            SyntaxKind::PercentEq,
+                            self.span(start, self.pos),
+                            "%=",
+                        ));
+                    } else {
+                        tokens.push(Token::new(
+                            SyntaxKind::Percent,
+                            self.span(start, self.pos),
+                            "%",
+                        ));
+                    }
                 }
                 '=' => {
                     let k = self.lex_eq();

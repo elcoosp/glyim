@@ -66,16 +66,16 @@ pub fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
         (TyKind::Array(elem_a, _), TyKind::Slice(elem_b)) if elem_a == elem_b => true,
         (TyKind::Ref(_, inner_a, mut_a), TyKind::Ref(_, inner_b, mut_b)) => {
             // Allow &mut T -> &T as well
-            (mut_a == mut_b)
+            ((mut_a == mut_b)
                 || (*mut_a == glyim_core::primitives::Mutability::Mut
-                    && *mut_b == glyim_core::primitives::Mutability::Not)
-                    && can_coerce(ctx, *inner_a, *inner_b)
+                    && *mut_b == glyim_core::primitives::Mutability::Not))
+                && can_coerce(ctx, *inner_a, *inner_b)
         }
         (TyKind::RawPtr(inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
-            (mut_a == mut_b)
+            ((mut_a == mut_b)
                 || (*mut_a == glyim_core::primitives::Mutability::Mut
-                    && *mut_b == glyim_core::primitives::Mutability::Not)
-                    && can_coerce(ctx, *inner_a, *inner_b)
+                    && *mut_b == glyim_core::primitives::Mutability::Not))
+                && can_coerce(ctx, *inner_a, *inner_b)
         }
         // §6.2: fn-item coercion to fn pointer. A zero-sized function item
         // coerces to `fn(Args) -> Ret` when its signature matches the pointer's.

@@ -1425,19 +1425,12 @@ impl<'a> MirBuilder<'a> {
         // off the other (orphaned, never-written) temp -- e.g. `match f.poll()
         // { Ready(v) => v, .. }` would bind `v` to uninitialized memory while
         // the switch dispatches on the correct result, a silent miscompile.
-        let full_scrut_op = if enum_dispatch {
-            // Enum scrutinees are matched *in place*: the switch reads the
-            // discriminant and arm patterns project fields off the temp. Copy
-            // the place into the temp rather than `Move`-ing it out of the
-            // owner (e.g. `self.state` where `self: &mut Self`) — otherwise the
-            // later `Discriminant(self.state)` read is a use of a partially
-            // moved value, which borrowck (B0001) correctly rejects. The
-            // interpreter tolerates the move, but the desugared async poll body
-            // must be borrow-check clean (M4/M5 compile-correctness gate).
-            glyim_mir::Operand::Copy(scrutinee_place.clone())
-        } else {
-            self.lower_expr_to_operand(scrutinee)
-        };
+        // NEVER re-lower the scrutinee. `lower_expr_to_place(scrutinee)`
+        // above already materialized it; re-lowering it here for the
+        // `SwitchInt` would run any side effects twice (HIR-29:
+        // `match counter.next() { .. }` advanced the counter twice). Reuse
+        // the materialized place for dispatch as well.
+        let full_scrut_op = glyim_mir::Operand::Copy(scrutinee_place.clone());
         // The discriminator the `SwitchInt` switches on.
         let (discr_op, switch_ty) = if slice_dispatch {
             // Slice/array matches dispatch on the *length* of the scrutinee.

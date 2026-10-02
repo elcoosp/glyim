@@ -153,6 +153,8 @@ pub enum SyntaxKind {
     /// Variant.
     SlashEq,
     /// Variant.
+    PercentEq,
+    /// Variant.
     OrEq,
     /// Variant.
     AndEq,
