@@ -294,3 +294,79 @@ fn loop_built_array_uses_per_element_flags() {
         "§15.2: loop-built array drop must be gated on per-element drop flags"
     );
 }
+
+/// MIR-10 regression: after array-drop elaboration, the original block 0's
+/// `Goto` must target the loop's *init* block, NOT block 0 (a self-loop that
+/// hangs the interpreter and drops nothing). The old code remapped the
+/// appended loop blocks through a map with no entries for them, so every edge
+/// into an appended block (index >= old_count) hit the `None -> 0` fallback.
+#[test]
+fn array_drop_init_edge_is_not_a_self_loop() {
+    use glyim_core::AdtId;
+    let mut ctx_mut = glyim_test::test_ty_ctx();
+    let string_ty = ctx_mut.mk_ty(TyKind::String);
+    let adt_id = AdtId::from_raw(100);
+    let subst = ctx_mut.intern_substitution(vec![]);
+    let field_defs = glyim_core::arena::IndexVec::from_raw(vec![glyim_type::FieldDef {
+        name: ctx_mut.resolver().intern("s"),
+        ty: string_ty,
+    }]);
+    let variant = glyim_type::VariantDef {
+        name: ctx_mut.resolver().intern("S"),
+        style: glyim_type::adt_def::VariantStyle::Unit,
+        fields: field_defs.clone(),
+    };
+    let adt_def = glyim_type::AdtDef {
+        kind: glyim_type::AdtKind::Struct,
+        fields: field_defs.clone(),
+        variants: vec![variant],
+        generic_params: vec![],
+    };
+    ctx_mut.register_adt(adt_id, adt_def);
+    let struct_ty = ctx_mut.mk_ty(TyKind::Adt(adt_id, subst));
+
+    let mut body = body_with_array_drop(&mut ctx_mut, struct_ty, 3);
+    crate::elaborate_drops(&mut ctx_mut, &mut body);
+
+    // Old block 0's terminator (was `Drop(array)`) must now be a `Goto` into
+    // the loop init block, which is a *new* block (index >= the original 2).
+    let block0 = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    match &block0.terminator.kind {
+        TerminatorKind::Goto { target } => {
+            assert_ne!(
+                target.to_raw(),
+                0,
+                "array-drop init edge must not be a self-loop (MIR-10): {:?}",
+                block0.terminator.kind
+            );
+            // It must land on the init block, whose terminator is itself a
+            // `Goto` into the condition block (which switches on the index).
+            let init = &body.basic_blocks[*target];
+            assert!(
+                matches!(init.terminator.kind, TerminatorKind::Goto { .. }),
+                "init block should Goto the condition block, got {:?}",
+                init.terminator.kind
+            );
+            let TerminatorKind::Goto { target: cond } = init.terminator.kind else {
+                unreachable!()
+            };
+            assert!(
+                matches!(
+                    body.basic_blocks[cond].terminator.kind,
+                    TerminatorKind::SwitchInt { .. }
+                ),
+                "init's target must be the condition SwitchInt, got {:?}",
+                body.basic_blocks[cond].terminator.kind
+            );
+        }
+        other => panic!("block 0 should Goto the loop init, got {other:?}"),
+    }
+
+    // Every Goto target must be in range (no fallback-to-0 style aliasing).
+    let n = body.basic_blocks.len() as u32;
+    for blk in body.basic_blocks.iter() {
+        if let TerminatorKind::Goto { target } = &blk.terminator.kind {
+            assert!(target.to_raw() < n, "Goto target out of range");
+        }
+    }
+}

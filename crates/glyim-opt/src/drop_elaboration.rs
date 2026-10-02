@@ -332,8 +332,31 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
     }
 
     // Transform Drop terminators.
-    let mut new_blocks = Vec::new();
-    let mut block_map: Vec<Option<usize>> = vec![None; body.basic_blocks.len()];
+    //
+    // Layout: the transformed OLD blocks keep their original indices
+    // (0..old_count); any appended blocks (array-drop loop / flag guards) are
+    // pushed AFTER them at `old_count..`. Because old indices are preserved
+    // (identity) and appended blocks are emitted with their final indices,
+    // NO terminator remapping is needed at all. The previous code interleaved
+    // appended blocks between the copied old ones and then ran
+    // `remap_terminator` over everything, which (a) mis-translated the
+    // appended blocks' own low-index edges and (b) mapped old→new edges that
+    // were already final — corrupting the CFG for every array drop (MIR-10).
+    let old_count = body.basic_blocks.len();
+    let mut new_blocks: Vec<BasicBlockData> = Vec::with_capacity(old_count);
+    // Reserve indices 0..old_count with placeholders; appended blocks land at
+    // `old_count..` as `new_blocks.len()` grows during emission.
+    let placeholder = BasicBlockData {
+        statements: Vec::new(),
+        terminator: Terminator {
+            kind: TerminatorKind::Unreachable,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        is_cleanup: false,
+    };
+    for _ in 0..old_count {
+        new_blocks.push(placeholder.clone());
+    }
 
     for (old_idx, old_block) in body.basic_blocks.iter().enumerate() {
         let old_bb = BasicBlockIdx::from_raw(old_idx as u32);
@@ -435,20 +458,16 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
             _ => terminator.kind.clone(),
         };
 
-        let new_idx = new_blocks.len();
-        block_map[old_idx] = Some(new_idx);
-        new_blocks.push(BasicBlockData {
+        // Old block `old_idx` keeps its index (`0..old_count`); overwrite its
+        // placeholder. Appended blocks emitted above already occupy the tail.
+        new_blocks[old_idx] = BasicBlockData {
             statements: old_block.statements.clone(),
             terminator: Terminator {
                 kind: new_term,
                 source_info: terminator.source_info.clone(),
             },
             is_cleanup: old_block.is_cleanup,
-        });
-    }
-
-    for block in &mut new_blocks {
-        super::cfg_simplify::remap_terminator(block, &block_map);
+        };
     }
 
     body.basic_blocks = IndexVec::from_raw(new_blocks);
