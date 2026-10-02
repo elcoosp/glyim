@@ -161,3 +161,89 @@ fn const_generic_array_drop_glue_panics_on_unresolved_length() {
     // `generate_drop_glue` must refuse to silently emit a no-op, per u00a72c.
     let _ = crate::mono_cache::generate_drop_glue(arr_with_param_len, &ty_ctx);
 }
+
+/// INF-23 regression: the `[T]` (slice) drop glue loop must be a real
+/// terminating loop that drops each element. The old code put `idx = 0` in the
+/// header and switched on the raw `idx` with `(0, exit)`, so the first
+/// evaluation exited immediately and **zero** elements were dropped; its latch
+/// also jumped back to a header that re-zeroed `idx` (non-terminating).
+///
+/// This checks the *structure*: the header compares `idx < len` and switches
+/// on that bool (true -> body), the body drops an indexed element, and the
+/// latch increments `idx` and jumps back to the header.
+#[test]
+fn slice_drop_glue_loop_drops_each_element() {
+    let (ty_ctx, ty) = with_fresh_ty_ctx(|c| {
+        let string_ty = c.mk_ty(TyKind::String);
+        // `[String]` — a slice whose element needs drop.
+        c.mk_ty(TyKind::Slice(string_ty))
+    });
+    let body = crate::mono_cache::generate_drop_glue(ty, &ty_ctx);
+
+    // 1. A block must compute `cond = idx < len`.
+    let has_lt = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|s| {
+            matches!(
+                &s.kind,
+                glyim_mir::StatementKind::Assign(
+                    _,
+                    glyim_mir::Rvalue::BinaryOp(
+                        glyim_core::primitives::BinOp::Lt,
+                        _
+                    )
+                )
+            )
+        })
+    });
+    assert!(has_lt, "slice drop glue must compare `idx < len` (INF-23)");
+
+    // 2. A block must switch on a bool with `true (1) -> body` (not exit).
+    let switch = body.basic_blocks.iter().find_map(|bb| {
+        if let TerminatorKind::SwitchInt {
+            switch_ty, targets, ..
+        } = &bb.terminator.kind
+            && *switch_ty == glyim_type::Ty::BOOL
+        {
+            return Some(targets.clone());
+        }
+        None
+    });
+    let targets = switch.expect("slice drop glue must switch on the loop condition");
+    let true_target = targets
+        .iter()
+        .find(|(v, _)| *v == 1)
+        .map(|(_, t)| t)
+        .expect("loop condition must have a `true` (1) branch");
+
+    // 3. The true branch must be a block that drops an *indexed* element.
+    let body_bb = &body.basic_blocks[true_target];
+    match &body_bb.terminator.kind {
+        TerminatorKind::Drop { place, .. } => {
+            assert!(
+                place
+                    .projection
+                    .iter()
+                    .any(|p| matches!(p, glyim_mir::ProjectionElem::Index(_))),
+                "loop body must drop an indexed element"
+            );
+        }
+        other => panic!("true branch of the loop condition must be a Drop, got {other:?}"),
+    }
+
+    // 4. Some block must increment (`idx + 1`) and Goto back into the loop.
+    let has_increment = body.basic_blocks.iter().any(|bb| {
+        bb.statements.iter().any(|s| {
+            matches!(
+                &s.kind,
+                glyim_mir::StatementKind::Assign(
+                    _,
+                    glyim_mir::Rvalue::BinaryOp(glyim_core::primitives::BinOp::Add, _)
+                )
+            )
+        }) && matches!(bb.terminator.kind, TerminatorKind::Goto { .. })
+    });
+    assert!(
+        has_increment,
+        "slice drop glue must have an `idx = idx + 1` latch that loops back"
+    );
+}

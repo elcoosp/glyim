@@ -793,28 +793,91 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
+    // `cond = idx < len` is materialized into a bool local (the `SwitchInt`
+    // discriminator is a `u8`/`bool`, not the `usize` comparison itself).
+    let cond_local = body.locals.push(LocalDecl {
+        ty: Ty::BOOL,
+        mutability: Mutability::Not,
+        source_info: SourceInfo::new(Span::DUMMY),
+    });
 
+    // Loop structure (INF-23):
+    //   entry (bb0):  len = Len(place); idx = 0; Goto header
+    //   header:       cond = idx < len; SwitchInt(cond): true -> body, else exit
+    //   body:         Drop(place[idx]); Goto latch
+    //   latch:        idx = idx + 1; Goto header
+    //   exit:         Return
+    //
+    // The previous shape put `idx = 0` in the header and switched on the raw
+    // `idx` with `(0, exit)` — "exit when idx == 0" — so the very first
+    // evaluation exited and *nothing* was dropped. The increment block also
+    // jumped back to the header, which re-zeroed `idx` (non-terminating).
     let exit_bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     }));
-    let inc_bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
-        kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(0),
-        },
+    let header_bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
+        kind: TerminatorKind::Goto { target: exit_bb },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
     let body_bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Drop {
             place: element_place(place, idx_local),
-            target: inc_bb,
+            target: exit_bb,
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
+    let latch_bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
+        kind: TerminatorKind::Goto {
+            target: header_bb,
+        },
+        source_info: SourceInfo::new(Span::DUMMY),
+    }));
 
-    // Increment block: idx = idx + 1.
-    if let Some(inc) = body.basic_blocks.get_mut(inc_bb) {
+    // Body block: drop element `idx`, then go to the latch.
+    if let Some(b) = body.basic_blocks.get_mut(body_bb) {
+        b.terminator = Terminator {
+            kind: TerminatorKind::Drop {
+                place: element_place(place, idx_local),
+                target: latch_bb,
+                cleanup: None,
+            },
+            source_info: SourceInfo::new(Span::DUMMY),
+        };
+    }
+
+    // Header block: cond = idx < len; loop while true.
+    if let Some(h) = body.basic_blocks.get_mut(header_bb) {
+        h.statements.push(Statement {
+            kind: StatementKind::Assign(
+                Place::new(cond_local),
+                Rvalue::BinaryOp(
+                    glyim_core::primitives::BinOp::Lt,
+                    Box::new((
+                        Operand::Copy(Place::new(idx_local)),
+                        Operand::Copy(Place::new(len_local)),
+                    )),
+                ),
+            ),
+            source_info: SourceInfo::new(Span::DUMMY),
+        });
+        h.terminator = Terminator {
+            kind: TerminatorKind::SwitchInt {
+                discr: Operand::Copy(Place::new(cond_local)),
+                switch_ty: Ty::BOOL,
+                // true (1) -> body; otherwise -> exit.
+                targets: SwitchTargets::new(
+                    Box::new([(1, body_bb)]),
+                    exit_bb,
+                ),
+            },
+            source_info: SourceInfo::new(Span::DUMMY),
+        };
+    }
+
+    // Latch block: idx = idx + 1; Goto header.
+    if let Some(inc) = body.basic_blocks.get_mut(latch_bb) {
         inc.statements.push(Statement {
             kind: StatementKind::Assign(
                 Place::new(idx_local),
@@ -834,7 +897,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
         });
     }
 
-    // Header (basic block 0): read len, set idx = 0, loop while idx < len.
+    // Entry (bb0): len = Len(place); idx = 0; Goto header.
     if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
         block0.statements.clear();
         block0.statements.push(Statement {
@@ -853,10 +916,8 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
             source_info: SourceInfo::new(Span::DUMMY),
         });
         block0.terminator = Terminator {
-            kind: TerminatorKind::SwitchInt {
-                discr: Operand::Copy(Place::new(idx_local)),
-                switch_ty: Ty::USIZE,
-                targets: SwitchTargets::new(Box::new([(0, exit_bb)]), body_bb),
+            kind: TerminatorKind::Goto {
+                target: header_bb,
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
