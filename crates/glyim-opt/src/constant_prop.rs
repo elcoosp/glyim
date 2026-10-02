@@ -379,6 +379,12 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
     }
 
     let mut in_maps: Vec<Option<BlockMap>> = vec![None; num_blocks];
+    // Per-block ENTRY maps (the `in_maps` above holds the *exit* state, since
+    // it is written after the block's transfer). The rewrite phase must start
+    // from the entry state and simulate the block statement-by-statement;
+    // applying the exit map to every statement folded `read x; x = c` to `c`
+    // (MIR-1).
+    let mut entry_maps: Vec<Option<BlockMap>> = vec![None; num_blocks];
     let mut changed = true;
     let mut iteration = 0;
     const MAX_ITERATIONS: usize = 1000;
@@ -398,6 +404,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
             }
 
             let mut out = incoming.clone();
+            entry_maps[bb_idx] = Some(incoming.clone());
             let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
             // Locals *defined* (assigned) in this block. A local defined with a
             // non-constant rvalue must be recorded as `None` (wild) in `out`,
@@ -439,12 +446,40 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
         }
     }
 
+    // Cache local types so the rewrite loop can read them without holding a
+    // second borrow of `body` alongside the mutable `basic_blocks` borrow.
+    let local_tys: Vec<Ty> = body.locals.iter().map(|l| l.ty).collect();
+
     for bb_idx in 0..num_blocks {
-        if let Some(map) = &in_maps[bb_idx] {
-            let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
-            for stmt in &mut block.statements {
-                if let StatementKind::Assign(_place, rvalue) = &mut stmt.kind {
-                    replace_in_rvalue(rvalue, map);
+        let Some(entry) = entry_maps[bb_idx].clone() else {
+            continue;
+        };
+        let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
+        // Simulate the block from its *entry* state, updating the map after
+        // each assignment with the same transfer the fixpoint used. Applying a
+        // single (exit) map to every statement would fold `_2 = move _1` to
+        // whatever `_1` held at the *end* of the block — e.g. in
+        // `_1 = 10; _2 = _1; _1 = 3` it would rewrite `_2 = _1` to `3`
+        // instead of `10` (MIR-1, silent wrong values).
+        let mut map = entry;
+        for stmt in &mut block.statements {
+            if let StatementKind::Assign(place, rvalue) = &mut stmt.kind {
+                replace_in_rvalue(rvalue, &map);
+                let local = place.local;
+                if place.projection.is_empty() {
+                    let ty = local_tys[local.index()];
+                    match evaluate_rvalue_to_const(rvalue, &map, ctx, ty) {
+                        Some(c) => {
+                            map.insert(local, Some(c));
+                        }
+                        None => {
+                            map.insert(local, None);
+                        }
+                    }
+                } else {
+                    // A projected assignment (e.g. `_1.0 = ..`) does not give
+                    // `_1` a constant value; pin it wild.
+                    map.insert(local, None);
                 }
             }
         }
