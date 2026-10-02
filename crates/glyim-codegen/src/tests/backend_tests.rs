@@ -3015,3 +3015,71 @@ fn t99_cross_backend_execution_computes_value() {
         "cross-backend (3+4)*2 must compute 14 in local 5"
     );
 }
+
+// ============================================================================
+// RT-11 regression: bool `SwitchInt` true/false target mapping
+//
+// Lowering builds a bool switch as `SwitchTargets::new([(1, then)], else)`
+// (value 1 = true block, otherwise = false block), and `OP_JUMP_IF` is
+// jump-if-nonzero (jump-if-true). The backend previously assigned the first
+// branch pair to the *false* target and `otherwise` to the *true* target —
+// inverting every if/while/match-guard. The pre-existing tests only checked
+// `contains(OP_JUMP_IF)`, so nothing caught it. This test decodes the emitted
+// target bytes.
+// ============================================================================
+#[test]
+fn rt11_bool_switch_true_target_is_branch_value_1() {
+    // Blocks: 0 = switch, 1 = true, 2 = false.
+    let body = make_body(
+        vec![
+            block(
+                vec![stmt(StatementKind::Assign(
+                    Place::new(LocalIdx::from_raw(0)),
+                    Rvalue::Use(Operand::Constant(MirConst {
+                        kind: MirConstKind::Bool(true),
+                        ty: Ty::BOOL,
+                        span: Span::DUMMY,
+                    })),
+                ))],
+                term(TerminatorKind::SwitchInt {
+                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    switch_ty: Ty::BOOL,
+                    // Convention: value 1 -> block 1 (true), otherwise -> block 2.
+                    targets: SwitchTargets::new(
+                        Box::new([(1u128, BasicBlockIdx::from_raw(1))]),
+                        BasicBlockIdx::from_raw(2),
+                    ),
+                }),
+            ),
+            block(vec![], term(TerminatorKind::Return)),
+            block(vec![], term(TerminatorKind::Return)),
+        ],
+        vec![local_decl(Ty::BOOL)],
+        0,
+    );
+    let backend = BytecodeBackend::with_ty_ctx(
+        std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
+        glyim_core::TargetInfo::default(),
+    );
+    let bc = backend.generate_function(&body).unwrap();
+
+    // Locate OP_JUMP_IF; the next 4 bytes are the jump-if-true target.
+    let pos = bc
+        .iter()
+        .position(|&b| b == OP_JUMP_IF)
+        .expect("expected OP_JUMP_IF in bytecode");
+    let true_target = u32::from_le_bytes([bc[pos + 1], bc[pos + 2], bc[pos + 3], bc[pos + 4]]);
+    // Then OP_JUMP with the false target.
+    assert_eq!(bc[pos + 5], OP_JUMP, "expected OP_JUMP after OP_JUMP_IF");
+    let false_target =
+        u32::from_le_bytes([bc[pos + 6], bc[pos + 7], bc[pos + 8], bc[pos + 9]]);
+
+    assert_eq!(
+        true_target, 1,
+        "OP_JUMP_IF must jump to the true block (block 1), got {true_target}",
+    );
+    assert_eq!(
+        false_target, 2,
+        "the fall-through OP_JUMP must target the false block (block 2), got {false_target}",
+    );
+}

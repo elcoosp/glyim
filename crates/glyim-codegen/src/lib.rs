@@ -1034,12 +1034,21 @@ impl BytecodeBackend {
             } => {
                 if *switch_ty == Ty::BOOL {
                     self.emit_operand(bc, discr, local_tys)?;
-                    let false_target = targets
+                    // Lowering convention (lower_rvalue.rs, builder.rs):
+                    // a bool `SwitchInt` is built as
+                    // `SwitchTargets::new([(1, then_bb)], else_bb)` — branch
+                    // value 1 is the TRUE block, `otherwise` is the FALSE
+                    // block. `OP_JUMP_IF` in the VM (`Vm::run`, `Opcode::JumpIf`)
+                    // is jump-if-nonzero, i.e. jump-if-true. The previous code
+                    // treated the first branch pair as the *false* target and
+                    // `otherwise` as the *true* target — the exact opposite —
+                    // so every `if` / `while` / match-guard took the wrong arm.
+                    let true_target = targets
                         .iter()
-                        .next()
+                        .find(|(v, _)| *v == 1)
                         .map(|(_, t)| t)
                         .unwrap_or_else(|| targets.otherwise());
-                    let true_target = targets.otherwise();
+                    let false_target = targets.otherwise();
                     bc.push(OP_JUMP_IF);
                     bc.extend_from_slice(&true_target.to_raw().to_le_bytes());
                     bc.push(OP_JUMP);
