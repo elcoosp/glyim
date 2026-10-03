@@ -392,9 +392,15 @@ impl<'a> MirBuilder<'a> {
                     },
                     cond.span,
                 );
+                let break_place = self.alloc_local(
+                    Ty::UNIT,
+                    glyim_core::primitives::Mutability::Mut,
+                    expr.span,
+                );
                 self.loop_stack.push(LoopInfo {
                     continue_bb: header_bb,
                     break_bb: exit_bb,
+                    break_place,
                 });
                 self.current_block = Some(body_bb);
                 let _ = self.lower_expr_to_rvalue(body);
@@ -415,6 +421,14 @@ impl<'a> MirBuilder<'a> {
             thir::ExprKind::Loop { body } => {
                 let loop_bb = self.new_block();
                 let exit_bb = self.new_block();
+                // HIR-30: `loop { break v; }` evaluates to `v`. Materialize a
+                // result local of the loop's type; `Break` writes it, and the
+                // loop expression reads it back at `exit_bb`.
+                let break_place = self.alloc_local(
+                    expr.ty,
+                    glyim_core::primitives::Mutability::Mut,
+                    expr.span,
+                );
                 self.terminate(
                     glyim_mir::TerminatorKind::Goto { target: loop_bb },
                     expr.span,
@@ -422,6 +436,7 @@ impl<'a> MirBuilder<'a> {
                 self.loop_stack.push(LoopInfo {
                     continue_bb: loop_bb,
                     break_bb: exit_bb,
+                    break_place,
                 });
                 self.current_block = Some(loop_bb);
                 let _ = self.lower_expr_to_rvalue(body);
@@ -433,11 +448,9 @@ impl<'a> MirBuilder<'a> {
                     );
                 }
                 self.current_block = Some(exit_bb);
-                glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                    kind: glyim_mir::MirConstKind::Unit,
-                    ty: Ty::NEVER,
-                    span: expr.span,
-                }))
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(glyim_mir::Place::new(
+                    break_place,
+                )))
             }
             thir::ExprKind::For {
                 pat,
@@ -470,9 +483,15 @@ impl<'a> MirBuilder<'a> {
                     glyim_mir::TerminatorKind::Goto { target: header_bb },
                     expr.span,
                 );
+                let break_place = self.alloc_local(
+                    Ty::UNIT,
+                    glyim_core::primitives::Mutability::Mut,
+                    expr.span,
+                );
                 self.loop_stack.push(LoopInfo {
                     continue_bb: header_bb,
                     break_bb: exit_bb,
+                    break_place,
                 });
                 // Get the iterator_next info. Prefer the resolved `next` method
                 // threaded from typeck through the THIR `For` node (production
@@ -818,8 +837,18 @@ impl<'a> MirBuilder<'a> {
                 }))
             }
             thir::ExprKind::Break { value } => {
+                // HIR-30: a `break <value>` must write the value into the
+                // enclosing loop's result local; the loop expression reads it
+                // back. Previously the value was evaluated and discarded.
                 if let Some(val_expr) = value {
-                    let _ = self.lower_expr_to_rvalue(val_expr);
+                    let rv = self.lower_expr_to_rvalue(val_expr);
+                    if let Some(info) = self.loop_stack.last() {
+                        let place = glyim_mir::Place::new(info.break_place);
+                        self.push_stmt(
+                            glyim_mir::StatementKind::Assign(place, rv),
+                            expr.span,
+                        );
+                    }
                 }
                 let target_bb = self.loop_stack.last().map(|info| info.break_bb);
                 if let Some(target) = target_bb {

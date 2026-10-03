@@ -13,6 +13,10 @@ use crate::lower::LowerCtx;
 pub(crate) struct LoopInfo {
     pub(crate) continue_bb: BasicBlockIdx,
     pub(crate) break_bb: BasicBlockIdx,
+    /// The local that a `break <value>` writes and the loop expression reads
+    /// back as its result (HIR-30). For a `while`/`for` (unit result) it holds
+    /// `()`; for `loop` it holds the break value's type.
+    pub(crate) break_place: LocalIdx,
 }
 
 /// The MIR Builder.
