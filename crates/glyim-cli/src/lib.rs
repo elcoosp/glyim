@@ -691,16 +691,25 @@ fn build_proc_macro_dependencies(
     let host_triple = host_target_triple();
     let mut combined = glyim_proc_macro::Registry::new();
     for dep in deps {
-        // Compile the proc-macro crate for the host to a cdylib.
-        let cdylib_path = compile_proc_macro_dep(dep, &host_triple)?;
+        // Compile the proc-macro crate for the host to a cdylib. RT-31: the
+        // returned `TempDir` MUST be kept alive until after the dlopen — its
+        // Drop deletes the directory, so dropping it early (as the old code
+        // did by returning only the path) made `load_cdylib` open a deleted
+        // path and always fail.
+        let (_out_dir_keep_alive, cdylib_path) = compile_proc_macro_dep(dep, &host_triple)?;
         // dlopen it and merge its registered macros into the combined registry.
-        let loaded = glyim_proc_macro::load_cdylib(cdylib_path.to_str().unwrap_or_default())
-            .map_err(|e| {
-                format!(
-                    "failed to load proc-macro cdylib for {}: {e}",
-                    dep.display()
-                )
-            })?;
+        let path_str = cdylib_path.to_str().ok_or_else(|| {
+            format!(
+                "proc-macro cdylib path for {} is not valid UTF-8",
+                dep.display()
+            )
+        })?;
+        let loaded = glyim_proc_macro::load_cdylib(path_str).map_err(|e| {
+            format!(
+                "failed to load proc-macro cdylib for {}: {e}",
+                dep.display()
+            )
+        })?;
         combined.merge(&loaded.registry);
     }
     Ok(combined)
@@ -711,7 +720,7 @@ fn build_proc_macro_dependencies(
 fn compile_proc_macro_dep(
     dep: &std::path::Path,
     host_triple: &str,
-) -> Result<std::path::PathBuf, String> {
+) -> Result<(tempfile::TempDir, std::path::PathBuf), String> {
     let out_dir = tempfile::tempdir().map_err(|e| format!("failed to make temp dir: {e}"))?;
     let cdylib_path = out_dir.path().join("proc_macro_dep");
     let cdylib_path = if cfg!(target_os = "macos") {
@@ -746,7 +755,7 @@ fn compile_proc_macro_dep(
             msg
         )
     })?;
-    Ok(cdylib_path)
+    Ok((out_dir, cdylib_path))
 }
 
 #[cfg(test)]

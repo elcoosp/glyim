@@ -3359,6 +3359,13 @@ impl<'a> FnCtxt<'a> {
                     let ref_mut_self =
                         self.ctx
                             .mk_ref(Region::Erased, impl_self_ty, Mutability::Mut);
+                    // LL-11: snapshot the inference table + diagnostics before
+                    // probing so a *failed* match does not leave permanent
+                    // unification side effects (a fresh `?T` receiver would
+                    // otherwise be bound to the first impl probed). `collect_for`
+                    // (the candidate scan) already does this; mirror it here.
+                    let inf_snap = self.infer.snapshot();
+                    let diag_len = self.diagnostics.len();
                     let infer = &mut *self.infer;
                     let recv_steps = steps
                         .iter()
@@ -3371,6 +3378,8 @@ impl<'a> FnCtxt<'a> {
                             || infer.unify(self.ctx, rt, ref_mut_self, span).is_ok()
                     });
                     if !self_matches {
+                        self.infer.rollback_to(inf_snap);
+                        self.diagnostics.truncate(diag_len);
                         continue;
                     }
                     for method in &impl_item.methods {
