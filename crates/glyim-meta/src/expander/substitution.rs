@@ -126,17 +126,37 @@ enum RepKind {
 }
 
 fn find_all_metavars(trees: &[TokenTree]) -> Vec<SmolStr> {
-    let mut names = Vec::new();
-    let mut i = 0;
-    while i < trees.len() {
-        if let TokenTree::Token(SyntaxKind::Dollar, _) = &trees[i]
-            && i + 1 < trees.len()
-            && let TokenTree::Token(SyntaxKind::Ident, name) = &trees[i + 1]
-        {
-            names.push(name.clone());
+    // HIR-3: recurse into delimiter groups so metavars nested in a
+    // repetition body (`$( ... $x ... )*`) or any group (`$(foo($x)),*`) are
+    // found. The previous flat scan only saw `$name` at the top level, so a
+    // nested `$( $( $x ),* ),*` collected no names and expanded to nothing.
+    fn walk(trees: &[TokenTree], names: &mut Vec<SmolStr>) {
+        let mut i = 0;
+        while i < trees.len() {
+            match &trees[i] {
+                TokenTree::Token(SyntaxKind::Dollar, _) if i + 1 < trees.len() => {
+                    match &trees[i + 1] {
+                        TokenTree::Token(SyntaxKind::Ident, name) => {
+                            names.push(name.clone());
+                            i += 2;
+                            continue;
+                        }
+                        TokenTree::Group(_, inner, _) => {
+                            walk(inner, names);
+                            i += 2;
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+                TokenTree::Group(_, inner, _) => walk(inner, names),
+                _ => {}
+            }
+            i += 1;
         }
-        i += 1;
     }
+    let mut names = Vec::new();
+    walk(trees, &mut names);
     names
 }
 
@@ -154,4 +174,52 @@ fn extract_repetition_bindings(
         }
     }
     result
+}
+
+#[cfg(test)]
+mod hir3_tests {
+    use super::*;
+
+    fn tok(k: SyntaxKind, t: &str) -> TokenTree {
+        TokenTree::Token(k, SmolStr::from(t))
+    }
+    fn group(inner: Vec<TokenTree>) -> TokenTree {
+        TokenTree::Group(SyntaxKind::LParen, inner, SyntaxKind::RParen)
+    }
+
+    /// HIR-3: a metavar nested inside a delimiter group must be found. The old
+    /// flat scan only saw `$name` at the top level, so `$( $( $x ),* ),*`
+    /// collected no names and expanded to nothing.
+    #[test]
+    fn find_all_metavars_recurses_into_groups() {
+        // Template shape: `$( wrap($x) ),*` — the `$x` is inside `wrap(...)`.
+        let wrap = vec![
+            tok(SyntaxKind::Ident, "wrap"),
+            group(vec![
+                tok(SyntaxKind::Dollar, "$"),
+                tok(SyntaxKind::Ident, "x"),
+            ]),
+        ];
+        let names = find_all_metavars(&wrap);
+        assert_eq!(
+            names,
+            vec![SmolStr::from("x")],
+            "metavar inside a group must be found; got {names:?}"
+        );
+    }
+
+    /// HIR-3: a doubly-nested repetition `$( $( $x ),* ),*` finds `$x`.
+    #[test]
+    fn find_all_metavars_finds_deeply_nested() {
+        let inner_rep = vec![
+            tok(SyntaxKind::Dollar, "$"),
+            group(vec![
+                tok(SyntaxKind::Dollar, "$"),
+                tok(SyntaxKind::Ident, "x"),
+            ]),
+            tok(SyntaxKind::Star, "*"),
+        ];
+        let names = find_all_metavars(&inner_rep);
+        assert_eq!(names, vec![SmolStr::from("x")]);
+    }
 }
