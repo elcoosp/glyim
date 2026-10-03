@@ -133,3 +133,113 @@ The audit's line anchors are pinned to commit `eff1f1fa`; the tree has moved
   findings). Decide whether to commit it.
 - A stale `.git/index.lock` appeared repeatedly when background
   `cargo`/`git` calls raced; `rm -f .git/index.lock` clears it.
+
+---
+
+## SOLVE-1 / SOLVE-2 bisection (exact, this session)
+
+Ran each half alone against a freshly built CLI + the full-stdlib probe.
+
+**SOLVE-1 alone** (resolve the int/float peer before binding; refuse to bind
+an int/float var to itself):
+
+    let other_ty = self.resolve_ty_shallow_preserve_int(ctx, if a_is_int { b } else { a });
+    let int_var_ty = if a_is_int { a } else { b };
+    if other_ty == int_var_ty { return Ok(Vec::new()); }
+
+- glyim-solve: 50/50 pass.
+- full-stdlib probe: **PASSES** (no regression).
+- Does NOT by itself fix the `if c { (a,b) } else { (b,a) }` repro.
+
+**SOLVE-2 alone** (follow binding chains at the TOP of `unify_tys`, before
+the `a_kind`/`b_kind` match):
+
+    let a = self.resolve_ty_shallow_preserve_int(ctx, a);
+    let b = self.resolve_ty_shallow_preserve_int(ctx, b);
+    if a == b { return Ok(Vec::new()); }
+
+- glyim-solve: 50/50 pass.
+- full-stdlib probe: **FAILS, 3 cases**:
+  - `option:L226` -- `mismatched types: T vs <Self as Trait37>::Item`
+  - `iter:L308` -- `mismatched types: T vs <Self as Trait37>::Item`
+  - `rc:L32` -- `mismatched types: isize vs usize`
+
+**SOLVE-1 + SOLVE-2 together**: fixes the repro (`rc=0`), but inherits the
+SOLVE-2 stdlib failures.
+
+**Conclusion**: SOLVE-1 is safe and independently valuable (a latent
+infinite-cycle guard), but it is not the fix for the int-var-cycle repro on
+its own. SOLVE-2's blanket top-of-`unify_tys` chain-follow is too aggressive
+for the stdlib's associated-type-heavy code (`<Self as Trait>::Item`,
+`isize`/`usize` literal defaulting) and must be scoped (e.g. only follow a
+chain when the *unresolved* side is a bare infer var, not for every
+recursive element unification). This is exactly the "coordinated root fix
+with SOLVE-3" the audit calls for. Deferred.
+
+### Remaining reproducible Criticals (verified this session)
+
+- **HIR-31** (closure `ByRef` captures): reproduces as
+  `[X0000] Layout error: UnknownType(Ty(63))` for both `let mut f = || { c += 1; }`
+  and the read-only `|| { let _ = c; }`. The MIR shows the closure aggregate
+  copies the capture local (`Copy(Place { local: LocalIdx(0) })` for `_0` —
+  the wrong local / by-value) and the closure body call has a `Closure<..>`
+  receiver typed `Closure2000000<...>` whose layout fails. Fix needs:
+  capture-field types become `&T`/`&mut T`, the aggregate operand becomes a
+  `Ref`, and use-sites in the closure body auto-deref. Large.
+- **SOLVE-1** repro (`if c { (a,b) } else { (b,a) }` with int literals) —
+  see bisection above.
+
+---
+
+## SOLVE-1 / SOLVE-2 bisection (exact, this session)
+
+Ran each half alone against a freshly built CLI + the full-stdlib probe.
+
+**SOLVE-1 alone** (resolve the int/float peer before binding; refuse to bind
+an int/float var to itself):
+
+    let other_ty = self.resolve_ty_shallow_preserve_int(ctx, if a_is_int { b } else { a });
+    let int_var_ty = if a_is_int { a } else { b };
+    if other_ty == int_var_ty { return Ok(Vec::new()); }
+
+- glyim-solve: 50/50 pass.
+- full-stdlib probe: **PASSES** (no regression).
+- Does NOT by itself fix the `if c { (a,b) } else { (b,a) }` repro.
+
+**SOLVE-2 alone** (follow binding chains at the TOP of `unify_tys`, before
+the `a_kind`/`b_kind` match):
+
+    let a = self.resolve_ty_shallow_preserve_int(ctx, a);
+    let b = self.resolve_ty_shallow_preserve_int(ctx, b);
+    if a == b { return Ok(Vec::new()); }
+
+- glyim-solve: 50/50 pass.
+- full-stdlib probe: **FAILS, 3 cases**:
+  - `option:L226` -- `mismatched types: T vs <Self as Trait37>::Item`
+  - `iter:L308` -- `mismatched types: T vs <Self as Trait37>::Item`
+  - `rc:L32` -- `mismatched types: isize vs usize`
+
+**SOLVE-1 + SOLVE-2 together**: fixes the repro (`rc=0`), but inherits the
+SOLVE-2 stdlib failures.
+
+**Conclusion**: SOLVE-1 is safe and independently valuable (a latent
+infinite-cycle guard), but it is not the fix for the int-var-cycle repro on
+its own. SOLVE-2's blanket top-of-`unify_tys` chain-follow is too aggressive
+for the stdlib's associated-type-heavy code (`<Self as Trait>::Item`,
+`isize`/`usize` literal defaulting) and must be scoped (e.g. only follow a
+chain when the *unresolved* side is a bare infer var, not for every
+recursive element unification). This is exactly the "coordinated root fix
+with SOLVE-3" the audit calls for. Deferred.
+
+### Remaining reproducible Criticals (verified this session)
+
+- **HIR-31** (closure `ByRef` captures): reproduces as
+  `[X0000] Layout error: UnknownType(Ty(63))` for both `let mut f = || { c += 1; }`
+  and the read-only `|| { let _ = c; }`. The MIR shows the closure aggregate
+  copies the capture local (`Copy(Place { local: LocalIdx(0) })` for `_0` —
+  the wrong local / by-value) and the closure body call has a `Closure<..>`
+  receiver typed `Closure2000000<...>` whose layout fails. Fix needs:
+  capture-field types become `&T`/`&mut T`, the aggregate operand becomes a
+  `Ref`, and use-sites in the closure body auto-deref. Large.
+- **SOLVE-1** repro (`if c { (a,b) } else { (b,a) }` with int literals) —
+  see bisection above.
