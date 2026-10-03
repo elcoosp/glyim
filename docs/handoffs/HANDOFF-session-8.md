@@ -243,3 +243,54 @@ with SOLVE-3" the audit calls for. Deferred.
   `Ref`, and use-sites in the closure body auto-deref. Large.
 - **SOLVE-1** repro (`if c { (a,b) } else { (b,a) }` with int literals) —
   see bisection above.
+
+---
+
+## HIR-31 investigation (not fixed — reverted)
+
+The closure-capture bug (`[X0000] Layout error: UnknownType(Ty(63))` for any
+non-`move` closure) was traced to **two** problems:
+
+1. **Wrong aggregate operand local.** The `thir::ExprKind::Closure` arm in
+   `crates/glyim-lower/src/lower_rvalue.rs` builds the closure aggregate's
+   capture operands with `LocalIdx::from_raw(capture.local.to_raw())`, where
+   `capture.local` is a THIR `LocalVarId` — NOT a MIR `LocalIdx`. For the
+   first user local that is `LocalIdx(0)` (the unit return place). The correct
+   value is `self.local_for_var(capture.local)` (the enclosing frame's MIR
+   local for the captured var). Applying only this fix kept the test suite
+   green (330/330 lower+typeck) but did **not** resolve the layout error, so
+   it was reverted rather than left as a half-fix.
+
+2. **A second, deeper source of `Ty(63)`.** `lower_closure` in
+   `crates/glyim-lower/src/builder.rs` sets the closure `fn_const.ty` to
+   `self.ctx.ty_ctx().error_ty()` and pushes the closure body under the
+   closure `substs` — the `Ty(63)` reaching `llvm_type_for_ty` is an
+   unresolved capture/closure type that survives to codegen. Fully fixing
+   HIR-31 needs the capture-field types to be `&T`/`&mut T` (typeck
+   `check_expr.rs` step 4), the aggregate operand to be a `Ref` (both
+   `lower_rvalue.rs` and `builder.rs` sites), AND use-site auto-deref in the
+   closure body — a coordinated typeck+lower change.
+
+Deferred as a focused multi-crate task.
+
+## Final session-8 state
+
+    git log --oneline -1
+    e7612a06 docs(handoff): record SOLVE-1/SOLVE-2 bisection + reproducible Criticals
+    (plus this wrap-up commit)
+
+    cargo nextest run --workspace
+    Summary: 4227 tests run: 4227 passed, 2 skipped
+
+Handoff files now live under `docs/handoffs/`.
+
+### Highest-value next tasks (each sizable)
+
+1. **HIR-31** closure captures (see above) — coordinated typeck+lower.
+2. **SOLVE-1 + a scoped SOLVE-2** — SOLVE-1 alone is stdlib-safe; SOLVE-2's
+   blanket chain-follow breaks 3 stdlib cases and must be narrowed.
+3. **MIR-24** terminator moves — needs a "Drop of already-moved is OK"
+   refinement (the naive fix false-positives on real programs).
+4. **RT-12** bytecode `block_offsets` — needs a module serializer +
+   `Module::deserialize`.
+5. **INF-13** rename sub-spans / **INF-16** LSP `FileMap` wiring.
