@@ -1,0 +1,135 @@
+# Handoff -- glyim-v2, session 8
+
+## TL;DR
+
+Suite: **4227/4227 pass** (2 skipped), clean tree.
+
+This session worked the audit's "12 fixes that matter most" list to
+completion, then began the next tier of Criticals. **A key finding: several
+audit entries are stale** — the described bug is not reproducible on the
+current tree (already fixed by an earlier commit, or the audit's line
+anchors moved). Each fix landed with a regression test verified to fail on
+the pre-fix code and pass after.
+
+## Commits landed this session
+
+    git log --oneline (session-8 range, newest first)
+    a30ebaf8 fix(interp): read enum base type from the owning frame
+    2982d490 fix(interp): enum field writes skip the discriminant tag
+    71dfd401 fix(lower): short-circuit && and ||
+    4c51c04e fix(lower): materialize loop break values
+    358ae136 fix(meta): recurse into groups when collecting repetition metavars
+    52e9f0d9 fix(interp): width-correct arithmetic and casts
+    7165a208 fix(lsp): SourceMap uses UTF-16 columns, not byte offsets
+    e6862ffa fix: audit batch 3 -- RT-13, LL-5, FE-6
+    b3982574 fix: audit batch 2 -- MIR-21, HIR-1, INF-12
+    e582702e fix(runtime): thread current_id is the ThreadStore id
+    4ab298b4 fix(pipeline): slice drop glue emits a real terminating loop
+    a516504d fix(opt): drop elaboration preserves old block indices
+    17012798 fix: audit batch 1 -- SOLVE-7, FE-1, HIR-14, HIR-29, LL-1..4, RT-3, RT-4
+    43c0ad86 fix(codegen): bytecode bool switch emits true/false targets inverted
+    8f08df91 fix(opt): const-prop simulates blocks from entry state
+    fb858abb fix(opt): DCE counts Drop terminators as uses
+    eabdda89 fix: resurrect the .g test harness + fix the bugs it found
+    ... plus the pre-audit session-7 work (turbofish, FromStr, byte literal)
+
+## The 12 "fixes that matter most" -- all DONE
+
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | RT-11 bytecode bool branches | fixed |
+| 2 | MIR-1 const-prop stale constants | fixed |
+| 3 | MIR-6 DCE drop uses | fixed |
+| 4 | MIR-10 drop-elab CFG corruption | fixed |
+| 5 | LL-1..4 LLVM sign/unsigned | fixed |
+| 6 | SOLVE-7 coercion precedence | fixed |
+| 7 | HIR-29 match scrutinee twice | fixed |
+| 8 | RT-21 async wake-up ID | fixed |
+| 9 | INF-23 slice drop loop | fixed |
+| 10 | FE-1 `%=` unparseable | fixed |
+| 11 | RT-3/RT-4 VM wire format | fixed |
+| 12 | HIR-14 string unescape | fixed |
+
+Plus, from later batches: MIR-21, HIR-1, INF-12, RT-13, LL-5, FE-6, INF-11,
+MIR-13, MIR-14, HIR-3, HIR-30, LL-10, MIR-17.
+
+## IMPORTANT: audit entries that are NOT reproducible on the current tree
+
+Verified by running the audit's own "Check" repro against a freshly built
+CLI. **Do not re-investigate these without re-verifying.**
+
+- **LL-6** (out-of-order struct literal writes wrong field): the MIR
+  aggregate operands are ALREADY in declaration order (`[x, y]`). No fix
+  needed; a pin test (`struct_field_order.rs`) guards it.
+- **SOLVE-8** (blanket-impl recursion → stack overflow): `impl<T: Foo> Foo
+  for T {}` produces a clean `T0001` diagnostic, no crash.
+- **LL-9** (`PassMode::Ignore` / ZST args → store to null): `fn f(u: (),
+  x: i32)` compiles and runs correctly.
+- **LL-7** (alloca in loop): the loop case compiles fine (the stack-growth
+  symptom needs a long-running binary to observe; not a compile failure).
+
+The audit's line anchors are pinned to commit `eff1f1fa`; the tree has moved
+~20 commits since, and several of these were fixed incidentally.
+
+## Reverted / deferred (attempted, then backed out)
+
+- **SOLVE-1 / SOLVE-2** (inference-var binding cycles / chain-following):
+  the fix is correct in isolation (50/50 solve tests pass) but regresses
+  stdlib type-checking (`T vs <Self as Trait>::Item`, `isize vs usize`).
+  The audit itself notes these need the coordinated root fix with SOLVE-3.
+- **MIR-24** (move analysis ignores terminator moves): the audit's fix
+  produces FALSE-POSITIVE "use of moved value" errors on real programs
+  (the `Drop`-as-move handling conflicts with legitimate scope-end drops;
+  the async poll-loop pattern relies on `Call`-destination re-init without
+  a matching move). Needs a more careful design.
+- **HIR-31** (closure `ByRef` captures copied by value): reproduces
+  (`Layout error: UnknownType`), but the fix requires threading a reference
+  type through capture-field typing AND use-site auto-deref in the closure
+  body — large and risky.
+
+## Remaining audit work (priority order, with caveats)
+
+1. **HIR-31** (closure `ByRef` captures) -- reproduces; large fix.
+2. **MIR-24** (terminator moves) -- reproduces as a *gap*, but the naive fix
+   over-reports; needs a "Drop of already-moved is OK" refinement.
+3. **MIR-11** (`MaybeInitialized` MAY vs definite) -- not yet attempted.
+4. **RT-12** (`block_offsets` table) -- needs the bytecode module
+   serializer + `Module::deserialize`; large.
+5. **INF-13** (rename whole-expr spans) -- LSP-only; needs identifier sub-
+   spans recorded during HIR lowering (or re-lexed at rename time).
+6. **INF-16** (LSP `FileMap` never populated) -- wire `build_router` to the
+   shared `db.file_map` + register didOpen/didChange notifications.
+7. Then the remaining High/Medium findings (FE-2..FE-20, SOLVE-1..23,
+   MIR-2..31, RT-1..31, LL-6..11, INF-1..23, HIR-1..31).
+
+## Working-style constraints (still in force)
+
+- Never lower `Ty::ERROR` at codegen -- `v15_t25_drop_error_type` is a
+  `#[should_panic]` contract.
+- Every `thir::Expr::err(span)` should be paired with a diagnostic.
+- Conventional commit prefixes; document blockers in handoff files.
+- Do NOT `git stash pop` a stale stash without checking `git stash list`.
+- **Reproduce an audit finding against a freshly built CLI BEFORE fixing.**
+  Several claims are stale (see above). Rebuild + use a fresh
+  `GLYIM_CACHE_DIR` to avoid the content-keyed cache serving stale results.
+- **Regression tests must fail on the pre-fix code.** Verify by reverting
+  the fix, rebuilding, and re-running. (Multiple times this session a
+  "test" passed on both versions -- not a real regression test.)
+- **Bounded test inputs.** A 5000-deep recursion test exhausted the user's
+  machine memory (the parser can spin appending diagnostics if a depth
+  guard bails without consuming a token). Use just-over-threshold inputs
+  (e.g. 300 vs MAX_EXPR_DEPTH 256) and make guards consume a token on bail.
+- **Watch for false positives** when strengthening an analysis (MIR-24):
+  run the FULL workspace suite, not just the target crate's tests.
+- `nextest` filters on test function names, not file names.
+
+## Tooling notes
+
+- CLI: `--emit=obj|exec|mir|llvm-ir|asm|cdylib`; `--with-stdlib` prepends
+  the minimal stdlib. Use a fresh `GLYIM_CACHE_DIR` when verifying a fix.
+- The MIR `ERROR glyim_mir: Place::ty(): ...` lines on every stdlib compile
+  are pre-existing tracing noise; filter with `grep -v '^2026-'`.
+- `docs/roadmaps/glyim-bug-and-performance-audit.md` is UNTRACKED (193
+  findings). Decide whether to commit it.
+- A stale `.git/index.lock` appeared repeatedly when background
+  `cargo`/`git` calls raced; `rm -f .git/index.lock` clears it.
