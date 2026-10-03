@@ -345,3 +345,91 @@ Handoff files now live under `docs/handoffs/`.
 4. **RT-12** bytecode `block_offsets` — needs a module serializer +
    `Module::deserialize`.
 5. **INF-13** rename sub-spans / **INF-16** LSP `FileMap` wiring.
+
+---
+
+## Session 8 addendum: MAJOR non-audit bug found + Criticals status
+
+### Compound assignment was completely broken (FIXED, commit a7617620)
+
+Not from the audit -- found while reproducing LL-7. `lower_assign_expr`
+(`crates/glyim-hir/src/lower/lower_expr.rs`) read the LHS and RHS but never
+looked at the operator token, so **every** compound assignment lowered to a
+plain assignment: `i += 1` -> `i = 1`, `x *= 3` -> `x = 3`. This made
+`while i < 1000 { i += 1; }` loop forever and segfault programs reading the
+result. Fixed by desugaring `lhs <op>= rhs` to `lhs = lhs <op> rhs`. This
+was pervasive (any `+=` in the stdlib or user code).
+
+### Criticals: what actually reproduces vs stale
+
+Verified against a freshly built CLI this session:
+
+| ID | Status |
+|----|--------|
+| RT-11, MIR-1, MIR-6, MIR-10, MIR-13, MIR-14, MIR-17, MIR-21, RT-3, RT-4, RT-13, RT-21, INF-11, INF-12, INF-23, HIR-1, HIR-3, HIR-29, HIR-30, LL-1, LL-2, LL-5, LL-10, FE-6, SOLVE-7 | **FIXED** |
+| LL-6, SOLVE-8, LL-9, HIR-4, HIR-10, MIR-11, MIR-24, RT-12 | **NOT reproducible / already correct** on current tree |
+| RT-31, LL-11 | **FIXED** this addendum |
+| HIR-2, HIR-11, HIR-31, SOLVE-1, SOLVE-2, INF-13, INF-16 | **REPRODUCE, not fixed (large/risky)** |
+
+### The remaining reproducible Criticals (each sizable)
+
+- **HIR-2** (multi-token repetition fragments): `stmts!(1 + 2, 3)` with
+  `($($e:expr),*)` mis-expands. Needs depth-aware bindings
+  (`Vec<Vec<TokenTree>>`) in the matcher + substitution.
+- **HIR-11** (multi-await drops statements): 2-await async fn reports
+  `unresolved name d`. Also the 1-await case hits an unrelated
+  "ambiguous method `poll` found in multiple impls". Deep async-desugar work
+  in `lower_async.rs`.
+- **HIR-31** (closure `ByRef` captures): `Layout error: UnknownType(Ty(63))`.
+  Root cause traced (wrong aggregate operand local + unresolved closure type
+  at codegen); needs coordinated typeck+lower + use-site auto-deref.
+- **SOLVE-1 + scoped SOLVE-2**: SOLVE-1 alone is stdlib-safe but insufficient;
+  SOLVE-2's blanket chain-follow breaks 3 stdlib cases. Needs scoping.
+- **INF-13** (rename whole-expr spans), **INF-16** (LSP FileMap wiring):
+  LSP-only, self-contained, but need sub-span recording / notification wiring.
+
+Suite after the compound-assign fix: **4230/4230 pass** (2 skipped).
+
+---
+
+## Session 8 addendum: MAJOR non-audit bug found + Criticals status
+
+### Compound assignment was completely broken (FIXED, commit a7617620)
+
+Not from the audit -- found while reproducing LL-7. `lower_assign_expr`
+(`crates/glyim-hir/src/lower/lower_expr.rs`) read the LHS and RHS but never
+looked at the operator token, so **every** compound assignment lowered to a
+plain assignment: `i += 1` -> `i = 1`, `x *= 3` -> `x = 3`. This made
+`while i < 1000 { i += 1; }` loop forever and segfault programs reading the
+result. Fixed by desugaring `lhs <op>= rhs` to `lhs = lhs <op> rhs`. This
+was pervasive (any `+=` in the stdlib or user code).
+
+### Criticals: what actually reproduces vs stale
+
+Verified against a freshly built CLI this session:
+
+| ID | Status |
+|----|--------|
+| RT-11, MIR-1, MIR-6, MIR-10, MIR-13, MIR-14, MIR-17, MIR-21, RT-3, RT-4, RT-13, RT-21, INF-11, INF-12, INF-23, HIR-1, HIR-3, HIR-29, HIR-30, LL-1, LL-2, LL-5, LL-10, FE-6, SOLVE-7 | **FIXED** |
+| LL-6, SOLVE-8, LL-9, HIR-4, HIR-10, MIR-11, MIR-24, RT-12 | **NOT reproducible / already correct** on current tree |
+| RT-31, LL-11 | **FIXED** this addendum |
+| HIR-2, HIR-11, HIR-31, SOLVE-1, SOLVE-2, INF-13, INF-16 | **REPRODUCE, not fixed (large/risky)** |
+
+### The remaining reproducible Criticals (each sizable)
+
+- **HIR-2** (multi-token repetition fragments): `stmts!(1 + 2, 3)` with
+  `($($e:expr),*)` mis-expands. Needs depth-aware bindings
+  (`Vec<Vec<TokenTree>>`) in the matcher + substitution.
+- **HIR-11** (multi-await drops statements): 2-await async fn reports
+  `unresolved name d`. Also the 1-await case hits an unrelated
+  "ambiguous method `poll` found in multiple impls". Deep async-desugar work
+  in `lower_async.rs`.
+- **HIR-31** (closure `ByRef` captures): `Layout error: UnknownType(Ty(63))`.
+  Root cause traced (wrong aggregate operand local + unresolved closure type
+  at codegen); needs coordinated typeck+lower + use-site auto-deref.
+- **SOLVE-1 + scoped SOLVE-2**: SOLVE-1 alone is stdlib-safe but insufficient;
+  SOLVE-2's blanket chain-follow breaks 3 stdlib cases. Needs scoping.
+- **INF-13** (rename whole-expr spans), **INF-16** (LSP FileMap wiring):
+  LSP-only, self-contained, but need sub-span recording / notification wiring.
+
+Suite after the compound-assign fix: **4230/4230 pass** (2 skipped).
