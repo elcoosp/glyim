@@ -42,34 +42,58 @@ impl SourceMap {
     pub fn source(&self) -> &str {
         &self.content
     }
+    /// Byte offset -> `(line, utf16_col)` (INF-11). LSP columns are UTF-16
+    /// code units, not bytes; the old code emitted byte columns, so every
+    /// position after a non-ASCII character drifted.
+    fn offset_to_line_utf16(&self, offset: usize) -> (usize, usize) {
+        let offset = offset.min(self.content.len());
+        let line = self
+            .line_starts
+            .binary_search(&offset)
+            .unwrap_or_else(|i| i.saturating_sub(1));
+        let line_start = self.line_starts[line];
+        // Count UTF-16 units between the line start and `offset`.
+        let col16 = self.content[line_start..offset]
+            .chars()
+            .map(|c| c.len_utf16())
+            .sum();
+        (line, col16)
+    }
+
     /// span_to_position.
     pub fn span_to_position(
         &self,
         lo: usize,
         hi: usize,
     ) -> Option<((usize, usize), (usize, usize))> {
-        let start_line = self
-            .line_starts
-            .binary_search(&lo)
-            .unwrap_or_else(|i| i - 1);
-        let start_col = lo - self.line_starts[start_line];
-        let end_line = self
-            .line_starts
-            .binary_search(&hi)
-            .unwrap_or_else(|i| i - 1);
-        let end_col = hi - self.line_starts[end_line];
-        Some(((start_line, start_col), (end_line, end_col)))
+        Some((self.offset_to_line_utf16(lo), self.offset_to_line_utf16(hi)))
     }
-    /// line_col_to_offset.
+
+    /// `(line, utf16_col)` -> byte offset (INF-11). The column is a UTF-16
+    /// code-unit count; it is converted to a byte offset on the line's char
+    /// boundaries. Returns `None` if the column is past the end of the line
+    /// (it never spills into the next line).
     pub fn line_col_to_offset(&self, line: usize, col: usize) -> Option<usize> {
-        if line >= self.line_starts.len() {
-            return None;
+        let start = *self.line_starts.get(line)?;
+        // The line runs to the next newline (or EOF).
+        let line_end = self.content[start..]
+            .find('\n')
+            .map(|i| start + i)
+            .unwrap_or(self.content.len());
+        let line_text = &self.content[start..line_end];
+        let mut u16_count = 0usize;
+        for (i, ch) in line_text.char_indices() {
+            if u16_count >= col {
+                return Some(start + i);
+            }
+            u16_count += ch.len_utf16();
         }
-        let offset = self.line_starts[line] + col;
-        if offset > self.content.len() {
-            None
+        if u16_count == col {
+            // Exactly end-of-line (before the newline).
+            Some(line_end)
         } else {
-            Some(offset)
+            // Column past the end of the line.
+            None
         }
     }
 }
@@ -262,5 +286,50 @@ impl AnalysisDatabase {
     /// Access the frozen `TyCtx` for a file (for inspecting resolved `Ty`s).
     pub fn ty_ctx(&self, file_id: FileId) -> Option<Arc<glyim_type::TyCtx>> {
         self.typeck.read().get(&file_id).map(|(ctx, _)| ctx.clone())
+    }
+}
+
+#[cfg(test)]
+mod source_map_tests {
+    use super::SourceMap;
+    use glyim_span::FileId;
+    use std::path::PathBuf;
+
+    fn sm(content: &str) -> SourceMap {
+        SourceMap::new(PathBuf::from("/t.g"), FileId::from_raw(1), content.to_string())
+    }
+
+    /// INF-11: LSP columns are UTF-16 code units. Round-trip on ASCII.
+    #[test]
+    fn round_trip_ascii() {
+        let m = sm("let x = 5;\nlet y = x;\n");
+        for (line, col) in [(0, 4), (0, 10), (1, 8)] {
+            let off = m.line_col_to_offset(line, col).unwrap();
+            let (l, c) = m.span_to_position(off, off).unwrap().0;
+            assert_eq!((l, c), (line, col), "round trip failed for {line}:{col}");
+        }
+    }
+
+    /// INF-11: after a multibyte char, byte-columns and UTF-16 columns differ.
+    /// `é` is 1 UTF-16 unit but 2 bytes.
+    #[test]
+    fn multibyte_column_is_utf16() {
+        let m = sm("aé b\n");
+        // UTF-16 column 3 is the `b` (a=1, é=1, space=1, b at col 3).
+        let off = m.line_col_to_offset(0, 3).unwrap();
+        assert_eq!(&m.source()[off..off + 1], "b");
+        // Byte offset of `b` is 4 (a=1, é=2, space=1).
+        assert_eq!(off, 4);
+        // And span_to_position maps that byte offset back to UTF-16 col 3.
+        let (_, c) = m.span_to_position(off, off).unwrap().0;
+        assert_eq!(c, 3);
+    }
+
+    /// A column past the end of the line is `None` (must not spill into the
+    /// next line).
+    #[test]
+    fn column_past_eol_is_none() {
+        let m = sm("ab\ncd\n");
+        assert!(m.line_col_to_offset(0, 99).is_none());
     }
 }
