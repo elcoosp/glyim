@@ -212,6 +212,71 @@ impl<'a> MirBuilder<'a> {
                 )
             }
             thir::ExprKind::Binary { op, lhs, rhs } => {
+                // LL-10: `&&`/`||` must short-circuit. Lowering them to an
+                // eager `BinaryOp(And/Or)` (which the LLVM backend turns into
+                // `build_and`/`build_or`) evaluated the RHS unconditionally —
+                // `i < len && arr[i] == x` read `arr[i]` even when the bounds
+                // check failed. Desugar into control flow (mirroring the `If`
+                // arm) with a destination local.
+                if matches!(*op, BinOp::And | BinOp::Or) {
+                    let bool_ty = self.ctx.ty_ctx().bool_ty();
+                    let dest_local =
+                        self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Mut, expr.span);
+                    let dest_place = glyim_mir::Place::new(dest_local);
+                    let rhs_bb = self.new_block();
+                    let short_bb = self.new_block();
+                    let merge_bb = self.new_block();
+                    let mk_bool = |v: bool| {
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                            glyim_mir::MirConst {
+                                kind: glyim_mir::MirConstKind::Bool(v),
+                                ty: bool_ty,
+                                span: expr.span,
+                            },
+                        ))
+                    };
+                    // For `&&`: lhs true (1) -> evaluate rhs, else short to false.
+                    // For `||`: lhs true (1) -> short to true, else evaluate rhs.
+                    let is_and = matches!(*op, BinOp::And);
+                    let lhs_op = self.lower_expr_to_operand(lhs);
+                    let (one_target, otherwise_target) =
+                        if is_and { (rhs_bb, short_bb) } else { (short_bb, rhs_bb) };
+                    self.terminate(
+                        glyim_mir::TerminatorKind::SwitchInt {
+                            discr: lhs_op,
+                            switch_ty: bool_ty,
+                            targets: glyim_mir::SwitchTargets::new(
+                                Box::new([(1, one_target)]),
+                                otherwise_target,
+                            ),
+                        },
+                        expr.span,
+                    );
+                    // Short-circuit block: the constant result (false for `&&`,
+                    // true for `||`).
+                    self.current_block = Some(short_bb);
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(dest_place.clone(), mk_bool(!is_and)),
+                        expr.span,
+                    );
+                    self.terminate(
+                        glyim_mir::TerminatorKind::Goto { target: merge_bb },
+                        expr.span,
+                    );
+                    // RHS block: evaluate the right operand.
+                    self.current_block = Some(rhs_bb);
+                    let rhs_val = self.lower_expr_to_rvalue(rhs);
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(dest_place.clone(), rhs_val),
+                        rhs.span,
+                    );
+                    self.terminate(
+                        glyim_mir::TerminatorKind::Goto { target: merge_bb },
+                        expr.span,
+                    );
+                    self.current_block = Some(merge_bb);
+                    return glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(dest_place));
+                }
                 let lhs_op = self.lower_expr_to_operand(lhs);
                 let rhs_op = self.lower_expr_to_operand(rhs);
                 glyim_mir::Rvalue::BinaryOp(*op, Box::new((lhs_op, rhs_op)))
