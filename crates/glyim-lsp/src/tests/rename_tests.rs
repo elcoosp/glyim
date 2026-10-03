@@ -171,3 +171,44 @@ fn test_rename_finds_variable_used_only_in_macro_arg() {
         assert_eq!(te.new_text, "renamed");
     }
 }
+
+/// INF-13 regression: renaming a `let` binding must edit ONLY the identifier,
+/// not the whole `let x = <init>;` statement. The reference graph previously
+/// recorded the enclosing statement's span for the `let` binding, so the edit
+/// range covered `let x = 5;` and the rename replaced/clobbered the initializer.
+#[test]
+fn test_rename_let_binding_edits_only_the_identifier() {
+    let source = "fn main() {\n    let x = 5;\n    let y = x + 1;\n}\n";
+    let (db, file_map, uri, file_id) = setup_test_db(source, "/test/main.g");
+    build_graph(&db, file_id, source);
+    // Cursor on the `x` in `let x = 5;` (line 1, col 8).
+    let params = RenameParams {
+        text_document_position: TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            position: Position { line: 1, character: 8 },
+        },
+        new_name: "z".to_string(),
+        work_done_progress_params: Default::default(),
+    };
+    let edit = rename_symbol(&db, &file_map, &params).expect("rename must produce edits");
+    let changes = edit.changes.unwrap();
+    let edits = changes.get(&uri).unwrap();
+
+    // The binding edit must be exactly one column wide (the identifier `x`),
+    // not span the whole `let x = 5;` statement.
+    let binding_edit = edits
+        .iter()
+        .find(|e| e.range.start.line == 1)
+        .expect("expected an edit on the `let x` line");
+    assert_eq!(
+        binding_edit.range.start.character, 8,
+        "binding edit must start at the identifier; got {:?}",
+        binding_edit.range
+    );
+    assert_eq!(
+        binding_edit.range.end.character, 9,
+        "binding edit must end right after the identifier `x` (one column), \
+         not cover the whole statement; got {:?}",
+        binding_edit.range
+    );
+}

@@ -106,6 +106,7 @@ pub(crate) fn lower_block_to_expr(
                         let ty = type_node.as_ref().and_then(|n| lower_type_ref(n, interner));
                         let let_expr = Expr::Let {
                             pat: pat_id,
+                            pat_span: node_span(&pat),
                             value: rhs_id,
                             ty,
                         };

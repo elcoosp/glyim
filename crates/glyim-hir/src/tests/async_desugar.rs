@@ -228,6 +228,7 @@ fn build_async_hir_with_loop_await() -> CrateHir {
     });
     let let_expr = exprs.push(Expr::Let {
         pat: wild_pat_id,
+        pat_span: Span::DUMMY,
         value: await_expr,
         ty: None,
     });
@@ -364,6 +365,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     });
     let let_total = exprs.push(Expr::Let {
         pat: total_pat,
+        pat_span: Span::DUMMY,
         value: zero,
         ty: None,
     });
@@ -374,6 +376,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     });
     let let_i = exprs.push(Expr::Let {
         pat: i_pat,
+        pat_span: Span::DUMMY,
         value: zero,
         ty: None,
     });

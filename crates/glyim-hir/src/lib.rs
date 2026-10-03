@@ -644,6 +644,10 @@ pub enum Expr {
     Let {
         /// Struct.
         pat: PatId,
+        /// Span of the pattern (specifically the bound identifier), for
+        /// precise LSP rename edits. Without it, a rename used the whole
+        /// `let` statement's span and clobbered the initializer.
+        pat_span: Span,
         /// Struct.
         value: ExprId,
         /// Optional type annotation written after the pattern (`let x: T = ..`).

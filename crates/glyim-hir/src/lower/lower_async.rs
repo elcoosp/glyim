@@ -1395,6 +1395,7 @@ fn desugar_multi_async_fn(
         let fut_let = poll_body.alloc_expr(
             Expr::Let {
                 pat: fut_pat,
+                pat_span: Span::DUMMY,
                 value: fut0,
                 ty: None,
             },
@@ -1443,6 +1444,7 @@ fn desugar_multi_async_fn(
         let fut1_let = poll_body.alloc_expr(
             Expr::Let {
                 pat: fut1_pat,
+                pat_span: Span::DUMMY,
                 value: fut1_expr,
                 ty: None,
             },
@@ -1621,6 +1623,7 @@ fn desugar_multi_async_fn(
                 let fut_next_let = poll_body.alloc_expr(
                     Expr::Let {
                         pat: fut_next_pat,
+                        pat_span: Span::DUMMY,
                         value: fut_next,
                         ty: None,
                     },
@@ -2044,8 +2047,14 @@ fn copy_expr_renamed(
                 .map(|e| copy_expr_renamed(src, dst, *e, rename, interner))
                 .collect(),
         ),
-        Expr::Let { pat, value, ty } => Expr::Let {
+        Expr::Let {
+            pat,
+            pat_span,
+            value,
+            ty,
+        } => Expr::Let {
             pat: copy_pat_renamed(src, dst, *pat, rename, interner),
+            pat_span: *pat_span,
             value: copy_expr_renamed(src, dst, *value, rename, interner),
             ty: ty.clone(),
         },
@@ -2619,6 +2628,7 @@ fn desugar_loop_async_fn(
         stmts.push(poll_body.alloc_expr(
             Expr::Let {
                 pat: fut_pat,
+                pat_span: Span::DUMMY,
                 value: fut_inner,
                 ty: None,
             },

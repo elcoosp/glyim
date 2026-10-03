@@ -231,7 +231,7 @@ impl<'a> FnCtxt<'a> {
             let span = self.expr_span(expr_id);
 
             match expr {
-                Expr::Let { pat, value, ty } => {
+                Expr::Let { pat, value, ty, .. } => {
                     let (value_expr, value_ty) = self.check_expr(*value);
                     // Apply the declared type annotation (if any) so
                     // `let r: Result<M, i32> = Result::Ok(M { .. })` pins `r`
@@ -340,7 +340,7 @@ impl<'a> FnCtxt<'a> {
         let expr = &self.body.exprs[stmt_id];
         let span = self.expr_span(stmt_id);
         match expr {
-            Expr::Let { pat, value, ty } => {
+            Expr::Let { pat, value, ty, .. } => {
                 let (value_expr, value_ty) = self.check_expr(*value);
                 let value_ty = match ty {
                     Some(ty_ref) => {

@@ -473,14 +473,25 @@ impl ReferenceGraph {
                     );
                 }
                 Expr::Break { value: None } => {}
-                Expr::Let { pat, value, .. } => {
+                Expr::Let {
+                    pat,
+                    pat_span,
+                    value,
+                    ..
+                } => {
                     // The pattern of a `let` introduces a *write* to the bound
                     // variable (mirrors the `Expr::Assign` LHS write tracking).
+                    // INF-13: use the PATTERN's own span, not the whole `let`
+                    // statement's — otherwise a rename of the bound name
+                    // rewrote the entire `let x = <init>;` line.
                     if let Pat::Binding { name, .. } = &body.pats[*pat] {
                         let name_str = interner.resolve(*name).to_string();
+                        // INF-13: use the PATTERN's span, not the whole `let`
+                        // statement's (`span`), so a rename edits only the
+                        // identifier and does not clobber the initializer.
                         add_ref(
                             &name_str,
-                            span,
+                            *pat_span,
                             true,
                             ReferenceKind::Variable,
                             AccessKind::Write,
