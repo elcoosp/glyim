@@ -1820,6 +1820,57 @@ fn lower_assign_expr(
     let rhs = children.remove(0);
     let lhs_id = lower_expr(&lhs, interner, body, diags, struct_field_map)?;
     let rhs_id = lower_expr(&rhs, interner, body, diags, struct_field_map)?;
+
+    // A compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`,
+    // `<<=`, `>>=`) desugars to `lhs = lhs <op> rhs`. The parser emits the
+    // operator token as a direct child of `AssignExpr`; the old code ignored
+    // it entirely, so `i += 1` lowered to `i = 1` (dropping the add), which
+    // made `while i < 1000 { i += 1; }` loop forever and segfault programs
+    // reading the result. Find the operator token and synthesize the binary
+    // op for the RHS.
+    let op_token = node
+        .children_with_tokens()
+        .filter_map(|el| el.into_token())
+        .find(|t| {
+            matches!(
+                t.kind(),
+                SyntaxKind::PlusEq
+                    | SyntaxKind::MinusEq
+                    | SyntaxKind::StarEq
+                    | SyntaxKind::SlashEq
+                    | SyntaxKind::PercentEq
+                    | SyntaxKind::AndEq
+                    | SyntaxKind::OrEq
+                    | SyntaxKind::CaretEq
+                    | SyntaxKind::ShlEq
+                    | SyntaxKind::ShrEq
+            )
+        });
+    let rhs_id = match op_token {
+        Some(tok) => {
+            let bin_op = match tok.kind() {
+                SyntaxKind::PlusEq => BinOp::Add,
+                SyntaxKind::MinusEq => BinOp::Sub,
+                SyntaxKind::StarEq => BinOp::Mul,
+                SyntaxKind::SlashEq => BinOp::Div,
+                SyntaxKind::PercentEq => BinOp::Rem,
+                SyntaxKind::AndEq => BinOp::BitAnd,
+                SyntaxKind::OrEq => BinOp::BitOr,
+                SyntaxKind::CaretEq => BinOp::BitXor,
+                SyntaxKind::ShlEq => BinOp::Shl,
+                SyntaxKind::ShrEq => BinOp::Shr,
+                _ => unreachable!(),
+            };
+            let bin = Expr::Binary {
+                op: bin_op,
+                lhs: lhs_id,
+                rhs: rhs_id,
+            };
+            body.alloc_expr(bin, node_span(node))
+        }
+        None => rhs_id,
+    };
+
     let expr = Expr::Assign {
         lhs: lhs_id,
         rhs: rhs_id,
