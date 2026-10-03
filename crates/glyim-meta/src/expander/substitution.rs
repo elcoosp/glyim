@@ -9,9 +9,15 @@ use std::collections::HashMap;
 /// the template is not bound. §19.3: an unbound metavariable is a hard error
 /// (it used to be silently dropped), because a `$(...)*` repetition tied to a
 /// metavar that never matched produces an expansion that cannot type-check.
+///
+/// HIR-2: bindings are *depth-aware* — each metavariable maps to one
+/// `Vec<TokenTree>` **per matched iteration** of the repetition that binds it,
+/// not to one flat token list. The outer length is therefore the repetition
+/// count; before this fix it counted captured *tokens*, so a multi-token
+/// fragment such as `1 + 2` split into three bogus iterations.
 pub(crate) fn substitute(
     template: &[TokenTree],
-    bindings: &HashMap<SmolStr, Vec<TokenTree>>,
+    bindings: &HashMap<SmolStr, Vec<Vec<TokenTree>>>,
 ) -> Result<Vec<TokenTree>, SmolStr> {
     let mut result = Vec::new();
     let mut i = 0;
@@ -29,8 +35,12 @@ pub(crate) fn substitute(
                         let text = name.as_str();
                         if text == "crate" {
                             result.push(TokenTree::DollarCrate);
-                        } else if let Some(captured) = bindings.get(name) {
-                            result.extend(captured.clone());
+                        } else if let Some(iterations) = bindings.get(name) {
+                            // Outside a repetition each metavar has exactly one
+                            // iteration; splice its tokens verbatim.
+                            for iteration in iterations {
+                                result.extend(iteration.iter().cloned());
+                            }
                         } else {
                             // §19.3: an unbound metavariable must be a hard error.
                             return Err(name.clone());
@@ -64,9 +74,13 @@ pub(crate) fn substitute(
                         };
                         i += 1;
 
-                        // Find all metavariable names in the inner pattern
+                        // Find all metavariable names in the inner pattern.
                         let var_names = find_all_metavars(inner);
-                        // Determine repetition count from the first metavar with bindings
+                        // HIR-2: each metavar maps to one entry *per matched
+                        // iteration*, so the outer length IS the repetition
+                        // count. (Before the depth-aware fix this counted
+                        // captured tokens, which over-expanded multi-token
+                        // fragments.)
                         let repetitions: usize = var_names
                             .iter()
                             .filter_map(|name| bindings.get(name).map(|v| v.len()))
@@ -160,17 +174,21 @@ fn find_all_metavars(trees: &[TokenTree]) -> Vec<SmolStr> {
     names
 }
 
+/// Re-wrap iteration `index` of each captured metavar into a depth-0 binding
+/// map so the recursive `substitute` call for one repetition body splices
+/// exactly that iteration's tokens.
 fn extract_repetition_bindings(
-    bindings: &HashMap<SmolStr, Vec<TokenTree>>,
+    bindings: &HashMap<SmolStr, Vec<Vec<TokenTree>>>,
     var_names: &[SmolStr],
     index: usize,
-) -> HashMap<SmolStr, Vec<TokenTree>> {
+) -> HashMap<SmolStr, Vec<Vec<TokenTree>>> {
     let mut result = HashMap::new();
     for name in var_names {
-        if let Some(tokens) = bindings.get(name)
-            && index < tokens.len()
+        if let Some(iterations) = bindings.get(name)
+            && index < iterations.len()
         {
-            result.insert(name.clone(), vec![tokens[index].clone()]);
+            // One outer entry = one "iteration" of the body being expanded.
+            result.insert(name.clone(), vec![iterations[index].clone()]);
         }
     }
     result
@@ -221,5 +239,60 @@ mod hir3_tests {
         ];
         let names = find_all_metavars(&inner_rep);
         assert_eq!(names, vec![SmolStr::from("x")]);
+    }
+
+    /// HIR-2: a repetition over a *multi-token* fragment splices the whole
+    /// fragment once per iteration. Before the depth-aware binding fix the
+    /// outer length counted captured tokens, so this produced six statements.
+    #[test]
+    fn repetition_splices_multi_token_fragments_per_iteration() {
+        // Template: `$( let _ = $e; )*`
+        let inner = vec![
+            tok(SyntaxKind::KwLet, "let"),
+            tok(SyntaxKind::Ident, "_"),
+            tok(SyntaxKind::Eq, "="),
+            tok(SyntaxKind::Dollar, "$"),
+            tok(SyntaxKind::Ident, "e"),
+            tok(SyntaxKind::Semicolon, ";"),
+        ];
+        let template = vec![
+            tok(SyntaxKind::Dollar, "$"),
+            group(inner),
+            tok(SyntaxKind::Star, "*"),
+        ];
+
+        // Two iterations, each a multi-token `$e`.
+        let mut bindings: HashMap<SmolStr, Vec<Vec<TokenTree>>> = HashMap::new();
+        bindings.insert(
+            SmolStr::from("e"),
+            vec![
+                vec![
+                    tok(SyntaxKind::Ident, "aa"),
+                    tok(SyntaxKind::Plus, "+"),
+                    tok(SyntaxKind::Ident, "bb"),
+                ],
+                vec![
+                    tok(SyntaxKind::Ident, "cc"),
+                    tok(SyntaxKind::Star, "*"),
+                    tok(SyntaxKind::Ident, "dd"),
+                ],
+            ],
+        );
+
+        let out = substitute(&template, &bindings).expect("substitution succeeds");
+        let lets = out
+            .iter()
+            .filter(|t| matches!(t, TokenTree::Token(SyntaxKind::KwLet, _)))
+            .count();
+        assert_eq!(lets, 2, "one `let` per iteration, got {}", lets);
+        // And the whole fragment is spliced intact.
+        assert!(
+            out.iter()
+                .any(|t| matches!(t, TokenTree::Token(SyntaxKind::Plus, _)))
+        );
+        assert!(
+            out.iter()
+                .any(|t| matches!(t, TokenTree::Token(SyntaxKind::Star, _)))
+        );
     }
 }

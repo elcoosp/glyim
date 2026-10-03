@@ -249,3 +249,47 @@ fn expand_api_with_builtin_file_macro() {
         expanded_text
     );
 }
+
+
+/// HIR-2 regression: a repetition over a *multi-token* fragment must expand to
+/// exactly one item per matched iteration, not one per captured token.
+///
+/// Before the depth-aware binding fix, `$($e:expr),*` matching `aa + bb, cc * dd`
+/// recorded `e = [aa, +, bb, cc, *, dd]` (six "iterations"), so
+/// `$( let _ = $e; )*` produced six malformed statements. It must produce two.
+#[test]
+fn repetition_multi_token_fragment_expands_once_per_iteration() {
+    let source = r#"
+macro_rules! stmts {
+    ($($e:expr),*) => {
+        $( let _ = $e; )*
+    }
+}
+
+fn main() {
+    stmts!(aa + bb, cc * dd);
+}
+"#;
+    let root = parse(source);
+    let mut hygiene = HygieneCtx::default();
+    let mut expander = Expander::new(&mut hygiene);
+    let (expanded, diags) = expander.expand_crate(&root);
+
+    let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
+    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+
+    let expanded_text = expanded.text().to_string();
+    assert!(
+        !expanded_text.contains("stmts!"),
+        "Expected macro call to be expanded away, got: {}",
+        expanded_text
+    );
+    // Exactly two `let` statements — one per `$e` iteration. The pre-fix code
+    // emitted six (one per captured token: aa, +, bb, cc, *, dd).
+    let lets = expanded_text.matches("let").count();
+    assert_eq!(
+        lets, 2,
+        "multi-token fragments must expand once per iteration, got {lets} `let`s in: {}",
+        expanded_text
+    );
+}

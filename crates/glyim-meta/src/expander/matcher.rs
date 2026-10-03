@@ -50,8 +50,17 @@ pub(crate) struct Pattern {
 
 #[derive(Clone, Debug)]
 #[allow(clippy::enum_variant_names)]
+/// Captured metavariables are stored **depth-aware** (HIR-2): each metavar maps
+/// to one `Vec<TokenTree>` *per matched iteration* of the repetition that binds
+/// it, not to one flat token list. A metavariable outside any repetition has
+/// exactly one iteration, so `bindings[name][0]` is its token sequence; a
+/// metavariable inside `$( ... )*` has one entry per repetition.
+///
+/// Before this shape, `$($e:expr),*` matching `1 + 2, 3` recorded
+/// `e = [1, +, 2, 3]` (four "iterations"), so `$( let _ = $e; )*` expanded to
+/// four statements instead of two.
 pub(crate) enum MatchResult {
-    FullMatch(HashMap<SmolStr, Vec<TokenTree>>),
+    FullMatch(HashMap<SmolStr, Vec<Vec<TokenTree>>>),
     PartialMatch,
     NoMatch,
 }
@@ -388,7 +397,7 @@ fn consume_fragment(
 }
 
 pub(crate) fn match_pattern(pattern: &Pattern, input: &[TokenTree]) -> MatchResult {
-    let mut bindings: HashMap<SmolStr, Vec<TokenTree>> = HashMap::new();
+    let mut bindings: HashMap<SmolStr, Vec<Vec<TokenTree>>> = HashMap::new();
     match match_pieces(&pattern.pieces, input, 0, &mut bindings) {
         Ok((consumed, _)) if consumed == input.len() => MatchResult::FullMatch(bindings),
         Ok((_, _)) => MatchResult::PartialMatch,
@@ -400,7 +409,7 @@ fn match_pieces(
     pieces: &[PatternPiece],
     input: &[TokenTree],
     pos: usize,
-    bindings: &mut HashMap<SmolStr, Vec<TokenTree>>,
+    bindings: &mut HashMap<SmolStr, Vec<Vec<TokenTree>>>,
 ) -> Result<(usize, usize), ()> {
     let mut i = pos;
     for piece in pieces {
@@ -439,7 +448,7 @@ fn match_pieces(
                 if flexible {
                     if let Some((consumed, captured)) = consume_fragment(fragment, input, i) {
                         i += consumed;
-                        bindings.entry(name.clone()).or_default().extend(captured);
+                        bindings.entry(name.clone()).or_default().push(captured);
                     } else {
                         return Err(());
                     }
@@ -447,7 +456,7 @@ fn match_pieces(
                     if matches_fragment_spec(&input[i], fragment) {
                         let captured = vec![input[i].clone()];
                         i += 1;
-                        bindings.entry(name.clone()).or_default().extend(captured);
+                        bindings.entry(name.clone()).or_default().push(captured);
                     } else {
                         return Err(());
                     }
@@ -480,9 +489,9 @@ fn match_pieces(
                 separator,
                 kind,
             } => {
-                let mut repetitions: Vec<HashMap<SmolStr, Vec<TokenTree>>> = Vec::new();
+                let mut repetitions: Vec<HashMap<SmolStr, Vec<Vec<TokenTree>>>> = Vec::new();
                 loop {
-                    let mut rep_bindings: HashMap<SmolStr, Vec<TokenTree>> = HashMap::new();
+                    let mut rep_bindings: HashMap<SmolStr, Vec<Vec<TokenTree>>> = HashMap::new();
                     match match_pieces(inner, input, i, &mut rep_bindings) {
                         Ok((new_i, _matched_count)) => {
                             // Stop when no progress was made — including the
@@ -643,8 +652,13 @@ mod tests {
         let result = match_pattern(&pattern, &input);
         assert!(matches!(result, MatchResult::FullMatch(_)));
         if let MatchResult::FullMatch(bindings) = result {
-            let captured = &bindings[&SmolStr::from("x")];
-            assert_eq!(captured.len(), 1, "Expected 1 token captured for expr");
+            let iterations = &bindings[&SmolStr::from("x")];
+            assert_eq!(
+                iterations.len(),
+                1,
+                "expr metavar outside a repetition has one iteration"
+            );
+            assert_eq!(iterations[0].len(), 1, "...holding exactly one token");
         }
     }
 
@@ -734,9 +748,10 @@ mod tests {
         let result = match_pattern(&pattern, &input);
         match result {
             MatchResult::FullMatch(bindings) => {
-                let captured = &bindings[&SmolStr::from("e")];
+                let iterations = &bindings[&SmolStr::from("e")];
+                assert_eq!(iterations.len(), 1, "one iteration");
                 assert_eq!(
-                    captured.len(),
+                    iterations[0].len(),
                     5,
                     "Stage B: :expr must capture the whole `a + b * c` expression"
                 );
@@ -780,9 +795,10 @@ mod tests {
         let result = match_pattern(&pattern, &input);
         match result {
             MatchResult::FullMatch(bindings) => {
-                let captured = &bindings[&SmolStr::from("t")];
+                let iterations = &bindings[&SmolStr::from("t")];
+                assert_eq!(iterations.len(), 1, "one iteration");
                 assert_eq!(
-                    captured.len(),
+                    iterations[0].len(),
                     2,
                     ":ty must capture `Vec<i32>` as two trees"
                 );
@@ -873,8 +889,11 @@ mod tests {
         let result = match_pattern(&pattern, &input);
         match result {
             MatchResult::FullMatch(bindings) => {
-                assert_eq!(bindings[&SmolStr::from("lhs")].len(), 3);
-                assert_eq!(bindings[&SmolStr::from("rhs")].len(), 3);
+                // Each metavar has one iteration holding its 3 trees.
+                assert_eq!(bindings[&SmolStr::from("lhs")].len(), 1);
+                assert_eq!(bindings[&SmolStr::from("lhs")][0].len(), 3);
+                assert_eq!(bindings[&SmolStr::from("rhs")].len(), 1);
+                assert_eq!(bindings[&SmolStr::from("rhs")][0].len(), 3);
             }
             other => panic!("expected FullMatch, got {:?}", other),
         }
