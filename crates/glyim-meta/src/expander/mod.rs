@@ -1061,8 +1061,15 @@ impl<'a> ExpanderImpl<'a> {
         let mut builder = rowan::GreenNodeBuilder::new();
         // Wrap expansion tokens in a synthetic SourceFile node so the tree is balanced
         builder.start_node(GlyimLang::kind_to_raw(SyntaxKind::SourceFile));
+        // Track the previously emitted token's text so we can insert a
+        // separating `Whitespace` token wherever two adjacent tokens would
+        // otherwise fuse when the expansion is re-lexed. `expand_node_recursive`
+        // reconstructs source text via `temp_root.text()` and re-parses it, so
+        // `let` immediately followed by `_` became the single identifier
+        // `let_` -> `[T0001] unresolved name 'let_'`.
+        let mut prev: Option<SmolStr> = None;
         for tree in trees {
-            self.build_token_tree_green(tree, &mut builder, &mark);
+            self.build_token_tree_green(tree, &mut builder, &mark, &mut prev);
         }
         builder.finish_node();
         builder.finish()
@@ -1073,28 +1080,54 @@ impl<'a> ExpanderImpl<'a> {
         tree: &TokenTree,
         builder: &mut rowan::GreenNodeBuilder,
         _mark: &Mark,
+        prev: &mut Option<SmolStr>,
     ) {
         match tree {
             TokenTree::Token(kind, text) => {
-                builder.token(GlyimLang::kind_to_raw(*kind), text.as_str());
+                self.emit_token(*kind, text.as_str(), builder, prev);
             }
             TokenTree::Group(delim_open, children, delim_close) => {
-                builder.token(
-                    GlyimLang::kind_to_raw(*delim_open),
+                self.emit_token(
+                    *delim_open,
                     delim_token_text(*delim_open),
+                    builder,
+                    prev,
                 );
                 for child in children {
-                    self.build_token_tree_green(child, builder, _mark);
+                    self.build_token_tree_green(child, builder, _mark, prev);
                 }
-                builder.token(
-                    GlyimLang::kind_to_raw(*delim_close),
+                self.emit_token(
+                    *delim_close,
                     delim_token_text(*delim_close),
+                    builder,
+                    prev,
                 );
             }
             TokenTree::DollarCrate => {
-                builder.token(GlyimLang::kind_to_raw(SyntaxKind::KwCrate), "crate");
+                self.emit_token(SyntaxKind::KwCrate, "crate", builder, prev);
             }
         }
+    }
+
+    /// Emit one token into the expansion builder, inserting a `Whitespace`
+    /// separator first if leaving it adjacent to `prev` would change how the
+    /// reconstructed source text lexes (HIR-2 e2e fallout). The expansion is
+    /// re-parsed via `temp_root.text()` in `expand_node_recursive`, so token
+    /// boundaries must survive the text round-trip.
+    fn emit_token(
+        &self,
+        kind: SyntaxKind,
+        text: &str,
+        builder: &mut rowan::GreenNodeBuilder,
+        prev: &mut Option<SmolStr>,
+    ) {
+        if let Some(prev_text) = prev.as_deref()
+            && token_boundary_needs_space(prev_text, text)
+        {
+            builder.token(GlyimLang::kind_to_raw(SyntaxKind::Whitespace), " ");
+        }
+        builder.token(GlyimLang::kind_to_raw(kind), text);
+        *prev = Some(SmolStr::from(text));
     }
 
     fn file_id_from_node(&self, _node: &SyntaxNode) -> FileId {
@@ -1153,6 +1186,62 @@ impl<'a> ExpanderImpl<'a> {
 /// This is intentionally NOT byte-exact to the original source (glyim's
 /// `TokenTree` carries only `SyntaxKind` + text, not spans) — it matches
 /// `stringify!`'s normalized output closely enough for production use.
+/// Whether a single space must be inserted between two adjacent token texts so
+/// that re-lexing their concatenation yields the same two tokens instead of a
+/// different (fused) token.
+///
+/// Conservative and punctuation-aware: covers word/word fusion
+/// (`let` + `_` -> `let_`, `1` + `2` -> `12`), `.` + digit (`x.5` -> float),
+/// and every punctuation pair that would form a longer punctuator or the start
+/// of a comment (`+`+`=` -> `+=`, `<`+`<` -> `<<`, `/`+`/` -> `//`, …).
+fn token_boundary_needs_space(prev: &str, cur: &str) -> bool {
+    let Some(last) = prev.chars().last() else {
+        return false;
+    };
+    let Some(first) = cur.chars().next() else {
+        return false;
+    };
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    if word(last) && word(first) {
+        return true;
+    }
+    // `.` followed by a digit would lex as a float literal.
+    if last == '.' && first.is_ascii_digit() {
+        return true;
+    }
+    let mut two = String::with_capacity(2);
+    two.push(last);
+    two.push(first);
+    matches!(
+        two.as_str(),
+        "++" | "--"
+            | "<<"
+            | ">>"
+            | "<="
+            | ">="
+            | "=="
+            | "!="
+            | "&&"
+            | "||"
+            | "->"
+            | "=>"
+            | "::"
+            | ".."
+            | "+="
+            | "-="
+            | "*="
+            | "/="
+            | "%="
+            | "&="
+            | "|="
+            | "^="
+            | "//"
+            | "/*"
+            | "*/"
+            | "#!"
+    )
+}
+
 fn stringify_token_trees(trees: &[TokenTree]) -> String {
     // Flatten into an ordered list of leaf pieces (tokens + delimiter chars).
     let mut leaves: Vec<String> = Vec::new();

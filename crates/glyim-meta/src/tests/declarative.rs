@@ -293,3 +293,41 @@ fn main() {
         expanded_text
     );
 }
+
+
+/// HIR-2 follow-on: the green→text round-trip in `expand_node_recursive`
+/// reconstructs source from token texts. Without a separator, `let` and `_`
+/// emitted as adjacent tokens fused into the single identifier `let_`, so any
+/// macro whose expansion contained a `let _ = ...` failed downstream with
+/// `[T0001] unresolved name 'let_'`. The builder must insert a `Whitespace`
+/// token at every boundary that would change how the text re-lexes.
+#[test]
+fn expansion_does_not_fuse_adjacent_identifier_tokens() {
+    let source = r#"
+macro_rules! stmts {
+    ($($e:expr),*) => {
+        $( let _ = $e; )*
+    }
+}
+
+fn main() {
+    stmts!(1 + 2, 3 * 4);
+}
+"#;
+    let root = parse(source);
+    let mut hygiene = HygieneCtx::default();
+    let mut expander = Expander::new(&mut hygiene);
+    let (expanded, diags) = expander.expand_crate(&root);
+
+    let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
+    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+
+    let text = expanded.text().to_string();
+    assert!(
+        !text.contains("let_"),
+        "`let` and `_` fused into `let_`; expansion text was: {}",
+        text
+    );
+    // Both `let`s must still be present (HIR-2: one per iteration).
+    assert_eq!(text.matches("let").count(), 2, "expansion was: {}", text);
+}
