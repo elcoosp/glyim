@@ -612,7 +612,12 @@ impl<'tcx> Interpreter<'tcx> {
     fn execute_statement(&mut self, stmt: &Statement) -> InterpResult<()> {
         match &stmt.kind {
             StatementKind::Assign(place, rvalue) => {
-                let val = self.eval_rvalue(rvalue)?;
+                // MIR-13/14: the destination local's declared type drives
+                // width-correct arithmetic and casts.
+                let dest_ty = self
+                    .current_local_ty(place.local)
+                    .unwrap_or(Ty::ERROR);
+                let val = self.eval_rvalue(rvalue, dest_ty)?;
                 self.write_place(place, val)?;
             }
             StatementKind::StorageLive(local) => {
@@ -631,14 +636,22 @@ impl<'tcx> Interpreter<'tcx> {
         Ok(())
     }
 
-    pub(crate) fn eval_rvalue(&self, rvalue: &Rvalue) -> InterpResult<InterpValue> {
+    /// The declared type of a local in the CURRENT frame — used by the
+    /// `Assign` dispatch to give arithmetic/casts their destination type.
+    /// Returns `None` for an out-of-range local so the caller can fall back
+    /// and let `write_place` report the bounds error.
+    pub(crate) fn current_local_ty(&self, local: LocalIdx) -> Option<Ty> {
+        self.local_decls.get(local.index()).map(|d| d.ty)
+    }
+
+    pub(crate) fn eval_rvalue(&self, rvalue: &Rvalue, dest_ty: Ty) -> InterpResult<InterpValue> {
         match rvalue {
             Rvalue::Use(operand) => self.eval_operand(operand),
             Rvalue::BinaryOp(op, operands) => {
                 let (left, right) = operands.as_ref();
                 let l = self.eval_operand(left)?;
                 let r = self.eval_operand(right)?;
-                self.eval_binary_op(*op, &l, &r)
+                self.eval_binary_op(*op, &l, &r, dest_ty)
             }
             Rvalue::UnaryOp(op, operand) => {
                 let v = self.eval_operand(operand)?;
@@ -722,7 +735,7 @@ impl<'tcx> Interpreter<'tcx> {
                     _ => Err(InterpError::Panic("Len: expected array or slice".into())),
                 }
             }
-            Rvalue::Cast(kind, operand, _target_ty) => {
+            Rvalue::Cast(kind, operand, target_ty) => {
                 let val = self.eval_operand(operand)?;
                 match kind {
                     &glyim_mir::CastKind::FloatToFloat => {
@@ -732,13 +745,26 @@ impl<'tcx> Interpreter<'tcx> {
                             Err(InterpError::Panic("expected float for FloatToFloat".into()))
                         }
                     }
-                    CastKind::IntToInt => Ok(val),
+                    // MIR-14: a real truncation to the target width/signedness,
+                    // not an identity. `(-1i32) as u8` must give 255, matching
+                    // the LLVM backend.
+                    CastKind::IntToInt => match val {
+                        InterpValue::Int(v) => Ok(InterpValue::Int(self.trunc_to_ty(v, *target_ty))),
+                        InterpValue::Uint(v) => {
+                            Ok(InterpValue::Uint(self.trunc_to_ty(v as i128, *target_ty) as u128))
+                        }
+                        other => Ok(other),
+                    },
                     CastKind::IntToFloat => match val {
                         InterpValue::Int(i) => Ok(InterpValue::Float(i as f64)),
                         _ => Err(InterpError::Panic("expected int for IntToFloat".into())),
                     },
+                    // Float-to-int: truncate the (float-derived) i128 to the
+                    // target width (MIR-14).
                     CastKind::FloatToInt => match val {
-                        InterpValue::Float(f) => Ok(InterpValue::Int(f as i128)),
+                        InterpValue::Float(f) => {
+                            Ok(InterpValue::Int(self.trunc_to_ty(f as i128, *target_ty)))
+                        }
                         _ => Err(InterpError::Panic("expected float for FloatToInt".into())),
                     },
                     // Deliberately a no-op: InterpValue pointers carry no
@@ -828,11 +854,32 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
+    /// Truncate `v` to the width/signedness of scalar type `ty` (MIR-13).
+    /// The interpreter carries values as `i128`; without this, `100i8 + 100i8`
+    /// yields 200 while an LLVM binary yields -56.
+    fn trunc_to_ty(&self, v: i128, ty: Ty) -> i128 {
+        use glyim_core::primitives::{IntTy, UintTy};
+        match self.tcx.ty_kind(ty) {
+            TyKind::Int(IntTy::I8) => v as i8 as i128,
+            TyKind::Int(IntTy::I16) => v as i16 as i128,
+            TyKind::Int(IntTy::I32) => v as i32 as i128,
+            TyKind::Int(IntTy::I64) => v as i64 as i128,
+            TyKind::Int(IntTy::Isize) => v as isize as i128,
+            TyKind::Uint(UintTy::U8) => (v as u8) as i128,
+            TyKind::Uint(UintTy::U16) => (v as u16) as i128,
+            TyKind::Uint(UintTy::U32) => (v as u32) as i128,
+            TyKind::Uint(UintTy::U64) => (v as u64) as i128,
+            TyKind::Uint(UintTy::Usize) => (v as usize) as i128,
+            _ => v,
+        }
+    }
+
     fn eval_binary_op(
         &self,
         op: BinOp,
         left: &InterpValue,
         right: &InterpValue,
+        dest_ty: Ty,
     ) -> InterpResult<InterpValue> {
         use InterpValue::*;
         match (left, right) {
@@ -877,7 +924,7 @@ impl<'tcx> Interpreter<'tcx> {
                         )));
                     }
                 };
-                Ok(Int(result))
+                Ok(Int(self.trunc_to_ty(result, dest_ty)))
             }
             (Uint(l), Uint(r)) => {
                 let result = match op {
@@ -918,7 +965,7 @@ impl<'tcx> Interpreter<'tcx> {
                         )));
                     }
                 };
-                Ok(Uint(result))
+                Ok(Uint(self.trunc_to_ty(result as i128, dest_ty) as u128))
             }
             (Bool(l), Bool(r)) => match op {
                 BinOp::Eq => Ok(Bool(l == r)),

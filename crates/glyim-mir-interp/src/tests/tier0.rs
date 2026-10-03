@@ -112,7 +112,8 @@ fn write_through_constant_index() {
         StatementKind::Assign(p, r) => (p.clone(), r.clone()),
         _ => panic!("expected an Assign statement"),
     };
-    let result = interp.write_place(&place, interp.eval_rvalue(&rvalue).unwrap());
+    let dest_ty = interp.current_local_ty(place.local).unwrap_or(Ty::UNIT);
+    let result = interp.write_place(&place, interp.eval_rvalue(&rvalue, dest_ty).unwrap());
     assert!(
         result.is_ok(),
         "ConstantIndex write must succeed: {result:?}"
@@ -189,6 +190,7 @@ fn write_through_subslice() {
         StatementKind::Assign(p, r) => (p.clone(), r.clone()),
         _ => panic!("expected an Assign statement"),
     };
-    let result = interp.write_place(&place, interp.eval_rvalue(&rvalue).unwrap());
+    let dest_ty = interp.current_local_ty(place.local).unwrap_or(Ty::UNIT);
+    let result = interp.write_place(&place, interp.eval_rvalue(&rvalue, dest_ty).unwrap());
     assert!(result.is_ok(), "Subslice write must succeed: {result:?}");
 }

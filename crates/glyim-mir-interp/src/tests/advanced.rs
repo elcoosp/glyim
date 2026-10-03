@@ -682,25 +682,28 @@ fn interpret_custom_recursion_limit() {
 #[test]
 fn interpret_wrapping_add() {
     let mut tcx_mut = test_ty_ctx();
-    let body = build_binop_body(&mut tcx_mut, BinOp::Add, i128::MAX, 1);
+    // The body's result local is `i32`, so wrapping is at 32-bit width
+    // (MIR-13): `i32::MAX + 1` wraps to `i32::MIN`.
+    let body = build_binop_body(&mut tcx_mut, BinOp::Add, i32::MAX as i128, 1);
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
         interp.get_local_value(LocalIdx::from_raw(1)),
-        Some(&InterpValue::Int(i128::MIN))
+        Some(&InterpValue::Int(i32::MIN as i128))
     );
 }
 
 #[test]
 fn interpret_wrapping_mul() {
     let mut tcx_mut = test_ty_ctx();
-    let body = build_binop_body(&mut tcx_mut, BinOp::Mul, i128::MAX, 2);
+    // 32-bit wrapping: `i32::MAX * 2` wraps to `-2` (MIR-13).
+    let body = build_binop_body(&mut tcx_mut, BinOp::Mul, i32::MAX as i128, 2);
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
         interp.get_local_value(LocalIdx::from_raw(1)),
-        Some(&InterpValue::Int(i128::MAX.wrapping_mul(2)))
+        Some(&InterpValue::Int((i32::MAX as i128).wrapping_mul(2) as i32 as i128))
     );
 }
