@@ -1307,6 +1307,13 @@ impl<'tcx> Interpreter<'tcx> {
         val: InterpValue,
     ) -> InterpResult<()> {
         let idx = place.local.index();
+        // Read the base local's declared type before taking the mutable
+        // `frame_locals` borrow (MIR-17 uses it to pick the enum-tag offset).
+        let base_ty = self
+            .local_decls
+            .get(idx)
+            .map(|d| d.ty)
+            .unwrap_or(Ty::ERROR);
         let frame_locals = self
             .write_target_locals_mut(frame)
             .ok_or_else(|| InterpError::Panic(format!("write to dead frame {frame}")))?;
@@ -1383,7 +1390,7 @@ impl<'tcx> Interpreter<'tcx> {
             .ok_or_else(|| InterpError::Panic(format!("write to uninitialized local {idx}")))?;
 
         let modified =
-            self.write_through_projections_with_locals(base_val, &place.projection, val)?;
+            self.write_through_projections_with_locals(base_val, &place.projection, val, base_ty)?;
         let frame_locals = self
             .write_target_locals_mut(frame)
             .ok_or_else(|| InterpError::Panic(format!("write to dead frame {frame}")))?;
@@ -1396,6 +1403,7 @@ impl<'tcx> Interpreter<'tcx> {
         base: InterpValue,
         projections: &[ProjectionElem],
         val: InterpValue,
+        current_ty: Ty,
     ) -> InterpResult<InterpValue> {
         if projections.is_empty() {
             return Ok(val);
@@ -1404,18 +1412,33 @@ impl<'tcx> Interpreter<'tcx> {
         match first {
             ProjectionElem::Field(field_idx) => {
                 let fi = field_idx.index();
+                // MIR-17: enum values are laid out as `[tag, ...payload]`.
+                // A `Field` write on an enum must skip the tag (like the read
+                // path and an explicit `Downcast` do); otherwise payload data
+                // overwrites the discriminant.
+                let is_enum = if let TyKind::Adt(adt_id, _) = self.tcx.ty_kind(current_ty) {
+                    self.tcx
+                        .adt_def(*adt_id)
+                        .map(|d| d.kind == AdtKind::Enum)
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
+                let adjusted = if is_enum { fi + 1 } else { fi };
+                let field_ty = self.get_field_type(current_ty, *field_idx);
                 match base {
                     InterpValue::Aggregate(mut fields) => {
-                        if fi >= fields.len() {
+                        if adjusted >= fields.len() {
                             return Err(InterpError::Panic(format!(
                                 "field index {} out of bounds (len {})",
-                                fi,
+                                adjusted,
                                 fields.len()
                             )));
                         }
-                        let inner = fields[fi].clone();
-                        fields[fi] =
-                            self.write_through_projections_with_locals(inner, rest, val)?;
+                        let inner = fields[adjusted].clone();
+                        fields[adjusted] = self.write_through_projections_with_locals(
+                            inner, rest, val, field_ty,
+                        )?;
                         Ok(InterpValue::Aggregate(fields))
                     }
                     _ => Err(InterpError::Panic(
@@ -1439,6 +1462,7 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Uint(u) => *u as usize,
                     _ => return Err(InterpError::Panic("index must be an integer".into())),
                 };
+                let elem_ty = self.get_element_type(current_ty);
                 match base {
                     InterpValue::Aggregate(mut elems) => {
                         if idx_u >= elems.len() {
@@ -1449,8 +1473,9 @@ impl<'tcx> Interpreter<'tcx> {
                             )));
                         }
                         let inner = elems[idx_u].clone();
-                        elems[idx_u] =
-                            self.write_through_projections_with_locals(inner, rest, val)?;
+                        elems[idx_u] = self.write_through_projections_with_locals(
+                            inner, rest, val, elem_ty,
+                        )?;
                         Ok(InterpValue::Aggregate(elems))
                     }
                     _ => Err(InterpError::Panic(
@@ -1459,7 +1484,33 @@ impl<'tcx> Interpreter<'tcx> {
                 }
             }
             ProjectionElem::Downcast(_) => {
-                Ok(self.write_through_projections_with_locals(base, rest, val)?)
+                // MIR-17: strip the discriminant tag so the following `Field`
+                // projections index the payload directly. Mark the type
+                // non-enum (ERROR sentinel) so the payload's own fields are not
+                // re-offset by +1. Capture the tag before consuming `base`.
+                match base {
+                    InterpValue::Aggregate(fields) => {
+                        let mut it = fields.into_iter();
+                        let tag = it.next().unwrap_or(InterpValue::Int(0));
+                        let payload = InterpValue::Aggregate(it.collect());
+                        let written = self.write_through_projections_with_locals(
+                            payload, rest, val, Ty::ERROR,
+                        )?;
+                        match written {
+                            InterpValue::Aggregate(payload_fields) => {
+                                let mut new_fields = Vec::with_capacity(payload_fields.len() + 1);
+                                new_fields.push(tag);
+                                new_fields.extend(payload_fields);
+                                Ok(InterpValue::Aggregate(new_fields))
+                            }
+                            other => Ok(other),
+                        }
+                    }
+                    other => {
+                        // Non-aggregate base: `Downcast` is a no-op.
+                        self.write_through_projections_with_locals(other, rest, val, current_ty)
+                    }
+                }
             }
             ProjectionElem::Deref => Err(InterpError::Panic(
                 "Deref projection unexpected in write_through_projections".into(),
