@@ -1307,11 +1307,14 @@ impl<'tcx> Interpreter<'tcx> {
         val: InterpValue,
     ) -> InterpResult<()> {
         let idx = place.local.index();
-        // Read the base local's declared type before taking the mutable
-        // `frame_locals` borrow (MIR-17 uses it to pick the enum-tag offset).
+        // Read the base local's declared type from the OWNING frame (not the
+        // current one) before taking the mutable `frame_locals` borrow. MIR-17
+        // uses it to pick the enum-tag offset; reading the current frame's
+        // decls for a cross-frame write (`*r.field = v` where `r` points at a
+        // caller's local) gave the wrong local's type and mis-decided `is_enum`.
         let base_ty = self
-            .local_decls
-            .get(idx)
+            .decls_for_ref_frame(frame)
+            .and_then(|decls| decls.get(idx))
             .map(|d| d.ty)
             .unwrap_or(Ty::ERROR);
         let frame_locals = self
