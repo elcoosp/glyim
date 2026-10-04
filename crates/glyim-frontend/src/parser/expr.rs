@@ -678,6 +678,14 @@ impl<'a> Parser<'a> {
                         self.start_node_at(cp, SyntaxKind::TupleExpr);
                         while self.current_kind() == SyntaxKind::Comma {
                             self.bump();
+                            // FE-2: a trailing comma (`(1,)`) must not demand
+                            // another expression. Without this the parser emits
+                            // "expected expression, found RParen", *bumps* the
+                            // `)`, and then `expect(RParen)` fires a second
+                            // error.
+                            if self.current_kind() == SyntaxKind::RParen {
+                                break;
+                            }
                             self.parse_expr();
                         }
                         self.expect(SyntaxKind::RParen);

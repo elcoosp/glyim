@@ -92,3 +92,41 @@ fn test_float_no_suffix() {
         _ => panic!("expected Float f64"),
     }
 }
+
+/// HIR-15: a literal that does not fit `i128`/`u128` must report an error, not
+/// silently become `0`.
+#[test]
+fn test_int_literal_overflow_reports_error() {
+    let tok = token_from_literal("999999999999999999999999999999999999999999999");
+    let mut interner = glyim_core::Interner::default();
+    let mut diags = Vec::new();
+    let lit = crate::lower::lower_literal_with_diags(&tok, &mut interner, &mut diags);
+    assert_eq!(lit, Literal::Int(0, None), "overflowing literal degrades to 0");
+    assert_eq!(diags.len(), 1, "exactly one overflow diagnostic");
+    assert!(
+        diags[0].message.contains("too large"),
+        "diagnostic should say the literal is too large, got: {}",
+        diags[0].message
+    );
+}
+
+/// HIR-15: `0xFFFF…` (more than 128 bits) must report an error too.
+#[test]
+fn test_hex_literal_overflow_reports_error() {
+    let tok = token_from_literal("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    let mut interner = glyim_core::Interner::default();
+    let mut diags = Vec::new();
+    let _ = crate::lower::lower_literal_with_diags(&tok, &mut interner, &mut diags);
+    assert_eq!(diags.len(), 1, "one overflow diagnostic for the hex literal");
+}
+
+/// HIR-15 sanity: a literal that *does* fit still lowers without diagnostics.
+#[test]
+fn test_int_literal_in_range_no_error() {
+    let tok = token_from_literal("42");
+    let mut interner = glyim_core::Interner::default();
+    let mut diags = Vec::new();
+    let lit = crate::lower::lower_literal_with_diags(&tok, &mut interner, &mut diags);
+    assert_eq!(lit, Literal::Int(42, None));
+    assert!(diags.is_empty());
+}

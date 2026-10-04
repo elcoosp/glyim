@@ -469,7 +469,7 @@ impl Vm {
                 | Opcode::Shr => {
                     let b = self.pop()?.as_int();
                     let a = self.pop()?.as_int();
-                    let r = self.binop(op, a, b);
+                    let r = self.binop(op, a, b)?;
                     self.stack.push(Value::Int(r));
                 }
                 Opcode::Not | Opcode::Neg => {
@@ -613,13 +613,16 @@ impl Vm {
         }
     }
 
-    fn binop(&self, op: Opcode, a: i64, b: i64) -> i64 {
-        match op {
+    fn binop(&self, op: Opcode, a: i64, b: i64) -> ExecResult<i64> {
+        Ok(match op {
             Opcode::Add => a.wrapping_add(b),
             Opcode::Sub => a.wrapping_sub(b),
             Opcode::Mul => a.wrapping_mul(b),
-            Opcode::Div => a.checked_div(b).unwrap_or(0),
-            Opcode::Rem => a.checked_rem(b).unwrap_or(0),
+            // RT-7: division/remainder by zero (and `i64::MIN / -1`) must
+            // TRAP, not silently yield 0. `checked_*` is None exactly on those
+            // cases.
+            Opcode::Div => a.checked_div(b).ok_or(VmError::AbnormalTermination)?,
+            Opcode::Rem => a.checked_rem(b).ok_or(VmError::AbnormalTermination)?,
             Opcode::Eq => (a == b) as i64,
             Opcode::Ne => (a != b) as i64,
             Opcode::Lt => (a < b) as i64,
@@ -634,7 +637,7 @@ impl Vm {
             Opcode::Shl => a.wrapping_shl(b as u32),
             Opcode::Shr => a.wrapping_shr(b as u32),
             _ => unreachable!("binop called on non-binary op"),
-        }
+        })
     }
 
     fn unop(&self, op: Opcode, a: i64) -> i64 {
@@ -1013,6 +1016,34 @@ mod tests {
         assert_eq!(
             vm.run_module(&module_bad).unwrap_err(),
             VmError::AssertionFailed
+        );
+    }
+
+    #[test]
+    fn run_div_by_zero_traps() {
+        // RT-7: `a / 0` and `a % 0` must trap, not silently yield 0.
+        let mut a = Asm::new();
+        a.load_const(10);
+        a.load_const(0);
+        a.op(Opcode::Div);
+        a.op(Opcode::Return);
+        let mut vm = Vm::new();
+        assert_eq!(
+            vm.run(&Chunk::new(a.finish(2, 0).code)).unwrap_err(),
+            VmError::AbnormalTermination,
+            "10 / 0 must trap"
+        );
+
+        let mut a = Asm::new();
+        a.load_const(10);
+        a.load_const(0);
+        a.op(Opcode::Rem);
+        a.op(Opcode::Return);
+        let mut vm = Vm::new();
+        assert_eq!(
+            vm.run(&Chunk::new(a.finish(2, 0).code)).unwrap_err(),
+            VmError::AbnormalTermination,
+            "10 % 0 must trap"
         );
     }
 

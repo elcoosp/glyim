@@ -65,3 +65,55 @@ fn test_pat_struct() {
         _ => panic!(),
     }
 }
+
+/// HIR-12: `mut` on a `PatIdent` binding must be reflected in the HIR
+/// `Pat::Binding`'s mutability. Before the fix it was hardcoded to `Not`, so
+/// mutation of an immutable binding was silently accepted and closure/borrow
+/// classification was wrong.
+#[test]
+fn test_pat_binding_mut_is_tracked() {
+    use glyim_core::primitives::Mutability;
+    let (hir, interner, body_id) = get_body_hir("fn f() { let mut x = 1; x = 2; x }");
+    let body = get_body(&hir, body_id);
+    let block_id = ExprId::from_raw(body.exprs.len() as u32 - 1);
+    let mut found = false;
+    if let Expr::Block { stmts, .. } = &body.exprs[block_id] {
+        for &sid in stmts {
+            if let Expr::Let { pat, .. } = &body.exprs[sid]
+                && let Pat::Binding {
+                    name,
+                    mutability,
+                    ..
+                } = &body.pats[*pat]
+                && name == &interner.intern("x")
+            {
+                assert_eq!(
+                    *mutability,
+                    Mutability::Mut,
+                    "`let mut x` must produce a mutable binding"
+                );
+                found = true;
+            }
+        }
+    }
+    assert!(found, "let-binding of x not found");
+
+    // A plain `let x` stays immutable.
+    let (hir, interner, body_id) = get_body_hir("fn f() { let y = 1; y }");
+    let body = get_body(&hir, body_id);
+    let block_id = ExprId::from_raw(body.exprs.len() as u32 - 1);
+    if let Expr::Block { stmts, .. } = &body.exprs[block_id] {
+        for &sid in stmts {
+            if let Expr::Let { pat, .. } = &body.exprs[sid]
+                && let Pat::Binding {
+                    name,
+                    mutability,
+                    ..
+                } = &body.pats[*pat]
+                && name == &interner.intern("y")
+            {
+                assert_eq!(*mutability, Mutability::Not, "`let y` must stay immutable");
+            }
+        }
+    }
+}

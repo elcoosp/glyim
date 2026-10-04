@@ -315,7 +315,7 @@ pub(crate) fn lower_expr(
         SyntaxKind::BinaryExpr => lower_binary_expr(node, interner, body, diags, struct_field_map),
         SyntaxKind::IfExpr => lower_if_expr(node, interner, body, diags, struct_field_map),
         SyntaxKind::PathExpr => lower_path_expr(node, interner, body),
-        SyntaxKind::LitExpr => lower_lit_expr(node, interner, body),
+        SyntaxKind::LitExpr => lower_lit_expr(node, interner, body, diags),
         SyntaxKind::CallExpr => lower_call_expr(node, interner, body, diags, struct_field_map),
         SyntaxKind::MethodCallExpr => {
             lower_method_call_expr(node, interner, body, diags, struct_field_map)
@@ -1030,7 +1030,12 @@ fn lower_path_expr(node: &SyntaxNode, interner: &mut Interner, body: &mut Body) 
     Some(eid)
 }
 
-fn lower_lit_expr(node: &SyntaxNode, interner: &mut Interner, body: &mut Body) -> Option<ExprId> {
+fn lower_lit_expr(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    body: &mut Body,
+    diags: &mut Vec<GlyimDiagnostic>,
+) -> Option<ExprId> {
     let lit_token = node
         .children_with_tokens()
         .filter_map(|c| c.into_token())
@@ -1039,18 +1044,32 @@ fn lower_lit_expr(node: &SyntaxNode, interner: &mut Interner, body: &mut Body) -
                 || t.kind() == SyntaxKind::KwTrue
                 || t.kind() == SyntaxKind::KwFalse
         })?;
-    let lit = lower_literal(&lit_token, interner);
+    let lit = lower_literal_with_diags(&lit_token, interner, diags);
     let expr = Expr::Literal(lit);
     let eid = body.alloc_expr(expr, node_span(node));
     Some(eid)
 }
 
 pub(crate) fn lower_literal(token: &SyntaxToken, interner: &mut Interner) -> Literal {
+    // No diagnostic sink available: discard overflow reports.
+    let mut sink = Vec::new();
+    lower_literal_with_diags(token, interner, &mut sink)
+}
+
+/// HIR-15: like [`lower_literal`], but reports literals that do not fit the
+/// integer range instead of silently lowering them to `0`.
+pub(crate) fn lower_literal_with_diags(
+    token: &SyntaxToken,
+    interner: &mut Interner,
+    diags: &mut Vec<GlyimDiagnostic>,
+) -> Literal {
     let text = token.text().to_string();
     match token.kind() {
         SyntaxKind::IntLit => {
             let (num_str, suffix) = split_int_literal(&text);
-            let (value, is_unsigned) = parse_int_with_prefix(&num_str);
+            let span = token_span(token);
+            let (value, is_unsigned) =
+                parse_int_with_prefix(&num_str, &text, span, diags);
             if let Some(suffix) = suffix {
                 match suffix.as_str() {
                     "i8" => return Literal::Int(value, Some(IntTy::I8)),
@@ -1192,16 +1211,50 @@ fn split_int_literal(s: &str) -> (String, Option<String>) {
     (num_part.replace('_', ""), suffix.map(|s| s.to_string()))
 }
 
-fn parse_int_with_prefix(s: &str) -> (i128, bool) {
+/// Span of a single token (rowan `text_range`), mirroring `node_span`.
+fn token_span(token: &SyntaxToken) -> Span {
+    let range = token.text_range();
+    Span::new(
+        glyim_span::FileId::from_raw(1),
+        glyim_span::ByteIdx::from_raw(u32::from(range.start())),
+        glyim_span::ByteIdx::from_raw(u32::from(range.end())),
+        glyim_span::SyntaxContext::ROOT,
+    )
+}
+
+/// Parse an integer literal body, reporting (HIR-15) literals that do not fit
+/// in `i128`/`u128` instead of silently turning them into `0`.
+fn parse_int_with_prefix(
+    s: &str,
+    original: &str,
+    span: Span,
+    diags: &mut Vec<GlyimDiagnostic>,
+) -> (i128, bool) {
     let s = s.trim_start_matches('+');
-    if s.starts_with("0x") || s.starts_with("0X") {
-        (i128::from_str_radix(&s[2..], 16).unwrap_or(0), false)
-    } else if s.starts_with("0o") || s.starts_with("0O") {
-        (i128::from_str_radix(&s[2..], 8).unwrap_or(0), false)
-    } else if s.starts_with("0b") || s.starts_with("0B") {
-        (i128::from_str_radix(&s[2..], 2).unwrap_or(0), false)
+    let (radix, digits): (u32, &str) = if let Some(d) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        (16, d)
+    } else if let Some(d) = s.strip_prefix("0o").or_else(|| s.strip_prefix("0O")) {
+        (8, d)
+    } else if let Some(d) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+        (2, d)
     } else {
-        (s.parse::<i128>().unwrap_or(0), s.starts_with('-'))
+        (10, s)
+    };
+    let unsigned = digits.starts_with('-');
+    // Try `i128` first; large-but-valid unsigned literals (`u64::MAX`, …) fall
+    // back to `u128`, which `i128::try_from` narrows when it fits.
+    let parsed: Option<i128> = i128::from_str_radix(digits, radix)
+        .ok()
+        .or_else(|| u128::from_str_radix(digits, radix).ok().and_then(|u| i128::try_from(u).ok()));
+    match parsed {
+        Some(v) => (v, unsigned),
+        None => {
+            diags.push(GlyimDiagnostic::type_error(
+                span,
+                format!("integer literal is too large: `{original}`"),
+            ));
+            (0, false)
+        }
     }
 }
 

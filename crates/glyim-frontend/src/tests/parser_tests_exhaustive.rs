@@ -295,3 +295,27 @@ fn eval(expr: Expr) -> i32 {
 "#,
     );
 }
+
+// ─── FE-2: trailing comma in a tuple ───
+#[test]
+fn test_tuple_trailing_comma() {
+    // `(1,)` is a one-element tuple. Pre-fix the parser emitted two errors
+    // ("expected expression, found RParen" then "expected RParen, found …")
+    // and swallowed the `)`.
+    let result = parse_to_syntax("fn f() { let t = (1,); }", file_id());
+    assert!(
+        result.diagnostics.is_empty(),
+        "`(1,)` must parse cleanly, got: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_tuple_trailing_comma_multi() {
+    let result = parse_to_syntax("fn f() { let t = (1, 2,); }", file_id());
+    assert!(
+        result.diagnostics.is_empty(),
+        "`(1, 2,)` must parse cleanly, got: {:?}",
+        result.diagnostics
+    );
+}

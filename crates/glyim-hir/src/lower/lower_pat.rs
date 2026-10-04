@@ -10,6 +10,42 @@ use super::{first_ident_text, lower_expr::lower_literal};
 use glyim_diag::GlyimDiagnostic;
 
 #[allow(unused_assignments)]
+/// HIR-12: whether a `PatIdent` binding is introduced by `mut`.
+///
+/// The parser emits `mut` as a **sibling** of the `PatIdent` node inside the
+/// enclosing `LetStmt` (`let mut x = ..` -> `LetStmt { KwLet, KwMut, PatIdent
+/// { Ident } }`), so checking only the node's own children misses it. Scan both
+/// the node's children (other shapes) and the immediately-preceding sibling
+/// token, skipping trivia.
+fn pat_ident_mutability(node: &glyim_syntax::SyntaxNode) -> Mutability {
+    use glyim_syntax::SyntaxKind;
+    let has_mut_child = node
+        .children_with_tokens()
+        .any(|c| c.as_token().is_some_and(|t| t.kind() == SyntaxKind::KwMut));
+    let has_mut_before = {
+        let mut prev = node.prev_sibling_or_token();
+        let mut found = false;
+        while let Some(el) = prev {
+            match el {
+                glyim_syntax::SyntaxElement::Token(t) if t.kind().is_trivia() => {
+                    prev = t.prev_sibling_or_token();
+                }
+                glyim_syntax::SyntaxElement::Token(t) => {
+                    found = t.kind() == SyntaxKind::KwMut;
+                    break;
+                }
+                glyim_syntax::SyntaxElement::Node(_) => break,
+            }
+        }
+        found
+    };
+    if has_mut_child || has_mut_before {
+        Mutability::Mut
+    } else {
+        Mutability::Not
+    }
+}
+
 pub(crate) fn lower_pat(
     node: &SyntaxNode,
     interner: &mut Interner,
@@ -48,7 +84,9 @@ pub(crate) fn lower_pat(
                     .and_then(|n| lower_pat(&n, interner, pats, diags));
                 Some(pats.push(Pat::Binding {
                     name,
-                    mutability: Mutability::Not,
+                    // HIR-12: the parser bumps `KwMut` inside `PatIdent`; read
+                    // it so `let mut x = ..` / `(mut x, ..)` bind mutably.
+                    mutability: pat_ident_mutability(node),
                     subpattern: subpat,
                 }))
             }
@@ -250,7 +288,7 @@ pub(crate) fn lower_pat(
                         } else {
                             let binding_id = pats.push(Pat::Binding {
                                 name,
-                                mutability: Mutability::Not,
+                                mutability: pat_ident_mutability(node),
                                 subpattern: None,
                             });
                             fields.push((name, binding_id));

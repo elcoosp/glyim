@@ -5,7 +5,7 @@ pub(crate) mod lower_pat;
 pub(crate) mod lower_type;
 
 #[cfg(test)]
-pub(crate) use lower_expr::{lower_expr, lower_literal};
+pub(crate) use lower_expr::{lower_expr, lower_literal, lower_literal_with_diags};
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
