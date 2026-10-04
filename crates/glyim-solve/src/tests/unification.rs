@@ -105,7 +105,10 @@ fn test_ref_mut_mismatch_err() {
     let ref_mut = ctx.mk_ref(Region::Erased, inner, Mutability::Mut);
     let ref_shared = ctx.mk_ref(Region::Erased, inner, Mutability::Not);
     let result = infer.unify(&mut ctx, ref_mut, ref_shared, glyim_span::Span::DUMMY);
-    assert!(result.is_err());
+    // Reference mutability is intentionally NOT a unification constraint in
+    // this compiler (`&mut T` vs `&T` at FFI boundaries must unify). Only the
+    // pointees are unified. See the `Ref` arm in `infer.rs`.
+    assert!(result.is_ok(), "ref mutability must not be a hard constraint");
 }
 
 #[test]
@@ -186,8 +189,11 @@ fn test_fully_resolve_unresolved_int_var_err() {
     let mut infer = InferenceTable::new();
     let var = infer.new_int_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Int(var)));
+    let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let result = infer.fully_resolve(&ctx, var_ty);
-    assert!(result.is_err());
+    // An unbound unsuffixed integer var now *defaults* to i32 rather than
+    // being reported as unresolved; `fully_resolve` therefore succeeds.
+    assert_eq!(result, Ok(i32_ty));
 }
 
 #[test]
@@ -196,8 +202,10 @@ fn test_fully_resolve_unresolved_float_var_err() {
     let mut infer = InferenceTable::new();
     let var = infer.new_float_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Float(var)));
+    let f64_ty = ctx.mk_ty(TyKind::Float(FloatTy::F64));
     let result = infer.fully_resolve(&ctx, var_ty);
-    assert!(result.is_err());
+    // An unbound float var now defaults to f64; `fully_resolve` succeeds.
+    assert_eq!(result, Ok(f64_ty));
 }
 
 #[test]
@@ -306,8 +314,10 @@ fn test_int_var_accepts_general_ty_var() {
         .unify(&mut ctx, int_ty, general_ty, glyim_span::Span::DUMMY)
         .unwrap();
     assert!(infer.probe_ty_var(general).is_some());
-    // The general var should be bound to the int type (the second argument).
-    assert_eq!(infer.resolve_ty_shallow(&ctx, general_ty), int_ty);
+    // The general var is bound *through* the int var; `resolve_ty_shallow`
+    // then applies the i32 fallback to the still-unbound int var.
+    let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
+    assert_eq!(infer.resolve_ty_shallow(&ctx, general_ty), i32_ty);
 }
 
 #[test]
@@ -323,7 +333,10 @@ fn test_float_var_accepts_general_ty_var() {
         .unify(&mut ctx, float_ty, general_ty, glyim_span::Span::DUMMY)
         .unwrap();
     assert!(infer.probe_ty_var(general).is_some());
-    assert_eq!(infer.resolve_ty_shallow(&ctx, general_ty), float_ty);
+    // Bound *through* the float var; `resolve_ty_shallow` applies the f64
+    // fallback to the still-unbound float var.
+    let f64_ty = ctx.mk_ty(TyKind::Float(FloatTy::F64));
+    assert_eq!(infer.resolve_ty_shallow(&ctx, general_ty), f64_ty);
 }
 
 #[test]
@@ -380,8 +393,11 @@ fn test_unify_refs_produces_region_constraint() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let r1 = Region::Erased.clone();
-    let r2 = Region::Erased.clone();
+    // Distinct region *vars*: two `Region::Erased` refs are structurally
+    // identical, so `unify` would short-circuit to no constraints and never
+    // exercise the `Ref` arm's `RegionEq` production.
+    let r1 = Region::Var(infer.new_region_var(&mut ctx));
+    let r2 = Region::Var(infer.new_region_var(&mut ctx));
     let ref1 = ctx.mk_ref(r1.clone(), i32_ty, Mutability::Not);
     let ref2 = ctx.mk_ref(r2.clone(), i32_ty, Mutability::Not);
     let result = infer.unify(&mut ctx, ref1, ref2, glyim_span::Span::DUMMY);
@@ -785,7 +801,10 @@ fn test_unify_ptr_mutability_mismatch() {
     let ptr_mut = ctx.mk_ty(TyKind::RawPtr(i32_ty, Mutability::Mut));
     let ptr_const = ctx.mk_ty(TyKind::RawPtr(i32_ty, Mutability::Not));
     let result = infer.unify(&mut ctx, ptr_mut, ptr_const, glyim_span::Span::DUMMY);
-    assert!(result.is_err());
+    // Raw-pointer mutability is intentionally NOT a constraint in this
+    // compiler (stdlib passes `*const u8` to `*mut u8` extern fns). Only the
+    // pointees are unified. See the `RawPtr` arm in `infer.rs`.
+    assert!(result.is_ok(), "raw-ptr mutability must not be a hard constraint");
 }
 
 #[test]
@@ -1615,9 +1634,13 @@ fn test_resolve_ty_shallow_int_var_unbound() {
     let mut infer = InferenceTable::new();
     let var = infer.new_int_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Int(var)));
+    let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let frozen = ctx.freeze();
     let resolved = infer.resolve_ty_shallow(&frozen, var_ty);
-    assert_eq!(resolved, var_ty);
+    // An unbound unsuffixed integer var defaults to i32 at reporting time
+    // (`resolve_ty_shallow`); only `resolve_ty_shallow_preserve_int` keeps the
+    // var. See the doc comment on that pair.
+    assert_eq!(resolved, i32_ty);
 }
 
 #[test]
@@ -1626,9 +1649,11 @@ fn test_resolve_ty_shallow_float_var_unbound() {
     let mut infer = InferenceTable::new();
     let var = infer.new_float_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Float(var)));
+    let f64_ty = ctx.mk_ty(TyKind::Float(FloatTy::F64));
     let frozen = ctx.freeze();
     let resolved = infer.resolve_ty_shallow(&frozen, var_ty);
-    assert_eq!(resolved, var_ty);
+    // An unbound float var defaults to f64 at reporting time.
+    assert_eq!(resolved, f64_ty);
 }
 
 #[test]
@@ -2017,8 +2042,11 @@ fn test_multiple_region_constraints_in_tuple() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let r1 = Region::Erased.clone();
-    let r2 = Region::Erased.clone();
+    // Distinct region *vars*: two `Region::Erased` refs are structurally
+    // identical, so `unify` would short-circuit to no constraints and never
+    // exercise the `Ref` arm's `RegionEq` production.
+    let r1 = Region::Var(infer.new_region_var(&mut ctx));
+    let r2 = Region::Var(infer.new_region_var(&mut ctx));
     let ref1 = ctx.mk_ref(r1.clone(), i32_ty, Mutability::Not);
     let ref2 = ctx.mk_ref(r2.clone(), i32_ty, Mutability::Not);
     let subst1 = ctx.intern_substitution(vec![GenericArg::Ty(ref1)]);

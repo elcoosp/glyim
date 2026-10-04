@@ -43,7 +43,8 @@ pub use fulfill::{
 };
 pub use infer::*;
 pub use solver::{
-    SimpleTraitSolver, SolverIteratorNextInfo, SolverResult, TraitContext, TraitSolver,
+    BuiltinTrait, ImplDef, SimpleTraitSolver, SolverIteratorNextInfo, SolverResult, TraitContext,
+    TraitDef, TraitSolver,
 };
 
 #[cfg(test)]

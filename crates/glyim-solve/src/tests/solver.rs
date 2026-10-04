@@ -1,7 +1,7 @@
 use crate::{ImplDef, SimpleTraitSolver, SolverResult, TraitContext, TraitDef, TraitSolver};
 use glyim_core::Interner;
 use glyim_core::def_id::{ImplDefId, TraitDefId};
-use glyim_test::test_ty_ctx;
+use glyim_test::{test_ty_ctx, with_fresh_ty_ctx};
 use glyim_type::{ImplPolarity, Predicate, Substitution, TraitPredicate, TraitRef, TyCtxMut};
 
 fn empty_subst(ctx: &mut TyCtxMut) -> Substitution {
@@ -71,28 +71,30 @@ fn t08_builtin_traits_proven_structurally() {
 
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
 
-    let (ty_ctx, (i32_ty, i32_sub)) = test_ty_ctx(|c| {
-        let ty = c.mk_ty(TyKind::Int(IntTy::I32));
-        (ty, c.intern_substitution(vec![GenericArg::Ty(ty)]))
-    });
-    let (_, (arr_ty, arr_sub)) = test_ty_ctx(|c| {
-        let elem = c.mk_ty(TyKind::Int(IntTy::I32));
-        let len = Const {
-            kind: ConstKind::Uint(3),
-            ty: c.mk_ty(TyKind::Uint(UintTy::Usize)),
-        };
-        let ty = c.mk_ty(TyKind::Array(elem, len));
-        (ty, c.intern_substitution(vec![GenericArg::Ty(ty)]))
-    });
-    let (_, (str_ty, str_sub)) = test_ty_ctx(|c| {
-        let ty = c.mk_ty(TyKind::String);
-        (ty, c.intern_substitution(vec![GenericArg::Ty(ty)]))
-    });
-    let (_, (slice_ty, slice_sub)) = test_ty_ctx(|c| {
-        let elem = c.mk_ty(TyKind::Int(IntTy::I32));
-        let ty = c.mk_ty(TyKind::Slice(elem));
-        (ty, c.intern_substitution(vec![GenericArg::Ty(ty)]))
-    });
+    // Build every substitution in ONE shared context. `with_fresh_ty_ctx`
+    // creates a fresh arena per call, so substitutions minted in separate
+    // arenas index into different `substitution_data` stores; proving against
+    // a single frozen context then reads out of bounds.
+    let mut c = test_ty_ctx();
+    let i32_ty = c.mk_ty(TyKind::Int(IntTy::I32));
+    let i32_sub = c.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
+
+    let arr_elem = c.mk_ty(TyKind::Int(IntTy::I32));
+    let arr_len = Const {
+        kind: ConstKind::Uint(3),
+        ty: c.mk_ty(TyKind::Uint(UintTy::Usize)),
+    };
+    let arr_ty = c.mk_ty(TyKind::Array(arr_elem, arr_len));
+    let arr_sub = c.intern_substitution(vec![GenericArg::Ty(arr_ty)]);
+
+    let str_ty = c.mk_ty(TyKind::String);
+    let str_sub = c.intern_substitution(vec![GenericArg::Ty(str_ty)]);
+
+    let slice_elem = c.mk_ty(TyKind::Int(IntTy::I32));
+    let slice_ty = c.mk_ty(TyKind::Slice(slice_elem));
+    let slice_sub = c.intern_substitution(vec![GenericArg::Ty(slice_ty)]);
+
+    let ty_ctx = c.freeze();
 
     let prove = |solver: &mut SimpleTraitSolver, id: TraitDefId, sub: Substitution| -> SolverResult {
         let pred = TraitPredicate {
