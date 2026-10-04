@@ -981,7 +981,12 @@ impl<'a> MirBuilder<'a> {
                 );
                 let mut capture_operands = Vec::with_capacity(captures.len());
                 for capture in captures {
-                    let capture_local = LocalIdx::from_raw(capture.local.to_raw());
+                    // HIR-31: `capture.local` is a THIR `LocalVarId`, NOT a MIR
+                    // `LocalIdx`. Reinterpreting it via `from_raw` captured
+                    // `LocalIdx(0)` (the return place) for the common case where
+                    // the variable was bound early. Resolve through
+                    // `local_for_var` (which honours `local_var_map`) instead.
+                    let capture_local = self.local_for_var(capture.local);
                     let operand = match capture.kind {
                         thir::CaptureKind::ByValue => {
                             glyim_mir::Operand::Move(glyim_mir::Place::new(capture_local))

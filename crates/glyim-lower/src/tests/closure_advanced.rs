@@ -326,3 +326,80 @@ fn closure_with_multiple_captures() {
         closure_agg
     );
 }
+
+/// HIR-31 (operand-local): a `ByRef` capture must reference the *captured
+/// variable's* MIR local, not `LocalIdx::from_raw(capture.local)`.
+///
+/// `capture.local` is a THIR `LocalVarId`, which is not aligned with the MIR
+/// `LocalIdx` space. Before the fix the operand was
+/// `Copy(Place { local: LocalIdx(0), .. })` — the function's *return place* —
+/// so the closure captured the wrong storage entirely. Resolve through
+/// `local_for_var` (which honours `local_var_map`) instead.
+#[test]
+fn closure_by_ref_capture_operand_uses_real_local() {
+    let mut ctx_mut = test_ty_ctx();
+    let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
+    let ref_i32_ty = ctx_mut.mk_ref(Region::Erased, i32_ty, Mutability::Not);
+
+    let closure_id = ClosureId::from_raw(9);
+    let closure_substs = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
+    let closure_ty = ctx_mut.mk_ty(TyKind::Closure(closure_id, closure_substs));
+
+    let interner = ctx_mut.resolver().clone();
+    let ctx = ctx_mut.freeze();
+    let mock = TestLowerCtx::new(&ctx);
+
+    let mut b = ThirBuilder::new(closure_ty, interner.clone());
+    let mut stmts = Vec::new();
+    b.add_let_binding(
+        "x",
+        i32_ty,
+        Some(b.expr(ExprKind::Literal(thir::Literal::Int(42, None)), i32_ty)),
+        &mut stmts,
+    );
+    let x_name = interner.intern("x");
+    let x_var_id = *b.var_names.get(&x_name).expect("x should be in var_names");
+
+    let closure_body = thir::Body {
+        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        params: vec![],
+        return_ty: i32_ty,
+        stmts: vec![],
+        span: glyim_span::Span::DUMMY,
+    };
+    let closure_expr = b.expr(
+        ExprKind::Closure {
+            body: Box::new(closure_body),
+            captures: vec![thir::Capture {
+                local: x_var_id,
+                kind: CaptureKind::ByRef(Mutability::Not),
+                ty: ref_i32_ty,
+            }],
+            is_move: false,
+        },
+        closure_ty,
+    );
+    stmts.push(thir::Stmt::Expr { expr: closure_expr });
+    let body = b.into_body(stmts, vec![]);
+    let result = lower_body(&mock, &body);
+
+    let capture_local = result.body.basic_blocks.iter().find_map(|bb| {
+        bb.statements.iter().find_map(|stmt| {
+            if let StatementKind::Assign(
+                _,
+                Rvalue::Aggregate(AggregateKind::Closure(_, _), ref ops),
+            ) = stmt.kind
+                && let Some(glyim_mir::Operand::Copy(place)) = ops.first()
+            {
+                return Some(place.local);
+            }
+            None
+        })
+    });
+    let local = capture_local.expect("closure aggregate with one Copy operand");
+    assert_ne!(
+        local,
+        glyim_mir::LocalIdx::from_raw(0),
+        "ByRef capture must not reference the return place (LocalIdx(0))"
+    );
+}
