@@ -232,12 +232,22 @@ impl InferenceTable {
                 // `b`, binding to `b` would alias the var to itself and
                 // produce an infinite type that `resolve_ty_shallow` later
                 // collapses to `Error`. Bind to the peer side instead.
-                let other_ty = if a_is_int { b } else { a };
+                // SOLVE-1: resolve the peer *before* binding so a swap of two
+                // still-unresolved int vars (`(a, b)` vs `(b, a)`) does not
+                // install a cycle (`Ia := Ib`, `Ib := Ia`). Without this every
+                // later resolve/unify recurses forever on the cycle.
+                let raw_other = if a_is_int { b } else { a };
+                let other_ty = self.resolve_ty_shallow_preserve_int(ctx, raw_other);
                 // For the general-Ty case, `int_var_ty` is the Int var's own
                 // Ty: the general var should resolve *through* the Int var,
                 // not directly to the (possibly still-unresolved) concrete
                 // side, so the Int var's eventual value wins.
                 let int_var_ty = if a_is_int { a } else { b };
+                // Already the same var (or already bound to it) — nothing to do.
+                if other_ty == int_var_ty {
+                    return Ok(Vec::new());
+                }
+                let other = ctx.ty_kind(other_ty).clone();
                 match &other {
                     TyKind::Int(_)
                     | TyKind::Uint(_)
@@ -261,9 +271,15 @@ impl InferenceTable {
             }
             (TyKind::Infer(InferVar::Float(var)), other)
             | (other, TyKind::Infer(InferVar::Float(var))) => {
-                // See the Int arm above for the self-binding rationale.
-                let other_ty = if a_is_float { b } else { a };
+                // See the Int arm above for the self-binding + resolve-first
+                // rationale (SOLVE-1).
+                let raw_other = if a_is_float { b } else { a };
+                let other_ty = self.resolve_ty_shallow_preserve_int(ctx, raw_other);
                 let float_var_ty = if a_is_float { a } else { b };
+                if other_ty == float_var_ty {
+                    return Ok(Vec::new());
+                }
+                let other = ctx.ty_kind(other_ty).clone();
                 match &other {
                     TyKind::Float(_) | TyKind::Infer(InferVar::Float(_)) | TyKind::Error => {
                         self.float_vars[var].value = Some(other_ty);
@@ -1089,24 +1105,47 @@ impl InferenceTable {
     /// spuriously fail. Final reporting uses `resolve_ty_shallow` (which keeps
     /// the `i32` fallback).
     pub fn resolve_ty_shallow_preserve_int(&self, ctx: &dyn TypeLookup, ty: Ty) -> Ty {
+        // SOLVE-3: this is the first thing every `unify()` runs, so a var cycle
+        // (`Ia := Ib`, `Ib := Ia`) would otherwise recurse without bound and
+        // abort the process. Guard with both a depth limit and a visited set;
+        // on either, degrade to `Ty::ERROR` (which `unify_tys` treats as a
+        // no-op) instead of spinning.
+        let mut seen = std::collections::HashSet::new();
+        self.resolve_preserve_int_inner(ctx, ty, &mut seen, 0)
+    }
+
+    fn resolve_preserve_int_inner(
+        &self,
+        ctx: &dyn TypeLookup,
+        ty: Ty,
+        seen: &mut std::collections::HashSet<Ty>,
+        depth: u32,
+    ) -> Ty {
+        if depth > MAX_RESOLVE_DEPTH {
+            return Ty::ERROR;
+        }
+        if !seen.insert(ty) {
+            // Cycle: the var chain loops back on itself.
+            return Ty::ERROR;
+        }
         match ctx.ty_kind(ty) {
             TyKind::Infer(InferVar::Int(var)) => {
                 if let Some(value) = self.int_vars.get(*var).and_then(|v| v.value) {
-                    self.resolve_ty_shallow_preserve_int(ctx, value)
+                    self.resolve_preserve_int_inner(ctx, value, seen, depth + 1)
                 } else {
                     ty
                 }
             }
             TyKind::Infer(InferVar::Ty(var)) => {
                 if let Some(value) = self.ty_vars.get(*var).and_then(|v| v.value) {
-                    self.resolve_ty_shallow_preserve_int(ctx, value)
+                    self.resolve_preserve_int_inner(ctx, value, seen, depth + 1)
                 } else {
                     ty
                 }
             }
             TyKind::Infer(InferVar::Float(var)) => {
                 if let Some(value) = self.float_vars.get(*var).and_then(|v| v.value) {
-                    self.resolve_ty_shallow_preserve_int(ctx, value)
+                    self.resolve_preserve_int_inner(ctx, value, seen, depth + 1)
                 } else {
                     ty
                 }
@@ -1364,4 +1403,96 @@ fn test_occurs_check_prevents_infinite_type() {
         result.is_err(),
         "Unifying ?T with List<?T> should fail occurs check"
     );
+}
+/// SOLVE-1 regression: unifying a tuple of two fresh int vars with the *swapped*
+/// tuple (the `(a, b)` vs `(b, a)` if/else merge) must not install a binding
+/// cycle. The tuple arm calls `unify_tys` on each element *raw*, so without
+/// resolving the peer before binding we get `Ia := Ib` and `Ib := Ia`; every
+/// later resolve then recurses without bound.
+#[test]
+fn test_unify_swapped_int_var_tuples_no_cycle() {
+    use glyim_core::interner::Interner;
+    use glyim_type::{GenericArg, InferVar, TyCtxMut, TyKind};
+
+    let mut ctx = TyCtxMut::new(Interner::new());
+    let mut infer = InferenceTable::new();
+
+    let ia = infer.new_int_var(&mut ctx);
+    let ib = infer.new_int_var(&mut ctx);
+    let ia_ty = ctx.mk_ty(TyKind::Infer(InferVar::Int(ia)));
+    let ib_ty = ctx.mk_ty(TyKind::Infer(InferVar::Int(ib)));
+
+    let sub_ab = ctx.intern_substitution(vec![GenericArg::Ty(ia_ty), GenericArg::Ty(ib_ty)]);
+    let sub_ba = ctx.intern_substitution(vec![GenericArg::Ty(ib_ty), GenericArg::Ty(ia_ty)]);
+    let t_ab = ctx.mk_ty(TyKind::Tuple(sub_ab));
+    let t_ba = ctx.mk_ty(TyKind::Tuple(sub_ba));
+
+    infer
+        .unify(&mut ctx, t_ab, t_ba, glyim_span::Span::DUMMY)
+        .expect("unify((Ia, Ib), (Ib, Ia))");
+
+    // Must terminate (pre-fix: unbounded recursion in resolve).
+    let frozen = ctx.freeze();
+    let resolved = infer.resolve_ty_shallow_preserve_int(&frozen, ia_ty);
+    assert_ne!(
+        resolved,
+        Ty::ERROR,
+        "int-var cycle collapsed to Error; got {resolved:?}"
+    );
+}
+
+/// SOLVE-1: after the swapped-tuple merge, constraining either element to a
+/// concrete int must still succeed.
+#[test]
+fn test_unify_swapped_int_var_tuples_then_concrete() {
+    use glyim_core::interner::Interner;
+    use glyim_core::primitives::IntTy;
+    use glyim_type::{GenericArg, InferVar, TyCtxMut, TyKind};
+
+    let mut ctx = TyCtxMut::new(Interner::new());
+    let mut infer = InferenceTable::new();
+
+    let ia = infer.new_int_var(&mut ctx);
+    let ib = infer.new_int_var(&mut ctx);
+    let ia_ty = ctx.mk_ty(TyKind::Infer(InferVar::Int(ia)));
+    let ib_ty = ctx.mk_ty(TyKind::Infer(InferVar::Int(ib)));
+
+    let sub_ab = ctx.intern_substitution(vec![GenericArg::Ty(ia_ty), GenericArg::Ty(ib_ty)]);
+    let sub_ba = ctx.intern_substitution(vec![GenericArg::Ty(ib_ty), GenericArg::Ty(ia_ty)]);
+    let t_ab = ctx.mk_ty(TyKind::Tuple(sub_ab));
+    let t_ba = ctx.mk_ty(TyKind::Tuple(sub_ba));
+
+    infer
+        .unify(&mut ctx, t_ab, t_ba, glyim_span::Span::DUMMY)
+        .unwrap();
+
+    let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
+    infer
+        .unify(&mut ctx, ia_ty, i32_ty, glyim_span::Span::DUMMY)
+        .expect("Ia must unify with i32 after the swapped-tuple merge");
+}
+
+/// SOLVE-3 regression: a deliberately-constructed var cycle must resolve to
+/// `Ty::ERROR` (terminate) instead of recursing without bound.
+#[test]
+fn test_resolve_preserve_int_cycle_terminates() {
+    use glyim_core::interner::Interner;
+    use glyim_type::{InferVar, TyCtxMut, TyKind};
+
+    let mut ctx = TyCtxMut::new(Interner::new());
+    let mut infer = InferenceTable::new();
+
+    let a = infer.new_ty_var(&mut ctx);
+    let b = infer.new_ty_var(&mut ctx);
+    let a_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(a)));
+    let b_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(b)));
+
+    // Force the cycle directly through the test-only setters.
+    infer.set_ty_var_value(a, b_ty);
+    infer.set_ty_var_value(b, a_ty);
+
+    let frozen = ctx.freeze();
+    // Must return (pre-fix: stack overflow / hang).
+    let _ = infer.resolve_ty_shallow_preserve_int(&frozen, a_ty);
+    let _ = infer.resolve_ty_shallow_preserve_int(&frozen, b_ty);
 }
