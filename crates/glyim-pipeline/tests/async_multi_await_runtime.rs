@@ -410,3 +410,65 @@ fn main() -> i32 {
         "block_on(countdown(3)) must execute the loop-await state machine and return 0+1+2 = 3"
     );
 }
+
+#[test]
+fn hir11_statements_between_awaits_execute_runtime() {
+    // HIR-11: a statement *between* two awaits must run on the first poll's
+    // Ready path, and a statement *after* the last await must run before the
+    // tail. Pre-fix both were dropped (`unresolved name mid` / `out`).
+    let src = r#"
+enum Poll<T> { Ready(T), Pending }
+trait Future {
+    type Output;
+    fn poll(&mut self) -> Poll<Self::Output>;
+}
+fn block_on<F: Future>(mut f: F) -> F::Output {
+    loop {
+        match f.poll() {
+            Poll::Ready(v) => return v,
+            Poll::Pending => { }
+        }
+    }
+}
+async fn dep(x: i32) -> i32 { x }
+async fn two_step(a: i32, b: i32) -> i32 {
+    let x = dep(a).await;
+    let mid = x + 100;
+    let y = dep(mid).await;
+    let out = y + b;
+    out
+}
+fn main() -> i32 {
+    let f = two_step(1, 2);
+    block_on(f)
+}
+"#;
+    // Compile (pre-fix: `unresolved name mid` / `out`).
+    let bodies = compile_async(src).expect("two_step with between-await stmts must compile");
+    let poll = find_poll_body(&bodies).expect("generated poll body must exist");
+    assert_is_state_machine(poll, "two_step poll");
+
+    // Execute: dep(1) -> x=1, mid=101, dep(101) -> y=101, out=103.
+    let comp = compile_async_full(src).expect("full compile for runtime");
+    let main_def_id = resolve_main_def_id(&comp).expect("main DefId resolvable");
+    let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
+    let mono_bodies = comp.monomorphize(main_fn_def_id);
+    let main_body = mono_bodies
+        .iter()
+        .find(|(id, _)| *id == main_def_id)
+        .map(|(_, b)| (**b).clone())
+        .expect("monomorphized main body present");
+    let mut interp = Interpreter::new(comp.ty_ctx.as_ref());
+    for (id, b) in &mono_bodies {
+        interp.add_function(*id, (**b).clone());
+    }
+    interp
+        .run_body(&main_body)
+        .expect("main must run to completion");
+    let ret = interp.get_return_value().expect("main must return a value");
+    assert_eq!(
+        ret,
+        InterpValue::Int(103),
+        "between/after-await statements must execute: dep(1)+100 -> dep(101)+2 = 103"
+    );
+}

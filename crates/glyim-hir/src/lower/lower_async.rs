@@ -1467,6 +1467,19 @@ fn desugar_multi_async_fn(
         let continue_expr = poll_body.alloc_expr(Expr::Continue, Span::DUMMY);
         let ready_arm_body = {
             let mut s = Vec::new();
+            // HIR-11(a): statements between await 0 and await 1 must run on the
+            // Ready path *before* the next future is built. Previously they were
+            // dropped entirely, so a `let mid = x + 1;` between the first and
+            // second await left `mid` unbound in the tail (`unresolved name`).
+            for &st in &pre_segments[1] {
+                s.push(copy_expr_renamed(
+                    &work_body,
+                    &mut poll_body,
+                    st,
+                    &rename,
+                    interner,
+                ));
+            }
             s.push(fut1_let);
             s.push(assign_s1);
             s.push(continue_expr);
@@ -1675,6 +1688,18 @@ fn desugar_multi_async_fn(
             } else {
                 // Last await (k == n-1): Ready => compute tail, store Done, return
                 let mut stmts: Vec<ExprId> = Vec::new();
+                // HIR-11(b): statements between the last await and the tail
+                // (`pre_segments[n]`). They were never emitted anywhere, so
+                // `let d = k(c); d` after the final await lost `d`.
+                for &st in &pre_segments[n] {
+                    stmts.push(copy_expr_renamed(
+                        &work_body,
+                        &mut poll_body,
+                        st,
+                        &rename_k,
+                        interner,
+                    ));
+                }
                 let tail = if let Some(t) = tail_expr {
                     copy_expr_renamed(&work_body, &mut poll_body, t, &rename_k, interner)
                 } else {
