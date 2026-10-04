@@ -2,11 +2,11 @@
 
 ## TL;DR
 
-HEAD: `1016db75`. Suite: **4238/4238 pass** (2 skipped), clean tree.
+HEAD: `a41ed261`. Suite: **4263/4263 pass** (2 skipped), clean tree.
 
-Five commits landed. HIR-2 (Critical), a related non-audit Critical (macro
-expansion token fusion), SOLVE-1+SOLVE-3 (Critical), and the operand-local
-half of HIR-31 (Critical).
+Seven commits landed. HIR-2 (Critical), a related non-audit Critical (macro
+expansion token fusion), SOLVE-1+SOLVE-3 (Critical), the operand-local half of
+HIR-31 (Critical), HIR-11 (Critical), and FE-20 (Medium).
 
 ## Commits landed this session
 
@@ -17,6 +17,8 @@ From `30f9820b` (session-9 wrap-up) forward:
 3. `804f6ef2` docs(handoff): session-10
 4. `59a62211` fix(solve): SOLVE-1 + SOLVE-3 -- int-var binding cycles
 5. `1016db75` fix(lower): HIR-31 (partial) -- closure capture operand wrong local
+6. `bf0ac1a9` fix(hir): HIR-11 -- multi-await state machine dropped between-await statements
+7. `a41ed261` fix(syntax): FE-20 -- is_keyword/is_node missed variants declared after ranges
 
 ## HIR-2 (Critical) -- FIXED
 
@@ -67,15 +69,46 @@ observe `c == 2`. Needs the coordinated change:
 3. use sites: auto-deref when the closure body reads/writes the capture (the
    Field-on-ref machinery near `lower_expr_to_place` already exists).
 
-## Recommended next steps (unchanged priority order)
+## HIR-11 (Critical) -- FIXED
 
-1. **HIR-11** -- multi-await async desugar (`lower_async.rs`). 2-await async fn
-   reports `unresolved name d`; 1-await hits "ambiguous method `poll`".
-2. **HIR-31 remainder** -- the by-ref aliasing change above.
-3. **FE-20** -- `SyntaxKind::is_keyword`/`is_node` numeric ranges exclude
-   `KwAsync`/`KwAwait`/`Lifetime` and post-`Error` node kinds; replace with
-   explicit `matches!` lists.
-4. Remaining High/Medium findings across the audit.
+`desugar_multi_async_fn` split the body into `pre_segments[0..=n]` + a tail but
+only emitted a subset:
+
+(a) The Start arm Ready path skipped `pre_segments[1]` -- statements between
+    await 0 and await 1 were dropped when the first future was Ready on the
+    first poll (the common case).
+(b) The last-await (`S_{n-1}`) Ready path never emitted `pre_segments[n]` --
+    statements between the final await and the tail were never emitted anywhere.
+
+Both produced `unresolved name` on
+`let x = dep(a).await; let mid = x + 100; let y = dep(mid).await; ...`.
+Fix emits `pre_segments[1]` (with `arm_rename(0)`) in the Start Ready body and
+`pre_segments[n]` (with `arm_rename(n-1)`) in the last-await Ready body.
+Regression test `hir11_statements_between_awaits_execute_runtime` (pipeline)
+compiles + interprets the two-await program to 103; pre-fix it fails with
+`unresolved name mid` / `unresolved name out`.
+
+## FE-20 (Medium) -- FIXED
+
+`is_keyword` used the range `KwFn ..= KwMacroRules` (excluding `KwMacro`,
+`KwAsync`, `KwAwait`, `Lifetime`); `is_node` used `SourceFile ..< Error`
+(excluding `Visibility`/`Vis*`, `WherePredicate`, `Bound`, `MetaVar`,
+`MetaVarCrate`). Replaced with explicit `matches!` lists.
+
+Root cause of the long-hidden status: `glyim-syntax`'s test module was **never
+wired up** (`lib.rs` had no `mod tests;`), so `kind_tests.rs` -- with its own
+incomplete copies of the same lists -- had never compiled or run. Now wired;
+24 syntax tests run (previously 0). Both kind tests fail on the pre-fix ranges.
+
+## Recommended next steps (priority order)
+
+1. **HIR-31 remainder** -- by-ref capture aliasing (typeck `&T` field type +
+   lower `Rvalue::Ref` + use-site auto-deref). Now the top open Critical.
+2. **Audit follow-ups from this session's findings:** the `glyim-solve`
+   `tests/unification.rs` (199 tests) is dead/rotted (not in `tests/mod.rs`,
+   would not compile) -- either revive or delete. Same latent risk as the
+   `glyim-syntax` dead test module fixed here.
+3. Remaining High/Medium findings across the audit.
 
 ## Constraints (still in force)
 
@@ -111,4 +144,5 @@ observe `c == 2`. Needs the coordinated change:
 | Int/Float unify + resolve guard | `crates/glyim-solve/src/infer.rs` |
 | Closure capture operand | `crates/glyim-lower/src/lower_rvalue.rs` (Closure arm) |
 | Closure body build | `crates/glyim-lower/src/builder.rs::lower_closure` |
-| Async desugar | `crates/glyim-hir/src/lower/lower_async.rs` |
+| Async multi-await desugar | `crates/glyim-hir/src/lower/lower_async.rs::desugar_multi_async_fn` |
+| SyntaxKind predicates | `crates/glyim-syntax/src/lib.rs::is_keyword` / `is_node` |
