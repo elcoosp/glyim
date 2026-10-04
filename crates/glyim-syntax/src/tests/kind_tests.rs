@@ -73,7 +73,13 @@ fn is_keyword_works() {
         SyntaxKind::KwConst,
         SyntaxKind::KwStatic,
         SyntaxKind::KwMove,
+        SyntaxKind::KwMacro,
         SyntaxKind::KwMacroRules,
+        // FE-20: these are declared after `KwMacroRules`; the old numeric range
+        // excluded them.
+        SyntaxKind::KwAsync,
+        SyntaxKind::KwAwait,
+        SyntaxKind::Lifetime,
     ];
     for kw in keyword_variants {
         assert!(kw.is_keyword(), "{:?} should be a keyword", kw);
@@ -174,6 +180,17 @@ fn is_node_works() {
         SyntaxKind::EnumVariant,
         SyntaxKind::FieldList,
         SyntaxKind::VariantList,
+        // FE-20: these are declared after `Error`; the old numeric range
+        // excluded them.
+        SyntaxKind::Visibility,
+        SyntaxKind::VisCrate,
+        SyntaxKind::VisSuper,
+        SyntaxKind::VisSelf,
+        SyntaxKind::VisPath,
+        SyntaxKind::WherePredicate,
+        SyntaxKind::Bound,
+        SyntaxKind::MetaVar,
+        SyntaxKind::MetaVarCrate,
     ];
     for node in node_variants {
         assert!(node.is_node(), "{:?} should be a node", node);

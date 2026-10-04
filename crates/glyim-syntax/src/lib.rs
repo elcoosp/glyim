@@ -429,15 +429,159 @@ impl SyntaxKind {
     }
 
     /// Returns true for keyword tokens.
+    ///
+    /// FE-20: this used to be a numeric range `KwFn ..= KwMacroRules`. That
+    /// silently excluded every keyword declared *after* `KwMacroRules`
+    /// (`KwAsync`, `KwAwait`) and `Lifetime`, which sits after them. An
+    /// explicit list cannot drift with the enum's declaration order.
     pub fn is_keyword(&self) -> bool {
-        let raw = *self as u16;
-        raw >= SyntaxKind::KwFn as u16 && raw <= SyntaxKind::KwMacroRules as u16
+        matches!(
+            self,
+            SyntaxKind::KwFn
+                | SyntaxKind::KwLet
+                | SyntaxKind::KwStruct
+                | SyntaxKind::KwEnum
+                | SyntaxKind::KwIf
+                | SyntaxKind::KwElse
+                | SyntaxKind::KwReturn
+                | SyntaxKind::KwMatch
+                | SyntaxKind::KwMod
+                | SyntaxKind::KwComptime
+                | SyntaxKind::KwSelf
+                | SyntaxKind::KwSuper
+                | SyntaxKind::KwCrate
+                | SyntaxKind::KwTrue
+                | SyntaxKind::KwFalse
+                | SyntaxKind::KwMut
+                | SyntaxKind::KwRef
+                | SyntaxKind::KwAs
+                | SyntaxKind::KwWhile
+                | SyntaxKind::KwFor
+                | SyntaxKind::KwLoop
+                | SyntaxKind::KwIn
+                | SyntaxKind::KwBreak
+                | SyntaxKind::KwContinue
+                | SyntaxKind::KwTrait
+                | SyntaxKind::KwImpl
+                | SyntaxKind::KwWhere
+                | SyntaxKind::KwDyn
+                | SyntaxKind::KwType
+                | SyntaxKind::KwPub
+                | SyntaxKind::KwPriv
+                | SyntaxKind::KwExtern
+                | SyntaxKind::KwUnsafe
+                | SyntaxKind::KwUse
+                | SyntaxKind::KwConst
+                | SyntaxKind::KwStatic
+                | SyntaxKind::KwMove
+                | SyntaxKind::KwMacro
+                | SyntaxKind::KwMacroRules
+                | SyntaxKind::KwAsync
+                | SyntaxKind::KwAwait
+                | SyntaxKind::Lifetime
+        )
     }
 
     /// Returns true for node kinds (non-terminal syntax constructs).
+    ///
+    /// FE-20: this used to be a numeric range `SourceFile ..< Error`. That
+    /// silently excluded every node kind declared *after* `Error`
+    /// (`Visibility`/`VisCrate`/`VisSuper`/`VisSelf`/`VisPath`,
+    /// `WherePredicate`, `Bound`, `MetaVar`, `MetaVarCrate`). An explicit list
+    /// cannot drift with the enum's declaration order.
     pub fn is_node(&self) -> bool {
-        let raw = *self as u16;
-        raw >= SyntaxKind::SourceFile as u16 && raw < SyntaxKind::Error as u16
+        matches!(
+            self,
+            SyntaxKind::SourceFile
+                | SyntaxKind::Module
+                | SyntaxKind::FnDef
+                | SyntaxKind::StructDef
+                | SyntaxKind::EnumDef
+                | SyntaxKind::TraitDef
+                | SyntaxKind::ImplDef
+                | SyntaxKind::TypeAlias
+                | SyntaxKind::ConstDef
+                | SyntaxKind::StaticDef
+                | SyntaxKind::UseDecl
+                | SyntaxKind::ExternBlock
+                | SyntaxKind::ParamList
+                | SyntaxKind::Param
+                | SyntaxKind::TypeParamList
+                | SyntaxKind::TypeParam
+                | SyntaxKind::WhereClause
+                | SyntaxKind::Block
+                | SyntaxKind::LetStmt
+                | SyntaxKind::ExprStmt
+                | SyntaxKind::IfExpr
+                | SyntaxKind::WhileExpr
+                | SyntaxKind::LoopExpr
+                | SyntaxKind::ForExpr
+                | SyntaxKind::MatchExpr
+                | SyntaxKind::MatchArmList
+                | SyntaxKind::MatchArm
+                | SyntaxKind::CallExpr
+                | SyntaxKind::MethodCallExpr
+                | SyntaxKind::FieldExpr
+                | SyntaxKind::IndexExpr
+                | SyntaxKind::UnaryExpr
+                | SyntaxKind::BinaryExpr
+                | SyntaxKind::CastExpr
+                | SyntaxKind::RefExpr
+                | SyntaxKind::ClosureExpr
+                | SyntaxKind::PathExpr
+                | SyntaxKind::TryExpr
+                | SyntaxKind::AwaitExpr
+                | SyntaxKind::ImplTraitType
+                | SyntaxKind::LitExpr
+                | SyntaxKind::ArrayExpr
+                | SyntaxKind::TupleExpr
+                | SyntaxKind::StructExpr
+                | SyntaxKind::RangeExpr
+                | SyntaxKind::BreakExpr
+                | SyntaxKind::ContinueExpr
+                | SyntaxKind::ReturnExpr
+                | SyntaxKind::AssignExpr
+                | SyntaxKind::RawPtrType
+                | SyntaxKind::PathType
+                | SyntaxKind::FnType
+                | SyntaxKind::DynType
+                | SyntaxKind::RefType
+                | SyntaxKind::SliceType
+                | SyntaxKind::ArrayType
+                | SyntaxKind::TupleType
+                | SyntaxKind::NeverType
+                | SyntaxKind::InferType
+                | SyntaxKind::GenericArgList
+                | SyntaxKind::PatIdent
+                | SyntaxKind::PatStruct
+                | SyntaxKind::PatTuple
+                | SyntaxKind::PatRef
+                | SyntaxKind::PatOr
+                | SyntaxKind::PatLit
+                | SyntaxKind::PatRange
+                | SyntaxKind::PatWild
+                | SyntaxKind::PatSlice
+                | SyntaxKind::UsePath
+                | SyntaxKind::UseTree
+                | SyntaxKind::MacroCall
+                | SyntaxKind::TokenTree
+                | SyntaxKind::MacroDef
+                | SyntaxKind::MacroArm
+                | SyntaxKind::MacroPattern
+                | SyntaxKind::StructField
+                | SyntaxKind::EnumVariant
+                | SyntaxKind::FieldList
+                | SyntaxKind::VariantList
+                | SyntaxKind::Visibility
+                | SyntaxKind::VisCrate
+                | SyntaxKind::VisSuper
+                | SyntaxKind::VisSelf
+                | SyntaxKind::VisPath
+                | SyntaxKind::WherePredicate
+                | SyntaxKind::Bound
+                | SyntaxKind::MetaVar
+                | SyntaxKind::MetaVarCrate
+        )
     }
 
     /// Convert from raw u16 using the TryFromPrimitive derive.
@@ -588,3 +732,6 @@ ast_node!(EnumVariant, SyntaxKind::EnumVariant);
 ast_node!(FieldList, SyntaxKind::FieldList);
 ast_node!(VariantList, SyntaxKind::VariantList);
 pub use rowan::GreenToken;
+
+#[cfg(test)]
+mod tests;
