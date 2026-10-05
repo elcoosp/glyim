@@ -510,12 +510,8 @@ impl<'a> Parser<'a> {
                 self.finish_node(); // Param
                 return;
             }
-            // `&'a T` / `&mut T` named parameter: wrap the pointee in a
-            // RefType so the parameter type survives to typeck.
-            self.start_node(SyntaxKind::RefType);
-            self.parse_type();
-            self.finish_node(); // RefType
-            self.finish_node(); // Param
+            // FE-15: a non-receiver `&` begins a reference *pattern*
+            // (`&x: &i32`), not a type prefix. Parse ident, `:`, then type.
             self.bump_expected(SyntaxKind::Ident);
             self.expect(SyntaxKind::Colon);
             self.parse_type();

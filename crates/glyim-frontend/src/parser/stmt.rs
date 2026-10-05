@@ -31,7 +31,9 @@ impl<'a> Parser<'a> {
             | SyntaxKind::KwReturn
             | SyntaxKind::KwBreak
             | SyntaxKind::KwContinue
-            | SyntaxKind::KwMove => {
+            | SyntaxKind::KwMove
+            // FE-10: a labeled loop/block statement (`'a: while …`).
+            | SyntaxKind::Lifetime => {
                 self.start_node(SyntaxKind::ExprStmt);
                 self.parse_expr();
                 if self.current_kind() == SyntaxKind::Semicolon {

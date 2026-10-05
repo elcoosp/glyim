@@ -380,3 +380,25 @@ fn test_unterminated_block_comment_diagnosed() {
         "unterminated block comment must be diagnosed"
     );
 }
+
+// ─── FE-7/10/15 batch ───
+#[test]
+fn test_bool_literal_fragment_macro() {
+    let r = parse_to_syntax(
+        "macro_rules! m { ($x:literal) => { 1 } }\nfn f() { let _ = m!(true); }",
+        file_id(),
+    );
+    assert!(r.diagnostics.is_empty(), "got: {:?}", r.diagnostics);
+}
+
+#[test]
+fn test_labeled_break_continue() {
+    let r = parse_to_syntax("fn f() { 'a: while true { break 'a; } }", file_id());
+    assert!(r.diagnostics.is_empty(), "got: {:?}", r.diagnostics);
+}
+
+#[test]
+fn test_ref_pattern_param() {
+    let r = parse_to_syntax("fn f(&x: &i32) -> i32 { *x }", file_id());
+    assert!(r.diagnostics.is_empty(), "got: {:?}", r.diagnostics);
+}

@@ -425,6 +425,9 @@ impl SyntaxKind {
                 | SyntaxKind::CharLit
                 | SyntaxKind::BoolLit
                 | SyntaxKind::ByteLit
+                // FE-7: `true`/`false` lex as keywords.
+                | SyntaxKind::KwTrue
+                | SyntaxKind::KwFalse
         )
     }
 

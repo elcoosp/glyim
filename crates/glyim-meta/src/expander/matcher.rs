@@ -209,7 +209,9 @@ fn matches_fragment_spec(tree: &TokenTree, spec: &FragmentSpec) -> bool {
                     | SyntaxKind::FloatLit
                     | SyntaxKind::StringLit
                     | SyntaxKind::BoolLit
-                    | SyntaxKind::CharLit,
+                    | SyntaxKind::CharLit
+                    | SyntaxKind::KwTrue
+                    | SyntaxKind::KwFalse,
                 _
             )
         ),

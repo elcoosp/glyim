@@ -736,6 +736,10 @@ impl<'a> Parser<'a> {
             SyntaxKind::KwBreak => {
                 self.start_node(SyntaxKind::BreakExpr);
                 self.bump(); // break
+                // FE-10: consume an optional label (`break 'a value;`).
+                if self.current_kind() == SyntaxKind::Lifetime {
+                    self.bump();
+                }
                 if !matches!(
                     self.current_kind(),
                     SyntaxKind::Semicolon
@@ -753,6 +757,10 @@ impl<'a> Parser<'a> {
             SyntaxKind::KwContinue => {
                 self.start_node(SyntaxKind::ContinueExpr);
                 self.bump(); // continue
+                // FE-10: consume an optional label (`continue 'a;`).
+                if self.current_kind() == SyntaxKind::Lifetime {
+                    self.bump();
+                }
                 self.finish_node(); // ContinueExpr
             }
             SyntaxKind::LBracket => {

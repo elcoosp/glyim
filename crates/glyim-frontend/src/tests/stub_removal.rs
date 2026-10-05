@@ -75,13 +75,14 @@ fn function_pointer_type_parses_cleanly() {
 
 #[test]
 fn labeled_loop_parses_with_expected_errors() {
-    // Labels are not yet lexed correctly; errors are expected.
+    // FE-10: labels now lex and parse correctly -- no errors.
     let file_id = FileId::from_raw(0);
     let result = parse_to_syntax("fn main() { 'outer: loop { break; } }", file_id);
     let errors: Vec<_> = result.diagnostics.iter().filter(|d| d.is_error()).collect();
     assert!(
-        !errors.is_empty(),
-        "Expected parse errors for unsupported label syntax"
+        errors.is_empty(),
+        "labeled loop must parse cleanly, got: {:?}",
+        errors
     );
 }
 
@@ -89,21 +90,36 @@ fn labeled_loop_parses_with_expected_errors() {
 fn labeled_while_parses_with_expected_errors() {
     let file_id = FileId::from_raw(0);
     let result = parse_to_syntax("fn main() { 'lbl: while true { break; } }", file_id);
-    assert!(result.diagnostics.iter().filter(|d| d.is_error()).count() > 0);
+    assert_eq!(
+        result.diagnostics.iter().filter(|d| d.is_error()).count(),
+        0,
+        "labeled while must parse cleanly: {:?}",
+        result.diagnostics
+    );
 }
 
 #[test]
 fn labeled_for_parses_with_expected_errors() {
     let file_id = FileId::from_raw(0);
-    let result = parse_to_syntax("fn main() { 'lbl: for _ in 0..1 { break; } }", file_id);
-    assert!(result.diagnostics.iter().filter(|d| d.is_error()).count() > 0);
+    let result = parse_to_syntax("fn main() { 'lbl: for i in 0..3 { break; } }", file_id);
+    assert_eq!(
+        result.diagnostics.iter().filter(|d| d.is_error()).count(),
+        0,
+        "labeled for must parse cleanly: {:?}",
+        result.diagnostics
+    );
 }
 
 #[test]
 fn labeled_block_parses_with_expected_errors() {
     let file_id = FileId::from_raw(0);
     let result = parse_to_syntax("fn main() { 'lbl: { break 'lbl; } }", file_id);
-    assert!(result.diagnostics.iter().filter(|d| d.is_error()).count() > 0);
+    assert_eq!(
+        result.diagnostics.iter().filter(|d| d.is_error()).count(),
+        0,
+        "labeled block must parse cleanly: {:?}",
+        result.diagnostics
+    );
 }
 
 use glyim_syntax::SyntaxKind;

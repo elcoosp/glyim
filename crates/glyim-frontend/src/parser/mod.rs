@@ -596,6 +596,8 @@ fn is_meta_literal(kind: SyntaxKind) -> bool {
             | SyntaxKind::FloatLit
             | SyntaxKind::CharLit
             | SyntaxKind::BoolLit
+            | SyntaxKind::KwTrue
+            | SyntaxKind::KwFalse
     )
 }
 

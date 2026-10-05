@@ -100,7 +100,9 @@ fn is_literal_works() {
     for lit in literal_variants {
         assert!(lit.is_literal(), "{:?} should be a literal", lit);
     }
-    assert!(!SyntaxKind::KwTrue.is_literal());
+    // FE-7: `true`/`false` lex as keywords and ARE literals.
+    assert!(SyntaxKind::KwTrue.is_literal());
+    assert!(SyntaxKind::KwFalse.is_literal());
 }
 
 #[test]
