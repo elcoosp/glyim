@@ -174,10 +174,15 @@ pub(crate) fn lower_block_to_expr(
                 // than tripping the `unrecognized child kind` unreachable.
                 continue;
             }
-            _ => unreachable!(
-                "parser produced a Block with unrecognized child kind: {:?}",
-                child.kind()
-            ),
+            other => {
+                // HIR-16: parser error-recovery can leave an unrecognized
+                // (often `Error`) node in a block. Emit a diagnostic and skip
+                // it rather than ICE-ing the whole compilation.
+                diags.push(GlyimDiagnostic::internal_error(format!(
+                    "unrecognized block child kind {other:?}; node skipped"
+                )));
+                continue;
+            }
         }
     }
 
@@ -820,7 +825,14 @@ fn lower_binary_expr(
         if let (Some(lhs), Some(rhs)) = (lhs_node, rhs_node) {
             let lhs_id = lower_expr(&lhs, interner, body, diags, struct_field_map)?;
             let rhs_id = lower_expr(&rhs, interner, body, diags, struct_field_map)?;
-            let op = lower_bin_op_token(&op_token);
+            // HIR-16: an unrecognized operator token is reported, not panicked.
+            let Some(op) = lower_bin_op_token(&op_token) else {
+                diags.push(GlyimDiagnostic::internal_error(format!(
+                    "unrecognized binary operator token {:?}; expression skipped",
+                    op_token.text()
+                )));
+                return None;
+            };
             let expr = Expr::Binary {
                 op,
                 lhs: lhs_id,
@@ -839,16 +851,13 @@ fn lower_binary_expr(
     }
     let lhs_id = lower_expr(&expr_children[0], interner, body, diags, struct_field_map)?;
     let rhs_id = lower_expr(&expr_children[1], interner, body, diags, struct_field_map)?;
+    // HIR-16: no operator token at all — report and skip rather than
+    // silently synthesizing an `Add` (which mis-typed the expression).
     diags.push(GlyimDiagnostic::internal_error(
-        "Unrecognized binary operator token",
+        "Unrecognized binary operator token; expression skipped",
     ));
-    let expr = Expr::Binary {
-        op: BinOp::Add,
-        lhs: lhs_id,
-        rhs: rhs_id,
-    };
-    let eid = body.alloc_expr(expr, node_span(node));
-    Some(eid)
+    let _ = (lhs_id, rhs_id);
+    None
 }
 
 /// Whether a syntax token kind is a binary-operator token. Restricting the
@@ -881,8 +890,8 @@ fn is_bin_op_kind(kind: SyntaxKind) -> bool {
     )
 }
 
-fn lower_bin_op_token(token: &SyntaxToken) -> BinOp {
-    match token.text() {
+fn lower_bin_op_token(token: &SyntaxToken) -> Option<BinOp> {
+    Some(match token.text() {
         "+" => BinOp::Add,
         "-" => BinOp::Sub,
         "*" => BinOp::Mul,
@@ -902,13 +911,11 @@ fn lower_bin_op_token(token: &SyntaxToken) -> BinOp {
         "^" => BinOp::BitXor,
         "<<" => BinOp::Shl,
         ">>" => BinOp::Shr,
-        other => unreachable!(
-            "parser produced a binary-expr node with unrecognized operator \
-             token {:?} -- parser and HIR lowering are out of sync, this is \
-             a compiler bug, not a user error",
-            other
-        ),
-    }
+        // HIR-16: an operator token the lowering does not recognize is a
+        // parser/lowering mismatch, not a user error. Return `None` so the
+        // caller can emit a diagnostic instead of panicking.
+        _ => return None,
+    })
 }
 
 fn lower_if_expr(
