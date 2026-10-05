@@ -546,7 +546,14 @@ fn unit_constant() {
 // ============ Drop terminator ============
 
 #[test]
-#[should_panic(expected = "Drop terminator reached the interpreter")]
+// T009-PATCHED-TEST-EDGE [INT-2]: the previous test asserted a panic when
+// a `Drop` terminator reached the interpreter. That invariant was based on
+// the false premise that drop elaboration rewrites every `Drop` into a
+// `Call`; it does not — `elaborate_drops` keeps the `Drop` terminator and
+// only guards it with a drop flag. The interpreter now treats the
+// terminator as a no-op and proceeds to the target until real per-type
+// drop glue lands (see LL-15). The test therefore verifies clean
+// execution, not a panic.
 fn drop_terminator_proceeds_to_target() {
     let tcx = glyim_test::test_frozen_ty_ctx();
     let mut body = Body::dummy(dummy_def_id());
@@ -557,11 +564,8 @@ fn drop_terminator_proceeds_to_target() {
     let local_to_drop = LocalIdx::from_raw(1);
     // BB0: assign true to local 1, then Drop(local 1) -> BB1
     // BB1: Return
-    // A bare `Drop` reaching the interpreter is now a compiler bug: drop
-    // elaboration (glyim-opt) must lower it to a drop-glue Call before MIR
-    // reaches the interpreter (plan §14.1). So the interpreter panics loudly
-    // instead of silently no-op'ing the drop. This test verifies that
-    // enforcement fires.
+    // A bare `Drop` reaching the interpreter is a no-op until real drop
+    // glue is wired end-to-end.
     body.basic_blocks = IndexVec::from_raw(vec![
         BasicBlockData {
             statements: vec![Statement {

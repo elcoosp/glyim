@@ -1082,7 +1082,14 @@ impl BytecodeBackend {
                     let count = targets.iter().count() as u32;
                     bc.extend_from_slice(&count.to_le_bytes());
                     for (v, t) in targets.iter() {
-                        bc.extend_from_slice(&v.to_le_bytes());
+                        // T008-PATCHED [BC-1]: `v` from `SwitchTargets::iter`
+                        // is `u128`, but the VM's `read_i64` and the peephole
+                        // decoder both treat each arm as 8-byte value + 4-byte
+                        // target (12 bytes total). Emitting 16 bytes per arm
+                        // desynchronised the PC after the first arm so every
+                        // enum match landed on a garbage block. The LLVM
+                        // backend already truncates to u64 (`val as u64`).
+                        bc.extend_from_slice(&(v as u64).to_le_bytes());
                         bc.extend_from_slice(&t.to_raw().to_le_bytes());
                     }
                     bc.extend_from_slice(&targets.otherwise().to_raw().to_le_bytes());

@@ -140,7 +140,12 @@ fn test_unreachable_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Drop terminator reached the interpreter")]
+// T009-PATCHED-TEST-TERM [INT-2]: the previous `#[should_panic]` encoded
+// the (incorrect) invariant that a `Drop` terminator must never reach the
+// interpreter. `elaborate_drops` keeps `Drop` terminators; only the
+// drop-flag plumbing distinguishes live drops. Until real per-type drop
+// glue is wired end-to-end (LL-15) the interpreter treats a `Drop` as a
+// no-op and proceeds to its target.
 fn test_drop_terminator_proceeds() {
     let mut ctx = glyim_test::test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));

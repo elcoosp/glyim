@@ -517,31 +517,21 @@ impl<'tcx> Interpreter<'tcx> {
                     target,
                     cleanup: _,
                 } => {
-                    // By the time MIR reaches the interpreter, `glyim-opt`'s
-                    // drop-elaboration pass must have rewritten `Drop`
-                    // terminators for types with actual destructors into
-                    // `Call`s to the generated drop-glue functions. A bare
-                    // `Drop` surviving to the interpreter means either the
-                    // type needs no drop glue (a legitimate no-op) or a
-                    // missing/misordered drop-elaboration pass (a compiler
-                    // bug). Enforce the invariant loudly in debug/test
-                    // builds instead of silently no-op'ing (plan §14.1): if a
-                    // `Drop` reaches here for a type that DOES need drop glue,
-                    // drop elaboration failed to run. We cannot inspect the
-                    // type cheaply here without the type context, so we assert
-                    // unconditionally and rely on the §15.1 validator (which
-                    // flags `Drop` on droppable types post-elaboration) to
-                    // catch the real bug at the MIR level. Fail open only in
-                    // release builds.
-                    debug_assert!(
-                        false,
-                        "Drop terminator reached the interpreter for place {place:?}; \
-                         drop elaboration should have lowered this to a drop-glue call. \
-                         This indicates a missing/misordered optimization pass — \
-                         check that DropElaboration runs before MIR reaches the interpreter/codegen."
-                    );
+                    // T009-PATCHED [INT-2]: the previous code carried an
+                    // unconditional `debug_assert!(false, ...)` on the
+                    // premise that drop elaboration rewrites every `Drop`
+                    // into a `Call`. That premise is false: `elaborate_drops`
+                    // keeps `TerminatorKind::Drop` for every needs-drop type
+                    // (it only *guards* it with a drop flag). Any program
+                    // with e.g. a `String` local therefore panicked the
+                    // interpreter thread in debug builds (reported as a
+                    // timeout by the test harness). Treat the terminator as
+                    // a no-op with a debug log until real per-type drop
+                    // glue lands via the runtime `glyim_drop_in_place`
+                    // (see LL-15).
                     tracing::debug!(
-                        "interpreter Drop terminator: skipping (drop glue already lowered to a Call)"
+                        ?place,
+                        "interpreter Drop terminator: no-op (drop glue not yet lowered)"
                     );
                     bb_idx = target;
                 }
