@@ -319,3 +319,22 @@ fn test_tuple_trailing_comma_multi() {
         result.diagnostics
     );
 }
+
+// ─── FE-3: chained casts ───
+#[test]
+fn test_chained_casts() {
+    // `as` is left-associative and chains freely; pre-fix the second `as`
+    // produced "unexpected token in statement: KwAs".
+    let result = parse_to_syntax("fn f() { let y = 1 as u8 as u32; }", file_id());
+    assert!(
+        result.diagnostics.is_empty(),
+        "`1 as u8 as u32` must parse cleanly, got: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_triple_chained_casts() {
+    let result = parse_to_syntax("fn f() { let y = 1 as i32 as i64 as u64; }", file_id());
+    assert!(result.diagnostics.is_empty(), "got: {:?}", result.diagnostics);
+}

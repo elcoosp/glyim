@@ -224,7 +224,10 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_cast_expr(&mut self) {
         let cp = self.checkpoint();
         self.parse_unary_expr();
-        if self.current_kind() == SyntaxKind::KwAs {
+        // FE-3: `as` is left-associative and chains freely (`x as u8 as u32`).
+        // Parse the whole chain with a `while`, re-wrapping the node at each
+        // step (same pattern as `parse_or_expr`).
+        while self.current_kind() == SyntaxKind::KwAs {
             self.start_node_at(cp, SyntaxKind::CastExpr);
             self.bump();
             self.parse_type();
