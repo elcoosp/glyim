@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-HEAD: `c349b296`. Suite: **4527/4528 pass** (2 skipped; the 1 failure is a
+HEAD: `7b787335`. Suite: **4527/4528 pass** (2 skipped; the 1 failure is a
 pre-existing arm64 linker issue, see below), clean tree.
 
 Eleven commits landed: HIR-2, token fusion, SOLVE-1+SOLVE-3, HIR-31 (partial),
@@ -133,12 +133,11 @@ re-exports of `BuiltinTrait`/`ImplDef`/`TraitDef`; `test_ty_ctx(|c| ..)` ->
 intentional behavior changes (mutability is not a unify constraint; unbound
 int/float default to i32/f64). `glyim-solve` went 53 -> 311 tests.
 
-## HIR-31 remainder (STILL OPEN -- top remaining Critical)
+## HIR-31 remainder -- FIXED (7b787335)
 
-`ByRef`/`ByRef(Mut)` captures are still lowered as a `Copy` of the captured
-value, so there is no aliasing: `let mut c = 0; let mut f = || { c += 1; };
-f(); f();` does not observe `c == 2`. The operand-local half is fixed
-(`1016db75`). The remaining coordinated change:
+`ByRef`/`ByRef(Mut)` captures now alias the enclosing binding. The full change
+(the plan below, now landed) required four coordinated edits plus two latent
+gaps it exposed:
 
 1. **typeck** (`check_expr.rs` ~2163): the capture type recorded for a `ByRef`
    capture must become `Ref(_, T, mut)` (the environment field type). NOTE the
@@ -152,20 +151,28 @@ f(); f();` does not observe `c == 2`. The operand-local half is fixed
    by-ref; when lowering a closure-body `VarRef` to one of them, add a
    `ProjectionElem::Deref` (reuse the Field-on-ref machinery in
    `lower_expr_to_place`).
-4. **interpreter risk**: `InterpValue::Ref { frame, local }` is *frame-relative*.
-   A `Ref` created in the enclosing frame is passed as the closure's leading
-   capture argument into a *new* frame; `read_place`'s `Deref` would resolve it
-   against the wrong frame. Landing this needs either a frame-stable reference
-   representation or resolving refs to `(frame, local)` at call time. This is
-   the part that makes the change more than a mechanical lowering edit -- budget
-   a full session and run the whole suite (4527 tests) after.
+4. **interpreter**: the frame-relative `InterpValue::Ref { frame, local }` was
+   NOT actually a problem -- the interpreter already resolves refs across frames
+   (`locals_for_ref_frame` + `write_place_frame`'s generation checks). What it
+   DID need: the closure value must be `[Fn(def_id), captures...]`, and
+   `compile_file_to_mir` must register `lower_result.closure_bodies`. Both gaps
+   were latent because closures had never executed at runtime before this.
+
+**Note on the plan vs the result:** the handoff's step 1 assumed the body would
+need a `&T` capture-field type AND body `VarRef`s typed `T`. In fact the body is
+type-checked *before* capture classification, so its `VarRef`s are already `T`;
+only the environment field type had to become `&T`, and lowering inserts the
+deref. Also: assignment statements route through `check_stmt_to_thir`, whose
+`Expr::Assign` arm (unlike `check_expr`'s) never set the capture `is_mut` flag --
+so `c = c + 1` was classified `ByRef(Not)`. That was the crux.
+
+Verified end-to-end: `closure_byref_runtime` (pipeline) interprets
+`let mut c = 0; let mut f = || { c = c + 1; }; f(); f(); c` to `2`, plus a
+shared-capture read-after-write case. Both fail pre-fix, pass post-fix.
 
 ## Recommended next steps (priority order)
 
-1. **HIR-31 remainder** -- by-ref capture aliasing (see the detailed plan
-   above; the interpreter's frame-relative `Ref` is the hard part). Top open
-   Critical.
-2. Remaining High findings, e.g. SOLVE-4 (speculative coercions mutate the
+1. Remaining High findings, e.g. SOLVE-4 (speculative coercions mutate the
    table with no rollback), SOLVE-5 (occurs check skips Projection/Dynamic),
    MIR-16 (`Rvalue::Ref` discards the projection), RT-1 (`resolve_target`
    indexes `block_offsets` unchecked).
