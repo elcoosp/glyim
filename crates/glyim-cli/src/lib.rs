@@ -576,11 +576,21 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         // the stdlib's `extern "C"` hooks (`glyim_stdout_write`,
         // `glyim_errno`, …). Add it as an extra object, before any
         // user-supplied flags. `-shared` for cdylib.
-        let runtime_lib = linker::find_runtime_staticlib();
+        // The runtime staticlib provides the stdlib's `extern "C"` hooks
+        // (`glyim_stdout_write`, `glyim_errno`, `glyim_alloc`, …). Without it
+        // the link fails with a cryptic `undefined _glyim_stdout_write`; report
+        // the real cause instead and say how to fix it.
+        let runtime_lib = linker::find_runtime_staticlib().ok_or_else(|| {
+            vec![glyim_diag::GlyimDiagnostic::internal_error(
+                "`--emit=exec`/`--emit=cdylib` needs the `glyim-runtime` static \
+                 library (`libglyim_runtime.a`), which provides the stdlib's \
+                 `extern \"C\"` hooks (`glyim_stdout_write`, …), but it was not \
+                 found. Build it first with `cargo build -p glyim-runtime`, or \
+                 point `GLYIM_RUNTIME_LIB` at an existing `libglyim_runtime.a`.",
+            )]
+        })?;
         let mut link_args = linker::LinkArgs::default();
-        if let Some(lib) = runtime_lib.as_ref() {
-            link_args.objects.push(lib.clone());
-        }
+        link_args.objects.push(runtime_lib);
         if emit == EmitKind::Cdylib {
             link_args.user_flags.push("-shared".to_string());
         }
@@ -618,11 +628,21 @@ fn finalize_after_object(
                 "emit should have a final output path",
             )]
         })?;
-        let runtime_lib = linker::find_runtime_staticlib();
+        // The runtime staticlib provides the stdlib's `extern "C"` hooks
+        // (`glyim_stdout_write`, `glyim_errno`, `glyim_alloc`, …). Without it
+        // the link fails with a cryptic `undefined _glyim_stdout_write`; report
+        // the real cause instead and say how to fix it.
+        let runtime_lib = linker::find_runtime_staticlib().ok_or_else(|| {
+            vec![glyim_diag::GlyimDiagnostic::internal_error(
+                "`--emit=exec`/`--emit=cdylib` needs the `glyim-runtime` static \
+                 library (`libglyim_runtime.a`), which provides the stdlib's \
+                 `extern \"C\"` hooks (`glyim_stdout_write`, …), but it was not \
+                 found. Build it first with `cargo build -p glyim-runtime`, or \
+                 point `GLYIM_RUNTIME_LIB` at an existing `libglyim_runtime.a`.",
+            )]
+        })?;
         let mut link_args = linker::LinkArgs::default();
-        if let Some(lib) = runtime_lib.as_ref() {
-            link_args.objects.push(lib.clone());
-        }
+        link_args.objects.push(runtime_lib);
         if emit == EmitKind::Cdylib {
             link_args.user_flags.push("-shared".to_string());
         }
