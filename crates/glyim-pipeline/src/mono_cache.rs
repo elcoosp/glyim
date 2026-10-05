@@ -411,7 +411,19 @@ pub(crate) fn make_drop_glue_provider(ty_ctx: &TyCtx) -> impl Fn(Ty) -> Arc<Body
 }
 
 pub(crate) fn generate_drop_glue(ty: Ty, ty_ctx: &TyCtx) -> Arc<Body> {
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    // T006-PATCHED [PIPE-1]: every glue body previously reused
+    // `DefId(0, 0)`, so all of them lowered into the single LLVM function
+    // `__glyim_fn_0` — in the typical program that is `main`, and the
+    // glue pass silently appended dead blocks into `main` and reverted
+    // its call convention back to fastcc, breaking the C-ABI entry
+    // wrapper. Allocate a fresh synthetic owner per glue body from a
+    // process-wide counter with the high bit set (so it can never collide
+    // with a real `LocalDefId`).
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static DROP_GLUE_OWNER: AtomicU32 = AtomicU32::new(0);
+    let unique = DROP_GLUE_OWNER.fetch_add(1, Ordering::Relaxed);
+    let synthetic = 0x8000_0000u32 | (unique & 0x7FFF_FFFF);
+    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(synthetic));
     let mut body = Body::dummy(def_id);
     body.return_ty = ty_ctx.unit_ty();
 
@@ -732,11 +744,17 @@ fn generate_array_drop_glue(
         source_info: SourceInfo::new(Span::DUMMY),
     }));
 
+    // T007-CALLS-PATCHED [PIPE-2]: `ConstantIndex::min_length` is `u64`.
+    // The array-glue body previously fed `Index(LocalIdx(index))`, which
+    // read `body.locals[index]` — out of bounds for the dummy body. Use
+    // the `ConstantIndex` projection instead so codegen emits a constant
+    // GEP into the array.
+    let n_u64: u64 = n as u64;
     // Build the tail of the chain in reverse order so the first element re-uses
     // basic block 0 (same shape as the struct field-drop chain).
     let mut next_target = return_bb;
     for i in (1..n).rev() {
-        let elem_place = element_place_at(place, i as u32);
+        let elem_place = element_place_at(place, i as u64, n_u64);
         let bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Drop {
                 place: elem_place,
@@ -748,7 +766,7 @@ fn generate_array_drop_glue(
         next_target = bb;
     }
 
-    let first_elem = element_place_at(place, 0);
+    let first_elem = element_place_at(place, 0, n_u64);
     if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
         block0.statements.clear();
         block0.terminator = Terminator {
@@ -764,10 +782,24 @@ fn generate_array_drop_glue(
 
 /// Build a place that indexes `base` by the compile-time constant `index`
 /// (`base[`index`]`).
-fn element_place_at(base: &Place, index: u32) -> Place {
-    let idx_local = LocalIdx::from_raw(index);
+///
+/// T007-PATCHED [PIPE-2]: the previous implementation reused the element
+/// index as a *local index* (`ProjectionElem::Index(LocalIdx(index))`).
+/// Codegen's `Index` arm loads the value of that local — so for `i >= 1`
+/// it read `body.locals[i]`, which is out of bounds in the array-glue
+/// dummy body (only one local, the receiver pointer) and panicked the
+/// compiler. MIR has `ProjectionElem::ConstantIndex` for exactly this
+/// case: a compile-time-known element index into an array of known
+/// length.
+fn element_place_at(base: &Place, index: u64, len: u64) -> Place {
+    // T007-TYPES-FIXED: `ConstantIndex` uses u64 for both offset and
+    // min_length, so the helper mirrors that.
     let mut proj = base.projection.to_vec();
-    proj.push(ProjectionElem::Index(idx_local));
+    proj.push(ProjectionElem::ConstantIndex {
+        offset: index,
+        min_length: len,
+        from_end: false,
+    });
     Place {
         local: base.local,
         projection: proj.into_boxed_slice(),

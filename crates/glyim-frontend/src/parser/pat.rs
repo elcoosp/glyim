@@ -170,8 +170,31 @@ impl<'a> Parser<'a> {
                         self.finish_node(); // PatStruct
                     }
                 } else {
+                    // T002-PATCHED [FE-102]: `current_kind()` flushes pending
+                    // trivia into the currently open node. Probing for `@`
+                    // *inside* the PatIdent therefore absorbed the trailing
+                    // whitespace after `x` into the node (FE-9 regression,
+                    // CST contract broken for six snapshot tests). Peek with
+                    // a manual scan over `self.tokens` (no flushing) and
+                    // only open the node when we know the shape.
                     self.start_node(SyntaxKind::PatIdent);
                     self.bump();
+                    // FE-9: `x @ subpat` — binding with a sub-pattern.
+                    let at_follows = {
+                        let mut p = self.pos;
+                        while let Some(t) = self.tokens.get(p) {
+                            if !t.kind.is_trivia() {
+                                break;
+                            }
+                            p += 1;
+                        }
+                        self.tokens.get(p).map(|t| t.kind) == Some(SyntaxKind::At)
+                    };
+                    if at_follows {
+                        self.flush_trivia(); // whitespace legitimately precedes `@`
+                        self.bump(); // @
+                        self.parse_pat_inner();
+                    }
                     self.finish_node();
                 }
             }

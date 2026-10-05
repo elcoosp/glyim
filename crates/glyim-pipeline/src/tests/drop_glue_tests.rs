@@ -40,11 +40,18 @@ fn drop_glue_for_array_of_droppable_drops_each_element() {
     for bb in body.basic_blocks.iter() {
         if let TerminatorKind::Drop { place, .. } = &bb.terminator.kind {
             drop_terminators += 1;
-            if place
-                .projection
-                .iter()
-                .any(|p| matches!(p, glyim_mir::ProjectionElem::Index(_)))
-            {
+            // T007-TESTS-PATCHED [PIPE-2]: array-glue now uses
+            // `ProjectionElem::ConstantIndex` (a fixed element index) rather
+            // than `Index` (which reads the value of a *local* — out of
+            // bounds in the dummy glue body). The assertion below matches
+            // either form so it survives future representation changes.
+            if place.projection.iter().any(|p| {
+                matches!(
+                    p,
+                    glyim_mir::ProjectionElem::Index(_)
+                        | glyim_mir::ProjectionElem::ConstantIndex { .. }
+                )
+            }) {
                 indexed_drops += 1;
             }
         }
@@ -118,11 +125,18 @@ fn const_generic_array_drop_glue_resolves_length_through_substitution() {
     for bb in body.basic_blocks.iter() {
         if let TerminatorKind::Drop { place, .. } = &bb.terminator.kind {
             drop_terminators += 1;
-            if place
-                .projection
-                .iter()
-                .any(|p| matches!(p, glyim_mir::ProjectionElem::Index(_)))
-            {
+            // T007-TESTS-PATCHED [PIPE-2]: array-glue now uses
+            // `ProjectionElem::ConstantIndex` (a fixed element index) rather
+            // than `Index` (which reads the value of a *local* — out of
+            // bounds in the dummy glue body). The assertion below matches
+            // either form so it survives future representation changes.
+            if place.projection.iter().any(|p| {
+                matches!(
+                    p,
+                    glyim_mir::ProjectionElem::Index(_)
+                        | glyim_mir::ProjectionElem::ConstantIndex { .. }
+                )
+            }) {
                 indexed_drops += 1;
             }
         }
@@ -223,7 +237,11 @@ fn slice_drop_glue_loop_drops_each_element() {
                 place
                     .projection
                     .iter()
-                    .any(|p| matches!(p, glyim_mir::ProjectionElem::Index(_))),
+                    .any(|p| matches!(
+                    p,
+                    glyim_mir::ProjectionElem::Index(_)
+                        | glyim_mir::ProjectionElem::ConstantIndex { .. }
+                )),
                 "loop body must drop an indexed element"
             );
         }
