@@ -1,0 +1,4 @@
+2799:                        .get_function("glyim_drop_in_place")
+2806:                                .add_function("glyim_drop_in_place", fn_type, None)
+2817:                        // pointer) so `glyim_drop_in_place` receives the
+2838:                    // T005-PATCHED [LL-15]: null 2nd arg matches the 2-param runtime decl.

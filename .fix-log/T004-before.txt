@@ -1,0 +1,61 @@
+    // `-> Poll<Output>` return type. (Explicit `return` sites are already
+    // wrapped by `rewrite_expr`; this handles the implicit tail.)
+    //
+    // IMPORTANT: we must wrap the *Block's tail* expression (the actual return
+    // value), NOT `body.exprs.last()`. The flat arena's last slot is often a
+    // `self`-path allocated during `rewrite_expr`; wrapping it in
+    // `Poll::Ready(..)` would make any `self.fN` field access (whose receiver
+    // points at that same slot) resolve to `Poll::Ready(self).fN` — a type
+    // error. Locate the root `Block` and wrap its `tail`.
+    let root_block = (0..body.exprs.len())
+        .map(|i| ExprId::from_raw(i as u32))
+        .find(|&rid| matches!(body.exprs[rid], Expr::Block { .. }));
+    let tail_id = match root_block {
+        Some(rid) => match &body.exprs[rid] {
+            Expr::Block { tail: Some(t), .. } => *t,
+            Expr::Block { .. } => return,
+            _ => return,
+        },
+        // Non-block body: the sole/top-level expr is the tail.
+        None => ExprId::from_raw(0),
+    };
+    // Wrap the tail value in `Poll::Ready(..)`. `fresh_tail` is a *separate*
+    // slot holding a clone of the original tail, so the wrapper's argument
+    // does NOT point at `tail_id` itself (which would be a self-referential
+    // expression that infinitely recurses during type-checking).
+    let original_tail = body.exprs[tail_id].clone();
+    let fresh_tail = body.alloc_expr(original_tail, Span::DUMMY);
+    let func = body.alloc_expr(Expr::Path(two_seg(interner, "Poll", ready_id)), Span::DUMMY);
+    let wrapped_expr = Expr::Call {
+        func,
+        args: vec![fresh_tail],
+    };
+    // Overwrite the old root block's tail slot with the wrapped value. (The
+    // root block itself is left in place but is no longer the last expr.)
+    body.exprs[tail_id] = wrapped_expr;
+    // Append a *fresh* root `Block { tail: Some(tail_id) }` as the LAST expr
+    // in the arena. `check_stmt` treats `body.exprs[len-1]` as the function's
+    // return value, so the wrapped `Poll::Ready(..)` must be reachable as that
+    // final block's tail — not the `Poll::Ready` constructor *path* that was
+    // allocated above (which would resolve to the `poll` fn-item and produce
+    // a `FnDef vs Poll<Output>` mismatch).
+    let new_root_stmts = match root_block {
+        Some(rid) => {
+            if let Expr::Block { stmts, .. } = &body.exprs[rid] {
+                stmts.clone()
+            } else {
+                Vec::new()
+            }
+        }
+        None => Vec::new(),
+    };
+    body.alloc_expr(
+        Expr::Block {
+            stmts: new_root_stmts,
+            tail: Some(tail_id),
+        },
+        Span::DUMMY,
+    );
+}
+
+/// Compute, for each suspend point `k`, the set of local bindings that are

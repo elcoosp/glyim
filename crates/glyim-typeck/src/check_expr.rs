@@ -842,6 +842,28 @@ impl<'a> FnCtxt<'a> {
                     arg_exprs.push(self.check_expr(arg_id).0);
                 }
 
+                // T003-PATCHED [TCK-24]: minimal arity guard for FnDef
+                // callees. The full arg-vs-formal unification requires
+                // snapshot/rollback plumbing that is not trivially wired
+                // here (see follow-up task); this guard already rejects the
+                // outright-wrong programs that motivated the finding —
+                // calling a function with the wrong number of arguments.
+                if let TyKind::FnDef(fn_def_id, _substs) = self.ctx.ty_kind(func_ty)
+                    && let Some(fn_sig) = self.ctx.fn_sig(*fn_def_id)
+                {
+                    let expected = fn_sig.inputs.len() as usize;
+                    if arg_exprs.len() != expected {
+                        self.diagnostics.push(glyim_diag::GlyimDiagnostic::type_error(
+                            span,
+                            format!(
+                                "this function takes {} argument(s) but {} were supplied",
+                                expected,
+                                arg_exprs.len()
+                            ),
+                        ));
+                    }
+                }
+
                 if let Some((trait_def_id, method_name)) = trait_call {
                     let recv_ty = arg_exprs.first().map(|e| e.ty).unwrap_or(Ty::ERROR);
                     if let Some(fn_def_id) =

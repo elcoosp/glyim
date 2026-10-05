@@ -1,0 +1,31 @@
+                }
+
+                // Mark callee position so a trait-method path callee
+                // (`T::f(..)`) does not emit the "used as a value"
+                // diagnostic; the Call arm rewrites the benign error node via
+                // static/virtual dispatch.
+                let saved_in_callee = self.in_callee_position;
+                self.in_callee_position = true;
+                let (func_expr, func_ty) = self.check_expr(*func);
+                self.in_callee_position = saved_in_callee;
+                let mut arg_exprs = Vec::with_capacity(args.len());
+                for &arg_id in args {
+                    arg_exprs.push(self.check_expr(arg_id).0);
+                }
+
+                if let Some((trait_def_id, method_name)) = trait_call {
+                    let recv_ty = arg_exprs.first().map(|e| e.ty).unwrap_or(Ty::ERROR);
+                    if let Some(fn_def_id) =
+                        self.resolve_trait_method_fn(recv_ty, trait_def_id, method_name, span)
+                    {
+                        let substs = self.ctx.intern_substitution(vec![]);
+                        let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
+                        let ret_ty = self.instantiate_fn_sig(fn_def_id, span);
+                        let callee = thir::Expr {
+                            kind: thir::ExprKind::FnRef(fn_def_id),
+                            ty: fn_ty,
+                            span,
+                        };
+                        // Overwrite the standalone callee node (which
+                        // `check_path` left as `Err`) so no stray
+                        // trait-method node survives into MIR lowering.

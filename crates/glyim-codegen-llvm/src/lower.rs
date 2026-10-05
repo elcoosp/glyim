@@ -2794,12 +2794,22 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let cleanup_bb = cleanup.map(|c| *self.bb_map.get(&c).unwrap());
 
                 if needs_drop || is_owning {
+                    // T005-PATCHED-DECL [LL-15]: the runtime symbol takes
+                    // `(ptr: *mut u8, drop_fn: Option<DropFn>)`; the second
+                    // parameter is niche-optimised to a raw function
+                    // pointer. Declaring the symbol with only one argument
+                    // let the callee read a garbage register as `drop_fn`
+                    // — a call through an arbitrary pointer (SIGSEGV/UB)
+                    // or a silent no-drop. Both the decl and the call site
+                    // now pass a null second argument until per-type drop
+                    // glue is wired end-to-end.
                     let drop_fn = self
                         .module
                         .get_function("glyim_drop_in_place")
                         .unwrap_or_else(|| {
+                            let ptr_ty = self.context.ptr_type(AddressSpace::default());
                             let fn_type = self.context.void_type().fn_type(
-                                &[self.context.ptr_type(AddressSpace::default()).into()],
+                                &[ptr_ty.into(), ptr_ty.into()],
                                 false,
                             );
                             self.module
@@ -2835,7 +2845,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     } else {
                         self.place_ptr(place)?.into()
                     };
-                    let args_vals: Vec<BasicValueEnum<'ctx>> = vec![drop_arg];
+                    // T005-PATCHED-CALL [LL-15]: pass the null `drop_fn`
+                    // the runtime expects as its second argument.
+                    let null_drop_fn = self
+                        .context
+                        .ptr_type(AddressSpace::default())
+                        .const_null();
+                    let args_vals: Vec<BasicValueEnum<'ctx>> =
+                        vec![drop_arg, null_drop_fn.into()];
 
                     if let Some(cleanup_bb) = cleanup_bb {
                         let normal_bb = self.context.append_basic_block(self.function, "drop_cont");

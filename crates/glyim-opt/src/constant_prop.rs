@@ -435,6 +435,17 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
                 out.entry(*d).or_insert(None);
             }
 
+            // T001-PATCHED [OPT-1]: a `Call` terminator may write through
+            // any live reference and mutate global/indirect state, so we
+            // conservatively kill all constants before the successor's
+            // entry map inherits them. Without this, a folded constant can
+            // survive across a call and produce a wrong result, e.g.
+            //   let mut a = 5; let r = &mut a; inc(r); a + 1  // must be 7
+            // would fold `a + 1` to 6.
+            if matches!(&block.terminator.kind, glyim_mir::TerminatorKind::Call { .. }) {
+                out.clear();
+            }
+
             let changed_this = match &in_maps[bb_idx] {
                 None => true,
                 Some(old) => !maps_equal(old, &out),

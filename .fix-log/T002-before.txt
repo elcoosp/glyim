@@ -1,0 +1,41 @@
+                                self.error("expected field pattern");
+                                if self.current().is_some() {
+                                    self.bump();
+                                }
+                            }
+                            if self.current_kind() == SyntaxKind::Comma {
+                                self.bump();
+                            }
+                        }
+                        self.expect(SyntaxKind::RBrace);
+                        self.finish_node(); // PatStruct
+                    }
+                } else {
+                    self.start_node(SyntaxKind::PatIdent);
+                    self.bump();
+                    self.finish_node();
+                }
+            }
+            SyntaxKind::IntLit
+            | SyntaxKind::FloatLit
+            | SyntaxKind::StringLit
+            | SyntaxKind::CharLit
+            | SyntaxKind::KwTrue
+            | SyntaxKind::KwFalse => {
+                let start_cp = self.checkpoint();
+                self.bump(); // consume start literal
+                if matches!(
+                    self.current_kind(),
+                    SyntaxKind::DotDot | SyntaxKind::DotDotEq
+                ) {
+                    // Range pattern: use PatRange as the outer node
+                    self.start_node_at(start_cp, SyntaxKind::PatRange);
+                    let _range_op = self.current_kind();
+                    self.bump(); // .. or ..=
+                    // Validate that the endpoint is a literal, not a pattern.
+                    // We'll check if the current token is a literal; if not, emit error.
+                    let is_literal = matches!(
+                        self.current_kind(),
+                        SyntaxKind::IntLit
+                            | SyntaxKind::FloatLit
+                            | SyntaxKind::StringLit

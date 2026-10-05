@@ -1,0 +1,9 @@
+2799:                        .get_function("glyim_drop_in_place")
+2806:                                .add_function("glyim_drop_in_place", fn_type, None)
+2817:                        // pointer) so `glyim_drop_in_place` receives the
+5://! - Memory: `glyim_alloc`, `glyim_dealloc`, `glyim_drop_in_place`
+67:/// Type for a drop function pointer passed to `glyim_drop_in_place`.
+145:pub unsafe extern "C" fn glyim_drop_in_place(ptr: *mut u8, drop_fn: Option<DropFn>) {
+5://! - Memory: `glyim_alloc`, `glyim_dealloc`, `glyim_drop_in_place`
+67:/// Type for a drop function pointer passed to `glyim_drop_in_place`.
+145:pub unsafe extern "C" fn glyim_drop_in_place(ptr: *mut u8, drop_fn: Option<DropFn>) {

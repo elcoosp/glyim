@@ -691,7 +691,14 @@ fn rewrite_for_poll(
     // `Poll::Ready(..)` would make any `self.fN` field access (whose receiver
     // points at that same slot) resolve to `Poll::Ready(self).fN` — a type
     // error. Locate the root `Block` and wrap its `tail`.
+    // T004-PATCHED [HIRX-1]: `lower_block_to_expr` allocates children
+    // before the block, so the outermost fn-body Block is the *last*
+    // Block in the arena (matching `root_expr_id` above). Searching
+    // forward finds a *nested* block (if/match/loop body) and collapses
+    // the poll body onto it — every other statement of the async fn
+    // including the `.await` polling becomes unreachable.
     let root_block = (0..body.exprs.len())
+        .rev()
         .map(|i| ExprId::from_raw(i as u32))
         .find(|&rid| matches!(body.exprs[rid], Expr::Block { .. }));
     let tail_id = match root_block {
