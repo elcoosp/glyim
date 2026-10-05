@@ -39,6 +39,11 @@ pub struct MirBuilder<'a> {
     )>,
     pub(crate) var_map: std::collections::HashMap<Name, LocalIdx>,
     pub(crate) capture_map: std::collections::HashMap<thir::LocalVarId, LocalIdx>,
+    /// HIR-31: captures whose environment field holds a *reference* into the
+    /// enclosing frame (`ByRef`/`ByRef(Mut)`). A closure-body `VarRef` to one
+    /// of these must be auto-deref'd: the capture local is typed `&T`/`&mut T`
+    /// while the body's THIR types the variable as `T`.
+    pub(crate) byref_capture_vars: std::collections::HashSet<thir::LocalVarId>,
     pub(crate) param_map: std::collections::HashMap<thir::LocalVarId, LocalIdx>,
     /// Maps a type-checker `LocalVarId` (carried by `VarRef` and by
     /// `PatternKind::Binding::var_id`) to the MIR `LocalIdx` this builder
@@ -95,6 +100,7 @@ impl<'a> MirBuilder<'a> {
             closure_bodies: Vec::new(),
             var_map: std::collections::HashMap::new(),
             capture_map: std::collections::HashMap::new(),
+            byref_capture_vars: std::collections::HashSet::new(),
             param_map: std::collections::HashMap::new(),
             local_var_map: std::collections::HashMap::new(),
             current_block: None,
@@ -397,6 +403,9 @@ impl<'a> MirBuilder<'a> {
             let local = builder.alloc_local(capture.ty, mutability, span);
             builder.capture_map.insert(capture.local, local);
             builder.local_var_map.insert(capture.local, local);
+            if matches!(capture.kind, thir::CaptureKind::ByRef(_)) {
+                builder.byref_capture_vars.insert(capture.local);
+            }
         }
 
         // Allocate locals for parameters and populate param_map.

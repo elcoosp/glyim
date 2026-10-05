@@ -2150,7 +2150,19 @@ impl<'a> FnCtxt<'a> {
                     } else {
                         thir::CaptureKind::ByRef(Mutability::Not)
                     };
-                    captures.push((id, kind, ty));
+                    // HIR-31: a `ByRef` capture's *environment field* holds a
+                    // reference into the captured local, not a copy. The body
+                    // was type-checked with the variable typed as `T` (step 2,
+                    // before this classification), so body `VarRef`s still
+                    // denote `T`; lowering inserts a `Deref` when the body
+                    // touches a by-ref capture. `ByValue` keeps the value type.
+                    let cap_ty = match kind {
+                        thir::CaptureKind::ByRef(m) => {
+                            self.ctx.mk_ref(Region::Erased, ty, m)
+                        }
+                        thir::CaptureKind::ByValue => ty,
+                    };
+                    captures.push((id, kind, cap_ty));
                 }
                 self.env.leave_scope();
 

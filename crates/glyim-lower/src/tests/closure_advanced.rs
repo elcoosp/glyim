@@ -147,10 +147,12 @@ fn closure_with_by_ref_capture() {
             }
         })
     });
+    // HIR-31: the closure value is `[Fn(def_id), captures...]`, so a
+    // one-capture closure has 2 operands (leading `Fn` + the capture).
     assert_eq!(
         closure_agg,
-        Some(1),
-        "expected closure Aggregate with 1 captured operand, got {:?}",
+        Some(2),
+        "expected closure Aggregate with Fn + 1 capture, got {:?}",
         closure_agg
     );
 }
@@ -226,8 +228,8 @@ fn closure_with_by_value_capture() {
     });
     assert_eq!(
         closure_agg,
-        Some(1),
-        "expected closure Aggregate with 1 by-value captured operand, got {:?}",
+        Some(2),
+        "expected closure Aggregate with Fn + 1 by-value capture, got {:?}",
         closure_agg
     );
 }
@@ -321,8 +323,8 @@ fn closure_with_multiple_captures() {
     });
     assert_eq!(
         closure_agg,
-        Some(2),
-        "expected closure Aggregate with 2 captured operands, got {:?}",
+        Some(3),
+        "expected closure Aggregate with Fn + 2 captures, got {:?}",
         closure_agg
     );
 }
@@ -389,9 +391,13 @@ fn closure_by_ref_capture_operand_uses_real_local() {
                 _,
                 Rvalue::Aggregate(AggregateKind::Closure(_, _), ref ops),
             ) = stmt.kind
-                && let Some(glyim_mir::Operand::Copy(place)) = ops.first()
+                && let Some(op) = ops.get(1)
             {
-                return Some(place.local);
+                // ops[0] is the leading `Fn` constant; ops[1] is the capture.
+                return match op {
+                    glyim_mir::Operand::Copy(p) | glyim_mir::Operand::Move(p) => Some(p.local),
+                    _ => None,
+                };
             }
             None
         })

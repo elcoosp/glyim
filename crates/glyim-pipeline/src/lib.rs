@@ -847,6 +847,19 @@ if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
         let mir_arc = Arc::new(lower_result.body);
         let owner = mir_arc.owner;
         bodies.insert(owner, mir_arc);
+        // HIR-31: closures lowered while lowering this function are real MIR
+        // bodies (the callee of a runtime closure call). `prepare_compilation`
+        // already registers them for codegen; `compile_file_to_mir` used to
+        // drop them, so a closure call in the interpreter failed with
+        // "function not found: ...2000000". Key them by their owner `DefId`,
+        // matching the `Fn(closure_id)` operand that `resolve_callee` unpacks.
+        for (_cid, _substs, cbody) in lower_result.closure_bodies {
+            if closure_body_has_unmonomorphized_ty(&cbody, ty_ctx_ref) {
+                continue;
+            }
+            let cowner = cbody.owner;
+            bodies.insert(cowner, Arc::new(cbody));
+        }
     }
 
     // Drop-glue elaboration: lower `Drop` terminators into conditional drop

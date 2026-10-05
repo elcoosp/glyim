@@ -378,6 +378,20 @@ impl<'a> FnCtxt<'a> {
             }
             Expr::Assign { lhs, rhs } => {
                 let (lhs_expr, lhs_ty) = self.check_expr(*lhs);
+                // HIR-31: an assignment to a captured local is a *mutating*
+                // use, so the closure capture analysis must classify it
+                // `ByRef(Mut)` (and lower it as an `&mut` borrow). This is the
+                // statement path; `check_expr`'s `Expr::Assign` arm has the
+                // same logic, but block statements route through here.
+                if let thir::ExprKind::VarRef(id) = lhs_expr.kind
+                    && let Some(entry) = self
+                        .capture_log
+                        .iter_mut()
+                        .rev()
+                        .find(|(vid, ..)| *vid == id)
+                {
+                    entry.2 = true;
+                }
                 let (rhs_expr, rhs_ty) = self.check_expr(*rhs);
                 self.unify(rhs_ty, lhs_ty, span);
                 if is_tail {

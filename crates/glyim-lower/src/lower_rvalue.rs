@@ -154,7 +154,16 @@ impl<'a> MirBuilder<'a> {
             }
             thir::ExprKind::VarRef(var_id) => {
                 let local = self.local_for_var(*var_id);
-                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(glyim_mir::Place::new(local)))
+                // HIR-31: a by-ref capture holds `&T`; the body reads `T`.
+                let place = if self.byref_capture_vars.contains(var_id) {
+                    self.place_with_projection(
+                        glyim_mir::Place::new(local),
+                        ProjectionElem::Deref,
+                    )
+                } else {
+                    glyim_mir::Place::new(local)
+                };
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(place))
             }
             thir::ExprKind::FnRef(_def_id) => {
                 let (fn_def_id, substs) = match self.ctx.ty_ctx().ty_kind(expr.ty) {
@@ -724,7 +733,12 @@ impl<'a> MirBuilder<'a> {
                 // but the MIR local still holds `&mut Counter`, and the
                 // interpreter requires a `Deref` step to reach the pointee.
                 let base_ty = self.locals[base_place.local].ty;
-                let base_place = if matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Ref(..)) {
+                // Only peel a reference at the *root* of the place. A by-ref
+                // capture (`VarRef` to a `&T` local) already produced a `Deref`
+                // projection; adding another would double-deref.
+                let base_place = if base_place.projection.is_empty()
+                    && matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Ref(..))
+                {
                     self.place_with_projection(base_place, ProjectionElem::Deref)
                 } else {
                     base_place
@@ -991,16 +1005,66 @@ impl<'a> MirBuilder<'a> {
                         thir::CaptureKind::ByValue => {
                             glyim_mir::Operand::Move(glyim_mir::Place::new(capture_local))
                         }
-                        thir::CaptureKind::ByRef(glyim_core::primitives::Mutability::Not)
-                        | thir::CaptureKind::ByRef(glyim_core::primitives::Mutability::Mut) => {
-                            glyim_mir::Operand::Copy(glyim_mir::Place::new(capture_local))
+                        thir::CaptureKind::ByRef(mutability) => {
+                            // HIR-31: the environment field is `&T`/`&mut T`,
+                            // NOT a copy of the captured value. Materialize the
+                            // reference into a temp local and capture that, so
+                            // the closure body aliases the enclosing binding.
+                            let borrow = match mutability {
+                                glyim_core::primitives::Mutability::Mut => {
+                                    glyim_mir::BorrowKind::Mut {
+                                        allow_two_phase_borrow: false,
+                                    }
+                                }
+                                glyim_core::primitives::Mutability::Not => {
+                                    glyim_mir::BorrowKind::Shared
+                                }
+                            };
+                            let ref_ty = capture.ty;
+                            let ref_local = self.alloc_local(
+                                ref_ty,
+                                glyim_core::primitives::Mutability::Not,
+                                expr.span,
+                            );
+                            self.push_stmt(
+                                glyim_mir::StatementKind::StorageLive(ref_local),
+                                expr.span,
+                            );
+                            self.push_stmt(
+                                glyim_mir::StatementKind::Assign(
+                                    glyim_mir::Place::new(ref_local),
+                                    glyim_mir::Rvalue::Ref(
+                                        glyim_mir::Place::new(capture_local),
+                                        borrow,
+                                    ),
+                                ),
+                                expr.span,
+                            );
+                            glyim_mir::Operand::Move(glyim_mir::Place::new(ref_local))
                         }
                     };
                     capture_operands.push(operand);
                 }
+                // The closure *value* is laid out as `[Fn(def_id), captures...]`
+                // (plan §12.1). The interpreter's `resolve_callee` unpacks that
+                // leading `Fn` to find the callee and passes the rest as the
+                // closure body's leading arguments. Emitting only the captures
+                // here made every runtime closure call fail with "indirect call
+                // through non-function value".
+                let fn_const = glyim_mir::MirConst {
+                    kind: glyim_mir::MirConstKind::Fn(
+                        glyim_core::def_id::FnDefId::from_raw(closure_id.to_raw()),
+                        *closure_substs,
+                    ),
+                    ty: self.ctx.ty_ctx().error_ty(),
+                    span: expr.span,
+                };
+                let mut operands = Vec::with_capacity(capture_operands.len() + 1);
+                operands.push(glyim_mir::Operand::Constant(fn_const));
+                operands.extend(capture_operands);
                 glyim_mir::Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Closure(*closure_id, *closure_substs),
-                    capture_operands,
+                    operands,
                 )
             }
             thir::ExprKind::Err => {
@@ -1119,7 +1183,16 @@ impl<'a> MirBuilder<'a> {
             }
             thir::ExprKind::VarRef(var_id) => {
                 let local = self.local_for_var(*var_id);
-                glyim_mir::Operand::Copy(glyim_mir::Place::new(local))
+                // HIR-31: a by-ref capture holds `&T`; the body reads `T`.
+                let place = if self.byref_capture_vars.contains(var_id) {
+                    self.place_with_projection(
+                        glyim_mir::Place::new(local),
+                        ProjectionElem::Deref,
+                    )
+                } else {
+                    glyim_mir::Place::new(local)
+                };
+                glyim_mir::Operand::Copy(place)
             }
             _ => {
                 let rvalue = self.lower_expr_to_rvalue(expr);
@@ -1141,7 +1214,15 @@ impl<'a> MirBuilder<'a> {
         match &expr.kind {
             thir::ExprKind::VarRef(var_id) => {
                 let local = self.local_for_var(*var_id);
-                glyim_mir::Place::new(local)
+                // HIR-31: deref a by-ref capture so the place denotes `T`.
+                if self.byref_capture_vars.contains(var_id) {
+                    self.place_with_projection(
+                        glyim_mir::Place::new(local),
+                        ProjectionElem::Deref,
+                    )
+                } else {
+                    glyim_mir::Place::new(local)
+                }
             }
             thir::ExprKind::Field {
                 receiver,
@@ -1160,7 +1241,12 @@ impl<'a> MirBuilder<'a> {
                 // but the MIR local still holds `&mut Counter`, and the
                 // interpreter requires a `Deref` step to reach the pointee.
                 let base_ty = self.locals[base_place.local].ty;
-                let base_place = if matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Ref(..)) {
+                // Only peel a reference at the *root* of the place. A by-ref
+                // capture (`VarRef` to a `&T` local) already produced a `Deref`
+                // projection; adding another would double-deref.
+                let base_place = if base_place.projection.is_empty()
+                    && matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Ref(..))
+                {
                     self.place_with_projection(base_place, ProjectionElem::Deref)
                 } else {
                     base_place
