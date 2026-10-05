@@ -2,11 +2,13 @@
 
 ## TL;DR
 
-HEAD: `a41ed261`. Suite: **4263/4263 pass** (2 skipped), clean tree.
+HEAD: `c349b296`. Suite: **4527/4528 pass** (2 skipped; the 1 failure is a
+pre-existing arm64 linker issue, see below), clean tree.
 
-Seven commits landed. HIR-2 (Critical), a related non-audit Critical (macro
-expansion token fusion), SOLVE-1+SOLVE-3 (Critical), the operand-local half of
-HIR-31 (Critical), HIR-11 (Critical), and FE-20 (Medium).
+Eleven commits landed: HIR-2, token fusion, SOLVE-1+SOLVE-3, HIR-31 (partial),
+HIR-11, FE-20 (all Critical except FE-20 Medium), plus a batch of four
+(FE-2, HIR-12, HIR-15, RT-7), HIR-16, and a revival of the dead
+`glyim-solve` test suite (+258 tests).
 
 ## Commits landed this session
 
@@ -19,6 +21,10 @@ From `30f9820b` (session-9 wrap-up) forward:
 5. `1016db75` fix(lower): HIR-31 (partial) -- closure capture operand wrong local
 6. `bf0ac1a9` fix(hir): HIR-11 -- multi-await state machine dropped between-await statements
 7. `a41ed261` fix(syntax): FE-20 -- is_keyword/is_node missed variants declared after ranges
+8. `8edfcbd3` test(solve): revive the dead test suite (258 tests)
+9. `d0bc46ed` fix: FE-2 + HIR-12 + HIR-15 + RT-7 (four findings)
+10. `c349b296` fix(hir): HIR-16 -- replace reachable `unreachable!()`s
+11. (this handoff)
 
 ## HIR-2 (Critical) -- FIXED
 
@@ -100,15 +106,79 @@ wired up** (`lib.rs` had no `mod tests;`), so `kind_tests.rs` -- with its own
 incomplete copies of the same lists -- had never compiled or run. Now wired;
 24 syntax tests run (previously 0). Both kind tests fail on the pre-fix ranges.
 
+## Later-session findings (FE-2, HIR-12, HIR-15, RT-7, HIR-16) -- FIXED
+
+- **FE-2** (H): `(1,)` / `(1, 2,)` double-errored and swallowed the `)`. The
+  tuple loop now breaks on a trailing comma before demanding another expr.
+- **HIR-12** (H): `mut` on a `PatIdent` binding was hardcoded `Not`. The
+  parser emits `mut` as a *sibling* of `PatIdent` inside `LetStmt`, so
+  `pat_ident_mutability` scans children *and* the preceding non-trivia sibling.
+- **HIR-15** (H): an int literal too large for `i128`/`u128` silently became
+  `0`; now reports "integer literal is too large" via
+  `lower_literal_with_diags`.
+- **RT-7** (H): the bytecode VM's `Div`/`Rem` used `checked_*().unwrap_or(0)`;
+  now traps (`VmError::AbnormalTermination`).
+- **HIR-16** (M): two reachable `unreachable!()`s in expression lowering (block
+  child / bin-op token) now emit diagnostics instead of ICE-ing.
+- **HIR-14** (H) was already fixed on the tree (single left-to-right string
+  unescape scanner present).
+
+## Dead test suite revived (glyim-solve)
+
+`crates/glyim-solve/src/tests/mod.rs` declared only 4 of 10 test files;
+`solver.rs`, `unification.rs`, etc. had never compiled or run (same rot class
+as the `glyim-syntax` module fixed earlier). Reviving needed: crate-root
+re-exports of `BuiltinTrait`/`ImplDef`/`TraitDef`; `test_ty_ctx(|c| ..)` ->
+`with_fresh_ty_ctx`; and refreshing ~10 expectations that had rotted against
+intentional behavior changes (mutability is not a unify constraint; unbound
+int/float default to i32/f64). `glyim-solve` went 53 -> 311 tests.
+
+## HIR-31 remainder (STILL OPEN -- top remaining Critical)
+
+`ByRef`/`ByRef(Mut)` captures are still lowered as a `Copy` of the captured
+value, so there is no aliasing: `let mut c = 0; let mut f = || { c += 1; };
+f(); f();` does not observe `c == 2`. The operand-local half is fixed
+(`1016db75`). The remaining coordinated change:
+
+1. **typeck** (`check_expr.rs` ~2163): the capture type recorded for a `ByRef`
+   capture must become `Ref(_, T, mut)` (the environment field type). NOTE the
+   closure *body* is type-checked at step 2, *before* capture classification at
+   step 3, so body `VarRef`s are typed as `T` (not `&T`) -- the environment
+   field is `&T` but the body expects `T`.
+2. **lower** (`lower_rvalue.rs` closure arm): for a `ByRef` capture, emit
+   `Rvalue::Ref(place_of_real_local, borrow_kind)` into a temp and capture
+   `Move(temp)`.
+3. **builder** (`builder.rs::lower_closure`): record which capture locals are
+   by-ref; when lowering a closure-body `VarRef` to one of them, add a
+   `ProjectionElem::Deref` (reuse the Field-on-ref machinery in
+   `lower_expr_to_place`).
+4. **interpreter risk**: `InterpValue::Ref { frame, local }` is *frame-relative*.
+   A `Ref` created in the enclosing frame is passed as the closure's leading
+   capture argument into a *new* frame; `read_place`'s `Deref` would resolve it
+   against the wrong frame. Landing this needs either a frame-stable reference
+   representation or resolving refs to `(frame, local)` at call time. This is
+   the part that makes the change more than a mechanical lowering edit -- budget
+   a full session and run the whole suite (4527 tests) after.
+
 ## Recommended next steps (priority order)
 
-1. **HIR-31 remainder** -- by-ref capture aliasing (typeck `&T` field type +
-   lower `Rvalue::Ref` + use-site auto-deref). Now the top open Critical.
-2. **Audit follow-ups from this session's findings:** the `glyim-solve`
-   `tests/unification.rs` (199 tests) is dead/rotted (not in `tests/mod.rs`,
-   would not compile) -- either revive or delete. Same latent risk as the
-   `glyim-syntax` dead test module fixed here.
-3. Remaining High/Medium findings across the audit.
+1. **HIR-31 remainder** -- by-ref capture aliasing (see the detailed plan
+   above; the interpreter's frame-relative `Ref` is the hard part). Top open
+   Critical.
+2. Remaining High findings, e.g. SOLVE-4 (speculative coercions mutate the
+   table with no rollback), SOLVE-5 (occurs check skips Projection/Dynamic),
+   MIR-16 (`Rvalue::Ref` discards the projection), RT-1 (`resolve_target`
+   indexes `block_offsets` unchecked).
+3. Remaining Medium findings across the audit (FE-3 chained casts, FE-5
+   negative-literal signs, HIR-13/20, ...).
+
+## Pre-existing failure to be aware of
+
+`glyim-cli::emit_modes::exec_binary_prints_hello` FAILS on this arm64 macOS
+host: the linker cannot resolve `_glyim_stdout_write`. It fails **identically
+on clean HEAD** -- not caused by any change in this or the prior session. It is
+a native-codegen/link concern on non-Linux hosts; the in-process interpreter
+tests are the authoritative on-host runtime proof.
 
 ## Constraints (still in force)
 
