@@ -338,3 +338,45 @@ fn test_triple_chained_casts() {
     let result = parse_to_syntax("fn f() { let y = 1 as i32 as i64 as u64; }", file_id());
     assert!(result.diagnostics.is_empty(), "got: {:?}", result.diagnostics);
 }
+
+// ─── FE-12/13/14/17/18 batch ───
+#[test]
+fn test_pub_in_path() {
+    // FE-12: `pub(in path)` was rejected ("expected crate, super, self, or path").
+    let r = parse_to_syntax("pub(in crate::foo) fn f() {}", file_id());
+    assert!(r.diagnostics.is_empty(), "got: {:?}", r.diagnostics);
+}
+
+#[test]
+fn test_extern_crate_semicolon() {
+    // FE-13: `extern crate name;` left the `;` unconsumed.
+    let r = parse_to_syntax("extern crate core;", file_id());
+    assert!(r.diagnostics.is_empty(), "got: {:?}", r.diagnostics);
+}
+
+#[test]
+fn test_anonymous_const() {
+    // FE-14: `const _: T = …;` emitted a spurious error (`_` is `Underscore`).
+    let r = parse_to_syntax("const _: i32 = 5;", file_id());
+    assert!(r.diagnostics.is_empty(), "got: {:?}", r.diagnostics);
+}
+
+#[test]
+fn test_exponent_underscore_rejected() {
+    // FE-17: `1e_` must NOT parse as a valid float exponent.
+    let r = parse_to_syntax("fn f() { let x = 1e_; }", file_id());
+    assert!(
+        !r.diagnostics.is_empty(),
+        "`1e_` must be a lex error, got no diagnostics"
+    );
+}
+
+#[test]
+fn test_unterminated_block_comment_diagnosed() {
+    // FE-18: an unclosed `/*` produced no diagnostic.
+    let r = parse_to_syntax("fn f() {}\n/* oops", file_id());
+    assert!(
+        !r.diagnostics.is_empty(),
+        "unterminated block comment must be diagnosed"
+    );
+}

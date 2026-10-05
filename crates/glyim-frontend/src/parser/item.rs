@@ -67,7 +67,13 @@ impl<'a> Parser<'a> {
             SyntaxKind::KwConst => {
                 self.start_node(SyntaxKind::ConstDef);
                 self.bump(); // const
-                self.bump_expected(SyntaxKind::Ident);
+                // FE-14: an anonymous const (`const _: T = …;`) uses `_`, which
+                // lexes as `Underscore`, not `Ident`.
+                if matches!(self.current_kind(), SyntaxKind::Ident | SyntaxKind::Underscore) {
+                    self.bump();
+                } else {
+                    self.error("expected name or `_` after `const`");
+                }
                 self.expect(SyntaxKind::Colon);
                 self.parse_type();
                 if self.current_kind() == SyntaxKind::Eq {
@@ -86,7 +92,12 @@ impl<'a> Parser<'a> {
                 if self.current_kind() == SyntaxKind::KwMut {
                     self.bump();
                 }
-                self.bump_expected(SyntaxKind::Ident);
+                // FE-14: allow `static _: T = …;`.
+                if matches!(self.current_kind(), SyntaxKind::Ident | SyntaxKind::Underscore) {
+                    self.bump();
+                } else {
+                    self.error("expected name or `_` after `static`");
+                }
                 self.expect(SyntaxKind::Colon);
                 self.parse_type();
                 if self.current_kind() == SyntaxKind::Eq {
@@ -137,6 +148,9 @@ impl<'a> Parser<'a> {
                         self.bump(); // as
                         self.bump_expected(SyntaxKind::Ident); // alias
                     }
+                    // FE-13: `extern crate name;` ends with a semicolon the
+                    // parser previously left unconsumed.
+                    self.expect(SyntaxKind::Semicolon);
                 } else if self.current_kind() == SyntaxKind::LBrace {
                     self.bump(); // {
                     while self.current_kind() != SyntaxKind::RBrace && self.current().is_some() {
@@ -216,6 +230,14 @@ impl<'a> Parser<'a> {
                 SyntaxKind::KwSelf => {
                     self.start_node(SyntaxKind::VisSelf);
                     self.bump();
+                    self.finish_node();
+                }
+                // FE-12: `pub(in path)` — accept the `in` keyword and parse
+                // the path (same `VisPath` node as the bare-path form).
+                SyntaxKind::KwIn => {
+                    self.bump(); // in
+                    self.start_node(SyntaxKind::VisPath);
+                    self.parse_path();
                     self.finish_node();
                 }
                 SyntaxKind::Ident => {

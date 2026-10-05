@@ -164,9 +164,11 @@ fn unterminated_block_comment() {
     let result = lex_result("42 /* never closed");
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::IntLit);
+    // FE-18: an unterminated block comment is now diagnosed (Rust errors on
+    // it too); previously it was silently swallowed as trivia.
     assert!(
-        result.diagnostics.is_empty(),
-        "unterminated block comment is just trivia"
+        !result.diagnostics.is_empty(),
+        "unterminated block comment must be diagnosed"
     );
 }
 

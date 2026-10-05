@@ -475,6 +475,7 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '/' if self.peek_next() == Some('*') => {
+                    let comment_start = self.pos;
                     self.advance();
                     self.advance();
                     let mut depth = 1u32;
@@ -495,6 +496,14 @@ impl<'a> Lexer<'a> {
                             }
                             None => break,
                         }
+                    }
+                    // FE-18: reaching EOF with `depth > 0` means the comment
+                    // was never closed; report it (strings/chars already do).
+                    if depth > 0 {
+                        self.diagnostics.push(GlyimDiagnostic::lex_error(
+                            self.span(comment_start, self.pos),
+                            "unterminated block comment".to_string(),
+                        ));
                     }
                 }
                 _ => break,
@@ -587,11 +596,16 @@ impl<'a> Lexer<'a> {
             if self.peek() == Some('+') || self.peek() == Some('-') {
                 self.advance();
             }
+            // FE-17: an underscore does NOT satisfy the "at least one digit"
+            // requirement (`1e_` must error, not parse as a float). Accept
+            // underscores only *after* a real digit.
             let mut has_exponent_digits = false;
             while let Some(ch) = self.peek() {
-                if ch.is_ascii_digit() || ch == '_' {
+                if ch.is_ascii_digit() {
                     self.advance();
                     has_exponent_digits = true;
+                } else if ch == '_' && has_exponent_digits {
+                    self.advance();
                 } else {
                     break;
                 }
