@@ -108,8 +108,37 @@ impl WsServer {
                                     if let Ok(ext_msg) =
                                         serde_json::from_str::<ExtensionMessage>(&text)
                                     {
+                                        // T016-PATCHED-WS [PILOT-1]: reject
+                                        // any message whose session_id (or
+                                        // trace_id) is not a strictly
+                                        // validated identifier. The id is
+                                        // later joined into the worktree
+                                        // directory path and git branch
+                                        // name; accepting attacker-chosen
+                                        // values over the unauthenticated
+                                        // local WebSocket lets a local
+                                        // attacker create files/refs
+                                        // outside the worktree base.
                                         let sid = ext_msg.session_id().map(|s| s.to_string());
                                         let tid = ext_msg.trace_id().map(|s| s.to_string());
+                                        let mut rejected = false;
+                                        if let Some(s) = sid.as_deref() {
+                                            if let Err(e) = crate::error::validate_id(s) {
+                                                tracing::warn!(peer = %addr, "rejected message (session_id): {e}");
+                                                rejected = true;
+                                            }
+                                        }
+                                        if !rejected {
+                                            if let Some(t) = tid.as_deref() {
+                                                if let Err(e) = crate::error::validate_id(t) {
+                                                    tracing::warn!(peer = %addr, "rejected message (trace_id): {e}");
+                                                    rejected = true;
+                                                }
+                                            }
+                                        }
+                                        if rejected {
+                                            continue;
+                                        }
                                         let _ = event_tx
                                             .send(ServerEvent::Message {
                                                 session_id: sid,

@@ -11,6 +11,13 @@ pub async fn create_worktree(
     branch_version: &str,
     timeout_secs: u64,
 ) -> Result<PathBuf, PilotError> {
+    // T016-PATCHED-WORKTREE [PILOT-1]: defense-in-depth validation. Even
+    // though the WebSocket layer now rejects malformed ids, the worktree
+    // layer must never trust the caller — a `stream_id` like `../../tmp/evil`
+    // would escape `worktree_base` and a `branch_version` with `/`, spaces,
+    // or `..` would break `git checkout -b`.
+    crate::error::validate_id(stream_id)?;
+    crate::error::validate_id(branch_version)?;
     let worktree_dir = worktree_base.join(format!("stream-{stream_id}"));
     let branch_name = format!("stream-{stream_id}/{branch_version}");
     let args = &[

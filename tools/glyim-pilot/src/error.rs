@@ -142,6 +142,37 @@ impl From<std::io::Error> for PilotError {
     }
 }
 
+/// T016-PATCHED-HELPER [PILOT-1]: reject `session_id`/`stream_id` strings
+/// that could be used to escape the worktree base or inject git ref spec
+/// characters. `session_id` arrives over an unauthenticated local WebSocket
+/// and is joined into the worktree directory path and git branch name, so a
+/// value like `../../tmp/evil` (or `..`, `/`, spaces, control chars) must
+/// never reach `create_worktree`.
+///
+/// Accepted values are non-empty ASCII alphanumerics plus `-`, `_`, `.`
+/// with the additional constraint that `.` cannot be a leading component
+/// (rejects `.`, `..`, `.foo/`, ...). Length is capped at 64 characters.
+pub fn validate_id(s: &str) -> Result<(), PilotError> {
+    if s.is_empty() || s.len() > 64 {
+        return Err(PilotError::Session(format!(
+            "invalid id {s:?}: length must be in 1..=64"
+        )));
+    }
+    if s == "." || s == ".." {
+        return Err(PilotError::Session(format!(
+            "invalid id {s:?}: `.` and `..` are not allowed"
+        )));
+    }
+    for c in s.chars() {
+        if !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+            return Err(PilotError::Session(format!(
+                "invalid id {s:?}: character {c:?} is not allowed"
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,5 +197,44 @@ mod tests {
         };
         assert_eq!(err.code(), "E0205");
         assert!(!format!("{err}").contains("I/O"));
+    }
+
+    // T016-PATCHED-TEST [PILOT-1]
+    #[test]
+    fn validate_id_accepts_normal_ids() {
+        for ok in &["W1-C01", "session_42", "a.b.c", "A", "0123456789"] {
+            validate_id(ok).unwrap_or_else(|e| panic!("{ok} should be ok: {e}"));
+        }
+    }
+
+    #[test]
+    fn validate_id_rejects_traversal_and_ref_specials() {
+        let bad = [
+            "",
+            ".",
+            "..",
+            "../../tmp/evil",
+            "a/b",
+            "a\\b",
+            "a b",
+            "a:refs",
+            "a~b",
+            "a^b",
+            "a*b",
+            "a?b",
+            "a[b",
+            "a]b",
+            "a..b/../c",
+            "\u{0}nul",
+            "héllo", // non-ASCII
+            &"x".repeat(65),
+        ];
+        for s in bad {
+            assert!(
+                validate_id(s).is_err(),
+                "expected reject: {s:?} (len={})",
+                s.len()
+            );
+        }
     }
 }
