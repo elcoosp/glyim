@@ -217,7 +217,15 @@ impl<'a> Parser<'a> {
                     if at_follows {
                         self.flush_trivia(); // whitespace legitimately precedes `@`
                         self.bump(); // @
-                        self.parse_pat_inner();
+                        // T164-PATCHED [FE-109]: `x @ (a, b)` needs the
+                        // tuple/struct/tuple-struct arm that lives in
+                        // `parse_pat_single`, not the narrower
+                        // `parse_pat_inner` (which handles `&`, `ref`,
+                        // `mut`, and the primitives but not `(`).
+                        // `x @ Some(y)` worked only because the Ident
+                        // arm already chains an optional `(`; the parenthesized
+                        // subpattern was unparseable.
+                        self.parse_pat_single();
                     }
                     self.finish_node();
                 }

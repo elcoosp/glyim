@@ -81,3 +81,16 @@ fn t022_negative_literal_in_pattern_parses() {
         "T022: expected zero diagnostics, got {diags:?}"
     );
 }
+
+/// T164 [FE-109]: `x @ (a, b)` — binding with a parenthesized sub-pattern
+/// must parse. The previous code called `parse_pat_inner` after `@`, which
+/// lacks an `LParen` arm.
+#[test]
+fn t164_binding_with_tuple_subpattern_parses() {
+    let src = "fn main() { let x @ (a, b) = (1, 2); }";
+    let diags = parse_ok(src);
+    assert!(
+        diags.is_empty(),
+        "T164: expected zero diagnostics, got {diags:?}"
+    );
+}
