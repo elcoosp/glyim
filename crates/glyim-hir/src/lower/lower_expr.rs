@@ -417,12 +417,20 @@ fn lower_closure_expr(
 ) -> Option<ExprId> {
     let mut params = Vec::new();
     let mut body_expr = None;
-    let mut is_move = false;
+    // T049-PATCHED [HIRX-3]: `KwMove` is a *token* kind, not a node
+    // kind, so the previous `node.children()` loop never saw it and
+    // `is_move` was always `false`. Every `move |..| ..` therefore
+    // lowered with `is_move = false`, and typeck captured by reference
+    // instead of by value. Detect the modifier through
+    // `children_with_tokens`, which yields both nodes and tokens.
+    let is_move = node.children_with_tokens().any(|el| {
+        matches!(
+            &el,
+            glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwMove
+        )
+    });
     for child in node.children() {
         match child.kind() {
-            SyntaxKind::KwMove => {
-                is_move = true;
-            }
             SyntaxKind::ParamList => {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
                     let (_, pat_id) = lower_param(&param_node, interner, &mut body.pats);
