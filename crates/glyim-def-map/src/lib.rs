@@ -649,19 +649,33 @@ fn process_use_tree(
                     if let Some(inner_path_node) = inner_use_path {
                         let inner_path = extract_path_from_syntax(&inner_path_node, interner);
 
-                        if let (Some(base_mod), Some(inner_p)) = (base_module, inner_path)
-                            && inner_p.segments.len() == 1
-                        {
-                            let orig_name = inner_p.segments[0].name;
+                        // T080-PATCHED [DM-3]: accept multi-segment inner
+                        // paths too (`use a::{b::c}`), not only single-
+                        // segment ones. The previous guard required
+                        // `inner_p.segments.len() == 1` and silently
+                        // dropped every deeper path. The submodule-name
+                        // check below still only makes sense for a
+                        // single-segment path, but the resolver call
+                        // already handles arbitrary-depth paths.
+                        if let (Some(base_mod), Some(inner_p)) = (base_module, inner_path) {
+                            let last_segment = inner_p
+                                .segments
+                                .last()
+                                .map(|s| s.name)
+                                .unwrap_or_else(|| interner.intern("_"));
                             let inner_alias = extract_alias_from_use_tree(&child, interner);
-                            let bind_name = inner_alias.unwrap_or(orig_name);
+                            let bind_name = inner_alias.unwrap_or(last_segment);
 
-                            // Handle submodule import (e.g. `use std::io::{self, Read}` => `io` itself)
-                            if let Some(child_mod_id) = modules[base_mod]
-                                .children
-                                .iter()
-                                .find(|(n, _)| *n == orig_name)
-                                .map(|(_, id)| *id)
+                            // Handle submodule import — only relevant when
+                            // the path is a single segment (the module's
+                            // own name). Deeper paths resolve through the
+                            // resolver below.
+                            if inner_p.segments.len() == 1
+                                && let Some(child_mod_id) = modules[base_mod]
+                                    .children
+                                    .iter()
+                                    .find(|(n, _)| *n == last_segment)
+                                    .map(|(_, id)| *id)
                             {
                                 let module_data = &modules[child_mod_id];
                                 let def_id = module_data.def_id;
@@ -674,7 +688,8 @@ fn process_use_tree(
                                 );
                             }
 
-                            // Now resolve types/values for the inner segment
+                            // Resolve the inner path (of any depth)
+                            // relative to the base module.
                             let resolver = Resolver::new(modules, ModuleId::from_raw(0), base_mod);
                             let per_ns = resolver.resolve_path(&inner_p);
 
