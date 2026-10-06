@@ -31,16 +31,41 @@ struct MaybeInitialized {
 
 impl MaybeInitialized {
     fn compute(body: &Body) -> Self {
+        // T105-PATCHED [OPT-2]: this is a *must*-initialized analysis: a
+        // local is definitely initialized at a program point only if it is
+        // initialized on *every* path to that point. The previous code was
+        // a union (may-analysis): a merge point saw a local as initialized
+        // as soon as *one* predecessor initialized it. Then
+        // `is_definitely_initialized` (which feeds the unconditional vs
+        // flag-guarded `Drop` decision) returned `true` for locals that
+        // were actually uninitialized on the other incoming path — the
+        // exact scenario drop flags exist for. With `if c { s = make(); }`
+        // and a scope-exit `Drop(s)`, the drop ran unconditionally and
+        // freed garbage on the `!c` path.
+        //
+        // Must-analysis:
+        //   * Non-entry blocks start at TOP (all `true`) and are narrowed
+        //     by intersecting each predecessor's OUT.
+        //   * Entry block starts with parameters as initialized and
+        //     everything else false.
+        //   * The worklist only ever removes `true`s (monotonically
+        //     decreasing), so a single pass per change is enough.
         let num_locals = body.locals.len();
         let num_blocks = body.basic_blocks.len();
-        let mut entry = vec![vec![false; num_locals]; num_blocks];
-        for i in 0..=body.arg_count {
-            entry[0][i] = true;
+        let mut entry = vec![vec![true; num_locals]; num_blocks];
+        // Entry block: params (locals 0..=arg_count) are initialized;
+        // every other local is not yet initialized on entry.
+        for (i, slot) in entry[0].iter_mut().enumerate() {
+            *slot = i <= body.arg_count as usize;
         }
         let mut queue = std::collections::VecDeque::new();
-        let mut changed = vec![true; num_blocks];
-        queue.push_back(0);
+        let mut in_queue = vec![false; num_blocks];
+        for i in 0..num_blocks {
+            queue.push_back(i);
+            in_queue[i] = true;
+        }
         while let Some(bb_idx) = queue.pop_front() {
+            in_queue[bb_idx] = false;
             let mut cur = entry[bb_idx].clone();
             let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
             for stmt in &block.statements {
@@ -59,16 +84,20 @@ impl MaybeInitialized {
             }
             for succ in super::cfg_simplify::terminator_successors(&block.terminator) {
                 let succ_idx = succ.to_raw() as usize;
+                if succ_idx == 0 {
+                    // The entry block has no predecessors; never meet into it.
+                    continue;
+                }
                 let succ_entry = &mut entry[succ_idx];
                 let mut changed_succ = false;
                 for i in 0..num_locals {
-                    if cur[i] && !succ_entry[i] {
-                        succ_entry[i] = true;
+                    if succ_entry[i] && !cur[i] {
+                        succ_entry[i] = false;
                         changed_succ = true;
                     }
                 }
-                if changed_succ && changed[succ_idx] {
-                    changed[succ_idx] = true;
+                if changed_succ && !in_queue[succ_idx] {
+                    in_queue[succ_idx] = true;
                     queue.push_back(succ_idx);
                 }
             }
