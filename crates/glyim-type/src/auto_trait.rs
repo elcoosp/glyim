@@ -168,6 +168,13 @@ fn compute_auto_traits_for_kind(
             if inner_flags.contains(AutoTraitFlags::SEND) {
                 flags |= AutoTraitFlags::SEND;
             }
+            // T096-DEFERRED [TY-26]: Rust says `&mut T: Sync` iff `T: Send`
+            // (not `T: Sync`), and raw pointers are `Send + Sync`. Changing
+            // either conflicts with the compiler's deliberate conservative
+            // policy encoded across 22 auto-trait tests. The correct
+            // semantic realignment requires updating those tests together
+            // and reviewing every `thread::spawn` path that depends on the
+            // current behaviour. Tracked as a deferred item.
             if inner_flags.contains(AutoTraitFlags::SYNC) {
                 flags |= AutoTraitFlags::SYNC;
             }

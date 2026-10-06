@@ -58,21 +58,32 @@ fn build_region_substitution(
     bound_vars: &[BoundVariableKind],
     placeholders: &[PlaceholderRegion],
 ) -> BoundVarSubstitution {
-    let mut region_map: Vec<Region> = Vec::new();
+    // T095-PATCHED [SOLVE-30]: index `region_map` by the *original*
+    // bound-var index, not by a separate running placeholder ordinal.
+    // With a mixed binder like `[Ty, Region]`, `LateBound(_, 1, _)` looked
+    // up `region_map[1]`, but the old code pushed placeholders into a
+    // fresh vector, so position 1 held nothing — the region was never
+    // substituted and escaped the check. We now allocate a full-length
+    // slot per bound var and fill only the region positions.
+    let mut region_map: Vec<Region> = Vec::with_capacity(bound_vars.len());
     let mut placeholder_idx = 0;
-
-    for (idx, var) in bound_vars.iter().enumerate() {
+    for var in bound_vars.iter() {
         match var {
             BoundVariableKind::Region(_) => {
                 if placeholder_idx < placeholders.len() {
-                    region_map.push(Region::Placeholder(placeholders[placeholder_idx].clone()));
+                    region_map
+                        .push(Region::Placeholder(placeholders[placeholder_idx].clone()));
                     placeholder_idx += 1;
+                } else {
+                    region_map.push(Region::Erased);
                 }
             }
-            BoundVariableKind::Ty(kind) => {
-                let _ = (idx, kind);
+            BoundVariableKind::Ty(_) | BoundVariableKind::Const => {
+                // T095: reserve the slot so later region entries keep
+                // their original indices. `Erased` here is a placeholder
+                // that non-region bound vars never read.
+                region_map.push(Region::Erased);
             }
-            BoundVariableKind::Const => {}
         }
     }
 

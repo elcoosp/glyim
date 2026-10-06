@@ -885,22 +885,24 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
     fn fn_abi_of(&self, sig: &FnSig) -> Result<FnAbi, LayoutError> {
         let conv = CallConvention::from(sig.abi);
         let args = self.ctx.substitution_args(sig.inputs);
-        let arg_abis: Vec<ArgAbi> = args
-            .iter()
-            .filter_map(|arg| {
-                if let GenericArg::Ty(t) = arg {
-                    let layout = self.layout_of(*t).ok()?;
-                    let mode = self.pass_mode_for(*t, &layout, conv);
-                    Some(ArgAbi {
-                        ty: *t,
-                        layout,
-                        mode,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // T116-PATCHED [LAY-1]: propagate a layout failure instead of
+        // silently dropping the argument. The previous `filter_map(...ok()?)`
+        // skipped any arg whose layout failed (e.g. a bare Param, Slice,
+        // or Infer at this stage), shifting every later argument's ABI
+        // position for consumers of the SimpleLayoutComputer (bytecode
+        // backend's provider paths, debug info).
+        let mut arg_abis: Vec<ArgAbi> = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            if let GenericArg::Ty(t) = arg {
+                let layout = self.layout_of(*t)?;
+                let mode = self.pass_mode_for(*t, &layout, conv);
+                arg_abis.push(ArgAbi {
+                    ty: *t,
+                    layout,
+                    mode,
+                });
+            }
+        }
         let ret_layout = self.layout_of(sig.output)?;
         let ret_mode = self.pass_mode_for(sig.output, &ret_layout, conv);
         Ok(FnAbi {
