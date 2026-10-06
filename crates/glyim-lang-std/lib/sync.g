@@ -2,11 +2,24 @@
 //!
 //! This module contains primitives for synchronizing access to shared data
 //! across multiple threads.
+//!
+//! T013-PATCHED [STD-1]: `Mutex<T>` and `RwLock<T>` now hold a `value:
+//! UnsafeCell<T>` field so the protected data is actually stored (previously
+//! it was dropped on the floor and guards reinterpreted lock state as `T`).
+//! The dead `glyim_mutex_lock` extern was removed (no such symbol in the
+//! runtime).
 
 /// A mutual exclusion primitive useful for protecting shared data.
+///
+/// T013-PATCHED [STD-1]: `value` holds the protected `T`. The previous
+/// definition stored *only* the lock state (`inner`) and a `PhantomData<T>`,
+/// so `new(t)` dropped the value on the floor and every read through a
+/// `MutexGuard` reinterpreted the `MutexInner` bits (an `AtomicBool` plus
+/// 63 padding bytes) as `T` — every reader saw lock garbage instead of the
+/// user's data.
 struct Mutex<T> {
     inner: UnsafeCell<MutexInner>,
-    _marker: PhantomData<T>,
+    value: UnsafeCell<T>,
 }
 
 /// Inner state for the mutex.
@@ -23,15 +36,15 @@ impl<T> Mutex<T> {
                 locked: AtomicBool::new(false),
                 _padding: [0u8; 63],
             }),
-            _marker: PhantomData,
+            value: UnsafeCell::new(t),
         }
     }
 
     /// Acquire the mutex, blocking the current thread until it is able to do so.
     fn lock(&self) -> MutexGuard<T> {
-        extern "C" {
-            fn glyim_mutex_lock(mutex: *const u8) -> i32;
-        }
+        // T013-PATCHED [STD-1]: removed the dead `glyim_mutex_lock` extern
+        // declaration — the runtime exports no such symbol, and the spin
+        // loop below is the actual critical-section entry.
         while self.inner().locked.compare_exchange(false, true, Ordering::Acquire).is_err() {
             // Spin and yield
             thread::yield_now();
@@ -50,15 +63,16 @@ impl<T> Mutex<T> {
 
     /// Returns a mutable reference to the underlying data.
     fn get_mut(&mut self) -> &mut T {
-        self.inner().locked.store(false, Ordering::Relaxed);
-        // SAFETY: we have &mut self, so no other references exist
-        unsafe { &mut *(self.inner.get() as *mut T) }
+        // T013-PATCHED [STD-1]: read through the real value field instead
+        // of reinterpreting the lock's inner state as `T`.
+        // SAFETY: we have `&mut self`, so no other references exist.
+        unsafe { &mut *self.value.get() }
     }
 
     /// Consume the mutex, returning the underlying data.
     fn into_inner(self) -> T {
-        // SAFETY: the mutex is consumed, so no other references exist
-        unsafe { self.inner.into_inner() as T }
+        // SAFETY: the mutex is consumed, so no other references exist.
+        self.value.into_inner()
     }
 
     fn inner(&self) -> &MutexInner {
@@ -82,22 +96,27 @@ impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        // SAFETY: we hold the lock
-        unsafe { &*(self.mutex.inner.get() as *const T) }
+        // T013-PATCHED [STD-1]: read through the value field, not through
+        // the lock state.
+        // SAFETY: we hold the lock; no other reference can access `value`.
+        unsafe { &*self.mutex.value.get() }
     }
 }
 
 impl<T> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        // SAFETY: we hold the lock
-        unsafe { &mut *(self.mutex.inner.get() as *mut T) }
+        // SAFETY: we hold the lock; no other reference can access `value`.
+        unsafe { &mut *self.mutex.value.get() }
     }
 }
 
 /// A reader-writer lock, allowing multiple readers or a single writer.
+///
+/// T013-PATCHED [STD-1]: like `Mutex`, the protected `T` is stored in a
+/// dedicated `value` field so guards never reinterpret lock state as data.
 struct RwLock<T> {
     inner: UnsafeCell<RwLockInner>,
-    _marker: PhantomData<T>,
+    value: UnsafeCell<T>,
 }
 
 struct RwLockInner {
@@ -113,7 +132,7 @@ impl<T> RwLock<T> {
                 read_count: AtomicUsize::new(0),
                 write_locked: AtomicBool::new(false),
             }),
-            _marker: PhantomData,
+            value: UnsafeCell::new(t),
         }
     }
 
@@ -182,7 +201,10 @@ impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { &*(self.lock.inner.get() as *const T) }
+        // T013-PATCHED [STD-1]
+        // SAFETY: we hold a read lock; the value is initialized and will
+        // not be mutated while we hold it.
+        unsafe { &*self.lock.value.get() }
     }
 }
 
@@ -201,13 +223,16 @@ impl<T> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { &*(self.lock.inner.get() as *const T) }
+        // T013-PATCHED [STD-1]
+        // SAFETY: we hold the write lock exclusively.
+        unsafe { &*self.lock.value.get() }
     }
 }
 
 impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *(self.lock.inner.get() as *mut T) }
+        // SAFETY: we hold the write lock exclusively.
+        unsafe { &mut *self.lock.value.get() }
     }
 }
 
