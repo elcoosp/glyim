@@ -732,3 +732,179 @@ mod tests {
         assert!(m.is_empty());
     }
 }
+
+// ---------------------------------------------------------------------------
+// T012-PATCHED [STD-6]: fd-based / nofollow metadata
+// ---------------------------------------------------------------------------
+//
+// The runtime previously exposed only `glyim_fs_metadata(path, path_len,
+// out_size)` which returned *just* the size. `fs.g`'s `File::metadata`
+// nevertheless declared it with `(fd: i32, out: *mut MetadataRaw)` and
+// passed `self.fd` — so the runtime read the integer fd as a *path
+// pointer*, dereferencing address 3 and segfaulting. The functions below
+// take the real fd (and a real path for the nofollow case) and fill the
+// full `MetadataRaw` struct that `fs.g` already declares.
+
+/// FFI struct matching `fs.g`'s `MetadataRaw` (64-byte layout).
+///
+/// Offsets must match the .g struct exactly:
+///   size: u64 @0, perm: u32 @8, file_type: u32 @12,
+///   modified_secs: u64 @16, modified_nanos: u32 @24, _pad0: u32 @28,
+///   accessed_secs: u64 @32, accessed_nanos: u32 @40, _pad1: u32 @44,
+///   created_secs: u64 @48, created_nanos: u32 @56, _pad2: u32 @60
+#[repr(C)]
+pub struct MetadataRaw {
+    /// Size of the file in bytes.
+    pub size: u64,
+    /// Permission bits (Unix mode).
+    pub perm: u32,
+    /// 1 = regular file, 2 = directory, 3 = symlink, 0 = other.
+    pub file_type: u32,
+    /// Seconds component of modified time.
+    pub modified_secs: u64,
+    /// Nanoseconds component of modified time.
+    pub modified_nanos: u32,
+    /// Padding (alignment).
+    pub _pad0: u32,
+    /// Seconds component of accessed time.
+    pub accessed_secs: u64,
+    /// Nanoseconds component of accessed time.
+    pub accessed_nanos: u32,
+    /// Padding (alignment).
+    pub _pad1: u32,
+    /// Seconds component of created time.
+    pub created_secs: u64,
+    /// Nanoseconds component of created time.
+    pub created_nanos: u32,
+    /// Padding (alignment).
+    pub _pad2: u32,
+}
+
+const _: () = {
+    // Compile-time check: the FFI struct must be exactly 64 bytes so the
+    // layout matches the .g declaration.
+    assert!(std::mem::size_of::<MetadataRaw>() == 64);
+};
+
+/// Convert a `std::fs::Metadata` to the FFI `MetadataRaw` layout.
+fn meta_to_raw(meta: &std::fs::Metadata) -> MetadataRaw {
+    #[cfg(unix)]
+    fn perms(meta: &std::fs::Metadata) -> u32 {
+        use std::os::unix::fs::MetadataExt;
+        meta.mode()
+    }
+    #[cfg(not(unix))]
+    fn perms(meta: &std::fs::Metadata) -> u32 {
+        if meta.permissions().readonly() { 0o444 } else { 0o666 }
+    }
+
+    let file_type = if meta.is_file() {
+        1u32
+    } else if meta.is_dir() {
+        2u32
+    } else if meta.file_type().is_symlink() {
+        3u32
+    } else {
+        0u32
+    };
+
+    let (msecs, mnanos) = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| (d.as_secs(), d.subsec_nanos()))
+        .unwrap_or((0, 0));
+    let (asecs, ananos) = meta
+        .accessed()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| (d.as_secs(), d.subsec_nanos()))
+        .unwrap_or((0, 0));
+    let (csecs, cnanos) = meta
+        .created()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| (d.as_secs(), d.subsec_nanos()))
+        .unwrap_or((0, 0));
+
+    MetadataRaw {
+        size: meta.len(),
+        perm: perms(meta),
+        file_type,
+        modified_secs: msecs,
+        modified_nanos: mnanos,
+        _pad0: 0,
+        accessed_secs: asecs,
+        accessed_nanos: ananos,
+        _pad1: 0,
+        created_secs: csecs,
+        created_nanos: cnanos,
+        _pad2: 0,
+    }
+}
+
+/// T012-PATCHED: fill a `MetadataRaw` from an open file descriptor (fstat).
+///
+/// Returns `FS_OK` on success, `FS_EBADF` if `fd` is not open, or another
+/// negative `FS_E*` code on failure.
+///
+/// # Safety
+///
+/// - `out` must be a valid pointer to a `MetadataRaw`
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_fs_metadata_fd(fd: i32, out: *mut MetadataRaw) -> i32 {
+    if out.is_null() {
+        return FS_EIO;
+    }
+    let mut table = match fs_table().lock() {
+        Ok(t) => t,
+        Err(_) => return FS_EIO,
+    };
+    let file = match table.get_mut(fd) {
+        Some(f) => f,
+        None => return FS_EBADF,
+    };
+    match file.metadata() {
+        Ok(meta) => {
+            // SAFETY: caller guarantees `out` is a valid pointer to a
+            // MetadataRaw. `#[repr(C)]` gives a deterministic layout.
+            unsafe {
+                out.write(meta_to_raw(&meta));
+            }
+            FS_OK
+        }
+        Err(e) => io_err_to_errno(&e),
+    }
+}
+
+/// T012-PATCHED: fill a `MetadataRaw` from a path, *without* following
+/// symlinks (lstat).
+///
+/// # Safety
+///
+/// - `path` must point to `path_len` bytes of valid UTF-8
+/// - `out` must be a valid pointer to a `MetadataRaw`
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_fs_symlink_metadata(
+    path: *const u8,
+    path_len: usize,
+    out: *mut MetadataRaw,
+) -> i32 {
+    if out.is_null() {
+        return FS_EIO;
+    }
+    let p = match unsafe { path_from_raw(path, path_len) } {
+        Some(p) => p,
+        None => return FS_EIO,
+    };
+    match fs::symlink_metadata(p) {
+        Ok(meta) => {
+            // SAFETY: caller guarantees `out` is a valid pointer.
+            unsafe {
+                out.write(meta_to_raw(&meta));
+            }
+            FS_OK
+        }
+        Err(e) => io_err_to_errno(&e),
+    }
+}

@@ -136,11 +136,16 @@ impl File {
 
     /// Get the metadata for this file.
     fn metadata(&self) -> Result<Metadata> {
+        // T012-PATCHED-G [STD-6]: use the real fd-based FFI. The previous
+        // declaration called `glyim_fs_metadata(fd, out)` — but the runtime
+        // symbol is `(path, path_len, out_size)` and only returns the size.
+        // `File::metadata()` passed `self.fd` (an integer) where the runtime
+        // expected a path pointer, dereferencing address 3 → SIGSEGV.
         extern "C" {
-            fn glyim_fs_metadata(fd: i32, out: *mut MetadataRaw) -> i32;
+            fn glyim_fs_metadata_fd(fd: i32, out: *mut MetadataRaw) -> i32;
         }
         let mut raw = MetadataRaw::default();
-        let rc = unsafe { glyim_fs_metadata(self.fd, &mut raw) };
+        let rc = unsafe { glyim_fs_metadata_fd(self.fd, &mut raw) };
         if rc < 0 {
             Result::Err(Error::last_os_error())
         } else {
@@ -431,8 +436,23 @@ fn create_dir_all(path: &str) -> Result<()> {
 
 /// Read the metadata of a file without following symlinks.
 fn symlink_metadata(path: &str) -> Result<Metadata> {
-    let file = File::open(path)?;
-    file.metadata()
+    // T012-PATCHED-G [STD-6]: the previous implementation opened the file
+    // (following symlinks) and returned the *target's* metadata, defeating
+    // the "no-follow" contract. Route through the runtime's lstat path.
+    extern "C" {
+        fn glyim_fs_symlink_metadata(
+            path: *const u8,
+            path_len: usize,
+            out: *mut MetadataRaw,
+        ) -> i32;
+    }
+    let mut raw = MetadataRaw::default();
+    let rc = unsafe { glyim_fs_symlink_metadata(path.as_ptr(), path.len(), &mut raw) };
+    if rc < 0 {
+        Result::Err(Error::last_os_error())
+    } else {
+        Result::Ok(Metadata::from_raw(raw))
+    }
 }
 
 /// Return the metadata of a file.
