@@ -206,10 +206,31 @@ fn has_unreachable_terminator(result: &crate::lower::LowerResult) -> bool {
         .any(|bb| matches!(bb.terminator.kind, glyim_mir::TerminatorKind::Unreachable))
 }
 
+
+/// T099-REGRESSION: does the body contain an `Assert` terminator with
+/// `AssertMessage::BoundsCheck`?
+fn has_bounds_check_assert(result: &crate::lower::LowerResult) -> bool {
+    use glyim_mir::{AssertMessage, TerminatorKind};
+    for bb in result.body.basic_blocks.iter() {
+        if let TerminatorKind::Assert { msg, .. } = &bb.terminator.kind
+            && matches!(msg, AssertMessage::BoundsCheck)
+        {
+            return true;
+        }
+    }
+    false
+}
+
 #[test]
 fn out_of_bounds_range_lowers_with_panic_path() {
     // `arr[2..5]` over a 3-element array: end (5) > len (3) -> the bounds
-    // check must fail and route to an `Unreachable` (panic) terminator.
+    // check must fail and route to a panic terminator.
+    //
+    // T099-PATCHED [LOW-8]: the panic path is now `Assert` with
+    // `AssertMessage::BoundsCheck`. The previous code emitted
+    // `TerminatorKind::Unreachable`, which the interpreter renders as a
+    // Panic("reached unreachable terminator") and LLVM renders as
+    // `unreachable` — undefined behavior rather than a clean panic.
     let result = lower_slice(Some(2), Some(5), false);
     assert!(
         result.diagnostics.is_empty(),
@@ -217,8 +238,8 @@ fn out_of_bounds_range_lowers_with_panic_path() {
         result.diagnostics
     );
     assert!(
-        has_unreachable_terminator(&result),
-        "expected an Unreachable terminator proving the out-of-bounds panic path is emitted"
+        has_bounds_check_assert(&result),
+        "expected an Assert {{ msg: BoundsCheck }} terminator proving the out-of-bounds panic path is emitted"
     );
     assert!(
         has_ptr_len_tuple(&result),
