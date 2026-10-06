@@ -49,10 +49,20 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         enable: bool,
         hygiene: Option<HygieneCtx>,
     ) -> Self {
+        // T188-PATCHED [LL-21]: use the first source file's real path as
+        // the compile-unit filename (was hardcoded to "test.g" for every
+        // compilation, so DWARF consumers reported every frame as
+        // test.g:1). Falls back to "test.g" only if the map is empty.
+        let cu_filename = source_map
+            .values()
+            .next()
+            .map(|(path, _content)| path.as_str())
+            .unwrap_or("test.g")
+            .to_string();
         let (builder, compile_unit) = module.create_debug_info_builder(
             true,
             DWARFSourceLanguage::Rust,
-            "test.g",
+            &cu_filename,
             ".",
             "glyim",
             false,

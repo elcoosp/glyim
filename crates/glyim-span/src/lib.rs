@@ -104,8 +104,14 @@ impl Span {
     }
 
     /// to.
+    ///
+    /// T198-PATCHED [SPAN-3]: merging spans from different files is a
+    /// compiler bug — the resulting span would attribute text from one
+    /// file to another. The old `debug_assert_eq!` silently passed in
+    /// release builds, producing wrong diagnostic locations. Promote to
+    /// a hard assert so the invariant is enforced in production too.
     pub fn to(self, other: Span) -> Span {
-        debug_assert_eq!(
+        assert_eq!(
             self.file, other.file,
             "Cannot merge spans from different files"
         );

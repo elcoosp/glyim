@@ -363,10 +363,29 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
                 let mut owned: Vec<CString> = Vec::with_capacity(input.len());
                 let mut in_ts = pm_ts_alloc();
                 for (kind, text) in input {
-                    let ctext = CString::new(text.as_str()).unwrap_or_default();
+                    // T172-PATCHED [PM-2]: `CString::new` rejects strings
+                    // containing interior NUL bytes, and `unwrap_or_default`
+                    // produced a 1-byte `\0` allocation while `PmStr::len`
+                    // still used `text.len()` — the dylib then read `len`
+                    // bytes from a 1-byte buffer (OOB). Reject NUL tokens
+                    // by substituting an empty string and using *that*
+                    // length, so the pair (ptr, len) always describes a
+                    // valid readable range.
+                    let (ctext, real_len) = match CString::new(text.as_str()) {
+                        Ok(c) => {
+                            let l = text.len();
+                            (c, l)
+                        }
+                        Err(_) => {
+                            // Interior NUL: substitute a placeholder token
+                            // and record zero length. The macro that
+                            // receives it will see an empty text.
+                            (CString::default(), 0usize)
+                        }
+                    };
                     let pm_text = PmStr {
                         ptr: ctext.as_ptr() as *const u8,
-                        len: text.len() as u32,
+                        len: real_len as u32,
                     };
                     owned.push(ctext);
                     pm_ts_push(

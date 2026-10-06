@@ -59,7 +59,7 @@ fn find_braced_ranges(source: &str) -> Vec<FoldingRange> {
             }
             match ch {
                 '/' if next == Some('/') => {
-                    in_line_comment = true;
+                    // Rest of the line is a comment; nothing more to scan.
                     break;
                 }
                 '/' if next == Some('*') => {
