@@ -2349,16 +2349,19 @@ fn v15_t30_drop_in_place_receives_pointer_arg() {
         .expect("lowering should succeed");
 
     let ir = module.print_to_string().to_string();
-    // The drop call should pass a pointer argument (the bitcast of local_1 alloca)
+    // The drop call should pass a pointer argument (the bitcast of local_1 alloca).
+    // T005 changed the runtime's signature to take a second `Option<DropFn>`
+    // argument (niche-optimised to a raw function pointer), so the emitted
+    // call now passes a null second operand.
     assert!(
         ir.contains("call void @glyim_drop_in_place(ptr"),
         "IR should call glyim_drop_in_place with ptr argument, got:\n{}",
         ir
     );
-    // The function should be declared as taking a ptr parameter
+    // The declaration must match the runtime's real 2-argument form.
     assert!(
-        ir.contains("declare void @glyim_drop_in_place(ptr)"),
-        "IR should declare glyim_drop_in_place(ptr), got:\n{}",
+        ir.contains("declare void @glyim_drop_in_place(ptr, ptr)"),
+        "IR should declare glyim_drop_in_place(ptr, ptr), got:\n{}",
         ir
     );
 }

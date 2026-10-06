@@ -3572,9 +3572,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             llvm_args.push(sret_ptr.as_basic_value_enum());
             sret_alloca = Some(sret_ptr);
         }
+        // T112-PATCHED [LL-17]: `PassMode::Ignore` args (ZSTs like `()`)
+        // are dropped from the LLVM parameter list but are still present in
+        // MIR's `args`. The previous code `continue`d *before* the arg_idx
+        // increment, so the next ABI arg was read from `args[arg_idx]` with
+        // `arg_idx` still pointing at the ignored MIR arg — the caller fed
+        // the ZST operand to the following non-ZST parameter. Advance the
+        // index even for ignored args.
         let mut arg_idx = 0;
         for arg_abi in &fn_abi.args {
             if matches!(arg_abi.mode, PassMode::Ignore) {
+                arg_idx += 1;
                 continue;
             }
             if arg_idx >= args.len() + closure_captures.as_ref().map(|c| c.len()).unwrap_or(0) {
@@ -4286,26 +4294,36 @@ pub(crate) fn lower_body<'ctx>(
     // slots, every read of a parameter reads uninitialized stack garbage
     // (silent miscompile of *every* function call in real-llvm codegen).
     let fn_abi = layout_computer.fn_abi_of(&fn_sig).ok();
-    for i in 1..=body.arg_count {
-        let local_idx = LocalIdx::from_raw(i as u32);
-        let params = function.get_params();
-        // When returning via sret, an extra hidden pointer is prepended as the
-        // function's first parameter; the real arguments start at index 1.
-        let param_idx = if lowering_ctx.is_sret { i } else { i - 1 };
+    // T112-PATCHED [LL-17]: map LLVM params to MIR locals by iterating the
+    // ABI classification, not by assuming `param_idx == mir_idx`. ZST
+    // (`PassMode::Ignore`) params are absent from the LLVM signature but
+    // still present in MIR; the previous `param_idx = i - 1` mapping read
+    // the wrong LLVM parameter (or nothing) whenever a ZST appeared before
+    // a real argument. Each MIR local `1..=arg_count` is matched to its
+    // `fn_abi.args[i - 1]` entry; when that entry is Ignore, the local
+    // stays uninitialized (it holds a ZST anyway, so nothing to store).
+    let params = function.get_params();
+    // Offset of the first non-hidden LLVM parameter. sret prepends a
+    // pointer to the return slot.
+    let llvm_param_offset: u32 = if lowering_ctx.is_sret { 1 } else { 0 };
+    // Walk the ABI arg list, tracking the LLVM param index as we go and
+    // skipping `Ignore` entries (which contribute no LLVM param).
+    let mut next_llvm_param: u32 = llvm_param_offset;
+    let mut mir_local_idx: u32 = 1;
+    for arg_abi in fn_abi.as_ref().map(|abi| abi.args.as_slice()).unwrap_or(&[]) {
+        let local_idx = LocalIdx::from_raw(mir_local_idx);
+        mir_local_idx += 1;
+        if matches!(arg_abi.mode, glyim_layout::PassMode::Ignore) {
+            // No LLVM param for this ABI entry; skip.
+            continue;
+        }
+        let param_idx = next_llvm_param;
+        next_llvm_param += 1;
         if let Some(param_val) = params.get(param_idx as usize) {
             let local_ptr = lowering_ctx.get_local_ptr(local_idx);
-            // A byval/Indirect param arrives as a *pointer* to a copy of the
-            // struct. The local slot is expected to hold the struct *value*
-            // (the rest of codegen GEPs/loads the value from it), so we must
-            // dereference the byval pointer here — otherwise we store the
-            // pointer itself as if it were the struct and every field read
-            // operates on a mis-typed pointer (silent miscompile → garbage).
-            let arg_mode = fn_abi
-                .as_ref()
-                .and_then(|abi| abi.args.get((i - 1) as usize))
-                .map(|a| matches!(a.mode, glyim_layout::PassMode::Indirect { .. }));
+            let arg_mode = matches!(arg_abi.mode, glyim_layout::PassMode::Indirect { .. });
             match arg_mode {
-                Some(true) => {
+                true => {
                     let llvm_ty = lowering_ctx
                         .llvm_type_for_ty(body.locals.get(local_idx).map(|l| l.ty).unwrap());
                     let loaded = lowering_ctx
@@ -4317,7 +4335,7 @@ pub(crate) fn lower_body<'ctx>(
                         .build_store(local_ptr, loaded)
                         .expect("failed to store param into local");
                 }
-                _ => {
+                false => {
                     lowering_ctx
                         .builder
                         .build_store(local_ptr, *param_val)
