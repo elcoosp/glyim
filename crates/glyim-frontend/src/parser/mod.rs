@@ -74,8 +74,8 @@ impl<'a> Parser<'a> {
         while let Some(t) = self.tokens.get(self.pos) {
             if t.kind.is_trivia() {
                 let kind = GlyimLang::kind_to_raw(t.kind);
-                let text = t.text.clone();
-                self.builder.token(kind, text.as_str());
+                // T168-PATCHED [FE-114]: borrow directly.
+                self.builder.token(kind, t.text.as_str());
                 self.pos += 1;
             } else {
                 break;
@@ -139,8 +139,13 @@ impl<'a> Parser<'a> {
         self.flush_trivia();
         if let Some(token) = self.tokens.get(self.pos) {
             let kind = GlyimLang::kind_to_raw(token.kind);
-            let text = token.text.clone();
-            self.builder.token(kind, text.as_str());
+            // T168-PATCHED [FE-114]: pass the borrowed `&str` straight
+            // through — `GreenNodeBuilder::token` copies it into the tree.
+            // The previous `token.text.clone()` allocated a SmolStr per
+            // token (inline memcpy for ≤23 bytes, Arc bump for longer
+            // ident/comments/strings) purely to produce a temporary
+            // `&str` we then immediately borrowed again.
+            self.builder.token(kind, token.text.as_str());
             self.pos += 1;
         }
     }
