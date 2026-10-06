@@ -190,14 +190,12 @@ impl<T> Option<T> {
     }
 
     /// Returns a copy of the `Option` if it contains a `Copy` value.
-    fn copied(self) -> Option<T> where T: Copy {
-        self
-    }
-
-    /// Returns a clone of the `Option` if it contains a `Clone` value.
-    fn cloned(self) -> Option<T> where T: Clone {
-        self
-    }
+    // T195-PATCHED [STD-19]: `Option::copied` and `Option::cloned` are
+    // removed. In Rust they convert `Option<&T>` to `Option<T>`; the
+    // previous definitions here took and returned `Option<T>` unchanged,
+    // advertising semantics they did not implement. A correct impl would
+    // need a distinct `Option<&T>` receiver shape the language cannot
+    // currently express. Removing the stubs is honest about the gap.
 }
 
 impl<T> Option<Option<T>> {
