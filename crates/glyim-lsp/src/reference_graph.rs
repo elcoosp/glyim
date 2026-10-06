@@ -74,8 +74,15 @@ impl ReferenceGraph {
 
     /// build_from_hir.
     pub fn build_from_hir(&mut self, file_id: FileId, hir: &CrateHir, interner: &Interner) {
-        self.references
-            .retain(|_, refs| refs.iter().all(|r| r.file_id != file_id));
+        // T051-PATCHED [LSP-2]: only drop refs that belong to *this* file.
+        // The previous `retain(|_, refs| refs.iter().all(|r| r.file_id != file_id))`
+        // dropped the whole entry (including refs from OTHER files) as soon
+        // as one entry pointed at the rebuilt file, so cross-file rename /
+        // find-references silently lost occurrences in every other file.
+        for refs in self.references.values_mut() {
+            refs.retain(|r| r.file_id != file_id);
+        }
+        self.references.retain(|_, refs| !refs.is_empty());
 
         for item in hir.items.iter() {
             if let ItemKind::Fn(_) = &item.kind {
@@ -515,11 +522,20 @@ impl ReferenceGraph {
                         && let Some(name) = path.as_name()
                     {
                         let name_str = interner.resolve(name).to_string();
-                        // The direct LHS of an assignment is a *write* to that
-                        // variable (mirrors Tier 1.1's is_mut_use write tracking).
+                        // T052-PATCHED [LSP-3]: use the LHS expression's own
+                        // span (and, when available, its path segment span)
+                        // instead of the enclosing Assign's span. The outer
+                        // span covered the whole `x = 5;` statement, so a
+                        // rename generated an edit that rewrote the entire
+                        // assignment (`z;`) and destroyed the initializer.
+                        let lhs_span = body
+                            .expr_spans
+                            .get(*lhs)
+                            .copied()
+                            .unwrap_or(span);
                         add_ref(
                             &name_str,
-                            span,
+                            lhs_span,
                             true,
                             ReferenceKind::Variable,
                             AccessKind::Write,

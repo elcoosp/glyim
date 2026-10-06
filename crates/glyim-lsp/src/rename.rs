@@ -91,6 +91,16 @@ pub fn rename_symbol(
         let mut changes: HashMap<Uri, Vec<TextEdit>> = HashMap::new();
 
         for r in references {
+            // T053-PATCHED-RENAME [LSP-4]: skip references with a
+            // DUMMY span (0..0). `walk_pattern` currently records
+            // `for`/closure/match pattern bindings with `Span::DUMMY`
+            // because HIR `Pat` has no span yet; renaming such a ref
+            // would insert the new name at file position 0:0 and
+            // corrupt the document. The real fix is to add span
+            // storage to `Pat`, tracked as a follow-up.
+            if r.span.is_dummy() {
+                continue;
+            }
             if let Some(ref_path) = file_map.path(r.file_id)
                 && let Ok(ref_url) = Url::from_file_path(ref_path)
             {

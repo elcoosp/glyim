@@ -107,6 +107,13 @@ pub fn find_references(
     let source_maps = db.source_maps.read();
     let mut locations = Vec::new();
     for r in references {
+        // T053-PATCHED-NAV [LSP-4]: skip refs whose span is DUMMY
+        // (pattern bindings currently have no real span). Returning
+        // `0:0` for those would place a bogus reference at the top
+        // of the file.
+        if r.span.is_dummy() {
+            continue;
+        }
         let sm = source_maps.get(&r.file_id)?;
         let (start_line, start_col) = sm
             .span_to_position(r.span.lo.to_usize(), r.span.hi.to_usize())
