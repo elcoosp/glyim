@@ -335,3 +335,159 @@ fn vfs_backed_line_column_and_include() {
         inc_text
     );
 }
+
+// ============================================================================
+// T084 [MAC-6] regression tests: assert!/assert_eq!/assert_ne!/matches!
+// must preserve their operands rather than expanding to `()` / `true`.
+// ============================================================================
+
+/// Run the builtin macros registry over a small source fragment and return
+/// the fully-expanded tree text plus any expansion diagnostics.
+fn expand_with_builtin(source: &str) -> (String, Vec<glyim_diag::GlyimDiagnostic>) {
+    let root = parse(source);
+    let mut hygiene = HygieneCtx::default();
+    let mut expander = Expander::new(&mut hygiene);
+
+    // Register every builtin macro handler we care about with the same names
+    // the default set uses.
+    for (name, handler) in [
+        ("assert", BuiltinMacro::Assert),
+        ("assert_eq", BuiltinMacro::Assert),
+        ("assert_ne", BuiltinMacro::Assert),
+        ("debug_assert", BuiltinMacro::Assert),
+        ("debug_assert_eq", BuiltinMacro::Assert),
+        ("debug_assert_ne", BuiltinMacro::Assert),
+        ("matches", BuiltinMacro::Matches),
+        ("format", BuiltinMacro::Format),
+    ] {
+        let id = expander.interner().intern(name);
+        expander.register_macro(MacroDef {
+            name: id,
+            kind: MacroKind::Builtin {
+                name: id,
+                handler,
+            },
+            span: Span::DUMMY,
+        });
+    }
+
+    let (expanded, diags) = expander.expand_crate(&root);
+    (expanded.text().to_string(), diags)
+}
+
+/// T084-REGRESSION: `assert!(v.push(1))` must expand to something that still
+/// contains the call `push(1)` — the previous stub dropped the entire
+/// argument to `()`.
+#[test]
+fn t084_assert_preserves_condition() {
+    let src = r#"
+fn main() {
+    let _ = assert!(is_ok());
+}
+"#;
+    let (text, _diags) = expand_with_builtin(src);
+    assert!(
+        text.contains("is_ok"),
+        "assert! must preserve its condition, got: {text}"
+    );
+    assert!(
+        !text.contains("assert!"),
+        "assert! should be expanded away, got: {text}"
+    );
+    assert!(
+        text.contains("loop"),
+        "assert! should expand to an `if !cond {{ loop {{}} }}` guard, got: {text}"
+    );
+}
+
+/// T084-REGRESSION: `assert_eq!(a, b)` must contain both operands and `==`.
+#[test]
+fn t084_assert_eq_builds_comparison() {
+    let src = r#"
+fn main() {
+    let _ = assert_eq!(left(), right());
+}
+"#;
+    let (text, _diags) = expand_with_builtin(src);
+    assert!(
+        text.contains("left") && text.contains("right"),
+        "assert_eq! must preserve both operands, got: {text}"
+    );
+    assert!(
+        text.contains("=="),
+        "assert_eq! must expand to a `==` comparison, got: {text}"
+    );
+}
+
+/// T084-REGRESSION: `assert_ne!(a, b)` must use `!=`.
+#[test]
+fn t084_assert_ne_builds_inequality() {
+    let src = r#"
+fn main() {
+    let _ = assert_ne!(left(), right());
+}
+"#;
+    let (text, _diags) = expand_with_builtin(src);
+    assert!(
+        text.contains("!="),
+        "assert_ne! must expand to a `!=` comparison, got: {text}"
+    );
+}
+
+/// T084-REGRESSION: `matches!(e, pat)` must build a `match` expression
+/// returning true/false — not the constant `true` the stub produced.
+#[test]
+fn t084_matches_builds_match_expression() {
+    let src = r#"
+fn main() {
+    let _ = matches!(x, 1);
+}
+"#;
+    let (text, _diags) = expand_with_builtin(src);
+    assert!(
+        text.contains("match"),
+        "matches! must expand to a match expression, got: {text}"
+    );
+    assert!(
+        text.contains("true") && text.contains("false"),
+        "matches! must produce both true and false arms, got: {text}"
+    );
+}
+
+/// T084-REGRESSION: `format!("literal")` (no substitutions) is passed through.
+#[test]
+fn t084_format_literal_only() {
+    let src = r#"
+fn main() {
+    let _ = format!("hello");
+}
+"#;
+    let (_text, diags) = expand_with_builtin(src);
+    assert!(
+        diags.is_empty(),
+        "format! with no substitutions should not diagnose, got: {diags:?}"
+    );
+}
+
+/// T084-REGRESSION: `format!("{}", x)` (with substitutions) must produce a
+/// diagnostic instead of silently returning "".
+#[test]
+fn t084_format_with_substitution_errors() {
+    let src = r#"
+fn main() {
+    let _ = format!("{}", x);
+}
+"#;
+    let (_text, diags) = expand_with_builtin(src);
+    assert!(
+        !diags.is_empty(),
+        "format! with substitutions must diagnose (not silently return \"\")"
+    );
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.message.contains("format!")),
+        "diagnostic should mention format!: {:?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}

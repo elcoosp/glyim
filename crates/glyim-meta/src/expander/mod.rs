@@ -525,6 +525,91 @@ impl<'a> ExpanderImpl<'a> {
         )
     }
 
+    /// T084-PATCHED [MAC-6]: strip the outer parentheses from a macro's
+    /// argument token stream. Supports both shapes the expander produces:
+    ///   1. `args_tt == [Group(LParen, inner, RParen)]`
+    ///   2. `args_tt == [Token(LParen), ..., Token(RParen)]`
+    fn extract_paren_args(args_tt: &[TokenTree]) -> Vec<TokenTree> {
+        if args_tt.len() == 1 {
+            if let TokenTree::Group(SyntaxKind::LParen, inner, SyntaxKind::RParen) = &args_tt[0]
+            {
+                return inner.clone();
+            }
+        }
+        let first_is_lparen = matches!(
+            args_tt.first(),
+            Some(TokenTree::Token(SyntaxKind::LParen, _))
+        );
+        let last_is_rparen = matches!(
+            args_tt.last(),
+            Some(TokenTree::Token(SyntaxKind::RParen, _))
+        );
+        if first_is_lparen && last_is_rparen && args_tt.len() >= 2 {
+            return args_tt[1..args_tt.len() - 1].to_vec();
+        }
+        args_tt.to_vec()
+    }
+
+    /// T084-PATCHED [MAC-6]: split the argument list on the first top-level
+    /// comma. Returns `(first, rest)` where `rest` may be empty. Only
+    /// top-level commas count -- commas inside a nested group are preserved.
+    fn split_top_level_comma(args: &[TokenTree]) -> (Vec<TokenTree>, Vec<TokenTree>) {
+        let mut depth: i32 = 0;
+        for (i, tt) in args.iter().enumerate() {
+            if let TokenTree::Token(kind, _) = tt {
+                match kind {
+                    SyntaxKind::LParen
+                    | SyntaxKind::LBracket
+                    | SyntaxKind::LBrace => depth += 1,
+                    SyntaxKind::RParen
+                    | SyntaxKind::RBracket
+                    | SyntaxKind::RBrace => depth -= 1,
+                    SyntaxKind::Comma if depth == 0 => {
+                        return (args[..i].to_vec(), args[i + 1..].to_vec());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        (args.to_vec(), Vec::new())
+    }
+
+    /// T084-PATCHED [MAC-6]: emit `{ if !(<cond>) { loop {} } }`.
+    fn build_assert_fail_guard(cond: Vec<TokenTree>) -> Vec<TokenTree> {
+        let negated = vec![
+            TokenTree::Token(SyntaxKind::Bang, SmolStr::from("!")),
+            TokenTree::Group(SyntaxKind::LParen, cond, SyntaxKind::RParen),
+        ];
+        let loop_body = vec![
+            TokenTree::Token(SyntaxKind::KwLoop, SmolStr::from("loop")),
+            TokenTree::Group(SyntaxKind::LBrace, Vec::new(), SyntaxKind::RBrace),
+        ];
+        let if_body = vec![
+            TokenTree::Token(SyntaxKind::KwIf, SmolStr::from("if")),
+            TokenTree::Group(SyntaxKind::LParen, negated, SyntaxKind::RParen),
+            TokenTree::Group(SyntaxKind::LBrace, loop_body, SyntaxKind::RBrace),
+        ];
+        vec![TokenTree::Group(
+            SyntaxKind::LBrace,
+            if_body,
+            SyntaxKind::RBrace,
+        )]
+    }
+
+    /// T084-PATCHED [MAC-6]: build `(<a>) <op> (<b>)`.
+    fn build_binop_expr(
+        a: Vec<TokenTree>,
+        op: SyntaxKind,
+        op_text: &str,
+        b: Vec<TokenTree>,
+    ) -> Vec<TokenTree> {
+        vec![
+            TokenTree::Group(SyntaxKind::LParen, a, SyntaxKind::RParen),
+            TokenTree::Token(op, SmolStr::from(op_text)),
+            TokenTree::Group(SyntaxKind::LParen, b, SyntaxKind::RParen),
+        ]
+    }
+
     /// Expand a builtin macro.
     fn expand_builtin(
         &mut self,
@@ -963,13 +1048,34 @@ impl<'a> ExpanderImpl<'a> {
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::Format => {
-                // `format!(fmt, args..)` — the probe type-checks only, so emit
-                // an empty string literal. Real interpolation needs `Display`
-                // dispatch (out of scope for the stdlib-compile fix).
-                vec![TokenTree::Token(
-                    SyntaxKind::StringLit,
-                    SmolStr::from("\"\""),
-                )]
+                // T084-PATCHED [MAC-6]: a bare `format!("literal")` is fine
+                // -- the result IS the literal. Substitutions require
+                // Display/Debug dispatch we cannot synthesize. Emit the
+                // literal unchanged for the no-args case; error loudly for
+                // any substitution-requiring case rather than silently
+                // discarding the arguments (previous behavior returned "").
+                let args_tt = flatten_token_tree(args_node);
+                let inner = Self::extract_paren_args(&args_tt);
+                let (fmt, rest) = Self::split_top_level_comma(&inner);
+                let has_substitution = fmt.iter().any(|tt| match tt {
+                    TokenTree::Token(SyntaxKind::StringLit, text) => {
+                        text.as_str().contains('{') || text.as_str().contains('}')
+                    }
+                    _ => false,
+                });
+                if !rest.is_empty() || has_substitution {
+                    return (
+                        None,
+                        vec![GlyimDiagnostic::type_error(
+                            call_site,
+                            "format! with substitutions is not yet supported; \
+                             use explicit concatenation or a future \
+                             Display-aware formatter."
+                                .to_string(),
+                        )],
+                    );
+                }
+                fmt
             }
             BuiltinMacro::Vec => {
                 // `vec![a, b, c]` → `[a, b, c]`.
@@ -988,8 +1094,39 @@ impl<'a> ExpanderImpl<'a> {
                 out
             }
             BuiltinMacro::Matches => {
-                // `matches!(e, pat)` → `true`.
-                vec![TokenTree::Token(SyntaxKind::KwTrue, SmolStr::from("true"))]
+                // T084-PATCHED [MAC-6]: previous expansion always returned
+                // `true`, ignoring the scrutinee and pattern. Emit a real
+                // `match (<e>) { <pat> => true, _ => false }`.
+                let args_tt = flatten_token_tree(args_node);
+                let inner = Self::extract_paren_args(&args_tt);
+                let (scrut, rest) = Self::split_top_level_comma(&inner);
+                let (pat, _trailing) = Self::split_top_level_comma(&rest);
+
+                let mut match_body: Vec<TokenTree> = Vec::new();
+                match_body.push(TokenTree::Token(SyntaxKind::KwMatch, SmolStr::from("match")));
+                match_body.push(TokenTree::Group(
+                    SyntaxKind::LParen,
+                    scrut,
+                    SyntaxKind::RParen,
+                ));
+                let mut arms: Vec<TokenTree> = Vec::new();
+                arms.extend(pat);
+                arms.push(TokenTree::Token(SyntaxKind::FatArrow, SmolStr::from("=>")));
+                arms.push(TokenTree::Token(SyntaxKind::KwTrue, SmolStr::from("true")));
+                arms.push(TokenTree::Token(SyntaxKind::Comma, SmolStr::from(",")));
+                arms.push(TokenTree::Token(SyntaxKind::Underscore, SmolStr::from("_")));
+                arms.push(TokenTree::Token(SyntaxKind::FatArrow, SmolStr::from("=>")));
+                arms.push(TokenTree::Token(SyntaxKind::KwFalse, SmolStr::from("false")));
+                match_body.push(TokenTree::Group(
+                    SyntaxKind::LBrace,
+                    arms,
+                    SyntaxKind::RBrace,
+                ));
+                vec![TokenTree::Group(
+                    SyntaxKind::LBrace,
+                    match_body,
+                    SyntaxKind::RBrace,
+                )]
             }
             BuiltinMacro::Print => {
                 // print! / println! / eprint! / eprintln! → `()`.
@@ -1007,11 +1144,32 @@ impl<'a> ExpanderImpl<'a> {
                 ]
             }
             BuiltinMacro::Assert => {
-                // assert!(..) → `()`.
-                vec![
-                    TokenTree::Token(SyntaxKind::LParen, SmolStr::from("(")),
-                    TokenTree::Token(SyntaxKind::RParen, SmolStr::from(")")),
-                ]
+                // T084-PATCHED [MAC-6]: previous expansion produced `()`, so
+                // assert!/assert_eq!/assert_ne! silently discarded both the
+                // condition and any side effects inside it. Emit
+                // `{ if !(<cond>) { loop {} } }` and dispatch on the macro
+                // name to build the right condition.
+                let args_tt = flatten_token_tree(args_node);
+                let inner = Self::extract_paren_args(&args_tt);
+                let macro_name = self.interner.resolve(name).to_string();
+                let cond_tokens: Vec<TokenTree> = match macro_name.as_str() {
+                    "assert" | "debug_assert" => {
+                        let (cond, _msg) = Self::split_top_level_comma(&inner);
+                        cond
+                    }
+                    "assert_eq" | "debug_assert_eq" => {
+                        let (a, rest) = Self::split_top_level_comma(&inner);
+                        let (b, _msg) = Self::split_top_level_comma(&rest);
+                        Self::build_binop_expr(a, SyntaxKind::EqEq, "==", b)
+                    }
+                    "assert_ne" | "debug_assert_ne" => {
+                        let (a, rest) = Self::split_top_level_comma(&inner);
+                        let (b, _msg) = Self::split_top_level_comma(&rest);
+                        Self::build_binop_expr(a, SyntaxKind::BangEq, "!=", b)
+                    }
+                    _ => inner,
+                };
+                Self::build_assert_fail_guard(cond_tokens)
             }
             BuiltinMacro::Write => {
                 // write!(..) / writeln!(..) → `Result::Ok(())`.
