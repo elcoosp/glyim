@@ -164,6 +164,34 @@ impl InferenceTable {
                 }
                 self.occurs(ctx, var, sig.output)
             }
+            // T092-PATCHED [SOLVE-28]: walk `Projection` and `Dynamic`
+            // arms too. Without them, `?T = <Vec<?T> as Iterator>::Item`
+            // passed the occurs check and installed a self-referential
+            // type; a `dyn Trait<?T>` predicate likewise slipped through.
+            TyKind::Projection(proj) => {
+                for arg in ctx.substitution_args(proj.trait_ref.substs) {
+                    if let GenericArg::Ty(t) = arg
+                        && self.occurs(ctx, var, *t)
+                    {
+                        return true;
+                    }
+                }
+                false
+            }
+            TyKind::Dynamic(preds, _) => {
+                for pred in preds.value.iter() {
+                    if let glyim_type::Predicate::Trait(p) = pred {
+                        for arg in ctx.substitution_args(p.trait_ref.substs) {
+                            if let GenericArg::Ty(t) = arg
+                                && self.occurs(ctx, var, *t)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
             _ => false,
         }
     }
