@@ -879,22 +879,41 @@ impl<'tcx> Interpreter<'tcx> {
                     BinOp::Sub => l.wrapping_sub(*r),
                     BinOp::Mul => l.wrapping_mul(*r),
                     BinOp::Div => {
-                        // Plan §11.2: signed division must not panic on
-                        // `MIN / -1`; `checked_div` returns `None` there and the
-                        // language semantics require `0`.
+                        // T107-PATCHED [INT-4]: `INT_MIN / -1` overflows in
+                        // two's-complement arithmetic; the LLVM backend
+                        // lowers this to `sdiv`, which SIGFPEs on x86. The
+                        // interpreter previously returned `0` here, so the
+                        // same source produced different results on the two
+                        // backends. Treat it like any other overflow: panic
+                        // with a clear message. (A matching check still
+                        // needs to be added to the LLVM backend; this is
+                        // the interpreter side.)
                         if *r == 0 {
                             return Err(InterpError::DivisionByZero);
                         }
-                        l.checked_div(*r).unwrap_or(0)
+                        match l.checked_div(*r) {
+                            Some(v) => v,
+                            None => {
+                                return Err(InterpError::Panic(
+                                    "attempt to divide with overflow".into(),
+                                ));
+                            }
+                        }
                     }
                     BinOp::Rem => {
-                        // Plan §11.2: signed remainder must not panic on
-                        // `MIN % -1`; `checked_rem` returns `None` there and the
-                        // language semantics require `0`.
+                        // T107-PATCHED [INT-4]: same overflow behavior as
+                        // Div above.
                         if *r == 0 {
                             return Err(InterpError::DivisionByZero);
                         }
-                        l.checked_rem(*r).unwrap_or(0)
+                        match l.checked_rem(*r) {
+                            Some(v) => v,
+                            None => {
+                                return Err(InterpError::Panic(
+                                    "attempt to calculate the remainder with overflow".into(),
+                                ));
+                            }
+                        }
                     }
                     BinOp::BitAnd => l & *r,
                     BinOp::BitOr => l | *r,
@@ -973,9 +992,13 @@ impl<'tcx> Interpreter<'tcx> {
                     BinOp::Sub => *l - *r,
                     BinOp::Mul => *l * *r,
                     BinOp::Div => {
-                        if *r == 0.0 {
-                            return Err(InterpError::Panic("division by zero".into()));
-                        }
+                        // T106-PATCHED [INT-3]: `1.0 / 0.0` is IEEE `+inf`
+                        // in Rust/LLVM; the LLVM backend emits `fdiv` which
+                        // follows that convention. The interpreter previously
+                        // returned a panic here, so the same source program
+                        // had different observable behavior depending on
+                        // backend. Let the native floating-point operation
+                        // produce inf/NaN and match LLVM.
                         *l / *r
                     }
                     BinOp::Eq => return Ok(Bool(l == r)),

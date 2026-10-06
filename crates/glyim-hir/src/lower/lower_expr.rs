@@ -2179,12 +2179,33 @@ fn lower_range_expr(
         .children()
         .filter(|c| is_expr_node(c) || c.kind() == SyntaxKind::LitExpr)
         .collect();
-    let start = children
-        .first()
-        .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map));
-    let end = children
-        .get(1)
-        .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map));
+    // T086-PATCHED [HIRX-9]: `..end` / `..=end` (open-start range)
+    // produces a `RangeExpr` whose *only* expression child is the end
+    // operand. The previous code assigned `children[0]` to `start` and
+    // `children[1]` to `end`, so `..5` lowered to `5..` — start and
+    // end were swapped for every open-start range. Detect the leading
+    // `..` / `..=` token and, if present, treat the single child as
+    // the *end* and leave `start` as `None`.
+    let leading_dotdot = node.children_with_tokens().next().is_some_and(|el| {
+        matches!(
+            el.kind(),
+            SyntaxKind::DotDot | SyntaxKind::DotDotEq
+        )
+    });
+    let (start, end) = if leading_dotdot {
+        let end = children
+            .first()
+            .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map));
+        (None, end)
+    } else {
+        let start = children
+            .first()
+            .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map));
+        let end = children
+            .get(1)
+            .and_then(|n| lower_expr(n, interner, body, diags, struct_field_map));
+        (start, end)
+    };
     let inclusive = node.children_with_tokens().any(
         |c| matches!(&c, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::DotDotEq),
     );
