@@ -226,15 +226,23 @@ async function reinjectWatcher(tabId: number, adapter: any, sessionId: string, t
         if (attempts++ < 50) setTimeout(tryClick, 200);
       };
       setTimeout(tryClick, 500);
+      // T161-PATCHED [EXT-5]: track a baseline of the assistant element's
+      // textContent and only fire when it has *grown*. The previous
+      // observer fired on the first mutation after the assistant
+      // element existed — which is from the *previous* turn — and
+      // re-sent stale content as a fresh stream.complete, producing a
+      // duplicate ops.ready (a re-apply of the previous block).
+      let baseline = document.querySelector(asstSel)?.textContent ?? '';
       const obs = new MutationObserver(() => {
         const responseElement = document.querySelector(asstSel);
-        if (responseElement) {
-          const full = responseElement.textContent || '';
-          chrome.runtime.sendMessage({ type: 'stream.complete', sessionId: sid, turn: turnNum, fullResponse: full });
-          obs.disconnect();
-        }
+        if (!responseElement) return;
+        const now = responseElement.textContent || '';
+        if (now.length <= baseline.length) return;
+        baseline = now;
+        chrome.runtime.sendMessage({ type: 'stream.complete', sessionId: sid, turn: turnNum, fullResponse: now });
+        obs.disconnect();
       });
-      obs.observe(document.body, { childList: true, subtree: true });
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
     },
     args: [sendSelector, assistantSelector, sessionId, turn],
   });

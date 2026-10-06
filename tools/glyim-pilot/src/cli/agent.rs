@@ -360,7 +360,29 @@ fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, 
     while changed {
         changed = false;
         for (id, upstream) in id_to_upstream.iter() {
-            let max_upstream_wave = upstream.iter().map(|u| id_to_wave[u]).max().unwrap_or(0);
+            // T200-PATCHED [PILOT-18]: resolve each upstream id through
+            // `.get()` and error clearly if it isn't in the map. The
+            // previous `id_to_wave[u]` panicked with a HashMap index error
+            // when a `streams.json` entry referenced a non-existent or
+            // misspelled upstream id, masking what was a trivial config
+            // bug as a compiler-style crash.
+            let mut max_upstream_wave = 0usize;
+            for u in upstream.iter() {
+                match id_to_wave.get(u) {
+                    Some(&w) => {
+                        if w > max_upstream_wave {
+                            max_upstream_wave = w;
+                        }
+                    }
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "stream {} references unknown upstream {}",
+                            id,
+                            u
+                        ));
+                    }
+                }
+            }
             let new_wave = max_upstream_wave + 1;
             if new_wave > id_to_wave[id] {
                 id_to_wave.insert(id.clone(), new_wave);

@@ -14,6 +14,8 @@ export class WsClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private intentionalClose = false;
   private messageHandler: ((msg: CliMessage) => void) | null = null;
+  /** T201-PATCHED [EXT-8]: pending outbound messages while disconnected. */
+  private queue: ExtensionMessage[] = [];
   private statusHandler: ((connected: boolean) => void) | null = null;
 
   constructor(url: string = DEFAULT_URL) { this.url = url; }
@@ -21,12 +23,40 @@ export class WsClient {
   onStatusChange(handler: (connected: boolean) => void): void { this.statusHandler = handler; }
   connect(): void { this.intentionalClose = false; this.doConnect(); }
   disconnect(): void { this.intentionalClose = true; this.cleanup(); this.ws?.close(); this.ws = null; }
-  send(msg: ExtensionMessage): boolean { if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false; this.ws.send(JSON.stringify(msg)); return true; }
+  send(msg: ExtensionMessage): boolean {
+    // T201-PATCHED [EXT-8]: queue outbound messages when the socket is
+    // not OPEN. Previously a message produced while the WS was
+    // reconnecting (server restart, MV3 service-worker suspension) was
+    // silently dropped — the server never learned a turn completed and
+    // the AI waited forever. The queue is bounded (50 messages) and
+    // flushed on `onopen`.
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+      return true;
+    }
+    if (this.queue.length < 50) {
+      this.queue.push(msg);
+    }
+    return false;
+  }
   get connected(): boolean { return this.ws !== null && this.ws.readyState === WebSocket.OPEN; }
 
   private doConnect(): void {
     try { this.ws = new WebSocket(this.url); } catch (e) { console.warn('glyim-pilot: WS creation failed:', e); this.scheduleReconnect(); return; }
-    this.ws.onopen = () => { this.reconnectAttempts = 0; this.statusHandler?.(true); this.startPing(); };
+    this.ws.onopen = () => {
+      this.reconnectAttempts = 0;
+      this.statusHandler?.(true);
+      this.startPing();
+      // T201-PATCHED [EXT-8]: flush queued messages produced while
+      // disconnected. Sent in FIFO order.
+      const pending = this.queue.splice(0);
+      for (const msg of pending) {
+        try { this.ws?.send(JSON.stringify(msg)); } catch (e) {
+          console.warn('glyim-pilot: failed to flush queued message:', e);
+          break;
+        }
+      }
+    };
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as CliMessage;
