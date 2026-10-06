@@ -123,6 +123,10 @@ fn fn_def_constant_lowering_produces_pointer() {
 
 #[test]
 fn const_ref_constant_lowering_produces_pointer() {
+    // T114-PATCHED [LL-19]: ConstRef reaching LLVM codegen is an internal
+    // error — const evaluation must fold named constants into concrete
+    // MirConstKind values first. This test exercises the ICE path: the
+    // diagnostic must name the const id and mention "const evaluation".
     let (ctx, (const_ref_ty, const_def_id, substs)) = with_fresh_ty_ctx(|c| {
         let const_def_id = ConstDefId::from_raw(7);
         let substs = c.intern_substitution(vec![]);
@@ -142,5 +146,10 @@ fn const_ref_constant_lowering_produces_pointer() {
     ));
     let body = builder.build();
     let ir = backend.generate_ir(&body);
-    assert!(ir.is_ok(), "generate_ir should succeed: {:?}", ir.err());
+    let errs = ir.expect_err("ConstRef should produce an internal-error diagnostic");
+    let joined = format!("{errs:?}");
+    assert!(
+        joined.contains("ConstRef(7)") || joined.contains("const evaluation"),
+        "diagnostic should name the const id and mention const evaluation, got: {joined}"
+    );
 }

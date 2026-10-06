@@ -317,6 +317,12 @@ fn test_debug_declare_local_emits_intrinsic() {
 
 #[test]
 fn test_const_ref_has_initializer() {
+    // T114-PATCHED [LL-19]: ConstRef reaching LLVM codegen is an
+    // internal-error diagnostic. The previous test asserted the wrong
+    // behaviour — the codegen produced a zero-initialized global that
+    // never held the actual constant value. The correct contract is:
+    // const evaluation folds named constants into MirConstKind before
+    // codegen; if a ConstRef survives, codegen reports a diagnostic.
     let mut ctx_mut = glyim_test::test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let unit_ty = ctx_mut.unit_ty();
@@ -363,11 +369,27 @@ fn test_const_ref_has_initializer() {
         span: Span::DUMMY,
         var_debug_info: vec![],
     };
-    let ir = lower_to_ir(&body, &ctx);
+
+    // Use the raw `lower_body` entry point so we can observe the error
+    // rather than the `lower_to_ir` wrapper's expect-ok panic.
+    let context = Context::create();
+    let module = context.create_module("test");
+    let result = crate::lower::lower_body(
+        &context,
+        &module,
+        &body,
+        TargetInfo::default(),
+        &ctx,
+        false,
+        HashMap::new(),
+        None,
+        None,
+    );
+    let errs = result.expect_err("ConstRef should produce an internal-error diagnostic");
+    let joined = format!("{errs:?}");
     assert!(
-        ir.contains("internal") || ir.contains("global i32 0"),
-        "ConstRef global should be defined with an initializer.\nIR:\n{}",
-        ir
+        joined.contains("ConstRef(0)") || joined.contains("const evaluation"),
+        "diagnostic should name the const id and mention const evaluation, got: {joined}"
     );
 }
 

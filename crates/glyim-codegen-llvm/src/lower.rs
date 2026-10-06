@@ -368,32 +368,23 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .as_basic_value_enum())
             }
             MirConstKind::ConstRef(const_def_id, _substs) => {
-                let global_name = format!("__glyim_const_{}", const_def_id.to_raw());
-                let module = self.module;
-                let global = module.get_global(&global_name).unwrap_or_else(|| {
-                    let llvm_ty = self.llvm_type_for_ty(c.ty);
-                    let global = module.add_global(
-                        llvm_ty,
-                        Some(inkwell::AddressSpace::default()),
-                        &global_name,
-                    );
-                    global.set_initializer(&llvm_ty.const_zero());
-                    global.set_constant(true);
-                    global.set_linkage(inkwell::module::Linkage::Internal);
-                    // Plan §19.3: enforce the real computed alignment on the
-                    // global unconditionally (not only above 16 bytes).
-                    let layout_computer =
-                        FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-                    if let Ok(layout) = layout_computer.layout_of(c.ty) {
-                        global.set_alignment(layout.align.0.max(1) as u32);
-                    }
-                    global
-                });
-                let llvm_ty = self.llvm_type_for_ty(c.ty);
-                Ok(self
-                    .builder
-                    .build_load(llvm_ty, global.as_pointer_value(), "const_ref_load")
-                    .expect("const ref load failed"))
+                // T114-PATCHED-LLVM [LL-19]: a named `const` that survived
+                // const-eval folding to this point cannot be materialised
+                // correctly here. The previous body allocated a global with
+                // a zero initializer and never wrote the real value, so
+                // every non-folded const context silently read `0`. Rather
+                // than emit wrong code, produce an internal-error diagnostic
+                // that names the const id and asks for the const evaluator
+                // to run first. If const-eval is guaranteed to fold every
+                // ConstRef before codegen, this arm is unreachable and the
+                // diagnostic simply documents the invariant.
+                Err(vec![GlyimDiagnostic::internal_error(format!(
+                    "ConstRef({}) reached LLVM codegen: const evaluation must \
+                     fold named constants into concrete MirConstKind values \
+                     before codegen. Context type: {:?}.",
+                    const_def_id.to_raw(),
+                    c.ty,
+                ))])
             }
             MirConstKind::Aggregate(elems) => {
                 // Emit a constant aggregate (tuple/array/struct) by recursively

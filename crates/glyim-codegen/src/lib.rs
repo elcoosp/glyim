@@ -1015,9 +1015,19 @@ impl BytecodeBackend {
                         self.const_is_int.borrow_mut().push(false);
                     }
                     MirConstKind::ConstRef(def_id, _) => {
-                        bc.push(OP_LOAD_CONST);
-                        bc.extend_from_slice(&(def_id.to_raw() as i64).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(false);
+                        // T114-PATCHED-BC [LL-19]: emitting the const's
+                        // DefId as a "value" made every non-folded const
+                        // context push an arbitrary integer instead of the
+                        // constant. Reject explicitly rather than silently
+                        // miscompile. Const evaluation must fold named
+                        // constants into concrete MirConstKind values before
+                        // codegen.
+                        return Err(vec![GlyimDiagnostic::internal_error(format!(
+                            "ConstRef({}) reached bytecode codegen: const \
+                             evaluation must fold named constants into \
+                             concrete MirConstKind values before codegen.",
+                            def_id.to_raw(),
+                        ))]);
                     }
                     MirConstKind::Aggregate(elems) => {
                         // Emit each element constant in order; the bytecode
