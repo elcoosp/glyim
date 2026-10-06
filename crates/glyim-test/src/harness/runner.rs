@@ -242,8 +242,14 @@ impl OutputCheck {
             }
         }
 
+        // T196-PATCHED [HARNESS-9]: match the expected stdout on line
+        // boundaries, not as a bare substring. `check-stdout: 1` previously
+        // matched `123` (a partial-line false positive). We accept the
+        // expected text if any line of `result.stdout` equals it exactly,
+        // or (for multi-line expectations) if the full text appears as a
+        // sequence of complete lines.
         if let Some(expected) = &self.expected_stdout
-            && !result.stdout.contains(expected.as_str())
+            && !stdout_matches(result.stdout.as_str(), expected.as_str())
         {
             return Err(crate::error::FailureReason::StdoutMismatch {
                 expected: expected.clone(),
@@ -261,5 +267,27 @@ impl OutputCheck {
         }
 
         Ok(())
+    }
+}
+
+
+/// T196-PATCHED [HARNESS-9]: line-anchored stdout matcher. A single-line
+/// expectation matches a whole line; a multi-line expectation matches the
+/// joined sequence of lines. This prevents partial-line false positives
+/// (`1` matching `123`).
+fn stdout_matches(actual: &str, expected: &str) -> bool {
+    let trimmed = expected.trim_end_matches('\n');
+    if trimmed.contains('\n') {
+        // Multi-line: require the exact sequence of lines.
+        let actual_lines: Vec<&str> = actual.lines().collect();
+        let expected_lines: Vec<&str> = trimmed.lines().collect();
+        if expected_lines.is_empty() {
+            return true;
+        }
+        actual_lines
+            .windows(expected_lines.len())
+            .any(|w| w == expected_lines.as_slice())
+    } else {
+        actual.lines().any(|l| l == trimmed)
     }
 }

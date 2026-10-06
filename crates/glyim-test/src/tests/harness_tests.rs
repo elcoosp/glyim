@@ -146,10 +146,12 @@ fn test_output_check_exit_code_fail() {
 
 #[test]
 fn test_output_check_stdout_pass() {
+    // T196-PATCHED [HARNESS-9]: the stdout oracle is line-anchored, so the
+    // expected text must match a whole line rather than being a substring.
     let check = harness::runner::OutputCheck::new().stdout("hello");
     let result = harness::runner::RunResult {
         exit_code: Some(0),
-        stdout: "say hello world".to_string(),
+        stdout: "hello\n".to_string(),
         stderr: String::new(),
         timed_out: false,
         duration: std::time::Duration::from_secs(0),
@@ -162,12 +164,30 @@ fn test_output_check_stdout_fail() {
     let check = harness::runner::OutputCheck::new().stdout("goodbye");
     let result = harness::runner::RunResult {
         exit_code: Some(0),
-        stdout: "say hello world".to_string(),
+        stdout: "hello\n".to_string(),
         stderr: String::new(),
         timed_out: false,
         duration: std::time::Duration::from_secs(0),
     };
     assert!(check.check(&result).is_err());
+}
+
+#[test]
+fn test_output_check_stdout_substring_no_longer_matches() {
+    // T196-REGRESSION: verify the line-anchored semantics — "1" no longer
+    // matches "123" via substring.
+    let check = harness::runner::OutputCheck::new().stdout("1");
+    let result = harness::runner::RunResult {
+        exit_code: Some(0),
+        stdout: "123\n".to_string(),
+        stderr: String::new(),
+        timed_out: false,
+        duration: std::time::Duration::from_secs(0),
+    };
+    assert!(
+        check.check(&result).is_err(),
+        "line-anchored check must reject substring matches"
+    );
 }
 
 #[test]

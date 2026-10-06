@@ -62,20 +62,57 @@ impl AnalysisDriver {
 
     /// run.
     pub async fn run(mut self) {
-        while let Some(msg) = self.rx.recv().await {
-            match msg {
-                AnalysisMessage::FileChanged {
-                    path,
-                    content,
-                    version: _,
-                } => {
-                    self.analyze_file(&path, &content).await;
+        // T134-PATCHED [LSP-11]: coalesce the queue after each recv so a
+        // burst of didChange notifications (30 keystrokes in a second) runs
+        // one analysis per file, not one per message. The previous loop
+        // analyzed every message in order, spending a full lex+parse+defmap
+        // +HIR+typeck on each keystroke and — because the channel is
+        // bounded (16) and `try_send` failures are discarded — could even
+        // drop the latest change during a burst. Coalescing keeps the last
+        // content per path and reduces the analysis count to the number of
+        // distinct files touched in the burst.
+        while let Some(first) = self.rx.recv().await {
+            // Map path -> latest (content, version). FileClosed cancels
+            // any pending FileChanged for the same path.
+            use std::collections::HashMap;
+            let mut latest_changes: HashMap<PathBuf, (String, i32)> = HashMap::new();
+            let mut closed_paths: Vec<PathBuf> = Vec::new();
+            let mut shutdown = false;
+
+            let mut absorb = |msg: AnalysisMessage| match msg {
+                AnalysisMessage::FileChanged { path, content, version } => {
+                    latest_changes.insert(path, (content, version));
                 }
                 AnalysisMessage::FileClosed { path } => {
-                    self.db.file_map.write().remove(&path);
-                    self.dep_graph.write().clear_deps(&path);
+                    latest_changes.remove(&path);
+                    closed_paths.push(path);
                 }
-                AnalysisMessage::Shutdown => break,
+                AnalysisMessage::Shutdown => shutdown = true,
+            };
+
+            absorb(first);
+            // Drain any further queued messages (non-blocking).
+            loop {
+                match self.rx.try_recv() {
+                    Ok(next) => absorb(next),
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                        shutdown = true;
+                        break;
+                    }
+                }
+            }
+
+            if shutdown {
+                break;
+            }
+
+            for path in closed_paths {
+                self.db.file_map.write().remove(&path);
+                self.dep_graph.write().clear_deps(&path);
+            }
+            for (path, (content, _version)) in latest_changes {
+                self.analyze_file(&path, &content).await;
             }
         }
     }
