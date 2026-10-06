@@ -721,6 +721,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_byte_lit(&mut self) {
+        // T167-PATCHED [FE-116]: capture the literal start so the
+        // unterminated-literal diagnostic below can span the whole token
+        // (previous code emitted a zero-width span at EOF).
+        let start = self.pos;
         // Current token start is the `b`/`B`; the char after it is the opening
         // quote (`'` or `"`). Consume the `b`, the opening quote, then the body.
         self.advance(); // consume `b`/`B`
@@ -744,9 +748,9 @@ impl<'a> Lexer<'a> {
             }
         }
         if !terminated {
-            let end = self.pos;
+            // T167-PATCHED [FE-116]: span the whole malformed literal.
             self.diagnostics.push(GlyimDiagnostic::lex_error(
-                self.span(end, end),
+                self.span(start, self.pos),
                 "unterminated byte literal".to_string(),
             ));
         }

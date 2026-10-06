@@ -54,9 +54,17 @@ impl FileTestDiscovery {
             let trimmed = line.trim();
 
             // Detect #[test] / #[ignore] attributes on their own line or inline.
+            // T193-PATCHED [GLYIP-7]: accept `#[test]` as a *prefix* so
+            // `#[test] fn foo() { ... }` on one line is not silently
+            // skipped. The attribute stays part of the line; the fn-name
+            // extractor below strips leading `#[...]` prefixes.
             if trimmed == "#[test]" {
                 pending_test_attr = true;
                 continue;
+            }
+            if trimmed.starts_with("#[test]") {
+                pending_test_attr = true;
+                // Fall through to allow the same line to declare the fn.
             }
             if trimmed == "#[ignore]" {
                 pending_ignore_attr = true;

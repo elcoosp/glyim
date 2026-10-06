@@ -293,8 +293,12 @@ fn collect_files_with_extension(dir: &Path, extension: &str) -> Vec<PathBuf> {
 /// any build scripts. Returns their (possibly non-existent) paths.
 fn config_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = vec![
-        dir.join("glyim.toml"),
-        dir.join("glyim.lock"),
+        // T191-PATCHED [GLYIP-5]: the real filenames are `Glyip.toml` /
+        // `Glyip.lock`. The lowercase spellings never existed, so the
+        // lock file was never watched — only the accidental `.toml` glob
+        // covered `Glyip.toml`.
+        dir.join("Glyip.toml"),
+        dir.join("Glyip.lock"),
         dir.join("build.g"),
         dir.join("build.rs"),
     ];
@@ -304,7 +308,8 @@ fn config_files(dir: &Path) -> Vec<PathBuf> {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.extension().is_some_and(|e| e == "toml")
-                    && p.file_name().is_some_and(|n| n != "glyim.toml")
+                    && p.file_name()
+                        .is_some_and(|n| n != "Glyip.toml" && n != "glyim.toml")
                 {
                     files.push(p);
                 }

@@ -202,6 +202,13 @@ fn select_best_version(versions: &[String], version_req: Option<&str>) -> Option
 /// The default build ships without a registry client; one is constructed
 /// only when the `registry` feature is enabled.
 pub trait RegistryClient {
+    /// T192-PATCHED [GLYIP-6]: expose the resolved registry base URL for
+    /// lockfile provenance. Default impl returns the public index so
+    /// mocks and less-specific impls keep working unchanged.
+    fn base_url_display(&self) -> String {
+        "https://index.glyim.dev".to_string()
+    }
+
     /// Fetch the index entry for a crate from the registry.
     fn fetch_index(&self, name: &str) -> GlyipResult<IndexEntry>;
 
@@ -246,7 +253,14 @@ impl HttpRegistryClient {
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
     }
+    /// T192-PATCHED [GLYIP-6]: expose the resolved base URL so the
+    /// lockfile records real provenance (custom or local indexes were
+    /// being silently rewritten to the public URL).
+    pub fn base_url_display(&self) -> String {
+        self.base_url.clone()
+    }
 }
+
 
 #[cfg(feature = "registry")]
 impl RegistryClient for HttpRegistryClient {
@@ -602,7 +616,15 @@ impl DependencyResolver {
                     name: name.to_string(),
                     version: version.clone(),
                     source: CrateSource::Registry {
-                        url: "https://index.glyim.dev".to_string(),
+                        // T192-PATCHED [GLYIP-6]: use the client's actual
+                        // base URL rather than hardcoding the public index
+                        // — a custom or local index would otherwise get
+                        // the wrong provenance in the lockfile.
+                        url: self
+                            .registry_client
+                            .as_ref()
+                            .map(|c| c.base_url_display())
+                            .unwrap_or_else(|| "local-index".to_string()),
                         checksum,
                     },
                     dependencies: sub_deps

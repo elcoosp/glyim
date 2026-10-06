@@ -695,6 +695,15 @@ impl<'a> Parser<'a> {
                             }
                         }
                     }
+                    // T166-PATCHED [FE-115]: accept `type A = T;` defaults
+                    // in trait bodies (mirrors the impl-body variant). The
+                    // previous arm expected `;` immediately, so `type A = T;`
+                    // produced "expected Semicolon, found Eq" plus three
+                    // more cascade errors.
+                    if self.current_kind() == SyntaxKind::Eq {
+                        self.bump();
+                        self.parse_type();
+                    }
                     self.expect(SyntaxKind::Semicolon);
                     self.finish_node();
                 }
