@@ -349,8 +349,22 @@ impl<'tcx> Interpreter<'tcx> {
                     // panic (if any) is no longer being propagated.
                     self.pending_unwind = None;
                     if let Some(frame) = self.call_stack.pop() {
-                        let ret_val = self.read_place(&Place::new(LocalIdx::from_raw(0)))?;
                         let caller_body = frame.body;
+                        // T108-PATCHED [INT-5]: `Call { target: None }`
+                        // stores the u32::MAX sentinel to mean "this call
+                        // was lowered as diverging". Check the sentinel
+                        // *before* reading the return place — a diverging
+                        // callee commonly returns without ever assigning
+                        // local 0, so reading it first would mask the
+                        // real diagnostic with an "uninitialized local"
+                        // error.
+                        if frame.target_bb.to_raw() == u32::MAX {
+                            self.current_body = Some(caller_body);
+                            return Err(InterpError::Panic(
+                                "diverging call returned to its caller".into(),
+                            ));
+                        }
+                        let ret_val = self.read_place(&Place::new(LocalIdx::from_raw(0)))?;
                         bb_idx = frame.target_bb;
                         self.locals = frame.locals;
                         self.local_decls = caller_body.locals.iter().cloned().collect();
@@ -455,15 +469,32 @@ impl<'tcx> Interpreter<'tcx> {
                         callee_locals[i + 1] = Some(val);
                     }
 
-                    let next_bb = target
-                        .unwrap_or_else(|| BasicBlockIdx::from_raw((bb_idx.index() + 1) as u32));
+                    // T108-PATCHED [INT-5]: a `Call { target: None }` is
+                    // *diverging* (panic!/abort-style). The previous code
+                    // resumed at `bb_idx + 1`, which either landed on an
+                    // unrelated block or, if `bb` was the last block,
+                    // produced an out-of-range index that panicked the
+                    // host. Represent "no resume point" explicitly with
+                    // `usize::MAX`-style sentinel via `Option` and raise
+                    // a clean panic if the callee ever returns to us.
+                    let next_bb: Option<BasicBlockIdx> = target;
 
                     let caller_frame = CallFrame {
                         body,
-                        bb: next_bb,
+                        // T108-PATCHED [INT-5]: `None` signals a diverging
+                        // call; the sentinel index we insert is never used
+                        // because the callee either loops forever or aborts,
+                        // and if it *does* return, `handle_return` below
+                        // raises a clear InterpError instead of silently
+                        // jumping to an arbitrary block.
+                        bb: next_bb
+                            .unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
                         locals: std::mem::take(&mut self.locals),
                         return_place: destination,
-                        target_bb: next_bb,
+                        // T108-PATCHED [INT-5]: same sentinel for the
+                        // unwind-target field so `frame.target_bb` and
+                        // `frame.bb` agree.
+                        target_bb: next_bb.unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
                         unwind_target: cleanup,
                         generation: self.next_frame_gen,
                     };

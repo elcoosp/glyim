@@ -121,13 +121,21 @@ fn call_with_no_target_falls_through() {
         is_cleanup: false,
     }]);
 
-    // Caller: BB0: call callee (no target) -> BB1: use result
+    // Caller: BB0: call callee -> BB1: use result
+    //
+    // T108-PATCHED [INT-5]: a Call terminator that resumes at the following
+    // block must use `target: Some(bb1)`. `target: None` is now reserved for
+    // diverging calls (panic!/abort-style); the interpreter treats it as
+    // "no resume point" and raises an InterpError if the callee ever
+    // returns. This test exercises the normal-resume path, so it must set
+    // the target explicitly.
     let mut caller = Body::dummy(dummy_def_id());
     let result_local = LocalIdx::from_raw(1);
     caller.locals = IndexVec::from_raw(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(i32_ty, Mutability::Mut),
     ]);
+    let bb1 = BasicBlockIdx::from_raw(1);
     caller.basic_blocks = IndexVec::from_raw(vec![
         BasicBlockData {
             statements: vec![],
@@ -140,7 +148,7 @@ fn call_with_no_target_falls_through() {
                     }),
                     args: vec![],
                     destination: Place::new(result_local),
-                    target: None, // NO TARGET: fall through to BB1
+                    target: Some(bb1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -165,6 +173,64 @@ fn call_with_no_target_falls_through() {
         interp.get_local_value(LocalIdx::from_raw(1)),
         Some(&InterpValue::Int(77))
     );
+}
+
+/// T108-REGRESSION: a Call with `target: None` is a diverging call. If the
+/// callee returns anyway, the interpreter surfaces a clear error instead of
+/// jumping to a random block index.
+#[test]
+fn call_with_no_target_diverges_cleanly_if_callee_returns() {
+    let mut tcx_mut = test_ty_ctx();
+    let i32_ty = tcx_mut.mk_ty(TyKind::Int(IntTy::I32));
+
+    let callee_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let mut callee = Body::dummy(callee_id);
+    callee.locals = IndexVec::from_raw(vec![local_decl(i32_ty, Mutability::Mut)]);
+    callee.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+        statements: vec![],
+        terminator: Terminator {
+            kind: TerminatorKind::Return,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        is_cleanup: false,
+    }]);
+
+    let mut caller = Body::dummy(dummy_def_id());
+    caller.locals = IndexVec::from_raw(vec![
+        local_decl(Ty::UNIT, Mutability::Mut),
+        local_decl(i32_ty, Mutability::Mut),
+    ]);
+    caller.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+        statements: vec![],
+        terminator: Terminator {
+            kind: TerminatorKind::Call {
+                func: Operand::Constant(MirConst {
+                    kind: MirConstKind::Int(callee_id.local_id.to_raw() as i128),
+                    ty: i32_ty,
+                    span: Span::DUMMY,
+                }),
+                args: vec![],
+                destination: Place::new(LocalIdx::from_raw(1)),
+                target: None,
+                cleanup: None,
+            },
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        is_cleanup: false,
+    }]);
+
+    let tcx = tcx_mut.freeze();
+    let mut interp = Interpreter::new(&tcx);
+    interp.add_function(callee_id, callee);
+    match interp.run_body(&caller) {
+        Err(InterpError::Panic(msg)) => {
+            assert!(
+                msg.contains("diverging"),
+                "expected 'diverging call returned' panic, got: {msg}"
+            );
+        }
+        other => panic!("expected InterpError::Panic, got {other:?}"),
+    }
 }
 
 // ============ Assert true + expected true (passes) ============
