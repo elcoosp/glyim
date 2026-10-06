@@ -333,6 +333,36 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     Rvalue::Repeat(_, const_val) => {
                         const_val.ty = substitute_ty(const_val.ty, substs, &mut sub_ctx, ty_ctx);
                     }
+                    // T102-PATCHED [LOW-11]: substitute the types embedded
+                    // in `AggregateKind`. A generic body that constructs
+                    // `[T; N]` or an ADT aggregate (`Some(x)` in
+                    // `fn f<T>`) previously kept the raw `Param` inside
+                    // the aggregate kind after monomorphization, and
+                    // codegen's layout/code paths that read the aggregate
+                    // kind (rather than the dest local's type) laid it out
+                    // with `Param` → `UnknownType` ICE or wrong layout.
+                    Rvalue::Aggregate(kind, _) => match kind {
+                        glyim_mir::AggregateKind::Array(elem_ty) => {
+                            *elem_ty = substitute_ty(*elem_ty, substs, &mut sub_ctx, ty_ctx);
+                        }
+                        glyim_mir::AggregateKind::Adt(_, _, adt_substs) => {
+                            *adt_substs = substitute_substitution(
+                                *adt_substs,
+                                substs,
+                                &mut sub_ctx,
+                                ty_ctx,
+                            );
+                        }
+                        glyim_mir::AggregateKind::Closure(_, closure_substs) => {
+                            *closure_substs = substitute_substitution(
+                                *closure_substs,
+                                substs,
+                                &mut sub_ctx,
+                                ty_ctx,
+                            );
+                        }
+                        glyim_mir::AggregateKind::Tuple => {}
+                    },
                     _ => {}
                 }
             }
