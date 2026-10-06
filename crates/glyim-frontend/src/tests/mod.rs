@@ -34,3 +34,6 @@ mod trivia;
 mod unicode;
 mod visibility;
 mod where_clause;
+
+#[cfg(test)]
+mod wave2_fe_tests;

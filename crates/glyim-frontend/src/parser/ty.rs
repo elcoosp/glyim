@@ -14,6 +14,22 @@ impl<'a> Parser<'a> {
                     self.builder
                         .token(GlyimLang::kind_to_raw(SyntaxKind::And), "&");
                     self.skip_token();
+                    // T019-PATCHED [FE-104]: run the same mut/lifetime
+                    // loop the single-`&` arm uses, so `&&mut T` and
+                    // `&&'a T` parse. The previous code called
+                    // `parse_type` directly, which rejected `KwMut` and
+                    // `Lifetime` and left the pointee unconsumed.
+                    loop {
+                        if self.current_kind() == SyntaxKind::KwMut {
+                            self.bump();
+                            continue;
+                        }
+                        if self.current_kind() == SyntaxKind::Lifetime {
+                            self.bump();
+                            continue;
+                        }
+                        break;
+                    }
                     self.parse_type();
                     self.finish_node(); // inner
                     self.finish_node(); // outer

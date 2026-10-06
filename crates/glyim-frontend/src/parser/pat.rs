@@ -1,5 +1,6 @@
 use super::Parser;
-use glyim_syntax::SyntaxKind;
+use glyim_syntax::{GlyimLang, SyntaxKind};
+use rowan::Language;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_pat(&mut self) {
@@ -29,10 +30,20 @@ impl<'a> Parser<'a> {
                 self.parse_pat_inner();
             }
             SyntaxKind::AndAnd => {
+                // T017-PATCHED [FE-101]: the lexer fuses `&&` into a single
+                // `AndAnd` token, so the previous double `bump()` consumed
+                // the fused token *and* the first token of the inner
+                // pattern (e.g. `x` in `&&x`) and cascaded into an
+                // "expected pattern, found ..." error. Emit two synthetic
+                // `&` tokens (one per nested `PatRef`) and consume the
+                // fused token once via `skip_token`.
                 self.start_node(SyntaxKind::PatRef);
-                self.bump(); // &
+                self.builder
+                    .token(GlyimLang::kind_to_raw(SyntaxKind::And), "&");
                 self.start_node(SyntaxKind::PatRef);
-                self.bump(); // &
+                self.builder
+                    .token(GlyimLang::kind_to_raw(SyntaxKind::And), "&");
+                self.skip_token(); // consume the fused `&&`
                 self.parse_pat_inner();
                 self.finish_node();
                 self.finish_node();
@@ -198,7 +209,24 @@ impl<'a> Parser<'a> {
                     self.finish_node();
                 }
             }
-            SyntaxKind::IntLit
+            // T022-PATCHED [FE-107]: leading `-` for negative literal
+            // patterns. `match x { -1 => ... }` previously fell through to
+            // the "expected pattern" arm and cascaded.
+            SyntaxKind::Minus => {
+                self.start_node(SyntaxKind::PatLit);
+                self.bump(); // -
+                if matches!(
+                    self.current_kind(),
+                    SyntaxKind::IntLit | SyntaxKind::FloatLit
+                ) {
+                    self.bump(); // the literal
+                } else {
+                    self.error("expected numeric literal after `-` in pattern");
+                }
+                self.finish_node();
+            }
+            SyntaxKind::ByteLit
+            | SyntaxKind::IntLit
             | SyntaxKind::FloatLit
             | SyntaxKind::StringLit
             | SyntaxKind::CharLit
@@ -218,7 +246,8 @@ impl<'a> Parser<'a> {
                     // We'll check if the current token is a literal; if not, emit error.
                     let is_literal = matches!(
                         self.current_kind(),
-                        SyntaxKind::IntLit
+                        SyntaxKind::ByteLit
+                            | SyntaxKind::IntLit
                             | SyntaxKind::FloatLit
                             | SyntaxKind::StringLit
                             | SyntaxKind::CharLit

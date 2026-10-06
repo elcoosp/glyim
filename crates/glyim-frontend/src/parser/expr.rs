@@ -245,6 +245,30 @@ impl<'a> Parser<'a> {
             }
             return;
         }
+        // T018-PATCHED [FE-103]: `&&expr` — the lexer fuses `&&` into a
+        // single `AndAnd` token, so the `Bang | Minus | Star | And` arm
+        // never matched it and `&&x` fell through to `parse_primary_expr`
+        // ("expected expression, found AndAnd"). Emit two nested
+        // `UnaryExpr` nodes with two synthetic `&` tokens and consume the
+        // fused token via `skip_token`.
+        if self.current_kind() == SyntaxKind::AndAnd {
+            self.recursion_depth += 1;
+            self.start_node(SyntaxKind::UnaryExpr);
+            self.builder
+                .token(GlyimLang::kind_to_raw(SyntaxKind::And), "&");
+            self.start_node(SyntaxKind::UnaryExpr);
+            self.builder
+                .token(GlyimLang::kind_to_raw(SyntaxKind::And), "&");
+            self.skip_token(); // consume the fused `&&`
+            if self.current_kind() == SyntaxKind::KwMut {
+                self.bump();
+            }
+            self.parse_unary_expr();
+            self.finish_node();
+            self.finish_node();
+            self.recursion_depth -= 1;
+            return;
+        }
         if matches!(
             self.current_kind(),
             SyntaxKind::Bang | SyntaxKind::Minus | SyntaxKind::Star | SyntaxKind::And
