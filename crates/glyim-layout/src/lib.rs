@@ -597,16 +597,14 @@ impl<'a> SimpleLayoutComputer<'a> {
         match self.ctx.ty_kind(ty) {
             TyKind::Bool => Some((2, 254)),
             TyKind::Ref(_, _, _) | TyKind::RawPtr(_, _) => Some((0, 1)),
-            TyKind::Int(int_ty) => {
-                let bw = int_ty.bit_width(&self.target);
-                match bw {
-                    8 => Some((0x80, 1)),
-                    16 => Some((0x8000, 1)),
-                    32 => Some((0x8000_0000, 1)),
-                    64 => Some((0x8000_0000_0000_0000, 1)),
-                    _ => None,
-                }
-            }
+            // T117-PATCHED [LAY-2]: signed `i8..i64` have no invalid bit
+            // patterns — every bit pattern represents a distinct value.
+            // The previous code reported a niche at `iN::MIN`, which made
+            // niche-encoded enums reuse a *representable* value as the
+            // discriminant (constructing `Variant(i8::MIN)` stored a bit
+            // pattern indistinguishable from the encoded discriminant of a
+            // different variant). Only `Bool`, `Char`, and nullable
+            // references/pointers have real niches.
             TyKind::Char => Some((0x110000, u128::MAX - 0x110000 + 1)),
             TyKind::Adt(adt_id, _) => {
                 let adt_def = self.ctx.adt_def(*adt_id)?;

@@ -93,13 +93,30 @@ impl ProgramRunner {
             }
         };
 
-        if let Some(ref input) = self.stdin_input
-            && let Some(mut stdin) = child.stdin.take()
-        {
-            let _ = stdin.write_all(input.as_bytes());
-        }
+        // T145-PATCHED [HARNESS-5]: write stdin from a background thread.
+        // The previous inline `stdin.write_all(...)` blocked when the child
+        // never read stdin and the input exceeded the pipe buffer (~64 KiB)
+        // *before* the timeout was armed — the configured timeout could
+        // never fire. Spawning the writer means the timeout monitor starts
+        // immediately; the writer thread is joined after the timeout
+        // resolves (leaking at worst one thread if the child is stuck on a
+        // full pipe, which is bounded by the timeout path).
+        let stdin_writer: Option<std::thread::JoinHandle<()>> =
+            self.stdin_input.clone().and_then(|input| {
+                child.stdin.take().map(|mut stdin| {
+                    std::thread::spawn(move || {
+                        use std::io::Write;
+                        let _ = stdin.write_all(input.as_bytes());
+                        let _ = stdin.flush();
+                    })
+                })
+            });
 
         let result = run_child_with_timeout(child, timeout);
+        // Do not block on the writer thread: if the child was killed by
+        // the timeout, the pipe may never be drained and joining would
+        // hang. Drop the handle and let it be reaped by the OS.
+        drop(stdin_writer);
         let duration = start.elapsed();
 
         match result {
