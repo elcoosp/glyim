@@ -206,9 +206,19 @@ impl MietteDiagnostic for GlyimDiagnostic {
             .map(|arc| arc as &dyn miette::SourceCode)
     }
     fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        self.suggestions
-            .first()
-            .map(|s| Box::new(s.message.clone()) as Box<dyn fmt::Display>)
+        // T199-PATCHED [DIAG-2]: render *all* suggestions, not just the
+        // first. Multi-step quick-fix hints were previously hidden behind
+        // `suggestions.first()`.
+        if self.suggestions.is_empty() {
+            return None;
+        }
+        let joined = self
+            .suggestions
+            .iter()
+            .map(|s| s.message.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Some(Box::new(joined) as Box<dyn fmt::Display>)
     }
 }
 
