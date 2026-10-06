@@ -170,12 +170,19 @@ fn format_diagnostics(
         let mut acc = 0usize;
         for (i, ln) in lines.iter().enumerate() {
             let end = acc + ln.len();
+            // T146-PATCHED [HARNESS-6]: `str::lines()` strips a trailing
+            // `\r`, so a CRLF source advances one byte more per line than
+            // `ln.len() + 1`. Compute the real consumed byte count so that
+            // diagnostics on line ≥ 2 have accurate offsets on Windows-style
+            // sources.
+            let _t146_crlf_adjust = if ln.ends_with('\r') { 2 } else { 1 };
             if off <= end {
                 let col = source[acc..off].chars().count();
                 return Some((i, col));
             }
             // +1 for the newline the split removed
-            acc = end + 1;
+            // T146-PATCHED: adjust for CRLF.
+            acc = end + _t146_crlf_adjust;
         }
         None
     };

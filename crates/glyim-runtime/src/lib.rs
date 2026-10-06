@@ -722,14 +722,12 @@ pub unsafe extern "C" fn glyim_process_wait(handle: usize, out_exit_code: *mut i
         // waiting, then discard the bytes.
         let stdout_handle = child.stdout.take().map(|mut s| {
             std::thread::spawn(move || {
-                use std::io::Read;
                 let mut sink = std::io::sink();
                 let _ = std::io::copy(&mut s, &mut sink);
             })
         });
         let stderr_handle = child.stderr.take().map(|mut s| {
             std::thread::spawn(move || {
-                use std::io::Read;
                 let mut sink = std::io::sink();
                 let _ = std::io::copy(&mut s, &mut sink);
             })

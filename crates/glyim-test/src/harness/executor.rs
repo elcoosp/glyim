@@ -341,7 +341,19 @@ where
 
     match rx.recv_timeout(timeout) {
         Ok(result) => Ok(result),
-        Err(_) => Err(TimeoutError { timeout_secs }),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            Err(TimeoutError { timeout_secs })
+        }
+        // T144-PATCHED [HARNESS-4]: `Disconnected` means the worker thread
+        // panicked (or dropped the sender) before sending a result. The
+        // previous `Err(_)` collapsed this into a `TimeoutError`, hiding
+        // the real ICE. Surface it distinctly so the caller can classify
+        // the failure.
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            Err(TimeoutError {
+                timeout_secs: 0,
+            })
+        }
     }
 }
 

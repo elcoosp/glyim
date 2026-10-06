@@ -114,12 +114,22 @@ pub fn find_references(
         if r.span.is_dummy() {
             continue;
         }
-        let sm = source_maps.get(&r.file_id)?;
+        // T131-PATCHED [LSP-7]: skip unresolvable refs (closed/removed file)
+        // instead of aborting the whole response. The previous `?` on
+        // `source_maps.get`/`file_map.path` returned `None` for the entire
+        // request as soon as one referenced file's SourceMap was missing,
+        // so a symbol with 10 refs where one file is closed returned
+        // "no references".
+        let Some(sm) = source_maps.get(&r.file_id) else {
+            continue;
+        };
         let (start_line, start_col) = sm
             .span_to_position(r.span.lo.to_usize(), r.span.hi.to_usize())
             .unwrap_or(((0, 0), (0, 0)))
             .0;
-        let path = file_map.path(r.file_id)?;
+        let Some(path) = file_map.path(r.file_id) else {
+            continue;
+        };
         let loc_uri = Url::from_file_path(path).ok()?;
         locations.push(Location {
             uri: Uri::from_str(loc_uri.as_str()).unwrap(),

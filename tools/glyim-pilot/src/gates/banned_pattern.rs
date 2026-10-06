@@ -57,7 +57,20 @@ impl Gate for BannedPatternGate {
                         continue;
                     }
                     let path = dir.join(rel_path);
-                    if let Ok(content) = std::fs::read_to_string(&path) {
+                    // T153-PATCHED [PILOT-11]: read failure must not
+                    // silently skip the file. Previously an unreadable
+                    // (or non-UTF-8) changed file passed the banned-pattern
+                    // gate unchecked.
+                    let content: Result<String, std::io::Error> =
+                        std::fs::read_to_string(&path);
+                    if let Err(e) = &content {
+                        violations.push(format!(
+                            "{}: unreadable: {}",
+                            path.display(),
+                            e
+                        ));
+                    }
+                    if let Ok(content) = content {
                         check_content_for_violations(
                             &content,
                             rel_path,
@@ -77,7 +90,19 @@ impl Gate for BannedPatternGate {
                         }
                         let rel = path.strip_prefix(&dir).unwrap_or(path);
                         let rel_str = rel.to_string_lossy().to_string();
-                        if let Ok(content) = std::fs::read_to_string(path) {
+                        // T153-PATCHED [PILOT-11]: same as above — log
+                        // unreadable files as violations instead of
+                        // silently skipping them.
+                        let content: Result<String, std::io::Error> =
+                            std::fs::read_to_string(path);
+                        if let Err(e) = &content {
+                            violations.push(format!(
+                                "{}: unreadable: {}",
+                                path.display(),
+                                e
+                            ));
+                        }
+                        if let Ok(content) = content {
                             check_content_for_violations(
                                 &content,
                                 &rel_str,
