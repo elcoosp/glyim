@@ -63,7 +63,11 @@ impl<T> Vec<T> {
     }
 
     /// Extends the vector with elements from a slice.
-    fn extend_from_slice(&mut self, other: &[T]) {
+    // T062-PATCHED [STD-9]: the body uses `ptr::read(item)` to bit-
+    // duplicate each element; without `T: Copy` this aliases ownership
+    // and double-frees non-Copy values like `String` (both vectors drop
+    // the same heap buffer). The bound makes the bit-copy sound.
+    fn extend_from_slice(&mut self, other: &[T]) where T: Copy {
         self.buf.reserve(self.len + other.len());
         for item in other {
             unsafe {

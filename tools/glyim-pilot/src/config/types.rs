@@ -420,11 +420,15 @@ pub struct DoneGatesConfig {
     /// Struct.
     pub self_review: Option<bool>,
 }
+// T067-PATCHED [PILOT-3]: percentage scale (0..100) to match the
+// values parsed from `cargo llvm-cov` output. The previous 0.80
+// default silently passed any coverage ≥ 0.8 %%.
 fn default_coverage_min() -> f64 {
-    0.80
+    80.0
 }
+// T067-PATCHED [PILOT-3]: percentage scale, see default_coverage_min.
 fn default_mutation_kill_rate() -> f64 {
-    0.75
+    75.0
 }
 impl Default for DoneGatesConfig {
     fn default() -> Self {

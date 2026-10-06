@@ -39,9 +39,14 @@ impl<T> DerefMut for Box<T> {
 
 impl<T> Drop for Box<T> {
     fn drop(&mut self) {
+        // T060-PATCHED [STD-7]: `self: &mut Box<T>` so `size_of_val(self)`
+        // is the size of the *pointer*, not of `T`. The allocation was
+        // made with `(size_of::<T>(), align_of::<T>())`; deallocating
+        // with the pointer layout violates `alloc::dealloc`'s contract
+        // (UB, corrupts size-classed allocators). Use `T`'s layout.
         let layout = Layout::from_size_align(
-            mem::size_of_val(self),
-            mem::align_of_val(self),
+            mem::size_of::<T>(),
+            mem::align_of::<T>(),
         ).expect("Box layout invalid at drop");
         unsafe {
             ptr::drop_in_place(self.ptr);

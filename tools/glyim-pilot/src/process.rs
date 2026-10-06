@@ -60,6 +60,11 @@ pub async fn run_timed_command(
     let output_fut = tokio::process::Command::new(program)
         .args(args)
         .current_dir(cwd)
+        // T066-PATCHED [PILOT-2]: kill the child when the future is
+        // dropped on timeout. Without this the child keeps running
+        // (holding `target/` flock and CPU) long after the caller
+        // believes the command timed out.
+        .kill_on_drop(true)
         .output();
 
     match tokio::time::timeout(timeout, output_fut).await {

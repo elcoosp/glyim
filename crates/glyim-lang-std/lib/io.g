@@ -416,9 +416,17 @@ impl<R: Read> Read for BufReader<R> {
 
 impl<R: Read> BufRead for BufReader<R> {
     fn fill_buf(&mut self) -> Result<&[u8], Error> {
+        // T063-PATCHED [STD-10]: `read` takes `&mut [u8]` and reads at
+        // most `slice.len()` bytes. The previous code called
+        // `self.buf.clear()` first, so the slice was empty (`len == 0`)
+        // and `read` returned `Ok(0)` forever — every `BufReader` saw
+        // EOF immediately. Keep the buffer allocated at its capacity and
+        // resize it so `&mut self.buf[..]` is a writable non-empty slice.
         if self.pos == self.cap {
-            self.buf.clear();
-            let n = self.inner.read(&mut self.buf)?;
+            if self.buf.len() < 8192 {
+                self.buf.resize(8192, 0);
+            }
+            let n = self.inner.read(&mut self.buf[..])?;
             self.cap = n;
             self.pos = 0;
         }

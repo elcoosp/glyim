@@ -23,9 +23,23 @@ impl<T> RawVec<T> {
         if self.cap >= required_cap {
             return;
         }
+        // T061-PATCHED [STD-8]: check the multiplication `new_cap *
+        // size_of::<T>()` before it is evaluated. Without this guard,
+        // growth past `usize::MAX / size_of::<T>()` wraps to a tiny
+        // size, `from_size_align` passes, and the following
+        // `copy_nonoverlapping` copies `self.cap` huge elements into
+        // the undersized buffer (heap overflow). `next_power_of_two`
+        // on `required_cap > 2^63` also overflows internally.
+        let elem_size = mem::size_of::<T>();
+        if elem_size != 0 && required_cap > usize::MAX / elem_size {
+            handle_alloc_error(Layout::from_size_align(1, 1).expect("trivial layout"));
+        }
+        if required_cap > usize::MAX / 2 {
+            handle_alloc_error(Layout::from_size_align(1, 1).expect("trivial layout"));
+        }
         let new_cap = required_cap.next_power_of_two().max(8);
         let layout = Layout::from_size_align(
-            new_cap * mem::size_of::<T>(),
+            new_cap * elem_size,
             mem::align_of::<T>(),
         ).expect("RawVec layout invalid");
         let new_ptr = GLOBAL.alloc(layout) as *mut T;
