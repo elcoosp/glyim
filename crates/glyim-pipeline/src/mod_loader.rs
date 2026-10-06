@@ -218,20 +218,35 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
         }
 
         // Is `mod` a whole identifier here?
+        // T202-PATCHED [X-1]: the identifier scanner used to advance
+        // byte-by-byte with `(bytes[j] as char).is_alphanumeric()`. For a
+        // non-ASCII module name like `mod café;` this stopped mid-codepoint
+        // and the subsequent `&source[name_start..j]` panicked with
+        // "byte index is not a char boundary" — an ICE on user input.
+        // Iterate by chars so we always land on a boundary.
         if c == b'm'
             && source[i..].starts_with("mod")
             && is_ident_boundary_before(source, i)
         {
             let mut j = i + 3;
-            // skip whitespace
+            // skip whitespace (bytes are fine here — ASCII whitespace is
+            // single-byte, and non-ASCII whitespace is not valid in this
+            // position anyway).
             while j < n && (bytes[j] as char).is_whitespace() {
                 j += 1;
             }
-            // read identifier
+            // read identifier (char-by-char to preserve UTF-8 boundaries)
             let name_start = j;
-            while j < n && (bytes[j] == b'_' || (bytes[j] as char).is_alphanumeric()) {
-                j += 1;
+            let mut chars_at = source[j..].char_indices();
+            let mut consumed = 0usize;
+            while let Some((off, ch)) = chars_at.next() {
+                if ch == '_' || ch.is_alphanumeric() {
+                    consumed = off + ch.len_utf8();
+                } else {
+                    break;
+                }
             }
+            j = name_start + consumed;
             let name = &source[name_start..j];
             if !name.is_empty() {
                 // skip whitespace, require `;`
@@ -257,6 +272,8 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
 }
 
 fn is_ident_boundary_before(source: &str, i: usize) -> bool {
+    // T202-PATCHED [X-1]: byte indexing is safe here because we only
+    // inspect the preceding byte; we do not slice the string.
     if i == 0 {
         return true;
     }

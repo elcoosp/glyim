@@ -96,6 +96,16 @@ impl HygieneCtx {
     }
 
     /// apply_mark.
+    ///
+    /// T197-DEFERRED [SPAN-2]: the plan calls for deduplicating identical
+    /// (parent_ctx, expn_id, transparency) marks, matching rustc. The
+    /// existing `test_syntax_context_distinguishes_marked_spans` test
+    /// *requires* the current behaviour — every `apply_mark` call must
+    /// produce a distinct `SyntaxContext`, because two expansion sites of
+    /// the same macro must not conflate. Realigning the dedup with the
+    /// intended semantics requires updating the test suite in the same
+    /// commit and reviewing every consumer of `syntax_context()` /
+    /// `adjust()`. Tracked as a deferred item.
     pub fn apply_mark(&mut self, span: Span, mark: Mark) -> Span {
         let new_ctx = SyntaxContext::from_hygiene_key(self.key, self.next_syntax_context);
         self.next_syntax_context += 1;
