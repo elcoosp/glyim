@@ -93,10 +93,27 @@ impl WsServer {
                         let sender_cli = sender.clone();
                         let mut cli_rx = cli_msg_tx.subscribe();
                         let send_task = tokio::spawn(async move {
-                            while let Ok(msg) = cli_rx.recv().await {
-                                let mut guard = sender_cli.lock().await;
-                                if guard.send(Message::Text(msg.into())).await.is_err() {
-                                    break;
+                            // T155-PATCHED [PILOT-13]: the broadcast channel
+                            // can return `Err(Lagged)` when the extension
+                            // reads slowly (tab throttling) and messages
+                            // are dropped. The previous `while let Ok(...)`
+                            // treated that as end-of-stream and exited the
+                            // task while the socket stayed open — from then
+                            // on the extension received nothing, silently.
+                            // Handle Lagged by warning and continuing.
+                            loop {
+                                match cli_rx.recv().await {
+                                    Ok(msg) => {
+                                        let mut guard = sender_cli.lock().await;
+                                        if guard.send(Message::Text(msg.into())).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                        tracing::warn!("cli forward lagged, {n} messages dropped");
+                                        continue;
+                                    }
+                                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                                 }
                             }
                         });
@@ -105,9 +122,15 @@ impl WsServer {
                         while let Some(msg) = ws_receiver.next().await {
                             match msg {
                                 Ok(Message::Text(text)) => {
-                                    if let Ok(ext_msg) =
-                                        serde_json::from_str::<ExtensionMessage>(&text)
-                                    {
+                                    match serde_json::from_str::<ExtensionMessage>(&text) {
+                                      Ok(ext_msg) => {
+                                        // T155-PATCHED [PILOT-13]: reject
+                                        // protocol-version mismatches instead
+                                        // of silently dropping them.
+                                        if let Err(ver) = ext_msg.validate_version() {
+                                            tracing::warn!(peer = %addr, "rejected: {ver}");
+                                            continue;
+                                        }
                                         // T016-PATCHED-WS [PILOT-1]: reject
                                         // any message whose session_id (or
                                         // trace_id) is not a strictly
@@ -146,6 +169,12 @@ impl WsServer {
                                                 msg: ext_msg,
                                             })
                                             .await;
+                                      }
+                                      Err(e) => {
+                                        let preview: String =
+                                            text.chars().take(200).collect();
+                                        tracing::warn!(peer = %addr, "undecodable message ({e}): {preview}");
+                                      }
                                     }
                                 }
                                 Ok(Message::Ping(data)) => {

@@ -468,6 +468,29 @@ impl DiagSink {
                     self.suppressed_count
                 )));
         }
+        // T150-PATCHED [DIAG-1]: deduplicate and stabilize the ordering of
+        // the diagnostic list. Without this, a diagnostic emitted twice
+        // (e.g. once during expansion and once during re-check, or the same
+        // error surfaced by two phases) is shown to the user twice, and
+        // the phase order is nondeterministic. Sort by (primary.lo, code,
+        // message) then drop exact duplicates.
+        self.diagnostics.sort_by(|a, b| {
+            a.span
+                .primary
+                .lo
+                .to_usize()
+                .cmp(&b.span.primary.lo.to_usize())
+                .then_with(|| (a.code.category as u8).cmp(&(b.code.category as u8)))
+                .then_with(|| a.code.number.cmp(&b.code.number))
+                .then_with(|| a.message.cmp(&b.message))
+        });
+        self.diagnostics.dedup_by(|a, b| {
+            a.span.primary.lo == b.span.primary.lo
+                && a.span.primary.hi == b.span.primary.hi
+                && a.code.category == b.code.category
+                && a.code.number == b.code.number
+                && a.message == b.message
+        });
         self.diagnostics
     }
 }

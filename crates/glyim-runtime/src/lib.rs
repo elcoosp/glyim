@@ -714,7 +714,27 @@ pub unsafe extern "C" fn glyim_process_wait(handle: usize, out_exit_code: *mut i
         .lock()
         .expect("process registry lock poisoned");
     if let Some(mut child) = registry.children.remove(&handle) {
-        match child.wait() {
+        // T121-PATCHED [RT-37]: `glyim_process_spawn` always sets
+        // `Stdio::piped()` for stdout/stderr, but a plain `wait` never
+        // reads them. A child writing more than the pipe buffer (~64 KiB)
+        // blocks forever on write, and the parent blocks in `wait()` ->
+        // classic deadlock. Drain both pipes on background threads while
+        // waiting, then discard the bytes.
+        let stdout_handle = child.stdout.take().map(|mut s| {
+            std::thread::spawn(move || {
+                use std::io::Read;
+                let mut sink = std::io::sink();
+                let _ = std::io::copy(&mut s, &mut sink);
+            })
+        });
+        let stderr_handle = child.stderr.take().map(|mut s| {
+            std::thread::spawn(move || {
+                use std::io::Read;
+                let mut sink = std::io::sink();
+                let _ = std::io::copy(&mut s, &mut sink);
+            })
+        });
+        let result = match child.wait() {
             Ok(status) => {
                 let code = status.code().unwrap_or(-1);
                 // SAFETY: out_exit_code is guaranteed non-null.
@@ -724,7 +744,14 @@ pub unsafe extern "C" fn glyim_process_wait(handle: usize, out_exit_code: *mut i
                 0
             }
             Err(_) => -1,
+        };
+        if let Some(h) = stdout_handle {
+            let _ = h.join();
         }
+        if let Some(h) = stderr_handle {
+            let _ = h.join();
+        }
+        result
     } else {
         -1
     }

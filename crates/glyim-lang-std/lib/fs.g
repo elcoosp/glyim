@@ -14,6 +14,20 @@ struct File {
     path: String,
 }
 
+// T142-PATCHED [STD-17]: close the underlying descriptor on drop. Without
+// this, every opened file leaked its fd (a long-running program exhausts
+// the process descriptor table).
+impl Drop for File {
+    fn drop(&mut self) {
+        extern "C" {
+            fn glyim_fs_close(fd: i32) -> i32;
+        }
+        if self.fd >= 0 {
+            let _ = unsafe { glyim_fs_close(self.fd) };
+        }
+    }
+}
+
 /// Options and flags which can be used to configure how a file is opened.
 struct OpenOptions {
     read: bool,
