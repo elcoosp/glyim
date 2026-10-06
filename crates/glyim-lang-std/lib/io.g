@@ -442,6 +442,11 @@ impl<R: Read> BufRead for BufReader<R> {
 struct BufWriter<W: Write> {
     inner: W,
     buf: Vec<u8>,
+    // T194-PATCHED [STD-18]: fixed threshold for flush decisions. Using
+    // `buf.capacity()` directly was wrong because Vec's power-of-two
+    // growth after the first flush (e.g. 512) is unrelated to the
+    // configured capacity (e.g. 8192), causing spurious flushes.
+    capacity: usize,
 }
 
 impl<W: Write> BufWriter<W> {
@@ -455,6 +460,7 @@ impl<W: Write> BufWriter<W> {
         BufWriter {
             inner,
             buf: Vec::with_capacity(capacity),
+            capacity,
         }
     }
 }
@@ -484,10 +490,12 @@ impl<W: Write> Write for BufWriter<W> {
     }
 
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
-        if self.buf.len() + buf.len() > self.buf.capacity() {
+        // T194-PATCHED [STD-18]: compare against the stored capacity, not
+        // `Vec::capacity()` (which drifts after the first growth).
+        if self.buf.len() + buf.len() > self.capacity {
             self.flush()?;
         }
-        if buf.len() >= self.buf.capacity() {
+        if buf.len() >= self.capacity {
             self.inner.write(buf)
         } else {
             self.buf.extend_from_slice(buf);

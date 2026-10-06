@@ -501,6 +501,18 @@ impl<'a> SimpleLayoutComputer<'a> {
                 if let Some((niche_start, niche_count)) = self.niche_info(field.ty)
                     && niche_count >= niche_variants_needed
                 {
+                    // T118-PATCHED [LAY-3]: only encode the niche when the
+                    // holder variant is the *first* or *last* variant. The
+                    // current `build_niche_layout` assigns a valid encoded
+                    // value to variants before (or after) the holder, but
+                    // leaves the variants on the *other* side without any
+                    // encoding — constructing them would write a value
+                    // that reads back as the holder variant. Rejecting the
+                    // middle-holder case keeps correctness at the cost of
+                    // a slightly larger tag for a rare enum shape.
+                    if vi != 0 && vi + 1 != variant_count {
+                        continue;
+                    }
                     return Ok(Some(self.build_niche_layout(
                         variant_layouts,
                         vi,

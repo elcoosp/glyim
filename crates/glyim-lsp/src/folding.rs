@@ -16,16 +16,12 @@ fn find_braced_ranges(source: &str) -> Vec<FoldingRange> {
     for (line_idx, line) in lines.iter().enumerate() {
         let mut in_string = false;
         let mut in_char = false;
-        let mut in_line_comment = false;
         let chars: Vec<char> = line.chars().collect();
         let mut i = 0usize;
         while i < chars.len() {
             let ch = chars[i];
             let next = chars.get(i + 1).copied();
 
-            if in_line_comment {
-                break;
-            }
             if in_block_comment {
                 if ch == '*' && next == Some('/') {
                     in_block_comment = false;
