@@ -79,9 +79,27 @@ pub mod prometheus_impl {
 
     impl Metrics for PrometheusMetrics {
         fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
+            // T157-PATCHED [PILOT-15]: cache key includes the labels. The
+            // previous name-only cache registered one series for the first
+            // label set and then reused it for every later set — so
+            // 'extension_error{type=input_not_found}' and
+            // 'extension_error{type=network_error}' collapsed into the
+            // same series and lost all per-type breakdown.
+            let mut sorted = labels.to_vec();
+            sorted.sort_by(|a, b| a.0.cmp(b.0));
+            let key = format!(
+                "{}|{}",
+                name,
+                sorted
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+
             let mut cache = self.counters.lock().unwrap();
 
-            if let Some(counter) = cache.get(name) {
+            if let Some(counter) = cache.get(&key) {
                 counter.inc();
                 return;
             }
@@ -92,11 +110,25 @@ pub mod prometheus_impl {
 
             let _ = prometheus::default_registry().register(Box::new(counter.clone()));
 
-            cache.insert(name.to_string(), counter.clone());
+            cache.insert(key, counter.clone());
             counter.inc();
         }
 
         fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
+            // T157-PATCHED [PILOT-15]: same fix as increment_counter —
+            // key on name + sorted labels so histogram series do not
+            // silently collapse across label sets.
+            let mut sorted = labels.to_vec();
+            sorted.sort_by(|a, b| a.0.cmp(b.0));
+            let _key = format!(
+                "{}|{}",
+                name,
+                sorted
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
             let mut cache = self.histograms.lock().unwrap();
 
             if let Some(histo) = cache.get(name) {

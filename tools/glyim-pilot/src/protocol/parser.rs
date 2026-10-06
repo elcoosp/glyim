@@ -96,7 +96,12 @@ pub fn parse_ops_block(input: &str) -> Result<ParsedOps, PilotError> {
                 message: "DELETE requires a path".into(),
             });
         } else if let Some(msg) = trimmed.strip_prefix("::COMMIT ") {
-            commit_message = Some(msg.trim().to_string());
+            // T158-PATCHED [PILOT-16]: strip surrounding quotes from the
+            // commit message. The shipped system prompt tells the AI to
+            // emit `::COMMIT "msg"`, and we used to store the literal
+            // quotes, producing commit titles like `stream-S01: "msg"`.
+            let cleaned = msg.trim().trim_matches(|c| c == '"' || c == '\'');
+            commit_message = Some(cleaned.to_string());
         } else if trimmed == "::COMMIT" {
             commit_message = Some(String::new());
         } else if trimmed == "::INCOMPLETE" {
@@ -105,6 +110,15 @@ pub fn parse_ops_block(input: &str) -> Result<ParsedOps, PilotError> {
             done = true;
         } else if trimmed == "::APPROVED" {
             approved = true;
+        } else if trimmed.starts_with("::") {
+            // T158-PATCHED [PILOT-16]: any line that begins with `::` is
+            // a directive; an unrecognized one must be a hard error. The
+            // previous fall-through silently dropped typos (`::COMMITE`,
+            // `::DNONE`, etc.), so a mistyped directive just disappeared.
+            return Err(PilotError::Parse {
+                line: line_num + 1,
+                message: format!("unknown directive {trimmed:?}"),
+            });
         }
     }
 
@@ -124,7 +138,13 @@ fn read_until_end<'a>(
     let mut content_lines = Vec::new();
     for (_, line) in lines {
         if line.trim() == "::END" {
-            while content_lines
+            // T158-PATCHED [PILOT-16]: strip at most *one* trailing empty
+            // line, matching the single newline the protocol implies. The
+            // previous `while` loop removed every trailing blank line, so
+            // a `::WRITE` content that legitimately ended with an empty
+            // line lost it — and any `---FIND---` block whose pattern
+            // ended in a blank line could never match.
+            if content_lines
                 .last()
                 .is_some_and(|l: &String| l.trim().is_empty())
             {
