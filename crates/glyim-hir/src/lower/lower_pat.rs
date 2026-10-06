@@ -286,9 +286,18 @@ pub(crate) fn lower_pat(
                                 fields.push((name, pat_id));
                             }
                         } else {
+                            // T174-PATCHED [HIRX-5]: query mutability on the
+                            // *field's own* PatIdent node, not on the
+                            // enclosing PatStruct. `pat_ident_mutability`
+                            // scans a node's own children and its
+                            // immediately-preceding sibling, so calling it
+                            // on the whole struct reported `mut` for every
+                            // shorthand binding whenever any *other* field
+                            // carried `mut` (or when the outer `let mut x
+                            // = ...` preceded the struct pattern).
                             let binding_id = pats.push(Pat::Binding {
                                 name,
-                                mutability: pat_ident_mutability(node),
+                                mutability: pat_ident_mutability(n),
                                 subpattern: None,
                             });
                             fields.push((name, binding_id));

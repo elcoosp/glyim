@@ -36,8 +36,20 @@ pub(crate) fn substitute(
                         if text == "crate" {
                             result.push(TokenTree::DollarCrate);
                         } else if let Some(iterations) = bindings.get(name) {
-                            // Outside a repetition each metavar has exactly one
-                            // iteration; splice its tokens verbatim.
+                            // T169-PATCHED [MAC-4]: a metavariable bound by
+                            // `$( $x:expr ),*` (multiple iterations) and
+                            // referenced *outside* its repetition would be
+                            // spliced as concatenated tokens (`1 2` for
+                            // `m!(1, 2)`), producing garbage. Rust rejects
+                            // that pattern; emit an error instead of
+                            // silently producing unparseable output.
+                            if iterations.len() > 1 {
+                                return Err(SmolStr::from(format!(
+                                    "metavariable `${}` used outside its repetition",
+                                    name
+                                )));
+                            }
+                            // Exactly one iteration (or zero): splice verbatim.
                             for iteration in iterations {
                                 result.extend(iteration.iter().cloned());
                             }
