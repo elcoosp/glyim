@@ -280,6 +280,12 @@ fn apply_write_atomic(
             source: e,
         })
     })?;
+    // T154-PATCHED [PILOT-12]: fsync the tmp file before the rename so a
+    // power loss cannot leave a durable directory entry pointing at an
+    // incomplete file (torn write).
+    if let Ok(f) = fs::File::open(&tmp_path) {
+        let _ = f.sync_all();
+    }
     fs::rename(&tmp_path, &abs_path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         PilotError::Apply(ApplyError::Io {
@@ -343,6 +349,12 @@ fn apply_replace_atomic(
             source: e,
         })
     })?;
+    // T154-PATCHED [PILOT-12]: fsync the tmp file before the rename so a
+    // power loss cannot leave a durable directory entry pointing at an
+    // incomplete file (torn write).
+    if let Ok(f) = fs::File::open(&tmp_path) {
+        let _ = f.sync_all();
+    }
     fs::rename(&tmp_path, &abs_path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         PilotError::Apply(ApplyError::Io {

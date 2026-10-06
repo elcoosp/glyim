@@ -317,6 +317,16 @@ async fn handle_extension_message(
 
             let cli_sender_clone = cli_sender.clone();
             let metrics_clone = Arc::clone(metrics);
+            // T151-PATCHED [PILOT-9]: capture the session id and trace id
+            // for the error path before `turn_ctx` moves them into its
+            // fields. The closure below can then build a FeedbackSend
+            // message when the orchestrator returns Err.
+            let session_id_for_err = turn_ctx.session_id.clone();
+            // `CliMessage::FeedbackSend::trace_id` is `Option<String>`, and
+            // `TurnContext::trace_id` is also `Option<String>` — clone it
+            // as-is so the err path reuses the same shape the worktree path
+            // above does.
+            let trace_id_for_err = turn_ctx.trace_id.clone();
 
             tokio::spawn(async move {
                 metrics_clone.increment_counter("ops_ready_received", &[]);
@@ -342,6 +352,38 @@ async fn handle_extension_message(
                         tracing::error!(?e, "orchestrator error");
                         metrics_clone
                             .increment_counter("orchestrator_error", &[("code", e.code())]);
+                        // T151-PATCHED [PILOT-9]: forward the failure as
+                        // feedback to the AI, matching the worktree-creation
+                        // path above. Without this the extension is left
+                        // waiting for a feedback message that never comes,
+                        // and the turn deadlocks until human intervention.
+                        // Recoverable classes (Parse / Apply / Limits /
+                        // Gate) are safe to retry; anything else escalates.
+                        let recoverable = matches!(
+                            e,
+                            glyim_pilot::error::PilotError::Parse { .. }
+                                | glyim_pilot::error::PilotError::Apply(_)
+                                | glyim_pilot::error::PilotError::Limits(_)
+                                | glyim_pilot::error::PilotError::Gate { .. }
+                        );
+                        if recoverable {
+                            let fb = CliMessage::FeedbackSend {
+                                session_id: session_id_for_err.clone(),
+                                message: format!(
+                                    "Orchestrator error [{}]: {}. Fix your glyim-ops block and resend.",
+                                    e.code(),
+                                    e
+                                ),
+                                turn: turn + 1,
+                                trace_id: Some(trace_id_for_err.clone()),
+                                v: PROTOCOL_VERSION,
+                            };
+                            if let Ok(json) = serde_json::to_string(&fb) {
+                                if let Err(send_err) = cli_sender_clone.send(json) {
+                                    tracing::warn!("failed to send feedback: {send_err}");
+                                }
+                            }
+                        }
                     }
                 }
             });
