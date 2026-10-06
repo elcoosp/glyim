@@ -700,7 +700,13 @@ fn decode_operand(bc: &[u8], i: usize, op: u8) -> (Vec<u8>, usize) {
     };
     match op {
         OP_LOAD_CONST => take(8),
-        OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF | OP_LEN | OP_DISCRIMINANT => take(4),
+        // T041-PATCHED [BC-5]: `OP_DISCRIMINANT` takes no operand bytes
+        // (the emitter pushes it bare). Consuming 4 bytes here made the
+        // peephole decoder eat the following `OP_STORE_LOCAL` + its u32
+        // local index, so every enum match at O1+ read an uninitialized
+        // local. `OP_LEN` still takes a 4-byte operand.
+        OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF | OP_LEN => take(4),
+        OP_DISCRIMINANT => take(0),
         OP_CAST => take(1),
         OP_ASSERT => {
             // 1-byte expected + 4-byte target.

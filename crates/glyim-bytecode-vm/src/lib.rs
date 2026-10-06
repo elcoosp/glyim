@@ -233,8 +233,16 @@ impl Function {
     /// `block_offsets` table is present; otherwise the target is a raw byte
     /// offset.
     fn resolve_target(&self, target: u32) -> usize {
+        // T040-PATCHED [BC-4]: the emitter produces sentinel targets
+        // (`u32::MAX`) for diverging calls / bounds traps. Indexing
+        // `block_offsets[u32::MAX]` panicked the host process. Return a
+        // sentinel and let `drive` translate it to
+        // `VmError::AbnormalTermination`.
         if !self.block_offsets.is_empty() {
-            self.block_offsets[target as usize]
+            self.block_offsets
+                .get(target as usize)
+                .copied()
+                .unwrap_or(usize::MAX)
         } else {
             target as usize
         }
@@ -558,8 +566,14 @@ impl Vm {
                     // u32 and jumped to garbage).
                 }
                 Opcode::Repeat => {
-                    let value = self.pop()?;
+                    // T038-PATCHED [BC-2]: the emitter pushes the value
+                    // first, then the count, so the count is on top of
+                    // the stack. The previous code popped the count into
+                    // `value` and the value into `count`, producing an
+                    // empty tuple for the common `[x; 3]` case (3 as
+                    // `value`, 0 as `count`).
                     let count = self.pop()?.as_int();
+                    let value = self.pop()?;
                     let mut elems = Vec::new();
                     for _ in 0..count.max(0) {
                         elems.push(value.clone());
