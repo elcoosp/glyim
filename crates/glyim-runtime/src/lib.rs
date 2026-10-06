@@ -1634,7 +1634,11 @@ pub unsafe extern "C" fn glyim_time_now_secs() -> u64 {
 /// # Safety
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_time_now_nanos() -> u64 {
-    monotonic_base().elapsed().subsec_nanos() as u64
+    // T122-PATCHED [RT-36]: use the full duration, not just the sub-second
+    // component. The previous body sawtoothed 0..10^9 each second, so
+    // `t2 - t1` across a second boundary came out negative — any timeout
+    // or elapsed-time math in .g code was wrong.
+    monotonic_base().elapsed().as_nanos() as u64
 }
 
 /// Monotonic nanoseconds since process start (combines secs + nanos into a

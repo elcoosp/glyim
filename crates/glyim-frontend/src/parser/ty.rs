@@ -89,16 +89,31 @@ impl<'a> Parser<'a> {
                 }
             }
             SyntaxKind::LParen => {
-                self.start_node(SyntaxKind::TupleType);
+                // T077-PATCHED [FE-110]: distinguish `(T)` (parenthesized
+                // type — Rust-equivalent to `T`) from `(T,)` / `(T, U)`
+                // (tuple types). The previous code always emitted a
+                // TupleType node, so `fn f(x: (i32))` silently had a
+                // 1-tuple parameter — a layout/ABI/generics mismatch.
+                let cp = self.checkpoint();
                 self.bump(); // (
-                while self.current_kind() != SyntaxKind::RParen && self.current().is_some() {
-                    self.parse_type();
-                    if self.current_kind() == SyntaxKind::Comma {
+                self.parse_type();
+                if self.current_kind() == SyntaxKind::Comma {
+                    // True tuple: consume optional trailing comma + more types.
+                    self.start_node_at(cp, SyntaxKind::TupleType);
+                    while self.current_kind() == SyntaxKind::Comma {
                         self.bump();
+                        if self.current_kind() == SyntaxKind::RParen {
+                            break;
+                        }
+                        self.parse_type();
                     }
+                    self.expect(SyntaxKind::RParen);
+                    self.finish_node();
+                } else {
+                    // Parenthesized type: `(` and `)` stay as loose tokens
+                    // inside the parent; the inner type node is the type.
+                    self.expect(SyntaxKind::RParen);
                 }
-                self.expect(SyntaxKind::RParen);
-                self.finish_node();
             }
             SyntaxKind::Bang => {
                 self.start_node(SyntaxKind::NeverType);

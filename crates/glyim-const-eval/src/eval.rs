@@ -974,9 +974,24 @@ impl<'a> ConstEvaluator<'a> {
     ) -> ConstEvalResult<ConstValue> {
         match (lhs, rhs) {
             (ConstValue::Int(a, ty), ConstValue::Int(b, _)) => {
+                // T097-PATCHED [CE-26]: validate the shift amount
+                // before wrapping. `a.wrapping_shl(b as u32)` masks the
+                // shift mod 32, so `1i32 << 33` silently became `2`
+                // instead of an overflow error; a negative shift
+                // became a huge masked value. Reject out-of-range
+                // shifts the same way `+`/`-`/`*` reject overflow.
+                let bits = 32u32;
+                if *b < 0 || (*b as u32) >= bits {
+                    return Err(ConstEvalError::new("attempt to shift with overflow", span));
+                }
                 Ok(ConstValue::Int(a.wrapping_shl(*b as u32), *ty))
             }
             (ConstValue::Uint(a, ty), ConstValue::Int(b, _)) => {
+                // T097-PATCHED [CE-26]
+                let bits = 32u32;
+                if *b < 0 || (*b as u32) >= bits {
+                    return Err(ConstEvalError::new("attempt to shift with overflow", span));
+                }
                 Ok(ConstValue::Uint(a.wrapping_shl(*b as u32), *ty))
             }
             _ => Err(ConstEvalError::new(
@@ -994,9 +1009,19 @@ impl<'a> ConstEvaluator<'a> {
     ) -> ConstEvalResult<ConstValue> {
         match (lhs, rhs) {
             (ConstValue::Int(a, ty), ConstValue::Int(b, _)) => {
+                // T097-PATCHED [CE-26]
+                let bits = 32u32;
+                if *b < 0 || (*b as u32) >= bits {
+                    return Err(ConstEvalError::new("attempt to shift with overflow", span));
+                }
                 Ok(ConstValue::Int(a.wrapping_shr(*b as u32), *ty))
             }
             (ConstValue::Uint(a, ty), ConstValue::Int(b, _)) => {
+                // T097-PATCHED [CE-26]
+                let bits = 32u32;
+                if *b < 0 || (*b as u32) >= bits {
+                    return Err(ConstEvalError::new("attempt to shift with overflow", span));
+                }
                 Ok(ConstValue::Uint(a.wrapping_shr(*b as u32), *ty))
             }
             _ => Err(ConstEvalError::new(
@@ -1118,11 +1143,21 @@ impl<'a> ConstEvaluator<'a> {
                 Ok(true)
             }
             Pat::Struct { fields, .. } => {
+                // T098-PATCHED [CE-27]: match each pattern field to the
+                // *value* field of the same name instead of relying on
+                // positional alignment. `match p { Point { y, x } => ... }`
+                // (pattern order != declaration order) previously bound
+                // `x` to the value of `y` and vice versa.
                 if let ConstValue::Struct(vals) = value {
                     if fields.len() != vals.len() {
                         return Ok(false);
                     }
-                    for ((_, pat_id), (_, val)) in fields.iter().zip(vals.iter()) {
+                    for (pat_field_name, pat_id) in fields.iter() {
+                        let Some((_, val)) =
+                            vals.iter().find(|(name, _)| name == pat_field_name)
+                        else {
+                            return Ok(false);
+                        };
                         if !self.pattern_matches(pat_id, val)? {
                             return Ok(false);
                         }

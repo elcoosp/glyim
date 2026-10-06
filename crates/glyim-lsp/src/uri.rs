@@ -37,7 +37,12 @@ pub fn offset_to_position(text: &str, offset: usize) -> Result<(usize, usize), S
             line += 1;
             col = 0;
         } else {
-            col += c.len_utf8();
+            // T132-PATCHED [LSP-8]: LSP `Position::character` is
+            // measured in UTF-16 code units, not bytes. The previous
+            // `len_utf8` shifted every insertion after a multi-byte
+            // character (e.g. an é in a comment). Mirrors
+            // SourceMap::offset_to_line_utf16.
+            col += c.len_utf16();
         }
     }
     if offset == text.len() {

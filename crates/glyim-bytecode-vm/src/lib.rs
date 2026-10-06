@@ -698,8 +698,13 @@ impl Vm {
 
     fn set_mem(&mut self, addr: usize, v: Value) -> ExecResult<()> {
         let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
+        // T119-PATCHED [VM-1]: reject wild addresses instead of resizing
+        // the frame to an attacker/bug-controlled size. The previous
+        // `resize(addr + 1, _)` on `a[bad_index]` (or a wrong field
+        // offset from T042) allocated gigabytes of host memory — OOM
+        // where a clean trap belongs.
         if addr >= frame.mem.len() {
-            frame.mem.resize(addr + 1, Value::Int(0));
+            return Err(VmError::LocalOutOfBounds(addr));
         }
         frame.mem[addr] = v;
         Ok(())
