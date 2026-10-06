@@ -76,20 +76,23 @@ pub(crate) fn substitute(
 
                         // Find all metavariable names in the inner pattern.
                         let var_names = find_all_metavars(inner);
-                        // T082-PATCHED [MAC-3]: any metavariable inside a
-                        // `$(...)*` that was never matched by the pattern
-                        // must be a hard error. The previous code filtered
-                        // unbound names out of `var_names` (via
-                        // `filter_map`), so `$( let _ = $q; )*` with no
-                        // `$q` in the pattern silently expanded to nothing —
-                        // a stub that compiled to empty code instead of
-                        // reporting the macro author's mistake.
-                        for name in &var_names {
-                            if !bindings.contains_key(name) {
-                                return Err(SmolStr::from(format!(
-                                    "unbound metavariable `${}` inside a repetition",
-                                    name
-                                )));
+                        // T082-PATCHED [MAC-3]: for `*`/`+` repetitions, any
+                        // metavariable inside the body that was never matched
+                        // by the pattern is a hard error (previously the
+                        // `filter_map` below silently dropped it, expanding
+                        // the whole repetition to nothing). For `?`
+                        // repetitions the metavariable may legitimately be
+                        // unbound — an *optional* tail like `$(, $x:expr)?`
+                        // doesn't bind `$x` when the caller omits it, and the
+                        // correct expansion is zero iterations.
+                        if !matches!(rep_kind, RepKind::ZeroOrOne) {
+                            for name in &var_names {
+                                if !bindings.contains_key(name) {
+                                    return Err(SmolStr::from(format!(
+                                        "unbound metavariable `${}` inside a repetition",
+                                        name
+                                    )));
+                                }
                             }
                         }
                         // HIR-2: each metavar maps to one entry *per matched
