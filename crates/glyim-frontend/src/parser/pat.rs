@@ -59,6 +59,19 @@ impl<'a> Parser<'a> {
                 self.start_node(SyntaxKind::PatTuple);
                 self.bump(); // (
                 while self.current_kind() != SyntaxKind::RParen && self.current().is_some() {
+                    // T076-PATCHED [FE-108]: `..` inside a tuple pattern
+                    // ignores the remaining elements — a common idiom
+                    // (`let (a, ..) = t;`). `parse_pat` has no DotDot
+                    // arm, so previously this cascaded into "expected
+                    // pattern, found DotDot". The slice-pattern code
+                    // already treats it specially.
+                    if self.current_kind() == SyntaxKind::DotDot {
+                        self.bump(); // ..
+                        if self.current_kind() == SyntaxKind::Comma {
+                            self.bump();
+                        }
+                        continue;
+                    }
                     self.parse_pat();
                     if self.current_kind() == SyntaxKind::Comma {
                         self.bump();

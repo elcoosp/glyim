@@ -713,7 +713,14 @@ pub unsafe extern "C" fn glyim_process_wait(handle: usize, out_exit_code: *mut i
     let mut registry = process_registry()
         .lock()
         .expect("process registry lock poisoned");
-    if let Some(mut child) = registry.children.remove(&handle) {
+    let removed_child = registry.children.remove(&handle);
+    // T120-PATCHED [RT-35]: release the registry lock before the blocking
+    // `child.wait()` below. The registry lock is process-global; holding it
+    // across the wait made concurrent `spawn`/`kill`/`wait` calls block
+    // until the waited child exits, which deadlocks the documented
+    // kill-during-wait scenario.
+    drop(registry);
+    if let Some(mut child) = removed_child {
         // T121-PATCHED [RT-37]: `glyim_process_spawn` always sets
         // `Stdio::piped()` for stdout/stderr, but a plain `wait` never
         // reads them. A child writing more than the pipe buffer (~64 KiB)

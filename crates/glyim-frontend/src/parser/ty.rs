@@ -90,15 +90,30 @@ impl<'a> Parser<'a> {
             }
             SyntaxKind::LParen => {
                 // T077-PATCHED [FE-110]: distinguish `(T)` (parenthesized
-                // type — Rust-equivalent to `T`) from `(T,)` / `(T, U)`
-                // (tuple types). The previous code always emitted a
-                // TupleType node, so `fn f(x: (i32))` silently had a
+                // type — Rust-equivalent to `T`) from `()` / `(T,)` /
+                // `(T, U)` (tuple types). The previous code always emitted
+                // a TupleType node, so `fn f(x: (i32))` silently had a
                 // 1-tuple parameter — a layout/ABI/generics mismatch.
+                //
+                // T077-REV2: handle the empty tuple `()` explicitly — the
+                // first version called `parse_type()` and then checked
+                // for a `,`, but for `()` the current token after `(` is
+                // `)`, and the comma that follows belongs to the *outer*
+                // generic list. The check therefore misclassified `()`
+                // as a tuple and swallowed the outer comma.
                 let cp = self.checkpoint();
                 self.bump(); // (
+                if self.current_kind() == SyntaxKind::RParen {
+                    // Unit tuple `()` — TupleType with no element children.
+                    self.start_node_at(cp, SyntaxKind::TupleType);
+                    self.expect(SyntaxKind::RParen);
+                    self.finish_node();
+                    return;
+                }
                 self.parse_type();
                 if self.current_kind() == SyntaxKind::Comma {
-                    // True tuple: consume optional trailing comma + more types.
+                    // True tuple: consume comma-separated remaining types
+                    // and the trailing comma if present.
                     self.start_node_at(cp, SyntaxKind::TupleType);
                     while self.current_kind() == SyntaxKind::Comma {
                         self.bump();

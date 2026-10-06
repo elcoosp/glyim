@@ -630,7 +630,21 @@ impl<'a> Parser<'a> {
         if self.current_kind() == SyntaxKind::KwElse {
             self.bump();
             if self.current_kind() == SyntaxKind::KwIf {
+                // T078-PATCHED [FE-111]: the else-if chain recurses
+                // through `parse_if_expr` without incrementing the
+                // counter, so a 50k-deep else-if chain (generated code /
+                // fuzzer) overflowed the stack. Bound it with the same
+                // guard the other recursion entry points use.
+                if self.recursion_depth > super::MAX_EXPR_DEPTH {
+                    self.error("expression nested too deeply");
+                    if self.current().is_some() {
+                        self.bump();
+                    }
+                    return;
+                }
+                self.recursion_depth += 1;
                 self.parse_if_expr();
+                self.recursion_depth -= 1;
             } else {
                 self.parse_block();
             }
