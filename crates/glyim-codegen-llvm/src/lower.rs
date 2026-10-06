@@ -2223,8 +2223,30 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::Shl => {
                 if l.is_int_value() && r.is_int_value() {
+                    let lv = l.into_int_value();
+                    let rv = r.into_int_value();
+                    // T113-PATCHED [LL-18]: the language defines over-shifts
+                    // as wrapping (the VM/interp use `wrapping_shl`), so we
+                    // mask the shift amount to `bits - 1` before calling
+                    // LLVM `shl`. Without the mask, LLVM treats a shift of
+                    // >= bitwidth as poison — UB — and different targets
+                    // produce different results (x86 masks by accident,
+                    // AArch64 yields 0). The `and` mask matches the VM.
+                    let bits = lv.get_type().get_bit_width();
+                    let mask = rv
+                        .get_type()
+                        .const_int((bits - 1) as u64, false);
+                    let masked = self
+                        .builder
+                        .build_and(rv, mask, "shl_mask")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "shl mask failed: {:?}",
+                                e
+                            ))]
+                        })?;
                     self.builder
-                        .build_left_shift(l.into_int_value(), r.into_int_value(), "shl")
+                        .build_left_shift(lv, masked, "shl")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
@@ -2241,8 +2263,24 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             BinOp::Shr => {
                 if l.is_int_value() && r.is_int_value() {
                     let signed = self.is_signed_int_ty(operand_ty);
+                    let lv = l.into_int_value();
+                    let rv = r.into_int_value();
+                    // T113-PATCHED [LL-18]: same masking as Shl above.
+                    let bits = lv.get_type().get_bit_width();
+                    let mask = rv
+                        .get_type()
+                        .const_int((bits - 1) as u64, false);
+                    let masked = self
+                        .builder
+                        .build_and(rv, mask, "shr_mask")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "shr mask failed: {:?}",
+                                e
+                            ))]
+                        })?;
                     self.builder
-                        .build_right_shift(l.into_int_value(), r.into_int_value(), signed, "shr")
+                        .build_right_shift(lv, masked, signed, "shr")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
