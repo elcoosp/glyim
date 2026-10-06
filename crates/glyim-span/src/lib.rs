@@ -228,7 +228,16 @@ impl SyntaxContext {
     /// Returns the expansion ID associated with this syntax context.
     /// For root contexts, returns `ExpnId::ROOT`.
     pub fn expn_id(self) -> ExpnId {
-        ExpnId::from_raw(self.to_raw())
+        // T149-PATCHED [SPAN-1]: `SyntaxContext` and `ExpnId` are
+        // allocated from *independent* counters in `HygieneCtx`, and
+        // `syntax_contexts[i].outer_expn` is the real association.
+        // The previous `ExpnId::from_raw(self.to_raw())` returned an id
+        // that indexes the expansions table at the *context* index —
+        // e.g. context #3 might belong to expansion #1 but claim to be
+        // expansion #3. Return `ExpnId::ROOT` here as a safe placeholder
+        // until the hygiene ctx plumb-through lands; callers that need
+        // the real expn id must go through `HygieneCtx`.
+        ExpnId::ROOT
     }
 }
 #[cfg(test)]

@@ -644,8 +644,15 @@ impl DependencyResolver {
                 let entry = client.fetch_index(name)?;
 
                 let version = if let Some(req) = version_req {
+                    // T135-PATCHED: no fallback to `versions.first()`.
+                    // The previous `.or_else(|| entry.versions.first()
+                    // .cloned())` silently locked `foo = "0.9"` at
+                    // whatever came first in the registry index (say
+                    // `2.0.0`), producing confusing downstream
+                    // "mutually unsatisfiable" errors. The local-index
+                    // path already errors on unsatisfiable reqs; this
+                    // now matches.
                     select_best_version(&entry.versions, Some(req))
-                        .or_else(|| entry.versions.first().cloned())
                         .ok_or_else(|| GlyipError::DependencyNotFound {
                             name: name.to_string(),
                             version: version_req.map(String::from),

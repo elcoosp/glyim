@@ -181,6 +181,10 @@ pub enum OptLevel {
 /// BytecodeBackend.
 pub struct BytecodeBackend {
     string_table: RefCell<Vec<String>>,
+    /// T190-PATCHED [BC-7]: side index for `string_table`, avoiding the
+    /// previous O(n) linear scan on every string constant intern (which
+    /// was O(consts^2) codegen time for a program with many literals).
+    string_index: RefCell<std::collections::HashMap<String, u32>>,
     fn_table: RefCell<Vec<(FnDefId, Substitution)>>,
     layout_provider: Box<dyn LayoutProvider>,
     /// Shared handle to the pipeline-published `TyCtx`. Reading through the
@@ -204,6 +208,7 @@ impl BytecodeBackend {
     pub fn with_ty_ctx_handle(handle: TyCtxHandle, target: TargetInfo) -> Self {
         Self {
             string_table: RefCell::new(Vec::new()),
+            string_index: RefCell::new(std::collections::HashMap::new()),
             fn_table: RefCell::new(Vec::new()),
             layout_provider: Box::new(GlyimLayoutProvider {
                 ty_ctx: handle.clone(),
@@ -469,14 +474,19 @@ impl BytecodeBackend {
     }
 
     fn intern_string(&self, s: &str) -> u32 {
-        let mut table = self.string_table.borrow_mut();
-        for (i, existing) in table.iter().enumerate() {
-            if existing == s {
-                return i as u32;
-            }
+        // T190-PATCHED [BC-7]: side HashMap for O(1) lookup. The previous
+        // linear scan was O(consts²) codegen time — every new string
+        // literal rescanned every previously-interned one, so a program
+        // with 10k distinct literals paid ~50M comparisons.
+        let mut index = self.string_index.borrow_mut();
+        if let Some(&idx) = index.get(s) {
+            return idx;
         }
+        let mut table = self.string_table.borrow_mut();
         table.push(s.to_string());
-        (table.len() - 1) as u32
+        let idx = (table.len() - 1) as u32;
+        index.insert(s.to_string(), idx);
+        idx
     }
 
     fn intern_fn(&self, def_id: FnDefId, substs: Substitution) -> u32 {

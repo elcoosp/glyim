@@ -527,14 +527,29 @@ impl<'a> Lexer<'a> {
         if self.peek() == Some('0') {
             let next = self.peek_next();
             if next == Some('x') || next == Some('X') {
+                let prefix_start = self.pos;
                 self.advance();
                 self.advance();
+                let mut digits: usize = 0;
                 while let Some(ch) = self.peek() {
-                    if ch.is_ascii_hexdigit() || ch == '_' {
+                    if ch.is_ascii_hexdigit() {
+                        digits += 1;
+                        self.advance();
+                    } else if ch == '_' {
                         self.advance();
                     } else {
                         break;
                     }
+                }
+                // T165-PATCHED [FE-113]: reject `0x` with no digits. The
+                // previous code emitted a clean `IntLit` and the error
+                // surfaced only later in HIR as "integer literal is too
+                // large: `0x`" — misleading and at the wrong stage.
+                if digits == 0 {
+                    self.diagnostics.push(GlyimDiagnostic::lex_error(
+                        self.span(prefix_start, self.pos),
+                        "expected digits after `0x` prefix".to_string(),
+                    ));
                 }
                 self.lex_number_suffix();
                 return SyntaxKind::IntLit;
