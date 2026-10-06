@@ -249,12 +249,19 @@ async function handleFeedbackSend(msg: Extract<CliMessage, { type: 'feedback.sen
     console.error(`Cannot send feedback, no tab for session ${msg.sessionId}`);
     return;
   }
+  // T160-PATCHED [EXT-4]: reset the existing StreamWatcher's per-turn
+  // state before injecting the new prompt. Without this the watcher's
+  // internal `turn` stayed at 0 forever, every `ops.ready` reported
+  // turn 0, and after the first completion the watcher never signalled
+  // completion again for the tab (its `completed` flag stayed true until
+  // a brand new watcher was created).
+  watchers.get(tabId)?.resetForNewTurn();
+  session.turn++;
   await injectPrompt(tabId, msg.message);
   const adapter = getAllAdapters().find(a => a.id === session.providerId);
   if (adapter) {
-    await reinjectWatcher(tabId, adapter, session.sessionId, session.turn + 1);
+    await reinjectWatcher(tabId, adapter, session.sessionId, session.turn);
   }
-  session.turn++;
   await persistSessions();
 }
 
@@ -264,12 +271,14 @@ async function handleFeedbackContinue(msg: Extract<CliMessage, { type: 'feedback
   const session = entry[1];
   const tabId = await ensureTab(session);
   if (!tabId) return;
+  // T160-PATCHED [EXT-4]: reset watcher state for the new turn.
+  watchers.get(tabId)?.resetForNewTurn();
+  session.turn++;
   await injectPrompt(tabId, 'Please continue.');
   const adapter = getAllAdapters().find(a => a.id === session.providerId);
   if (adapter) {
-    await reinjectWatcher(tabId, adapter, session.sessionId, session.turn + 1);
+    await reinjectWatcher(tabId, adapter, session.sessionId, session.turn);
   }
-  session.turn++;
   await persistSessions();
 }
 
@@ -280,12 +289,14 @@ async function handleRetryPrompt(msg: Extract<CliMessage, { type: 'retry.prompt'
   const session = entry[1];
   const tabId = await ensureTab(session);
   if (!tabId) return;
+  // T160-PATCHED [EXT-4]: reset watcher state for the new turn.
+  watchers.get(tabId)?.resetForNewTurn();
+  session.turn++;
   await injectPrompt(tabId, msg.message);
   const adapter = getAllAdapters().find(a => a.id === session.providerId);
   if (adapter) {
-    await reinjectWatcher(tabId, adapter, session.sessionId, session.turn + 1);
+    await reinjectWatcher(tabId, adapter, session.sessionId, session.turn);
   }
-  session.turn++;
   await persistSessions();
 }
 
