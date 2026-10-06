@@ -634,7 +634,13 @@ impl<'a> ExpanderImpl<'a> {
                 } else {
                     format!("file_{}", call_site.file.to_raw())
                 };
-                let text = SmolStr::from(format!("\"{}\"", name.replace('\\', "\\\\")));
+                // T170-PATCHED [MAC-7]: escape both backslash and double
+                // quote. The previous `name.replace('\\', "\\\\")` only
+                // handled backslashes, so a filename containing `"` would
+                // break the produced string literal (`"a"b"` → reparse
+                // garbage).
+                let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
+                let text = SmolStr::from(format!("\"{}\"", escaped));
                 vec![TokenTree::Token(SyntaxKind::StringLit, text)]
             }
             BuiltinMacro::Line => {
@@ -660,7 +666,12 @@ impl<'a> ExpanderImpl<'a> {
                 match first_string_lit(&args_tt) {
                     Some(var_name) => match std::env::var(var_name) {
                         Ok(val) => {
-                            let lit = SmolStr::from(format!("\"{}\"", val));
+                            // T170-PATCHED [MAC-7]: escape quotes and
+                            // backslashes so an env value like `a"b` or
+                            // `a\\b` doesn't corrupt the produced literal.
+                            let escaped =
+                                val.replace('\\', "\\\\").replace('"', "\\\"");
+                            let lit = SmolStr::from(format!("\"{}\"", escaped));
                             vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
                         }
                         Err(_) => {
@@ -692,7 +703,13 @@ impl<'a> ExpanderImpl<'a> {
                 match first_string_lit(&args_tt) {
                     Some(var_name) => {
                         let token = match std::env::var(var_name) {
-                            Ok(val) => SmolStr::from(format!("Some(\"{}\")", val)),
+                            Ok(val) => {
+                                // T170-PATCHED [MAC-7]: same escaping as env!.
+                                let escaped = val
+                                    .replace('\\', "\\\\")
+                                    .replace('"', "\\\"");
+                                SmolStr::from(format!("Some(\"{}\")", escaped))
+                            }
                             Err(_) => SmolStr::from("None"),
                         };
                         vec![TokenTree::Token(SyntaxKind::Ident, token)]
