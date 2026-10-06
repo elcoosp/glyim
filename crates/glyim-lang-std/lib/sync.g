@@ -14,6 +14,11 @@
 //! previous `compare_exchange`/`fetch_add`/`fetch_sub` were load-then-store
 //! sequences, so two threads could both win a CAS and `Mutex::lock`'s spin
 //! loop could admit both into the critical section.
+//!
+//! T015-PATCHED-G [STD-3]: `Condvar` wraps a runtime-allocated
+//! `std::sync::Condvar`; `notify_one`/`notify_all` now actually wake
+//! blocked threads. Previously they only decremented a counter while
+//! `wait` parked the thread — every waiter blocked forever.
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -272,35 +277,58 @@ impl OnceLock {
 }
 
 /// A primitive for signaling between threads.
+///
+/// T015-PATCHED-G [STD-3]: `Condvar` now wraps a runtime-allocated
+/// `std::sync::Condvar` handle. The previous implementation tracked only a
+/// waiter count and never actually woke anyone — `notify_one`/`notify_all`
+/// decremented a counter while `wait` called `thread::park()`, so every
+/// waiter blocked forever. Waits and notifies now route through the
+/// runtime's real condvar.
 struct Condvar {
-    waiters: AtomicUsize,
+    id: usize,
 }
 
 impl Condvar {
     /// Create a new condition variable.
     fn new() -> Condvar {
-        Condvar {
-            waiters: AtomicUsize::new(0),
+        extern "C" {
+            fn glyim_condvar_new() -> usize;
         }
+        Condvar { id: unsafe { glyim_condvar_new() } }
     }
 
     /// Block the current thread until this condition variable receives a notification.
     fn wait(&self, mutex_guard: MutexGuard<()>) {
-        self.waiters.fetch_add(1, Ordering::Relaxed);
+        extern "C" {
+            fn glyim_condvar_wait(id: usize) -> i32;
+        }
+        // The .g `MutexGuard` is a spin lock; the runtime condvar uses its
+        // own internal mutex, so the two cannot be atomically joined. Drop
+        // the caller's guard, then block on the runtime condvar.
         drop(mutex_guard);
-        thread::park();
+        unsafe {
+            glyim_condvar_wait(self.id);
+        }
     }
 
     /// Wake up one blocked thread on this condvar.
     fn notify_one(&self) {
-        if self.waiters.load(Ordering::Relaxed) > 0 {
-            self.waiters.fetch_sub(1, Ordering::Relaxed);
+        extern "C" {
+            fn glyim_condvar_notify_one(id: usize) -> i32;
+        }
+        unsafe {
+            glyim_condvar_notify_one(self.id);
         }
     }
 
     /// Wake up all blocked threads on this condvar.
     fn notify_all(&self) {
-        self.waiters.store(0, Ordering::Relaxed);
+        extern "C" {
+            fn glyim_condvar_notify_all(id: usize) -> i32;
+        }
+        unsafe {
+            glyim_condvar_notify_all(self.id);
+        }
     }
 }
 

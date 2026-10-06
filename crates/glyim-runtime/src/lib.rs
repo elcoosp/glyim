@@ -1806,3 +1806,99 @@ pub unsafe extern "C" fn glyim_atomic_usize_fetch_sub(ptr: *mut usize, val: usiz
     }
     unsafe { (*(ptr as *const RtAtomicUsize)).fetch_sub(val, RtOrdering::SeqCst) }
 }
+
+// ---------------------------------------------------------------------------
+// T015-PATCHED-RUNTIME [STD-3]: real Condvar via std::sync::Condvar
+// ---------------------------------------------------------------------------
+//
+// The .g stdlib's `Condvar::notify_one`/`notify_all` previously just
+// decremented an atomic counter — they never woke anyone, so every waiter
+// blocked forever. This registry keeps a real `std::sync::Condvar` per
+// user-visible id and routes wait/notify through it.
+
+struct RtCondvar {
+    m: std::sync::Mutex<()>,
+    c: std::sync::Condvar,
+}
+
+static RT_CONDVARS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<usize, std::sync::Arc<RtCondvar>>>,
+> = std::sync::OnceLock::new();
+static RT_NEXT_CONDVAR: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(1);
+
+fn rt_condvars() -> &'static std::sync::Mutex<
+    std::collections::HashMap<usize, std::sync::Arc<RtCondvar>>,
+> {
+    RT_CONDVARS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// T015-PATCHED-RUNTIME: allocate a fresh condvar and return its opaque id.
+#[unsafe(no_mangle)]
+pub extern "C" fn glyim_condvar_new() -> usize {
+    let id = RT_NEXT_CONDVAR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let handle = std::sync::Arc::new(RtCondvar {
+        m: std::sync::Mutex::new(()),
+        c: std::sync::Condvar::new(),
+    });
+    if let Ok(mut t) = rt_condvars().lock() {
+        t.insert(id, handle);
+    }
+    id
+}
+
+/// T015-PATCHED-RUNTIME: block until notified.
+///
+/// Returns `0` on success, `-1` if the id is unknown.
+#[unsafe(no_mangle)]
+pub extern "C" fn glyim_condvar_wait(id: usize) -> i32 {
+    let handle = match rt_condvars()
+        .lock()
+        .ok()
+        .and_then(|t| t.get(&id).cloned())
+    {
+        Some(h) => h,
+        None => return -1,
+    };
+    match handle.m.lock() {
+        Ok(guard) => {
+            // `Condvar::wait` returns the reacquired `MutexGuard`; we
+            // hold no invariant across the wait, so drop it immediately.
+            drop(handle.c.wait(guard));
+            0
+        }
+        Err(_) => -1,
+    }
+}
+
+/// T015-PATCHED-RUNTIME: wake one waiter.
+#[unsafe(no_mangle)]
+pub extern "C" fn glyim_condvar_notify_one(id: usize) -> i32 {
+    match rt_condvars()
+        .lock()
+        .ok()
+        .and_then(|t| t.get(&id).cloned())
+    {
+        Some(h) => {
+            h.c.notify_one();
+            0
+        }
+        None => -1,
+    }
+}
+
+/// T015-PATCHED-RUNTIME: wake all waiters.
+#[unsafe(no_mangle)]
+pub extern "C" fn glyim_condvar_notify_all(id: usize) -> i32 {
+    match rt_condvars()
+        .lock()
+        .ok()
+        .and_then(|t| t.get(&id).cloned())
+    {
+        Some(h) => {
+            h.c.notify_all();
+            0
+        }
+        None => -1,
+    }
+}

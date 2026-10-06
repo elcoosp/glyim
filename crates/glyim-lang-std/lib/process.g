@@ -139,12 +139,16 @@ impl Command {
     }
 
     /// Execute the command and collect its stdout.
+    ///
+    /// T011-FOLLOWUP-PATCHED [STD-5]: the previous version rebuilt a fresh
+    /// `Command` from `self.program` + `self.args`, discarding `self.env`
+    /// and `self.current_dir`. Now `output()` simply spawns `self` (the
+    /// runtime's `glyim_process_spawn` already pipes stdout/stderr) and
+    /// collects the output. Note: the runtime still doesn't forward
+    /// `env`/`current_dir` to the child — that remains an open item
+    /// tracked alongside T011.
     fn output(self) -> Result<Output, String> {
-        let child = Command::new(&self.program)
-            .args(self.args.as_slice())
-            .stdout(Stdio::Piped)
-            .stderr(Stdio::Piped)
-            .spawn()?;
+        let child = self.spawn()?;
         child.wait_with_output()
     }
 }
