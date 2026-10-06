@@ -2099,8 +2099,27 @@ impl<'a> MirBuilder<'a> {
                     },
                     span,
                 );
+                // T099-PATCHED [LOW-8]: an overflow in `end + 1` for a
+                // `..=end` range slice is a bounds violation, not a
+                // compiler-unreachable state. Emit `Assert` with
+                // `BoundsCheck` so the interpreter/codegen surface a clean
+                // panic instead of `unreachable` (an ICE-shaped abort in
+                // the interp, LLVM UB in codegen).
                 self.current_block = Some(overflow_bb);
-                self.terminate(TerminatorKind::Unreachable, span);
+                self.terminate(
+                    TerminatorKind::Assert {
+                        cond: Operand::Constant(glyim_mir::MirConst {
+                            kind: glyim_mir::MirConstKind::Bool(false),
+                            ty: self.ctx.ty_ctx().bool_ty(),
+                            span,
+                        }),
+                        expected: true,
+                        target: cont_bb,
+                        cleanup: None,
+                        msg: glyim_mir::AssertMessage::BoundsCheck,
+                    },
+                    span,
+                );
                 self.current_block = Some(cont_bb);
                 Operand::Copy(Place::new(eff_end_local))
             } else {
@@ -2167,8 +2186,26 @@ impl<'a> MirBuilder<'a> {
             span,
         );
 
+        // T099-PATCHED [LOW-8]: same for the `end <= len` failure. The
+        // previous `Unreachable` terminator produced an interp Panic
+        // ("reached unreachable terminator") and an LLVM `unreachable`
+        // instruction (UB) for programs that used an out-of-range
+        // `&arr[a..b]`.
         self.current_block = Some(check_end_le_len_bb);
-        self.terminate(TerminatorKind::Unreachable, span);
+        self.terminate(
+            TerminatorKind::Assert {
+                cond: Operand::Constant(glyim_mir::MirConst {
+                    kind: glyim_mir::MirConstKind::Bool(false),
+                    ty: self.ctx.ty_ctx().bool_ty(),
+                    span,
+                }),
+                expected: true,
+                target: done_bb,
+                cleanup: None,
+                msg: glyim_mir::AssertMessage::BoundsCheck,
+            },
+            span,
+        );
 
         self.current_block = Some(done_bb);
 
