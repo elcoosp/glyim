@@ -1053,9 +1053,13 @@ pub fn literal_ty(ctx: &mut TyCtxMut, infer: &mut InferenceTable, lit: &Literal)
         // `Some(IntTy::I32)` (the default), so we must treat `Some(I32)` /
         // `Some(Isize)` as inference vars too — only explicitly-suffixed
         // non-default hints stay concrete.
-        Literal::Int(_, Some(IntTy::I32))
-        | Literal::Int(_, Some(IntTy::Isize))
-        | Literal::Int(_, None) => {
+        // T180-PATCHED [TCK-30]: only *unsuffixed* literals (`None`) are
+        // inference variables. An explicit `i32`/`isize` suffix is a hard
+        // annotation (matching Rust's semantics), so `5i32` cannot be
+        // silently unified with `u64` or any other integer type. The HIR
+        // emits `None` for literals with no suffix and `Some(hint)` only
+        // for a real suffix, so this arm is unambiguous.
+        Literal::Int(_, None) => {
             let var = infer.new_int_var(ctx);
             ctx.mk_ty(TyKind::Infer(InferVar::Int(var)))
         }

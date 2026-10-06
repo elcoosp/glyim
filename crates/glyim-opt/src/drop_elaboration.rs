@@ -582,9 +582,22 @@ fn emit_array_drop_loop(
         ),
         source_info: span.clone(),
     };
+    // T184-PATCHED [OPT-3]: append the element index to the *original*
+    // place's projections instead of dropping them. For a projected place
+    // like `x.0` (a struct field of array type), the previous code
+    // dropped the `Field(0)` projection and generated
+    // `x[idx]` — indexing the struct as if it were an array. Any drop
+    // glue that ever reached this path (e.g. from a struct whose field
+    // is `[String; N]`) elaborated to the wrong address.
     let elem_place = Place {
         local: place.local,
-        projection: vec![ProjectionElem::Index(idx_local)].into_boxed_slice(),
+        projection: place
+            .projection
+            .iter()
+            .cloned()
+            .chain(std::iter::once(ProjectionElem::Index(idx_local)))
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
     };
 
     if let Some((flag_arr, _)) = per_element {

@@ -411,7 +411,10 @@ fn compute_move_dataflow(
 
         // --- Moved dataflow ---
         let mut new_moved_in = BitSet::with_capacity(num_paths);
-        if bi != 0 {
+        // T187-PATCHED [BCK-3]: rely on `predecessors[0].is_empty()`
+        // rather than a `bi != 0` guard (same behaviour today, and the
+        // guard silently broke if a back-edge into block 0 is ever added).
+        if true {
             for &pred in &predecessors[bi] {
                 new_moved_in.union_with(&moved_out[pred.to_raw() as usize]);
             }

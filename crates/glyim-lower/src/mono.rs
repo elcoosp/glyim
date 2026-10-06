@@ -204,6 +204,23 @@ impl<'a> MonoCtx<'a> {
         let Some(ty_ctx) = self.ty_ctx else {
             return;
         };
+        // T186-PATCHED [LOW-13]: pre-scan for a `VirtualMethod` constant.
+        // `Arc::make_mut` deep-clones the whole Body when the refcount is
+        // > 1, which is always true here — the mono cache shares Bodies
+        // between callers. That clone was paid for *every* mono item even
+        // though `VirtualMethod` is rare. Skip the clone (and the whole
+        // pass) when nothing needs rewriting.
+        let has_virtual_method = body.basic_blocks.iter().any(|b| {
+            if let TerminatorKind::Call { func, .. } = &b.terminator.kind {
+                if let Operand::Constant(c) = func {
+                    return matches!(c.kind, MirConstKind::VirtualMethod { .. });
+                }
+            }
+            false
+        });
+        if !has_virtual_method {
+            return;
+        }
         let body_mut = Arc::make_mut(body);
         for block in body_mut.basic_blocks.iter_mut() {
             if let TerminatorKind::Call { func, args, .. } = &mut block.terminator.kind {

@@ -69,9 +69,28 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
         }
         TyKind::Array(elem, count) => {
             let elem_llvm = llvm_type_for_ty(ctx, target_info, context, *elem)?;
+            // T189-PATCHED [LL-23]: reject counts that do not fit in u32
+            // instead of truncating (`[u8; 4294967296]` silently became
+            // `[i8; 0]`) and reject negative `Int` counts. Layout uses
+            // u64 with checked arithmetic, so any count reaching this
+            // point that exceeds u32::MAX is a genuine codegen error.
             let n = match &count.kind {
-                glyim_type::ConstKind::Uint(n) => *n as u32,
-                glyim_type::ConstKind::Int(n) => *n as u32,
+                glyim_type::ConstKind::Uint(n) => {
+                    if *n > u32::MAX as u128 {
+                        return Err(vec![GlyimDiagnostic::internal_error(
+                            "array count exceeds u32::MAX",
+                        )]);
+                    }
+                    *n as u32
+                }
+                glyim_type::ConstKind::Int(n) => {
+                    if *n < 0 || (*n as u128) > u32::MAX as u128 {
+                        return Err(vec![GlyimDiagnostic::internal_error(
+                            "array count is negative or exceeds u32::MAX",
+                        )]);
+                    }
+                    *n as u32
+                }
                 _ => {
                     return Err(vec![GlyimDiagnostic::internal_error(
                         "internal compiler error: Array with non-integer count in TyKind::Array",
