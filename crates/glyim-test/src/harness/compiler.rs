@@ -155,11 +155,41 @@ impl TestCompiler for PipelineCompiler {
         source: &str,
         source_path: &std::path::Path,
         file_id: FileId,
-        _flags: &[String],
+        flags: &[String],
     ) -> CompileOutput {
         use glyim_db::{CrateConfig, Database};
 
         tracing::info!(phase = "full-pipeline", file_id = file_id.to_raw());
+
+        // T143-PATCHED [HARNESS-3]: honor `// compile-flags:` directives.
+        // The `flags` list is parsed by the config layer; we support the
+        // small set of flag names the harness needs today. Unknown flags
+        // are ignored (matching the pre-fix behaviour for the unimplemented
+        // subset). `--opt-level=N` is the primary flag in use; a `-O`/`-O<N>`
+        // shorthand is also accepted.
+        let mut opt_level: u8 = 0;
+        let mut target_triple: Option<String> = None;
+        let mut i = 0usize;
+        while i < flags.len() {
+            let f = &flags[i];
+            if let Some(v) = f.strip_prefix("--opt-level=") {
+                opt_level = v.parse().unwrap_or(0);
+            } else if f == "--opt-level" && i + 1 < flags.len() {
+                opt_level = flags[i + 1].parse().unwrap_or(0);
+                i += 1;
+            } else if let Some(v) = f.strip_prefix("-O") {
+                // `-O` = 2; `-O0`..`-O3` = explicit.
+                opt_level = if v.is_empty() { 2 } else { v.parse().unwrap_or(2) };
+            } else if let Some(v) = f.strip_prefix("--target=") {
+                target_triple = Some(v.to_string());
+            } else if f == "--target" && i + 1 < flags.len() {
+                target_triple = Some(flags[i + 1].clone());
+                i += 1;
+            }
+            i += 1;
+        }
+        let target_triple = target_triple
+            .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string());
 
         // Each `compile()` call writes its source to a temp file that the
         // pipeline reads back. The path must be UNIQUE per call: many tests
@@ -174,8 +204,8 @@ impl TestCompiler for PipelineCompiler {
 
         let config = CrateConfig {
             name: format!("test_{}", file_id.to_raw()),
-            target_triple: "x86_64-unknown-linux-gnu".to_string(),
-            opt_level: 0,
+            target_triple,
+            opt_level,
         };
 
         let mut db = Database::new(config);

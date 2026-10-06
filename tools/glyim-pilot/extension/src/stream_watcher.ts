@@ -31,9 +31,20 @@ export class StreamWatcher {
       document.querySelector(this.adapter.assistantSelector)?.parentElement ??
       document.body;
 
-    // Existing observer for DOM changes (triggers check for ops blocks)
+    // T162-PATCHED [EXT-6]: debounce the DOM observer at 500 ms. The
+    // previous observer ran `serializedCheck` (which computes the full
+    // extracted-text SHA-256) on *every* mutation of the streaming
+    // response, so a token-by-token stream produced O(n²) work in the
+    // provider page's main thread. 500 ms is the spec's minimum
+    // debouncing interval (REQ-FUNC-056).
+    let debounceHandle: ReturnType<typeof setTimeout> | null = null;
     this.observer = new MutationObserver(() => {
-      if (!this.adapter.isStreaming()) void this.serializedCheck();
+      if (this.adapter.isStreaming()) return;
+      if (debounceHandle) return;
+      debounceHandle = setTimeout(() => {
+        debounceHandle = null;
+        void this.serializedCheck();
+      }, 500);
     });
     this.observer.observe(container, { childList: true, subtree: true, characterData: true });
 
