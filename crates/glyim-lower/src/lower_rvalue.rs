@@ -889,11 +889,44 @@ impl<'a> MirBuilder<'a> {
                         ));
                     }
                 };
-                let mut mir_operands = Vec::new();
-                for (_name, field_expr) in fields {
-                    mir_operands.push(self.lower_expr_to_operand(field_expr));
-                }
+                // T024-PATCHED [LOW-2]: resolve each field to its
+                // *declaration* index instead of pushing operands in source
+                // order. Layout, `Field(i)` projections, and codegen all
+                // follow the ADT / variant declaration order, so
+                // `P { y: 2, x: 1 }` previously stored 2 in the `x` slot
+                // and 1 in the `y` slot (silent field-value swap).
                 let variant = glyim_mir::VariantIdx::from_raw(*variant_idx);
+                let resolved: Vec<(usize, glyim_mir::Operand)> = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(src_idx, (name, field_expr))| {
+                        let operand = self.lower_expr_to_operand(field_expr);
+                        let idx = self
+                            .ctx
+                            .field_index_by_name(*adt_id, *variant_idx, *name)
+                            .map(|fidx| fidx.index())
+                            .unwrap_or(src_idx);
+                        (idx, operand)
+                    })
+                    .collect();
+                let total = resolved
+                    .iter()
+                    .map(|(i, _)| i + 1)
+                    .max()
+                    .unwrap_or(fields.len());
+                let mut mir_operands: Vec<glyim_mir::Operand> = Vec::with_capacity(total);
+                for (idx, operand) in resolved {
+                    while mir_operands.len() <= idx {
+                        mir_operands.push(glyim_mir::Operand::Constant(
+                            glyim_mir::MirConst {
+                                kind: glyim_mir::MirConstKind::Error,
+                                ty: glyim_type::Ty::ERROR,
+                                span: expr.span,
+                            },
+                        ));
+                    }
+                    mir_operands[idx] = operand;
+                }
                 glyim_mir::Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Adt(*adt_id, variant, *substs),
                     mir_operands,
