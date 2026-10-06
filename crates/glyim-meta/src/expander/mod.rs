@@ -847,57 +847,27 @@ impl<'a> ExpanderImpl<'a> {
                 }
             }
             BuiltinMacro::Include => {
-                // include!("path") reads file content as a string literal.
-                // Resolves relative to the calling file's directory when a VFS
-                // with the call-site file is available; otherwise CWD.
-                let args_tt = flatten_token_tree(args_node);
-                match first_string_lit(&args_tt) {
-                    Some(path_str) => {
-                        let path = Path::new(path_str);
-                        let resolved = if path.is_absolute() {
-                            path.to_path_buf()
-                        } else if let Some(vfs) = self.vfs {
-                            match vfs.file_path(call_site.file) {
-                                Some(calling) => calling
-                                    .parent()
-                                    .map(|dir| dir.join(path_str))
-                                    .unwrap_or_else(|| PathBuf::from(path_str)),
-                                None => PathBuf::from(path_str),
-                            }
-                        } else {
-                            PathBuf::from(path_str)
-                        };
-                        match fs::read_to_string(&resolved) {
-                            Ok(content) => {
-                                let escaped = content.replace('\\', "\\\\").replace('"', "\\\"");
-                                let lit = SmolStr::from(format!("\"{}\"", escaped));
-                                vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
-                            }
-                            Err(e) => {
-                                return (
-                                    None,
-                                    vec![GlyimDiagnostic::type_error(
-                                        call_site,
-                                        format!(
-                                            "failed to read file '{}': {}",
-                                            resolved.display(),
-                                            e
-                                        ),
-                                    )],
-                                );
-                            }
-                        }
-                    }
-                    None => {
-                        return (
-                            None,
-                            vec![GlyimDiagnostic::type_error(
-                                call_site,
-                                "include! expects one string literal argument".to_string(),
-                            )],
-                        );
-                    }
-                }
+                // T171-PATCHED [MAC-8]: `include!` in Rust splices the
+                // file's *tokens* into the program at the call site, so
+                // `include!("items.g");` at item position includes the
+                // items. The previous implementation was byte-for-byte
+                // identical to `include_str!` — it produced a string
+                // literal — so an `include!("items.g");` in item
+                // position expanded to a stray string, and there was no
+                // way to include code. Faithfully tokenizing the file
+                // needs the full lexer + parser plumbing that isn't yet
+                // wired here; emit an explicit "not supported" diagnostic
+                // so users are not silently misled.
+                let _ = args_node;
+                let _ = (self.vfs, call_site);
+                return (
+                    None,
+                    vec![GlyimDiagnostic::type_error(
+                        call_site,
+                        "include! for source-code inclusion is not yet supported;                          use a `mod` declaration or `include_str!` for string data."
+                            .to_string(),
+                    )],
+                );
             }
             BuiltinMacro::Concat => {
                 // concat!(a, b, ...) concatenates string representations, skipping punctuation

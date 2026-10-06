@@ -539,13 +539,30 @@ pub fn build_def_map(
     // imports is a no-op. Cross-module globs / cycles can only be resolved once
     // all modules and their public items are present, which the structural pass
     // guarantees before this loop runs.
+    // T173-PATCHED [DM-5]: track which use-decls are already settled and
+    // skip them on subsequent passes. Previously every pass re-processed
+    // *all* `use` declarations, and each glob re-cloned the entire source
+    // scope — the work repeated until the total scope count stabilized,
+    // which is O(passes × globs × scope_size) of pure churn.
     let mut prev_count = scope_entry_count(&modules);
+    let mut settled: Vec<bool> = vec![false; use_decls.len()];
     loop {
-        for (node, module, vis) in &use_decls {
+        let mut any_progress = false;
+        for (i, (node, module, vis)) in use_decls.iter().enumerate() {
+            if settled[i] {
+                continue;
+            }
+            let before = scope_entry_count(&modules);
             process_use_decl(node, *module, &mut modules, &interner, vis.clone());
+            let after = scope_entry_count(&modules);
+            if after == before {
+                settled[i] = true;
+            } else {
+                any_progress = true;
+            }
         }
         let new_count = scope_entry_count(&modules);
-        if new_count == prev_count {
+        if new_count == prev_count || !any_progress {
             break;
         }
         prev_count = new_count;

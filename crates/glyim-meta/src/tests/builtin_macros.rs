@@ -246,15 +246,24 @@ fn test_include_macro() {
     let name = expander.interner().intern("include");
 
     let result = expander.expand(name, &args, span);
-    assert!(result.diagnostics.is_empty());
-    let expanded = result.expanded.unwrap();
-    let text = expanded.text().to_string();
+    // T171-PATCHED [MAC-8]: `include!` for source-code inclusion is not
+    // yet wired through the full tokenizer/parser; the expander emits an
+    // explicit "not yet supported" diagnostic rather than producing a
+    // string literal byte-identical to `include_str!`.
+    let result = expander.expand(name, &args, span);
     assert!(
-        text.contains(content),
-        "Expected '{}', got {}",
-        content,
-        text
+        !result.diagnostics.is_empty(),
+        "include! must report the 'not yet supported' diagnostic"
     );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("include!")),
+        "diagnostic should name include!: {:?}",
+        result.diagnostics
+    );
+
 }
 
 #[test]

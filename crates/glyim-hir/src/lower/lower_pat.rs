@@ -57,6 +57,13 @@ pub(crate) fn lower_pat(
             let name_text = first_ident_text(node).unwrap_or_else(|| "_".to_string());
             let name = interner.intern(&name_text);
             if name_text.starts_with(|c: char| c.is_uppercase()) {
+                // T175-PATCHED [HIRX-6]: keep the uppercase heuristic as a
+                // fast path (matching Rust's "single-segment path" shape),
+                // but the typeck check_pat::Pat::Path arm now has a
+                // resolution fallback for the case where the name does
+                // not correspond to a real variant or const — see
+                // check_pat.rs. This preserves the common case while
+                // allowing `let A = x;` to bind a variable.
                 let path = HirPath {
                     segments: vec![PathSegment {
                         name,
