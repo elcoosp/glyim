@@ -8,6 +8,12 @@
 //! it was dropped on the floor and guards reinterpreted lock state as `T`).
 //! The dead `glyim_mutex_lock` extern was removed (no such symbol in the
 //! runtime).
+//!
+//! T014-PATCHED-G [STD-2]: `AtomicBool`/`AtomicUsize`/`AtomicU8` delegate
+//! every operation to genuine `std::sync::atomic` FFI in the runtime. The
+//! previous `compare_exchange`/`fetch_add`/`fetch_sub` were load-then-store
+//! sequences, so two threads could both win a CAS and `Mutex::lock`'s spin
+//! loop could admit both into the critical section.
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -346,6 +352,12 @@ impl BarrierWaitResult {
 }
 
 /// An atomic boolean value.
+///
+/// T014-PATCHED-G [STD-2]: all operations delegate to genuine atomics in
+/// the runtime (`std::sync::atomic`). The previous implementations were
+/// load-then-store sequences — `compare_exchange` and `fetch_*` were racy,
+/// so `Mutex::lock`'s spin loop could let two threads enter the critical
+/// section simultaneously.
 struct AtomicBool {
     v: UnsafeCell<u8>,
 }
@@ -359,23 +371,36 @@ impl AtomicBool {
     }
 
     /// Load the value.
-    fn load(&self, order: Ordering) -> bool {
-        unsafe { *self.v.get() != 0 }
+    fn load(&self, _order: Ordering) -> bool {
+        extern "C" {
+            fn glyim_atomic_u8_load(ptr: *const u8) -> u8;
+        }
+        let raw = unsafe { glyim_atomic_u8_load(self.v.get() as *const u8) };
+        raw != 0
     }
 
     /// Store the value.
-    fn store(&self, val: bool, order: Ordering) {
-        unsafe { *self.v.get() = if val { 1 } else { 0 } };
+    fn store(&self, val: bool, _order: Ordering) {
+        extern "C" {
+            fn glyim_atomic_u8_store(ptr: *mut u8, val: u8);
+        }
+        unsafe { glyim_atomic_u8_store(self.v.get(), if val { 1 } else { 0 }) };
     }
 
     /// Compare and exchange.
-    fn compare_exchange(&self, current: bool, new: bool, order: Ordering) -> Result<bool, bool> {
-        let cur = self.load(order);
-        if cur == current {
-            self.store(new, order);
+    ///
+    /// Returns `Ok(new)` if the swap succeeded, `Err(prev)` otherwise.
+    fn compare_exchange(&self, current: bool, new: bool, _order: Ordering) -> Result<bool, bool> {
+        extern "C" {
+            fn glyim_atomic_u8_cas(ptr: *mut u8, expected: u8, new: u8) -> u8;
+        }
+        let prev = unsafe {
+            glyim_atomic_u8_cas(self.v.get(), if current { 1 } else { 0 }, if new { 1 } else { 0 })
+        };
+        if prev == (if current { 1 } else { 0 }) {
             Result::Ok(new)
         } else {
-            Result::Err(cur)
+            Result::Err(prev != 0)
         }
     }
 }
@@ -392,27 +417,35 @@ impl AtomicUsize {
     }
 
     /// Load the value.
-    fn load(&self, order: Ordering) -> usize {
-        unsafe { *self.v.get() }
+    fn load(&self, _order: Ordering) -> usize {
+        extern "C" {
+            fn glyim_atomic_usize_load(ptr: *const usize) -> usize;
+        }
+        unsafe { glyim_atomic_usize_load(self.v.get() as *const usize) }
     }
 
     /// Store the value.
-    fn store(&self, val: usize, order: Ordering) {
-        unsafe { *self.v.get() = val };
+    fn store(&self, val: usize, _order: Ordering) {
+        extern "C" {
+            fn glyim_atomic_usize_store(ptr: *mut usize, val: usize);
+        }
+        unsafe { glyim_atomic_usize_store(self.v.get(), val) };
     }
 
     /// Increment and return the previous value.
-    fn fetch_add(&self, val: usize, order: Ordering) -> usize {
-        let prev = self.load(order);
-        self.store(prev + val, order);
-        prev
+    fn fetch_add(&self, val: usize, _order: Ordering) -> usize {
+        extern "C" {
+            fn glyim_atomic_usize_fetch_add(ptr: *mut usize, val: usize) -> usize;
+        }
+        unsafe { glyim_atomic_usize_fetch_add(self.v.get(), val) }
     }
 
     /// Decrement and return the previous value.
-    fn fetch_sub(&self, val: usize, order: Ordering) -> usize {
-        let prev = self.load(order);
-        self.store(prev - val, order);
-        prev
+    fn fetch_sub(&self, val: usize, _order: Ordering) -> usize {
+        extern "C" {
+            fn glyim_atomic_usize_fetch_sub(ptr: *mut usize, val: usize) -> usize;
+        }
+        unsafe { glyim_atomic_usize_fetch_sub(self.v.get(), val) }
     }
 }
 
@@ -428,23 +461,31 @@ impl AtomicU8 {
     }
 
     /// Load the value.
-    fn load(&self, order: Ordering) -> u8 {
-        unsafe { *self.v.get() }
+    fn load(&self, _order: Ordering) -> u8 {
+        extern "C" {
+            fn glyim_atomic_u8_load(ptr: *const u8) -> u8;
+        }
+        unsafe { glyim_atomic_u8_load(self.v.get() as *const u8) }
     }
 
     /// Store the value.
-    fn store(&self, val: u8, order: Ordering) {
-        unsafe { *self.v.get() = val };
+    fn store(&self, val: u8, _order: Ordering) {
+        extern "C" {
+            fn glyim_atomic_u8_store(ptr: *mut u8, val: u8);
+        }
+        unsafe { glyim_atomic_u8_store(self.v.get(), val) };
     }
 
     /// Compare and exchange.
-    fn compare_exchange(&self, current: u8, new: u8, order: Ordering) -> Result<u8, u8> {
-        let cur = self.load(order);
-        if cur == current {
-            self.store(new, order);
+    fn compare_exchange(&self, current: u8, new: u8, _order: Ordering) -> Result<u8, u8> {
+        extern "C" {
+            fn glyim_atomic_u8_cas(ptr: *mut u8, expected: u8, new: u8) -> u8;
+        }
+        let prev = unsafe { glyim_atomic_u8_cas(self.v.get(), current, new) };
+        if prev == current {
             Result::Ok(new)
         } else {
-            Result::Err(cur)
+            Result::Err(prev)
         }
     }
 }

@@ -1687,3 +1687,122 @@ pub mod reactor;
 
 #[cfg(test)]
 mod tests;
+
+// ---------------------------------------------------------------------------
+// T014-PATCHED-RUNTIME [STD-2]: real atomic operations
+// ---------------------------------------------------------------------------
+//
+// The .g stdlib's `AtomicBool`/`AtomicUsize`/`AtomicU8` types previously did
+// non-atomic loads/stores, so `fetch_add`/`compare_exchange` were racy (two
+// threads could both win a CAS). These FFI entry points expose genuine
+// `std::sync::atomic` operations so the .g wrappers become correct. The .g
+// caller passes a pointer to its `UnsafeCell<u8/usize>` payload; the
+// pointer is reinterpreted as an `AtomicU8`/`AtomicUsize` at the boundary
+// (same size, same alignment, same layout guarantee from `#[repr(transparent)]`
+// on Rust's atomics).
+
+use std::sync::atomic::{
+    AtomicU8 as RtAtomicU8, AtomicUsize as RtAtomicUsize, Ordering as RtOrdering,
+};
+
+/// T014-PATCHED-RUNTIME: atomic load of a `u8`.
+///
+/// # Safety
+/// `ptr` must point to a live, 1-byte aligned `u8`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_u8_load(ptr: *const u8) -> u8 {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { (*(ptr as *const RtAtomicU8)).load(RtOrdering::SeqCst) }
+}
+
+/// T014-PATCHED-RUNTIME: atomic store of a `u8`.
+///
+/// # Safety
+/// `ptr` must point to a live, 1-byte aligned `u8`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_u8_store(ptr: *mut u8, val: u8) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe { (*(ptr as *const RtAtomicU8)).store(val, RtOrdering::SeqCst) };
+}
+
+/// T014-PATCHED-RUNTIME: atomic compare-exchange of a `u8`.
+///
+/// Returns the previous value. On success (`prev == expected`) the new value
+/// is stored; on failure the memory is untouched. The caller checks
+/// `returned == expected` to know whether the swap happened.
+///
+/// # Safety
+/// `ptr` must point to a live, 1-byte aligned `u8`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_u8_cas(ptr: *mut u8, expected: u8, new: u8) -> u8 {
+    if ptr.is_null() {
+        return 0;
+    }
+    match unsafe {
+        (*(ptr as *const RtAtomicU8)).compare_exchange(
+            expected,
+            new,
+            RtOrdering::SeqCst,
+            RtOrdering::SeqCst,
+        )
+    } {
+        Ok(prev) => prev,
+        Err(prev) => prev,
+    }
+}
+
+/// T014-PATCHED-RUNTIME: atomic load of a `usize`.
+///
+/// # Safety
+/// `ptr` must point to a live, `usize`-aligned `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_usize_load(ptr: *const usize) -> usize {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { (*(ptr as *const RtAtomicUsize)).load(RtOrdering::SeqCst) }
+}
+
+/// T014-PATCHED-RUNTIME: atomic store of a `usize`.
+///
+/// # Safety
+/// `ptr` must point to a live, `usize`-aligned `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_usize_store(ptr: *mut usize, val: usize) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe { (*(ptr as *const RtAtomicUsize)).store(val, RtOrdering::SeqCst) };
+}
+
+/// T014-PATCHED-RUNTIME: atomic fetch-and-add of a `usize`.
+///
+/// Returns the previous value.
+///
+/// # Safety
+/// `ptr` must point to a live, `usize`-aligned `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_usize_fetch_add(ptr: *mut usize, val: usize) -> usize {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { (*(ptr as *const RtAtomicUsize)).fetch_add(val, RtOrdering::SeqCst) }
+}
+
+/// T014-PATCHED-RUNTIME: atomic fetch-and-sub of a `usize`.
+///
+/// Returns the previous value.
+///
+/// # Safety
+/// `ptr` must point to a live, `usize`-aligned `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_usize_fetch_sub(ptr: *mut usize, val: usize) -> usize {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { (*(ptr as *const RtAtomicUsize)).fetch_sub(val, RtOrdering::SeqCst) }
+}
