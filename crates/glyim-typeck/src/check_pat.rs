@@ -362,10 +362,54 @@ impl<'a> FnCtxt<'a> {
                         });
                     }
                 } else {
-                    // Struct pattern: named fields.
+                    // T088-PATCHED [TCK-26]: substitute the scrutinee's
+                    // generic arguments through the field's declared type,
+                    // mirroring the tuple-variant path above. Without this,
+                    // `let Wrapper { v } = w` where `w: Wrapper<u64>` bound
+                    // `v: Param(T)` (rigid) — every downstream `v == 1u64`
+                    // failed spuriously, or unified with an unrelated `T`
+                    // elsewhere (Param unifies by index).
+                    //
+                    // Build the subst map from the scrutinee type, peeling
+                    // ref layers off so `&Wrapper<u64>` also works.
+                    let subst: std::collections::HashMap<u32, glyim_type::GenericArg> =
+                        match self.ctx.ty_kind(expected_ty) {
+                            TyKind::Adt(_, sub) => {
+                                let args = self.ctx.substitution_args(*sub);
+                                let mut m = std::collections::HashMap::new();
+                                for (idx, arg) in args.iter().enumerate() {
+                                    if let glyim_type::GenericArg::Ty(t) = arg {
+                                        m.insert(idx as u32, glyim_type::GenericArg::Ty(*t));
+                                    }
+                                }
+                                m
+                            }
+                            TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                                TyKind::Adt(_, sub) => {
+                                    let args = self.ctx.substitution_args(*sub);
+                                    let mut m = std::collections::HashMap::new();
+                                    for (idx, arg) in args.iter().enumerate() {
+                                        if let glyim_type::GenericArg::Ty(t) = arg {
+                                            m.insert(
+                                                idx as u32,
+                                                glyim_type::GenericArg::Ty(*t),
+                                            );
+                                        }
+                                    }
+                                    m
+                                }
+                                _ => std::collections::HashMap::new(),
+                            },
+                            _ => std::collections::HashMap::new(),
+                        };
                     for (field_name, field_pat_id) in fields {
                         let field_ty = if adt_known {
-                            self.lookup_field_ty(adt_id, *field_name, span)
+                            let formal = self.lookup_field_ty(adt_id, *field_name, span);
+                            if subst.is_empty() {
+                                formal
+                            } else {
+                                self.ctx.subst_ty(formal, &subst)
+                            }
                         } else {
                             expected_ty
                         };
