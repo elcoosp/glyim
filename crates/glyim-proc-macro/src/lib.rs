@@ -350,6 +350,17 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
             let name = CStr::from_ptr(name).to_string_lossy().into_owned();
             let expand = move |input: &[(SyntaxKind, String)]| -> Vec<(SyntaxKind, String)> {
                 // Build input PmTokenStream on the host side.
+                //
+                // T087-PATCHED [PM-1]: the previous implementation
+                // `mem::forget`ed one `CString` per input token, so
+                // every proc-macro invocation permanently leaked the
+                // token text. The comment's stated goal — "kept alive
+                // for the duration of the call" — is achieved by
+                // keeping the `CString`s in a local `Vec` that lives
+                // until after `(entry)(...)` returns and the result is
+                // copied out. Ownership of each `CString` is then
+                // released at the end of the closure scope.
+                let mut owned: Vec<CString> = Vec::with_capacity(input.len());
                 let mut in_ts = pm_ts_alloc();
                 for (kind, text) in input {
                     let ctext = CString::new(text.as_str()).unwrap_or_default();
@@ -357,6 +368,7 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
                         ptr: ctext.as_ptr() as *const u8,
                         len: text.len() as u32,
                     };
+                    owned.push(ctext);
                     pm_ts_push(
                         &mut in_ts,
                         PmToken {
@@ -364,15 +376,16 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
                             text: pm_text,
                         },
                     );
-                    // ctext is leaked intentionally: the dylib reads it during
-                    // the call; kept alive for the duration of the call.
-                    std::mem::forget(ctext);
                 }
                 let mut out_ts = pm_ts_alloc();
                 (entry)(&mut in_ts, &mut out_ts);
                 let result = pm_to_tokens(&out_ts);
                 pm_ts_free(&mut in_ts);
                 pm_ts_free(&mut out_ts);
+                // `owned` is dropped here — after the dylib call has
+                // returned and `result` has been cloned into Rust-owned
+                // `String`s. No leak, no use-after-free.
+                drop(owned);
                 result
             };
             (*reg).0.register(&name, expand);

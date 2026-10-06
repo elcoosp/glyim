@@ -396,7 +396,12 @@ pub(crate) fn lower_struct_def(
             && is_type_node(ty)
         {
             let fname = interner.intern(t.text());
-            let fty = lower_type_ref(ty, interner)?;
+            // T085-PATCHED [HIRX-4]: recover from a failed type lower
+            // instead of aborting the whole struct item. Previously
+            // `?` returned `None` and the entire `ItemKind::Struct`
+            // disappeared from the HIR, turning one bad field into a
+            // cascade of misleading "unresolved name" errors.
+            let fty = lower_type_ref(ty, interner).unwrap_or(TypeRef::Error);
             fields.push(Field {
                 name: fname,
                 ty: fty,
@@ -523,10 +528,12 @@ pub(crate) fn lower_variant(node: &SyntaxNode, interner: &mut Interner) -> Optio
             {
                 let fname_str = first_ident_text(&fnode).unwrap_or_default();
                 let fname = interner.intern(&fname_str);
+                // T085-PATCHED [HIRX-4]: same recovery as above.
                 let fty = fnode
                     .children()
                     .find(is_type_node)
-                    .and_then(|n| lower_type_ref(&n, interner))?;
+                    .and_then(|n| lower_type_ref(&n, interner))
+                    .unwrap_or(TypeRef::Error);
                 fields.push(Field {
                     name: fname,
                     ty: fty,
@@ -590,8 +597,19 @@ pub(crate) fn lower_impl_def(
                         }
                     } else if trait_ref.is_none() {
                         // Before `for`: this is the trait.
-                        if let TypeRef::Path(p) = lower_type_ref(&child, interner)? {
-                            trait_ref = Some(p);
+                        // T085-PATCHED [HIRX-4]: recover from a failed
+                        // lower instead of aborting the whole impl
+                        // item (which silently dropped every method
+                        // and left callers with "no method" errors).
+                        match lower_type_ref(&child, interner) {
+                            Some(TypeRef::Path(p)) => trait_ref = Some(p),
+                            Some(_) => {} // non-path trait shape: ignore
+                            None => {
+                                // Leave `trait_ref` unset; the impl is
+                                // still lowered and downstream passes
+                                // emit a targeted error for the missing
+                                // trait path.
+                            }
                         }
                     }
                 }
