@@ -878,7 +878,13 @@ pub(crate) fn lower_trait_def(
         kind: ItemKind::Trait(TraitItem {
             associated_types,
             methods,
-            generic_params: Vec::new(),
+            // T176-PATCHED [HIRX-7]: propagate the trait's declared generic
+            // parameters. Previously hardcoded to `Vec::new()`, so a
+            // generic trait like `trait Wrapper<T> { fn get(&self) -> T; }`
+            // had no `T` to bind — every method signature in the trait
+            // body failed to resolve `T`, and every `impl Wrapper<X> for Y`
+            // could not be matched against the trait's declared shape.
+            generic_params: collect_generic_params(node, interner),
             where_clauses: collect_where_clauses(node, interner),
         }),
         visibility: Visibility::Inherited,
