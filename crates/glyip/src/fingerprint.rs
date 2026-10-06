@@ -293,12 +293,15 @@ fn collect_files_with_extension(dir: &Path, extension: &str) -> Vec<PathBuf> {
 /// any build scripts. Returns their (possibly non-existent) paths.
 fn config_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = vec![
-        // T191-PATCHED [GLYIP-5]: the real filenames are `Glyip.toml` /
-        // `Glyip.lock`. The lowercase spellings never existed, so the
-        // lock file was never watched — only the accidental `.toml` glob
-        // covered `Glyip.toml`.
+        // T191-PATCHED [GLYIP-5]: list BOTH the real spellings
+        // (`Glyip.toml` / `Glyip.lock`) and the legacy lowercase ones so
+        // existing projects on either convention are fingerprinted. The
+        // previous list only had `glyim.toml`/`glyim.lock`; the real
+        // `Glyip.lock` was never watched.
         dir.join("Glyip.toml"),
         dir.join("Glyip.lock"),
+        dir.join("glyim.toml"),
+        dir.join("glyim.lock"),
         dir.join("build.g"),
         dir.join("build.rs"),
     ];
