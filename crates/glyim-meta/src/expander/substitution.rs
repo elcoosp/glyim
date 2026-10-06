@@ -76,11 +76,25 @@ pub(crate) fn substitute(
 
                         // Find all metavariable names in the inner pattern.
                         let var_names = find_all_metavars(inner);
+                        // T082-PATCHED [MAC-3]: any metavariable inside a
+                        // `$(...)*` that was never matched by the pattern
+                        // must be a hard error. The previous code filtered
+                        // unbound names out of `var_names` (via
+                        // `filter_map`), so `$( let _ = $q; )*` with no
+                        // `$q` in the pattern silently expanded to nothing —
+                        // a stub that compiled to empty code instead of
+                        // reporting the macro author's mistake.
+                        for name in &var_names {
+                            if !bindings.contains_key(name) {
+                                return Err(SmolStr::from(format!(
+                                    "unbound metavariable `${}` inside a repetition",
+                                    name
+                                )));
+                            }
+                        }
                         // HIR-2: each metavar maps to one entry *per matched
                         // iteration*, so the outer length IS the repetition
-                        // count. (Before the depth-aware fix this counted
-                        // captured tokens, which over-expanded multi-token
-                        // fragments.)
+                        // count.
                         let repetitions: usize = var_names
                             .iter()
                             .filter_map(|name| bindings.get(name).map(|v| v.len()))

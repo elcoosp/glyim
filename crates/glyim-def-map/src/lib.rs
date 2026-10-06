@@ -842,6 +842,32 @@ fn collect_items(
             // from each variant's value `LocalDefId` to
             // `(enum_local, VariantIdx)` for `check_path`.
             SyntaxKind::EnumDef => {
+                // T081-PATCHED [DM-4]: emit a duplicate-definition
+                // diagnostic if the name is already declared in the
+                // types namespace (matching the FnDef/StructDef arm).
+                // Previously the second EnumDef silently overwrote
+                // the first in `scope.types`, so `enum Color { Red }
+                // enum Color { Blue }` orphaned `Red`'s variants and
+                // left two same-named child modules in `children`.
+                {
+                    let name_str_dup = extract_ident(&child);
+                    let name_dup = interner.intern(&name_str_dup);
+                    if modules[parent_module].scope.types.contains_key(&name_dup)
+                        || modules[parent_module]
+                            .children
+                            .iter()
+                            .any(|(n, _)| *n == name_dup)
+                    {
+                        diagnostics.push(GlyimDiagnostic::parse_error(
+                            node_span(&child),
+                            format!(
+                                "duplicate definition of `{}`",
+                                interner.resolve(name_dup)
+                            ),
+                        ));
+                        continue;
+                    }
+                }
                 let name_str = extract_ident(&child);
                 let name = interner.intern(&name_str);
                 let vis = visibility_of_node(&child, interner);

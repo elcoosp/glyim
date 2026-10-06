@@ -2585,20 +2585,19 @@ impl<'a> FnCtxt<'a> {
                     });
                 let _ = adt_name;
                 // Cheaper: try the canonical builtin AdtIds for common names.
-                // We don't know the name here directly, but the const_table
-                // in TyCtxMut has `canonical_builtin_name` helper if present.
-                // Fallback: probe a small fixed set of builtin AdtIds whose
-                // methods include `expect`/`unwrap`/`map`/`and_then`/etc.
+                // T093-DEFERRED [TCK-27]: the fallback here is still the
+                // original "any ADT matches a small candidate list" version.
+                // A correct fix needs the ADT's name, which
+                // `adt_name_for_id` exposes only on `TyCtxMut`. Porting
+                // that lookup onto the frozen `TyCtx` (or threading the
+                // name through `lookup_builtin_method`) is a follow-up.
+                // See .fix-log/WAVE2-SKIPPED.md.
                 let candidates: [u32; 4] = [1010, 1011, 1006, 1007];
                 let mut found = None;
                 for cand in candidates {
                     if let Some(hit) =
                         self.ctx.lookup_builtin_method(AdtId::from_raw(cand), method_name)
                     {
-                        // Only accept if the receiver's type-shape (number of
-                        // generic args) matches the candidate's arity. Result
-                        // and Option both take 1 generic arg in this compiler,
-                        // so we accept when the receiver is an Adt too.
                         if matches!(self.ctx.ty_kind(step_ty), TyKind::Adt(_, _)) {
                             found = Some(hit);
                             break;
