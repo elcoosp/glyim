@@ -37,3 +37,6 @@ mod where_clause;
 
 #[cfg(test)]
 mod wave2_fe_tests;
+
+#[cfg(test)]
+mod wave2_fe_tests2;

@@ -151,7 +151,14 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_comparison_expr(&mut self) {
         let cp = self.checkpoint();
-        self.parse_bitwise_expr();
+        // T021-PATCHED [FE-106]: descend into the bit-OR level (the
+        // lowest-precedence bitwise operator); it in turn calls the
+        // XOR/AND/SHIFT levels so `|`, `^`, `&`, `<<`, `>>` have
+        // distinct precedence. The previous single `parse_bitwise_expr`
+        // collapsed all five onto one left-associative level, so e.g.
+        // `4 | 1 & 3` parsed as `(4 | 1) & 3` = 1 instead of
+        // `4 | (1 & 3)` = 5.
+        self.parse_bit_or_expr();
         if matches!(
             self.current_kind(),
             SyntaxKind::EqEq
@@ -163,28 +170,63 @@ impl<'a> Parser<'a> {
         ) {
             self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
-            self.parse_bitwise_expr();
+            self.parse_bit_or_expr();
             self.finish_node();
         }
     }
 
-    pub(crate) fn parse_bitwise_expr(&mut self) {
-        // See `parse_or_expr` — checkpoint taken once, never reset.
+    /// Bit-OR level: `a | b`.
+    pub(crate) fn parse_bit_or_expr(&mut self) {
+        let cp = self.checkpoint();
+        self.parse_bit_xor_expr();
+        while self.current_kind() == SyntaxKind::Or {
+            self.start_node_at(cp, SyntaxKind::BinaryExpr);
+            self.bump();
+            self.parse_bit_xor_expr();
+            self.finish_node();
+        }
+    }
+
+    /// Bit-XOR level: `a ^ b`.
+    pub(crate) fn parse_bit_xor_expr(&mut self) {
+        let cp = self.checkpoint();
+        self.parse_bit_and_expr();
+        while self.current_kind() == SyntaxKind::Caret {
+            self.start_node_at(cp, SyntaxKind::BinaryExpr);
+            self.bump();
+            self.parse_bit_and_expr();
+            self.finish_node();
+        }
+    }
+
+    /// Bit-AND level: `a & b`.
+    pub(crate) fn parse_bit_and_expr(&mut self) {
+        let cp = self.checkpoint();
+        self.parse_shift_expr();
+        while self.current_kind() == SyntaxKind::And {
+            self.start_node_at(cp, SyntaxKind::BinaryExpr);
+            self.bump();
+            self.parse_shift_expr();
+            self.finish_node();
+        }
+    }
+
+    /// Shift level: `a << b` / `a >> b`.
+    pub(crate) fn parse_shift_expr(&mut self) {
         let cp = self.checkpoint();
         self.parse_additive_expr();
-        while matches!(
-            self.current_kind(),
-            SyntaxKind::And
-                | SyntaxKind::Or
-                | SyntaxKind::Caret
-                | SyntaxKind::Shl
-                | SyntaxKind::Shr
-        ) {
+        while matches!(self.current_kind(), SyntaxKind::Shl | SyntaxKind::Shr) {
             self.start_node_at(cp, SyntaxKind::BinaryExpr);
             self.bump();
             self.parse_additive_expr();
             self.finish_node();
         }
+    }
+
+    /// Backwards-compat alias — some call sites still reference
+    /// `parse_bitwise_expr`. It now walks the full three-level chain.
+    pub(crate) fn parse_bitwise_expr(&mut self) {
+        self.parse_bit_or_expr();
     }
 
     pub(crate) fn parse_additive_expr(&mut self) {
@@ -480,6 +522,82 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
+    }
+
+    /// T020-PATCHED [FE-105]: does the `<` at the current position begin a
+    /// generic-argument list on a value path (i.e. `Vec<u8>::new()`) rather
+    /// than a less-than comparison? Returns `true` only when the matching
+    /// `>` at depth 0 is immediately followed by `::`. This is a cheap,
+    /// bounded lookahead (<64 tokens) that avoids consuming on ordinary
+    /// comparisons like `a < b`.
+    pub(crate) fn lt_starts_generic_args(&mut self) -> bool {
+        // Flush pending trivia so the scan starts at the real next token
+        // without polluting the CST (this only advances past trivia that
+        // will be emitted into the enclosing node anyway).
+        if self.current_kind() != SyntaxKind::Lt {
+            return false;
+        }
+        let mut p = self.pos;
+        // Skip the leading `<` itself.
+        debug_assert_eq!(self.tokens.get(p).map(|t| t.kind), Some(SyntaxKind::Lt));
+        p += 1;
+        let mut depth: i32 = 1;
+        let mut scanned = 0;
+        while let Some(tok) = self.tokens.get(p) {
+            if tok.kind.is_trivia() {
+                p += 1;
+                continue;
+            }
+            scanned += 1;
+            if scanned > 64 {
+                return false;
+            }
+            match tok.kind {
+                SyntaxKind::Lt => depth += 1,
+                SyntaxKind::Gt => {
+                    depth -= 1;
+                    if depth == 0 {
+                        // Look at the next non-trivia token after `>`.
+                        let mut q = p + 1;
+                        while let Some(t) = self.tokens.get(q) {
+                            if !t.kind.is_trivia() {
+                                return t.kind == SyntaxKind::ColonColon;
+                            }
+                            q += 1;
+                        }
+                        return false;
+                    }
+                }
+                SyntaxKind::Shr => {
+                    // `>>` closes two levels at once.
+                    depth -= 2;
+                    if depth <= 0 {
+                        let mut q = p + 1;
+                        while let Some(t) = self.tokens.get(q) {
+                            if !t.kind.is_trivia() {
+                                return t.kind == SyntaxKind::ColonColon;
+                            }
+                            q += 1;
+                        }
+                        return false;
+                    }
+                }
+                // A `;`, `)`, `{`, `}`, or `,` at depth 0 aborts the scan;
+                // we are not inside a valid generic arg list.
+                SyntaxKind::Semicolon
+                | SyntaxKind::RParen
+                | SyntaxKind::LBrace
+                | SyntaxKind::RBrace
+                | SyntaxKind::Comma
+                    if depth == 1 =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+            p += 1;
+        }
+        false
     }
 
     pub(crate) fn parse_path_expr(&mut self) {
@@ -845,6 +963,20 @@ impl<'a> Parser<'a> {
                 self.error("expected identifier in path");
                 return;
             }
+        }
+        // T020-PATCHED [FE-105]: generic args are allowed on the *first*
+        // segment of a value path as well (`Vec<u8>::new()`). The previous
+        // implementation only accepted `<...>` after a `::`, so a bare
+        // `Vec<u8>::new()` stopped at the first `<`, producing "expected `;`
+        // after expression" and "unexpected token" cascades.
+        //
+        // The naive "consume `<` unconditionally" version broke `a < b`
+        // (every comparison parsed as a generic argument list). We gate the
+        // consume behind a bounded lookahead: only accept `<` as generics
+        // when the matching `>` at depth 0 is *immediately followed by*
+        // `::` — the signature of a multi-segment path with generics.
+        if self.current_kind() == SyntaxKind::Lt && self.lt_starts_generic_args() {
+            self.parse_type_arg_list();
         }
         while self.current_kind() == SyntaxKind::ColonColon {
             self.bump(); // ::
