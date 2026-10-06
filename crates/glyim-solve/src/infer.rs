@@ -480,10 +480,18 @@ impl InferenceTable {
                             None
                         }
                     };
+                    // T090-PATCHED [SOLVE-26]: every speculative probe
+                    // below mutates `int_vars`/`ty_vars` as it runs. If
+                    // the probe ultimately fails, the pre-failure
+                    // bindings stayed installed and polluted all later
+                    // inference in the body. Snapshot before each probe
+                    // and rollback on failure.
                     if let Some((t, u)) = vec_a_to_slice_b {
+                        let snap = self.snapshot();
                         if self.unify_tys(ctx, t, u, span).is_ok() {
                             return Ok(constraints);
                         }
+                        self.rollback_to(snap);
                     }
                     let vec_b_to_slice_a: Option<(glyim_type::Ty, glyim_type::Ty)> = {
                         use glyim_type::TyKind as K;
@@ -505,21 +513,27 @@ impl InferenceTable {
                         }
                     };
                     if let Some((t, u)) = vec_b_to_slice_a {
+                        let snap = self.snapshot();
                         if self.unify_tys(ctx, t, u, span).is_ok() {
                             return Ok(constraints);
                         }
+                        self.rollback_to(snap);
                     }
                     let deref_a = ctx.deref_ty(ty_a);
                     if let Some(da) = deref_a {
+                        let snap = self.snapshot();
                         if self.unify_tys(ctx, da, ty_b, span).is_ok() {
                             return Ok(constraints);
                         }
+                        self.rollback_to(snap);
                     }
                     let deref_b = ctx.deref_ty(ty_b);
                     if let Some(db) = deref_b {
+                        let snap = self.snapshot();
                         if self.unify_tys(ctx, ty_a, db, span).is_ok() {
                             return Ok(constraints);
                         }
+                        self.rollback_to(snap);
                     }
                 }
                 constraints.extend(self.unify_tys(ctx, ty_a, ty_b, span)?);
