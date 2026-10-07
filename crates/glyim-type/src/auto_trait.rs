@@ -59,6 +59,30 @@ impl AdtRepr {
 
 #[derive(Clone, Debug, Default)]
 /// AutoTraitRegistry.
+/// T096-REVIEWED [TY-26]: user `unsafe impl Send for X {}` /
+/// `unsafe impl Sync for X {}` and their negative counterparts
+/// (`impl !Send for X {}`) are not yet registered here.
+///
+/// The plan document for T096 also proposed changing `&mut T: Sync` to
+/// require `T: Send` and making raw pointers `Send + Sync`. Both
+/// proposals are *wrong* per Rust's actual semantics:
+///   * `&mut T: Sync` iff `T: Sync` (matches stdlib's
+///     `unsafe impl<T: ?Sized + Sync> Sync for &mut T`).
+///   * `*const T` / `*mut T` are `!Send + !Sync` in Rust (matches
+///     stdlib's `impl<T: ?Sized> !Send for *mut T`).
+/// The compiler already matches Rust on both points; the plan's
+/// proposals were reviewed and rejected.
+///
+/// The *real* remaining work — user-registered manual / negative impls —
+/// requires:
+///   1. Parser: accept `impl !Trait for T {}` (the `!` is currently
+///      unparsed) and `unsafe impl Trait for T {}`.
+///   2. HIR: carry an `is_negative: bool` and `is_unsafe: bool` on
+///      `ImplItem`.
+///   3. Typeck: in the impl-scan loop, when `trait_ref.name` is one of
+///      `Send`/`Sync`/`Unpin`, call
+///      `ctx.register_manual_impl(self_adt, auto_trait)` (or
+///      `register_negative_impl` for `!Trait`).
 pub struct AutoTraitRegistry {
     negative_impls: HashSet<(AdtId, AutoTrait)>,
     manual_impls: HashSet<(AdtId, AutoTrait)>,
@@ -168,19 +192,21 @@ fn compute_auto_traits_for_kind(
             if inner_flags.contains(AutoTraitFlags::SEND) {
                 flags |= AutoTraitFlags::SEND;
             }
-            // T096-DEFERRED [TY-26]: Rust says `&mut T: Sync` iff `T: Send`
-            // (not `T: Sync`), and raw pointers are `Send + Sync`. Changing
-            // either conflicts with the compiler's deliberate conservative
-            // policy encoded across 22 auto-trait tests. The correct
-            // semantic realignment requires updating those tests together
-            // and reviewing every `thread::spawn` path that depends on the
-            // current behaviour. Tracked as a deferred item.
+            // T096-REVIEWED [TY-26]: the plan proposed changing this to
+            // `T: Send` (to make `&mut Cell<i32>` Sync). Rust's actual
+            // semantics are `&mut T: Sync` iff `T: Sync` (matches the
+            // stdlib's `unsafe impl<T: ?Sized + Sync> Sync for &mut T`),
+            // and the code below already has that. No change.
             if inner_flags.contains(AutoTraitFlags::SYNC) {
                 flags |= AutoTraitFlags::SYNC;
             }
             flags
         }
 
+        // T096-REVIEWED [TY-26]: the plan proposed making raw pointers
+        // `Send + Sync`. Rust's actual semantics are `*const T: !Send +
+        // !Sync` and `*mut T: !Send + !Sync` (matching stdlib's
+        // `impl<T: ?Sized> !Send for *const T` / `*mut T`). No change.
         TyKind::RawPtr(_, _) => AutoTraitFlags::UNPIN,
 
         TyKind::Slice(inner) => {
