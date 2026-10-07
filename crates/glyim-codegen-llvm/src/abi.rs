@@ -24,6 +24,11 @@ use glyim_type::{Ty, TyCtx, TyKind};
 pub(crate) struct FullLayoutComputer<'a> {
     simple: SimpleLayoutComputer<'a>,
     ctx: &'a TyCtx,
+    /// T123-PATCHED [LL-22]: per-instance layout cache. `layout_of` is
+    /// called recursively from every place_ptr, alloc_local, and
+    /// field-offset query in the codegen backend; without memoization
+    /// the same recursive layout is recomputed for every operand.
+    cache: std::cell::RefCell<std::collections::HashMap<Ty, Layout>>,
 }
 
 impl<'a> FullLayoutComputer<'a> {
@@ -31,6 +36,7 @@ impl<'a> FullLayoutComputer<'a> {
         Self {
             simple: SimpleLayoutComputer::new(ctx, target),
             ctx,
+            cache: std::cell::RefCell::new(std::collections::HashMap::new()),
         }
     }
 
@@ -107,6 +113,65 @@ impl<'a> FullLayoutComputer<'a> {
 
 impl LayoutComputer for FullLayoutComputer<'_> {
     fn layout_of(&self, ty: Ty) -> Result<Layout, LayoutError> {
+        // T123-PATCHED [LL-22]: memoized wrapper. `layout_of` is called
+        // recursively from every place_ptr / alloc_local / field-offset
+        // query in codegen — without the cache, the same type's layout
+        // (and every nested type's layout) is recomputed for every
+        // operand, making large bodies quadratic. Layouts are
+        // deterministic per (ty, target), so caching is safe.
+        if let Some(cached) = self.cache.borrow().get(&ty) {
+            return Ok(cached.clone());
+        }
+        let layout = self.layout_of_compute(ty)?;
+        self.cache.borrow_mut().insert(ty, layout.clone());
+        Ok(layout)
+}
+
+    fn fn_abi_of(&self, sig: &glyim_type::FnSig) -> Result<FnAbi, LayoutError> {
+        let ret_layout = self.layout_of(sig.output)?;
+        let ret_mode = self.classify_arg(sig.output, &ret_layout);
+
+        let args = self.ctx.substitution_args(sig.inputs);
+        let mut arg_abis = Vec::with_capacity(args.len());
+        for arg in args {
+            if let glyim_type::GenericArg::Ty(t) = arg {
+                let layout = self.layout_of(*t)?;
+                let mode = self.classify_arg(*t, &layout);
+                arg_abis.push(ArgAbi {
+                    ty: *t,
+                    layout,
+                    mode,
+                });
+            }
+        }
+        Ok(FnAbi {
+            args: arg_abis,
+            ret: ArgAbi {
+                ty: sig.output,
+                layout: ret_layout,
+                mode: ret_mode,
+            },
+            conv: CallConvention::from(sig.abi),
+            c_variadic: sig.c_variadic,
+        })
+    }
+
+    fn ptr_size(&self) -> Size {
+        self.simple.ptr_size()
+    }
+    fn ptr_align(&self) -> Align {
+        self.simple.ptr_align()
+    }
+    fn target_info(&self) -> &TargetInfo {
+        self.simple.target_info()
+    }
+}
+
+impl FullLayoutComputer<'_> {
+    /// T123-PATCHED [LL-22]: uncached inner computation. Recursive calls
+    /// re-enter through the trait method `layout_of`, which is
+    /// cache-aware — so nested types are memoized transparently.
+    fn layout_of_compute(&self, ty: Ty) -> Result<Layout, LayoutError> {
         match self.ctx.ty_kind(ty) {
             TyKind::Tuple(subst) => {
                 let args = self.ctx.substitution_args(*subst);
@@ -311,45 +376,7 @@ impl LayoutComputer for FullLayoutComputer<'_> {
             }
             _ => self.simple.layout_of(ty),
         }
-    }
-
-    fn fn_abi_of(&self, sig: &glyim_type::FnSig) -> Result<FnAbi, LayoutError> {
-        let ret_layout = self.layout_of(sig.output)?;
-        let ret_mode = self.classify_arg(sig.output, &ret_layout);
-
-        let args = self.ctx.substitution_args(sig.inputs);
-        let mut arg_abis = Vec::with_capacity(args.len());
-        for arg in args {
-            if let glyim_type::GenericArg::Ty(t) = arg {
-                let layout = self.layout_of(*t)?;
-                let mode = self.classify_arg(*t, &layout);
-                arg_abis.push(ArgAbi {
-                    ty: *t,
-                    layout,
-                    mode,
-                });
-            }
-        }
-        Ok(FnAbi {
-            args: arg_abis,
-            ret: ArgAbi {
-                ty: sig.output,
-                layout: ret_layout,
-                mode: ret_mode,
-            },
-            conv: CallConvention::from(sig.abi),
-            c_variadic: sig.c_variadic,
-        })
-    }
-
-    fn ptr_size(&self) -> Size {
-        self.simple.ptr_size()
-    }
-    fn ptr_align(&self) -> Align {
-        self.simple.ptr_align()
-    }
-    fn target_info(&self) -> &TargetInfo {
-        self.simple.target_info()
+    
     }
 }
 

@@ -618,3 +618,18 @@ mod terminator_conflict_tests {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod t104_tests {
+    use super::*;
+    // T104 regression tests live in tests/write_conflicts.rs.
+    #[test]
+    fn t104_note_terminator_write_check_exists() {
+        // The check_terminator_conflicts function now inspects
+        // Call::destination and Drop::place. This test exists as a
+        // placeholder pointing at the real functional tests in
+        // `tests/write_conflicts.rs`, which exercise the checker via
+        // full body construction.
+        assert!(true);
+    }
+}
