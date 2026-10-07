@@ -29,6 +29,12 @@ pub struct LowerResult {
     /// it is the `Start`/`S0`..`S_{n-1}`/`Done` state-machine plan that the
     /// (currently tracked, host-unverifiable) M4 codegen would apply. It is
     /// stored here so the pipeline has the plan available without recomputing.
+    /// T100-DEFERRED [LOW-9]: `async_transform` carries the state-machine
+    /// plan computed by `async_state_transform::transform_async_body`, but
+    /// no pipeline consumer reads it yet. Wiring it requires emitting a
+    /// `match self.state { .. }` dispatch (per `plan_resume_arm`), which
+    /// touches the MIR builder, the interpreter's suspend/resume points,
+    /// and the codegen call-frame layout. Tracked for a follow-up batch.
     pub async_transform: Option<crate::async_state_transform::AsyncTransformPlan>,
 }
 
