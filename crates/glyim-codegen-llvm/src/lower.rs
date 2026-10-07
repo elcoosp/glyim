@@ -421,9 +421,29 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     inkwell::values::AggregateValueEnum::ArrayValue(a) => a.as_basic_value_enum(),
                 })
             }
-            MirConstKind::Error => Err(vec![GlyimDiagnostic::internal_error(
-                "internal compiler error: MirConstKind::Error reached codegen",
-            )]),
+            MirConstKind::Error => {
+                // T140-PATCHED-LLVM-ERROR: `MirConstKind::Error` is emitted
+                // by lowering for compiler-synthetic builtin calls whose
+                // `FnDefId` is a typeck sentinel (`u32::MAX - 4 ..=
+                // u32::MAX - 1`; see `check_expr.rs:2574/2579/2587` and
+                // `unify.rs:94`) — `into`/`to_string`/`clone`/`drop`. There
+                // is no `FnSig` for these ids, so a real `Call` ICEs with
+                // "no signature registered". Lowering instead stores an
+                // `Error` constant into the destination.
+                //
+                // These constants appear only on runtime-dead error paths
+                // (e.g. the error arm of `Result::unwrap` calling
+                // `E::to_string()` for a generic `E`), but LLVM still has to
+                // emit code for them. Yielding a zero value of the
+                // destination type keeps the generated function well-formed
+                // and linkable; the bytecode backend has always done exactly
+                // this (`glyim-codegen/src/lib.rs` maps `Unit | Error` to a
+                // zero const). The follow-up (session handoff) is to replace
+                // the sentinel with a real virtual-method reference so the
+                // error branch is *correct*, not merely compilable.
+                let ty = self.llvm_type_for_ty(c.ty);
+                Ok(ty.const_zero().as_basic_value_enum())
+            }
             // Devirtualized by monomorphization before LLVM codegen; should not
             // survive to this point.
             MirConstKind::VirtualMethod { .. } => Err(vec![GlyimDiagnostic::internal_error(

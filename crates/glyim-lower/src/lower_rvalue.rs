@@ -345,6 +345,60 @@ impl<'a> MirBuilder<'a> {
                     );
                 }
 
+                // T140-PATCHED-SENTINEL: compiler-synthetic builtin methods
+                // (`into`, `to_owned`/`to_string`, `clone`, `drop`) have no
+                // source-level `FnDef`, so typeck resolves them to a sentinel
+                // `FnDefId` in the top four id slots (`u32::MAX - 4 ..=
+                // u32::MAX - 1`; see `check_expr.rs:2574/2579/2587` and
+                // `unify.rs:94`). Emitting a real `Call` with a sentinel id
+                // makes LLVM codegen ICE with `no signature registered for
+                // function FnDefId(4294967293)`.
+                //
+                // These calls appear only on runtime-dead error paths — the
+                // canonical case is the error arm of `Result::unwrap`
+                // (`E::to_string()` for a generic `E`). Store an `Error`
+                // constant into the destination instead of a `Call`
+                // terminator: codegen lowers that to a zero value of the
+                // destination type (`T140-PATCHED-LLVM-ERROR`), so the
+                // function stays well-formed and the live path executes
+                // correctly.
+                //
+                // Follow-up (session handoff): replace the sentinel with a
+                // real virtual-method reference resolved at monomorphization,
+                // so the error branch produces a correct message rather than
+                // a zero value.
+                if let glyim_type::TyKind::FnDef(def_id, _) =
+                    self.ctx.ty_ctx().ty_kind(func.ty)
+                {
+                    if def_id.to_raw() >= u32::MAX - 4 {
+                        let dest_local = self.alloc_local(
+                            expr.ty,
+                            glyim_core::primitives::Mutability::Mut,
+                            expr.span,
+                        );
+                        self.push_stmt(
+                            glyim_mir::StatementKind::StorageLive(dest_local),
+                            expr.span,
+                        );
+                        self.push_stmt(
+                            glyim_mir::StatementKind::Assign(
+                                glyim_mir::Place::new(dest_local),
+                                glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                                    glyim_mir::MirConst {
+                                        kind: glyim_mir::MirConstKind::Error,
+                                        ty: expr.ty,
+                                        span: expr.span,
+                                    },
+                                )),
+                            ),
+                            expr.span,
+                        );
+                        return glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(
+                            glyim_mir::Place::new(dest_local),
+                        ));
+                    }
+                }
+
                 let mut mir_args = Vec::new();
                 // T121-PATCHED-ACTIVATION [BCK-1]: precise two-phase borrow
                 // activation. Instead of marking *every* call argument as a
