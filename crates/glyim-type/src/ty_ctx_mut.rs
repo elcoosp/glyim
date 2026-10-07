@@ -744,13 +744,33 @@ impl TyCtxMut {
             .collect();
         self.variant_types.insert(id, variant_tys);
         self.adt_defs.insert(id, def.clone());
-        // Registering a new ADT may change interior-mutability answers for any
-        // previously-queried ADT that transitively references it. Invalidate the
-        // cache so no stale `false` survives (see §1.2).
+        // T181-PATCHED [TY-27]: recompute interior-mutability *for every
+        // already-registered ADT* after the new one lands, iterating to a
+        // fixpoint. Previously only the newly-registered ADT was marked, so
+        // `struct A { b: B }` declared before `struct B { c: Cell<u8> }`
+        // computed A as non-interior-mutable during Pass 1 and never
+        // revisited — the cache clear alone didn't help because the
+        // per-Ty `HAS_INTERIOR_MUTABILITY` bit was already set.
         self.adt_generation += 1;
         self.interior_mutability_cache.clear();
-        if self.compute_adt_interior_mutability(id) {
-            self.mark_adt_interior_mutable(id);
+        // Iterate to fixpoint: recomputing A may unlock B (and vice-versa).
+        // At most N passes where N = #adts; in practice 1-2 passes.
+        let ids: Vec<AdtId> = self.adt_defs.keys().copied().collect();
+        for _ in 0..ids.len().max(1) {
+            let mut changed = false;
+            for adt_id in &ids {
+                let im = self.compute_adt_interior_mutability(*adt_id);
+                if im {
+                    let before = self.interior_mutable_adt_ids.contains(adt_id);
+                    if !before {
+                        self.mark_adt_interior_mutable(*adt_id);
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
         }
     }
 

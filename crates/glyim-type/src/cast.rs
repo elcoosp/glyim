@@ -70,7 +70,13 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
         (Infer(InferVar::Float(_)), Int(_) | Uint(_) | Float(_)) => true,
         (Int(_) | Uint(_), Int(_) | Uint(_) | Float(_)) => true,
         (Float(_), Float(_) | Int(_) | Uint(_)) => true,
-        (RawPtr(_, _) | Ref(_, _, _), RawPtr(_, _) | Int(_)) => true,
+        // T182-PATCHED [TY-28]: refs must be cast to a raw pointer *first*
+        // (`&v as *const i32`) — the language (and Rust) reject `&v as i32`
+        // directly. Previously this arm accepted any `Ref` source to any
+        // `Int` destination, so `&v as i32` type-checked while `&v as usize`
+        // was rejected (the reverse asymmetry).
+        (RawPtr(_, _), RawPtr(_, _) | Int(_) | Uint(_)) => true,
+        (Ref(_, _, _), RawPtr(_, _)) => true,
         (Bool, Int(_) | Uint(_)) => true,
         (Char, Int(_) | Uint(_)) => true,
         (Adt(from_id, _), Int(_) | Uint(_)) => {

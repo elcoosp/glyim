@@ -6,11 +6,7 @@ use glyim_diag::GlyimDiagnostic;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 use std::collections::HashMap;
 
-use crate::{
-    AssociatedTy, Body, BodyId, ConstItem, EnumItem, Field, FnItem, GenericParam, GenericParamKind,
-    ImplItem, ImplMethod, Item, ItemId, ItemKind, ModItem, Param, Pat, PatId, Path, StructItem,
-    TraitItem, TraitMethod, TypeAliasItem, TypeRef, Variant, Visibility,
-};
+use crate::{AssociatedTy, Body, BodyId, ConstItem, EnumItem, Field, FnItem, GenericParam, GenericParamKind, ImplItem, ImplMethod, Item, ItemId, ItemKind, ModItem, Param, Pat, PatId, Path, StaticItem, StructItem, TraitItem, TraitMethod, TypeAliasItem, TypeRef, Variant, Visibility};
 
 /// Collect generic type parameters from a `TypeParamList` child node (e.g. the
 /// `<T, U>` of `struct S<T, U>` / `enum E<T>` / `fn f<T>`). The parser emits a
@@ -980,6 +976,100 @@ pub(crate) fn lower_const_def(
     })
 }
 
+/// T177-PATCHED [HIRX-8]: lower a `static NAME: TYPE = EXPR;` item into
+/// `ItemKind::Static`. Previously `StaticDef` was not lowered at all — the
+/// item-walk's `_ => {}` arm silently discarded it, and any use of the
+/// static later in the program failed with an unresolved-name error.
+/// (Def-map declared the static in the values namespace, so the mismatch
+/// was visible across phases.)
+pub(crate) fn lower_static_def(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    local_def_counter: &mut u32,
+    item_id_counter: &mut u32,
+    bodies: &mut IndexVec<BodyId, Body>,
+    body_owners: &mut IndexVec<BodyId, LocalDefId>,
+    diags: &mut Vec<GlyimDiagnostic>,
+    struct_field_map: &HashMap<Name, Vec<Name>>,
+) -> Option<Item> {
+    let name_str = first_ident_text(node)?;
+    let name = interner.intern(&name_str);
+    let owner = next_local_def_id(local_def_counter);
+
+    // `is_mut`: the parser puts a `KwMut` token as a direct child of the
+    // StaticDef (`static mut X: T = ...;`).
+    let is_mut = node.children_with_tokens().any(|el| {
+        matches!(
+            &el,
+            glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwMut
+        )
+    });
+
+    // Type annotation: `static X: TYPE = ...`. Type node follows a `:`.
+    let mut ty: Option<TypeRef> = None;
+    let mut saw_colon = false;
+    for el in node.children_with_tokens() {
+        match el {
+            glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::Colon => {
+                saw_colon = true;
+            }
+            glyim_syntax::SyntaxElement::Node(n) if saw_colon && is_type_node(&n) => {
+                ty = lower_type_ref(&n, interner);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let ty = ty?;
+
+    // Initializer: `static X: TYPE = EXPR;`. Find the `=` token, then the
+    // first non-type expr node.
+    let mut init_node: Option<SyntaxNode> = None;
+    let mut saw_eq = false;
+    for el in node.children_with_tokens() {
+        match el {
+            glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::Eq => {
+                saw_eq = true;
+            }
+            glyim_syntax::SyntaxElement::Node(n) if saw_eq && !is_type_node(&n) => {
+                init_node = Some(n);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let body_id: Option<BodyId> = if let Some(init) = init_node {
+        let mut body = Body {
+            owner,
+            exprs: IndexVec::new(),
+            pats: IndexVec::new(),
+            params: Vec::new(),
+            span: node_span(node),
+            expr_spans: IndexVec::new(),
+        };
+        let _ = lower_expr(&init, interner, &mut body, diags, struct_field_map);
+        let bid = bodies.push(body);
+        body_owners.push(owner);
+        Some(bid)
+    } else {
+        None
+    };
+
+    let id = ItemId::from_raw(*item_id_counter);
+    *item_id_counter += 1;
+    Some(Item {
+        id,
+        name,
+        kind: ItemKind::Static(StaticItem {
+            ty,
+            body: body_id,
+            is_mut,
+        }),
+        visibility: Visibility::Inherited,
+        span: node_span(node),
+    })
+}
+
 /// Lower an inline `mod name { ... }` block into `ItemKind::Mod`.
 ///
 /// The module's inner items are lowered by the same per-item lower functions
@@ -1085,6 +1175,21 @@ pub(crate) fn lower_mod_def(
             }
             SyntaxKind::ConstDef => {
                 if let Some(item) = lower_const_def(
+                    &child,
+                    interner,
+                    local_def_counter,
+                    item_id_counter,
+                    bodies,
+                    body_owners,
+                    diags,
+                    struct_field_map,
+                ) {
+                    children.push(item.id);
+                    items.push(item);
+                }
+            }
+            SyntaxKind::StaticDef => {
+                if let Some(item) = lower_static_def(
                     &child,
                     interner,
                     local_def_counter,
