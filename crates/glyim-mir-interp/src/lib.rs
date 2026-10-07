@@ -185,6 +185,193 @@ impl<'tcx> Interpreter<'tcx> {
         self.locals.get(local.index())?.as_ref()
     }
 
+    /// T140-PATCHED-BUILTIN: dispatch compiler-synthetic builtin methods.
+    ///
+    /// Typeck resolves a handful of builtin methods (`Vec::push` / `len` /
+    /// `new`, `Option::unwrap` / `is_some` / `is_none`, `Result::unwrap` /
+    /// `is_ok` / `is_err`, `String::new` / `len` / `as_str` / `push_str`,
+    /// `str::len`) to synthetic `FnDefId`s in the 9000+ range with no MIR
+    /// body. The LLVM backend handles these in `try_lower_builtin_intrinsic`;
+    /// the interpreter had no equivalent and panicked `function not found`
+    /// for any stdlib code using them.
+    ///
+    /// Returns `Ok(Some(value))` when the call was recognised (the caller
+    /// writes `value` into the destination and jumps to `target`),
+    /// `Ok(None)` when the callee is not a builtin this dispatcher knows,
+    /// `Err` for a genuine runtime failure (e.g. `unwrap` on `None`).
+    fn try_call_builtin(
+        &mut self,
+        callee_id: &DefId,
+        args: &[InterpValue],
+    ) -> InterpResult<Option<InterpValue>> {
+        let raw = callee_id.local_id.to_raw();
+        if raw < 9_000 {
+            return Ok(None);
+        }
+        let fn_def_id = glyim_core::def_id::FnDefId::from_raw(raw);
+        let Some((adt_id, name)) = self.tcx.builtin_fn_id(fn_def_id) else {
+            return Ok(None);
+        };
+        let method = self.tcx.name_str(name).to_string();
+        let receiver = args.first().cloned().unwrap_or(InterpValue::Unit);
+
+        match (adt_id.to_raw(), method.as_str()) {
+            (1010, "is_some") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) == Some(1)))),
+            (1010, "is_none") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) != Some(1)))),
+            (1010, "unwrap") | (1010, "expect") => {
+                if Self::enum_tag(&receiver) == Some(1) {
+                    Ok(Some(Self::enum_payload(&receiver)))
+                } else {
+                    Err(InterpError::Panic(
+                        "called `Option::unwrap()` on a `None` value".into(),
+                    ))
+                }
+            }
+            (1010, "unwrap_or") => {
+                if Self::enum_tag(&receiver) == Some(1) {
+                    Ok(Some(Self::enum_payload(&receiver)))
+                } else {
+                    Ok(Some(args.get(1).cloned().unwrap_or(InterpValue::Unit)))
+                }
+            }
+            (1011, "is_ok") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) == Some(0)))),
+            (1011, "is_err") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) != Some(0)))),
+            (1011, "unwrap") | (1011, "expect") => {
+                if Self::enum_tag(&receiver) == Some(0) {
+                    Ok(Some(Self::enum_payload(&receiver)))
+                } else {
+                    Err(InterpError::Panic(
+                        "called `Result::unwrap()` on an `Err` value".into(),
+                    ))
+                }
+            }
+            (1020, "new") => Ok(Some(InterpValue::Aggregate(Vec::new()))),
+            (1020, "len") => {
+                let v = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Uint(Self::vec_len(&v) as u128)))
+            }
+            (1020, "is_empty") => {
+                let v = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Bool(Self::vec_len(&v) == 0)))
+            }
+            (1020, "push") => {
+                let elem = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let mut v = self.builtin_deref(&receiver)?;
+                Self::vec_push(&mut v, elem);
+                self.builtin_store_back(&receiver, v)?;
+                Ok(Some(InterpValue::Unit))
+            }
+            (1050, "new") => Ok(Some(InterpValue::String(String::new()))),
+            (1050, "len") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Uint(Self::str_len(&s) as u128)))
+            }
+            (1050, "is_empty") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Bool(Self::str_len(&s) == 0)))
+            }
+            (1050, "as_str") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(s))
+            }
+            (1050, "push_str") => {
+                let add = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let mut s = self.builtin_deref(&receiver)?;
+                Self::string_push_str(&mut s, &add);
+                self.builtin_store_back(&receiver, s)?;
+                Ok(Some(InterpValue::Unit))
+            }
+            (1061, "len") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Uint(Self::str_len(&s) as u128)))
+            }
+            (1061, "is_empty") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Bool(Self::str_len(&s) == 0)))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn builtin_deref(&self, v: &InterpValue) -> InterpResult<InterpValue> {
+        match v {
+            InterpValue::Ref { frame, local } => self
+                .locals_for_ref_frame(*frame)
+                .and_then(|locals| locals.get(*local).and_then(|o| o.as_ref()).cloned())
+                .ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "builtin receiver: Ref{{frame:{frame}, local:{local}}} points to uninitialized or dead slot"
+                    ))
+                }),
+            other => Ok(other.clone()),
+        }
+    }
+
+    fn builtin_store_back(
+        &mut self,
+        receiver: &InterpValue,
+        val: InterpValue,
+    ) -> InterpResult<()> {
+        match receiver {
+            InterpValue::Ref { frame, local } => {
+                let place = Place::new(LocalIdx::from_raw(*local as u32));
+                self.write_place_frame(*frame, &place, val)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn enum_tag(v: &InterpValue) -> Option<i128> {
+        if let InterpValue::Aggregate(fields) = v {
+            if let Some(InterpValue::Int(t)) = fields.first() {
+                return Some(*t);
+            }
+        }
+        None
+    }
+
+    fn enum_payload(v: &InterpValue) -> InterpValue {
+        if let InterpValue::Aggregate(fields) = v {
+            if fields.len() >= 2 {
+                return fields[1].clone();
+            }
+        }
+        InterpValue::Unit
+    }
+
+    fn vec_len(v: &InterpValue) -> usize {
+        if let InterpValue::Aggregate(fields) = v {
+            fields.len()
+        } else {
+            0
+        }
+    }
+
+    fn vec_push(v: &mut InterpValue, elem: InterpValue) {
+        if let InterpValue::Aggregate(fields) = v {
+            fields.push(elem);
+        } else {
+            *v = InterpValue::Aggregate(vec![elem]);
+        }
+    }
+
+    fn str_len(v: &InterpValue) -> usize {
+        if let InterpValue::String(s) = v { s.len() } else { 0 }
+    }
+
+    fn string_push_str(s: &mut InterpValue, add: &InterpValue) {
+        let suffix = if let InterpValue::String(inner) = add {
+            inner.clone()
+        } else {
+            String::new()
+        };
+        if let InterpValue::String(inner) = s {
+            inner.push_str(&suffix);
+        } else {
+            *s = InterpValue::String(suffix);
+        }
+    }
+
     /// get_return_value.
     pub fn get_return_value(&self) -> Option<InterpValue> {
         self.locals.first().and_then(|opt| opt.clone())
@@ -457,6 +644,32 @@ impl<'tcx> Interpreter<'tcx> {
                     // convention the closure body was lowered with
                     // (`arg_count = captures.len() + params.len()`).
                     let (callee_id, captured) = self.resolve_callee(&func, &args)?;
+
+                    let mut arg_values = captured;
+                    for arg_op in &args {
+                        arg_values.push(self.eval_operand(arg_op)?);
+                    }
+
+                    // T140-PATCHED-BUILTIN: dispatch compiler-synthetic
+                    // builtin methods (FnDefId in the 9000+ range) before the
+                    // ordinary function-table lookup. The LLVM backend has
+                    // `try_lower_builtin_intrinsic` for these; the
+                    // interpreter had no equivalent and panicked `function
+                    // not found` for any stdlib code calling `Vec::push`,
+                    // `Option::unwrap`, etc.
+                    if let Some(ret) = self.try_call_builtin(&callee_id, &arg_values)? {
+                        self.write_place(&destination, ret)?;
+                        if let Some(t) = target {
+                            bb_idx = t;
+                            continue;
+                        }
+                        self.current_body = Some(body);
+                        self.current_bb = bb_idx;
+                        return Err(InterpError::Panic(
+                            "builtin call has no continuation".into(),
+                        ));
+                    }
+
                     let callee_body =
                         self.function_table
                             .get(&callee_id)
@@ -464,11 +677,6 @@ impl<'tcx> Interpreter<'tcx> {
                             .ok_or_else(|| {
                                 InterpError::Panic(format!("function not found: {:?}", callee_id))
                             })?;
-
-                    let mut arg_values = captured;
-                    for arg_op in &args {
-                        arg_values.push(self.eval_operand(arg_op)?);
-                    }
 
                     self.recursion_depth += 1;
                     if self.recursion_depth > self.recursion_limit {
