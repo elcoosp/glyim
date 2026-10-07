@@ -101,11 +101,13 @@ fn s15_vtable_computer_populates_methods_from_trait_def() {
         name: ctx_mut.resolver().intern("Foo"),
         methods: vec![
             glyim_type::MethodDef {
+                has_generic_params: false,
                 name: foo_name,
                 sig: sig.clone(),
                 fn_def_id: Some(glyim_core::FnDefId::from_raw(10)),
             },
             glyim_type::MethodDef {
+                has_generic_params: false,
                 name: bar_name,
                 sig,
                 fn_def_id: Some(glyim_core::FnDefId::from_raw(11)),
