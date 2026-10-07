@@ -173,7 +173,17 @@ impl Write for Stdout {
         let mut written = 0;
         while written < buf.len() {
             match self.write(&buf[written..]) {
-                Result::Ok(0) => break,
+                // T139-PATCHED [STD-14]: an `Ok(0)` (no progress) write
+                // is a WriteZero error per Rust's Write::write_all
+                // contract. Previously we broke out of the loop and
+                // returned Ok(()) — silently reporting a partial write
+                // as success.
+                Result::Ok(0) => {
+                    return Result::Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer".to_string(),
+                    ));
+                }
                 Result::Ok(n) => written += n,
                 Result::Err(e) => return Result::Err(e),
             }
@@ -228,7 +238,17 @@ impl Write for Stderr {
         let mut written = 0;
         while written < buf.len() {
             match self.write(&buf[written..]) {
-                Result::Ok(0) => break,
+                // T139-PATCHED [STD-14]: an `Ok(0)` (no progress) write
+                // is a WriteZero error per Rust's Write::write_all
+                // contract. Previously we broke out of the loop and
+                // returned Ok(()) — silently reporting a partial write
+                // as success.
+                Result::Ok(0) => {
+                    return Result::Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer".to_string(),
+                    ));
+                }
                 Result::Ok(n) => written += n,
                 Result::Err(e) => return Result::Err(e),
             }
@@ -484,7 +504,17 @@ impl<W: Write> Write for BufWriter<W> {
         let mut written = 0;
         while written < buf.len() {
             match self.write(&buf[written..]) {
-                Result::Ok(0) => break,
+                // T139-PATCHED [STD-14]: an `Ok(0)` (no progress) write
+                // is a WriteZero error per Rust's Write::write_all
+                // contract. Previously we broke out of the loop and
+                // returned Ok(()) — silently reporting a partial write
+                // as success.
+                Result::Ok(0) => {
+                    return Result::Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer".to_string(),
+                    ));
+                }
                 Result::Ok(n) => written += n,
                 Result::Err(e) => return Result::Err(e),
             }
@@ -642,7 +672,17 @@ impl Write for Sink {
         let mut written = 0;
         while written < buf.len() {
             match self.write(&buf[written..]) {
-                Result::Ok(0) => break,
+                // T139-PATCHED [STD-14]: an `Ok(0)` (no progress) write
+                // is a WriteZero error per Rust's Write::write_all
+                // contract. Previously we broke out of the loop and
+                // returned Ok(()) — silently reporting a partial write
+                // as success.
+                Result::Ok(0) => {
+                    return Result::Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer".to_string(),
+                    ));
+                }
                 Result::Ok(n) => written += n,
                 Result::Err(e) => return Result::Err(e),
             }
