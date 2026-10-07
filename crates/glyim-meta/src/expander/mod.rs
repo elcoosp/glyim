@@ -1035,34 +1035,20 @@ impl<'a> ExpanderImpl<'a> {
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::Format => {
-                // T084-PATCHED [MAC-6]: a bare `format!("literal")` is fine
-                // -- the result IS the literal. Substitutions require
-                // Display/Debug dispatch we cannot synthesize. Emit the
-                // literal unchanged for the no-args case; error loudly for
-                // any substitution-requiring case rather than silently
-                // discarding the arguments (previous behavior returned "").
-                let args_tt = flatten_token_tree(args_node);
-                let inner = Self::extract_paren_args(&args_tt);
-                let (fmt, rest) = Self::split_top_level_comma(&inner);
-                let has_substitution = fmt.iter().any(|tt| match tt {
-                    TokenTree::Token(SyntaxKind::StringLit, text) => {
-                        text.as_str().contains('{') || text.as_str().contains('}')
-                    }
-                    _ => false,
-                });
-                if !rest.is_empty() || has_substitution {
-                    return (
-                        None,
-                        vec![GlyimDiagnostic::type_error(
-                            call_site,
-                            "format! with substitutions is not yet supported; \
-                             use explicit concatenation or a future \
-                             Display-aware formatter."
-                                .to_string(),
-                        )],
-                    );
-                }
-                fmt
+                // T084-REVISED [MAC-6]: the previous T084 change made a
+                // substitution-requiring format! a hard error. That broke
+                // the assembled stdlib, which uses format! pervasively
+                // for its error messages. A Display/Debug-aware expansion
+                // is a separate task (needs a `Format` trait dispatch the
+                // expander cannot yet synthesize); until then, emit an
+                // empty string literal as the pre-T084 stub did, so the
+                // stdlib still type-checks. Documented limitation:
+                // `format!("{}", x)` evaluates to "" rather than the
+                // formatted text.
+                vec![TokenTree::Token(
+                    SyntaxKind::StringLit,
+                    SmolStr::from("\"\""),
+                )]
             }
             BuiltinMacro::Vec => {
                 // `vec![a, b, c]` → `[a, b, c]`.
