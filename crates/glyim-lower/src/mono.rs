@@ -141,10 +141,20 @@ impl<'a> MonoCtx<'a> {
                     DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(def_id.to_raw())),
                     substs,
                 ),
-                MonoItem::Static { .. } => Arc::new(glyim_mir::Body::dummy(DefId::new(
-                    CrateId::from_raw(0),
-                    LocalDefId::from_raw(0),
-                ))),
+                MonoItem::Static { def_id: _ } => {
+                    // T110-DEFERRED [LOW-12]: statics get a shared dummy
+                    // body (LocalDefId(0)) — the static's initializer is
+                    // not lowered. A correct fix needs the pipeline's
+                    // `lower_static_def` body (see T177) to be registered
+                    // and the mono-collection to fetch it here. For now
+                    // keep the placeholder but document the identity
+                    // caveat: a static colliding with main in
+                    // `__glyim_fn_0` is a known follow-up.
+                    Arc::new(glyim_mir::Body::dummy(DefId::new(
+                        CrateId::from_raw(0),
+                        LocalDefId::from_raw(0),
+                    )))
+                }
                 MonoItem::DropGlue { ty } => drop_glue_body(*ty),
             };
 
@@ -163,6 +173,12 @@ impl<'a> MonoCtx<'a> {
                 item: item.clone(),
                 body,
                 symbol,
+                // T124-DEFERRED [PIPE-4]: source_module is still hardcoded
+                // to 0, so `partition()` always returns one CGU regardless
+                // of `--codegen-units`. A correct fix requires wiring the
+                // def-map's `def_to_module` map into `MonoCtx`; tracked for
+                // a follow-up batch. For now this marker documents the
+                // limitation.
                 source_module: 0,
             });
             self.cache.insert(item, id);

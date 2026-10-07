@@ -8,9 +8,7 @@ use glyim_mir::{
     SourceInfo, Statement, StatementKind, Terminator, TerminatorKind, VarDebugInfo,
     VarDebugInfoValue,
 };
-use glyim_span::{
-    ByteIdx, ExpnData, ExpnId, ExpnKind, FileId, HygieneCtx, Span, SyntaxContext, Transparency,
-};
+use glyim_span::{ByteIdx, ExpnData, ExpnId, ExpnKind, FileId, HygieneCtx, Mark, Span, SyntaxContext, Transparency};
 use glyim_type::{TyCtxMut, TyKind};
 use inkwell::context::Context;
 use std::collections::HashMap;
@@ -485,6 +483,11 @@ fn test_debug_info_verify_module() {
 
 #[test]
 fn resolve_span_to_location_returns_call_site_for_macro_span() {
+    // T149-PATCHED [SPAN-1]: the previous version conflated SyntaxContext
+    // and ExpnId by constructing `SyntaxContext::from_raw(expn_id.to_raw())`
+    // — that only worked because the compiler's old `expn_id()` reinterprets
+    // one as the other. With the fix, callers go through `apply_mark` so a
+    // proper `syntax_contexts` entry exists.
     let mut hygiene = HygieneCtx::new();
     let file_id = FileId::from_raw(1);
     let call_site = Span::new(
@@ -503,12 +506,18 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
         transparency: Transparency::Transparent,
     };
     hygiene.push_expansion(expn_data);
-    let macro_ctx = SyntaxContext::from_raw(expn_id.to_raw());
-    let expanded_span = Span::new(
+    let base_span = Span::new(
         file_id,
         ByteIdx::from_raw(15),
         ByteIdx::from_raw(25),
-        macro_ctx,
+        SyntaxContext::ROOT,
+    );
+    let expanded_span = hygiene.apply_mark(
+        base_span,
+        Mark {
+            expn_id,
+            transparency: Transparency::Transparent,
+        },
     );
     let resolved = crate::debug::resolve_span_to_location(expanded_span, &hygiene);
     assert_eq!(resolved.file, call_site.file);

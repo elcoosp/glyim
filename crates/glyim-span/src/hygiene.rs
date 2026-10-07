@@ -150,6 +150,23 @@ impl HygieneCtx {
         span.ctx
     }
 
+    /// T149-PATCHED [SPAN-1]: return the expansion id actually associated
+    /// with a syntax context. `SyntaxContext` and `ExpnId` are allocated
+    /// from independent counters, so `ExpnId::from_raw(ctx.to_raw())` was
+    /// wrong — it returned a valid-looking id that indexed an unrelated
+    /// entry in the `expansions` table. Consumers must go through this
+    /// method (or `remove_mark`).
+    pub fn expn_id_of(&self, ctx: SyntaxContext) -> ExpnId {
+        if ctx.is_root() {
+            return ExpnId::ROOT;
+        }
+        let idx = ctx.to_raw() as usize - 1;
+        self.syntax_contexts
+            .get(idx)
+            .map(|d| d.outer_expn)
+            .unwrap_or(ExpnId::ROOT)
+    }
+
     /// adjust.
     pub fn adjust(&mut self, span: Span, scope_ctx: SyntaxContext) -> Span {
         let mut current = span;

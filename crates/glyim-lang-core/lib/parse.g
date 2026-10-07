@@ -23,6 +23,10 @@ impl FromStr for u8 {
         if len == 0 { return Result::Err(ParseIntError); }
         let mut value: u64 = 0;
         let mut i: usize = 0;
+        // T136-PATCHED [STD-11]: accept a leading `+` for unsigned ints
+        // (matching Rust's from_str_radix). The previous code rejected
+        // `"+5".parse::<u32>()` despite accepting it in the signed path.
+        if len > 0 && bytes[0] == b'+' { i = 1; if i >= len { return Result::Err(ParseIntError); } }
         while i < len {
             let ch = bytes[i];
             if ch < b'0' || ch > b'9' { return Result::Err(ParseIntError); }
@@ -43,6 +47,10 @@ impl FromStr for u16 {
         if len == 0 { return Result::Err(ParseIntError); }
         let mut value: u64 = 0;
         let mut i: usize = 0;
+        // T136-PATCHED [STD-11]: accept a leading `+` for unsigned ints
+        // (matching Rust's from_str_radix). The previous code rejected
+        // `"+5".parse::<u32>()` despite accepting it in the signed path.
+        if len > 0 && bytes[0] == b'+' { i = 1; if i >= len { return Result::Err(ParseIntError); } }
         while i < len {
             let ch = bytes[i];
             if ch < b'0' || ch > b'9' { return Result::Err(ParseIntError); }
@@ -63,6 +71,10 @@ impl FromStr for u32 {
         if len == 0 { return Result::Err(ParseIntError); }
         let mut value: u64 = 0;
         let mut i: usize = 0;
+        // T136-PATCHED [STD-11]: accept a leading `+` for unsigned ints
+        // (matching Rust's from_str_radix). The previous code rejected
+        // `"+5".parse::<u32>()` despite accepting it in the signed path.
+        if len > 0 && bytes[0] == b'+' { i = 1; if i >= len { return Result::Err(ParseIntError); } }
         while i < len {
             let ch = bytes[i];
             if ch < b'0' || ch > b'9' { return Result::Err(ParseIntError); }
@@ -83,6 +95,10 @@ impl FromStr for u64 {
         if len == 0 { return Result::Err(ParseIntError); }
         let mut value: u64 = 0;
         let mut i: usize = 0;
+        // T136-PATCHED [STD-11]: accept a leading `+` for unsigned ints
+        // (matching Rust's from_str_radix). The previous code rejected
+        // `"+5".parse::<u32>()` despite accepting it in the signed path.
+        if len > 0 && bytes[0] == b'+' { i = 1; if i >= len { return Result::Err(ParseIntError); } }
         while i < len {
             let ch = bytes[i];
             if ch < b'0' || ch > b'9' { return Result::Err(ParseIntError); }
@@ -103,6 +119,10 @@ impl FromStr for usize {
         if len == 0 { return Result::Err(ParseIntError); }
         let mut value: u64 = 0;
         let mut i: usize = 0;
+        // T136-PATCHED [STD-11]: accept a leading `+` for unsigned ints
+        // (matching Rust's from_str_radix). The previous code rejected
+        // `"+5".parse::<u32>()` despite accepting it in the signed path.
+        if len > 0 && bytes[0] == b'+' { i = 1; if i >= len { return Result::Err(ParseIntError); } }
         while i < len {
             let ch = bytes[i];
             if ch < b'0' || ch > b'9' { return Result::Err(ParseIntError); }

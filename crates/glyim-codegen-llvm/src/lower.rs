@@ -3777,6 +3777,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             } else {
                 self.builder
                     .build_indirect_call(fn_type, func_val, &metadata_args, "call")
+                    .map(|call_site| {
+                        // T115-PATCHED [LL-20]: set the call-site convention
+                        // to match the callee's declared ABI. Direct calls
+                        // inherit the callee's convention automatically,
+                        // but indirect calls default to `ccc`, while our
+                        // `Abi::Glyim` functions are emitted with fastcc
+                        // (8). Calling fastcc through a ccc site silently
+                        // drops the return value on AArch64.
+                        call_site.set_call_convention(8u32);
+                        call_site
+                    })
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "call failed: {:?}",

@@ -20,7 +20,9 @@ pub(crate) fn resolve_span_to_location(mut span: Span, hygiene: &HygieneCtx) -> 
         return Span::DUMMY;
     }
     while !span.ctx.is_root() {
-        let expn_id = span.ctx.expn_id();
+        // T149-PATCHED [SPAN-1]: look up the expansion id *through* the
+        // hygiene context, not by reinterpreting the syntax-context index.
+        let expn_id = hygiene.expn_id_of(span.ctx);
         match hygiene.expn_data(expn_id) {
             Some(expn_data) => span = expn_data.call_site,
             None => break,

@@ -174,15 +174,37 @@ impl SystemTime {
     }
 
     /// Returns `self + duration`.
+    /// T138-PATCHED [STD-13]: normalize nanos across the 1e9 boundary.
+    /// The previous version could produce an invalid SystemTime where
+    /// `nanos >= 1_000_000_000` (u32 wrap), making later diff/elapsed
+    /// calculations off by whole seconds; and `checked_sub` used
+    /// `saturating_sub` on the fraction, silently dropping the borrow
+    /// (2.0s - 0.5s yielded 2.0s, not 1.5s).
     fn checked_add(&self, duration: Duration) -> Option<SystemTime> {
-        let secs = self.secs.checked_add(duration.secs)?;
-        Option::Some(SystemTime { secs, nanos: self.nanos + duration.nanos })
+        let mut secs = self.secs.checked_add(duration.secs)?;
+        let mut nanos = self.nanos + duration.nanos;
+        if nanos >= 1_000_000_000 {
+            secs = secs.checked_add(1)?;
+            nanos -= 1_000_000_000;
+        }
+        Option::Some(SystemTime { secs, nanos })
     }
 
     /// Returns `self - duration`.
     fn checked_sub(&self, duration: Duration) -> Option<SystemTime> {
-        let secs = self.secs.checked_sub(duration.secs)?;
-        Option::Some(SystemTime { secs, nanos: self.nanos.saturating_sub(duration.nanos) })
+        if self.secs < duration.secs
+            || (self.secs == duration.secs && self.nanos < duration.nanos)
+        {
+            return Option::None;
+        }
+        let mut secs = self.secs - duration.secs;
+        let nanos = if self.nanos >= duration.nanos {
+            self.nanos - duration.nanos
+        } else {
+            secs -= 1;
+            self.nanos + 1_000_000_000 - duration.nanos
+        };
+        Option::Some(SystemTime { secs, nanos })
     }
 
     fn diff(&self, earlier: &SystemTime) -> Duration {

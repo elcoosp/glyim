@@ -77,8 +77,14 @@ fn vars() -> Vec<(String, String)> {
         let mut val_buf = [0u8; 4096];
         let rc = unsafe { glyim_env_vars_get(i, key_buf.as_mut_ptr(), key_buf.len(), val_buf.as_mut_ptr(), val_buf.len()) };
         if rc >= 0 {
-            let key = String::from_utf8_lossy(&key_buf).to_string();
-            let val = String::from_utf8_lossy(&val_buf).to_string();
+            // T141-PATCHED [STD-16]: NUL-terminate at the first NUL byte
+            // so the returned strings are not the full (NUL-padded)
+            // 256/4096-byte buffers. The runtime does not return the
+            // actual length, so we trim at the first NUL.
+            let key_end = key_buf.iter().position(|&b| b == 0).unwrap_or(key_buf.len());
+            let val_end = val_buf.iter().position(|&b| b == 0).unwrap_or(val_buf.len());
+            let key = String::from_utf8_lossy(&key_buf[..key_end]).to_string();
+            let val = String::from_utf8_lossy(&val_buf[..val_end]).to_string();
             result.push((key, val));
         }
         i += 1;
