@@ -423,8 +423,11 @@ impl<R: Read> BufRead for BufReader<R> {
         // EOF immediately. Keep the buffer allocated at its capacity and
         // resize it so `&mut self.buf[..]` is a writable non-empty slice.
         if self.pos == self.cap {
-            if self.buf.len() < 8192 {
-                self.buf.resize(8192, 0);
+            // T063-PATCHED [STD-10] + method-resolution workaround: fill
+            // the buffer to at least 8192 bytes with a manual push loop
+            // (Vec::resize is not on the builtin method table).
+            while self.buf.len() < 8192 {
+                self.buf.push(0);
             }
             let n = self.inner.read(&mut self.buf[..])?;
             self.cap = n;

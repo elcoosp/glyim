@@ -77,12 +77,21 @@ fn vars() -> Vec<(String, String)> {
         let mut val_buf = [0u8; 4096];
         let rc = unsafe { glyim_env_vars_get(i, key_buf.as_mut_ptr(), key_buf.len(), val_buf.as_mut_ptr(), val_buf.len()) };
         if rc >= 0 {
-            // T141-PATCHED [STD-16]: NUL-terminate at the first NUL byte
-            // so the returned strings are not the full (NUL-padded)
-            // 256/4096-byte buffers. The runtime does not return the
-            // actual length, so we trim at the first NUL.
-            let key_end = key_buf.iter().position(|&b| b == 0).unwrap_or(key_buf.len());
-            let val_end = val_buf.iter().position(|&b| b == 0).unwrap_or(val_buf.len());
+            // T141-PATCHED [STD-16]: trim at the first NUL byte with a
+            // manual scan (Iterator::position / Option::unwrap_or are not
+            // on the builtin method tables).
+            let mut key_end = key_buf.len();
+            let mut k = 0;
+            while k < key_buf.len() {
+                if key_buf[k] == 0 { key_end = k; break; }
+                k += 1;
+            }
+            let mut val_end = val_buf.len();
+            let mut v = 0;
+            while v < val_buf.len() {
+                if val_buf[v] == 0 { val_end = v; break; }
+                v += 1;
+            }
             let key = String::from_utf8_lossy(&key_buf[..key_end]).to_string();
             let val = String::from_utf8_lossy(&val_buf[..val_end]).to_string();
             result.push((key, val));
