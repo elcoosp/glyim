@@ -75,6 +75,17 @@ pub struct MonoCtx<'a> {
     /// (tests, ad-hoc callers), it defaults to 0 — matching the previous
     /// single-CGU behaviour.
     def_to_module: Option<&'a std::collections::HashMap<glyim_core::def_id::LocalDefId, u32>>,
+    /// T101-PATCHED [LOW-10]: optional map of *pre-substitution* MIR
+    /// bodies keyed by `DefId`. `polymorphize_and_deduplicate` needs the
+    /// pre-subst body to see `TyKind::Param` and correctly identify used
+    /// generic parameters. The substituted body (which is what
+    /// `MonoItemData::body` holds, and what codegen consumes) has every
+    /// `Param` already replaced, so analyzing it always reports all-false
+    /// and the dedup then merges `f::<i32>` with `f::<String>` — a
+    /// wrong-code bug the earlier T101 deferral note flagged. When this
+    /// is None (unit tests), deduplication falls back to the previous
+    /// (incorrect-but-narrower) behavior.
+    pre_subst_bodies: Option<&'a std::collections::HashMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>>,
 }
 
 impl<'a> MonoCtx<'a> {
@@ -85,6 +96,7 @@ impl<'a> MonoCtx<'a> {
             queue: std::collections::VecDeque::new(),
             seen: std::collections::HashSet::new(),
             def_to_module: None,
+            pre_subst_bodies: None,
             cache: std::collections::HashMap::new(),
             drop_locals: Vec::new(),
             ty_ctx: None,
@@ -120,6 +132,15 @@ impl<'a> MonoCtx<'a> {
         map: &'a std::collections::HashMap<glyim_core::def_id::LocalDefId, u32>,
     ) {
         self.def_to_module = Some(map);
+    }
+
+    /// T101-PATCHED [LOW-10]: supply the pre-substitution body map so
+    /// `polymorphize_and_deduplicate` can analyze `TyKind::Param` usage.
+    pub fn with_pre_subst_bodies(
+        &mut self,
+        bodies: &'a std::collections::HashMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>,
+    ) {
+        self.pre_subst_bodies = Some(bodies);
     }
 
     /// collect.
@@ -522,7 +543,16 @@ impl<'a> MonoCtx<'a> {
         if self.items.is_empty() {
             return;
         }
-        let deduped = crate::polymorphize::deduplicate(ctx, self.items.as_slice());
+        // T101-PATCHED [LOW-10]: pass the pre-subst body map so
+        // `analyze_used_params` sees the *unsubstituted* MIR (with
+        // `TyKind::Param` locals). Without this, the analysis reports
+        // all-false and the dedup merges every instantiation of the same
+        // generic fn.
+        let deduped = crate::polymorphize::deduplicate_with_pre_subst(
+            ctx,
+            self.items.as_slice(),
+            self.pre_subst_bodies,
+        );
         self.items = IndexVec::new();
         self.cache.clear();
         for data in deduped {

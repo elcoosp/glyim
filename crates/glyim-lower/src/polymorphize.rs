@@ -160,12 +160,53 @@ pub fn compute_poly_item(ctx: &mut TyCtxMut, item: &MonoItem, body: &glyim_mir::
 }
 
 /// deduplicate.
+///
+/// T101-PATCHED [LOW-10]: prefer the pre-substitution body (via
+/// `pre_subst`) for `analyze_used_params`. The substituted body in
+/// `MonoItemData::body` has no `TyKind::Param`, so the analysis would
+/// always come back all-false and dedup would merge every instantiation
+/// of the same generic fn — a wrong-code bug. When `pre_subst` is None
+/// (unit tests / standalone callers), fall back to the substituted body
+/// (preserving the previous behavior so existing tests keep passing).
 pub fn deduplicate(ctx: &mut TyCtxMut, items: &[MonoItemData]) -> Vec<MonoItemData> {
+    deduplicate_with_pre_subst(ctx, items, None)
+}
+
+/// T101-PATCHED [LOW-10]: dedup with an optional pre-substitution body map.
+pub fn deduplicate_with_pre_subst(
+    ctx: &mut TyCtxMut,
+    items: &[MonoItemData],
+    pre_subst: Option<&std::collections::HashMap<glyim_core::def_id::DefId, std::sync::Arc<glyim_mir::Body>>>,
+) -> Vec<MonoItemData> {
     let mut seen: HashSet<MonoItem> = HashSet::new();
     let mut result = Vec::new();
 
     for data in items {
-        let poly_item = compute_poly_item(ctx, &data.item, &data.body);
+        // Look up the pre-subst body for this item (if the map was
+        // supplied). The DefId key is (CrateId(0), LocalDefId) for
+        // Fn/Const/Static; DropGlue has no underlying source body so
+        // uses its constructed body directly.
+        let pre_body = pre_subst.and_then(|m| {
+            let key = match &data.item {
+                MonoItem::Fn { def_id, .. } => Some(glyim_core::def_id::DefId::new(
+                    glyim_core::def_id::CrateId::from_raw(0),
+                    glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                )),
+                MonoItem::Const { def_id, .. } => Some(glyim_core::def_id::DefId::new(
+                    glyim_core::def_id::CrateId::from_raw(0),
+                    glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                )),
+                MonoItem::Static { def_id } => Some(glyim_core::def_id::DefId::new(
+                    glyim_core::def_id::CrateId::from_raw(0),
+                    glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                )),
+                MonoItem::DropGlue { .. } => None,
+            };
+            key.and_then(|k| m.get(&k).cloned())
+        });
+
+        let analysis_body: &glyim_mir::Body = pre_body.as_deref().unwrap_or(&data.body);
+        let poly_item = compute_poly_item(ctx, &data.item, analysis_body);
         if seen.contains(&poly_item) {
             continue;
         }
