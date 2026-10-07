@@ -141,19 +141,21 @@ impl<'a> MonoCtx<'a> {
                     DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(def_id.to_raw())),
                     substs,
                 ),
-                MonoItem::Static { def_id: _ } => {
-                    // T110-DEFERRED [LOW-12]: statics get a shared dummy
-                    // body (LocalDefId(0)) — the static's initializer is
-                    // not lowered. A correct fix needs the pipeline's
-                    // `lower_static_def` body (see T177) to be registered
-                    // and the mono-collection to fetch it here. For now
-                    // keep the placeholder but document the identity
-                    // caveat: a static colliding with main in
-                    // `__glyim_fn_0` is a known follow-up.
-                    Arc::new(glyim_mir::Body::dummy(DefId::new(
+                MonoItem::Static { def_id } => {
+                    // T110-PATCHED [LOW-12]: fetch the static's real body
+                    // from the pipeline's `mir_bodies` provider (populated
+                    // by T177's `lower_static_def`). The DefId key is
+                    // `(CrateId(0), LocalDefId)` where the LocalDefId is
+                    // the one the HIR allocated for this static — the
+                    // same key used for fn bodies. Falls back to the
+                    // dummy body only if the pipeline never registered
+                    // one (i.e. an older caller that predates T177).
+                    let key = DefId::new(
                         CrateId::from_raw(0),
-                        LocalDefId::from_raw(0),
-                    )))
+                        LocalDefId::from_raw(def_id.to_raw()),
+                    );
+                    let empty_substs = Substitution::empty();
+                    mir_bodies(key, &empty_substs)
                 }
                 MonoItem::DropGlue { ty } => drop_glue_body(*ty),
             };
