@@ -129,8 +129,12 @@ fn goto_definition_cross_file() {
         is_definition: false,
         kind: ReferenceKind::Call,
         access: AccessKind::Read,
+
         def_id: None,
-    };
+
+        owner_item_id: None,
+            is_item_level: false,
+            };
     analysis
         .reference_graph
         .write()

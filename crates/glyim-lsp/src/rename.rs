@@ -87,10 +87,38 @@ pub fn rename_symbol(
 
     let references = ref_graph.find_references(symbol_name);
     if !references.is_empty() {
+        // T129-PATCHED [LSP-5]: scope-aware filtering. Determine the
+        // reference the cursor points at (its span contains `offset`).
+        // If that reference is NOT item-level (i.e. it's a local,
+        // parameter, field, or variant), rename only refs sharing the
+        // same `owner_item_id` — otherwise a local `x` in one function
+        // would rename unrelated `x`s in every other function that
+        // shares the name. Item-level names (free fns, structs, enums)
+        // stay global so cross-module renames work as before.
+        let cursor_ref = references
+            .iter()
+            .find(|r| {
+                !r.span.is_dummy()
+                    && r.file_id == file_id
+                    && r.span.lo.to_usize() <= offset
+                    && offset < r.span.hi.to_usize()
+            });
+        let scope_owner: Option<u32> = match cursor_ref {
+            Some(r) if !r.is_item_level => r.owner_item_id,
+            _ => None,
+        };
+
         // We have semantic references, use them.
         let mut changes: HashMap<Uri, Vec<TextEdit>> = HashMap::new();
 
         for r in references {
+            // T129: if the cursor landed on a scoped reference, filter
+            // out any ref with a different owner.
+            if let Some(owner) = scope_owner {
+                if r.owner_item_id != Some(owner) {
+                    continue;
+                }
+            }
             // T053-PATCHED-RENAME [LSP-4]: skip references with a
             // DUMMY span (0..0). `walk_pattern` currently records
             // `for`/closure/match pattern bindings with `Span::DUMMY`

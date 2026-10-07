@@ -19,16 +19,19 @@ pub struct Reference {
     /// `Expr::Assign` or the operand of a `&mut` borrow; everything else is a
     /// `Read`. Mirrors Tier 1.1's `is_mut_use` classification.
     pub access: AccessKind,
-    /// T129-DEFERRED [LSP-5]: `def_id` is the def-map's LocalDefId for
-    /// the resolved definition, but the whole reference graph is
-    /// currently name-keyed (`references: HashMap<String, Vec<Reference>>`)
-    /// and `def_id` is always `None`. Making rename/references scope-aware
-    /// requires keying refs by `(owner_def_id, name)` instead — which
-    /// threads the def-map's scope stack through `walk_expr`/`walk_pattern`
-    /// and through every caller. Tracked as a follow-up; until then,
-    /// renaming a local `x` in one function still renames unrelated `x`s
-    /// in other functions and files.
     pub def_id: Option<glyim_core::def_id::DefId>,
+    /// T129-PATCHED [LSP-5]: the `ItemId` of the enclosing HIR item (for
+    /// locals, the function/impl-method body that owns them; for free
+    /// items, the item itself). Rename uses this to filter refs to a
+    /// single scope — otherwise renaming a local `x` in one function
+    /// renames every `x` in every other function that shares the name.
+    pub owner_item_id: Option<u32>,
+    /// T129-PATCHED [LSP-5]: `true` for a top-level item's own name (its
+    /// definition and every reference to it, cross-module). `false` for
+    /// locals, params, fields, and variants — anything whose name is
+    /// scoped to a single item. Rename filters refs by `owner_item_id`
+    /// only when this is `false`; item-level names stay global.
+    pub is_item_level: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,6 +105,15 @@ impl ReferenceGraph {
         let mut seen = HashSet::new();
         let function_names = &self.function_names;
 
+        // T129-PATCHED [LSP-5]: the reference graph records which HIR
+        // `ItemId` owns each reference. Rename uses this to filter refs
+        // to a single scope — without it, renaming a local `x` in one
+        // function renames every `x` in every other function.
+        // Implemented as a Cell so the closure can read it while the
+        // outer loop mutates it, avoiding a cascade through the 11
+        // `add_ref` call sites.
+        let current_owner: std::cell::Cell<Option<u32>> = std::cell::Cell::new(None);
+
         let mut add_ref =
             |name: &str, span: Span, is_def: bool, kind: ReferenceKind, access: AccessKind| {
                 let key = (
@@ -123,11 +135,16 @@ impl ReferenceGraph {
                             kind,
                             access,
                             def_id: None,
+                            owner_item_id: current_owner.get(),
+                            // Set true only by the outer item loop below;
+                            // the inner add_ref calls all default to false.
+                            is_item_level: false,
                         });
                 }
             };
 
         for item in hir.items.iter() {
+            current_owner.set(Some(item.id.to_raw()));
             let name = interner.resolve(item.name).to_string();
             add_ref(
                 &name,
@@ -174,7 +191,6 @@ impl ReferenceGraph {
                 }
             }
         }
-
         fn walk_pattern(
             pat_id: glyim_hir::PatId,
             body: &Body,
@@ -808,6 +824,29 @@ impl ReferenceGraph {
                     false,
                     AccessKind::Read,
                 );
+            }
+        }
+
+        // T129-PATCHED [LSP-5]: release the mutable borrow held by
+        // `add_ref` before the post-pass mutates `self.references`.
+        drop(add_ref);
+
+        // T129-PATCHED [LSP-5]: post-pass to mark item-level definitions.
+        // Any `is_definition=true` ref whose span matches a HIR item's own
+        // span is the item's own name — item-level (cross-module visible).
+        // Everything else (locals, params, fields, variants) is scoped.
+        for item in hir.items.iter() {
+            let name = interner.resolve(item.name).to_string();
+            if let Some(refs) = self.references.get_mut(&name) {
+                for r in refs.iter_mut() {
+                    if r.is_definition
+                        && r.file_id == file_id
+                        && r.span.lo == item.span.lo
+                        && r.span.hi == item.span.hi
+                    {
+                        r.is_item_level = true;
+                    }
+                }
             }
         }
     }

@@ -97,6 +97,8 @@ pub fn find_references(
     params: &ReferenceParams,
 ) -> Option<Vec<Location>> {
     let uri = &params.text_document_position.text_document.uri;
+    let path = url::Url::parse(uri.as_str()).ok()?.to_file_path().ok()?;
+    let file_id = file_map.get_by_path(&path)?;
     let symbol_name =
         get_symbol_name_at_position(db, file_map, uri, params.text_document_position.position)?;
     let ref_graph = db.reference_graph.read();
@@ -104,9 +106,37 @@ pub fn find_references(
     if references.is_empty() {
         return None;
     }
+    // T129-PATCHED [LSP-5]: scope filter. Same logic as rename: if the
+    // cursor is on a scoped reference (local, param, field, variant),
+    // only refs sharing the same `owner_item_id` are returned.
+    let cursor_offset = {
+        let sm = db.source_maps.read();
+        sm.get(&file_id)
+            .and_then(|s| {
+                s.line_col_to_offset(
+                    params.text_document_position.position.line as usize,
+                    params.text_document_position.position.character as usize,
+                )
+            })
+    };
+    let scope_owner: Option<u32> = cursor_offset
+        .and_then(|off| {
+            references.iter().find(|r| {
+                !r.span.is_dummy()
+                    && r.file_id == file_id
+                    && r.span.lo.to_usize() <= off
+                    && off < r.span.hi.to_usize()
+            })
+        })
+        .and_then(|r| if r.is_item_level { None } else { r.owner_item_id });
     let source_maps = db.source_maps.read();
     let mut locations = Vec::new();
     for r in references {
+        if let Some(owner) = scope_owner {
+            if r.owner_item_id != Some(owner) {
+                continue;
+            }
+        }
         // T053-PATCHED-NAV [LSP-4]: skip refs whose span is DUMMY
         // (pattern bindings currently have no real span). Returning
         // `0:0` for those would place a bogus reference at the top
