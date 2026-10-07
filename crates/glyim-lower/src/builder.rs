@@ -52,6 +52,11 @@ pub struct MirBuilder<'a> {
     /// between user-variable allocations), so `VarRef(local_var_id)` must be
     /// resolved through this map rather than `LocalIdx::from_raw(var_id)`.
     pub(crate) local_var_map: std::collections::HashMap<thir::LocalVarId, LocalIdx>,
+    /// T121-PATCHED [BCK-1]: true while lowering an argument of a `Call`.
+    /// `&mut x` produced as a direct call argument becomes a *two-phase
+    /// borrow* so that `f(&mut x, x)` type-checks (the shared read of `x`
+    /// is allowed until the mutable borrow activates).
+    pub(crate) lowering_call_arg: bool,
     pub(crate) current_block: Option<BasicBlockIdx>,
     /// Stack of enclosing loops for break/continue resolution.
     pub(crate) loop_stack: Vec<LoopInfo>,
@@ -103,6 +108,7 @@ impl<'a> MirBuilder<'a> {
             byref_capture_vars: std::collections::HashSet::new(),
             param_map: std::collections::HashMap::new(),
             local_var_map: std::collections::HashMap::new(),
+            lowering_call_arg: false,
             current_block: None,
             loop_stack: Vec::new(),
             drop_flags: std::collections::HashMap::new(),

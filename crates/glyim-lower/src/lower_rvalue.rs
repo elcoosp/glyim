@@ -312,7 +312,10 @@ impl<'a> MirBuilder<'a> {
                 let place = self.lower_expr_to_place(operand);
                 let borrow_kind = match mutability {
                     glyim_core::primitives::Mutability::Mut => glyim_mir::BorrowKind::Mut {
-                        allow_two_phase_borrow: false,
+                        // T121-PATCHED [BCK-1]: `&mut x` as a direct call
+                        // argument is a two-phase borrow (`f(&mut x, x)`
+                        // is legal until the mutable borrow activates).
+                        allow_two_phase_borrow: self.lowering_call_arg,
                     },
                     glyim_core::primitives::Mutability::Not => glyim_mir::BorrowKind::Shared,
                 };
@@ -343,9 +346,14 @@ impl<'a> MirBuilder<'a> {
                 }
 
                 let mut mir_args = Vec::new();
+                // T121-PATCHED [BCK-1]: mark that we're lowering a call
+                // argument so `&mut x` becomes a two-phase borrow.
+                let saved_flag = self.lowering_call_arg;
+                self.lowering_call_arg = true;
                 for arg in args {
                     mir_args.push(self.lower_expr_to_operand(arg));
                 }
+                self.lowering_call_arg = saved_flag;
                 let func_op = self.lower_expr_to_operand(func);
                 let dest_local =
                     self.alloc_local(expr.ty, glyim_core::primitives::Mutability::Mut, expr.span);
@@ -600,7 +608,8 @@ impl<'a> MirBuilder<'a> {
                                 glyim_mir::Rvalue::Ref(
                                     glyim_mir::Place::new(iter_local),
                                     glyim_mir::BorrowKind::Mut {
-                                        allow_two_phase_borrow: false,
+                                        // T121-PATCHED [BCK-1]: see above.
+                                        allow_two_phase_borrow: self.lowering_call_arg,
                                     },
                                 ),
                             ),
@@ -1046,6 +1055,12 @@ impl<'a> MirBuilder<'a> {
                             let borrow = match mutability {
                                 glyim_core::primitives::Mutability::Mut => {
                                     glyim_mir::BorrowKind::Mut {
+                                        // T121-REVIEWED [BCK-1]: closure
+                                        // capture is not a call argument,
+                                        // so no two-phase borrow — the
+                                        // reference is stored immediately,
+                                        // not held for the duration of a
+                                        // call.
                                         allow_two_phase_borrow: false,
                                     }
                                 }
