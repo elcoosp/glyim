@@ -37,13 +37,19 @@ impl<T> NonNull<T> {
 }
 
 /// Creates a null raw pointer.
+///
+/// T140-PATCHED [STD-15]: implemented as a zero-cast. `Int → RawPtr` is
+/// accepted by `is_valid_cast`, so `0 as *const T` folds to the null
+/// pointer without needing a compiler intrinsic.
 fn null<T>() -> *const T {
-    // compiler intrinsic
+    0 as *const T
 }
 
 /// Creates a null mutable raw pointer.
+///
+/// T140-PATCHED [STD-15]: zero-cast, matching `ptr::null`.
 fn null_mut<T>() -> *mut T {
-    // compiler intrinsic
+    0 as *mut T
 }
 
 /// Reads the value from `src` without moving it.
