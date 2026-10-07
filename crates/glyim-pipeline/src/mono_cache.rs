@@ -44,23 +44,11 @@ impl PipelineMonoCache {
     }
 }
 
-/// T101-DEFERRED [LOW-10]: build a pipeline mono cache with polymorphization
-/// dedup applied. This function is intentionally NOT wired into the
-/// pipeline yet: `polymorphize_and_deduplicate` analyzes `MonoItem::body`
-/// (already substituted — see `make_mir_body_provider`), so its
-/// `analyze_used_params` never sees a `TyKind::Param`, `used` comes back
-/// all-false, `polymorphize_substs` rewrites every arg to `()` and
-/// `deduplicate` merges `f::<i32>` with `f::<String>` keeping whichever
-/// body arrived first — a wrong-code bug for the second instantiation.
-///
-/// The real fix is to run `analyze_used_params` on the *pre-substitution*
-/// body (fetch from `mir_bodies_map`, like
-/// `post_mono_checks::check_unused_generic_params` does) before wiring
-/// this into the pipeline. Until then, callers must use
-/// `PipelineMonoCache::from_items` directly; this helper is left in place
-/// (with an explanatory marker) so the wiring is a one-line swap once the
-/// pre-substitution analysis is ready.
-#[allow(dead_code)]
+/// T101-PATCHED [LOW-10]: build a pipeline mono cache with
+/// polymorphization dedup applied. The pipeline now supplies the
+/// pre-substitution body map to MonoCtx (via
+/// `with_pre_subst_bodies`), so `analyze_used_params` sees
+/// `TyKind::Param` and the dedup is correct.
 pub(crate) fn build_mono_cache(
     ctx: &mut glyim_lower::MonoCtx,
     ty_ctx: &mut TyCtxMut,

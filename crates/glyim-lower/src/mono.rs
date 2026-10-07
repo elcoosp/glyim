@@ -213,12 +213,6 @@ impl<'a> MonoCtx<'a> {
                 item: item.clone(),
                 body,
                 symbol,
-                // T124-DEFERRED [PIPE-4]: source_module is still hardcoded
-                // to 0, so `partition()` always returns one CGU regardless
-                // of `--codegen-units`. A correct fix requires wiring the
-                // def-map's `def_to_module` map into `MonoCtx`; tracked for
-                // a follow-up batch. For now this marker documents the
-                // limitation.
                 // T124-PATCHED [PIPE-4]: look up the item's defining
                 // module. `MonoItem::Fn/Static/Const` all carry a
                 // LocalDefId (in their `def_id`); check against the
