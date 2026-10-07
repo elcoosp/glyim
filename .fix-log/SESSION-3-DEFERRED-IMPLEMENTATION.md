@@ -77,3 +77,40 @@ resolution-based classification requires reworking the HIR's
 uppercase-first heuristic.
 
 ## Test matrix (all green)
+
+---
+
+## Additional deferred items completed
+
+- **T109** [INT-6]: removed per-statement `Statement` clone from the
+  interpreter main loop (was one alloc per executed MIR statement).
+- **T124** [PIPE-4]: `CrateDefMap.def_to_module` is exposed and MonoCtx
+  consumes it via `with_def_to_module`; `source_module` per item now
+  reflects the declaring module instead of hardcoded 0.
+- **T126** [CLI-2]: `--lto fat` now returns an explicit error rather
+  than silently collapsing to `--lto off`.
+- **T156** [PILOT-14]: fsync + per-process tmp for state file (already
+  done); session cap (>200 → evict oldest) also in place.
+- **T159** [PILOT-17]: `handle_extension_message` is spawned so the
+  server event loop is non-blocking (already done in an earlier batch).
+
+## Truly remaining work (large / multi-hour refactors)
+
+- **T100** — async state transform wiring (MIR builder + interp + codegen)
+- **T101** — polymorphize pre-substitution analysis (needs `mir_bodies_map`
+  to expose the *pre-subst* body; currently only the substituted one is
+  in the pipeline)
+- **T123** — LLVM layout memoization (design doc in abi.rs; two viable
+  designs)
+- **T129/T130** — LSP scope-aware references + dependency graph
+- **T139** — write_all strict semantics (blocked on guard mistranslation)
+- **T140** — compiler intrinsics (each needs 4-layer plumbing)
+- **T175** — full resolution-based Pat::Path classification (partial fix
+  for single-segment Plain paths is done)
+
+## Rejected (documented as incorrect per Rust's actual semantics)
+
+- **T096 point 2** — plan claims `&mut T: Sync` iff `T: Send`; Rust says
+  iff `T: Sync` (matching stdlib).
+- **T096 point 3** — plan claims raw pointers are `Send + Sync`; Rust
+  says `*const T`/`*mut T` are `!Send + !Sync`.
