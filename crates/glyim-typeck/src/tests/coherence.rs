@@ -174,6 +174,7 @@ fn build_def_map(
         interner: interner.clone(),
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     }
 }
 

@@ -54,6 +54,7 @@ fn build_def_map(interner: &mut Interner, krate: CrateId, type_names: &[&str]) -
         interner: interner.clone(),
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     }
 }
 

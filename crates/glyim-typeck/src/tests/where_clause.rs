@@ -56,6 +56,7 @@ fn build_def_map_with_names(
         interner: interner.clone(),
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     }
 }
 
@@ -470,6 +471,7 @@ fn build_def_map_with_nested_trait(
         interner: interner.clone(),
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     }
 }
 

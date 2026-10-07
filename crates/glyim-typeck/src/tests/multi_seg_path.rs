@@ -65,6 +65,7 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
         interner: interner.clone(),
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     }
 }
 
@@ -126,6 +127,7 @@ fn single_segment_struct_pattern_still_resolves() {
         interner: interner.clone(),
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     };
     let ctx = TyCtxMut::new(interner.clone());
 

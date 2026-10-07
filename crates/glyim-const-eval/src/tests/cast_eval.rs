@@ -27,6 +27,7 @@ fn test_body() -> Body {
         owner: glyim_core::def_id::LocalDefId::from_raw(0),
         exprs: glyim_core::arena::IndexVec::new(),
         pats: glyim_core::arena::IndexVec::new(),
+        pat_spans: glyim_core::arena::IndexVec::new(),
         params: Vec::new(),
         span: dummy_span(),
         expr_spans: glyim_core::arena::IndexVec::new(),

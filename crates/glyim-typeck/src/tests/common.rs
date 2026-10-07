@@ -165,6 +165,7 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
         interner,
         variant_map: Default::default(),
         max_local_def_id: 0,
+        def_to_module: Default::default(),
     }
 }
 
