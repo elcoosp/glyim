@@ -949,7 +949,7 @@ impl<'a> FnCtxt<'a> {
         span: Span,
     ) -> (thir::Expr, Ty) {
 
-        if std::env::var("GLYIM_DBG_VEXPR").is_ok() {
+        if super::check_expr::dbg_flags::vexpr() {
             eprintln!("[VEXPR] adt_id={:?} variant_idx={:?}", adt_id, variant_idx);
         }
         let arity = self.ctx.adt_generic_arity(adt_id);

@@ -137,10 +137,26 @@ async fn run_serve(config: Arc<PilotConfig>, project_root: PathBuf) {
                     }
                     ServerEvent::Disconnected { addr } => tracing::info!(peer = %addr, "extension disconnected"),
                     ServerEvent::Message { msg, .. } => {
-                        handle_extension_message(
-                            msg, &config, &persistence, &project_root,
-                            &cli_sender, &processing, &metrics,
-                        ).await;
+                        // T159-PATCHED [PILOT-17]: spawn the message
+                        // handler so a slow worktree creation (up to 120s
+                        // of `git worktree add`) or a `gh` call does not
+                        // freeze the select loop — which would stall
+                        // pong handling, error handling, and every other
+                        // connected session. Ordering per stream is
+                        // preserved by the `processing` set the handler
+                        // already consults (see T069's guard).
+                        let cfg = config.clone();
+                        let persist = Arc::clone(&persistence);
+                        let proj_root = project_root.clone();
+                        let cli_tx = cli_sender.clone();
+                        let proc = Arc::clone(&processing);
+                        let mets = Arc::clone(&metrics);
+                        tokio::spawn(async move {
+                            handle_extension_message(
+                                msg, &cfg, &persist, &proj_root,
+                                &cli_tx, &proc, &mets,
+                            ).await;
+                        });
                     }
                 }
             }

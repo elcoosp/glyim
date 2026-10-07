@@ -2,6 +2,26 @@
 
 use std::collections::{HashMap, HashSet};
 
+/// T183-PATCHED [TCK-31]: debug flags read once from env and cached. The
+/// previous per-call `std::env::var("GLYIM_DBG_...")` in the method-
+/// resolution hot loop was a syscall on every invocation, dominating
+/// typeck cost when the flags were unset (the common case).
+pub(crate) mod dbg_flags {
+    use std::sync::OnceLock;
+    pub(crate) fn disp3() -> bool {
+        static V: OnceLock<bool> = OnceLock::new();
+        *V.get_or_init(|| std::env::var("GLYIM_DBG_DISP3").is_ok())
+    }
+    pub(crate) fn cand_push() -> bool {
+        static V: OnceLock<bool> = OnceLock::new();
+        *V.get_or_init(|| std::env::var("GLYIM_DBG_CAND_PUSH").is_ok())
+    }
+    pub(crate) fn vexpr() -> bool {
+        static V: OnceLock<bool> = OnceLock::new();
+        *V.get_or_init(|| std::env::var("GLYIM_DBG_VEXPR").is_ok())
+    }
+}
+
 use glyim_core::def_id::{AdtId, ClosureId, FnDefId, TraitDefId};
 use glyim_core::interner::Name;
 use glyim_core::primitives::*;
@@ -1234,7 +1254,7 @@ impl<'a> FnCtxt<'a> {
                     }
                     arg_exprs.push(a_expr);
                 }
-                if std::env::var("GLYIM_DBG_DISP3").is_ok() {
+                if dbg_flags::disp3() {
                     let mn = self.ctx.name_str(*method).to_string();
                     if mn == "read" || mn == "clear" {
                         let kind = match &dispatch {
@@ -2965,7 +2985,7 @@ impl<'a> FnCtxt<'a> {
                                     })
                                     .map(MethodDispatch::Virtual)
                             });
-                            if std::env::var("GLYIM_DBG_CAND_PUSH").is_ok() {
+                            if dbg_flags::cand_push() {
                                 let mn = this.ctx.name_str(method_name).to_string();
                                 if mn == "len" {
                                     let step_kind = format!("{:?}", this.ctx.ty_kind(step_ty));
