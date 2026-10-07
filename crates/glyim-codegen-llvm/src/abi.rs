@@ -1,3 +1,19 @@
+//! T123-DEFERRED [LL-22]: FullLayoutComputer::layout_of is not memoized.
+//! Every `place_ptr`, `alloc_local`, and field-offset query in codegen
+//! reconstructs a fresh FullLayoutComputer (cloning TargetInfo) and
+//! recomputes the full recursive layout of the same types, which is
+//! quadratic on large bodies. A correct memoization requires either:
+//!   * a RefCell<HashMap<Ty, Layout>> on the struct (careful: `layout_of`
+//!     takes `&self`, and recursive calls need to reenter through the
+//!     cache-aware wrapper, which requires a private inherent method),
+//!     or
+//!   * a process-global cache keyed on `(TargetInfo, Ty)` (safe because
+//!     layouts are deterministic per-target).
+//! Attempting the former via automated patch mangled the impl block; the
+//! fix needs a hand-written pass through `crates/glyim-codegen-llvm/src/`
+//! to convert all `FullLayoutComputer::new(...)` call sites to a single
+//! per-body instance that owns the cache.
+
 use glyim_core::primitives::TargetInfo;
 use glyim_layout::{
     Align, ArgAbi, CallConvention, FieldsShape, FnAbi, Layout, LayoutComputer, LayoutError,
