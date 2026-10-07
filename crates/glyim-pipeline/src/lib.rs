@@ -585,6 +585,21 @@ impl Pipeline {
                 .map(|(k, v)| (*k, v.to_raw()))
                 .collect();
             mono_ctx.with_def_to_module(&def_to_module_u32);
+            // T101-PATCHED [LOW-10]: supply the *pre-substitution* body
+            // map so polymorphization can see `TyKind::Param`. The bodies
+            // held by `MonoItemData` are post-substitution, so analyzing
+            // them always reports the used-params set as all-false and
+            // dedup would merge every instantiation of a generic fn.
+            //
+            // NOTE: the actual `polymorphize_and_deduplicate` call is
+            // gated on the stdlib typeck regressions being fixed first
+            // (T063's `Vec::resize` / Vec methods like `position`,
+            // `unwrap_or` are not registered on the builtin method
+            // tables, so running dedup on the assembled stdlib fails to
+            // type-check before reaching the dedup stage). The plumbing
+            // here is complete; enabling the invocation is a one-line
+            // uncomment once those registrations land.
+            mono_ctx.with_pre_subst_bodies(&mir_bodies_map);
             mono_ctx.collect(&mono_roots, &body_provider, &drop_provider);
             // §8.12: post-monomorphization semantic checks. These were dead
             // `#[allow(dead_code)]` functions; they now run here, immediately
