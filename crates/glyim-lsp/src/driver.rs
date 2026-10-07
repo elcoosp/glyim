@@ -35,6 +35,11 @@ pub enum AnalysisMessage {
 pub struct AnalysisDriver {
     db: Arc<AnalysisDatabase>,
     rx: Receiver<AnalysisMessage>,
+    /// T130-PATCHED [LSP-6]: sender for re-analyzing dependent files when
+    /// one changes. `analyze_file` uses it to enqueue affected files so
+    /// cross-file hover/completions/references stay fresh after a
+    /// signature change.
+    analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
     #[allow(unused)]
     cache_dir: PathBuf,
     dep_graph: Arc<parking_lot::RwLock<DependencyGraph>>,
@@ -47,6 +52,7 @@ impl AnalysisDriver {
         db: Arc<AnalysisDatabase>,
         rx: Receiver<AnalysisMessage>,
         cache_dir: PathBuf,
+        analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
     ) -> Self {
         // Create a channel for file system events, but we won't spawn a thread for now
         // to keep compilation simple. The watcher can be added later.
@@ -54,6 +60,7 @@ impl AnalysisDriver {
         Self {
             db,
             rx,
+            analysis_tx,
             cache_dir,
             dep_graph: Arc::new(parking_lot::RwLock::new(DependencyGraph::new())),
             _watcher,
@@ -142,6 +149,38 @@ impl AnalysisDriver {
             glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
 
         self.extract_dependencies(path, &hir, &interner);
+
+        // T130-PATCHED [LSP-6]: enqueue re-analysis of every file that
+        // depends on this one, so a signature change here refreshes
+        // hover/completions/references there. The re-analysis reads each
+        // dependent's *cached* content from the db (not the file on disk),
+        // and the resulting nested enqueue is bounded by the fact that a
+        // dependent's own extract_dependencies will find its own deps in
+        // turn — a file already analysed in this batch has the same
+        // dependency set, so the `try_send` re-entrant call is a no-op
+        // beyond the first pass (the driver coalesces duplicates).
+        {
+            let affected = {
+                let graph = self.dep_graph.read();
+                graph.affected_files(path)
+            };
+            let source_maps = self.db.source_maps.read();
+            for other in affected {
+                if &other == path {
+                    continue;
+                }
+                let file_id_opt = self.db.file_map.read().get_by_path(&other);
+                let content = file_id_opt
+                    .and_then(|id| source_maps.get(&id).map(|sm| sm.source().to_string()));
+                if let Some(content) = content {
+                    let _ = self.analysis_tx.try_send(AnalysisMessage::FileChanged {
+                        path: other,
+                        content,
+                        version: 0,
+                    });
+                }
+            }
+        }
 
         self.db
             .symbol_index
