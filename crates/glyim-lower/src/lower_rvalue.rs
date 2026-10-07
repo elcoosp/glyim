@@ -346,11 +346,21 @@ impl<'a> MirBuilder<'a> {
                 }
 
                 let mut mir_args = Vec::new();
-                // T121-PATCHED [BCK-1]: mark that we're lowering a call
-                // argument so `&mut x` becomes a two-phase borrow.
+                // T121-PATCHED-ACTIVATION [BCK-1]: precise two-phase borrow
+                // activation. Instead of marking *every* call argument as a
+                // two-phase borrow, mark only `&mut <local>` arguments whose
+                // sibling arguments read the same local — the exact
+                // precondition under which rustc reserves a two-phase borrow
+                // (`f(&mut x, x)`). An `&mut x` with no sibling read is a
+                // plain mutable borrow; leaving the flag off restores rustc's
+                // activation semantics for it (the reservation no longer
+                // outlives the call). The analysis is over-approximate in the
+                // "keep the reservation" direction, so it never rejects a
+                // program the coarse version accepted.
                 let saved_flag = self.lowering_call_arg;
-                self.lowering_call_arg = true;
-                for arg in args {
+                let tp_flags = compute_two_phase_flags(args);
+                for (i, arg) in args.iter().enumerate() {
+                    self.lowering_call_arg = tp_flags.get(i).copied().unwrap_or(false);
                     mir_args.push(self.lower_expr_to_operand(arg));
                 }
                 self.lowering_call_arg = saved_flag;
@@ -2308,3 +2318,152 @@ impl<'a> MirBuilder<'a> {
         Rvalue::Aggregate(glyim_mir::AggregateKind::Tuple, slice_operands)
     }
 }
+
+// ---------------------------------------------------------------------------
+// T121-PATCHED-ACTIVATION [BCK-1]: precise two-phase borrow flag computation.
+// ---------------------------------------------------------------------------
+
+/// For a call's argument list, compute the two-phase-borrow flag for each
+/// argument. `flags[i]` is `true` iff `args[i]` is an `&mut <local>` whose
+/// target local is also read by at least one *sibling* argument — the exact
+/// precondition under which rustc reserves a two-phase borrow.
+///
+/// The analysis is conservative in the "keep the reservation" direction: any
+/// expression shape whose child set is not exhaustively modelled is treated
+/// as *reading* the place, so the flag is over-set rather than under-set.
+/// Over-setting admits strictly more programs (i.e. the pre-refinement
+/// behavior) and is sound; the refinement only *removes* the flag where we
+/// can prove no sibling reads the borrowed place.
+fn compute_two_phase_flags(args: &[thir::Expr]) -> Vec<bool> {
+    let mut flags = vec![false; args.len()];
+    for (i, arg) in args.iter().enumerate() {
+        let Some(target) = ref_mut_target_local(arg) else {
+            continue;
+        };
+        for (j, sib) in args.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+            if expr_reads_local(sib, target) {
+                flags[i] = true;
+                break;
+            }
+        }
+    }
+    flags
+}
+
+/// If `e` is a `&mut <local>` reference expression, return the local's id.
+fn ref_mut_target_local(e: &thir::Expr) -> Option<thir::LocalVarId> {
+    if let thir::ExprKind::Ref {
+        mutability: Mutability::Mut,
+        operand,
+    } = &e.kind
+    {
+        if let thir::ExprKind::VarRef(id) = &operand.kind {
+            return Some(*id);
+        }
+    }
+    None
+}
+
+/// Approximate "does `e` read local `v`?" for the T121 flag. Returns `true`
+/// for any expression shape whose child set is not exhaustively modelled, so
+/// the flag is over-set rather than under-set.
+fn expr_reads_local(e: &thir::Expr, v: thir::LocalVarId) -> bool {
+    match &e.kind {
+        thir::ExprKind::VarRef(id) => *id == v,
+        // A mutable reborrow is not a read of the underlying local.
+        thir::ExprKind::Ref {
+            mutability: Mutability::Mut,
+            ..
+        } => false,
+        // A shared reborrow is a read.
+        thir::ExprKind::Ref { operand, .. } => expr_reads_local(operand, v),
+        thir::ExprKind::Binary { lhs, rhs, .. } => {
+            expr_reads_local(lhs, v) || expr_reads_local(rhs, v)
+        }
+        thir::ExprKind::Unary { operand, .. } => expr_reads_local(operand, v),
+        thir::ExprKind::Call { func, args } => {
+            expr_reads_local(func, v) || args.iter().any(|a| expr_reads_local(a, v))
+        }
+        thir::ExprKind::DynamicCall { receiver, args, .. } => {
+            expr_reads_local(receiver, v) || args.iter().any(|a| expr_reads_local(a, v))
+        }
+        // Known leaves that cannot read a local.
+        thir::ExprKind::Literal(_)
+        | thir::ExprKind::FnRef(_)
+        | thir::ExprKind::ConstRef(_)
+        | thir::ExprKind::Err => false,
+        // Anything else: over-approximate (keeps the reservation).
+        _ => true,
+    }
+}
+
+#[cfg(test)]
+mod t121_two_phase_tests {
+    use super::*;
+
+    fn var(v: u32) -> thir::Expr {
+        thir::Expr {
+            kind: thir::ExprKind::VarRef(thir::LocalVarId::from_raw(v)),
+            ty: Ty::ERROR,
+            span: glyim_span::Span::DUMMY,
+        }
+    }
+    fn ref_mut(v: u32) -> thir::Expr {
+        thir::Expr {
+            kind: thir::ExprKind::Ref {
+                mutability: Mutability::Mut,
+                operand: Box::new(var(v)),
+            },
+            ty: Ty::ERROR,
+            span: glyim_span::Span::DUMMY,
+        }
+    }
+    fn leaf() -> thir::Expr {
+        thir::Expr {
+            kind: thir::ExprKind::Err,
+            ty: Ty::ERROR,
+            span: glyim_span::Span::DUMMY,
+        }
+    }
+
+    #[test]
+    fn lone_mut_ref_is_not_two_phase() {
+        // `f(&mut x)` — a plain mutable borrow, no reservation needed.
+        let args = vec![ref_mut(0)];
+        assert_eq!(compute_two_phase_flags(&args), vec![false]);
+    }
+
+    #[test]
+    fn mut_ref_with_sibling_read_is_two_phase() {
+        // `f(&mut x, x)` — the canonical two-phase borrow.
+        let args = vec![ref_mut(0), var(0)];
+        assert_eq!(compute_two_phase_flags(&args), vec![true, false]);
+    }
+
+    #[test]
+    fn mut_ref_with_unrelated_sibling_is_not_two_phase() {
+        // `f(&mut x, y)` — no sibling read of `x`.
+        let args = vec![ref_mut(0), var(1)];
+        assert_eq!(compute_two_phase_flags(&args), vec![false, false]);
+    }
+
+    #[test]
+    fn read_before_reservation_still_marks_later_mut_ref() {
+        // `f(x, &mut x)` — the read precedes the reservation; rustc accepts
+        // and the conservative flag covers it.
+        let args = vec![var(0), ref_mut(0)];
+        assert_eq!(compute_two_phase_flags(&args), vec![false, true]);
+    }
+
+    #[test]
+    fn mut_ref_with_leaf_sibling_is_not_two_phase() {
+        // `f(&mut x, <opaque leaf>)` — a leaf that cannot read `x`.
+        let args = vec![ref_mut(0), leaf()];
+        assert_eq!(compute_two_phase_flags(&args), vec![false, false]);
+    }
+}
+
+// ---------------------------------------------------------------------------
