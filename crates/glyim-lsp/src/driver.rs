@@ -188,6 +188,13 @@ impl AnalysisDriver {
         _hir: &glyim_hir::CrateHir,
         _interner: &glyim_core::Interner,
     ) {
-        // Placeholder for dependency extraction
+        // T130-DEFERRED [LSP-6]: dependency extraction is a placeholder,
+        // so `analyze_file` only re-analyzes the changed file — dependent
+        // files keep stale hover/completion/references until the user
+        // edits them too. Implementing this requires walking each HIR's
+        // `Expr::Path`/`TypeRef::Path` names, matching them against
+        // `SymbolIndex`'s import table for other files, and populating
+        // `dep_graph.add_dep(from, to)`; then `analyze_file` must enqueue
+        // `affected_files(path)` for re-analysis. Tracked as a follow-up.
     }
 }

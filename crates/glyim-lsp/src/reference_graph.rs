@@ -19,7 +19,15 @@ pub struct Reference {
     /// `Expr::Assign` or the operand of a `&mut` borrow; everything else is a
     /// `Read`. Mirrors Tier 1.1's `is_mut_use` classification.
     pub access: AccessKind,
-    /// Struct.
+    /// T129-DEFERRED [LSP-5]: `def_id` is the def-map's LocalDefId for
+    /// the resolved definition, but the whole reference graph is
+    /// currently name-keyed (`references: HashMap<String, Vec<Reference>>`)
+    /// and `def_id` is always `None`. Making rename/references scope-aware
+    /// requires keying refs by `(owner_def_id, name)` instead — which
+    /// threads the def-map's scope stack through `walk_expr`/`walk_pattern`
+    /// and through every caller. Tracked as a follow-up; until then,
+    /// renaming a local `x` in one function still renames unrelated `x`s
+    /// in other functions and files.
     pub def_id: Option<glyim_core::def_id::DefId>,
 }
 
