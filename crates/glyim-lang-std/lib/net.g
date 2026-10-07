@@ -625,7 +625,13 @@ fn parse_ipv6_range(s: &str, start: usize, end: usize) -> Option<Ipv6Addr> {
             i += 1;
         }
     } else {
-        if head_count != 8 {
+        // T137-PATCHED [STD-12]: an IPv6 string ending in `::` (or
+        // consisting only of `::`) has an empty tail. The previous code
+        // required `head_count == 8`, so the all-zeros address `::`
+        // (Rust: valid) and forms like `fe80::` / `1::` were rejected.
+        // The `head_count + tail_count <= 8` check below is what
+        // actually guarantees the `::` gap fits.
+        if head_count + tail_count > 8 {
             return Option::None;
         }
     }

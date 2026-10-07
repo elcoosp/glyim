@@ -362,14 +362,17 @@ impl FromStr for f64 {
                 if ch < b'0' || ch > b'9' {
                     return Result::Err(ParseFloatError);
                 }
-                exp = exp * 10 + ((ch - b'0') as i32);
+                // T136-EXP-PATCHED [STD-11]: cap the accumulator as soon
+                // as it exceeds 400 so a pathological exponent
+                // (`1e99999999999999999999`) cannot overflow i32 during
+                // accumulation and wrap to a negative value (which would
+                // suppress the trailing multiply loop and produce `1.0`
+                // instead of `inf`).
+                if exp <= 400 {
+                    exp = exp * 10 + ((ch - b'0') as i32);
+                    if exp > 400 { exp = 400; }
+                }
                 i += 1;
-            }
-            // Cap the exponent so a pathological input cannot spin for
-            // billions of iterations; beyond ~±308 the value is 0 or inf
-            // anyway.
-            if exp > 400 {
-                exp = 400;
             }
             let mut k = exp;
             if exp_neg {
