@@ -305,11 +305,24 @@ impl<'tcx> Interpreter<'tcx> {
             // Execute statements one at a time. An index loop (not `for
             // stmt in &body...`) is required so the immutable borrow of `body`
             // ends before `unwind_step` may take a mutable borrow of `body`.
+            //
+            // T109-PATCHED [INT-6]: previously this cloned the entire
+            // `Statement` (including a Vec of args for Calls) for every
+            // statement executed — a per-step heap allocation in the hot
+            // interpreter loop. The immutable borrow of `body` here and the
+            // mutable borrow of `self` inside `execute_statement` are
+            // disjoint (body is a local, not part of self), so the clone is
+            // unnecessary. Removing it eliminates one alloc per executed
+            // statement without changing semantics: on Err, the borrow
+            // ends and `unwind_step` takes `&mut body` sequentially.
             let stmt_count = body.basic_blocks[bb_idx].statements.len();
             let mut stmt_idx = 0;
             while stmt_idx < stmt_count {
-                let stmt = body.basic_blocks[bb_idx].statements[stmt_idx].clone();
-                if let Err(e) = self.execute_statement(&stmt) {
+                let err = {
+                    let stmt = &body.basic_blocks[bb_idx].statements[stmt_idx];
+                    self.execute_statement(stmt).err()
+                };
+                if let Some(e) = err {
                     self.unwind_step(e, &mut body, &mut bb_idx, cleanup_edge)?;
                 }
                 stmt_idx += 1;
