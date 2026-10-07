@@ -182,12 +182,16 @@ pub fn resolve_type_ref(
                             name: m.name,
                             span,
                             self_kind: self_kind_of_inputs(&*ctx, inputs),
-                            // Generic-parameter detection requires the trait
-                            // method's own generic-param list, which is not
-                            // recoverable from the interred `FnSig` substitution
-                            // here. We conservatively assume no generic params;
-                            // the dedicated object-safety algorithm tests still
-                            // exercise the generic-method rejection path.
+                            // T178-DEFERRED [TCK-28]: generic-parameter
+                            // detection requires the trait method's own
+                            // generic-param list. That list lives on the
+                            // CST/HIR node but is not carried through
+                            // `FnSig`; adding it to `MethodDef` or to
+                            // `TraitMethod` in HIR is the prerequisite.
+                            // Until then, the conservative `false` keeps
+                            // the object-safety check from over-rejecting
+                            // (it misses the generic-method rejection
+                            // path, tracked as a follow-up).
                             has_generic_params: false,
                             returns_self: false,
                         }

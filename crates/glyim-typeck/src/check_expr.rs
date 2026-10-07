@@ -2495,12 +2495,22 @@ impl<'a> FnCtxt<'a> {
     /// + name (so the caller falls through to user-impl / generic dispatch).
     fn try_builtin_method(&mut self, step_ty: Ty, method_name: Name) -> Option<(Ty, FnDefId)> {
 
-        // Universal methods (`into`, `to_owned`, `to_string`, `clone`) resolve
-        // for any receiver via a synthetic fn id whose output is either a fresh
-        // inference var (context-pinned by the caller, e.g. `.into()` where the
-        // target is stated) or a `String` for `to_string`/`to_owned`. This
-        // covers blanket-like `From`/`Into`/`ToString`/`Clone` behaviour the
-        // stdlib relies on without a real trait-solver blanket impl.
+        // T179-DEFERRED [TCK-29]: universal `into`/`to_owned`/`to_string`/
+        // `clone` resolution currently accepts any receiver via a
+        // synthetic fn id. Correctly gating on trait-impl existence
+        // requires `TyCtx` to expose a `has_trait_impl(ty, trait_id)`
+        // query that reads the impl_method_fns / coherence registries —
+        // currently only `resolve_trait_method` exists (which itself
+        // takes a method name). Implementing the gate is tracked as a
+        // follow-up; until then, `Mutex.to_string()` and friends are
+        // accepted.
+        //
+        // Universal methods resolve for any receiver via a synthetic fn
+        // id whose output is either a fresh inference var (context-pinned
+        // by the caller, e.g. `.into()` where the target is stated) or a
+        // `String` for `to_string`/`to_owned`. This covers blanket-like
+        // `From`/`Into`/`ToString`/`Clone` behaviour the stdlib relies on
+        // without a real trait-solver blanket impl.
         {
             let mn = self.ctx.name_str(method_name).to_string();
             if mn == "into" {

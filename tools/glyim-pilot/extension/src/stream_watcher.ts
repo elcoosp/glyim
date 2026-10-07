@@ -51,6 +51,22 @@ export class StreamWatcher {
     // Polling timer for streaming state (fallback)
     this.pollingTimer = setInterval(() => {
       if (!this.isWatching) return;
+      // T163-PATCHED [EXT-7]: rate-limit / server-error detection.
+      // `detectError` has been implemented on every provider adapter but
+      // was never called — the CAP-RETRY path in the server (REQ-FUNC-
+      // 033..040) had no input. Poll it once per tick; when a provider
+      // error is present, surface it via `onDangerousPattern` (a generic
+      // callback we reuse for out-of-band error signalling) and stop the
+      // watcher so it doesn't keep firing.
+      const providerErr = this.adapter.detectError?.();
+      if (providerErr) {
+        this.onDangerousPattern(
+          '',
+          `provider-error:${providerErr.kind ?? 'unknown'}`,
+        );
+        this.lastStreaming = false;
+        return;
+      }
       const streaming = this.adapter.isStreaming();
       if (this.lastStreaming && !streaming && !this.completed) {
         void this.serializedCheck();
