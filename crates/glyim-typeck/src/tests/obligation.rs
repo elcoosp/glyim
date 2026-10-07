@@ -88,6 +88,7 @@ fn obligation_fulfilled() {
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
+        pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
         expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),

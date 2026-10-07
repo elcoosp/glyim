@@ -106,6 +106,7 @@ pub fn make_single_body_hir(
         owner: LocalDefId::from_raw(0),
         exprs: expr_vec,
         pats: IndexVec::new(),
+        pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
         expr_spans,

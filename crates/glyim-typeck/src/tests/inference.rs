@@ -29,6 +29,7 @@ fn inference_param_type() {
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats,
+        pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![x_pat],
         span: Span::DUMMY,
         expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),

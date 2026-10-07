@@ -82,6 +82,7 @@ fn build_simple_hir(
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
+        pat_spans: glyim_core::arena::IndexVec::new(),
         params: Vec::new(),
         span: dummy_span(),
         expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.len()]),
