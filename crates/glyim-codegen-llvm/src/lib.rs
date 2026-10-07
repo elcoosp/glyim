@@ -333,12 +333,26 @@ impl LlvmBackend {
         module: &inkwell::module::Module<'ctx>,
         target_machine: &inkwell::targets::TargetMachine,
     ) -> Result<(), String> {
+        // T126-PATCHED [CLI-2]: `--lto fat` is now rejected explicitly
+        // when there are no secondary modules to merge. Previously the
+        // single-module call collapsed to the same pipeline as `--lto off`
+        // (a silent no-op); a user who passed `--lto fat` in the belief
+        // they were getting cross-module inlining got an identical object
+        // to `--lto off` with no diagnostic. Full fat LTO requires the
+        // multi-CGU compilation driver (partition() + per-CGU modules),
+        // which is in progress (see T124) but not yet wired end-to-end.
+        if matches!(self.lto, crate::passes::LtoKind::Fat) {
+            return Err(
+                "`--lto fat` requires multi-CGU compilation, which is not yet \
+                 wired end-to-end. Use `--lto off` (or `--codegen-units=1`) for \
+                 now; see KNOWN_GAPS Phase 10.2 / the T126 deferral note."
+                    .to_string(),
+            );
+        }
         // Honour the requested link-time optimization strategy (Phase 10.2).
-        // `run_lto` treats `None`/`Fat` as running the standard pipeline once
-        // (Fat with no secondary modules is just a single-module pass run), and
-        // surfaces `Thin` as an explicit tracked-gap error rather than silently
-        // no-op. Full multi-module merge requires the multi-CGU compilation
-        // driver, which is a tracked gap (KNOWN_GAPS.md Phase 10.2).
+        // `run_lto` treats `None` as running the standard pipeline once; it
+        // surfaces `Thin` as an explicit tracked-gap error rather than
+        // silently no-op.
         crate::passes::run_lto(
             module,
             &[],
