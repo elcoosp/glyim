@@ -16,13 +16,25 @@ impl<T> NonNull<T> {
     }
 
     /// Creates a new `NonNull` without checking for null.
+    ///
+    /// T140-PATCHED [STD-15]: direct struct construction. The `*mut T`
+    /// → `*const T` cast is a legal RawPtr→RawPtr conversion.
     fn new_unchecked(ptr: *mut T) -> Self {
-        // unsafe - compiler intrinsic
+        NonNull { pointer: ptr as *const T }
     }
 
     /// Creates a dangling but well-aligned `NonNull`.
+    ///
+    /// T140-PATCHED [STD-15]: for a byte-aligned marker pointer, use
+    /// `align_of::<T>() as *mut T`. When `align_of` is not resolved
+    /// (still a compiler intrinsic), fall back to `1 as *mut T` — which
+    /// is non-null and correct for all align-1 types; the strongest
+    /// guarantee (well-aligned) needs `align_of`, tracked alongside the
+    /// remaining intrinsics.
     fn dangling() -> Self {
-        // compiler intrinsic
+        NonNull {
+            pointer: (1 as *mut T) as *const T,
+        }
     }
 
     /// Returns the pointer as a raw pointer.

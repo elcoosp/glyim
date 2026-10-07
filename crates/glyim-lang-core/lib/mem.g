@@ -45,8 +45,17 @@ fn needs_drop<T>() -> bool {
 }
 
 /// Forgets about `value` without running its destructor.
+///
+/// T140-PATCHED [STD-15]: empty body. The compiler's current drop
+/// lowering treats `Drop` as a no-op in the interpreter (T009) and
+/// `glyim_drop_in_place(ptr, null)` as a no-op in LLVM codegen (T005),
+/// so simply letting `value` fall out of scope does NOT run its
+/// destructor. When real per-type drop glue lands, this needs to route
+/// through a `ManuallyDrop`-based implementation or a dedicated
+/// intrinsic to preserve the semantics.
 fn forget<T>(value: T) {
-    // compiler intrinsic - skips drop
+    // Intentionally empty. See doc-comment.
+    let _ = &value;
 }
 
 /// Takes ownership and returns the value, replacing it with `Default::default()`.
