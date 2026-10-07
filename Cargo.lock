@@ -1360,6 +1360,7 @@ dependencies = [
  "glyim-diag",
  "glyim-frontend",
  "glyim-hir",
+ "glyim-lang-std",
  "glyim-layout",
  "glyim-lower",
  "glyim-meta",
