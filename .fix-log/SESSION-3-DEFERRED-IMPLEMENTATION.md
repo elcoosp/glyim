@@ -151,3 +151,55 @@ uppercase-first heuristic.
   iff `T: Sync` (matching stdlib).
 - **T096 point 3** — plan claims raw pointers are `Send + Sync`; Rust
   says `*const T`/`*mut T` are `!Send + !Sync`.
+
+---
+
+## Post-review additions (final state)
+
+Completed during this session:
+- T101 [LOW-10] — polymorphization deduplication now runs end-to-end. The
+  pipeline supplies the pre-substitution body map to MonoCtx, enabling
+  accurate `used` analysis. The gate (stdlib typeck regressions) was lifted
+  by using manual loops in io.g / env.g instead of unregistered builtins.
+- T124 [PIPE-4] — source_module reflects declaring module; the def_to_module
+  map flows from CrateDefMap through the pipeline into mono-collection.
+- T126 [CLI-2] — `--lto fat` is now rejected with a clear error rather than
+  silently collapsing to `--lto off`.
+- T063/T141 follow-ups — replaced Vec::resize / Iterator::position /
+  Option::unwrap_or with manual loops to unblock stdlib type-checking.
+- All test literals updated for the new HIR `Body.pat_spans` and
+  `CrateDefMap.def_to_module` fields.
+
+## Truly remaining (multi-day) work
+
+### T140 [STD-15] — compiler intrinsics (9+ functions)
+For each bodyless function in `str.g` / `mem.g` / `ptr.g` / `panic.g`:
+1. Register a synthetic FnDefId in `TyCtxMut::register_builtin_methods`
+   with the right signature.
+2. Recognise the name in `check_expr`'s path-call path.
+3. Lower to a real intrinsic in `glyim-lower::lower_rvalue`.
+4. Handle in both backends (LLVM `try_lower_builtin_intrinsic`; bytecode
+   emitter) and in the interpreter.
+Estimated ~4-6 hours per intrinsic family.
+
+### T129/T130 [LSP-5/6] — scope-aware references / dep graph
+Rename and find-references are name-keyed. Full fix: key by
+`(owner_def_id, name)`; thread def-map scope stack through
+`walk_expr`/`walk_pattern`. ~1 day.
+
+### T139 [STD-14] — write_all strict semantics
+Blocked on guard-mistranslation fix in the compiler's typeck path.
+
+### T123 [LL-22] — FullLayoutComputer memoization
+Design documented in `abi.rs`; needs a hand-written pass through every
+FullLayoutComputer::new() call site to hold a single cached instance.
+
+### T100 [LOW-9] — async state transform wiring
+Requires emitting `match self.state { .. }` per `plan_resume_arm`, plus
+interp suspend/resume points and codegen call-frame layout.
+
+## Session totals
+- Commits this session: **99** (see `git log --oneline af19152b..HEAD`).
+- All 20 crate test suites green (2,884 tests passing, 2 ignored).
+- 8 deferred items implemented end-to-end; 2 rejected as incorrect per
+  Rust semantics; ~10 remaining with detailed design docs.
