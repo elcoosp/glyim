@@ -1,10 +1,10 @@
 # HANDOFF — Glyim compiler fix plan (current)
 
-**Updated at**: end of Session 5
-**HEAD**: `248a454a` (`fix(codegen): lower synthetic sentinel calls + accept Error const as zero`)
+**Updated at**: end of Session 5 (final)
+**HEAD**: `17aacb46` (`chore: Cargo.lock for glyim-test -> glyim-lang-std dep`)
 **Baseline for this session**: `bd571466` (the session-4 handoff doc commit)
 **Session-4 history**: preserved verbatim in `.fix-log/HANDOFF-session-4-archive.md`
-**Workspace state**: clean, 0 compile errors, **4569 passing / 2 failing** (2 skipped) across 65 test binaries.
+**Workspace state**: clean, 0 compile errors, **4570 passing / 1 failing** (2 skipped) across 65 test binaries.
 
 > **Correction notice.** The archived session-4 handoff claimed "3,175 tests passing, 0 failing". That was wrong twice over: the real suite is 4,571 tests, and there were **six** pre-existing failures at `bd571466` that the doc's verification commands could not see. See §5 for why, and §3 for what remains.
 
@@ -22,6 +22,13 @@ Six commits on top of `bd571466`:
 | `fed55588` | revert | Revert `114bb5f8` — based on a wrong hypothesis (see below). |
 | `f35321a5` | reapply | Restore `114bb5f8` after confirming the async failure it was blamed for is pre-existing. |
 | `248a454a` | fix(codegen) | Lower synthetic sentinel `FnDefId` calls to an `Error` constant; accept `MirConstKind::Error` in LLVM codegen as a zero of the destination type. **Fixes 4 `emit_modes` tests + `println` via `--with-stdlib`.** |
+| `b51f62bd` | docs(handoff) | Corrected this handoff. |
+| `00949c26` | docs(handoff) | Restore the session-4 archive (it had been committed empty). |
+| `80fe0fcd` | fix(hir/async) | **T100 real bug.** `rewrite_for_poll` searched for the fn-body root Block *after* rewriting; `rewrite_expr` allocates new Blocks (the `Pending => loop {}` arm), so the search found an empty inner Block, hit the silent `return` bail-out, and skipped the `Poll::Ready` wrap. The poll body was effectively empty. **Greens `async_state_machine_runs_via_interpreter`.** |
+| `591aa394` | fix(interp) | Accept `MirConstKind::Error` as `Unit` (symmetric with `248a454a`'s LLVM change). |
+| `7f57cf8e` | feat(harness) | `// compile-flags: --with-stdlib` — `PipelineCompiler` prepends the assembled minimal stdlib. |
+| `71b900dc` | fix(interp) | **Builtin-method dispatch.** The interpreter had no handler for compiler-synthetic builtin methods (`FnDefId` 9000+); stdlib code calling `Vec::push`/`Option::unwrap`/`String::as_str` panicked `function not found`. Adds `try_call_builtin`. **Greens `probe_option_unwrap.g`.** |
+| `17aacb46` | chore | `Cargo.lock` for the new `glyim-test` -> `glyim-lang-std` dep. |
 
 ### 1.1 The T121 revert/reapply (honest record)
 
@@ -60,31 +67,52 @@ Still open, with corrected reasoning:
 
 ---
 
-## 3. Genuinely remaining — the 2 failures
+## 3. Genuinely remaining — the last failure
 
-Both are **confirmed pre-existing** (they fail identically at `bd571466`).
+One test still fails: `glyim-test::run_pass_corpus run_pass_corpus_passes`.
+It reports **4 fixtures**, but they are **two distinct workstreams**, neither a
+one-line fix.
 
-### 3.1 `glyim-pipeline::async_runtime` — interpreter reads uninitialized local 0
+Matrix today: **4,570 passing / 1 failing / 2 skipped** (was 4,565/6 at session start).
 
-```
-Panic("read from uninitialized local 0 (owner=Some(DefId { local_id: LocalDefId(10) }))")
-```
+### 3.1 The interpreter cannot execute `vec.g`'s source `Vec::push`
 
-The generated state-machine `poll` body reads local 0 before the wrapper has initialized it. This is a real bug in the M4 async work. It needs MIR-convention recon: in the interpreter, `arg_count` locals are `1..=arg_count` (`lib.rs:663`) — local 0 is the return slot, and `poll`'s receiver binding must be established before the dispatch `match self.state` runs. **Do not "fix" this by loosening the uninitialized-read check** — the check is correct; the generated MIR is wrong.
+`probe_vec_push_len.g` runs but returns `0` instead of `3`. Instrumentation shows:
+- `Vec::len` reaches the builtin dispatch (`recv = Aggregate([])`).
+- **`Vec::new` and `Vec::push` do NOT reach it** — they resolve to their *source*
+  bodies in `crates/glyim-lang-alloc/lib/vec.g`, and those bodies fail silently
+  in the interpreter.
 
-### 3.2 `glyim-test::run_pass_corpus` — 5 probe fixtures
+`vec.g`'s `push` calls `RawVec::reserve`, `buf.as_mut_ptr`, `ptr::write`, and
+updates `self.len`. The interpreter does not execute that allocation path
+correctly, so the `Vec::push` arm added in `71b900dc` is dead code for this
+fixture.
 
-The harness (`TestRunner`) does **not** inject the stdlib. It has no `with-stdlib` annotation (see `harness/collector.rs:105`). So these probes fail for four *different* reasons:
+**This is the real remaining work.** Fix needs either (a) the interpreter to run
+`RawVec`/`ptr::*` allocation, or (b) typeck to route `Vec::push` to the builtin
+id instead of the source body. Either is a workstream, not a patch.
 
-| Fixture | Reason | Kind |
-|---|---|---|
-| `probe_println_function.g` | `unresolved name println` | harness scope — needs stdlib injection or relocation |
-| `probe_println_macro.g` | `unresolved name println` | same |
-| `probe_string_push_str.g` | `unresolved name as_str`, `println` | same, plus a missing `String::as_str` |
-| `probe_vec_push_len.g` | `mismatched types: usize vs i32` | **fixture is wrong** — `v.len()` returns `usize`, `fn main() -> i32` requires a cast |
-| `probe_option_unwrap.g` | exit 101, `TyKind::Error` reaches LLVM | **real `Option::unwrap` bug** |
+### 3.2 The `println` chain
 
-The right fix for the first three is a **harness decision**: either teach `TestRunner` to inject `std_source_assembled_minimal` the way `inject_assembled_stdlib` does, or move the probes to `glyim-lang-std/tests/` where `println.g` already lives. `probe_vec_push_len.g` is a one-line fixture fix. `probe_option_unwrap.g` is a genuine compiler bug in the `Option::unwrap` lowering path.
+`probe_println_function.g`, `probe_println_macro.g`, `probe_string_push_str.g`
+compile (thanks to `7f57cf8e`) but panic at runtime. `println`'s body is:
+
+    stdout().write_all(s.as_bytes()).unwrap();
+
+Each step is a builtin or FFI call the interpreter does not implement:
+`stdout()` (FFI), `write_all` (trait method on `Stdout`), `as_bytes` (builtin —
+partly handled), `unwrap` (builtin — handled). This needs the interpreter to
+model stdout/write side-effects; it currently has no output-capture model at
+all (`interpreter_runner.rs`'s `stdout` field is always empty).
+
+### 3.3 Honest scope note
+
+The session-4 handoff's claim of "two remaining failures" was an undercount:
+there were **six** pre-existing failures at `bd571466`, of which four were test
+files that did not compile (`--workspace` hides test targets) and two were real
+bugs (async interpreter, `Option::unwrap`). This session closed four of those
+six, plus the two genuine bugs, leaving one multi-fixture failure with the two
+workstreams above.
 
 ---
 
