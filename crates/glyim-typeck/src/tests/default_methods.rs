@@ -118,6 +118,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
         params: vec![],
         return_ty: None,
         default_body: None,
+                generic_params: vec![],
     };
 
     let trait_item = TraitItem {
@@ -251,12 +252,14 @@ fn v03_t03_default_method_calling_another_default_method() {
             params: vec![],
             return_ty: None,
             default_body: None,
+                generic_params: vec![],
         },
         TraitMethod {
             name: foo_name,
             params: vec![],
             return_ty: None,
             default_body: None,
+                generic_params: vec![],
         },
     ];
 
@@ -386,6 +389,7 @@ fn v03_t04_default_method_with_generic_params() {
         params: vec![],
         return_ty: None,
         default_body: None,
+                generic_params: vec![],
     };
 
     let trait_item = TraitItem {
@@ -501,6 +505,7 @@ fn v03_t05_default_method_calls_missing_method_error() {
         params: vec![],
         return_ty: None,
         default_body: None,
+                generic_params: vec![],
     };
 
     let trait_item = TraitItem {
