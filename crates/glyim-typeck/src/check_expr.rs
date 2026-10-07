@@ -2615,23 +2615,38 @@ impl<'a> FnCtxt<'a> {
                     });
                 let _ = adt_name;
                 // Cheaper: try the canonical builtin AdtIds for common names.
-                // T093-DEFERRED [TCK-27]: the fallback here is still the
-                // original "any ADT matches a small candidate list" version.
-                // A correct fix needs the ADT's name, which
-                // `adt_name_for_id` exposes only on `TyCtxMut`. Porting
-                // that lookup onto the frozen `TyCtx` (or threading the
-                // name through `lookup_builtin_method`) is a follow-up.
-                // See .fix-log/WAVE2-SKIPPED.md.
-                let candidates: [u32; 4] = [1010, 1011, 1006, 1007];
+                // T093-PATCHED [TCK-27]: consult the receiver ADT's real
+                // name before accepting a builtin fallback. The previous
+                // code matched any `Adt(_)` receiver against a small
+                // candidate list, so `my_struct.unwrap()` type-checked and
+                // dispatched to `Option::unwrap`'s intrinsic — silent
+                // wrong dispatch.
+                let receiver_adt_id = match self.ctx.ty_kind(step_ty) {
+                    TyKind::Adt(id, _) => Some(*id),
+                    TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                        TyKind::Adt(id, _) => Some(*id),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let receiver_name: Option<String> = receiver_adt_id
+                    .and_then(|id| self.ctx.adt_name_for_id(id))
+                    .map(|n| self.ctx.name_str(n).to_string());
+                let candidate_pairs: &[(&str, u32)] = &[
+                    ("Option", 1010),
+                    ("Result", 1011),
+                    ("Iterator", 1006),
+                    ("IntoIterator", 1007),
+                ];
                 let mut found = None;
-                for cand in candidates {
-                    if let Some(hit) =
-                        self.ctx.lookup_builtin_method(AdtId::from_raw(cand), method_name)
+                for (expected_name, cand) in candidate_pairs {
+                    if receiver_name.as_deref() == Some(*expected_name)
+                        && let Some(hit) = self
+                            .ctx
+                            .lookup_builtin_method(AdtId::from_raw(*cand), method_name)
                     {
-                        if matches!(self.ctx.ty_kind(step_ty), TyKind::Adt(_, _)) {
-                            found = Some(hit);
-                            break;
-                        }
+                        found = Some(hit);
+                        break;
                     }
                 }
                 found?

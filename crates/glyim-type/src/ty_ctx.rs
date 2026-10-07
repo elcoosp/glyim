@@ -508,6 +508,17 @@ impl TyCtx {
     /// Snapshot of every registered ADT id. Used by post-inference passes
     /// (`glyim_typeck::zonk`) that fold inference variables out of
     /// `AdtDef` field types.
+    /// T093-PATCHED [TCK-27]: reverse lookup — return the interned name
+    /// for an `AdtId`. The forward `adt_by_name` map is `Name -> AdtId`;
+    /// this scans it to answer `AdtId -> Name`. Needed by the typeck
+    /// builtin-method fallback so `my_struct.unwrap()` can be rejected
+    /// (the ADT's name is not Option/Result).
+    pub fn adt_name_for_id(&self, id: AdtId) -> Option<Name> {
+        self.adt_by_name
+            .iter()
+            .find_map(|(name, aid)| if *aid == id { Some(*name) } else { None })
+    }
+
     pub fn adt_def_ids(&self) -> Vec<AdtId> {
         self.adt_defs.keys().copied().collect()
     }
