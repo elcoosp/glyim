@@ -440,12 +440,36 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     if cacheable
         && let Some(c) = cache.as_ref()
     {
+        // T128-PATCHED [CLI-4]: hash each proc-macro dependency file's
+        // bytes into the cache key. Also mix the LTO kind so fat/incremental
+        // (once implemented) do not serve cross-config objects.
+        let mut extra_key_bytes: Vec<u8> = Vec::new();
+        if let Some(list) = args.proc_macro_deps.as_deref() {
+            for p in list.split(',').map(|s| s.trim()) {
+                if p.is_empty() {
+                    continue;
+                }
+                extra_key_bytes.extend_from_slice(b"\x1fpm\x1f");
+                extra_key_bytes.extend_from_slice(p.as_bytes());
+                extra_key_bytes.extend_from_slice(b"\x1f");
+                if let Ok(bytes) = std::fs::read(p) {
+                    extra_key_bytes.extend_from_slice(&bytes);
+                }
+            }
+        }
+        extra_key_bytes.extend_from_slice(b"\x1flto\x1f");
+        extra_key_bytes.push(match lto {
+            glyim_codegen_llvm::passes::LtoKind::None => 0,
+            glyim_codegen_llvm::passes::LtoKind::Thin => 1,
+            glyim_codegen_llvm::passes::LtoKind::Fat => 2,
+        });
         let key = glyim_pipeline::Pipeline::compute_cache_key(
             &mut db,
             input,
             &target_triple,
             args.opt_level,
             matches!(emit, EmitKind::Exec) && entry_main.is_some(),
+            &extra_key_bytes,
         );
         if let Some(k) = key {
             if let Some(hit) = c.lookup(&k) {

@@ -99,6 +99,33 @@ impl CompileCache {
     /// stale-object bug (upgraded compiler, unchanged source, cache hit on an
     /// object the old compiler emitted) is exactly the failure mode this
     /// guards against.
+    /// T128-PATCHED [CLI-4]: same as `key` but also hashes an `extra`
+    /// byte slice (used for proc-macro dependency files).
+    pub fn key_with_extra(
+        source: &str,
+        target: &str,
+        opt_level: u8,
+        entry_main: bool,
+        extra: &[u8],
+    ) -> String {
+        let base = Self::key(source, target, opt_level, entry_main);
+        if extra.is_empty() {
+            return base;
+        }
+        let mut h = Sha256::new();
+        h.update(base.as_bytes());
+        h.update(b"\x1fextra\x1f");
+        h.update(extra);
+        let digest = h.finalize();
+        // Same lowercase-hex loop as `key` (avoids pulling in a hex crate).
+        let mut s = String::with_capacity(digest.len() * 2);
+        for b in digest {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+        }
+        s
+    }
+
     pub fn key(source: &str, target: &str, opt_level: u8, entry_main: bool) -> String {
         let mut h = Sha256::new();
         // Field separator so `("ab", "c")` and `("a", "bc")` cannot collide.

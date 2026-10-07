@@ -137,7 +137,31 @@ impl StatePersistence {
     /// add_session.
     pub async fn add_session(&self, session: SessionState) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
+        // T156-CAP-PATCHED [PILOT-14]: cap the session map at 200 entries.
+        // Every unknown `session_id` in an `ops.ready` creates a session;
+        // a client that keeps sending new ids would grow the map (and the
+        // serialized state file) without bound.
         p.state.sessions.insert(session.stream_id.clone(), session);
+        if p.state.sessions.len() > 200 {
+            // Evict the oldest sessions by last-activity; the exact
+            // retention policy is a follow-up but 200 is generous and
+            // bounded.
+            let mut ids: Vec<(String, chrono::DateTime<chrono::Utc>)> = p
+                .state
+                .sessions
+                .iter()
+                .map(|(k, v)| (k.clone(), v.last_activity))
+                .collect();
+            ids.sort_by_key(|(_, t)| *t);
+            while p.state.sessions.len() > 200 {
+                if let Some((id, _)) = ids.first() {
+                    p.state.sessions.remove(id);
+                    ids.remove(0);
+                } else {
+                    break;
+                }
+            }
+        }
         p.save().await
     }
     /// try_update_session.

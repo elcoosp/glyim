@@ -239,19 +239,26 @@ impl Pipeline {
     /// `has_entry_main` must be `true` when the caller will ask the backend
     /// for a C-ABI `main` wrapper (`--emit=exec`), since that changes the
     /// produced object.
+    /// T128-PATCHED [CLI-4]: the cache key now also mixes in an `extra`
+    /// byte slice. Callers (the CLI) pass the concatenated bytes of every
+    /// `--proc-macro-deps` file. Without this, editing `pm.g` left the
+    /// main source's key unchanged and the cache served an object
+    /// produced by the old macro expansion.
     pub fn compute_cache_key(
         db: &mut Database,
         path: &Path,
         target: &str,
         opt_level: u8,
         has_entry_main: bool,
+        extra: &[u8],
     ) -> Option<String> {
         let (_, source) = load_crate_source(db, path).ok()?;
-        Some(glyim_db::cache::CompileCache::key(
+        Some(glyim_db::cache::CompileCache::key_with_extra(
             &source,
             target,
             opt_level,
             has_entry_main,
+            extra,
         ))
     }
 }
