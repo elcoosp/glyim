@@ -58,6 +58,12 @@ pub struct CrateDefMap {
     /// id 51 previously overwrote `io::copy`'s `FnSig` (also id 51),
     /// making `io::copy(..)` type as `Adt63` (OpenOptions).
     pub max_local_def_id: u32,
+    /// T124-PATCHED [PIPE-4]: maps every `LocalDefId` to its declaring
+    /// module. Consumed by mono-collection to populate
+    /// `MonoItemData::source_module` so `partition()` can produce multiple
+    /// CGUs (and eventually parallel codegen). Previously discarded by
+    /// `build_def_map`, forcing `source_module = 0` and a single CGU.
+    pub def_to_module: HashMap<LocalDefId, ModuleId>,
 }
 
 #[derive(Clone, Debug)]
@@ -591,6 +597,9 @@ pub fn build_def_map(
         interner,
         variant_map,
         max_local_def_id: def_counter,
+        // T124-PATCHED [PIPE-4]: hand the def-id-to-module map through
+        // to the pipeline for mono-collection.
+        def_to_module,
     };
     (def_map, diagnostics)
 }

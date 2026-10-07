@@ -69,6 +69,12 @@ pub struct MonoCtx<'a> {
     /// argument types during monomorphization (closes the single-await
     /// `TyKind::Error` codegen gap for generic `Future::Output`/`block_on`).
     ty_ctx: Option<&'a TyCtx>,
+    /// T124-PATCHED [PIPE-4]: optional `LocalDefId → ModuleId` map. When
+    /// provided (by the pipeline), each `MonoItemData::source_module` is
+    /// set to the module id of the item's defining def. When absent
+    /// (tests, ad-hoc callers), it defaults to 0 — matching the previous
+    /// single-CGU behaviour.
+    def_to_module: Option<&'a std::collections::HashMap<glyim_core::def_id::LocalDefId, u32>>,
 }
 
 impl<'a> MonoCtx<'a> {
@@ -78,6 +84,7 @@ impl<'a> MonoCtx<'a> {
             items: IndexVec::new(),
             queue: std::collections::VecDeque::new(),
             seen: std::collections::HashSet::new(),
+            def_to_module: None,
             cache: std::collections::HashMap::new(),
             drop_locals: Vec::new(),
             ty_ctx: None,
@@ -103,6 +110,16 @@ impl<'a> MonoCtx<'a> {
         if !self.seen.contains(&item) && !self.cache.contains_key(&item) {
             self.queue.push_back(item);
         }
+    }
+
+    /// T124-PATCHED [PIPE-4]: supply a def-to-module map so each
+    /// `MonoItemData::source_module` reflects the item's declaring module
+    /// rather than a hardcoded 0.
+    pub fn with_def_to_module(
+        &mut self,
+        map: &'a std::collections::HashMap<glyim_core::def_id::LocalDefId, u32>,
+    ) {
+        self.def_to_module = Some(map);
     }
 
     /// collect.
@@ -181,7 +198,29 @@ impl<'a> MonoCtx<'a> {
                 // def-map's `def_to_module` map into `MonoCtx`; tracked for
                 // a follow-up batch. For now this marker documents the
                 // limitation.
-                source_module: 0,
+                // T124-PATCHED [PIPE-4]: look up the item's defining
+                // module. `MonoItem::Fn/Static/Const` all carry a
+                // LocalDefId (in their `def_id`); check against the
+                // pipeline-supplied def_to_module map. Fall back to 0 when
+                // the map is absent or the def isn't found (e.g. drop glue).
+                source_module: match (&item, self.def_to_module) {
+                    (MonoItem::Fn { def_id, .. }, Some(map)) => {
+                        map.get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                            .copied()
+                            .unwrap_or(0)
+                    }
+                    (MonoItem::Const { def_id, .. }, Some(map)) => {
+                        map.get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                            .copied()
+                            .unwrap_or(0)
+                    }
+                    (MonoItem::Static { def_id }, Some(map)) => {
+                        map.get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                            .copied()
+                            .unwrap_or(0)
+                    }
+                    _ => 0,
+                },
             });
             self.cache.insert(item, id);
         }

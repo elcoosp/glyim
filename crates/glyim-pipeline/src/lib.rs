@@ -573,6 +573,18 @@ impl Pipeline {
             let body_provider = make_mir_body_provider(&mir_bodies_map, &sink_cell, ty_ctx_ref);
             let drop_provider = make_drop_glue_provider(ty_ctx_ref);
             mono_ctx.with_ty_ctx(ty_ctx_ref);
+            // T124-PATCHED [PIPE-4]: supply the def-id-to-module map so
+            // each MonoItemData::source_module reflects its declaring
+            // module. Converts ModuleId → u32 for the MonoCtx API.
+            let def_to_module_u32: std::collections::HashMap<
+                glyim_core::def_id::LocalDefId,
+                u32,
+            > = def_map
+                .def_to_module
+                .iter()
+                .map(|(k, v)| (*k, v.to_raw()))
+                .collect();
+            mono_ctx.with_def_to_module(&def_to_module_u32);
             mono_ctx.collect(&mono_roots, &body_provider, &drop_provider);
             // §8.12: post-monomorphization semantic checks. These were dead
             // `#[allow(dead_code)]` functions; they now run here, immediately
