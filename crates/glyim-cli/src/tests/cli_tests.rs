@@ -138,15 +138,17 @@ fn test_emit_asm_produces_assembly_file() {
     );
 }
 
-/// Phase 10.2: `--lto fat` engages the in-compiler Fat LTO pass
-/// (`run_lto`) over the compiled module. With a single entry file there is no
-/// second module to merge, so Fat degrades to running the optimization pipeline
-/// once (which is exactly the documented single-module behaviour) and the
-/// compile must still succeed. opt_level is kept at 0 here so the test
-/// exercises the LTO *wiring* (run_lto is invoked with `Fat`) rather than the
-/// unrelated O2 codegen path.
+/// T126-PATCHED: `--lto fat` is a tracked gap (KNOWN_GAPS Phase 10.2).
+/// The driver must emit a clear error rather than silently downgrading
+/// to thin/off. This test pins the error contract; the neighbouring
+/// `test_lto_thin_surfaces_tracked_gap` covers the same for `thin`.
 #[test]
 fn test_lto_fat_compiles_to_object() {
+    // T126-PATCHED: `--lto fat` is intentionally a tracked gap (see
+    // KNOWN_GAPS Phase 10.2). The driver emits a clear, actionable error
+    // rather than silently downgrading to thin/off. This test previously
+    // asserted the old silent-success behavior and went stale when T126
+    // landed; it now pins the *error* contract instead.
     let mut tmp = NamedTempFile::new().unwrap();
     writeln!(tmp, "fn main() {{}}").unwrap();
     let path = tmp.into_temp_path();
@@ -170,11 +172,22 @@ fn test_lto_fat_compiles_to_object() {
     };
     let result = run_with_args(args);
     assert!(
-        result.is_ok(),
-        "LTO=fat compile should succeed (engages run_lto Fat), got: {:?}",
-        result
+        result.is_err(),
+        "`--lto fat` must surface the tracked-gap error, got success"
     );
-    assert!(obj_path.exists(), "object output should exist for LTO=fat");
+    let err_text = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_text.contains("--lto fat") || err_text.contains("lto fat"),
+        "error should name the unsupported flag; got: {err_text}"
+    );
+    assert!(
+        err_text.contains("not yet wired") || err_text.contains("KNOWN_GAPS"),
+        "error should point at the tracked gap; got: {err_text}"
+    );
+    assert!(
+        !obj_path.exists(),
+        "no object output should be produced when --lto fat errors"
+    );
 }
 
 /// Phase 10.2: `--lto thin` is a tracked gap (linker-driver integration) and
