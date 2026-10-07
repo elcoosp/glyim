@@ -664,6 +664,25 @@ fn rewrite_for_poll(
     ready_id: crate::Name,
     pending_id: crate::Name,
 ) {
+    // T100-PATCHED-ROOTBLOCK: capture the function's root Block *before*
+    // rewriting. `rewrite_expr` allocates new `Expr::Block` nodes (the
+    // `Pending => loop {}` arm allocates an empty Block as the loop body),
+    // so a post-rewrite reverse search for "the last Block in the arena"
+    // finds that empty inner Block instead of the fn-body root. Its
+    // `tail` is `None`, so the wrapping code below took the
+    // `Expr::Block { .. } => return` bail-out branch and left the poll
+    // body without its `Poll::Ready(...)` wrapper — producing a
+    // practically-empty MIR body (`StorageLive(self); Return`) and the
+    // "read from uninitialized local 0" failure at runtime.
+    //
+    // `root_expr_id` uses the same reverse search as the original code
+    // here, so capturing its result before any allocation preserves the
+    // exact intended root.
+    let pre_rewrite_root_block: Option<ExprId> = (0..body.exprs.len())
+        .rev()
+        .map(|i| ExprId::from_raw(i as u32))
+        .find(|&rid| matches!(body.exprs[rid], Expr::Block { .. }));
+
     // Snapshot expr ids to avoid iterating while mutating.
     let ids: Vec<ExprId> = (0..body.exprs.len())
         .map(|i| ExprId::from_raw(i as u32))
@@ -699,10 +718,9 @@ fn rewrite_for_poll(
     // forward finds a *nested* block (if/match/loop body) and collapses
     // the poll body onto it — every other statement of the async fn
     // including the `.await` polling becomes unreachable.
-    let root_block = (0..body.exprs.len())
-        .rev()
-        .map(|i| ExprId::from_raw(i as u32))
-        .find(|&rid| matches!(body.exprs[rid], Expr::Block { .. }));
+    // T100-PATCHED-ROOTBLOCK: use the captured pre-rewrite root; a fresh
+    // reverse search would find a rewrite-allocated inner Block.
+    let root_block = pre_rewrite_root_block;
     let tail_id = match root_block {
         Some(rid) => match &body.exprs[rid] {
             Expr::Block { tail: Some(t), .. } => *t,
