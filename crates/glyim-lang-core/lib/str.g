@@ -1,3 +1,15 @@
+//! T140-DEFERRED [STD-15]: several `str` methods have empty bodies
+//! ("compiler intrinsic" markers): `len`, `contains`, `trim`, and
+//! `Chars::next`. A full implementation needs either:
+//!   * a compiler-intrinsic lowering path (register a synthetic FnDefId
+//!     in `TyCtxMut::register_builtin_methods`, lower in
+//!     `glyim-lower`, implement in both backends and the interpreter), or
+//!   * native slice support (str-indexing by byte range currently
+//!     returns `()`, so the pure-Glyim versions of `trim`/`contains`
+//!     don't type-check).
+//! Tracked as a follow-up; the empty bodies are functionally no-ops
+//! until then.
+
 //! String slice operations for the Glyim core library.
 
 /// Extension methods for string slices.
