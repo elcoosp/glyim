@@ -195,6 +195,11 @@ pub struct TraitMethod {
     pub return_ty: Option<TypeRef>,
     /// Struct.
     pub default_body: Option<BodyId>,
+    /// T178-PATCHED [TCK-28]: declared generic parameters on the method.
+    /// Carried through so typeck can populate `MethodDef::generic_params`
+    /// and the object-safety check can correctly reject
+    /// `trait It { fn next_of<T>(&mut self, x: T); }` used as `dyn It`.
+    pub generic_params: Vec<GenericParam>,
 }
 
 #[derive(Clone, Debug)]

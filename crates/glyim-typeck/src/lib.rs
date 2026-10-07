@@ -615,6 +615,11 @@ pub fn typeck_crate(
                             abi: Abi::Glyim,
                         },
                         fn_def_id: None,
+                        // T178-PATCHED [TCK-28]: surface the method's
+                        // declared generic-parameter list so the
+                        // object-safety check rejects generic methods on
+                        // `dyn Trait`.
+                        has_generic_params: !m.generic_params.is_empty(),
                     })
                     .collect();
                 ctx.register_trait_def(

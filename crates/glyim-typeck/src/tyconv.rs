@@ -182,17 +182,13 @@ pub fn resolve_type_ref(
                             name: m.name,
                             span,
                             self_kind: self_kind_of_inputs(&*ctx, inputs),
-                            // T178-DEFERRED [TCK-28]: generic-parameter
-                            // detection requires the trait method's own
-                            // generic-param list. That list lives on the
-                            // CST/HIR node but is not carried through
-                            // `FnSig`; adding it to `MethodDef` or to
-                            // `TraitMethod` in HIR is the prerequisite.
-                            // Until then, the conservative `false` keeps
-                            // the object-safety check from over-rejecting
-                            // (it misses the generic-method rejection
-                            // path, tracked as a follow-up).
-                            has_generic_params: false,
+                            // T178-PATCHED [TCK-28]: MethodDef now carries
+                            // the trait method's declared generic-param
+                            // count. A method with type generics cannot be
+                            // put in a vtable, so `trait It { fn next_of<T>
+                            // (&mut self, x: T); }` used as `dyn It` is
+                            // rejected (Rust-matching).
+                            has_generic_params: m.has_generic_params,
                             returns_self: false,
                         }
                     })

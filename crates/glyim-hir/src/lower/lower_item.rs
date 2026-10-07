@@ -853,6 +853,10 @@ pub(crate) fn lower_trait_def(
             params,
             return_ty,
             default_body,
+            // T178-PATCHED [TCK-28]: capture the method's declared
+            // generic parameters so typeck can populate MethodDef and
+            // the object-safety check sees them.
+            generic_params: collect_generic_params(&method_node, interner),
         });
     }
 

@@ -82,4 +82,10 @@ pub struct MethodDef {
     /// method whose monomorphized body should be dispatched. `None` when the
     /// method's def id is not yet known (e.g. built-in traits).
     pub fn_def_id: Option<glyim_core::def_id::FnDefId>,
+    /// T178-PATCHED [TCK-28]: number of generic type parameters declared
+    /// directly on the method (excluding lifetime params). Used by the
+    /// object-safety check: a method with type generics cannot be in a
+    /// vtable, so `trait It { fn next_of<T>(&mut self, x: T); }` cannot be
+    /// used as `dyn It`. Populated from HIR's `TraitMethod.generic_params`.
+    pub has_generic_params: bool,
 }
