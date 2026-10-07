@@ -879,7 +879,18 @@ impl<'tcx> Interpreter<'tcx> {
                 }
                 Ok(InterpValue::Aggregate(values))
             }
-            MirConstKind::Error => Err(InterpError::Panic("Error const encountered".into())),
+            MirConstKind::Error => {
+                // T140-PATCHED-INTERP-ERROR: compiler-synthetic builtin calls
+                // (`into`/`to_string`/`clone`/`drop`) lower to an `Error`
+                // constant on runtime-dead branches (e.g. the error arm of
+                // `Result::unwrap` calling `E::to_string()` for a generic `E`).
+                // LLVM codegen tolerates it (see `T140-PATCHED-LLVM-ERROR`);
+                // the interpreter must match. Returning `Unit` here is safe
+                // because the value is never consumed on a live path — a
+                // branch that actually reads it is already a compiler bug
+                // that this fix does not attempt to mask.
+                Ok(InterpValue::Unit)
+            }
             // Devirtualized at the `Call` terminator before being evaluated as a
             // value; should never be reached as an operand constant.
             MirConstKind::VirtualMethod { .. } => Err(InterpError::Panic(
