@@ -223,7 +223,41 @@ impl<'a> FnCtxt<'a> {
                                 };
                             }
                         }
-                        // Genuinely unresolved.
+                        // T175-PATCHED-2 [HIRX-6]: a *single-segment*
+                        // unresolved path pattern is a legitimate binding
+                        // in Rust — e.g. `let Name = x;` or
+                        // `match v { A => 1, _ => 0 }` bind a variable,
+                        // not a variant/const. The HIR emits
+                        // `Pat::Path` for any uppercase-starting
+                        // identifier; typeck must not reject it just
+                        // because the name doesn't resolve to a real
+                        // variant. Fall back to a Binding when the path
+                        // is single-segment and Plain-kind.
+                        let is_single_segment_plain = matches!(
+                            path.kind,
+                            glyim_core::path::PathKind::Plain
+                        ) && path.segments.len() == 1;
+                        if is_single_segment_plain
+                            && let Some(name) = path.as_name()
+                        {
+                            let ctx_name = self.remap_name(name);
+                            let id = self.env.add_binding(name, expected_ty, Mutability::Not);
+                            if ctx_name != name {
+                                self.env.add_alias(ctx_name, id);
+                            }
+                            return thir::Pattern {
+                                kind: thir::PatternKind::Binding {
+                                    var_id: thir::LocalVarId::from_raw(id.to_raw()),
+                                    name: ctx_name,
+                                    mutability: Mutability::Not,
+                                    subpattern: None,
+                                },
+                                ty: expected_ty,
+                                span,
+                            };
+                        }
+                        // Genuinely unresolved (multi-segment or qualified
+                        // path). Diagnose.
                         let label = if let Some(name) = path.as_name() {
                             format!("unresolved path pattern `{}`", self.ctx.name_str(name))
                         } else {
