@@ -222,6 +222,42 @@ fn check_terminator_conflicts(
             }
         }
     }
+
+    // T104-PATCHED [BCK-2]: `Call { destination, .. }` writes to
+    // `destination`; `Drop { place, .. }` moves-out of `place`. Both are
+    // write effects on the target place, and both must be checked against
+    // the active loans — matching the write-conflict logic in
+    // `check_stmt_conflicts` case (b). Previously the terminator check
+    // only inspected reads (func/args/discr), so `let r = &x; f(&mut r, x)`
+    // and `let r = &x; drop(x)` both slipped through.
+    let mut write_places: SmallVec<[Place; 2]> = SmallVec::new();
+    match &terminator.kind {
+        glyim_mir::TerminatorKind::Call { destination, .. } => {
+            write_places.push(destination.clone());
+        }
+        glyim_mir::TerminatorKind::Drop { place, .. } => {
+            write_places.push(place.clone());
+        }
+        _ => {}
+    }
+    for place in &write_places {
+        for loan in active_loans.iter().copied() {
+            if places_conflict(place, &loan.borrowed_place) {
+                let name = ctx.local_name(place.local);
+                let msg = format!(
+                    "cannot write to `{name}` because it is {} borrowed",
+                    borrow_kind_label(&loan.kind)
+                );
+                let mut diag = GlyimDiagnostic::borrow_error(terminator.source_info.span, msg);
+                diag = diag.with_sub(SubDiagnostic {
+                    severity: DiagSeverity::Note,
+                    message: format!("{} borrow occurs here", borrow_kind_label(&loan.kind)),
+                    span: Some(MultiSpan::from_span(loan.span)),
+                });
+                errors.push(diag);
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
