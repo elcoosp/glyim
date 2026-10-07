@@ -1371,6 +1371,33 @@ impl TyCtxMut {
     /// via the function `fn_def_id`. Populated during `typeck_crate` from
     /// `impl Trait for Type` items; carried into the frozen `TyCtx` for
     /// monomorphization / interpreter devirtualization.
+    /// T179-PATCHED [TCK-29]: mirror of `TyCtx::resolve_trait_method` on the
+    /// mutable context. `impl_method_fns` is populated by typeck's impl scan,
+    /// which runs on `TyCtxMut`. The universal method gate in check_expr
+    /// needs this lookup while only holding a `TyCtxMut`.
+    pub fn resolve_trait_method(
+        &self,
+        trait_def_id: glyim_core::def_id::TraitDefId,
+        recv_ty: crate::Ty,
+        method_name: Name,
+    ) -> Option<FnDefId> {
+        // Peel leading references so `&T` / `&mut T` receivers see the
+        // underlying `Self` (mirrors the frozen-context implementation).
+        let mut base = recv_ty;
+        while let crate::TyKind::Ref(_, inner, _) = self.ty_kind(base) {
+            base = *inner;
+        }
+        let candidates = [base, recv_ty];
+        for cand in candidates {
+            if let Some(methods) = self.impl_method_fns.get(&(trait_def_id, cand))
+                && let Some(&fn_id) = methods.get(&method_name)
+            {
+                return Some(fn_id);
+            }
+        }
+        None
+    }
+
     pub fn register_impl_method(
         &mut self,
         trait_def_id: glyim_core::def_id::TraitDefId,

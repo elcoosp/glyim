@@ -2515,46 +2515,78 @@ impl<'a> FnCtxt<'a> {
     /// + name (so the caller falls through to user-impl / generic dispatch).
     fn try_builtin_method(&mut self, step_ty: Ty, method_name: Name) -> Option<(Ty, FnDefId)> {
 
-        // T179-DEFERRED [TCK-29]: universal `into`/`to_owned`/`to_string`/
-        // `clone` resolution currently accepts any receiver via a
-        // synthetic fn id. Correctly gating on trait-impl existence
-        // requires `TyCtx` to expose a `has_trait_impl(ty, trait_id)`
-        // query that reads the impl_method_fns / coherence registries —
-        // currently only `resolve_trait_method` exists (which itself
-        // takes a method name). Implementing the gate is tracked as a
-        // follow-up; until then, `Mutex.to_string()` and friends are
-        // accepted.
-        //
-        // Universal methods resolve for any receiver via a synthetic fn
-        // id whose output is either a fresh inference var (context-pinned
-        // by the caller, e.g. `.into()` where the target is stated) or a
-        // `String` for `to_string`/`to_owned`. This covers blanket-like
-        // `From`/`Into`/`ToString`/`Clone` behaviour the stdlib relies on
-        // without a real trait-solver blanket impl.
+        // T179-PATCHED [TCK-29]: universal `into`/`to_owned`/`to_string`/
+        // `clone` are now gated on a real receiver-shape decision. The
+        // pre-fix code accepted any receiver (`Mutex.to_string()`,
+        // `Option<i32>.clone()` via a synthetic fn id whose output is
+        // discarded or assumed). We accept:
+        //   * primitives and known builtin types (i32/u8/bool/char/str/
+        //     String/&T/Box/Vec/…), which have implicit trait impls the
+        //     compiler does not register via `impl_method_fns`;
+        //   * any receiver for which `resolve_trait_method(Clone, recv,
+        //     "clone")` (resp. `Into`, `ToString`) finds a registered
+        //     user impl.
+        // Anything else is rejected so the caller falls through to the
+        // generic method-resolution path (which will report "no method").
         {
             let mn = self.ctx.name_str(method_name).to_string();
-            if mn == "into" {
-                // Result is a fresh var: the caller's context (assignment,
-                // return, explicit comparison) pins the target.
-                let var = self.infer.new_ty_var(self.ctx);
-                let out_ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-                let fn_id = FnDefId::from_raw(u32::MAX - 1);
-                return Some((out_ty, fn_id));
-            }
-            if mn == "to_owned" || mn == "to_string" {
-                let out_ty = self.ctx.mk_ty(TyKind::String);
-                let fn_id = FnDefId::from_raw(u32::MAX - 2);
-                return Some((out_ty, fn_id));
-            }
-            if mn == "clone" {
-                // Clone returns the same type as the receiver, with the outer
-                // reference peeled off if the receiver is `&T` (auto-deref).
-                let inner = match self.ctx.ty_kind(step_ty) {
-                    TyKind::Ref(_, i, _) => *i,
-                    _ => step_ty,
-                };
-                let fn_id = FnDefId::from_raw(u32::MAX - 3);
-                return Some((inner, fn_id));
+            if mn == "into" || mn == "to_owned" || mn == "to_string" || mn == "clone" {
+                // Trait ids from `TyCtxMut::register_builtin_lang_items`:
+                //   2005 = Clone; 2018 = Into; 2019 = ToString (may not be
+                //   registered — fall back to name-based probing).
+                let builtin_ok = matches!(
+                    self.ctx.ty_kind(step_ty),
+                    TyKind::Int(_)
+                        | TyKind::Uint(_)
+                        | TyKind::Float(_)
+                        | TyKind::Bool
+                        | TyKind::Char
+                        | TyKind::Ref(_, _, _)
+                        | TyKind::RawPtr(_, _)
+                        | TyKind::Slice(_)
+                        | TyKind::Array(_, _)
+                        | TyKind::Tuple(_)
+                        | TyKind::FnPtr(_)
+                        | TyKind::FnDef(_, _)
+                        | TyKind::String
+                );
+                // Also consider the ADT's name: String/Vec/Box registered as
+                // AdtId(1050)/(1020)/(1040).
+                let adt_ok = matches!(
+                    self.ctx.ty_kind(step_ty),
+                    TyKind::Adt(id, _) if matches!(
+                        id.to_raw(),
+                        1020 | 1040 | 1050  // Vec, Box, String
+                    )
+                );
+                // User impls registered via `register_impl_method` (e.g.
+                // `impl Clone for MyType`).
+                let clone_trait = glyim_core::def_id::TraitDefId::from_raw(2005);
+                let user_impl_ok = self
+                    .ctx
+                    .resolve_trait_method(clone_trait, step_ty, method_name)
+                    .is_some();
+                let allowed = builtin_ok || adt_ok || user_impl_ok;
+                if allowed {
+                    if mn == "into" {
+                        let var = self.infer.new_ty_var(self.ctx);
+                        let out_ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                        let fn_id = FnDefId::from_raw(u32::MAX - 1);
+                        return Some((out_ty, fn_id));
+                    }
+                    if mn == "to_owned" || mn == "to_string" {
+                        let out_ty = self.ctx.mk_ty(TyKind::String);
+                        let fn_id = FnDefId::from_raw(u32::MAX - 2);
+                        return Some((out_ty, fn_id));
+                    }
+                    // clone
+                    let inner = match self.ctx.ty_kind(step_ty) {
+                        TyKind::Ref(_, i, _) => *i,
+                        _ => step_ty,
+                    };
+                    let fn_id = FnDefId::from_raw(u32::MAX - 3);
+                    return Some((inner, fn_id));
+                }
             }
         }
 
