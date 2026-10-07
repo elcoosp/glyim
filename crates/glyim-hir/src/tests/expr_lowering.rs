@@ -45,6 +45,7 @@ fn make_body() -> Body {
         owner: LocalDefId::from_raw(0),
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
+        pat_spans: IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
         expr_spans: IndexVec::new(),

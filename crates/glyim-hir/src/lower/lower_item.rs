@@ -5,6 +5,7 @@ use glyim_core::primitives::*;
 use glyim_diag::GlyimDiagnostic;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 use std::collections::HashMap;
+use glyim_span::Span;
 
 use crate::{AssociatedTy, Body, BodyId, ConstItem, EnumItem, Field, FnItem, GenericParam, GenericParamKind, ImplItem, ImplMethod, Item, ItemId, ItemKind, ModItem, Param, Pat, PatId, Path, StaticItem, StructItem, TraitItem, TraitMethod, TypeAliasItem, TypeRef, Variant, Visibility};
 
@@ -161,12 +162,13 @@ pub(crate) fn lower_fn_def(
 
     // Temporary pats storage for parameters (will be moved into body if present)
     let mut temp_pats = IndexVec::new();
+    let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
 
     // Collect parameters
     for child in node.children() {
         if child.kind() == SyntaxKind::ParamList {
             for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats);
+                let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
                 params.push(p);
                 body_params.push(pat_id);
             }
@@ -231,6 +233,7 @@ pub(crate) fn lower_fn_def(
             owner,
             exprs: IndexVec::new(),
             pats: temp_pats,
+            pat_spans: temp_pat_spans,
             params: body_params,
             span: node_span(node),
             expr_spans: IndexVec::new(),
@@ -308,6 +311,7 @@ pub(crate) fn lower_param(
     node: &SyntaxNode,
     interner: &mut Interner,
     pats: &mut IndexVec<PatId, Pat>,
+    pat_spans: &mut IndexVec<PatId, Span>,
 ) -> (Param, PatId) {
     let name_text = first_ident_text_with_depth(node).unwrap_or_else(|| "_".to_string());
     let name = interner.intern(&name_text);
@@ -353,6 +357,9 @@ pub(crate) fn lower_param(
         }
     };
     let pat_id = pats.push(pat);
+    // T053-PATCHED [LSP-4]: record the source span for this parameter
+    // pattern so LSP rename can edit the real range.
+    pat_spans.push(crate::lower::node_span(node));
     (
         Param {
             name,
@@ -626,10 +633,12 @@ pub(crate) fn lower_impl_def(
         let mut params = Vec::new();
         let mut body_params = Vec::new();
         let mut temp_pats = IndexVec::new();
+        let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
+    let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         for child in method_node.children() {
             if child.kind() == SyntaxKind::ParamList {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats);
+                    let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
                     params.push(p);
                     body_params.push(pat_id);
                 }
@@ -659,6 +668,7 @@ pub(crate) fn lower_impl_def(
                 owner,
                 exprs: IndexVec::new(),
                 pats: temp_pats,
+                pat_spans: temp_pat_spans,
                 params: body_params,
                 span: node_span(&method_node),
                 expr_spans: IndexVec::new(),
@@ -790,10 +800,12 @@ pub(crate) fn lower_trait_def(
         let mut params = Vec::new();
         let mut body_params = Vec::new();
         let mut temp_pats = IndexVec::new();
+        let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
+    let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         for child in method_node.children() {
             if child.kind() == SyntaxKind::ParamList {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats);
+                    let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
                     params.push(p);
                     body_params.push(pat_id);
                 }
@@ -823,6 +835,7 @@ pub(crate) fn lower_trait_def(
                 owner,
                 exprs: IndexVec::new(),
                 pats: temp_pats,
+                pat_spans: temp_pat_spans,
                 params: body_params,
                 span: node_span(&method_node),
                 expr_spans: IndexVec::new(),
@@ -949,6 +962,7 @@ pub(crate) fn lower_const_def(
             owner,
             exprs: IndexVec::new(),
             pats: IndexVec::new(),
+        pat_spans: IndexVec::new(),
             params: Vec::new(),
             span: node_span(node),
             expr_spans: IndexVec::new(),
@@ -1043,6 +1057,7 @@ pub(crate) fn lower_static_def(
             owner,
             exprs: IndexVec::new(),
             pats: IndexVec::new(),
+        pat_spans: IndexVec::new(),
             params: Vec::new(),
             span: node_span(node),
             expr_spans: IndexVec::new(),

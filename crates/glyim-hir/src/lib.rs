@@ -479,6 +479,12 @@ pub struct Body {
     pub exprs: IndexVec<ExprId, Expr>,
     /// Struct.
     pub pats: IndexVec<PatId, Pat>,
+    /// T053-PATCHED [LSP-4]: source span for every `PatId`. Parallel to
+    /// `pats`; entries for compiler-synthesized patterns (async desugar,
+    /// etc.) are `Span::DUMMY`. Consumers (LSP rename / find-refs, HIR
+    /// diagnostics) can now produce an accurate range for real
+    /// user-authored patterns instead of falling back to `0..0`.
+    pub pat_spans: IndexVec<PatId, Span>,
     /// Struct.
     pub params: Vec<PatId>,
     /// Struct.

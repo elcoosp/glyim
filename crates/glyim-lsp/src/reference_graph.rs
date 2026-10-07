@@ -183,12 +183,20 @@ impl ReferenceGraph {
             access: AccessKind,
         ) {
             let pat = &body.pats[pat_id];
+            // T053-PATCHED [LSP-4]: prefer the real pattern span when the
+            // lowering recorded one. Synthesized patterns (async desugar)
+            // still come back as `Span::DUMMY`; callers skip those.
+            let pat_span = body
+                .pat_spans
+                .get(pat_id)
+                .copied()
+                .unwrap_or(Span::DUMMY);
             match pat {
                 Pat::Binding { name, .. } => {
                     let name_str = interner.resolve(*name).to_string();
                     add_ref(
                         &name_str,
-                        Span::DUMMY,
+                        pat_span,
                         true,
                         ReferenceKind::Definition,
                         access,

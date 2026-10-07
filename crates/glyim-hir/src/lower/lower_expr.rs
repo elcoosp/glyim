@@ -99,7 +99,7 @@ pub(crate) fn lower_block_to_expr(
                 }
                 let mut consumed = false;
                 if let (Some(pat), Some(rhs)) = (pat_node, expr_node.clone())
-                    && let Some(pat_id) = lower_pat(&pat, interner, &mut body.pats, diags)
+                    && let Some(pat_id) = lower_pat(&pat, interner, &mut body.pats, &mut body.pat_spans, diags)
                 {
                     let rhs_expr_id = lower_expr(&rhs, interner, body, diags, struct_field_map);
                     if let Some(rhs_id) = rhs_expr_id {
@@ -433,7 +433,7 @@ fn lower_closure_expr(
         match child.kind() {
             SyntaxKind::ParamList => {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (_, pat_id) = lower_param(&param_node, interner, &mut body.pats);
+                    let (_, pat_id) = lower_param(&param_node, interner, &mut body.pats, &mut body.pat_spans);
                     params.push(pat_id);
                 }
             }
@@ -1641,7 +1641,7 @@ fn lower_match_expr(
                     | SyntaxKind::PatOr
                     | SyntaxKind::PatSlice
                     | SyntaxKind::UsePath => {
-                        pat_id = lower_pat(&part, interner, &mut body.pats, diags)
+                        pat_id = lower_pat(&part, interner, &mut body.pats, &mut body.pat_spans, diags)
                     }
                     _ if is_expr_node(&part) => {
                         // In a match arm, the structure is:
@@ -1768,7 +1768,7 @@ fn lower_while_expr(
         // Lower the RHS expression.
         let rhs_id = lower_expr(&rhs_node, interner, body, diags, struct_field_map)?;
         // Lower the pattern via the same helper the match arm uses.
-        let pat_id = super::lower_pat::lower_pat(&pat_node, interner, &mut body.pats, diags)?;
+        let pat_id = super::lower_pat::lower_pat(&pat_node, interner, &mut body.pats, &mut body.pat_spans, diags)?;
         // Lower the body block.
         let body_id = lower_expr(&block_node, interner, body, diags, struct_field_map)?;
 
@@ -1860,7 +1860,7 @@ fn lower_for_expr(
     })?;
     let iterable_node = children.find(|c| is_expr_node(c) || c.kind() == SyntaxKind::RangeExpr)?;
     let body_node = children.find(|c| c.kind() == SyntaxKind::Block)?;
-    let pat_id = lower_pat(&pat_node, interner, &mut body.pats, diags)?;
+    let pat_id = lower_pat(&pat_node, interner, &mut body.pats, &mut body.pat_spans, diags)?;
     let iterable_id = lower_expr(&iterable_node, interner, body, diags, struct_field_map)?;
     let body_id = lower_expr(&body_node, interner, body, diags, struct_field_map)?;
     let expr = Expr::For {

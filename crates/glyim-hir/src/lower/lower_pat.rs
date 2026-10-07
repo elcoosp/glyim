@@ -5,9 +5,24 @@ use glyim_core::primitives::*;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 
 use crate::{Pat, PatId, Path as HirPath, PathSegment};
+use glyim_span::Span;
 
-use super::{first_ident_text, lower_expr::lower_literal};
+use super::{first_ident_text, lower_expr::lower_literal, node_span};
 use glyim_diag::GlyimDiagnostic;
+
+/// T053-PATCHED [LSP-4]: pair a pattern with its source span so the LSP
+/// (rename / find-references) and diagnostics can produce an accurate
+/// range instead of falling back to `Span::DUMMY`.
+fn push_pat(
+    pats: &mut IndexVec<PatId, Pat>,
+    pat_spans: &mut IndexVec<PatId, Span>,
+    node: &SyntaxNode,
+    pat: Pat,
+) -> PatId {
+    let id = pats.push(pat);
+    pat_spans.push(node_span(node));
+    id
+}
 
 #[allow(unused_assignments)]
 /// HIR-12: whether a `PatIdent` binding is introduced by `mut`.
@@ -50,6 +65,7 @@ pub(crate) fn lower_pat(
     node: &SyntaxNode,
     interner: &mut Interner,
     pats: &mut IndexVec<PatId, Pat>,
+    pat_spans: &mut IndexVec<PatId, Span>,
     diags: &mut Vec<GlyimDiagnostic>,
 ) -> Option<PatId> {
     match node.kind() {
@@ -71,7 +87,7 @@ pub(crate) fn lower_pat(
                     }],
                     kind: PathKind::Plain,
                 };
-                Some(pats.push(Pat::Path(path)))
+                Some(push_pat(pats, pat_spans, node, Pat::Path(path)))
             } else {
                 let subpat = node
                     .children()
@@ -88,8 +104,8 @@ pub(crate) fn lower_pat(
                                 | SyntaxKind::PatSlice
                         )
                     })
-                    .and_then(|n| lower_pat(&n, interner, pats, diags));
-                Some(pats.push(Pat::Binding {
+                    .and_then(|n| lower_pat(&n, interner, pats, pat_spans, diags));
+                Some(push_pat(pats, pat_spans, node, Pat::Binding {
                     name,
                     // HIR-12: the parser bumps `KwMut` inside `PatIdent`; read
                     // it so `let mut x = ..` / `(mut x, ..)` bind mutably.
@@ -98,7 +114,7 @@ pub(crate) fn lower_pat(
                 }))
             }
         }
-        SyntaxKind::PatWild => Some(pats.push(Pat::Wild)),
+        SyntaxKind::PatWild => Some(push_pat(pats, pat_spans, node, Pat::Wild)),
         SyntaxKind::PatLit => {
             // PatLit wraps a single literal token (simple literal pattern)
             let lit_token = node
@@ -110,7 +126,7 @@ pub(crate) fn lower_pat(
                         || t.kind() == SyntaxKind::KwFalse
                 })?;
             let lit = lower_literal(&lit_token, interner);
-            Some(pats.push(Pat::Literal(lit)))
+            Some(push_pat(pats, pat_spans, node, Pat::Literal(lit)))
         }
         SyntaxKind::PatRange => {
             // PatRange contains: start_literal_token, DotDot/DotDotEq, end PatLit node
@@ -138,7 +154,7 @@ pub(crate) fn lower_pat(
                         after_dot = true;
                     }
                     glyim_syntax::SyntaxElement::Node(n) => {
-                        if let Some(pat_id) = lower_pat(&n, interner, pats, diags)
+                        if let Some(pat_id) = lower_pat(&n, interner, pats, pat_spans, diags)
                             && let Pat::Literal(lit) = &pats[pat_id]
                         {
                             if !after_dot {
@@ -151,7 +167,7 @@ pub(crate) fn lower_pat(
                     _ => {}
                 }
             }
-            Some(pats.push(Pat::Range {
+            Some(push_pat(pats, pat_spans, node, Pat::Range {
                 start,
                 end,
                 inclusive,
@@ -160,7 +176,7 @@ pub(crate) fn lower_pat(
         SyntaxKind::PatOr => {
             let mut flat = Vec::new();
             for child in node.children() {
-                if let Some(pat_id) = lower_pat(&child, interner, pats, diags) {
+                if let Some(pat_id) = lower_pat(&child, interner, pats, pat_spans, diags) {
                     if let Pat::Or(inner) = &pats[pat_id] {
                         flat.extend(inner.iter().copied());
                     } else {
@@ -168,25 +184,25 @@ pub(crate) fn lower_pat(
                     }
                 }
             }
-            Some(pats.push(Pat::Or(flat)))
+            Some(push_pat(pats, pat_spans, node, Pat::Or(flat)))
         }
         SyntaxKind::PatSlice => {
             let mut elems = Vec::new();
             for child in node.children() {
-                if let Some(pat_id) = lower_pat(&child, interner, pats, diags) {
+                if let Some(pat_id) = lower_pat(&child, interner, pats, pat_spans, diags) {
                     elems.push(pat_id);
                 }
             }
-            Some(pats.push(Pat::Slice(elems)))
+            Some(push_pat(pats, pat_spans, node, Pat::Slice(elems)))
         }
         SyntaxKind::PatTuple => {
             let mut elems = Vec::new();
             for child in node.children() {
-                if let Some(pat_id) = lower_pat(&child, interner, pats, diags) {
+                if let Some(pat_id) = lower_pat(&child, interner, pats, pat_spans, diags) {
                     elems.push(pat_id);
                 }
             }
-            Some(pats.push(Pat::Tuple(elems)))
+            Some(push_pat(pats, pat_spans, node, Pat::Tuple(elems)))
         }
         SyntaxKind::PatStruct => {
             let mut path = None;
@@ -229,7 +245,7 @@ pub(crate) fn lower_pat(
                                         | SyntaxKind::PatRange
                                         | SyntaxKind::PatSlice
                                 )
-                                && let Some(pat_id) = lower_pat(&sub_n, interner, pats, diags)
+                                && let Some(pat_id) = lower_pat(&sub_n, interner, pats, pat_spans, diags)
                             {
                                 let field_name = {
                                     let s = sub_n.text().to_string();
@@ -288,7 +304,7 @@ pub(crate) fn lower_pat(
                         }
                         if has_colon {
                             if let Some(sub_n) = subpattern_node
-                                && let Some(pat_id) = lower_pat(&sub_n, interner, pats, diags)
+                                && let Some(pat_id) = lower_pat(&sub_n, interner, pats, pat_spans, diags)
                             {
                                 fields.push((name, pat_id));
                             }
@@ -302,7 +318,7 @@ pub(crate) fn lower_pat(
                             // shorthand binding whenever any *other* field
                             // carried `mut` (or when the outer `let mut x
                             // = ...` preceded the struct pattern).
-                            let binding_id = pats.push(Pat::Binding {
+                            let binding_id = push_pat(pats, pat_spans, n, Pat::Binding {
                                 name,
                                 mutability: pat_ident_mutability(n),
                                 subpattern: None,
@@ -318,7 +334,7 @@ pub(crate) fn lower_pat(
             }
 
             let path = path?;
-            Some(pats.push(Pat::Struct { path, fields, rest }))
+            Some(push_pat(pats, pat_spans, node, Pat::Struct { path, fields, rest }))
         }
         SyntaxKind::UsePath => {
             let mut segments = Vec::new();
@@ -339,7 +355,7 @@ pub(crate) fn lower_pat(
                 segments,
                 kind: PathKind::Plain,
             };
-            Some(pats.push(Pat::Path(path)))
+            Some(push_pat(pats, pat_spans, node, Pat::Path(path)))
         }
         SyntaxKind::PathExpr => {
             let mut segments = Vec::new();
@@ -360,7 +376,7 @@ pub(crate) fn lower_pat(
                 segments,
                 kind: PathKind::Plain,
             };
-            Some(pats.push(Pat::Path(path)))
+            Some(push_pat(pats, pat_spans, node, Pat::Path(path)))
         }
         _ => {
             diags.push(GlyimDiagnostic::internal_error(format!(

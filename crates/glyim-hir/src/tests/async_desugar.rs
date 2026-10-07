@@ -74,6 +74,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
+        pat_spans: IndexVec::new(),
         params: Vec::new(),
         span: Span::DUMMY,
         expr_spans: {
@@ -266,6 +267,15 @@ fn build_async_hir_with_loop_await() -> CrateHir {
     let body = Body {
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
+        pat_spans: {
+            // T053-PATCHED [LSP-4]: tests build `pats` manually and don't
+            // track spans; parallel array of DUMMY is fine for HIR tests.
+            let mut s = IndexVec::new();
+            for _ in 0..pats.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
         pats,
         params: Vec::new(),
         span: Span::DUMMY,
@@ -432,6 +442,15 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     let body = Body {
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
+        pat_spans: {
+            // T053-PATCHED [LSP-4]: tests build `pats` manually and don't
+            // track spans; parallel array of DUMMY is fine for HIR tests.
+            let mut s = IndexVec::new();
+            for _ in 0..pats.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
         pats,
         params: Vec::new(),
         span: Span::DUMMY,
