@@ -414,4 +414,20 @@ mod tests {
         let mods = find_bodyless_mods("mod a;\nmod b;\n");
         assert_eq!(mods.len(), 2);
     }
+
+    #[test]
+    fn find_bodyless_mods_in_nested_inline() {
+        // T125: `mod a { mod b; }` must record inline_path=["a"].
+        let mods = find_bodyless_mods("mod a { mod b; }\nfn main() {}\n");
+        assert_eq!(mods.len(), 1);
+        assert_eq!(mods[0].name, "b");
+        assert_eq!(mods[0].inline_path, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn find_bodyless_mods_top_level_has_empty_inline_path() {
+        let mods = find_bodyless_mods("mod b;\nfn main() {}\n");
+        assert_eq!(mods.len(), 1);
+        assert!(mods[0].inline_path.is_empty());
+    }
 }
