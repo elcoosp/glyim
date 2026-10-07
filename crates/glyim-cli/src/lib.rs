@@ -385,12 +385,17 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     };
 
     // Early return for MIR, LLVM IR, and assembly emit
+    // T127-PATCHED [CLI-3]: pass the proc-macro registry through to the
+    // emit helpers. Previously they hardcoded `None`, so a compile with
+    // `--proc-macro-deps foo.g --emit=llvm-ir` paid for the cdylib build
+    // and dlopen and then produced IR without macro expansion.
+    let proc_registry_ref = proc_registry.as_ref();
     if emit == EmitKind::Mir {
-        return glyim_pipeline::emit_mir(&mut db, input, &object_path);
+        return glyim_pipeline::emit_mir(&mut db, input, &object_path, proc_registry_ref);
     } else if emit == EmitKind::LlvmIr {
-        return glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path);
+        return glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path, proc_registry_ref);
     } else if emit == EmitKind::Asm {
-        return glyim_pipeline::emit_asm(&mut db, input, &object_path);
+        return glyim_pipeline::emit_asm(&mut db, input, &object_path, proc_registry_ref);
     }
 
     // Build the LLVM backend concretely so the Thin path can drive per-CGU

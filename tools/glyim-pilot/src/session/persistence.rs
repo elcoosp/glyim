@@ -25,12 +25,35 @@ impl Inner {
         Ok(Self { path, state })
     }
     async fn save(&self) -> Result<(), PilotError> {
+        // T156-PATCHED [PILOT-14]: use a per-process tmp filename and
+        // fsync the tmp file before rename. The previous shared `.tmp`
+        // path allowed two processes (serve + any status/HTTP merge) to
+        // interleave write/rename and cross-commit corrupt state; and
+        // skipping sync_all meant a power loss between write and rename
+        // could leave the directory entry pointing at an incomplete file.
         let content = serde_json::to_string(&self.state)
             .map_err(|e| PilotError::Session(format!("serialization failed: {e}")))?;
-        let tmp_path = std::path::PathBuf::from(format!("{}.tmp", self.path.display()));
-        tokio::fs::write(&tmp_path, &content)
-            .await
-            .map_err(|e| PilotError::Session(format!("temp write failed: {e}")))?;
+        let tmp_path = std::path::PathBuf::from(format!(
+            "{}.{}.tmp",
+            self.path.display(),
+            std::process::id()
+        ));
+        {
+            use tokio::io::AsyncWriteExt;
+            let mut file = tokio::fs::File::create(&tmp_path)
+                .await
+                .map_err(|e| PilotError::Session(format!("temp create failed: {e}")))?;
+            file.write_all(content.as_bytes())
+                .await
+                .map_err(|e| PilotError::Session(format!("temp write failed: {e}")))?;
+            // T156: flush + sync so the rename is durable.
+            file.flush()
+                .await
+                .map_err(|e| PilotError::Session(format!("temp flush failed: {e}")))?;
+            file.sync_all()
+                .await
+                .map_err(|e| PilotError::Session(format!("temp sync failed: {e}")))?;
+        }
         tokio::fs::rename(&tmp_path, &self.path)
             .await
             .map_err(|e| PilotError::Session(format!("rename failed: {e}")))?;

@@ -896,6 +896,7 @@ pub fn emit_mir(
     db: &mut Database,
     input: &Path,
     output: &Path,
+    _proc_registry: Option<&glyim_proc_macro::Registry>,
 ) -> Result<(), Vec<GlyimDiagnostic>> {
     let sink = DiagSink::new();
     let sink_cell = RefCell::new(sink);
@@ -1025,6 +1026,7 @@ pub fn emit_llvm_ir(
     db: &mut Database,
     input: &Path,
     output: &Path,
+    proc_registry: Option<&glyim_proc_macro::Registry>,
 ) -> Result<(), Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) so the
     // bodies are monomorphized. The previous standalone implementation
@@ -1032,7 +1034,7 @@ pub fn emit_llvm_ir(
     // `MonoCtx::collect` — so generic stdlib definitions reached codegen with
     // `TyKind::Param` in their locals and `fn_abi_of` ICEd with
     // `UnknownType`. Any new emit mode MUST go through `prepare_compilation`.
-    let prepared = Pipeline::prepare_compilation(db, input, None, None)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry)?;
 
     // Emit *every* monomorphized body (previously only `mir_bodies[0]` was
     // emitted, silently dropping the rest of the crate from the IR).
@@ -1062,11 +1064,12 @@ pub fn emit_asm(
     db: &mut Database,
     input: &Path,
     output: &Path,
+    proc_registry: Option<&glyim_proc_macro::Registry>,
 ) -> Result<(), Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) — see
     // `emit_llvm_ir` for why the standalone chain was wrong (it skipped
     // monomorphization, so generic bodies ICEd in `fn_abi_of`).
-    let prepared = Pipeline::prepare_compilation(db, input, None, None)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry)?;
     let backend = LlvmBackend::with_db(db).with_debug_info(false);
     backend
         .emit_assembly(&prepared.all_bodies, output)
