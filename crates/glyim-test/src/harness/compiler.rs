@@ -191,6 +191,25 @@ impl TestCompiler for PipelineCompiler {
         let target_triple = target_triple
             .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string());
 
+        // T140-PATCHED-HARNESS: honor `// compile-flags: --with-stdlib` by
+        // prepending the assembled minimal stdlib, exactly like
+        // `glyim-cli --with-stdlib` / `glyim_cli::inject_assembled_stdlib`.
+        // The run-pass probe fixtures (`probe_println_*.g`,
+        // `probe_string_push_str.g`) use `println`/`String`, so without
+        // this they fail with "unresolved name `println`" — the harness
+        // previously compiled fixtures with no stdlib in scope at all.
+        let with_stdlib = flags.iter().any(|f| f.as_str() == "--with-stdlib");
+        let mut combined_storage = String::new();
+        let source: &str = if with_stdlib {
+            combined_storage.push_str(&glyim_lang_std::std_source_assembled_minimal());
+            combined_storage.push('\n');
+            combined_storage.push_str(source);
+            combined_storage.push('\n');
+            combined_storage.as_str()
+        } else {
+            source
+        };
+
         // Each `compile()` call writes its source to a temp file that the
         // pipeline reads back. The path must be UNIQUE per call: many tests
         // run concurrently and several reuse the same `FileId` (e.g. `1`), so

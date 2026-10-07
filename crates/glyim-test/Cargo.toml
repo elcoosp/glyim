@@ -41,6 +41,7 @@ glyim-codegen-llvm = { workspace = true, optional = true }
 glyim-db         = { workspace = true }
 glyim-pipeline   = { workspace = true }
 glyim-cli        = { workspace = true }
+glyim-lang-std   = { workspace = true }
 glyim-meta       = { workspace = true }
 glyim-proc-macro = { workspace = true }
 glyim-layout     = { workspace = true }
