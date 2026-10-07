@@ -98,7 +98,19 @@ fn flatten(
         out.push_str(&source[cursor..m.start]);
         out.push_str(&format!("mod {} {{ ", m.name));
 
-        match resolve_module_file(dir, &m.name) {
+        // T125-PATCHED [PIPE-5]: for a bodyless `mod foo;` nested inside
+        // an inline module `mod a { mod foo; }`, resolve `foo` against
+        // `dir/a/` (Rust's convention), not `dir/`. The inline_path
+        // records the enclosing module names in order.
+        let nested_dir: PathBuf = {
+            let mut p = dir.to_path_buf();
+            for seg in &m.inline_path {
+                p.push(seg);
+            }
+            p
+        };
+
+        match resolve_module_file(&nested_dir, &m.name) {
             Some(mod_path) => {
                 let canonical = mod_path
                     .canonicalize()
@@ -145,9 +157,9 @@ fn flatten(
                 &format!(
                     "cannot find module file for `mod {};` (looked for `{}/{}.g` and `{}/{}/mod.g`)",
                     m.name,
-                    dir.display(),
+                    nested_dir.display(),
                     m.name,
-                    dir.display(),
+                    nested_dir.display(),
                     m.name
                 ),
             )),
@@ -167,6 +179,12 @@ struct ModDecl {
     name: String,
     start: usize,
     end: usize,
+    /// T125-PATCHED [PIPE-5]: names of every *inline* module (`mod a { ... }`)
+    /// that textually encloses this `mod foo;` declaration. Rust resolves
+    /// the file for a nested `mod foo;` relative to the enclosing module
+    /// path, so `mod a { mod b; }` in `dir/parent.g` looks for
+    /// `dir/a/b.g`, not `dir/b.g`. Empty for top-level `mod foo;`.
+    inline_path: Vec<String>,
 }
 
 /// Scan `source` for top-level `mod <ident>;` declarations.
@@ -183,6 +201,15 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
     let mut out = Vec::new();
     let mut i = 0usize;
     let n = bytes.len();
+
+    // T125-PATCHED [PIPE-5]: stack of names of inline modules currently
+    // being scanned (`mod foo { ... }`). Used to build the path prefix
+    // for nested bodyless mods.
+    let mut inline_path: Vec<String> = Vec::new();
+    // Brace depth inside inline modules: last element is the depth at
+    // which the currently open inline module started.
+    let mut inline_depths: Vec<i32> = Vec::new();
+    let mut brace_depth: i32 = 0;
 
     while i < n {
         let c = bytes[i];
@@ -214,6 +241,25 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
                 i += 1;
             }
             i = (i + 1).min(n);
+            continue;
+        }
+
+        // Track braces for inline-module scoping.
+        if c == b'{' {
+            brace_depth += 1;
+            i += 1;
+            continue;
+        }
+        if c == b'}' {
+            brace_depth -= 1;
+            // Close any inline module that opened at this depth.
+            if let Some(&top) = inline_depths.last()
+                && brace_depth <= top
+            {
+                inline_depths.pop();
+                inline_path.pop();
+            }
+            i += 1;
             continue;
         }
 
@@ -249,17 +295,29 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
             j = name_start + consumed;
             let name = &source[name_start..j];
             if !name.is_empty() {
-                // skip whitespace, require `;`
+                // skip whitespace
                 while j < n && (bytes[j] as char).is_whitespace() {
                     j += 1;
                 }
                 if j < n && bytes[j] == b';' {
+                    // T125-PATCHED: bodyless `mod name;` — record the
+                    // enclosing inline-module path.
                     out.push(ModDecl {
                         name: name.to_string(),
                         start: i,
                         end: j + 1,
+                        inline_path: inline_path.clone(),
                     });
                     i = j + 1;
+                    continue;
+                } else if j < n && bytes[j] == b'{' {
+                    // T125-PATCHED: inline `mod name { ... }` — push onto
+                    // the stack. Its closing `}` will pop it.
+                    inline_path.push(name.to_string());
+                    inline_depths.push(brace_depth);
+                    // Do NOT skip the `{`; the outer loop's brace
+                    // tracking will increment depth and continue.
+                    i = j;
                     continue;
                 }
             }
