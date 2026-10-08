@@ -92,38 +92,40 @@ fixture.
 `RawVec`/`ptr::*` allocation, or (b) typeck to route `Vec::push` to the builtin
 id instead of the source body. Either is a workstream, not a patch.
 
-### 3.2 The `println` chain — remaining work, with design
+### 3.2 `probe_string_push_str.g` — the last failure (needs typed expansion)
 
-`probe_println_function.g`, `probe_println_macro.g`, `probe_string_push_str.g`
-compile but do not produce output. `println`'s body is
-`stdout().write_all(s.as_bytes()).unwrap()`, whose byte path traverses
-`str::as_bytes` -> `slice::as_ptr` / `slice::len` -> `extern "C"
-glyim_stdout_write(fd, ptr, len)`.
+`probe_string_push_str.g` is the only remaining corpus failure. Its body is
+`println!("{}", s.as_str())`, which expands to
+`format!(concat!("{}","\n"), s.as_str())`.
 
-**What was tried this session and why it is not the fix:** the interpreter
-carries byte slices in `InterpValue::String`. Arms were added for
-`Deref`/`Field`/`Index` projections and a `try_call_extern` dispatcher.
-Each projection patch moved the failure one step (deref -> field -> binop),
-ending at `unsupported binop types: String("hi") and Int(0)` — a String
-meeting an Int in arithmetic. **This is the signal that the String stand-in
-is the wrong shape.** A `String` cannot act as a `[ptr, len]` fat pointer;
-every site that needs a real pointer reveals another site.
+**Fixed this session** (all in `crates/glyim-meta/src/expander/mod.rs`):
+- `format!` on a lone literal returns the literal (was `""`).
+- `format!` recurses into `TokenTree::Group`, so the `concat!(..)`-wrapped
+  literal is found (`flatten_token_tree` does not descend into groups).
+  This greened `probe_println_macro.g` (`println!("hi")`).
 
-**The right design (not yet implemented):**
+**What remains:** real `{}` interpolation. `format!("{}", x)` requires
+emitting code that calls `x.to_string()` (or a `Display` dispatch) and
+concatenates the result. An attempt was made this session to synthesize
+that token stream in the expander, but it requires knowing the concrete
+`glyim_syntax::SyntaxKind` variants for statement keywords (`let`,
+`mut`, `::`) and the token-tree-to-`GreenNode` conversion helper — neither
+of which the expander's existing arms use, so the guess did not compile
+and was reverted rather than left broken.
 
-1. Add an interpreter-side byte arena: `byte_arena: Vec<Vec<u8>>`, with a
-   new value variant `InterpValue::ByteRef(usize)` naming a slot in it.
-2. `str::as_bytes` / `String::as_bytes` / `as_ptr` return a fat-pointer
-   `Aggregate([ByteRef(id), Uint(len)])` — a real 2-field value that the
-   existing `Aggregate` projection code already handles for `Deref`,
-   `Field(0)`, `Field(1)`, and `Index`.
-3. `try_call_extern`'s `glyim_stdout_write` reads `args[1]` as
-   `ByteRef(id)` and copies `byte_arena[id]` into `stdout_buf`.
-4. Delete the String projection arms added this session — they become
-   dead once the value is a proper aggregate.
+**The right design:** add a small token-builder that uses the *actual*
+`SyntaxKind` set (grep the existing `Concat`/`Matches` arms for the kinds
+they emit — `Ident`, `StringLit`, `Comma`, `LBracket`, `RBracket`, etc.)
+and reuse whatever conversion the neighbouring arms use to produce a
+`GreenNode`. Then `format!("{}", e)` expands to
+`{ let mut s = String::new(); s.push_str(e.to_string().as_str()); s }` —
+`to_string` and `String::push_str` are registered builtins, so it
+type-checks without a synthesized `Display` dispatch. ~half a day.
 
-Estimated: ~1 day. Bounded, and removes the approximation rather than
-layering on it.
+**Alternative:** leave `format!("{}", ..)` as the empty-string stub and
+move `probe_string_push_str.g` out of the run-pass corpus (it is not a
+compiler bug; it is an unimplemented formatting feature). The other four
+probes pass.
 ### 3.3 Honest scope note
 
 The session-4 handoff's claim of "two remaining failures" was an undercount:
