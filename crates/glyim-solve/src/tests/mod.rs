@@ -7,4 +7,5 @@ mod iterator_next_test;
 mod projection_occurs_check;
 mod projection_unification;
 mod solver;
+mod solver_regressions;
 mod unification;
