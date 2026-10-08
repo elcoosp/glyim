@@ -43,12 +43,17 @@ impl InterpRunner {
     pub fn run(self, timeout: Duration) -> super::runner::RunResult {
         let start = std::time::Instant::now();
         let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
+        // T140-FIX-LEAK: retain the JoinHandle so the worker thread is
+        // joined on the completion path. Without this, nextest flags the
+        // test as "leaky" (a detached thread outlives the test).
+        let handle = std::thread::spawn(move || {
             let output = interpret_bodies(&self.bodies, self.ty_ctx.as_ref(), self.entry_main);
             let _ = tx.send(output);
         });
         match rx.recv_timeout(timeout) {
             Ok(output) => {
+                // Worker finished; join it to reclaim the OS thread.
+                let _ = handle.join();
                 let duration = start.elapsed();
                 super::runner::RunResult {
                     exit_code: Some(output.exit_code),
@@ -59,6 +64,11 @@ impl InterpRunner {
                 }
             }
             Err(_) => {
+                // Worker is still running (timeout). It will eventually
+                // finish and exit; joining here would block forever, so we
+                // intentionally detach it. This is the one intentional
+                // leak, and it only occurs on the timeout path.
+                drop(handle);
                 let duration = start.elapsed();
                 super::runner::RunResult {
                     exit_code: None,
