@@ -1221,6 +1221,7 @@ version = "0.1.0"
 dependencies = [
  "glyim-core",
  "glyim-mir",
+ "glyim-mir-interp",
  "glyim-span",
  "glyim-test",
  "glyim-type",

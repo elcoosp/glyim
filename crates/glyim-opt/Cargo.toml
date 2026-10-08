@@ -12,3 +12,4 @@ glyim-core = { workspace = true }
 tracing = { workspace = true }
 [dev-dependencies]
 glyim-test = { workspace = true }
+glyim-mir-interp = { workspace = true }
