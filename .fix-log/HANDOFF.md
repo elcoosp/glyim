@@ -67,75 +67,60 @@ Still open, with corrected reasoning:
 
 ---
 
-## 3. Genuinely remaining — the last failure
+## 3. Genuinely remaining — one probe, one LLVM feature
 
-One test still fails: `glyim-test::run_pass_corpus run_pass_corpus_passes`.
-It reports **4 fixtures**, but they are **two distinct workstreams**, neither a
-one-line fix.
+**Matrix: 4,570 passing / 1 failing / 2 skipped / 0 leaky.**
 
-Matrix today: **4,570 passing / 1 failing / 2 skipped** (was 4,565/6 at session start).
+The single failure is `glyim-test::run_pass_corpus run_pass_corpus_passes`,
+covering one fixture:
 
-### 3.1 The interpreter cannot execute `vec.g`'s source `Vec::push`
+### 3.1 `probe_string_push_str.g` — needs LLVM String allocation
 
-`probe_vec_push_len.g` runs but returns `0` instead of `3`. Instrumentation shows:
-- `Vec::len` reaches the builtin dispatch (`recv = Aggregate([])`).
-- **`Vec::new` and `Vec::push` do NOT reach it** — they resolve to their *source*
-  bodies in `crates/glyim-lang-alloc/lib/vec.g`, and those bodies fail silently
-  in the interpreter.
+The fixture is `println!("{}", s.as_str())`. Greening it requires
+`format!` to emit real interpolation code. **That emission was attempted
+this session and reverted**, because it regresses
+`glyim-cli::emit_modes exec_binary_prints_hello`: the interpolation calls
+`String::new` / `String::push_str` / `String::as_str` via their builtin
+`FnDefId`s, and `glyim-codegen-llvm`'s `try_lower_builtin_intrinsic`
+(currently covering only `as_bytes`/`as_ptr`/`as_mut_ptr`/`len`/`is_empty`)
+emits **no symbol** for them, so the linker fails with
 
-`vec.g`'s `push` calls `RawVec::reserve`, `buf.as_mut_ptr`, `ptr::write`, and
-updates `self.len`. The interpreter does not execute that allocation path
-correctly, so the `Vec::push` arm added in `71b900dc` is dead code for this
-fixture.
+    Undefined symbols: ___glyim_fn_9095 (as_str), ___glyim_fn_9113
+    (String::new), ___glyim_fn_9155 (push_str)
 
-**This is the real remaining work.** Fix needs either (a) the interpreter to run
-`RawVec`/`ptr::*` allocation, or (b) typeck to route `Vec::push` to the builtin
-id instead of the source body. Either is a workstream, not a patch.
+**The real fix** is one of:
 
-### 3.2 `probe_string_push_str.g` — the last failure (needs typed expansion)
+1. **Extend `try_lower_builtin_intrinsic`** to lower these three inline.
+   `String::new` → `dest_llvm_ty.const_zero()` (a new `String` is all-zero:
+   `{ inner: { buf: {ptr,cap}, len: 0 } }`). `as_str` on a `String` →
+   extract the `{ptr, len}` sub-struct. `push_str` needs real growth
+   (allocation + memcpy), which is the hard part — likely delegate to a
+   `glyim-runtime` FFI helper (`glyim_string_push_str`) rather than inline
+   IR. ~1 day.
 
-`probe_string_push_str.g` is the only remaining corpus failure. Its body is
-`println!("{}", s.as_str())`, which expands to
-`format!(concat!("{}","\n"), s.as_str())`.
+2. **Emit a call to the stdlib source fn instead of the builtin id.** The
+   stdlib's `String::new` / `push_str` have real MIR bodies and therefore
+   real LLVM symbols. If the format! expansion referenced those (by name)
+   rather than the typeck-registered builtin `FnDefId`, LLVM would link.
+   This is the cheaper path — a lowering change, not a codegen feature.
+   ~2-3 hours.
 
-**Fixed this session** (all in `crates/glyim-meta/src/expander/mod.rs`):
-- `format!` on a lone literal returns the literal (was `""`).
-- `format!` recurses into `TokenTree::Group`, so the `concat!(..)`-wrapped
-  literal is found (`flatten_token_tree` does not descend into groups).
-  This greened `probe_println_macro.g` (`println!("hi")`).
+**Until one of those lands**, `format!("{}", x)` falls through to the
+empty-string stub (the pre-existing behavior), and the fixture is a
+documented gap, not a bug in the fixes landed this session.
 
-**What remains:** real `{}` interpolation. `format!("{}", x)` requires
-emitting code that calls `x.to_string()` (or a `Display` dispatch) and
-concatenates the result. An attempt was made this session to synthesize
-that token stream in the expander, but it requires knowing the concrete
-`glyim_syntax::SyntaxKind` variants for statement keywords (`let`,
-`mut`, `::`) and the token-tree-to-`GreenNode` conversion helper — neither
-of which the expander's existing arms use, so the guess did not compile
-and was reverted rather than left broken.
+### 3.2 What is NOT remaining
 
-**The right design:** add a small token-builder that uses the *actual*
-`SyntaxKind` set (grep the existing `Concat`/`Matches` arms for the kinds
-they emit — `Ident`, `StringLit`, `Comma`, `LBracket`, `RBracket`, etc.)
-and reuse whatever conversion the neighbouring arms use to produce a
-`GreenNode`. Then `format!("{}", e)` expands to
-`{ let mut s = String::new(); s.push_str(e.to_string().as_str()); s }` —
-`to_string` and `String::push_str` are registered builtins, so it
-type-checks without a synthesized `Display` dispatch. ~half a day.
+Everything else in the previous §3 is fixed and verified:
 
-**Alternative:** leave `format!("{}", ..)` as the empty-string stub and
-move `probe_string_push_str.g` out of the run-pass corpus (it is not a
-compiler bug; it is an unimplemented formatting feature). The other four
-probes pass.
-### 3.3 Honest scope note
-
-The session-4 handoff's claim of "two remaining failures" was an undercount:
-there were **six** pre-existing failures at `bd571466`, of which four were test
-files that did not compile (`--workspace` hides test targets) and two were real
-bugs (async interpreter, `Option::unwrap`). This session closed four of those
-six, plus the two genuine bugs, leaving one multi-fixture failure with the two
-workstreams above.
-
----
+- `async_state_machine_runs_via_interpreter` — PASSES (T100 root-block fix).
+- The leaky test — FIXED (interpreter worker thread is joined).
+- `probe_option_unwrap.g` — PASSES (builtin dispatch).
+- `probe_vec_push_len.g` — PASSES (Vec `{buf,len}` model + mixed-num arms).
+- `probe_println_function.g` — PASSES (extern dispatch + byte-ptr arith).
+- `probe_println_macro.g` — PASSES (`format!` literal + group recursion).
+- The four `glyim-cli::emit_modes` tests — PASS.
+- The pre-existing `MethodDef` and `--lto fat` test breakages — FIXED.
 
 ## 4. Items reverted or rejected (unchanged from session 4)
 
