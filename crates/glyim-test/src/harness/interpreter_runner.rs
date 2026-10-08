@@ -83,7 +83,9 @@ fn interpret_bodies(
     ty_ctx: &glyim_type::TyCtx,
     entry_main: Option<u32>,
 ) -> InterpOutput {
-    let stdout = String::new();
+    // T140-PATCHED-IO: stdout/stderr are populated from the interpreter's
+    // FFI write buffers below, not left empty.
+    let mut stdout = String::new();
     let mut stderr = String::new();
 
     if bodies.is_empty() {
@@ -116,6 +118,9 @@ fn interpret_bodies(
 
     match result {
         Ok(()) => {
+            // T140-PATCHED-IO: surface FFI-captured output.
+            stdout = String::from_utf8_lossy(interpreter.get_stdout()).into_owned();
+            stderr = String::from_utf8_lossy(interpreter.get_stderr()).into_owned();
             // A `main` that returns `i32` (the common case) surfaces its value
             // through `get_return_value`; the runtime then turns it into the
             // process exit code, mirroring a real executable. A `main` that

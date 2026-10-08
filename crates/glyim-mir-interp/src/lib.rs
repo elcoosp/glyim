@@ -56,6 +56,9 @@ pub struct Interpreter<'tcx> {
     pub recursion_limit: usize,
     step_count: usize,
     recursion_depth: usize,
+    /// T140-PATCHED-IO: bytes captured from FFI writes.
+    stdout_buf: Vec<u8>,
+    stderr_buf: Vec<u8>,
     function_table: HashMap<DefId, Body>,
     current_body_owner: Option<DefId>,
     current_arg_count: usize,
@@ -115,6 +118,8 @@ impl<'tcx> Interpreter<'tcx> {
             recursion_limit: 256,
             step_count: 0,
             recursion_depth: 0,
+            stdout_buf: Vec::new(),
+            stderr_buf: Vec::new(),
             function_table: HashMap::new(),
             current_body_owner: None,
             current_arg_count: 0,
@@ -203,6 +208,7 @@ impl<'tcx> Interpreter<'tcx> {
         &mut self,
         callee_id: &DefId,
         args: &[InterpValue],
+        arg_operands: &[Operand],
     ) -> InterpResult<Option<InterpValue>> {
         let raw = callee_id.local_id.to_raw();
         if raw < 9_000 {
@@ -245,7 +251,14 @@ impl<'tcx> Interpreter<'tcx> {
                     ))
                 }
             }
-            (1020, "new") => Ok(Some(InterpValue::Aggregate(Vec::new()))),
+            (1020, "new") => {
+                // Real Vec<T> = { buf: RawVec<T>, len: usize }. Model as
+                // a two-field aggregate so `len`/`push` can agree on shape.
+                Ok(Some(InterpValue::Aggregate(vec![
+                    InterpValue::Aggregate(Vec::new()),
+                    InterpValue::Uint(0),
+                ])))
+            }
             (1020, "len") => {
                 let v = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::Uint(Self::vec_len(&v) as u128)))
@@ -256,12 +269,13 @@ impl<'tcx> Interpreter<'tcx> {
             }
             (1020, "push") => {
                 let elem = args.get(1).cloned().unwrap_or(InterpValue::Unit);
-                let mut v = self.builtin_deref(&receiver)?;
-                Self::vec_push(&mut v, elem);
-                self.builtin_store_back(&receiver, v)?;
+                self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    Self::vec_push(v, elem);
+                })?;
                 Ok(Some(InterpValue::Unit))
             }
             (1050, "new") => Ok(Some(InterpValue::String(String::new()))),
+            // (str_id 1061 and string_id 1050 `push_str` are both handled below)
             (1050, "len") => {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::Uint(Self::str_len(&s) as u128)))
@@ -274,11 +288,11 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(s))
             }
-            (1050, "push_str") => {
+            (1050, "push_str") | (1061, "push_str") => {
                 let add = args.get(1).cloned().unwrap_or(InterpValue::Unit);
-                let mut s = self.builtin_deref(&receiver)?;
-                Self::string_push_str(&mut s, &add);
-                self.builtin_store_back(&receiver, s)?;
+                self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    Self::string_push_str(v, &add);
+                })?;
                 Ok(Some(InterpValue::Unit))
             }
             (1061, "len") => {
@@ -289,12 +303,36 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::Bool(Self::str_len(&s) == 0)))
             }
+            // T140-PATCHED-IO: byte-view operations. `&str`/`&[u8]` payloads
+            // are carried in `InterpValue::String` (byte-exact for the ASCII
+            // fixtures; lossy for non-UTF-8, a documented limit of this
+            // interpreter's reference model).
+            (1061, "as_bytes") | (1050, "as_bytes") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::String(Self::byte_payload(&s))))
+            }
+            (1060, "len") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Uint(Self::byte_payload(&s).len() as u128)))
+            }
+            (1060, "is_empty") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Bool(Self::byte_payload(&s).is_empty())))
+            }
+            (1020, "as_ptr") | (1060, "as_ptr") | (1061, "as_ptr") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::String(Self::byte_payload(&s))))
+            }
+            (1020, "as_slice") | (1020, "as_ref") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::String(Self::byte_payload(&s))))
+            }
             _ => Ok(None),
         }
     }
 
     fn builtin_deref(&self, v: &InterpValue) -> InterpResult<InterpValue> {
-        match v {
+        let result = match v {
             InterpValue::Ref { frame, local } => self
                 .locals_for_ref_frame(*frame)
                 .and_then(|locals| locals.get(*local).and_then(|o| o.as_ref()).cloned())
@@ -304,6 +342,52 @@ impl<'tcx> Interpreter<'tcx> {
                     ))
                 }),
             other => Ok(other.clone()),
+        };
+        result
+    }
+
+    /// T140-PATCHED-MUTRECV: read-modify-write the receiver of a builtin
+    /// `&mut self` method. The current lowering emits builtin method calls
+    /// with the receiver as a `Copy(place)` *value* rather than an
+    /// autoref'd `&mut` (see the follow-up note in the session handoff).
+    /// When the receiver is a place, write back to that place; when it is
+    /// an `InterpValue::Ref`, deref/write through the frame-aware path.
+    fn mutate_receiver<F: FnOnce(&mut InterpValue)>(
+        &mut self,
+        op: Option<&Operand>,
+        value: Option<&InterpValue>,
+        f: F,
+    ) -> InterpResult<()> {
+        if let Some(Operand::Copy(p) | Operand::Move(p)) = op {
+            let mut v = self.read_place(p)?;
+            f(&mut v);
+            return self.write_place(p, v);
+        }
+        match value {
+            Some(InterpValue::Ref { frame, local }) => {
+                let place = Place::new(LocalIdx::from_raw(*local as u32));
+                let mut v = self
+                    .locals_for_ref_frame(*frame)
+                    .and_then(|ls| ls.get(*local).and_then(|o| o.as_ref()).cloned())
+                    .ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "builtin mutate: dead Ref{{frame:{frame}, local:{local}}}"
+                        ))
+                    })?;
+                f(&mut v);
+                self.write_place_frame(*frame, &place, v)
+            }
+            Some(v) => {
+                // Value-only receiver with no place to write back to.
+                // Mutating a copy would be a silent no-op; surface the
+                // design gap instead of pretending the call succeeded.
+                let _ = v;
+                Err(InterpError::Panic(
+                    "builtin &mut-self method called with a by-value receiver;                      no place to write the mutation back to. This is a lowering                      gap — see the session-5 handoff §3.1."
+                        .into(),
+                ))
+            }
+            None => Ok(()),
         }
     }
 
@@ -341,6 +425,15 @@ impl<'tcx> Interpreter<'tcx> {
 
     fn vec_len(v: &InterpValue) -> usize {
         if let InterpValue::Aggregate(fields) = v {
+            if fields.len() == 2 {
+                if let InterpValue::Uint(n) = fields[1] {
+                    return n as usize;
+                }
+                if let InterpValue::Int(n) = fields[1] {
+                    return n.max(0) as usize;
+                }
+            }
+            // Fallback: flat element list (some construction paths).
             fields.len()
         } else {
             0
@@ -349,7 +442,28 @@ impl<'tcx> Interpreter<'tcx> {
 
     fn vec_push(v: &mut InterpValue, elem: InterpValue) {
         if let InterpValue::Aggregate(fields) = v {
-            fields.push(elem);
+            if fields.len() == 2 {
+                // {buf, len}: bump len and store the element in buf's
+                // element list so both views agree.
+                let cur = match &fields[1] {
+                    InterpValue::Uint(n) => *n as usize,
+                    InterpValue::Int(n) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                if let InterpValue::Aggregate(buf) = &mut fields[0] {
+                    while buf.len() < cur {
+                        buf.push(InterpValue::Unit);
+                    }
+                    if buf.len() == cur {
+                        buf.push(elem);
+                    } else if cur < buf.len() {
+                        buf[cur] = elem;
+                    }
+                }
+                fields[1] = InterpValue::Uint((cur + 1) as u128);
+            } else {
+                fields.push(elem);
+            }
         } else {
             *v = InterpValue::Aggregate(vec![elem]);
         }
@@ -357,6 +471,62 @@ impl<'tcx> Interpreter<'tcx> {
 
     fn str_len(v: &InterpValue) -> usize {
         if let InterpValue::String(s) = v { s.len() } else { 0 }
+    }
+
+    /// T140-PATCHED-IO: extract the byte payload of a byte-buffer-like value.
+    fn byte_payload(v: &InterpValue) -> String {
+        match v {
+            InterpValue::String(s) => s.clone(),
+            InterpValue::Aggregate(fields) if !fields.is_empty() => {
+                Self::byte_payload(&fields[0])
+            }
+            InterpValue::Uint(n) => "\u{0}".repeat(*n as usize),
+            _ => String::new(),
+        }
+    }
+
+    /// T140-PATCHED-IO: dispatch an `extern "C"` FFI call by registered
+    /// symbol name. Returns `Ok(Some(ret))` when recognised (caller writes
+    /// `ret` and jumps to the continuation), `Ok(None)` otherwise.
+    fn try_call_extern(
+        &mut self,
+        callee_id: &DefId,
+        args: &[InterpValue],
+    ) -> InterpResult<Option<InterpValue>> {
+        let fn_def_id = glyim_core::def_id::FnDefId::from_raw(callee_id.local_id.to_raw());
+        let maybe = self.tcx.extern_fn_name(fn_def_id).map(str::to_string);
+        let Some(name) = maybe else {
+            return Ok(None);
+        };
+        match name.as_str() {
+            "glyim_stdout_write" | "glyim_stderr_write" => {
+                let payload = args.get(1).map(Self::byte_payload).unwrap_or_default();
+                let len = args
+                    .get(2)
+                    .and_then(|v| match v {
+                        InterpValue::Uint(n) => Some(*n as usize),
+                        InterpValue::Int(n) => Some((*n).max(0) as usize),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                let n = payload.len().min(len);
+                let bytes = payload.as_bytes()[..n].to_vec();
+                if name == "glyim_stdout_write" {
+                    self.stdout_buf.extend_from_slice(&bytes);
+                } else {
+                    self.stderr_buf.extend_from_slice(&bytes);
+                }
+                Ok(Some(InterpValue::Int(n as i128)))
+            }
+            "glyim_stdout_flush" | "glyim_stderr_flush" | "glyim_stdin_flush" => {
+                Ok(Some(InterpValue::Int(0)))
+            }
+            "glyim_stdin_read" => Ok(Some(InterpValue::Int(0))),
+            _ => {
+                tracing::warn!(extern_fn = %name, "interpreter: unhandled extern; returning 0");
+                Ok(Some(InterpValue::Int(0)))
+            }
+        }
     }
 
     fn string_push_str(s: &mut InterpValue, add: &InterpValue) {
@@ -370,6 +540,16 @@ impl<'tcx> Interpreter<'tcx> {
         } else {
             *s = InterpValue::String(suffix);
         }
+    }
+
+    /// T140-PATCHED-IO: bytes written to stdout by `glyim_stdout_write`.
+    pub fn get_stdout(&self) -> &[u8] {
+        &self.stdout_buf
+    }
+
+    /// T140-PATCHED-IO: bytes written to stderr by `glyim_stderr_write`.
+    pub fn get_stderr(&self) -> &[u8] {
+        &self.stderr_buf
     }
 
     /// get_return_value.
@@ -657,7 +837,9 @@ impl<'tcx> Interpreter<'tcx> {
                     // interpreter had no equivalent and panicked `function
                     // not found` for any stdlib code calling `Vec::push`,
                     // `Option::unwrap`, etc.
-                    if let Some(ret) = self.try_call_builtin(&callee_id, &arg_values)? {
+                    if let Some(ret) =
+                        self.try_call_builtin(&callee_id, &arg_values, &args)?
+                    {
                         self.write_place(&destination, ret)?;
                         if let Some(t) = target {
                             bb_idx = t;
@@ -667,6 +849,19 @@ impl<'tcx> Interpreter<'tcx> {
                         self.current_bb = bb_idx;
                         return Err(InterpError::Panic(
                             "builtin call has no continuation".into(),
+                        ));
+                    }
+                    // T140-PATCHED-IO: extern "C" FFI dispatch.
+                    if let Some(ret) = self.try_call_extern(&callee_id, &arg_values)? {
+                        self.write_place(&destination, ret)?;
+                        if let Some(t) = target {
+                            bb_idx = t;
+                            continue;
+                        }
+                        self.current_body = Some(body);
+                        self.current_bb = bb_idx;
+                        return Err(InterpError::Panic(
+                            "extern call has no continuation".into(),
                         ));
                     }
 
@@ -970,6 +1165,22 @@ impl<'tcx> Interpreter<'tcx> {
                         Ok(InterpValue::Int(len as i128))
                     }
                     glyim_type::TyKind::Slice(_) => {
+                        let val = self.read_place(place)?;
+                        let len = self.slice_length_from_value(&val)?;
+                        Ok(InterpValue::Int(len as i128))
+                    }
+                    // T140-PATCHED-LEN-REF: `buf.len()` where `buf: &[u8]`
+                    // (or `&str`) has a declared local type of
+                    // `Ref(Slice(_))` / `Ref(String)`, which the two arms
+                    // above do not match. Read the place (the interpreter's
+                    // `read_place` follows the reference) and length the
+                    // resulting value.
+                    glyim_type::TyKind::Ref(_, inner, _)
+                        if matches!(
+                            self.tcx.ty_kind(*inner),
+                            glyim_type::TyKind::Slice(_) | glyim_type::TyKind::String
+                        ) =>
+                    {
                         let val = self.read_place(place)?;
                         let len = self.slice_length_from_value(&val)?;
                         Ok(InterpValue::Int(len as i128))
@@ -1278,6 +1489,19 @@ impl<'tcx> Interpreter<'tcx> {
                     }
                 };
                 Ok(Float(result))
+            }
+            // T140-PATCHED-MIXED-NUM: mixed-signedness numeric ops.
+            // Rust typeck allows `i32 < usize` by inserting a coercion at
+            // the MIR level; the interpreter sees pre-coercion operand
+            // values, so `println`'s `written < buf.len()` (Int vs Uint)
+            // reached the fallthrough and panicked. Promote both operands
+            // to `Int(i128)` and recurse — the `(Int, Int)` arm above
+            // handles every op. Depth is bounded at 2.
+            (Int(a), Uint(b)) => {
+                self.eval_binary_op(op, &Int(*a), &Int(*b as i128), dest_ty)
+            }
+            (Uint(a), Int(b)) => {
+                self.eval_binary_op(op, &Int(*a as i128), &Int(*b), dest_ty)
             }
             _ => Err(InterpError::Panic(format!(
                 "unsupported binop types: {:?} and {:?}",
@@ -2033,6 +2257,9 @@ impl<'tcx> Interpreter<'tcx> {
                     })?;
                 self.slice_length_from_value(target_val)
             }
+            // T140-PATCHED-LEN-REF: the interpreter carries `&str`/`&[u8]`
+            // byte payloads in `InterpValue::String` (see `byte_payload`).
+            InterpValue::String(s) => Ok(s.len()),
             _ => Err(InterpError::Panic(
                 "slice length expected aggregate or reference".into(),
             )),
