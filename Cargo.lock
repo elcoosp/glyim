@@ -1268,6 +1268,7 @@ name = "glyim-pipeline"
 version = "0.1.0"
 dependencies = [
  "glyim-borrowck",
+ "glyim-bytecode-vm",
  "glyim-codegen",
  "glyim-codegen-llvm",
  "glyim-const-eval",

@@ -473,6 +473,45 @@ impl BytecodeBackend {
         Ok(())
     }
 
+    /// BC-JUMP-FIX: like [`generate_function`], but also returns the
+    /// per-basic-block byte-offset table.
+    ///
+    /// The emitter writes jump targets as **block indices**
+    /// (`emit_terminator`'s `Goto` arm: `bc.extend(target.to_raw()...)`), and
+    /// the golden tests assert that encoding. The VM's `resolve_target`,
+    /// however, only interprets a target as a block index when the function's
+    /// `block_offsets` table is non-empty; otherwise it treats the target as a
+    /// raw byte offset. The emitter previously never produced the table, so
+    /// **every jump through the emitter→VM path landed at the wrong byte**.
+    /// Straight-line programs (the only ones the tests ran through the VM) hid
+    /// this. Callers that execute emitted bytecode on the VM must use this
+    /// method and pass the offsets to `Function::with_blocks`.
+    ///
+    /// NOTE: offsets are recorded before the peephole pass, which can change
+    /// byte lengths. Accurate at `OptLevel::O0` (the default); callers running
+    /// with optimizations enabled should not rely on the offsets.
+    pub fn generate_function_with_blocks(
+        &self,
+        body: &Arc<Body>,
+    ) -> CompResult<(Vec<u8>, Vec<usize>)> {
+        let mut bc = Vec::new();
+        let mut block_offsets = Vec::with_capacity(body.basic_blocks.len());
+        // Reset the per-constant int-tracking record; it is rebuilt during this
+        // function's emission and consumed by the peephole pass below.
+        self.const_is_int.borrow_mut().clear();
+        for block in body.basic_blocks.iter() {
+            block_offsets.push(bc.len());
+            for stmt in &block.statements {
+                self.emit_statement(&mut bc, &stmt.kind, &body.locals)?;
+            }
+            self.emit_terminator(&mut bc, &block.terminator.kind, &body.locals)?;
+        }
+        if self.opt_level != OptLevel::O0 {
+            self.peephole(&mut bc);
+        }
+        Ok((bc, block_offsets))
+    }
+
     fn intern_string(&self, s: &str) -> u32 {
         // T190-PATCHED [BC-7]: side HashMap for O(1) lookup. The previous
         // linear scan was O(consts²) codegen time — every new string
@@ -597,20 +636,7 @@ impl CodegenBackend for BytecodeBackend {
     }
 
     fn generate_function(&self, body: &Arc<Body>) -> CompResult<Vec<u8>> {
-        let mut bc = Vec::new();
-        // Reset the per-constant int-tracking record; it is rebuilt during this
-        // function's emission and consumed by the peephole pass below.
-        self.const_is_int.borrow_mut().clear();
-        for block in body.basic_blocks.iter() {
-            for stmt in &block.statements {
-                self.emit_statement(&mut bc, &stmt.kind, &body.locals)?;
-            }
-            self.emit_terminator(&mut bc, &block.terminator.kind, &body.locals)?;
-        }
-        if self.opt_level != OptLevel::O0 {
-            self.peephole(&mut bc);
-        }
-        Ok(bc)
+        Ok(self.generate_function_with_blocks(body)?.0)
     }
 }
 
