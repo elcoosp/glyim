@@ -92,19 +92,38 @@ fixture.
 `RawVec`/`ptr::*` allocation, or (b) typeck to route `Vec::push` to the builtin
 id instead of the source body. Either is a workstream, not a patch.
 
-### 3.2 The `println` chain
+### 3.2 The `println` chain — remaining work, with design
 
 `probe_println_function.g`, `probe_println_macro.g`, `probe_string_push_str.g`
-compile (thanks to `7f57cf8e`) but panic at runtime. `println`'s body is:
+compile but do not produce output. `println`'s body is
+`stdout().write_all(s.as_bytes()).unwrap()`, whose byte path traverses
+`str::as_bytes` -> `slice::as_ptr` / `slice::len` -> `extern "C"
+glyim_stdout_write(fd, ptr, len)`.
 
-    stdout().write_all(s.as_bytes()).unwrap();
+**What was tried this session and why it is not the fix:** the interpreter
+carries byte slices in `InterpValue::String`. Arms were added for
+`Deref`/`Field`/`Index` projections and a `try_call_extern` dispatcher.
+Each projection patch moved the failure one step (deref -> field -> binop),
+ending at `unsupported binop types: String("hi") and Int(0)` — a String
+meeting an Int in arithmetic. **This is the signal that the String stand-in
+is the wrong shape.** A `String` cannot act as a `[ptr, len]` fat pointer;
+every site that needs a real pointer reveals another site.
 
-Each step is a builtin or FFI call the interpreter does not implement:
-`stdout()` (FFI), `write_all` (trait method on `Stdout`), `as_bytes` (builtin —
-partly handled), `unwrap` (builtin — handled). This needs the interpreter to
-model stdout/write side-effects; it currently has no output-capture model at
-all (`interpreter_runner.rs`'s `stdout` field is always empty).
+**The right design (not yet implemented):**
 
+1. Add an interpreter-side byte arena: `byte_arena: Vec<Vec<u8>>`, with a
+   new value variant `InterpValue::ByteRef(usize)` naming a slot in it.
+2. `str::as_bytes` / `String::as_bytes` / `as_ptr` return a fat-pointer
+   `Aggregate([ByteRef(id), Uint(len)])` — a real 2-field value that the
+   existing `Aggregate` projection code already handles for `Deref`,
+   `Field(0)`, `Field(1)`, and `Index`.
+3. `try_call_extern`'s `glyim_stdout_write` reads `args[1]` as
+   `ByteRef(id)` and copies `byte_arena[id]` into `stdout_buf`.
+4. Delete the String projection arms added this session — they become
+   dead once the value is a proper aggregate.
+
+Estimated: ~1 day. Bounded, and removes the approximation rather than
+layering on it.
 ### 3.3 Honest scope note
 
 The session-4 handoff's claim of "two remaining failures" was an undercount:
