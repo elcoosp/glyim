@@ -1567,6 +1567,12 @@ impl<'tcx> Interpreter<'tcx> {
         for proj in place.projection.iter() {
             match proj {
                 ProjectionElem::Deref => match val {
+                    // T140-PATCHED-DEREF-STRING: `InterpValue::String` is the
+                    // interpreter's stand-in for `&str`/`&[u8]` byte payloads
+                    // (see `byte_payload`). A `Deref` projection on it
+                    // (`buf[0]` on `buf: &[u8]`) is a no-op — the value is
+                    // already the "dereferenced" byte view.
+                    InterpValue::String(_) => { /* val unchanged */ }
                     InterpValue::Ref { frame, local } => {
                         let target = local;
                         let frame_locals = self.locals_for_ref_frame(frame).ok_or_else(|| {
@@ -1661,6 +1667,20 @@ impl<'tcx> Interpreter<'tcx> {
                         }
                     };
                     match val {
+                        // T140-PATCHED-DEREF-STRING: `buf[i]` on a byte-payload
+                        // String returns the i-th byte as a Uint.
+                        InterpValue::String(ref s) => {
+                            let bytes = s.as_bytes();
+                            val = bytes
+                                .get(idx_u)
+                                .map(|b| InterpValue::Uint(*b as u128))
+                                .ok_or_else(|| {
+                                    InterpError::Panic(format!(
+                                        "index out of bounds: {idx_u} >= {}",
+                                        bytes.len()
+                                    ))
+                                })?;
+                        }
                         InterpValue::Aggregate(ref elems) => {
                             val = elems.get(idx_u).cloned().ok_or_else(|| {
                                 InterpError::Panic(format!(
