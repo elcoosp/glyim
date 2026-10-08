@@ -1035,20 +1035,53 @@ impl<'a> ExpanderImpl<'a> {
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::Format => {
-                // T084-REVISED [MAC-6]: the previous T084 change made a
-                // substitution-requiring format! a hard error. That broke
-                // the assembled stdlib, which uses format! pervasively
-                // for its error messages. A Display/Debug-aware expansion
-                // is a separate task (needs a `Format` trait dispatch the
-                // expander cannot yet synthesize); until then, emit an
-                // empty string literal as the pre-T084 stub did, so the
-                // stdlib still type-checks. Documented limitation:
-                // `format!("{}", x)` evaluates to "" rather than the
-                // formatted text.
-                vec![TokenTree::Token(
-                    SyntaxKind::StringLit,
-                    SmolStr::from("\"\""),
-                )]
+                // T084-FORMAT-LITERAL: when `format!` receives exactly one
+                // argument and it is a plain string literal containing no
+                // `{}`/`{:..}` placeholders (the common case after
+                // `concat!(..)` has already folded down to a single literal
+                // — e.g. `println!("hi")` -> `format!(concat!("hi","\n"))`
+                // -> `format!("hi\n")`), the output IS that literal. Return
+                // it verbatim instead of the empty-string stub, so the
+                // literal-only `println!` / `print!` / `eprintln!` family
+                // produces real output.
+                //
+                // Interpolating forms (`format!("{}", x)`) still fall
+                // through to the empty-string stub: they need a `Display`
+                // dispatch the expander cannot synthesize, and are a
+                // separate follow-up.
+                let args_tt = flatten_token_tree(args_node);
+                let mut tokens: Vec<(SyntaxKind, SmolStr)> = Vec::new();
+                for tt in &args_tt {
+                    match tt {
+                        TokenTree::Token(kind, text) if *kind != SyntaxKind::Comma => {
+                            tokens.push((*kind, text.clone()));
+                        }
+                        TokenTree::Token(_, _) => {}
+                        _ => {
+                            // A nested group (e.g. a `{..}` named argument)
+                            // means real interpolation: fall through to the
+                            // stub rather than guessing.
+                            tokens.clear();
+                            break;
+                        }
+                    }
+                }
+                let literal_only = tokens.len() == 1
+                    && tokens[0].0 == SyntaxKind::StringLit
+                    && !tokens[0].1.contains('{');
+                // NOTE: this is the *match arm's* value, not a `return` —
+                // the enclosing fn returns `(Option<GreenNode>, Vec<Diag>)`.
+                if literal_only {
+                    vec![TokenTree::Token(
+                        SyntaxKind::StringLit,
+                        tokens[0].1.clone(),
+                    )]
+                } else {
+                    vec![TokenTree::Token(
+                        SyntaxKind::StringLit,
+                        SmolStr::from("\"\""),
+                    )]
+                }
             }
             BuiltinMacro::Vec => {
                 // `vec![a, b, c]` → `[a, b, c]`.
