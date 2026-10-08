@@ -6,7 +6,7 @@ use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
 use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
-use crate::navigation::{document_symbols, find_references};
+use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::rename::rename_symbol;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
@@ -17,6 +17,7 @@ use lsp_types::notification::{
 use lsp_types::request::{
     CodeActionRequest, Completion, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
     GotoDefinition, HoverRequest, Initialize, References, Rename, Shutdown,
+    WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -58,6 +59,10 @@ pub fn build_router(
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                // LSP-CONFORMANCE: `navigation::workspace_symbols` existed
+                // and was tested, but neither advertised nor routed — a dead
+                // feature. Advertise it so clients send the request.
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             };
             Ok(InitializeResult {
@@ -144,6 +149,19 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(provide_code_actions(&db, &guard, &params))
+        }
+    });
+
+    // Workspace Symbols (LSP-CONFORMANCE: was dead — advertised nothing,
+    // routed nothing; the function and its tests existed but no client could
+    // reach it).
+    let db_ws = db.clone();
+    router.request::<WorkspaceSymbolRequest, _>(move |_, params: WorkspaceSymbolParams| {
+        let db = db_ws.clone();
+        async move {
+            Ok(Some(WorkspaceSymbolResponse::Flat(
+                workspace_symbols(&db, &params).unwrap_or_default(),
+            )))
         }
     });
 

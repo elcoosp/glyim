@@ -21,6 +21,7 @@ mod reference_graph;
 mod symbol_index;
 mod uri_tests;
 mod workspace_symbol_tests;
+mod conformance;
 // New test modules for M10
 mod common;
 mod driver_tests;
