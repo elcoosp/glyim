@@ -311,6 +311,19 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
+            // T140-PATCHED-STR-IDENTITY: `str::as_str(&self) -> &str` is an
+            // identity on a `&str`; `str::to_string` / `String::to_string`
+            // wrap the payload as a `String`. The `format!("{}", x)`
+            // expansion emits `(x).to_string().as_str()`, so both are on
+            // the path.
+            (1061, "as_str") | (1050, "as_str") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::String(Self::byte_payload(&s))))
+            }
+            (1061, "to_string") | (1050, "to_string") | (1060, "to_string") => {
+                let s = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::String(Self::byte_payload(&s))))
+            }
             (1060, "len") => {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::Uint(Self::byte_payload(&s).len() as u128)))
