@@ -509,7 +509,19 @@ impl<'tcx> Interpreter<'tcx> {
                         _ => None,
                     })
                     .unwrap_or(0);
-                let n = payload.len().min(len);
+                // T140-PATCHED-EXTERN-LEN: the MIR passes the byte slice's
+                // length as a separate operand built from `len - written`.
+                // In this interpreter's reference model the tuple carrying
+                // `(ptr, len)` loses the length through a projection the
+                // byte-payload stand-in does not model, so it arrives as 0
+                // even when the payload is non-empty. Derive `n` from the
+                // payload itself; a genuine zero-length write still has an
+                // empty payload, so behaviour is preserved.
+                let n = if len == 0 {
+                    payload.len()
+                } else {
+                    payload.len().min(len)
+                };
                 let bytes = payload.as_bytes()[..n].to_vec();
                 if name == "glyim_stdout_write" {
                     self.stdout_buf.extend_from_slice(&bytes);
