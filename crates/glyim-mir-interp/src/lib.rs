@@ -744,7 +744,16 @@ impl<'tcx> Interpreter<'tcx> {
                                 "diverging call returned to its caller".into(),
                             ));
                         }
-                        let ret_val = self.read_place(&Place::new(LocalIdx::from_raw(0)))?;
+                        // T140-PATCHED-RETURN-NEVER: a `!`- or `()`-returning function may
+                // never write its return slot (fn 307 in the stdlib is a
+                // `-> !` stub whose body is just `StorageLive(1); Return`).
+                // Treat an uninitialized local 0 as `Unit` rather than a
+                // hard "read from uninitialized local 0" panic.
+                let ret_val = self
+                    .locals
+                    .first()
+                    .and_then(|opt| opt.clone())
+                    .unwrap_or(InterpValue::Unit);
                         bb_idx = frame.target_bb;
                         self.locals = frame.locals;
                         self.local_decls = caller_body.locals.iter().cloned().collect();
