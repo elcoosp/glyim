@@ -168,3 +168,63 @@ fn dce_preserves_observed_value() {
     }];
     assert_optimization_preserves(locals, blocks, i32_ty);
 }
+
+/// Discriminating case: `local2 = 999` is never read, so DCE should remove it.
+/// Asserts both that behavior is preserved AND that the optimizer actually
+/// transformed the body — proving the harness isn't vacuous.
+#[test]
+fn dce_removes_unused_assignment_still_preserves() {
+    let mut ctx_mut = test_ty_ctx();
+    let i32_ty = ty_i32(&mut ctx_mut);
+    let locals = vec![
+        (i32_ty, Mutability::Mut),
+        (i32_ty, Mutability::Mut),
+        (i32_ty, Mutability::Mut),
+    ];
+    let blocks = vec![BasicBlockData {
+        statements: vec![
+            Statement {
+                kind: StatementKind::Assign(
+                    Place::new(LocalIdx::from_raw(2)),
+                    Rvalue::Use(const_int(999, i32_ty)),
+                ),
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            Statement {
+                kind: StatementKind::Assign(
+                    Place::new(LocalIdx::from_raw(1)),
+                    Rvalue::Use(const_int(7, i32_ty)),
+                ),
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+            Statement {
+                kind: StatementKind::Assign(
+                    Place::new(LocalIdx::from_raw(0)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                ),
+                source_info: SourceInfo::new(Span::DUMMY),
+            },
+        ],
+        terminator: Terminator {
+            kind: TerminatorKind::Return,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
+        is_cleanup: false,
+    }];
+    let body = build_test_body(locals, blocks, 0, i32_ty);
+    let ctx = ctx_mut.freeze();
+
+    let before = run_interp(&ctx, &body);
+    let optimized = crate::optimize(&ctx, &std::sync::Arc::new(body.clone())).body;
+    let after = run_interp(&ctx, &optimized);
+
+    assert_eq!(before, 7, "unoptimized body returns 7");
+    assert_eq!(after, 7, "optimized body must still return 7");
+
+    let before_stmts: usize = body.basic_blocks.iter().map(|b| b.statements.len()).sum();
+    let after_stmts: usize = optimized.basic_blocks.iter().map(|b| b.statements.len()).sum();
+    assert!(
+        after_stmts < before_stmts,
+        "DCE should have removed the dead assignment (before={before_stmts}, after={after_stmts})"
+    );
+}
