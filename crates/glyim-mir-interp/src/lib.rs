@@ -1503,6 +1503,28 @@ impl<'tcx> Interpreter<'tcx> {
             (Uint(a), Int(b)) => {
                 self.eval_binary_op(op, &Int(*a as i128), &Int(*b), dest_ty)
             }
+            // T140-PATCHED-BYTEPTR-ARITH: `InterpValue::String` stands in for
+            // a byte pointer (see `byte_payload`). `buf.as_ptr() + offset` in
+            // the MIR's sub-slice lowering reaches this fallthrough as
+            // `(String, Int|Uint)`. Model pointer advance as "drop N leading
+            // bytes" so `&buf[written..]` produces the correct suffix, and
+            // `len - written` (Int/Int) computes the matching new length.
+            (String(s), Int(n)) => {
+                let skip = (*n).max(0) as usize;
+                if skip >= s.len() {
+                    Ok(InterpValue::String(std::string::String::new()))
+                } else {
+                    Ok(InterpValue::String(s[skip..].to_string()))
+                }
+            }
+            (String(s), Uint(n)) => {
+                let skip = *n as usize;
+                if skip >= s.len() {
+                    Ok(InterpValue::String(std::string::String::new()))
+                } else {
+                    Ok(InterpValue::String(s[skip..].to_string()))
+                }
+            }
             _ => Err(InterpError::Panic(format!(
                 "unsupported binop types: {:?} and {:?}",
                 left, right
