@@ -1938,3 +1938,67 @@ pub extern "C" fn glyim_condvar_notify_all(id: usize) -> i32 {
         None => -1,
     }
 }
+
+/// LSP/format FFI: allocate a `{ptr, len}` String from raw bytes.
+///
+/// Writes 16 bytes (pointer then length, both native-endian) to `out`.
+/// The language's `TyKind::String` lowers to exactly this `{ptr, i64}`
+/// layout (see `glyim-codegen-llvm/src/types.rs`).
+///
+/// # Safety
+/// `out` must point to 16 writable bytes; `src` must be valid for `len`
+/// bytes (may be null when `len == 0`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_string_from_bytes(
+    src: *const u8,
+    len: usize,
+    out: *mut u8,
+) {
+    if out.is_null() {
+        return;
+    }
+    let (ptr, _) = if len == 0 {
+        (std::ptr::null_mut::<u8>(), 0usize)
+    } else {
+        let alloc = unsafe { glyim_alloc(len, 1) };
+        unsafe { std::ptr::copy_nonoverlapping(src, alloc, len) };
+        (alloc, len)
+    };
+    unsafe {
+        std::ptr::write_unaligned(out as *mut *mut u8, ptr);
+        std::ptr::write_unaligned((out as *mut u8).add(8) as *mut usize, len);
+    }
+}
+
+/// Format FFI: append `add_len` bytes to the String whose `{ptr, len}` header
+/// lives at `str_header`, reallocating as needed and writing the updated
+/// header back.
+///
+/// # Safety
+/// `str_header` must point to 16 readable+writable bytes holding a valid
+/// `{ptr, len}` produced by `glyim_string_from_bytes` (or zero-initialized);
+/// `add` must be valid for `add_len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_string_push_str(
+    str_header: *mut u8,
+    add: *const u8,
+    add_len: usize,
+) {
+    if str_header.is_null() || add_len == 0 {
+        return;
+    }
+    let old_ptr =
+        unsafe { std::ptr::read_unaligned(str_header as *const *mut u8) };
+    let old_len =
+        unsafe { std::ptr::read_unaligned((str_header as *const u8).add(8) as *const usize) };
+    let new_len = old_len + add_len;
+    let new_ptr = unsafe { glyim_alloc(new_len, 1) };
+    if old_len > 0 && !old_ptr.is_null() {
+        unsafe { std::ptr::copy_nonoverlapping(old_ptr, new_ptr, old_len) };
+    }
+    unsafe { std::ptr::copy_nonoverlapping(add, new_ptr.add(old_len), add_len) };
+    unsafe {
+        std::ptr::write_unaligned(str_header as *mut *mut u8, new_ptr);
+        std::ptr::write_unaligned((str_header as *mut u8).add(8) as *mut usize, new_len);
+    }
+}
