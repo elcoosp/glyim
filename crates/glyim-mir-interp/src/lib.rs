@@ -1607,6 +1607,25 @@ impl<'tcx> Interpreter<'tcx> {
                 ProjectionElem::Field(field_idx) => {
                     let fi = field_idx.index();
                     match val {
+                        // T140-PATCHED-FIELD-STRING: `InterpValue::String`
+                        // stands in for a fat-pointer slice `[ptr, len]`. The
+                        // MIR's `as_ptr()`/`as_bytes()` lowering reads
+                        // `[Deref, Field(0)]` (data ptr) and `[Deref, Field(1)]`
+                        // (len) directly. Model field 0 = the byte payload
+                        // itself (a reference stand-in) and field 1 = the byte
+                        // length, so the extern call's `(fd, ptr, len)` shape
+                        // arrives intact.
+                        InterpValue::String(ref s) => {
+                            if fi == 0 {
+                                val = InterpValue::String(s.clone());
+                            } else if fi == 1 {
+                                val = InterpValue::Uint(s.len() as u128);
+                            } else {
+                                return Err(InterpError::Panic(format!(
+                                    "field {fi} on byte payload (expected 0=ptr or 1=len)"
+                                )));
+                            }
+                        }
                         InterpValue::Aggregate(ref fields) => {
                             // Enum values are laid out as `[tag, ...payload]` in
                             // this interpreter (see `Rvalue::Aggregate` /
