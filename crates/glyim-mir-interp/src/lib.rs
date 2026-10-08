@@ -269,10 +269,10 @@ impl<'tcx> Interpreter<'tcx> {
             }
             (1020, "push") => {
                 let elem = args.get(1).cloned().unwrap_or(InterpValue::Unit);
-                self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     Self::vec_push(v, elem);
                 })?;
-                Ok(Some(InterpValue::Unit))
+                Ok(Some(v))
             }
             (1050, "new") => Ok(Some(InterpValue::String(String::new()))),
             // (str_id 1061 and string_id 1050 `push_str` are both handled below)
@@ -290,10 +290,10 @@ impl<'tcx> Interpreter<'tcx> {
             }
             (1050, "push_str") | (1061, "push_str") => {
                 let add = args.get(1).cloned().unwrap_or(InterpValue::Unit);
-                self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     Self::string_push_str(v, &add);
                 })?;
-                Ok(Some(InterpValue::Unit))
+                Ok(Some(v))
             }
             (1061, "len") => {
                 let s = self.builtin_deref(&receiver)?;
@@ -370,11 +370,18 @@ impl<'tcx> Interpreter<'tcx> {
         op: Option<&Operand>,
         value: Option<&InterpValue>,
         f: F,
-    ) -> InterpResult<()> {
+    ) -> InterpResult<InterpValue> {
+        // T140-PATCHED-RETURN-MUTATED: return the mutated value in addition
+        // to writing it back. MIR sometimes uses the *receiver's* place as
+        // the call destination for a `()`-returning `&mut self` method
+        // (`s.push_str(..)` lowered with destination = `s`); returning Unit
+        // then clobbered `s`. Returning the mutated value makes the
+        // destination correct whichever place MIR chose.
         if let Some(Operand::Copy(p) | Operand::Move(p)) = op {
             let mut v = self.read_place(p)?;
             f(&mut v);
-            return self.write_place(p, v);
+            self.write_place(p, v.clone())?;
+            return Ok(v);
         }
         match value {
             Some(InterpValue::Ref { frame, local }) => {
@@ -388,19 +395,17 @@ impl<'tcx> Interpreter<'tcx> {
                         ))
                     })?;
                 f(&mut v);
-                self.write_place_frame(*frame, &place, v)
+                self.write_place_frame(*frame, &place, v.clone())?;
+                Ok(v)
             }
             Some(v) => {
-                // Value-only receiver with no place to write back to.
-                // Mutating a copy would be a silent no-op; surface the
-                // design gap instead of pretending the call succeeded.
                 let _ = v;
                 Err(InterpError::Panic(
                     "builtin &mut-self method called with a by-value receiver;                      no place to write the mutation back to. This is a lowering                      gap — see the session-5 handoff §3.1."
                         .into(),
                 ))
             }
-            None => Ok(()),
+            None => Ok(InterpValue::Unit),
         }
     }
 
