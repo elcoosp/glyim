@@ -1035,46 +1035,57 @@ impl<'a> ExpanderImpl<'a> {
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::Format => {
-                // T084-FORMAT-LITERAL: when `format!` receives exactly one
-                // argument and it is a plain string literal containing no
-                // `{}`/`{:..}` placeholders (the common case after
-                // `concat!(..)` has already folded down to a single literal
-                // — e.g. `println!("hi")` -> `format!(concat!("hi","\n"))`
-                // -> `format!("hi\n")`), the output IS that literal. Return
-                // it verbatim instead of the empty-string stub, so the
-                // literal-only `println!` / `print!` / `eprintln!` family
-                // produces real output.
+                // T084-FORMAT-GROUP: reduce a placeholder-free `format!` to
+                // the literal it denotes. This handles both
+                // `format!("hi\n")` (a direct literal) and the shape the
+                // io.g declarative `println!` macro produces,
+                // `format!(concat!("hi", "\n"))`, where the arguments
+                // arrive as `concat! ( <group> )` — the string literals
+                // live *inside* a `TokenTree::Group`, which
+                // `flatten_token_tree` does not descend into.
                 //
-                // Interpolating forms (`format!("{}", x)`) still fall
-                // through to the empty-string stub: they need a `Display`
-                // dispatch the expander cannot synthesize, and are a
-                // separate follow-up.
-                let args_tt = flatten_token_tree(args_node);
-                let mut tokens: Vec<(SyntaxKind, SmolStr)> = Vec::new();
-                for tt in &args_tt {
-                    match tt {
-                        TokenTree::Token(kind, text) if *kind != SyntaxKind::Comma => {
-                            tokens.push((*kind, text.clone()));
-                        }
-                        TokenTree::Token(_, _) => {}
-                        _ => {
-                            // A nested group (e.g. a `{..}` named argument)
-                            // means real interpolation: fall through to the
-                            // stub rather than guessing.
-                            tokens.clear();
-                            break;
+                // Walk the args recursively: collect every `StringLit`,
+                // note whether any contains `{` (interpolation). If none do
+                // and we found at least one literal, emit their
+                // concatenation. Otherwise fall through to the empty-string
+                // stub — `format!("{}", x)` needs a `Display` dispatch the
+                // expander cannot synthesize.
+                fn collect(
+                    tts: &[TokenTree],
+                    lits: &mut Vec<String>,
+                    has_interp: &mut bool,
+                ) {
+                    for tt in tts {
+                        match tt {
+                            TokenTree::Token(kind, text) => {
+                                if *kind == SyntaxKind::StringLit {
+                                    let inner = text.trim_matches('"');
+                                    if inner.contains('{') {
+                                        *has_interp = true;
+                                        return;
+                                    }
+                                    lits.push(inner.to_string());
+                                }
+                            }
+                            TokenTree::Group(_, inner, _) => {
+                                collect(inner, lits, has_interp);
+                                if *has_interp {
+                                    return;
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
-                let literal_only = tokens.len() == 1
-                    && tokens[0].0 == SyntaxKind::StringLit
-                    && !tokens[0].1.contains('{');
-                // NOTE: this is the *match arm's* value, not a `return` —
-                // the enclosing fn returns `(Option<GreenNode>, Vec<Diag>)`.
-                if literal_only {
+                let args_tt = flatten_token_tree(args_node);
+                let mut lits: Vec<String> = Vec::new();
+                let mut has_interp = false;
+                collect(&args_tt, &mut lits, &mut has_interp);
+                if !has_interp && !lits.is_empty() {
+                    let combined = lits.concat();
                     vec![TokenTree::Token(
                         SyntaxKind::StringLit,
-                        tokens[0].1.clone(),
+                        SmolStr::from(format!("\"{}\"", combined)),
                     )]
                 } else {
                     vec![TokenTree::Token(
