@@ -5,13 +5,11 @@
 //! `Return` means "the value is in local 0" while the VM's `OP_RETURN` *pops
 //! the operand stack*. The emitter never pushes local 0, so every function
 //! run through the VM errors. Fixing it (load local 0 before `OP_RETURN`)
-//! broke 76 byte-position golden tests in `glyim-codegen`, which are
-//! themselves assertions on the buggy encoding. Reconciling the two — fix the
-//! emitter and update the goldens, or change the VM's `OP_RETURN` to read
-//! local 0 — is a discrete workstream, not a tail-of-session patch.
-//!
-//! The tests are `#[ignore]`d until then, with the expectation and finding
-//! preserved so they can be enabled the moment the bug is fixed.
+//! FIXED (BC-RETURN): the emitter now pushes local 0 before `OP_RETURN` for
+//! value-returning functions (unit-returning ones push nothing), and the VM's
+//! `OP_RETURN` treats an empty stack as Unit rather than `EmptyReturn`. The
+//! byte-length goldens were unaffected because their synthetic bodies return
+//! unit; only `t99` needed updating (it had asserted the buggy post-run state).
 
 //! Bytecode VM ≡ MIR interpreter differential test.
 //!
@@ -108,32 +106,27 @@ fn assert_agree(src: &str, expected: i64) {
 }
 
 #[test]
-#[ignore = "BC-RETURN: emitter does not push local 0 before OP_RETURN"]
 fn constant_return() {
     assert_agree("fn main() -> i32 {\n    42\n}", 42);
 }
 
 #[test]
-#[ignore = "BC-RETURN: see module docs"]
 fn arithmetic() {
     assert_agree("fn main() -> i32 {\n    3 + 4 * 2 - 1\n}", 10);
 }
 
 #[test]
-#[ignore = "BC-RETURN: see module docs"]
 fn if_else_taken_branch() {
     // RT-11: inverted if-guards would take the wrong branch.
     assert_agree("fn main() -> i32 {\n    if 1 < 2 { 10 } else { 99 }\n}", 10);
 }
 
 #[test]
-#[ignore = "BC-RETURN: see module docs"]
 fn if_else_not_taken_branch() {
     assert_agree("fn main() -> i32 {\n    if 1 > 2 { 99 } else { 10 }\n}", 10);
 }
 
 #[test]
-#[ignore = "BC-RETURN: see module docs"]
 fn while_loop_sum() {
     assert_agree(
         "fn main() -> i32 { let mut i = 0; let mut s = 0; while i < 5 { s = s + i; i = i + 1; } s }",

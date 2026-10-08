@@ -1099,6 +1099,21 @@ impl BytecodeBackend {
     ) -> CompResult<()> {
         match kind {
             TerminatorKind::Return => {
+                // BC-RETURN-FIX: MIR's `Return` means "result is in local 0";
+                // the VM's `OP_RETURN` pops the operand stack. Push local 0
+                // for value-returning functions. Unit-returning functions
+                // push nothing (the VM treats an empty-stack Return as Unit),
+                // so their byte layout is unchanged.
+                let has_local0 = !local_tys.is_empty();
+                let ret_ty = if has_local0 {
+                    local_tys[LocalIdx::from_raw(0)].ty
+                } else {
+                    Ty::UNIT
+                };
+                if ret_ty != Ty::UNIT {
+                    bc.push(OP_LOAD_LOCAL);
+                    bc.extend_from_slice(&0u32.to_le_bytes());
+                }
                 bc.push(OP_RETURN);
                 Ok(())
             }

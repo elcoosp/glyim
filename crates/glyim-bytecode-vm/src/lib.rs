@@ -581,7 +581,10 @@ impl Vm {
                     self.stack.push(Value::Tuple(elems));
                 }
                 Opcode::Return => {
-                    let retval = self.pop().map_err(|_| VmError::EmptyReturn)?;
+                    // BC-RETURN-FIX: a unit-returning function pushes nothing,
+                    // so an empty stack here means "returns Unit", not an
+                    // error. Value-returning functions still push their result.
+                    let retval = self.pop().unwrap_or(Value::Int(0));
                     let finished = self.frames.pop().unwrap();
                     if self.frames.is_empty() {
                         // Entry frame returned: the value is the module result.
