@@ -3097,17 +3097,32 @@ impl<'a> FnCtxt<'a> {
         // The builtin table only contains methods with real intrinsic
         // lowerings, so falling through to the impl scan on a miss (e.g.
         // `first`, `get`, `reverse`) is still correct.
+        // ADT-BUILTIN-FIRST: the stdlib's `String`/`Vec`/`Box` are
+        // `TyKind::Adt(1050/1020/1040, _)` at the receiver, NOT
+        // `TyKind::String` (which is the primitive `str`-like type). The
+        // guard previously matched only the primitive forms, so
+        // `s.len()` on a `String` skipped the builtin table and resolved
+        // to the stdlib's empty `str::len` stub — returning uninitialized
+        // memory (0). Match the builtin ADT ids too.
+        let is_builtin_adt = |this: &Self, t: Ty| -> bool {
+            matches!(
+                this.ctx.ty_kind(t),
+                TyKind::Adt(id, _) if matches!(id.to_raw(), 1020 | 1040 | 1050)
+            )
+        };
         if matches!(
             self.ctx.ty_kind(recv_ty),
             TyKind::Slice(_) | TyKind::Array(..) | TyKind::String
-        ) || matches!(
-            self.ctx.ty_kind(recv_ty),
-            TyKind::Ref(_, inner, _)
-                if matches!(
-                    self.ctx.ty_kind(*inner),
-                    TyKind::Slice(_) | TyKind::Array(..) | TyKind::String
-                )
-        ) {
+        ) || is_builtin_adt(self, recv_ty)
+            || matches!(
+                self.ctx.ty_kind(recv_ty),
+                TyKind::Ref(_, inner, _)
+                    if matches!(
+                        self.ctx.ty_kind(*inner),
+                        TyKind::Slice(_) | TyKind::Array(..) | TyKind::String
+                    ) || is_builtin_adt(self, *inner)
+            )
+        {
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
                     return (out_ty, Some(MethodDispatch::Builtin(fn_id)));
