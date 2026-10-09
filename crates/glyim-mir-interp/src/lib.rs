@@ -211,6 +211,18 @@ impl<'tcx> Interpreter<'tcx> {
         arg_operands: &[Operand],
     ) -> InterpResult<Option<InterpValue>> {
         let raw = callee_id.local_id.to_raw();
+        // SENTINEL-HARD-FAIL: the top four id slots are typeck's synthetic
+        // sentinels (`into` / `to_string` / `clone` / `drop`). Lowering
+        // replaces them with an `Error` constant on the *dead* branch it
+        // assumes they always sit on. When one is reached on a live path,
+        // evaluating it as a zero value silently produces wrong output
+        // (observed: `.to_string()` returning 0). Fail loudly instead.
+        if raw >= u32::MAX - 4 {
+            return Err(InterpError::Panic(format!(
+                "reached a compiler-synthetic sentinel call (FnDefId {raw}); \
+                 this branch was assumed dead. File a compiler bug."
+            )));
+        }
         if raw < 9_000 {
             return Ok(None);
         }
