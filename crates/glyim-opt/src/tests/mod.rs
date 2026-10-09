@@ -11,3 +11,4 @@ pub mod testutil;
 mod unreachable_elim;
 mod unreachable_elim_tests;
 mod behavior_preservation;
+mod dce_projection_uses;

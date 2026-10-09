@@ -45,8 +45,31 @@ fn collect_operand_uses(op: &Operand, used: &mut HashSet<LocalIdx>) {
             // local is used even when the projection list is non-empty. Dropping
             // it would delete the only store that feeds the projection.
             used.insert(place.local);
+            // DCE-INDEX-USES: a projection can *also* read other locals —
+            // `arr[i]` reads the index local `i`, and `arr[a..b]` reads `a`
+            // and `b`. The previous code ignored the projection entirely, so
+            // DCE deleted `Assign(i, 0)` as "unused" and the subsequent
+            // `arr[i]` read an uninitialized local (`index local N not
+            // initialized`). Walk the projection and mark every local it
+            // names.
+            collect_projection_locals(&place.projection, used);
         }
         Operand::Constant(_) => {}
+    }
+}
+
+/// Mark every local named inside a projection list as used.
+///
+/// `ProjectionElem::Index(l)` reads local `l`; `ConstantIndex` and `Subslice`
+/// carry constants, not locals. `Deref`/`Field`/`Downcast` name nothing.
+fn collect_projection_locals(proj: &[ProjectionElem], used: &mut HashSet<LocalIdx>) {
+    for p in proj {
+        match p {
+            ProjectionElem::Index(l) => {
+                used.insert(*l);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -59,6 +82,7 @@ fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
         }
         Rvalue::Ref(place, _) => {
             used.insert(place.local);
+            collect_projection_locals(&place.projection, used);
         }
         Rvalue::Aggregate(_, operands) => {
             for op in operands {
@@ -67,6 +91,7 @@ fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
         }
         Rvalue::Discriminant(place) | Rvalue::Len(place) => {
             used.insert(place.local);
+            collect_projection_locals(&place.projection, used);
         }
         Rvalue::Cast(_, op, _) => collect_operand_uses(op, used),
         Rvalue::Repeat(op, _) => collect_operand_uses(op, used),
@@ -97,6 +122,7 @@ fn collect_uses_in_terminator(term: &Terminator, used: &mut HashSet<LocalIdx>) {
             collect_operand_uses(cond, used);
         }
         TerminatorKind::Drop { place, .. } => {
+            collect_projection_locals(&place.projection, used);
             // A scope-exit `Drop` terminator reads its place: the local must
             // stay initialized, or DCE would delete the only store that feeds
             // it and the drop would run on uninitialized memory (MIR-6).
