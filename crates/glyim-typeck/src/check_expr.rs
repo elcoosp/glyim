@@ -2576,6 +2576,43 @@ impl<'a> FnCtxt<'a> {
                     }
                     if mn == "to_owned" || mn == "to_string" {
                         let out_ty = self.ctx.mk_ty(TyKind::String);
+                        // TO_STRING-BUILTIN-FIRST: `str::to_string` and
+                        // `String::to_string` have *registered* builtins
+                        // (`ty_ctx_mut.rs` 2335 / 2379) with real intrinsic
+                        // bodies. The sentinel `FnDefId(u32::MAX - 2)` this
+                        // block used to return unconditionally is replaced by
+                        // an `Error` constant during lowering, so `to_string`
+                        // on a String/&str silently produced poison (every
+                        // `.to_string().len()` returned 0). Consult the
+                        // registry first; fall back to the sentinel only when
+                        // the receiver has no real builtin (the generic
+                        // `Display::to_string` case).
+                        let canon: Option<AdtId> = match self.ctx.ty_kind(step_ty) {
+                            TyKind::String => Some(AdtId::from_raw(1061)),
+                            TyKind::Slice(e)
+                                if matches!(self.ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)) =>
+                            {
+                                Some(AdtId::from_raw(1061))
+                            }
+                            TyKind::Adt(id, _) => Some(*id),
+                            TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                                TyKind::String => Some(AdtId::from_raw(1061)),
+                                TyKind::Slice(e)
+                                    if matches!(self.ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)) =>
+                                {
+                                    Some(AdtId::from_raw(1061))
+                                }
+                                TyKind::Adt(id, _) => Some(*id),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        if let Some(aid) = canon
+                            && let Some((fn_id, _)) =
+                                self.ctx.lookup_builtin_method(aid, method_name)
+                        {
+                            return Some((out_ty, fn_id));
+                        }
                         let fn_id = FnDefId::from_raw(u32::MAX - 2);
                         return Some((out_ty, fn_id));
                     }
