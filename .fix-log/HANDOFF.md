@@ -1,181 +1,82 @@
-# HANDOFF — Glyim compiler fix plan (current)
+# HANDOFF — Glyim compiler (current)
 
-**Updated at**: end of Session 5 (final)
-**HEAD**: `17aacb46` (`chore: Cargo.lock for glyim-test -> glyim-lang-std dep`)
-**Baseline for this session**: `bd571466` (the session-4 handoff doc commit)
-**Session-4 history**: preserved verbatim in `.fix-log/HANDOFF-session-4-archive.md`
-**Workspace state**: clean, 0 compile errors, **4570 passing / 1 failing** (2 skipped) across 65 test binaries.
+**Updated**: end of Session 7
+**HEAD**: `946403fe`
+**Matrix**: **4598 passing / 0 failing / 2 skipped** — fully green.
 
-> **Correction notice.** The archived session-4 handoff claimed "3,175 tests passing, 0 failing". That was wrong twice over: the real suite is 4,571 tests, and there were **six** pre-existing failures at `bd571466` that the doc's verification commands could not see. See §5 for why, and §3 for what remains.
+> Session 5's handoff (`.fix-log/HANDOFF.md` before this) claimed
+> `17aacb46`, 4570/1. Superseded.
 
 ---
 
-## 1. What this session changed
+## 1. Session 7 summary
 
-Six commits on top of `bd571466`:
+Started from the `better-testing.md` doc, ended up fixing five real
+compiler defects plus building a four-class regression suite.
 
-| Commit | Kind | What |
+### Bugs fixed (6 commits)
+
+| Commit | Bug |
+|---|---|
+| `7df95f81` | typeck returned sentinel `FnDefId(u32::MAX-2)` for **any** `.to_string()`; lowering replaced it with a poison `Error` constant → every `to_string` returned 0 |
+| `9950a459` | builtin methods never registered in `fn_sigs` (codegen panicked "no signature registered"); `str::to_string` had no LLVM arm |
+| `59ed4b2c` | `String`/`Vec`/`Box` are `TyKind::Adt(1050/1020/1040)`, not `TyKind::String` — the builtin-before-impl guard skipped them, so `s.len()` resolved to an empty `str::len` stub (uninitialized → 0) |
+| `414e19a9` | `format!("{}", x)` interpolation end-to-end (emitter + LLVM `as_str`/`new`/`push_str` arms) |
+| `cf68f584` | interpreter now hard-fails on sentinel ids instead of returning poison |
+
+`probe_string_push_str.g` — the failure that motivated this — passes.
+
+### Regression suite (4 classes, all committed)
+
+| Class | Where | Guards |
 |---|---|---|
-| `f3592a8d` | test(layout) | Fix `MethodDef` test initializers after T178 added `has_generic_params`. **Pre-existing breakage** — `cargo check --workspace` never compiles test targets, so it hid. |
-| `114bb5f8` | fix(lower) | T121 follow-up: per-argument two-phase borrow flags. |
-| `e5e0212f` | test(cli) | Pin `--lto fat` **error** contract. T126 made `--lto fat` a tracked gap; the test still asserted success. **Pre-existing stale test.** |
-| `fed55588` | revert | Revert `114bb5f8` — based on a wrong hypothesis (see below). |
-| `f35321a5` | reapply | Restore `114bb5f8` after confirming the async failure it was blamed for is pre-existing. |
-| `248a454a` | fix(codegen) | Lower synthetic sentinel `FnDefId` calls to an `Error` constant; accept `MirConstKind::Error` in LLVM codegen as a zero of the destination type. **Fixes 4 `emit_modes` tests + `println` via `--with-stdlib`.** |
-| `b51f62bd` | docs(handoff) | Corrected this handoff. |
-| `00949c26` | docs(handoff) | Restore the session-4 archive (it had been committed empty). |
-| `80fe0fcd` | fix(hir/async) | **T100 real bug.** `rewrite_for_poll` searched for the fn-body root Block *after* rewriting; `rewrite_expr` allocates new Blocks (the `Pending => loop {}` arm), so the search found an empty inner Block, hit the silent `return` bail-out, and skipped the `Poll::Ready` wrap. The poll body was effectively empty. **Greens `async_state_machine_runs_via_interpreter`.** |
-| `591aa394` | fix(interp) | Accept `MirConstKind::Error` as `Unit` (symmetric with `248a454a`'s LLVM change). |
-| `7f57cf8e` | feat(harness) | `// compile-flags: --with-stdlib` — `PipelineCompiler` prepends the assembled minimal stdlib. |
-| `71b900dc` | fix(interp) | **Builtin-method dispatch.** The interpreter had no handler for compiler-synthetic builtin methods (`FnDefId` 9000+); stdlib code calling `Vec::push`/`Option::unwrap`/`String::as_str` panicked `function not found`. Adds `try_call_builtin`. **Greens `probe_option_unwrap.g`.** |
-| `17aacb46` | chore | `Cargo.lock` for the new `glyim-test` -> `glyim-lang-std` dep. |
-
-### 1.1 The T121 revert/reapply (honest record)
-
-`114bb5f8` was reverted on the hypothesis that it caused `async_state_machine_runs_via_interpreter` to fail. It did not: the test fails identically at `bd571466`, before any of this session's work. The revert was based on a misread, and `f35321a5` undoes it. Both the revert and its reversal are in history deliberately — the log should show the correction, not hide it.
-
-The reverted-then-restored change is a *precision* refinement (only mark `&mut x` as two-phase when a sibling argument reads `x`). It is sound: it never marks fewer borrows than necessary in a way that rejects a valid program, because the fallback for any unrecognised expression shape is "assume it reads the place" (`expr_reads_local`'s `_ => true`).
+| 1. Registry invariants | `glyim-type/src/tests/builtin_registry.rs` | builtin id present in method table but missing `fn_sigs`; sentinel slots; duplicate/out-of-range ids |
+| 2. Poison hard-fail | `glyim-mir-interp/src/tests/poison.rs` | a compiler sentinel reaching a live path must panic |
+| 3. Behavioral matrix | `glyim-test/tests/run-pass/behavior/*.g` (9 fixtures) | method resolving to the wrong/empty body — value assertions through the real pipeline |
+| 4. Backend completeness | `glyim-cli/tests/emit_modes.rs::object_has_no_unresolved_glyim_fn_symbols` | a builtin with no lowering arm → undefined `__glyim_fn_*` symbol |
 
 ---
 
-## 2. Corrected status of the session-4 "remaining items"
+## 2. Original plan status (`docs/roadmaps/glyim-fix-plan.md`)
 
-The archived handoff listed three items as remaining. Two of them were **already implemented** when it was written.
+202 tasks (T001–T202), 199 findings, 4 waves.
 
-### 2.1 T100 (async state machine) — ALREADY IMPLEMENTED, not remaining
-
-`crates/glyim-hir/src/lower/lower_async.rs` contains three working desugars:
-- `desugar_one_async_fn` — single-poll (0 or 1 `.await`),
-- `desugar_multi_async_fn` — sequential multi-`.await` state machine (`Start`/`S0`…/`Done`),
-- `desugar_loop_async_fn` — a resumable machine for one `.await` inside a `while` body.
-
-The MIR-level analysis half (`crates/glyim-lower/src/async_state_transform.rs`) also exists with unit tests. **The archived handoff's §3.1 "full design" describes work that is done.** What is *not* done is runtime verification: `async_state_machine_runs_via_interpreter` fails (see §3.1).
-
-### 2.2 T121 (two-phase borrow) — DONE
-
-Basic flag landed in session 4 (`687ef927`). The follow-up (precise per-argument activation) landed this session as `f35321a5`. No further work planned.
-
-### 2.3 T140 (compiler intrinsics) — PARTIALLY done, remainder re-scoped
-
-Done this session:
-- Synthetic sentinel `FnDefId` calls (`into`/`to_string`/`clone`/`drop`) no longer ICE. `248a454a`.
-
-Still open, with corrected reasoning:
-- **`mem::size_of` / `mem::align_of`** — the archived handoff framed this as "needs layout fold". That understates it. `thir::ExprKind::FnRef(FnDefId)` carries **no substitution**, so the generic argument `T` in `size_of::<T>()` is not on the callee expression. `ExprKind::FnRef`'s `.ty` *is* `TyKind::FnDef(id, Substitution)`, so `T` is reachable — but identifying *which* `FnDefId` is `mem::size_of` needs a name-keyed registry that does not exist. **New task: add a `FnDefId`→name/kind registry**, then fold these calls in `lower_expr_to_rvalue`.
-- **`ptr::read`/`write`/`copy`/`copy_nonoverlapping`/`drop_in_place`** — design unchanged from the archived §3.2.B (per-backend intrinsics).
-- **`str::contains`/`trim`/`Chars::next`** — still blocked on `str` byte-range indexing returning `()`.
+- **Waves 1–4**: done in sessions 1–4 (114 commits).
+- Status markers in tree: **`-PATCHED` 111 files**, `-REVIEWED` 2, `-REVISED` 1, **`-DEFERRED` 1** (`str.g`).
 
 ---
 
-## 3. Genuinely remaining — one probe, one LLVM feature
+## 3. What remains: T140 [STD-15]
 
-**Matrix: 4,570 passing / 1 failing / 2 skipped / 0 leaky.**
+Bodyless "compiler intrinsic" stubs with no lowering. Plan verification:
+`"  x ".trim().len()` must print `1`.
 
-The single failure is `glyim-test::run_pass_corpus run_pass_corpus_passes`,
-covering one fixture:
+**Open items:**
 
-### 3.1 `probe_string_push_str.g` — needs LLVM String allocation
+- **`str.g`**: `str::len` (empty stub — masked by the builtin table for
+  `String`, but still there), `str::contains`, `str::trim`, `Chars::next`,
+  `Lines::next`.
+- **`mem.g`**: `size_of`, `align_of`, `needs_drop`.
+- **`ptr.g`**: `read`, `write`, `copy`, `copy_nonoverlapping`,
+  `drop_in_place` (these four have runtime FFI: `glyim_string_from_bytes`,
+  etc., but the *core* ptr intrinsics do not).
+- **`MaybeUninit`**: `uninit` / `new` / `assume_init`.
 
-The fixture is `println!("{}", s.as_str())`. Greening it requires
-`format!` to emit real interpolation code. **That emission was attempted
-this session and reverted**, because it regresses
-`glyim-cli::emit_modes exec_binary_prints_hello`: the interpolation calls
-`String::new` / `String::push_str` / `String::as_str` via their builtin
-`FnDefId`s, and `glyim-codegen-llvm`'s `try_lower_builtin_intrinsic`
-(currently covering only `as_bytes`/`as_ptr`/`as_mut_ptr`/`len`/`is_empty`)
-emits **no symbol** for them, so the linker fails with
+Already done (T140 partials): `ptr::null`/`null_mut`, `NonNull::{new_unchecked,dangling}`,
+`mem::forget`.
 
-    Undefined symbols: ___glyim_fn_9095 (as_str), ___glyim_fn_9113
-    (String::new), ___glyim_fn_9155 (push_str)
-
-**The real fix** is one of:
-
-1. **Extend `try_lower_builtin_intrinsic`** to lower these three inline.
-   `String::new` → `dest_llvm_ty.const_zero()` (a new `String` is all-zero:
-   `{ inner: { buf: {ptr,cap}, len: 0 } }`). `as_str` on a `String` →
-   extract the `{ptr, len}` sub-struct. `push_str` needs real growth
-   (allocation + memcpy), which is the hard part — likely delegate to a
-   `glyim-runtime` FFI helper (`glyim_string_push_str`) rather than inline
-   IR. ~1 day.
-
-2. **Emit a call to the stdlib source fn instead of the builtin id.** The
-   stdlib's `String::new` / `push_str` have real MIR bodies and therefore
-   real LLVM symbols. If the format! expansion referenced those (by name)
-   rather than the typeck-registered builtin `FnDefId`, LLVM would link.
-   This is the cheaper path — a lowering change, not a codegen feature.
-   ~2-3 hours.
-
-**Until one of those lands**, `format!("{}", x)` falls through to the
-empty-string stub (the pre-existing behavior), and the fixture is a
-documented gap, not a bug in the fixes landed this session.
-
-### 3.2 What is NOT remaining
-
-Everything else in the previous §3 is fixed and verified:
-
-- `async_state_machine_runs_via_interpreter` — PASSES (T100 root-block fix).
-- The leaky test — FIXED (interpreter worker thread is joined).
-- `probe_option_unwrap.g` — PASSES (builtin dispatch).
-- `probe_vec_push_len.g` — PASSES (Vec `{buf,len}` model + mixed-num arms).
-- `probe_println_function.g` — PASSES (extern dispatch + byte-ptr arith).
-- `probe_println_macro.g` — PASSES (`format!` literal + group recursion).
-- The four `glyim-cli::emit_modes` tests — PASS.
-- The pre-existing `MethodDef` and `--lto fat` test breakages — FIXED.
-
-## 4. Items reverted or rejected (unchanged from session 4)
-
-### T010 (`STD-4`) / T011 (`STD-5`) — env.g / process.g FFI rewrite
-Reverted; runtime FFI retained. Blocked on turbofish-on-generic-method (`ptr::null_mut::<u8>()`) hitting a solver limitation.
-
-### T096 (`TY-26`) — Send/Sync realignment
-Rejected as incorrect per Rust semantics. The compiler's current behavior is right; the plan's proposal was wrong. Genuinely useful remainder (user `unsafe impl Send`/`impl !Send`) not implemented — parser lacks `impl !Trait`.
+**Blocker for `size_of`/`align_of`**: needs a `FnDefId`→name registry at
+lowering (see session-5 handoff §2.3); the calls carry the generic `T` in
+the callee's `Substitution`, so the fold is feasible once the id is
+identifiable.
 
 ---
 
-## 5. Verification commands — CORRECTED
-
-The session-4 handoff's commands were insufficient. They used `cargo check --workspace`, which **does not compile test targets**, so a broken test file (`glyim-layout/src/tests/vtable_layout.rs`) sat undetected, and `cargo nextest run` without `--no-fail-fast` stops at the first failing binary, hiding the rest.
+## 4. Verification (corrected)
 
 ```bash
-# Compile sanity — INCLUDING test targets (this is the fix for the above):
-cargo check --workspace --tests
-
-# Full matrix — NO fail-fast, so every failure surfaces in one run:
+cargo check --workspace --tests   # --tests is REQUIRED (skips test targets otherwise)
 cargo nextest run --workspace --no-fail-fast
-
-# The two known-failing tests, for focused iteration:
-cargo test -p glyim-pipeline --test async_runtime
-cargo nextest run -p glyim-test run_pass_corpus_passes --no-fail-fast
 ```
 
-**Expected**: `cargo check --workspace --tests` clean; `4569 passed / 2 failed / 2 skipped` (4,571 total).
-
----
-
-## 6. Marker conventions (unchanged)
-
-| Marker | Meaning |
-|---|---|
-| `T###-PATCHED` | Fix applied, verified. |
-| `T###-PATCHED-XXX` | Sub-marker (`-DECL`, `-CALL`, `-LLVM-ERROR`, …). |
-| `T###-REVIEWED` | Plan's suggestion rejected as incorrect; current code kept. |
-| `T###-REVISED` | Fix applied, then revised after tests broke. |
-| `T###-DEFERRED` | Not implemented; rationale + design in the comment. |
-
-Commit style: `fix(wave-N): TIDs (brief)`, `feat(...)`, `perf(...)`, `chore(...)`, `docs(session): ...`, `test(area): ...`.
-
----
-
-## 7. How to resume
-
-1. `cd /Users/adm/Documents/Repos/glyim-v2`
-2. `git log --oneline bd571466..HEAD` → **6** commits (listed in §1).
-3. `cargo check --workspace --tests` → clean.
-4. `cargo nextest run --workspace --no-fail-fast` → 4569/2.
-5. Pick from §3. Suggested order:
-   - **§3.2 `probe_vec_push_len.g`** — trivial fixture fix (`v.len() as i32`).
-   - **§3.2 harness stdlib injection** — unblocks 3 probes at once; decide injection vs relocation.
-   - **§3.1 async interpreter** — needs recon first; do not touch the uninit check.
-   - **§3.2 `probe_option_unwrap.g`** — real compiler bug; highest difficulty.
-
-The source of truth is `git log bd571466..HEAD` plus this document. The plan itself is `docs/roadmaps/glyim-fix-plan.md`.
+Expected: **4598 passed / 2 skipped**.
