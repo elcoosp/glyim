@@ -2612,19 +2612,15 @@ self.register_builtin_methods();
             let n = self.resolver.intern(name);
             let inputs_subst =
                 self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
-            self.primitive_method_fns.insert(
-                (recv_ty, n),
-                (
-                    fn_id,
-                    FnSig {
-                        inputs: inputs_subst,
-                        output,
-                        c_variadic: false,
-                        unsafety: glyim_core::primitives::Safety::Safe,
-                        abi: glyim_core::primitives::Abi::Glyim,
-                    },
-                ),
-            );
+            let sig = FnSig {
+                inputs: inputs_subst,
+                output,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            };
+            self.fn_sigs.insert(fn_id, sig.clone());
+            self.primitive_method_fns.insert((recv_ty, n), (fn_id, sig));
         }
 
         // Bit / power-of-two / zero helper methods on the primitive
@@ -2655,19 +2651,15 @@ self.register_builtin_methods();
             let n = self.resolver.intern(name);
             let inputs_subst =
                 self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
-            self.primitive_method_fns.insert(
-                (recv_ty, n),
-                (
-                    fn_id,
-                    FnSig {
-                        inputs: inputs_subst,
-                        output,
-                        c_variadic: false,
-                        unsafety: glyim_core::primitives::Safety::Safe,
-                        abi: glyim_core::primitives::Abi::Glyim,
-                    },
-                ),
-            );
+            let sig = FnSig {
+                inputs: inputs_subst,
+                output,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            };
+            self.fn_sigs.insert(fn_id, sig.clone());
+            self.primitive_method_fns.insert((recv_ty, n), (fn_id, sig));
         }
 
         // Primitive numeric methods (keyed on the primitive `Ty`).
@@ -2704,19 +2696,15 @@ self.register_builtin_methods();
             let n = self.resolver.intern(name);
             let inputs_subst =
                 self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
-            self.primitive_method_fns.insert(
-                (recv_ty, n),
-                (
-                    fn_id,
-                    FnSig {
-                        inputs: inputs_subst,
-                        output,
-                        c_variadic: false,
-                        unsafety: glyim_core::primitives::Safety::Safe,
-                        abi: glyim_core::primitives::Abi::Glyim,
-                    },
-                ),
-            );
+            let sig = FnSig {
+                inputs: inputs_subst,
+                output,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            };
+            self.fn_sigs.insert(fn_id, sig.clone());
+            self.primitive_method_fns.insert((recv_ty, n), (fn_id, sig));
         }
 
         for (adt_id, name, inputs, output) in entries {
@@ -2728,19 +2716,18 @@ self.register_builtin_methods();
             let n = self.resolver.intern(name);
             let inputs_subst =
                 self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
-            self.builtin_method_fns.insert(
-                (adt_id, n),
-                (
-                    fn_id,
-                    FnSig {
-                        inputs: inputs_subst,
-                        output,
-                        c_variadic: false,
-                        unsafety: glyim_core::primitives::Safety::Safe,
-                        abi: glyim_core::primitives::Abi::Glyim,
-                    },
-                ),
-            );
+            let sig = FnSig {
+                inputs: inputs_subst,
+                output,
+                c_variadic: false,
+                unsafety: glyim_core::primitives::Safety::Safe,
+                abi: glyim_core::primitives::Abi::Glyim,
+            };
+            // BUILTIN-FN-SIG-REG: codegen resolves the call ABI via
+            // `fn_sig(fn_id)`; without this the LLVM backend panics with
+            // "no signature registered for function FnDefId(N)".
+            self.fn_sigs.insert(fn_id, sig.clone());
+            self.builtin_method_fns.insert((adt_id, n), (fn_id, sig));
         }
     }
 

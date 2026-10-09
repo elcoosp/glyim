@@ -3291,6 +3291,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     ///
     /// Anything else returns `Ok(false)` so future builtins can be added
     /// incrementally.
+    /// Declare (or fetch) an external helper with a void return and the
+    /// given parameter types. Used by String-builtin lowering.
+    fn declare_void_helper(
+        &self,
+        name: &str,
+        param_tys: &[inkwell::types::BasicMetadataTypeEnum<'ctx>],
+    ) -> inkwell::values::FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function(name) {
+            return f;
+        }
+        let fn_ty = self.context.void_type().fn_type(param_tys, false);
+        self.module.add_function(name, fn_ty, None)
+    }
+
     fn try_lower_builtin_intrinsic(
         &mut self,
         fn_id: glyim_core::def_id::FnDefId,
@@ -3305,6 +3319,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         if !matches!(
             method.as_str(),
             "as_bytes" | "as_ptr" | "as_mut_ptr" | "len" | "is_empty"
+                | "to_string"
         ) {
             return Ok(false);
         }
@@ -3320,6 +3335,42 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .map(|d| d.ty)
             .unwrap_or(glyim_type::Ty::UNIT);
         let dest_llvm_ty = self.llvm_type_for_ty(dest_ty);
+
+        // BC-TOSTRING-LLVM: `str::to_string(&self) -> String`. In this
+        // compiler's LLVM type model both `str` (a `&str`) and `String` lower
+        // to the fat pointer `{ptr, i64}`, so `to_string` is a copy: read the
+        // receiver's (ptr, len) and hand them to the runtime helper, which
+        // allocates and copies. Without this arm the call emitted an undefined
+        // `__glyim_fn_9106`.
+        if method == "to_string" {
+            if !recv_val.is_struct_value() {
+                return Ok(false);
+            }
+            let sv = recv_val.into_struct_value();
+            let p = self.builder.build_extract_value(sv, 0, "ts_p")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string ptr: {e:?}"))])?;
+            let l = self.builder.build_extract_value(sv, 1, "ts_l")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string len: {e:?}"))])?;
+            let helper = self.declare_void_helper(
+                "glyim_string_from_bytes",
+                &[
+                    self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                    self.llvm_int_type(64).into(),
+                    self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                ],
+            );
+            let args: Vec<inkwell::values::BasicMetadataValueEnum> =
+                vec![p.into(), l.into(), dest_ptr.into()];
+            self.builder.build_call(helper, &args, "to_string_call")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string call: {e:?}"))])?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("to_string target");
+                self.builder.build_unconditional_branch(tb)
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
+            }
+            return Ok(true);
+        }
+
         // `len` / `is_empty` on a fat pointer `{data_ptr, len}` extract field
         // 1 (the length). `is_empty` further compares it to 0.
         if matches!(method.as_str(), "len" | "is_empty") {
