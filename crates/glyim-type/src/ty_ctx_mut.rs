@@ -2375,7 +2375,6 @@ self.register_builtin_methods();
                 vec![],
                 self.mk_ty(TyKind::Ref(Region::Erased, slice_u8, Mutability::Not)),
             ),
-            (str_id, "contains", vec![u8_ty], bool_ty),
             (str_id, "to_string", vec![], string_ty),
             (
                 str_id,

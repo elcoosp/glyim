@@ -1,22 +1,17 @@
-//! T140-DEFERRED [STD-15]: several `str` methods have empty bodies
-//! ("compiler intrinsic" markers): `len`, `contains`, `trim`, and
-//! `Chars::next`. A full implementation needs either:
-//!   * a compiler-intrinsic lowering path (register a synthetic FnDefId
-//!     in `TyCtxMut::register_builtin_methods`, lower in
-//!     `glyim-lower`, implement in both backends and the interpreter), or
-//!   * native slice support (str-indexing by byte range currently
-//!     returns `()`, so the pure-Glyim versions of `trim`/`contains`
-//!     don't type-check).
-//! Tracked as a follow-up; the empty bodies are functionally no-ops
-//! until then.
-
 //! String slice operations for the Glyim core library.
+//!
+//! T140 [STD-15]: `len` / `contains` are implemented here. `trim`,
+//! `Chars::next`, and `Lines::next` remain compiler-intrinsic stubs — they
+//! need either native `&str` sub-slicing (`&s[a..b]` currently rejects a
+//! dynamic range on `str`) or unicode decoding, neither of which the
+//! language exposes yet.
 
 /// Extension methods for string slices.
 impl str {
     /// Returns the length of `self`.
     fn len(&self) -> usize {
-        // compiler intrinsic
+        // compiler intrinsic: `len` extracts field 1 of the `{ptr, len}` fat
+        // pointer. The builtin table (`str_id`, "len") lowers it.
     }
 
     /// Returns `true` if `self` has a length of zero bytes.
@@ -24,9 +19,38 @@ impl str {
         self.len() == 0
     }
 
-    /// Returns `true` if the given pattern matches a sub-slice of this string slice.
+    /// Returns `true` if `needle` occurs anywhere in `self`.
+    ///
+    /// T140: implemented as a naive byte-window search over `as_bytes()`
+    /// (both operands). Correct for byte-substring matching (the common use:
+    /// searching for ASCII delimiters like `\n`, `" "`).
     fn contains(&self, needle: &str) -> bool {
-        // compiler intrinsic or pattern matching
+        let h = self.as_bytes();
+        let n = needle.as_bytes();
+        let hn = h.len();
+        let nn = n.len();
+        if nn == 0 {
+            return true;
+        }
+        if nn > hn {
+            return false;
+        }
+        let mut i = 0;
+        while i + nn <= hn {
+            let mut j = 0;
+            let mut ok = true;
+            while j < nn {
+                if h[i + j] != n[j] {
+                    ok = false;
+                }
+                j = j + 1;
+            }
+            if ok {
+                return true;
+            }
+            i = i + 1;
+        }
+        false
     }
 
     /// Returns an iterator over the chars of the string slice.
@@ -41,7 +65,7 @@ impl str {
 
     /// Returns a string slice with leading and trailing whitespace removed.
     fn trim(&self) -> &str {
-        // compiler intrinsic
+        // compiler intrinsic: needs `&str` sub-slicing on a runtime range.
     }
 
     /// Parses this string slice into another type.
@@ -58,7 +82,7 @@ struct Chars<'a> {
 impl<'a> Iterator for Chars<'a> {
     type Item = char;
     fn next(&mut self) -> Option<char> {
-        // compiler intrinsic - yields next unicode scalar
+        // compiler intrinsic: yields the next unicode scalar (needs decoding).
     }
 }
 
