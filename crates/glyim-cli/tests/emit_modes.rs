@@ -210,3 +210,59 @@ fn exec_binary_prints_hello() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Every `__glyim_fn_*` the object *references* must be *defined* in it.
+///
+/// Bug class: a builtin method reaches codegen with no lowering arm, so the
+/// backend emits a bare call to `__glyim_fn_<id>` and never defines it. The
+/// object compiles; the **link** fails. This test objects-and-checks the
+/// symbol table directly, so it fails even where a linker would be lenient
+/// (and on hosts with no linker). It compiles through the real pipeline —
+/// no synthetic MIR — so it exercises the actual emitter.
+#[test]
+fn object_has_no_unresolved_glyim_fn_symbols() {
+    let dir = tempdir();
+    let src = hello_source(&dir);
+    let obj = dir.join("hello.o");
+    let out = run_emit(&src, "obj", &obj);
+    assert!(
+        out.status.success(),
+        "--emit=obj failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // `nm` is part of binutils/LLVM on every CI image. Absent -> skip
+    // (better a gap than a false failure).
+    let nm = match Command::new("nm").arg(&obj).output() {
+        Ok(o) => o,
+        Err(_) => return,
+    };
+    let text = String::from_utf8_lossy(&nm.stdout);
+
+    // Collect defined (T/t/D/d/B/b) and undefined (U) `__glyim_fn_*` names.
+    let mut defined = std::collections::HashSet::new();
+    let mut undefined = Vec::new();
+    for line in text.lines() {
+        let mut parts = line.split_whitespace();
+        let (Some(kind), Some(name)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if !name.contains("__glyim_fn_") {
+            continue;
+        }
+        if kind == "U" {
+            undefined.push(name.to_string());
+        } else {
+            defined.insert(name.to_string());
+        }
+    }
+    let missing: Vec<_> = undefined
+        .iter()
+        .filter(|n| !defined.contains(*n))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "object references undefined `__glyim_fn_*` symbols: {missing:?}\n\
+         A builtin method reached codegen with no lowering arm."
+    );
+}
