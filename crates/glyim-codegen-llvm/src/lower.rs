@@ -3319,9 +3319,31 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         if !matches!(
             method.as_str(),
             "as_bytes" | "as_ptr" | "as_mut_ptr" | "len" | "is_empty"
-                | "to_string"
+                | "to_string" | "as_str" | "new" | "push_str"
         ) {
             return Ok(false);
+        }
+        // BC-NEW-ZEROARG: `String::new()` / `Vec::new()` take no arguments,
+        // so the `args.first()` guard below would bail before any per-method
+        // arm. Handle the zero-arg constructors first. `dest` is the
+        // `{ptr, len}` fat pointer; an empty collection is all-zero.
+        if method == "new" {
+            let dest_ty0 = self
+                .body
+                .locals
+                .get(destination.local)
+                .map(|d| d.ty)
+                .unwrap_or(glyim_type::Ty::UNIT);
+            let dest_llvm_ty0 = self.llvm_type_for_ty(dest_ty0);
+            let dp = self.place_ptr(destination)?;
+            self.builder.build_store(dp, dest_llvm_ty0.const_zero())
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("store new: {e:?}"))])?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("new target");
+                self.builder.build_unconditional_branch(tb)
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
+            }
+            return Ok(true);
         }
         let Some(recv) = args.first() else {
             return Ok(false);
@@ -3335,6 +3357,75 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .map(|d| d.ty)
             .unwrap_or(glyim_type::Ty::UNIT);
         let dest_llvm_ty = self.llvm_type_for_ty(dest_ty);
+
+        // BC-STR-ARMS: `as_str` is identity (`String` and `&str` are both
+        // `{ptr, i64}`); `String::new` is all-zero; `push_str` mutates the
+        // receiver's `{ptr, len}` header in place via the runtime helper.
+        if method == "as_str" {
+            let stored = if recv_val.get_type() == dest_llvm_ty {
+                recv_val
+            } else if recv_val.is_struct_value() && dest_llvm_ty.is_struct_type() {
+                recv_val
+            } else {
+                return Ok(false);
+            };
+            self.builder.build_store(dest_ptr, stored)
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("store as_str: {e:?}"))])?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("as_str target");
+                self.builder.build_unconditional_branch(tb)
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
+            }
+            return Ok(true);
+        }
+        if method == "push_str" {
+            // Receiver is `&mut String`; its LLVM value is the `{ptr, i64}`
+            // struct OR a pointer to it. The helper needs a pointer to the
+            // header.
+            let header_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                // Struct value receiver: store into a temp alloca, pass its
+                // address, then reload. (Non-mutating in-place for a by-value
+                // receiver; the emitter passes a place, so this is the
+                // fallback.)
+                let alloca = self.builder.build_alloca(recv_val.get_type(), "ps_hdr")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("alloca: {e:?}"))])?;
+                self.builder.build_store(alloca, recv_val)
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("store: {e:?}"))])?;
+                alloca
+            } else {
+                return Ok(false);
+            };
+            let Some(add) = args.get(1) else { return Ok(false); };
+            let add_val = self.lower_operand(add)?;
+            if !add_val.is_struct_value() {
+                return Ok(false);
+            }
+            let av = add_val.into_struct_value();
+            let ap = self.builder.build_extract_value(av, 0, "ps_p")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("extract: {e:?}"))])?;
+            let al = self.builder.build_extract_value(av, 1, "ps_l")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("extract: {e:?}"))])?;
+            let helper = self.declare_void_helper(
+                "glyim_string_push_str",
+                &[
+                    self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                    self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                    self.llvm_int_type(64).into(),
+                ],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> =
+                vec![header_ptr.into(), ap.into(), al.into()];
+            self.builder.build_call(helper, &cargs, "push_str_call")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("push_str call: {e:?}"))])?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("push_str target");
+                self.builder.build_unconditional_branch(tb)
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
+            }
+            return Ok(true);
+        }
 
         // BC-TOSTRING-LLVM: `str::to_string(&self) -> String`. In this
         // compiler's LLVM type model both `str` (a `&str`) and `String` lower

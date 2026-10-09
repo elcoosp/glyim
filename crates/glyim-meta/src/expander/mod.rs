@@ -1035,63 +1035,145 @@ impl<'a> ExpanderImpl<'a> {
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::Format => {
-                // T084-FORMAT-GROUP: reduce a placeholder-free `format!` to
-                // the literal it denotes. This handles both
-                // `format!("hi\n")` (a direct literal) and the shape the
-                // io.g declarative `println!` macro produces,
-                // `format!(concat!("hi", "\n"))`, where the arguments
-                // arrive as `concat! ( <group> )` — the string literals
-                // live *inside* a `TokenTree::Group`, which
-                // `flatten_token_tree` does not descend into.
-                //
-                // Walk the args recursively: collect every `StringLit`,
-                // note whether any contains `{` (interpolation). If none do
-                // and we found at least one literal, emit their
-                // concatenation. Otherwise fall through to the empty-string
-                // stub — `format!("{}", x)` needs a `Display` dispatch the
-                // expander cannot synthesize.
-                fn collect(
-                    tts: &[TokenTree],
-                    lits: &mut Vec<String>,
-                    has_interp: &mut bool,
-                ) {
-                    for tt in tts {
-                        match tt {
-                            TokenTree::Token(kind, text) => {
-                                if *kind == SyntaxKind::StringLit {
-                                    let inner = text.trim_matches('"');
-                                    if inner.contains('{') {
+                fn tt_tok(k: SyntaxKind, t: &str) -> TokenTree {
+                    TokenTree::Token(k, SmolStr::from(t))
+                }
+                fn tt_paren(inner: Vec<TokenTree>) -> TokenTree {
+                    TokenTree::Group(SyntaxKind::LParen, inner, SyntaxKind::RParen)
+                }
+                fn take_fmt(tokens: &[TokenTree]) -> Option<(String, &[TokenTree])> {
+                    match tokens.split_first() {
+                        Some((TokenTree::Token(SyntaxKind::StringLit, text), rest)) => {
+                            Some((text.trim_matches('"').to_string(), rest))
+                        }
+                        Some((TokenTree::Token(SyntaxKind::Ident, name), rest))
+                            if name == "concat" =>
+                        {
+                            let rest = match rest.split_first() {
+                                Some((TokenTree::Token(SyntaxKind::Bang, _), r)) => r,
+                                _ => return None,
+                            };
+                            let (group, rest) = match rest.split_first() {
+                                Some((TokenTree::Group(_, inner, _), r)) => (inner, r),
+                                _ => return None,
+                            };
+                            let mut combined = String::new();
+                            for t in group {
+                                if let TokenTree::Token(SyntaxKind::StringLit, txt) = t {
+                                    combined.push_str(txt.trim_matches('"'));
+                                }
+                            }
+                            Some((combined, rest))
+                        }
+                        _ => None,
+                    }
+                }
+                fn emit_push_str(out: &mut Vec<TokenTree>, arg: Vec<TokenTree>) {
+                    out.push(tt_tok(SyntaxKind::Ident, "__glyim_fmt"));
+                    out.push(tt_tok(SyntaxKind::Dot, "."));
+                    out.push(tt_tok(SyntaxKind::Ident, "push_str"));
+                    out.push(tt_paren(arg));
+                    out.push(tt_tok(SyntaxKind::Semicolon, ";"));
+                }
+                fn try_interp(inner: &[TokenTree]) -> Option<Vec<TokenTree>> {
+                    let (fmt, rest) = take_fmt(inner)?;
+                    let open = fmt.find("{}")?;
+                    let (before, after) = (&fmt[..open], &fmt[open + 2..]);
+                    if before.contains('{') || before.contains('}')
+                        || after.contains('{') || after.contains('}')
+                    {
+                        return None;
+                    }
+                    let rest = match rest.split_first() {
+                        Some((TokenTree::Token(SyntaxKind::Comma, _), r)) => r,
+                        _ => return None,
+                    };
+                    if rest.is_empty() {
+                        return None;
+                    }
+                    let mut out: Vec<TokenTree> = Vec::new();
+                    out.push(tt_tok(SyntaxKind::LBrace, "{"));
+                    out.push(tt_tok(SyntaxKind::KwLet, "let"));
+                    out.push(tt_tok(SyntaxKind::KwMut, "mut"));
+                    out.push(tt_tok(SyntaxKind::Ident, "__glyim_fmt"));
+                    out.push(tt_tok(SyntaxKind::Eq, "="));
+                    out.push(tt_tok(SyntaxKind::Ident, "String"));
+                    out.push(tt_tok(SyntaxKind::ColonColon, "::"));
+                    out.push(tt_tok(SyntaxKind::Ident, "new"));
+                    out.push(tt_paren(Vec::new()));
+                    out.push(tt_tok(SyntaxKind::Semicolon, ";"));
+                    if !before.is_empty() {
+                        emit_push_str(
+                            &mut out,
+                            vec![tt_tok(SyntaxKind::StringLit, &format!("\"{}\"", before))],
+                        );
+                    }
+                    let mut arg_toks: Vec<TokenTree> = Vec::new();
+                    arg_toks.extend(rest.iter().cloned());
+                    arg_toks.push(tt_tok(SyntaxKind::Dot, "."));
+                    arg_toks.push(tt_tok(SyntaxKind::Ident, "to_string"));
+                    arg_toks.push(tt_paren(Vec::new()));
+                    arg_toks.push(tt_tok(SyntaxKind::Dot, "."));
+                    arg_toks.push(tt_tok(SyntaxKind::Ident, "as_str"));
+                    arg_toks.push(tt_paren(Vec::new()));
+                    emit_push_str(&mut out, arg_toks);
+                    if !after.is_empty() {
+                        emit_push_str(
+                            &mut out,
+                            vec![tt_tok(SyntaxKind::StringLit, &format!("\"{}\"", after))],
+                        );
+                    }
+                    out.push(tt_tok(SyntaxKind::Ident, "__glyim_fmt"));
+                    out.push(tt_tok(SyntaxKind::RBrace, "}"));
+                    Some(out)
+                }
+
+                let args_tt = flatten_token_tree(args_node);
+                let mut inner: &[TokenTree] = &args_tt;
+                if matches!(inner.first(), Some(TokenTree::Token(SyntaxKind::LParen, _))) {
+                    inner = &inner[1..];
+                }
+                if matches!(inner.last(), Some(TokenTree::Token(SyntaxKind::RParen, _))) {
+                    inner = &inner[..inner.len() - 1];
+                }
+                if let Some(tokens) = try_interp(inner) {
+                    tokens
+                } else {
+                    fn collect(tts: &[TokenTree], lits: &mut Vec<String>, has_interp: &mut bool) {
+                        for tt in tts {
+                            match tt {
+                                TokenTree::Token(SyntaxKind::StringLit, text) => {
+                                    let s = text.trim_matches('"');
+                                    if s.contains('{') {
                                         *has_interp = true;
                                         return;
                                     }
-                                    lits.push(inner.to_string());
+                                    lits.push(s.to_string());
                                 }
-                            }
-                            TokenTree::Group(_, inner, _) => {
-                                collect(inner, lits, has_interp);
-                                if *has_interp {
-                                    return;
+                                TokenTree::Group(_, inner2, _) => {
+                                    collect(inner2, lits, has_interp);
+                                    if *has_interp {
+                                        return;
+                                    }
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
-                }
-                let args_tt = flatten_token_tree(args_node);
-                let mut lits: Vec<String> = Vec::new();
-                let mut has_interp = false;
-                collect(&args_tt, &mut lits, &mut has_interp);
-                if !has_interp && !lits.is_empty() {
-                    let combined = lits.concat();
-                    vec![TokenTree::Token(
-                        SyntaxKind::StringLit,
-                        SmolStr::from(format!("\"{}\"", combined)),
-                    )]
-                } else {
-                    vec![TokenTree::Token(
-                        SyntaxKind::StringLit,
-                        SmolStr::from("\"\""),
-                    )]
+                    let mut lits = Vec::new();
+                    let mut has_interp = false;
+                    collect(&args_tt, &mut lits, &mut has_interp);
+                    if !has_interp && !lits.is_empty() {
+                        vec![TokenTree::Token(
+                            SyntaxKind::StringLit,
+                            SmolStr::from(format!("\"{}\"", lits.concat())),
+                        )]
+                    } else {
+                        vec![TokenTree::Token(
+                            SyntaxKind::StringLit,
+                            SmolStr::from("\"\""),
+                        )]
+                    }
                 }
             }
             BuiltinMacro::Vec => {
