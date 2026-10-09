@@ -680,6 +680,14 @@ impl TyCtx {
         self.fn_sigs.get(&def_id)
     }
 
+    /// Every synthetic `FnDefId` in the builtin-method registry.
+    ///
+    /// Used by registry-consistency tests: every id here must also have an
+    /// entry in `fn_sigs` (codegen resolves the call ABI through `fn_sig`).
+    pub fn builtin_fn_ids(&self) -> Vec<FnDefId> {
+        self.builtin_fn_index.keys().copied().collect()
+    }
+
     pub fn builtin_fn_id(&self, id: FnDefId) -> Option<(AdtId, Name)> {
         self.builtin_fn_index.get(&id).copied()
     }

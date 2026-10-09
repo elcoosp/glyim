@@ -45,3 +45,4 @@ mod traits;
 mod type_construction;
 mod type_display;
 mod type_idx;
+mod builtin_registry;
