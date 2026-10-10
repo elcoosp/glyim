@@ -23,17 +23,33 @@ impl<'a> Parser<'a> {
                 }
                 self.finish_node();
             }
+            // BLOCK-LIKE-STMT: `if`/`while`/`for`/`loop`/`match` (and a
+            // labeled `'a: while`) are *block-like*: in statement position
+            // they terminate the statement. Parse ONLY the construct via
+            // `parse_primary_expr` — running the full `parse_expr` chain let
+            // a trailing binary operator bind to the block, so
+            // `while c { } & s[0..n]` parsed as `(while c {}) & (s[0..n])`
+            // (bitwise-AND) and the tail's type came out `()`.
             SyntaxKind::KwIf
             | SyntaxKind::KwWhile
             | SyntaxKind::KwFor
             | SyntaxKind::KwLoop
             | SyntaxKind::KwMatch
-            | SyntaxKind::KwReturn
-            | SyntaxKind::KwBreak
-            | SyntaxKind::KwContinue
-            | SyntaxKind::KwMove
             // FE-10: a labeled loop/block statement (`'a: while …`).
             | SyntaxKind::Lifetime => {
+                self.start_node(SyntaxKind::ExprStmt);
+                self.parse_primary_expr();
+                if self.current_kind() == SyntaxKind::Semicolon {
+                    self.bump();
+                }
+                self.finish_node();
+            }
+            // `return`/`break`/`continue`/`move` are NOT block-like — their
+            // operand IS the expression, so the full chain applies.
+            SyntaxKind::KwReturn
+            | SyntaxKind::KwBreak
+            | SyntaxKind::KwContinue
+            | SyntaxKind::KwMove => {
                 self.start_node(SyntaxKind::ExprStmt);
                 self.parse_expr();
                 if self.current_kind() == SyntaxKind::Semicolon {
@@ -66,8 +82,9 @@ impl<'a> Parser<'a> {
                 }
             }
             SyntaxKind::LBrace => {
+                // A bare block is block-like in statement position.
                 self.start_node(SyntaxKind::ExprStmt);
-                self.parse_expr();
+                self.parse_primary_expr();
                 if self.current_kind() == SyntaxKind::Semicolon {
                     self.bump();
                 }
