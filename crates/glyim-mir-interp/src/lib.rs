@@ -612,6 +612,23 @@ impl<'tcx> Interpreter<'tcx> {
                 Ok(Some(InterpValue::Int(0)))
             }
             "glyim_stdin_read" => Ok(Some(InterpValue::Int(0))),
+            // ABORT-EXTERNS: the runtime's `-> !` abort hooks must STOP
+            // execution. The `_` fallthrough swallowed them as `Int(0)`, so
+            // `abort`/`panic` silently continued. Surface as InterpError.
+            "glyim_panic" | "glyim_process_abort" => {
+                Err(InterpError::Panic("program aborted".into()))
+            }
+            "glyim_process_exit" => {
+                let code = args
+                    .first()
+                    .and_then(|v| match v {
+                        InterpValue::Int(n) => Some(*n),
+                        InterpValue::Uint(n) => Some(*n as i128),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                Err(InterpError::Panic(format!("exit({code})")))
+            }
             _ => {
                 tracing::warn!(extern_fn = %name, "interpreter: unhandled extern; returning 0");
                 Ok(Some(InterpValue::Int(0)))
