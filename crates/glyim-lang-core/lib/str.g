@@ -69,14 +69,31 @@ impl str {
 
     /// Returns a string slice with leading and trailing whitespace removed.
     ///
-    /// T140 [STD-15]: STILL a compiler-intrinsic stub. A pure-Glyim body
-    /// (`scan as_bytes, then &self[start..end]`) is correct at the MIR level
-    /// — the lowering fix in `daa01ead` makes `&s[a..b]` produce a fat
-    /// pointer — but **typeck still types `s[a..b]` on a `str` as `()`**, so
-    /// the body fails `mismatched types: () vs str`. Fixing that (typeck's
-    /// `Index` handling for `str` + `Range`) is the remaining step.
+    /// T140: byte-scan + `&self[start..end]` sub-slicing. Strips the six
+    /// ASCII whitespace bytes: space, tab, LF, CR, form-feed, vertical tab.
+    /// Non-ASCII whitespace is not stripped.
     fn trim(&self) -> &str {
-        // compiler intrinsic
+        let b = self.as_bytes();
+        let n = b.len();
+        let mut start = 0;
+        while start < n {
+            let c = b[start];
+            if c == 32 || c == 9 || c == 10 || c == 13 || c == 12 || c == 11 {
+                start = start + 1;
+            } else {
+                break;
+            }
+        }
+        let mut end = n;
+        while end > start {
+            let c = b[end - 1];
+            if c == 32 || c == 9 || c == 10 || c == 13 || c == 12 || c == 11 {
+                end = end - 1;
+            } else {
+                break;
+            }
+        }
+        &self[start..end]
     }
 
     /// Parses this string slice into another type.
