@@ -9,9 +9,13 @@
 /// Extension methods for string slices.
 impl str {
     /// Returns the length of `self`.
+    ///
+    /// T140: delegates to `as_bytes().len()`. A `str` is byte-indexable
+    /// (`&self[a..b]` yields a `&str`), and `as_bytes()` gives the byte slice
+    /// whose `len` is the byte length — identical to the builtin's field
+    /// extraction.
     fn len(&self) -> usize {
-        // compiler intrinsic: `len` extracts field 1 of the `{ptr, len}` fat
-        // pointer. The builtin table (`str_id`, "len") lowers it.
+        self.as_bytes().len()
     }
 
     /// Returns `true` if `self` has a length of zero bytes.
@@ -64,8 +68,15 @@ impl str {
     }
 
     /// Returns a string slice with leading and trailing whitespace removed.
+    ///
+    /// T140 [STD-15]: STILL a compiler-intrinsic stub. A pure-Glyim body
+    /// (`scan as_bytes, then &self[start..end]`) is correct at the MIR level
+    /// — the lowering fix in `daa01ead` makes `&s[a..b]` produce a fat
+    /// pointer — but **typeck still types `s[a..b]` on a `str` as `()`**, so
+    /// the body fails `mismatched types: () vs str`. Fixing that (typeck's
+    /// `Index` handling for `str` + `Range`) is the remaining step.
     fn trim(&self) -> &str {
-        // compiler intrinsic: needs `&str` sub-slicing on a runtime range.
+        // compiler intrinsic
     }
 
     /// Parses this string slice into another type.
