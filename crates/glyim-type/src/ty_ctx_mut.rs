@@ -144,6 +144,12 @@ pub struct TyCtxMut {
     pub inherent_methods_by_name: HashMap<(Name, Name), FnDefId>,
     /// Extern C symbol names for `extern` function declarations.
     pub extern_fns: HashMap<FnDefId, String>,
+    /// CONST-FN-REGISTRY: free functions with a compiler-known value
+    /// (`mem::size_of`, `align_of`, `needs_drop`, …), keyed by their
+    /// FnDefId. Lowering folds a call to one of these into an integer
+    /// constant using the call's generic substitution. Populated in
+    /// `pre_register_fn_sigs_in_module` alongside `extern_fns`.
+    pub const_fns: HashMap<FnDefId, String>,
     /// Builtin inherent methods on *primitive* numeric receivers
     /// (`u64::checked_add`, `u32::saturating_sub`, …), keyed on the receiver's
     /// `Ty`. Primitive types are not ADTs, so they cannot share
@@ -193,6 +199,7 @@ impl TyCtxMut {
             inherent_method_fns: HashMap::new(),
             inherent_methods_by_name: HashMap::new(),
             extern_fns: HashMap::new(),
+            const_fns: HashMap::new(),
             primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
         };
@@ -333,6 +340,7 @@ impl TyCtxMut {
             inherent_method_fns: HashMap::new(),
             inherent_methods_by_name: HashMap::new(),
             extern_fns: HashMap::new(),
+            const_fns: HashMap::new(),
             primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
         }
@@ -1283,6 +1291,7 @@ impl TyCtxMut {
             drop_impls: self.drop_impls.clone(),
             impl_method_fns: self.impl_method_fns.clone(),
             extern_fns: self.extern_fns.clone(),
+            const_fns: self.const_fns.clone(),
             inherent_method_fns: self.inherent_method_fns.clone(),
             inherent_methods_by_name: self.inherent_methods_by_name.clone(),
             builtin_fn_index: {
@@ -1324,6 +1333,7 @@ impl TyCtxMut {
             drop_impls: self.drop_impls,
             impl_method_fns: self.impl_method_fns,
             extern_fns: self.extern_fns.clone(),
+            const_fns: self.const_fns.clone(),
             inherent_method_fns: self.inherent_method_fns.clone(),
             inherent_methods_by_name: self.inherent_methods_by_name.clone(),
             builtin_fn_index: {

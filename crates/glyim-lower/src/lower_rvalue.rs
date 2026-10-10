@@ -322,6 +322,58 @@ impl<'a> MirBuilder<'a> {
                 glyim_mir::Rvalue::Ref(place, borrow_kind)
             }
             thir::ExprKind::Call { func, args } => {
+                // CONST-FN-FOLD: `mem::size_of::<T>()` / `align_of::<T>()` /
+                // `needs_drop::<T>()` resolve to the empty `.g` stub fns. Fold
+                // them into an integer constant using the generic `T` from the
+                // callee's `FnDef` substitution + the layout computer. The
+                // callee is identified by name (see the `const_fns` registry).
+                if let thir::ExprKind::FnRef(def_id) = func.kind
+                    && let Some(name) = self.ctx.ty_ctx().const_fn_name(def_id)
+                    && let glyim_type::TyKind::FnDef(_, substs) =
+                        self.ctx.ty_ctx().ty_kind(func.ty)
+                {
+                    let ty_arg = self
+                        .ctx
+                        .ty_ctx()
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        });
+                    if let Some(t) = ty_arg {
+                        let value: i128 = match name {
+                            "needs_drop" => {
+                                i128::from(self.ctx.ty_ctx().needs_drop(t))
+                            }
+                            _ => {
+                                let lc = glyim_layout::SimpleLayoutComputer::new(
+                                    self.ctx.ty_ctx(),
+                                    TargetInfo::x86_64(),
+                                );
+                                match lc.layout_of(t) {
+                                    Ok(l) => {
+                                        let n = if name == "align_of" {
+                                            l.align.0
+                                        } else {
+                                            l.size.0
+                                        };
+                                        n as i128
+                                    }
+                                    Err(_) => 0,
+                                }
+                            }
+                        };
+                        let _ = args;
+                        return glyim_mir::Rvalue::Use(
+                            glyim_mir::Operand::Constant(glyim_mir::MirConst {
+                                kind: glyim_mir::MirConstKind::Uint(value as u128),
+                                ty: expr.ty,
+                                span: expr.span,
+                            }),
+                        );
+                    }
+                }
                 // Data-carrying variant constructor call (`Some(x)` /
                 // `Color::Green(x)`): lower to an `Aggregate` of the enum ADT
                 // instead of a function call.

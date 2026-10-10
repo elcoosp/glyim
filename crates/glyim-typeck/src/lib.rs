@@ -1196,6 +1196,21 @@ fn pre_register_fn_sigs_in_module(
                     ctx.extern_fns.insert(fn_id, name_str);
                 }
 
+                // CONST-FN-REGISTRY: free fns whose value the compiler can
+                // compute from the call's generic argument (`mem::size_of::<T>`).
+                // Lowering folds a call to one of these into an integer
+                // constant; without the name it cannot identify the callee
+                // (the id alone is opaque).
+                {
+                    let name_str = ctx.name_str(item.name).to_string();
+                    if matches!(
+                        name_str.as_str(),
+                        "size_of" | "align_of" | "needs_drop"
+                    ) {
+                        ctx.const_fns.insert(fn_id, name_str);
+                    }
+                }
+
                 if ctx.fn_sig(fn_id).is_some() {
                     continue;
                 }

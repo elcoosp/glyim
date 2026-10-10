@@ -60,6 +60,7 @@ pub struct TyCtx {
     /// name (e.g. `glyim_stdout_write`). Codegen uses this to declare and
     /// call the C symbol directly rather than emitting `__glyim_fn_{id}`.
     pub(crate) extern_fns: HashMap<FnDefId, String>,
+    pub(crate) const_fns: HashMap<FnDefId, String>,
     pub(crate) const_tys: HashMap<ConstDefId, Ty>,
     pub(crate) closure_sigs: HashMap<ClosureId, FnSig>,
     /// `ClosureId` → synthetic `AdtId` for the closure's captured environment
@@ -704,6 +705,12 @@ impl TyCtx {
     }
 
     /// Name of the C symbol for an `extern` function, if this id names one.
+    /// CONST-FN-REGISTRY: the name of a compiler-known value fn
+    /// (`size_of`/`align_of`/`needs_drop`), or `None`.
+    pub fn const_fn_name(&self, id: FnDefId) -> Option<&str> {
+        self.const_fns.get(&id).map(String::as_str)
+    }
+
     pub fn extern_fn_name(&self, id: FnDefId) -> Option<&str> {
         self.extern_fns.get(&id).map(String::as_str)
     }
