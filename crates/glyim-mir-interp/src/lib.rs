@@ -337,8 +337,39 @@ impl<'tcx> Interpreter<'tcx> {
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
             (1060, "len") => {
+                // SLICE-LEN-TYPED: `[T]`/`[T; N]`/`&[T]` have three runtime
+                // representations, and the correct length comes from the
+                // receiver's *declared type*, not a blind `byte_payload`:
+                //  - `[T; N]` / array literal  -> a flat `Aggregate([e0..eN-1])`,
+                //    length = field count.
+                //  - `&[T]` (fat pointer)      -> `Aggregate([data_ptr, len])`,
+                //    length = field 1.
+                //  - `String`/`&str` byte view -> the byte payload length.
+                // The previous single `byte_payload` call returned 0 for a
+                // plain array, so `[1,2,3].len()` was 0.
+                let declared = arg_operands.first().and_then(|o| self.operand_ty(o));
+                let is_fat_ptr = matches!(
+                    declared.and_then(|t| self.tcx.ty_kind(t).clone().into()),
+                    Some(glyim_type::TyKind::Ref(_, inner, _))
+                        if matches!(self.tcx.ty_kind(inner), glyim_type::TyKind::Slice(_))
+                );
                 let s = self.builtin_deref(&receiver)?;
-                Ok(Some(InterpValue::Uint(Self::byte_payload(&s).len() as u128)))
+                let len = match &s {
+                    InterpValue::Aggregate(fields) => {
+                        if is_fat_ptr && fields.len() >= 2 {
+                            // Fat pointer `{ptr, len}`: read field 1.
+                            match &fields[1] {
+                                InterpValue::Int(n) => (*n).max(0) as usize,
+                                InterpValue::Uint(n) => *n as usize,
+                                _ => fields.len(),
+                            }
+                        } else {
+                            fields.len()
+                        }
+                    }
+                    other => Self::byte_payload(other).len(),
+                };
+                Ok(Some(InterpValue::Uint(len as u128)))
             }
             (1060, "is_empty") => {
                 let s = self.builtin_deref(&receiver)?;
