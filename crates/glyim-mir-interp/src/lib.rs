@@ -286,6 +286,11 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(v))
             }
+            // UNSAFECELL-NEW: `UnsafeCell::new(v)` is a single-field wrapper.
+            (1005, "new") => {
+                let v = args.first().cloned().unwrap_or(InterpValue::Unit);
+                Ok(Some(InterpValue::Aggregate(vec![v])))
+            }
             (1050, "new") => Ok(Some(InterpValue::String(String::new()))),
             // (str_id 1061 and string_id 1050 `push_str` are both handled below)
             (1050, "len") => {

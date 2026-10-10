@@ -90,23 +90,31 @@ impl<T> DerefMut for ManuallyDrop<T> {
 }
 
 /// A wrapper type that may represent an uninitialized value.
+///
+/// T140: modelled as a transparent wrapper `{ value: T }`. `uninit` is
+/// `new(Default::default())`-shaped — the interpreter has no
+/// uninitialized-value state, so it materialises a default. `assume_init`
+/// unwraps. This is correct for the write-then-read pattern the stdlib uses.
 struct MaybeUninit<T> {
-    // compiler intrinsic representation
+    value: T,
 }
 
-impl<T> MaybeUninit<T> {
+impl<T: Default> MaybeUninit<T> {
     /// Creates a new `MaybeUninit` in an uninitialized state.
+    ///
+    /// T140: the interpreter has no uninitialized state, so this returns a
+    /// default-initialized wrapper. Sound for the write-then-read pattern.
     fn uninit() -> MaybeUninit<T> {
-        // compiler intrinsic
+        MaybeUninit { value: T::default() }
     }
 
     /// Creates a new `MaybeUninit` with the given value.
     fn new(val: T) -> MaybeUninit<T> {
-        // compiler intrinsic
+        MaybeUninit { value: val }
     }
 
     /// Assumes the value is initialized and returns it.
     fn assume_init(self) -> T {
-        // compiler intrinsic - unsafe
+        self.value
     }
 }

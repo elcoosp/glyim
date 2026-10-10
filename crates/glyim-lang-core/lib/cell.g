@@ -14,8 +14,11 @@ impl<T> UnsafeCell<T> {
     }
 
     /// Returns a raw pointer to the underlying data.
+    ///
+    /// T140: `&self.value as *mut T` — a shared reference to the field cast
+    /// to a mutable raw pointer. `&T as *mut T` is a legal RawPtr cast.
     fn get(&self) -> *mut T {
-        // compiler intrinsic
+        &self.value as *mut T
     }
 
     /// Unwraps the value, returning the underlying data.
