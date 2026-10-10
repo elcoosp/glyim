@@ -95,6 +95,11 @@ fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
         }
         Rvalue::Cast(_, op, _) => collect_operand_uses(op, used),
         Rvalue::Repeat(op, _) => collect_operand_uses(op, used),
+        // DCE-UNARYOP: `UnaryOp(Deref, operand)` reads `operand`. The `_ => {}`
+        // fallthrough ignored it, so DCE deleted the store feeding a `*p`
+        // deref (e.g. `&x as *const i32; *p`), and the deref then read an
+        // uninitialized local. `Neg`/`Not` read their operand too.
+        Rvalue::UnaryOp(_, op) => collect_operand_uses(op, used),
         _ => {}
     }
 }
