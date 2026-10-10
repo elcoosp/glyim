@@ -46,31 +46,41 @@ compiler defects plus building a four-class regression suite.
 
 ---
 
-## 3. What remains: T140 [STD-15]
+## 3. T140 — status after session 8
 
-Bodyless "compiler intrinsic" stubs with no lowering. Plan verification:
-`"  x ".trim().len()` must print `1`.
+### Implemented (tested)
 
-**Open items:**
+| Item | Fixture |
+|---|---|
+| `str::len`, `str::contains`, `str::trim` | `tests/run-pass/str/` (15) |
+| `[T]::len` | `tests/run-pass/slice/` (4) |
+| `MaybeUninit::{uninit,new,assume_init}` | `tests/run-pass/core/maybe_uninit_new.g` |
+| `UnsafeCell::new` | `tests/run-pass/core/unsafecell_new.g` |
+| raw deref `*p` | `tests/run-pass/core/raw_deref.g` |
+| `hint::spin_loop` | no-op is correct |
 
-- **`str.g`**: `str::len` (empty stub — masked by the builtin table for
-  `String`, but still there), `str::contains`, `str::trim`, `Chars::next`,
-  `Lines::next`.
-- **`mem.g`**: `size_of`, `align_of`, `needs_drop`.
-- **`ptr.g`**: `read`, `write`, `copy`, `copy_nonoverlapping`,
-  `drop_in_place` (these four have runtime FFI: `glyim_string_from_bytes`,
-  etc., but the *core* ptr intrinsics do not).
-- **`MaybeUninit`**: `uninit` / `new` / `assume_init`.
+### Compiler bugs fixed while doing T140
 
-Already done (T140 partials): `ptr::null`/`null_mut`, `NonNull::{new_unchecked,dangling}`,
-`mem::forget`.
+1. DCE ignored projection locals (`062cc9db`) — `arr[i]`'s index local deleted as dead.
+2. DCE ignored `UnaryOp` operands (`0a3cdf56`) — `*p` read uninitialized.
+3. Block-like statements absorbed trailing operators (`02be5cf5`) —
+   `while c { } & s[0..n]` parsed as `(while c {}) & (s[0..n])`.
+4. `str` dynamic range slicing (`daa01ead`).
 
-**Blocker for `size_of`/`align_of`**: needs a `FnDefId`→name registry at
-lowering (see session-5 handoff §2.3); the calls carry the generic `T` in
-the callee's `Substitution`, so the fold is feasible once the id is
-identifiable.
+### Still stubs (each a workstream)
 
----
+| Item | Blocker |
+|---|---|
+| `mem::size_of`/`align_of`/`needs_drop` | call hits the empty `.g` body, not a builtin; needs a `FnDefId`→name lookup |
+| `ptr::read`/`write`/`copy`/`copy_nonoverlapping`/`drop_in_place` | per-backend intrinsics; `ptr::write` currently no-ops |
+| `Chars::next`/`Lines::next` | unicode decoding |
+| `panic_any` | should abort; currently a no-op |
+| `UnsafeCell::get` runtime | `&self.value` refs the dead callee frame; needs `Ref` projections |
+
+### Verification
+
+    cargo check --workspace --tests
+    cargo nextest run --workspace --no-fail-fast   # 4599 passed / 2 skipped
 
 ## 4. Verification (corrected)
 
