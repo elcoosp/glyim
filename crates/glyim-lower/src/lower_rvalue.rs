@@ -2064,6 +2064,15 @@ impl<'a> MirBuilder<'a> {
                     })
                     .unwrap_or_else(|| self.ctx.ty_ctx().error_ty())
             }
+            // STR-SLICE-ELEM: `str` / `String` slice by *byte* range, element
+            // type `u8`. `str` is `TyKind::String` (primitive) or `Adt(1050)`
+            // (the stdlib's `String`), both lowering to the `{ptr, len}` fat
+            // pointer — exactly what the slice path below builds. This is
+            // what makes `&s[a..b]` (and thus `str::trim`) possible.
+            TyKind::String => self.ctx.ty_ctx().mk_ty(TyKind::Uint(glyim_core::UintTy::U8)),
+            TyKind::Adt(adt_id, _) if *adt_id == glyim_core::def_id::AdtId::from_raw(1050) => {
+                self.ctx.ty_ctx().mk_ty(TyKind::Uint(glyim_core::UintTy::U8))
+            }
             _ => {
                 self.diagnostics.push(GlyimDiagnostic::type_error(
                     span,

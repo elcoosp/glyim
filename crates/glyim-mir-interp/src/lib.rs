@@ -500,7 +500,19 @@ impl<'tcx> Interpreter<'tcx> {
     }
 
     fn str_len(v: &InterpValue) -> usize {
-        if let InterpValue::String(s) = v { s.len() } else { 0 }
+        match v {
+            InterpValue::String(s) => s.len(),
+            // STR-LEN-FATPTR: a dynamic slice (`&s[a..b]`) lowers to a
+            // fat-pointer `Aggregate([data_ptr, len])`, not a `String`. The
+            // previous `if let String` returned 0 for every sliced `&str`, so
+            // `&s[1..3].len()` was 0. Read field 1 (the length).
+            InterpValue::Aggregate(fields) if fields.len() >= 2 => match &fields[1] {
+                InterpValue::Int(n) => (*n).max(0) as usize,
+                InterpValue::Uint(n) => *n as usize,
+                _ => 0,
+            },
+            _ => 0,
+        }
     }
 
     /// T140-PATCHED-IO: extract the byte payload of a byte-buffer-like value.
@@ -1232,6 +1244,26 @@ impl<'tcx> Interpreter<'tcx> {
                             glyim_type::TyKind::Slice(_) | glyim_type::TyKind::String
                         ) =>
                     {
+                        let val = self.read_place(place)?;
+                        let len = self.slice_length_from_value(&val)?;
+                        Ok(InterpValue::Int(len as i128))
+                    }
+                    // LEN-STR: a bare `str` local (`TyKind::String`). `str`
+                    // lowers to the `{ptr, len}` fat pointer; length is the
+                    // same extraction as the slice case. Reached by
+                    // `lower_dynamic_range_slice`'s `Len(base)` on a `&s[a..b]`
+                    // where the base's declared type is the primitive `str`.
+                    glyim_type::TyKind::String => {
+                        let val = self.read_place(place)?;
+                        let len = self.slice_length_from_value(&val)?;
+                        Ok(InterpValue::Int(len as i128))
+                    }
+                    glyim_type::TyKind::Adt(id, _)
+                        if id.to_raw() == 1050 || id.to_raw() == 1020 =>
+                    {
+                        // `String` (1050) / `Vec` (1020): the container's own
+                        // value carries its length (field 1 of the fat
+                        // pointer / the `len` field). Used by the slice path.
                         let val = self.read_place(place)?;
                         let len = self.slice_length_from_value(&val)?;
                         Ok(InterpValue::Int(len as i128))
