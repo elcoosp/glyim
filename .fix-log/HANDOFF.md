@@ -144,3 +144,39 @@ path is verified clean).
 
 `glyim_process_abort` itself is fine — `tests/run-pass/core/abort_stops.g`
 calls it directly and correctly exits 101.
+
+---
+
+## 6. ROOT CAUSE: enum matches ignore field patterns (found session 9)
+
+`lower_match` + `collect_switch_values` (`crates/glyim-lower/src/lower_rvalue.rs`)
+compile an enum `match` to a `SwitchInt` on the **discriminant only**. The
+`PatternKind::Struct` arm of `collect_switch_values` (line ~1985) pushes
+`(variant_idx, arm_bb)` and **ignores the pattern's fields**.
+
+Consequence — a silent miscompile:
+
+```glyim
+match r {
+    Result::Ok(0) => 1,     // pushed (0, bb_a)
+    Result::Ok(n) => n,     // pushed (0, bb_b)  <-- same key
+    Result::Err(_) => 9,
+}
+
+---
+
+## 6. ROOT CAUSE: enum matches ignore field patterns (found session 9)
+
+`lower_match` + `collect_switch_values` (`crates/glyim-lower/src/lower_rvalue.rs`)
+compile an enum `match` to a `SwitchInt` on the **discriminant only**. The
+`PatternKind::Struct` arm of `collect_switch_values` (line ~1985) pushes
+`(variant_idx, arm_bb)` and **ignores the pattern's fields**.
+
+Consequence — a silent miscompile:
+
+```glyim
+match r {
+    Result::Ok(0) => 1,     // pushed (0, bb_a)
+    Result::Ok(n) => n,     // pushed (0, bb_b)  <-- same key
+    Result::Err(_) => 9,
+}
