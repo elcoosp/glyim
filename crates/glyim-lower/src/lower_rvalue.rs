@@ -386,7 +386,18 @@ impl<'a> MirBuilder<'a> {
                     for arg in args {
                         mir_args.push(self.lower_expr_to_operand(arg));
                     }
-                    let substs = glyim_type::Substitution::empty();
+                    // Derive the aggregate's substitution from the call
+                    // expression's type. The previous `Substitution::empty()`
+                    // gave a generic enum like `Result<T, E>` a zero-arity
+                    // substitution even though the ADT's arity is 2, so
+                    // layout computing for the aggregate's fields saw
+                    // `Ty::ERROR` (`UnknownType(Ty(0))`). Non-generic enums
+                    // (arity 0) worked by accident. Mirrors the struct-literal
+                    // arm below, which already reads `expr.ty`.
+                    let substs = match self.ctx.ty_ctx().ty_kind(expr.ty) {
+                        glyim_type::TyKind::Adt(_, s) => *s,
+                        _ => glyim_type::Substitution::empty(),
+                    };
                     return glyim_mir::Rvalue::Aggregate(
                         glyim_mir::AggregateKind::Adt(
                             *adt_id,
@@ -1500,7 +1511,24 @@ impl<'a> MirBuilder<'a> {
                 mutability,
                 subpattern,
             } => {
-                let local = self.alloc_local(pat.ty, *mutability, span);
+                // Prefer `init_local`'s resolved type when `pat.ty` is
+                // `Ty::ERROR`. Typeck leaves the binding's own type as
+                // `Ty::ERROR` for a binding *inside a variant-field pattern*
+                // (`Ok(n)` on `Result<usize, E>`), so `n` would be
+                // error-typed and `written += n` would build an `Add` on an
+                // error operand. The `init_local` was allocated by the
+                // enclosing `Struct`/`Tuple` arm from the resolved
+                // `Downcast+Field` place type; inheriting its type here fixes
+                // the binding.
+                let local_ty = if pat.ty == Ty::ERROR {
+                    match init_local {
+                        Some(init) => self.locals[init].ty,
+                        None => pat.ty,
+                    }
+                } else {
+                    pat.ty
+                };
+                let local = self.alloc_local(local_ty, *mutability, span);
                 self.var_map.insert(*name, local);
                 self.local_var_map.insert(*var_id, local);
                 self.push_stmt(glyim_mir::StatementKind::StorageLive(local), span);
@@ -1555,6 +1583,26 @@ impl<'a> MirBuilder<'a> {
             } => {
                 if let Some(init) = init_local {
                     let init_place = glyim_mir::Place::new(init);
+                    // For an enum scrutinee, insert a `Downcast` before the
+                    // `Field` projection. Without it, `Place::ty()` on the
+                    // field place bails with "Field projection on
+                    // non-tuple/ADT type", the field local's type collapses to
+                    // `Ty::ERROR`, and an arm body like `Ok(n) => written += n`
+                    // ends up adding a default `1` instead of `n` (or, worse,
+                    // folding to a constant) -- the reason `write_all` never
+                    // advanced `written` and looped forever / panicked.
+                    let is_enum =
+                        self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum;
+                    let field_base = if is_enum {
+                        self.place_with_projection(
+                            init_place.clone(),
+                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(
+                                *variant_idx,
+                            )),
+                        )
+                    } else {
+                        init_place.clone()
+                    };
                     for field_pat in fields {
                         let field_idx =
                             self.ctx
@@ -1565,9 +1613,27 @@ impl<'a> MirBuilder<'a> {
                         };
                         let field_proj = ProjectionElem::Field(field_idx);
                         let field_place =
-                            self.place_with_projection(init_place.clone(), field_proj);
+                            self.place_with_projection(field_base.clone(), field_proj);
+                        // Type the field local from the *resolved place*
+                        // (`Downcast(variant) + Field(idx)` -> concrete field
+                        // type), not from `field_pat.pattern.ty`. Typeck
+                        // leaves the latter as `Ty::ERROR` for a field inside
+                        // a generic enum-variant pattern (`Ok(n)` on
+                        // `Result<usize, E>`), which then propagates: an
+                        // `Ok(n) => written += n` arm would build an `Add`
+                        // with a `Ty::ERROR` operand and the layout computer
+                        // rejects the aggregate. Fall back to
+                        // `field_pat.pattern.ty` only if the resolved place
+                        // type itself is error.
+                        let place_field_ty =
+                            field_place.ty(self.ctx.ty_ctx(), &self.locals);
+                        let field_ty = if place_field_ty == Ty::ERROR {
+                            field_pat.pattern.ty
+                        } else {
+                            place_field_ty
+                        };
                         let temp_local = self.alloc_local(
-                            field_pat.pattern.ty,
+                            field_ty,
                             glyim_core::primitives::Mutability::Not,
                             field_pat.span,
                         );
@@ -1738,12 +1804,13 @@ impl<'a> MirBuilder<'a> {
         span: glyim_span::Span,
     ) -> glyim_mir::Rvalue {
         let merge_bb = self.new_block();
-        let dest_local = self.alloc_local(result_ty, glyim_core::primitives::Mutability::Mut, span);
+        let dest_local = self.alloc_local(
+            result_ty,
+            glyim_core::primitives::Mutability::Mut,
+            span,
+        );
         let dest_place = glyim_mir::Place::new(dest_local);
 
-        // Slice/array matches dispatch on the *length* of the scrutinee rather
-        // than its value. `[a, b, c]` matches precisely when the slice has 3
-        // elements, so we compute `len = Len(scrutinee)` and `SwitchInt` on it.
         let slice_dispatch = matches!(
             self.ctx.ty_ctx().ty_kind(scrutinee.ty),
             TyKind::Slice(_) | TyKind::Array(_, _)
@@ -1751,161 +1818,106 @@ impl<'a> MirBuilder<'a> {
             .iter()
             .any(|a| matches!(&a.pat.kind, thir::PatternKind::Slice { .. }));
 
-        let enum_dispatch =
-            if let TyKind::Adt(adt_id, _substs) = self.ctx.ty_ctx().ty_kind(scrutinee.ty) {
-                self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum
-            } else {
-                false
-            };
-
-        // Always materialize the *whole* scrutinee into a local so that
-        // match-arm patterns can be bound to MIR locals (mirroring `let`
-        // pattern binding in `bind_pattern`). Without this, variables bound by
-        // a `match` arm -- e.g. `match self.state { Start { f0, fut0 } => .. }`
-        // from the async state-machine desugar -- receive no `local_var_map`
-        // entry and `VarRef(var_id)` falls back to
-        // `LocalIdx::from_raw(var_id)`, colliding with the `self` parameter
-        // (M4/M5 async multi-await). For slice/enum dispatch the *switch*
-        // discriminates on a derived value (length / discriminant), but the
-        // arm-pattern fields are still projected off the whole value.
+        // Materialize the whole scrutinee exactly once. Both the per-arm
+        // test blocks (which project fields) and `bind_pattern` (which binds
+        // the arm patterns' variables) read off this single local; see the
+        // long comment that used to live here about not re-lowering the
+        // scrutinee (side effects would run twice).
         let scrutinee_place = self.lower_expr_to_place(scrutinee);
-        // Always materialize the *whole* scrutinee into a local so that
-        // match-arm patterns can be bound to MIR locals (mirroring `let`
-        // pattern binding in `bind_pattern`). Without this, variables bound by
-        // a `match` arm -- e.g. `match self.state { Start { f0, fut0 } => .. }`
-        // from the async state-machine desugar -- receive no `local_var_map`
-        // entry and `VarRef(var_id)` falls back to
-        // `LocalIdx::from_raw(var_id)`, colliding with the `self` parameter
-        // (M4/M5 async multi-await). For slice/enum dispatch the *switch*
-        // discriminates on a derived value (length / discriminant), but the
-        // arm-pattern fields are still projected off the whole value.
-        //
-        // IMPORTANT: `lower_expr_to_place(scrutinee)` must be called exactly
-        // once and the returned place reused for BOTH the materialized temp
-        // (`scrut_local`, used by `bind_pattern`) and the `Discriminant`
-        // read. Calling it twice allocates two distinct temps; the discriminant
-        // would then be read off the real scrutinee while the arm pattern binds
-        // off the other (orphaned, never-written) temp -- e.g. `match f.poll()
-        // { Ready(v) => v, .. }` would bind `v` to uninitialized memory while
-        // the switch dispatches on the correct result, a silent miscompile.
-        // NEVER re-lower the scrutinee. `lower_expr_to_place(scrutinee)`
-        // above already materialized it; re-lowering it here for the
-        // `SwitchInt` would run any side effects twice (HIR-29:
-        // `match counter.next() { .. }` advanced the counter twice). Reuse
-        // the materialized place for dispatch as well.
-        let full_scrut_op = glyim_mir::Operand::Copy(scrutinee_place.clone());
-        // The discriminator the `SwitchInt` switches on.
-        let (discr_op, switch_ty) = if slice_dispatch {
-            // Slice/array matches dispatch on the *length* of the scrutinee.
-            let len_local =
-                self.alloc_local(Ty::USIZE, glyim_core::primitives::Mutability::Not, span);
-            self.push_stmt(
-                glyim_mir::StatementKind::Assign(
-                    glyim_mir::Place::new(len_local),
-                    glyim_mir::Rvalue::Len(scrutinee_place.clone()),
-                ),
-                span,
-            );
-            (
-                glyim_mir::Operand::Copy(glyim_mir::Place::new(len_local)),
-                Ty::USIZE,
-            )
-        } else if enum_dispatch {
-            // Enum matches dispatch on the *discriminant* (the variant tag), not
-            // the whole value. Switching on the full value can never match a
-            // `Variant { .. }` pattern, so every arm's switch-value list is
-            // empty and the `SwitchInt` would fall through to the FIRST arm
-            // unconditionally -- which breaks the async state-machine desugar
-            // (M4/M5): `match self.state { Start => .., S0 => .., .. }` would
-            // always re-enter `Start`, suspending forever. Emit
-            // `Discr = Discriminant(scrut)` and switch on `Discr` (u8).
-            // Use the single scrutinee place (see above) so the discriminant
-            // and the arm-pattern binding agree on which value they read.
-            let discr_local =
-                self.alloc_local(Ty::U8, glyim_core::primitives::Mutability::Not, span);
-            self.push_stmt(
-                glyim_mir::StatementKind::Assign(
-                    glyim_mir::Place::new(discr_local),
-                    glyim_mir::Rvalue::Discriminant(scrutinee_place.clone()),
-                ),
-                span,
-            );
-            (
-                glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local)),
-                Ty::U8,
-            )
-        } else {
-            // Scalar / bool / char scrutinees: switch on the value directly.
-            // (Enum/slice scrutinees use their discriminant/length above; the
-            // whole-scrutinee materialization is only needed to bind arm
-            // patterns, which read off `scrutinee_place` directly.)
-            (full_scrut_op, scrutinee.ty)
-        };
-
-        let mut switch_targets: Vec<(u128, BasicBlockIdx)> = Vec::new();
-        let mut arm_blocks: Vec<(BasicBlockIdx, &thir::MatchArm)> = Vec::new();
-        let otherwise_bb = self.new_block();
-
-        for arm in arms.iter() {
-            let arm_bb = self.new_block();
-            arm_blocks.push((arm_bb, arm));
-            self.collect_switch_values(&arm.pat, &mut switch_targets, arm_bb);
-        }
-
-        let otherwise = if switch_targets.is_empty() {
-            arm_blocks.first().map(|(bb, _)| *bb).unwrap_or(merge_bb)
-        } else {
-            otherwise_bb
-        };
-
-        let targets = glyim_mir::SwitchTargets::new(switch_targets.into_boxed_slice(), otherwise);
-        self.terminate(
-            glyim_mir::TerminatorKind::SwitchInt {
-                discr: discr_op,
-                switch_ty,
-                targets,
-            },
+        let scrut_local =
+            self.alloc_local(scrutinee.ty, glyim_core::primitives::Mutability::Not, span);
+        self.push_stmt(
+            glyim_mir::StatementKind::Assign(
+                glyim_mir::Place::new(scrut_local),
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrutinee_place.clone())),
+            ),
             span,
         );
+        let scrut_place = glyim_mir::Place::new(scrut_local);
 
-        for (i, (arm_bb, arm)) in arm_blocks.iter().enumerate() {
-            self.current_block = Some(*arm_bb);
+        // Per-arm blocks: `test_bbs[i]` decides whether arm `i` matches;
+        // `arm_bbs[i]` binds the pattern and lowers the body; `otherwise_bb`
+        // is the fail-target of the last arm's test.
+        let arm_bbs: Vec<BasicBlockIdx> =
+            (0..arms.len()).map(|_| self.new_block()).collect();
+        let test_bbs: Vec<BasicBlockIdx> =
+            (0..arms.len()).map(|_| self.new_block()).collect();
+        let otherwise_bb = self.new_block();
+
+        if arms.is_empty() {
+            self.terminate(
+                glyim_mir::TerminatorKind::Goto {
+                    target: otherwise_bb,
+                },
+                span,
+            );
+        } else {
+            self.terminate(
+                glyim_mir::TerminatorKind::Goto {
+                    target: test_bbs[0],
+                },
+                span,
+            );
+        }
+
+        // Emit each arm's test block. Sequential arm testing (HANDOFF §4):
+        // a pattern like `Ok(0)` needs *both* `discriminant == Ok` *and*
+        // `field0 == 0`, so a discriminant-only switch silently miscompiled
+        // every arm that discriminated on a payload literal. Here every arm
+        // gets a full pattern test as a boolean, chained in order.
+        for (i, arm) in arms.iter().enumerate() {
+            self.current_block = Some(test_bbs[i]);
+            let next_bb = if i + 1 < arms.len() {
+                test_bbs[i + 1]
+            } else {
+                otherwise_bb
+            };
+            match self.lower_pattern_test(&arm.pat, &scrut_place, span) {
+                Some(bool_local) => {
+                    let bool_ty = self.ctx.ty_ctx().bool_ty();
+                    self.terminate(
+                        glyim_mir::TerminatorKind::SwitchInt {
+                            discr: glyim_mir::Operand::Copy(glyim_mir::Place::new(
+                                bool_local,
+                            )),
+                            switch_ty: bool_ty,
+                            targets: glyim_mir::SwitchTargets::if_switch(arm_bbs[i], next_bb),
+                        },
+                        span,
+                    );
+                }
+                None => {
+                    // Irrefutable pattern: jump straight to the arm body.
+                    self.terminate(
+                        glyim_mir::TerminatorKind::Goto { target: arm_bbs[i] },
+                        span,
+                    );
+                }
+            }
+        }
+
+        // Emit each arm's body block.
+        for (i, arm) in arms.iter().enumerate() {
+            self.current_block = Some(arm_bbs[i]);
             // Bind the arm pattern's variables into MIR locals so that
-            // `VarRef`s inside the arm body resolve correctly (M4/M5 async
-            // state-machine: `match self.state { Start { f0, fut0 } => .. }`).
-            // Skipped for slice-dispatch matches, where the discriminant is the
-            // slice *length* rather than the value.
+            // `VarRef`s inside the arm body resolve correctly. Skipped for
+            // slice-dispatch matches (as before) where the historical
+            // behaviour was to not bind at all.
             if !slice_dispatch {
-                // Bind the arm pattern's fields off the *whole* scrutinee value,
-                // materialized into a temp local. For `match self.state { ... }`
-                // the scrutinee place is `self.state`; projecting arm fields off a
-                // bare `self` local would read the `state` *field* (the whole
-                // enum) instead of the variant's payload field, so `f0` would
-                // capture the entire `Start(..)` aggregate. Materializing the
-                // full `scrutinee_place` into `scrut_local` and binding off that
-                // local makes `bind_pattern` project from the enum value itself.
-                let scrut_local =
-                    self.alloc_local(scrutinee.ty, glyim_core::primitives::Mutability::Not, span);
-                self.push_stmt(
-                    glyim_mir::StatementKind::Assign(
-                        glyim_mir::Place::new(scrut_local),
-                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrutinee_place.clone())),
-                    ),
-                    span,
-                );
                 self.bind_pattern(&arm.pat, Some(scrut_local), arm.pat.span);
             }
             if let Some(guard) = &arm.guard {
                 let guard_op = self.lower_expr_to_operand(guard);
                 let arm_body_bb = self.new_block();
-                let next_arm_bb = if i + 1 < arm_blocks.len() {
-                    arm_blocks[i + 1].0
+                let next_bb = if i + 1 < arms.len() {
+                    test_bbs[i + 1]
                 } else {
                     otherwise_bb
                 };
-
-                let guard_targets =
-                    glyim_mir::SwitchTargets::new(Box::new([(1, arm_body_bb)]), next_arm_bb);
+                let guard_targets = glyim_mir::SwitchTargets::new(
+                    Box::new([(1, arm_body_bb)]),
+                    next_bb,
+                );
                 self.terminate(
                     glyim_mir::TerminatorKind::SwitchInt {
                         discr: guard_op,
@@ -1914,7 +1926,6 @@ impl<'a> MirBuilder<'a> {
                     },
                     guard.span,
                 );
-
                 self.current_block = Some(arm_body_bb);
                 self.lower_arm_body(arm, &dest_place, merge_bb);
             } else {
@@ -1922,82 +1933,396 @@ impl<'a> MirBuilder<'a> {
             }
         }
 
-        if self.current_block == Some(otherwise_bb) {
-            self.terminate(glyim_mir::TerminatorKind::Unreachable, span);
-        }
+        // `otherwise_bb` is reached only if no arm matched. Terminate it
+        // explicitly so every block in the body has a terminator, whether or
+        // not it happens to be entered (dead blocks get eliminated later).
+        self.current_block = Some(otherwise_bb);
+        self.terminate(glyim_mir::TerminatorKind::Unreachable, span);
 
         self.current_block = Some(merge_bb);
         glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(dest_place))
     }
 
-    fn collect_switch_values(
+    /// Compute a boolean local that is `true` iff `pat` matches the value at
+    /// `scrut_place`. Returns `None` for an irrefutable pattern (the caller
+    /// then jumps straight to the arm body).
+    fn lower_pattern_test(
         &mut self,
         pat: &thir::Pattern,
-        targets: &mut Vec<(u128, BasicBlockIdx)>,
-        arm_bb: BasicBlockIdx,
-    ) {
+        scrut_place: &glyim_mir::Place,
+        span: glyim_span::Span,
+    ) -> Option<LocalIdx> {
         match &pat.kind {
+            thir::PatternKind::Wild | thir::PatternKind::Error => None,
+            thir::PatternKind::Binding { subpattern, .. } => match subpattern {
+                None => None,
+                Some(sub) => self.lower_pattern_test(sub, scrut_place, span),
+            },
             thir::PatternKind::Literal(lit) => {
-                if let Some(val) = self.literal_to_u128(lit) {
-                    targets.push((val, arm_bb));
-                }
+                // Prefer the projected place's resolved type (the field's
+                // real type after Downcast+Field). Fall back to `pat.ty`
+                // only when the place type is unresolvable. `pat.ty` is
+                // `Ty::ERROR` for a field literal inside an enum-variant
+                // pattern (`Ok(0)` on `Result<usize, E>`), which would make
+                // the constant error-typed and the comparison always fail.
+                let place_ty = scrut_place.ty(self.ctx.ty_ctx(), &self.locals);
+                let scrut_ty = if place_ty == Ty::ERROR { pat.ty } else { place_ty };
+                let const_op = self.literal_to_mir_const(lit, scrut_ty, span)?;
+                let cmp = glyim_mir::Rvalue::BinaryOp(
+                    BinOp::Eq,
+                    Box::new((
+                        glyim_mir::Operand::Copy(scrut_place.clone()),
+                        glyim_mir::Operand::Constant(const_op),
+                    )),
+                );
+                let bool_ty = self.ctx.ty_ctx().bool_ty();
+                let out =
+                    self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Not, span);
+                self.push_stmt(glyim_mir::StatementKind::StorageLive(out), span);
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(glyim_mir::Place::new(out), cmp),
+                    span,
+                );
+                Some(out)
             }
             thir::PatternKind::Range {
                 start,
                 end,
                 inclusive,
             } => {
-                if let (Some(s), Some(e)) = (start, end)
-                    && let (Some(s_val), Some(e_val)) =
-                        (self.literal_to_u128(s), self.literal_to_u128(e))
-                {
-                    let end_val = if *inclusive {
-                        e_val
-                    } else {
-                        e_val.saturating_sub(1)
-                    };
-                    for v in s_val..=end_val {
-                        targets.push((v, arm_bb));
+                // See the note on the `Literal` arm above.
+                let place_ty = scrut_place.ty(self.ctx.ty_ctx(), &self.locals);
+                let scrut_ty = if place_ty == Ty::ERROR { pat.ty } else { place_ty };
+                let bool_ty = self.ctx.ty_ctx().bool_ty();
+                let mut acc: Option<LocalIdx> = None;
+                if let Some(s) = start {
+                    if let Some(c) = self.literal_to_mir_const(s, scrut_ty, span) {
+                        let cmp = glyim_mir::Rvalue::BinaryOp(
+                            BinOp::GtEq,
+                            Box::new((
+                                glyim_mir::Operand::Copy(scrut_place.clone()),
+                                glyim_mir::Operand::Constant(c),
+                            )),
+                        );
+                        let l = self.alloc_local(
+                            bool_ty,
+                            glyim_core::primitives::Mutability::Not,
+                            span,
+                        );
+                        self.push_stmt(glyim_mir::StatementKind::StorageLive(l), span);
+                        self.push_stmt(
+                            glyim_mir::StatementKind::Assign(glyim_mir::Place::new(l), cmp),
+                            span,
+                        );
+                        acc = Some(l);
                     }
                 }
+                if let Some(e) = end {
+                    if let Some(c) = self.literal_to_mir_const(e, scrut_ty, span) {
+                        let op = if *inclusive { BinOp::LtEq } else { BinOp::Lt };
+                        let cmp = glyim_mir::Rvalue::BinaryOp(
+                            op,
+                            Box::new((
+                                glyim_mir::Operand::Copy(scrut_place.clone()),
+                                glyim_mir::Operand::Constant(c),
+                            )),
+                        );
+                        let l = self.alloc_local(
+                            bool_ty,
+                            glyim_core::primitives::Mutability::Not,
+                            span,
+                        );
+                        self.push_stmt(glyim_mir::StatementKind::StorageLive(l), span);
+                        self.push_stmt(
+                            glyim_mir::StatementKind::Assign(glyim_mir::Place::new(l), cmp),
+                            span,
+                        );
+                        acc = Some(match acc {
+                            None => l,
+                            Some(prev) => self.and_bool(prev, l, span),
+                        });
+                    }
+                }
+                acc
             }
             thir::PatternKind::Or(subpats) => {
+                let mut acc: Option<LocalIdx> = None;
                 for sub in subpats {
-                    self.collect_switch_values(sub, targets, arm_bb);
-                }
-            }
-            thir::PatternKind::Slice { prefix, suffix, .. } => {
-                // A `[prefix..suffix]` pattern matches when the slice length
-                // equals `prefix.len() + suffix.len()`; switch on that length.
-                targets.push(((prefix.len() + suffix.len()) as u128, arm_bb));
-            }
-            thir::PatternKind::ConstBlock(const_body) => {
-                match self.const_block_to_u128(const_body) {
-                    Some(val) => targets.push((val, arm_bb)),
-                    None => {
-                        self.diagnostics.push(GlyimDiagnostic::type_error(
-                            pat.span,
-                            "failed to evaluate `const` pattern at compile time",
-                        ));
+                    match self.lower_pattern_test(sub, scrut_place, span) {
+                        None => return None,
+                        Some(l) => {
+                            acc = Some(match acc {
+                                None => l,
+                                Some(prev) => self.or_bool(prev, l, span),
+                            });
+                        }
                     }
                 }
+                acc
             }
             thir::PatternKind::Struct {
                 adt_id,
                 variant_idx,
+                fields,
                 ..
             } => {
-                // A `Variant { .. }` pattern on an *enum* scrutinee matches when
-                // the discriminant equals `variant_idx`. Integer/scalar
-                // patterns already populate the switch; this is the enum arm.
-                // (Struct scrutinees are matched by field, not discriminant, so
-                // on a struct ADT this pattern contributes no switch value.)
                 let is_enum = self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum;
+                let mut acc: Option<LocalIdx> = None;
                 if is_enum {
-                    targets.push((*variant_idx as u128, arm_bb));
+                    let u8_ty = Ty::U8;
+                    let discr_local = self.alloc_local(
+                        u8_ty,
+                        glyim_core::primitives::Mutability::Not,
+                        span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(discr_local),
+                        span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(discr_local),
+                            glyim_mir::Rvalue::Discriminant(scrut_place.clone()),
+                        ),
+                        span,
+                    );
+                    let idx_const = glyim_mir::MirConst {
+                        kind: glyim_mir::MirConstKind::Uint(*variant_idx as u128),
+                        ty: u8_ty,
+                        span,
+                    };
+                    let cmp = glyim_mir::Rvalue::BinaryOp(
+                        BinOp::Eq,
+                        Box::new((
+                            glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local)),
+                            glyim_mir::Operand::Constant(idx_const),
+                        )),
+                    );
+                    let bool_ty = self.ctx.ty_ctx().bool_ty();
+                    let discr_eq = self.alloc_local(
+                        bool_ty,
+                        glyim_core::primitives::Mutability::Not,
+                        span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(discr_eq),
+                        span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(discr_eq),
+                            cmp,
+                        ),
+                        span,
+                    );
+                    acc = Some(discr_eq);
                 }
+                for field_pat in fields {
+                    let field_idx = self.ctx.field_index_by_name(
+                        *adt_id,
+                        *variant_idx,
+                        field_pat.field,
+                    );
+                    let Some(field_idx) = field_idx else {
+                        continue;
+                    };
+                    // For an enum scrutinee, insert a `Downcast` before the
+                    // `Field` projection so `Place::ty()` can resolve the
+                    // variant's field type (without it, `Place::ty()` bails
+                    // with "Field projection on non-tuple/ADT type" and the
+                    // field test is silently skipped or error-typed).
+                    let field_base = if is_enum {
+                        self.place_with_projection(
+                            scrut_place.clone(),
+                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(
+                                *variant_idx,
+                            )),
+                        )
+                    } else {
+                        scrut_place.clone()
+                    };
+                    let field_place = self.place_with_projection(
+                        field_base,
+                        ProjectionElem::Field(field_idx),
+                    );
+                    if let Some(fl) =
+                        self.lower_pattern_test(&field_pat.pattern, &field_place, span)
+                    {
+                        acc = Some(match acc {
+                            None => fl,
+                            Some(prev) => self.and_bool(prev, fl, span),
+                        });
+                    }
+                }
+                acc
             }
-            _ => {}
+            thir::PatternKind::Tuple(fields) => {
+                let mut acc: Option<LocalIdx> = None;
+                for (i, field_pat) in fields.iter().enumerate() {
+                    let field_place = self.place_with_projection(
+                        scrut_place.clone(),
+                        ProjectionElem::Field(FieldIdx::from_raw(i as u32)),
+                    );
+                    if let Some(fl) = self.lower_pattern_test(field_pat, &field_place, span) {
+                        acc = Some(match acc {
+                            None => fl,
+                            Some(prev) => self.and_bool(prev, fl, span),
+                        });
+                    }
+                }
+                acc
+            }
+            thir::PatternKind::Slice { prefix, suffix, .. } => {
+                let usize_ty = Ty::USIZE;
+                let len_local = self.alloc_local(
+                    usize_ty,
+                    glyim_core::primitives::Mutability::Not,
+                    span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::StorageLive(len_local),
+                    span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(len_local),
+                        glyim_mir::Rvalue::Len(scrut_place.clone()),
+                    ),
+                    span,
+                );
+                let expected = (prefix.len() + suffix.len()) as u128;
+                let expected_const = glyim_mir::MirConst {
+                    kind: glyim_mir::MirConstKind::Uint(expected),
+                    ty: usize_ty,
+                    span,
+                };
+                let cmp = glyim_mir::Rvalue::BinaryOp(
+                    BinOp::Eq,
+                    Box::new((
+                        glyim_mir::Operand::Copy(glyim_mir::Place::new(len_local)),
+                        glyim_mir::Operand::Constant(expected_const),
+                    )),
+                );
+                let bool_ty = self.ctx.ty_ctx().bool_ty();
+                let out =
+                    self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Not, span);
+                self.push_stmt(glyim_mir::StatementKind::StorageLive(out), span);
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(glyim_mir::Place::new(out), cmp),
+                    span,
+                );
+                Some(out)
+            }
+            thir::PatternKind::ConstBlock(_) => {
+                // Const-block patterns previously had no field tests
+                // either; conservatively treat them as irrefutable so the
+                // arm body executes (matching historical behaviour).
+                None
+            }
+        }
+    }
+
+    /// `dest = lhs & rhs` on two bool locals, returning `dest`.
+    fn and_bool(
+        &mut self,
+        lhs: LocalIdx,
+        rhs: LocalIdx,
+        span: glyim_span::Span,
+    ) -> LocalIdx {
+        let bool_ty = self.ctx.ty_ctx().bool_ty();
+        let dest = self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Not, span);
+        self.push_stmt(glyim_mir::StatementKind::StorageLive(dest), span);
+        self.push_stmt(
+            glyim_mir::StatementKind::Assign(
+                glyim_mir::Place::new(dest),
+                glyim_mir::Rvalue::BinaryOp(
+                    // `BinOp::And` (logical), not `BitAnd`: the interpreter
+                    // implements bool short-circuit `And`/`Or` and rejects
+                    // `BitAnd`/`BitOr` on `Bool` operands with
+                    // "unsupported bool binop".
+                    BinOp::And,
+                    Box::new((
+                        glyim_mir::Operand::Copy(glyim_mir::Place::new(lhs)),
+                        glyim_mir::Operand::Copy(glyim_mir::Place::new(rhs)),
+                    )),
+                ),
+            ),
+            span,
+        );
+        dest
+    }
+
+    /// `dest = lhs | rhs` on two bool locals, returning `dest`.
+    fn or_bool(
+        &mut self,
+        lhs: LocalIdx,
+        rhs: LocalIdx,
+        span: glyim_span::Span,
+    ) -> LocalIdx {
+        let bool_ty = self.ctx.ty_ctx().bool_ty();
+        let dest = self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Not, span);
+        self.push_stmt(glyim_mir::StatementKind::StorageLive(dest), span);
+        self.push_stmt(
+            glyim_mir::StatementKind::Assign(
+                glyim_mir::Place::new(dest),
+                glyim_mir::Rvalue::BinaryOp(
+                    // `BinOp::Or` (logical), not `BitOr`; see `and_bool`.
+                    BinOp::Or,
+                    Box::new((
+                        glyim_mir::Operand::Copy(glyim_mir::Place::new(lhs)),
+                        glyim_mir::Operand::Copy(glyim_mir::Place::new(rhs)),
+                    )),
+                ),
+            ),
+            span,
+        );
+        dest
+    }
+
+    /// Convert a THIR literal into a MIR constant, using `fallback_ty` for
+    /// the integer / char cases where the literal's own width isn't carried.
+    /// Bool is always `Ty::BOOL`.
+    fn literal_to_mir_const(
+        &self,
+        lit: &thir::Literal,
+        fallback_ty: Ty,
+        span: glyim_span::Span,
+    ) -> Option<glyim_mir::MirConst> {
+        // Whether the comparison target is unsigned. `usize`/`u8`/`u16`/`u32`/
+        // `u64` are represented as `Uint` at runtime; a `Literal::Int` used as
+        // a pattern for an unsigned field (e.g. `Ok(0)` where the payload is
+        // `usize`) must become a `Uint` constant, else the interpreter's
+        // `Uint(n) == Int(0)` sees a mixed pair and rejects it.
+        let target_is_unsigned = matches!(
+            self.ctx.ty_ctx().ty_kind(fallback_ty),
+            TyKind::Uint(_)
+        );
+        match lit {
+            thir::Literal::Int(v, _) => Some(glyim_mir::MirConst {
+                kind: if target_is_unsigned {
+                    glyim_mir::MirConstKind::Uint(*v as u128)
+                } else {
+                    glyim_mir::MirConstKind::Int(*v)
+                },
+                ty: fallback_ty,
+                span,
+            }),
+            thir::Literal::Uint(v, _) => Some(glyim_mir::MirConst {
+                kind: glyim_mir::MirConstKind::Uint(*v),
+                ty: fallback_ty,
+                span,
+            }),
+            thir::Literal::Bool(b) => Some(glyim_mir::MirConst {
+                kind: glyim_mir::MirConstKind::Bool(*b),
+                ty: Ty::BOOL,
+                span,
+            }),
+            thir::Literal::Char(c) => Some(glyim_mir::MirConst {
+                kind: glyim_mir::MirConstKind::Char(*c),
+                ty: fallback_ty,
+                span,
+            }),
+            _ => None,
         }
     }
 
@@ -2017,6 +2342,20 @@ impl<'a> MirBuilder<'a> {
         merge_bb: BasicBlockIdx,
     ) {
         let arm_val = self.lower_expr_to_rvalue(&arm.body);
+        // A diverging arm body (`return ..`, `panic!(..)`, `panic_any(..)`,
+        // any call whose return type is `!`) has ALREADY terminated the
+        // current block during `lower_expr_to_rvalue` -- see the
+        // `ExprKind::Return` arm, which calls `self.terminate(Return)`.
+        // Pushing the result `Assign` here would append a statement to a
+        // terminated block (invalid MIR) and then
+        // `self.terminate(Goto { merge_bb })` would OVERWRITE the `Return`
+        // terminator, silently converting `Result::Ok(0) => return
+        // Result::Err(..)` into a no-op `Goto(merge)`. That is exactly why
+        // `write_all`'s `Ok(0)` / `Ok(n)` arms misbehaved and `unwrap`
+        // panicked.
+        if arm.body.ty == Ty::NEVER {
+            return;
+        }
         self.push_stmt(
             glyim_mir::StatementKind::Assign(dest_place.clone(), arm_val),
             arm.body.span,
