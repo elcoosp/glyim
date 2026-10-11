@@ -35,6 +35,20 @@ use crate::check_body::FnCtxt;
 use crate::thir;
 use crate::unify::thir_literal;
 
+/// A raw-pointer arithmetic method expanded inline by `check_expr`.
+#[derive(Clone, Copy)]
+pub(crate) enum PtrArithOp {
+    IsNull,
+    IsNotNull,
+    Addr,
+    Add,
+    Sub,
+}
+
+fn op_is_not_null(op: &PtrArithOp) -> bool {
+    matches!(op, PtrArithOp::IsNotNull)
+}
+
 /// How a method call (`recv.method(..)`) should be dispatched after
 /// type-checking.
 #[derive(Clone)]
@@ -54,6 +68,11 @@ pub(crate) enum MethodDispatch {
     /// the call can be devirtualized against the instantiated receiver type.
     /// Lowered to a `DynamicCall` carrying the trait + method identity.
     Virtual(TraitDefId),
+    /// A raw-pointer method with no source `impl` and no MIR body
+    /// (`is_null`, `addr`, `add`, `sub`). Expanded in `check_expr` into a
+    /// pointer↔integer cast plus integer arithmetic, which every backend
+    /// already handles. Carries the op and the pointee type.
+    PtrArith(PtrArithOp, Ty),
 }
 
 /// Collect the enum variant indices covered by a THIR `Pattern`. Used by the
@@ -1289,6 +1308,7 @@ impl<'a> FnCtxt<'a> {
                             Some(MethodDispatch::Static(_)) => "Static",
                             Some(MethodDispatch::Virtual(_)) => "Virtual",
                             Some(MethodDispatch::Builtin(_)) => "Builtin",
+                            Some(MethodDispatch::PtrArith(_, _)) => "PtrArith",
                             None => "None",
                         };
                         let rk = format!("{:?}", self.ctx.ty_kind(recv_expr.ty));
@@ -1594,6 +1614,52 @@ impl<'a> FnCtxt<'a> {
                             },
                             ty: ret_ty,
                             span,
+                        }
+                    }
+                    Some(MethodDispatch::PtrArith(op, _elem_ty)) => {
+                        // Expand the raw-pointer method into casts + integer
+                        // ops. `p as usize` is `PtrToInt`; `== 0` and `addr`
+                        // are plain integer ops, all handled by every backend.
+                        let usize_ty = self
+                            .ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
+                        let ptr_as_usize = thir::Expr {
+                            kind: thir::ExprKind::Cast {
+                                expr: Box::new(recv_expr),
+                            },
+                            ty: usize_ty,
+                            span,
+                        };
+                        match op {
+                            PtrArithOp::Addr => ptr_as_usize,
+                            PtrArithOp::IsNull | PtrArithOp::IsNotNull => {
+                                let zero = thir::Expr {
+                                    kind: thir::ExprKind::Literal(thir::Literal::Int(
+                                        0,
+                                        Some(glyim_core::primitives::IntTy::I32),
+                                    )),
+                                    ty: usize_ty,
+                                    span,
+                                };
+                                let _ = op_is_not_null(&op);
+                                thir::Expr {
+                                    kind: thir::ExprKind::Binary {
+                                        op: if op_is_not_null(&op) {
+                                            glyim_core::primitives::BinOp::Ne
+                                        } else {
+                                            glyim_core::primitives::BinOp::Eq
+                                        },
+                                        lhs: Box::new(ptr_as_usize),
+                                        rhs: Box::new(zero),
+                                    },
+                                    ty: Ty::BOOL,
+                                    span,
+                                }
+                            }
+                            PtrArithOp::Add | PtrArithOp::Sub => {
+                                // Not yet expanded (needs elem size).
+                                thir::Expr::err(span)
+                            }
                         }
                     }
                     None => {
@@ -2868,15 +2934,38 @@ impl<'a> FnCtxt<'a> {
         // the compiler's `as` casts between `*mut T` and `usize` don't
         // compose with method dispatch at stdlib level (Script 81's
         // attempt added 18 net errors).
-        if let TyKind::RawPtr(inner_ty, mutability) = self.ctx.ty_kind(recv_ty) {
+        // Copy the pointee type and mutability out of the borrow of `self.ctx`
+        // before the match below, so `"addr"` / `"as_ptr"` / `"as_mut_ptr"`
+        // can call `self.ctx.mk_ty(..)` without a mutable-borrow conflict
+        // (`ty_kind` returns `&TyKind`, borrowing `self.ctx` immutably; `Ty`
+        // and `Mutability` are `Copy`, so we dereference them out).
+        let raw_ptr_parts: Option<(Ty, glyim_core::primitives::Mutability)> =
+            match self.ctx.ty_kind(recv_ty) {
+                TyKind::RawPtr(inner, m) => Some((*inner, *m)),
+                _ => None,
+            };
+        if let Some((inner_ty, mutability)) = raw_ptr_parts {
             let mname = self.ctx.name_str(method_name).to_string();
             match mname.as_str() {
-                "is_null" | "is_not_null" => {
-                    return (Ty::BOOL, None);
+                "is_null" => {
+                    return (
+                        Ty::BOOL,
+                        Some(MethodDispatch::PtrArith(PtrArithOp::IsNull, inner_ty)),
+                    );
+                }
+                "is_not_null" => {
+                    return (
+                        Ty::BOOL,
+                        Some(MethodDispatch::PtrArith(PtrArithOp::IsNotNull, inner_ty)),
+                    );
                 }
                 "addr" => {
-                    let usize_ty = self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
-                    return (usize_ty, None);
+                    let usize_ty =
+                        self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
+                    return (
+                        usize_ty,
+                        Some(MethodDispatch::PtrArith(PtrArithOp::Addr, inner_ty)),
+                    );
                 }
                 "add" | "sub" => {
                     // `p.add(n)` / `p.sub(n)` preserve the receiver's pointer type.
@@ -2887,7 +2976,7 @@ impl<'a> FnCtxt<'a> {
                     let new_ty = match mutability {
                         glyim_core::primitives::Mutability::Mut => self
                             .ctx
-                            .mk_ty(TyKind::RawPtr(*inner_ty, glyim_core::primitives::Mutability::Not)),
+                            .mk_ty(TyKind::RawPtr(inner_ty, glyim_core::primitives::Mutability::Not)),
                         glyim_core::primitives::Mutability::Not => recv_ty,
                     };
                     return (new_ty, None);
@@ -2897,7 +2986,7 @@ impl<'a> FnCtxt<'a> {
                     let new_ty = match mutability {
                         glyim_core::primitives::Mutability::Not => self
                             .ctx
-                            .mk_ty(TyKind::RawPtr(*inner_ty, glyim_core::primitives::Mutability::Mut)),
+                            .mk_ty(TyKind::RawPtr(inner_ty, glyim_core::primitives::Mutability::Mut)),
                         glyim_core::primitives::Mutability::Mut => recv_ty,
                     };
                     return (new_ty, None);
