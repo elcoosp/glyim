@@ -1,8 +1,8 @@
 # HANDOFF — Glyim compiler (current)
 
-**Updated**: end of Session 7
-**HEAD**: `946403fe`
-**Matrix**: **4598 passing / 0 failing / 2 skipped** — fully green.
+**Updated**: end of Session 9
+**HEAD**: `995ac244`
+**Matrix**: **4599 passing / 0 failing / 2 skipped** — fully green.
 
 > Session 5's handoff (`.fix-log/HANDOFF.md` before this) claimed
 > `17aacb46`, 4570/1. Superseded.
