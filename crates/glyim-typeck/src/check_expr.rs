@@ -1184,6 +1184,7 @@ impl<'a> FnCtxt<'a> {
                                             (TyKind::Adt(p_id, _), TyKind::Adt(a_id, _))
                                                 if p_id == a_id
                                         )
+                                        && Self::ty_contains_infer(self.ctx, arg_expr.ty)
                                     {
                                         // Concrete-Adt formal against same-Adt arg
                                         // that still carries fresh inference vars
@@ -1195,6 +1196,16 @@ impl<'a> FnCtxt<'a> {
                                         // `Result<usize, ERROR>` and breaking
                                         // layout/codegen). Unify so the formal's
                                         // concrete args pin the arg's fresh vars.
+                                        //
+                                        // Guarded on the arg actually containing an
+                                        // inference var: if the arg's substitution
+                                        // carries rigid `Param`s at different
+                                        // indices from the formal's (a generic
+                                        // function passing `Foo<T>` to a formal
+                                        // `Foo<T_impl>`), unifying would produce a
+                                        // spurious `Param != Param` mismatch.
+                                        // `align_impl_param_subst` below handles
+                                        // that case.
                                         self.unify(arg_expr.ty, *param_ty, span);
                                     }
                                     // Structural alignment: a formal that is an
@@ -2646,6 +2657,36 @@ impl<'a> FnCtxt<'a> {
             map.insert(i as u32, arg.clone());
         }
         self.ctx.subst_ty(ty, &map)
+    }
+
+    /// Does `ty` or any of its immediate type-argument positions contain a
+    /// `TyKind::Infer(_)`? Used to guard the concrete-Adt-vs-same-Adt
+    /// unification: we only want to unify when the argument still has fresh
+    /// inference vars to pin. Rigid `Param`-vs-`Param` mismatches are the
+    /// responsibility of `align_impl_param_subst` instead.
+    fn ty_contains_infer(ctx: &glyim_type::TyCtxMut, ty: Ty) -> bool {
+        match ctx.ty_kind(ty) {
+            TyKind::Infer(_) => true,
+            TyKind::Adt(_, substs) => {
+                let args = ctx.substitution_args(*substs);
+                args.iter().any(|a| match a {
+                    glyim_type::GenericArg::Ty(t) => Self::ty_contains_infer(ctx, *t),
+                    _ => false,
+                })
+            }
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) | TyKind::Slice(inner) => {
+                Self::ty_contains_infer(ctx, *inner)
+            }
+            TyKind::Array(inner, _) => Self::ty_contains_infer(ctx, *inner),
+            TyKind::Tuple(substs) => {
+                let args = ctx.substitution_args(*substs);
+                args.iter().any(|a| match a {
+                    glyim_type::GenericArg::Ty(t) => Self::ty_contains_infer(ctx, *t),
+                    _ => false,
+                })
+            }
+            _ => false,
+        }
     }
 
     fn is_cast_valid(&self, from: Ty, to: Ty) -> bool {
