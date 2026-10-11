@@ -46,36 +46,46 @@ compiler defects plus building a four-class regression suite.
 
 ---
 
-## 3. T140 — status after session 8
+## 3. T140 — status after session 9
 
 ### Implemented (tested)
 
 | Item | Fixture |
 |---|---|
-| `str::len`, `str::contains`, `str::trim` | `tests/run-pass/str/` (15) |
+| `str::len`, `contains`, `trim` | `tests/run-pass/str/` (15) |
 | `[T]::len` | `tests/run-pass/slice/` (4) |
 | `MaybeUninit::{uninit,new,assume_init}` | `tests/run-pass/core/maybe_uninit_new.g` |
+| `mem::size_of` / `align_of` | `tests/run-pass/mem/` (6) |
+| `ptr::read` / `write` (direct + through fn) | `tests/run-pass/ptr/` (3) |
+| raw deref `*p` read/write | same |
 | `UnsafeCell::new` | `tests/run-pass/core/unsafecell_new.g` |
-| raw deref `*p` | `tests/run-pass/core/raw_deref.g` |
+| extern abort hooks stop execution | `tests/run-pass/core/abort_stops.g` |
 | `hint::spin_loop` | no-op is correct |
 
-### Compiler bugs fixed while doing T140
+### Compiler bugs fixed across sessions 8-9
 
-1. DCE ignored projection locals (`062cc9db`) — `arr[i]`'s index local deleted as dead.
-2. DCE ignored `UnaryOp` operands (`0a3cdf56`) — `*p` read uninitialized.
-3. Block-like statements absorbed trailing operators (`02be5cf5`) —
-   `while c { } & s[0..n]` parsed as `(while c {}) & (s[0..n])`.
-4. `str` dynamic range slicing (`daa01ead`).
+1. DCE ignored projection locals (`062cc9db`).
+2. DCE ignored `UnaryOp` operands (`0a3cdf56`).
+3. Block-like statements absorbed trailing operators (`02be5cf5`).
+4. `str` dynamic range slicing + fat-ptr `str::len` (`daa01ead`).
+5. extern abort hooks returned 0 instead of stopping (`1853419d`).
+6. `size_of`/`align_of`/`needs_drop` had no lowering (`aa409971`,
+   `const_fns` registry + layout fold).
+7. `*p = v` lowered as an rvalue, not a place (`702ea7db`).
+8. Block-tail statements (`unsafe { *p = 7 }`) were discarded (`702ea7db`).
+9. DCE ignored the LHS *place* of a projected assignment (`e7c13984`).
+10. const-prop did not kill aliased constants on a `Deref` write
+    (`e7c13984`) — both analysis and rewrite loops.
 
-### Still stubs (each a workstream)
+### Still stubs
 
 | Item | Blocker |
 |---|---|
-| `mem::size_of`/`align_of`/`needs_drop` | call hits the empty `.g` body, not a builtin; needs a `FnDefId`→name lookup |
-| `ptr::read`/`write`/`copy`/`copy_nonoverlapping`/`drop_in_place` | per-backend intrinsics; `ptr::write` currently no-ops |
-| `Chars::next`/`Lines::next` | unicode decoding |
-| `panic_any` | should abort; currently a no-op |
-| `UnsafeCell::get` runtime | `&self.value` refs the dead callee frame; needs `Ref` projections |
+| `ptr::copy` / `copy_nonoverlapping` | need a byte-memcpy intrinsic (per backend) |
+| `ptr::drop_in_place` | needs drop-glue lowering |
+| `Chars::next` / `Lines::next` | unicode decoding + `&str` iteration state |
+| `panic_any` | `msg.to_string()` on an `impl Display` *type param* hits the generic-display gap (Error sentinel → undefined symbol); `glyim_process_abort` works, so a message-free abort is possible |
+| `UnsafeCell::get` runtime | `&self.value` records a `Ref` into the callee frame, dead on return — needs `Ref` to carry a projection |
 
 ### Verification
 
