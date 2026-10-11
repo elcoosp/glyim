@@ -100,3 +100,25 @@ cargo nextest run --workspace --no-fail-fast
 ```
 
 Expected: **4598 passed / 2 skipped**.
+
+---
+
+## 5. Session 9 addendum — `panic_any` blocker (do not just enable it)
+
+Enabling `panic_any` (route to the runtime `glyim_process_abort`) **breaks
+every `println` fixture**. Root cause, confirmed from MIR:
+
+- hello world's stdlib calls `panic_any` (`FnDefId(307)`) on the error
+  branches of `write_all` / `unwrap` / `flush` (`grep FnDefId(307)` over the
+  hello MIR shows ~5 call sites).
+- Those branches are supposed to be runtime-dead. They are **not** — a live
+  path reaches `panic_any`, which today silently no-ops, so `println`
+  "works". Wiring a real abort exposes it.
+
+So `panic_any` is *not* an isolated stub. Making it abort requires first
+fixing whatever in the write path takes the error branch. Until then,
+`panic_any` must stay a no-op (or message-free abort only where the write
+path is verified clean).
+
+`glyim_process_abort` itself is fine — `tests/run-pass/core/abort_stops.g`
+calls it directly and correctly exits 101.
