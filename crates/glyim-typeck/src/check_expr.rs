@@ -1144,6 +1144,25 @@ impl<'a> FnCtxt<'a> {
                                     ) && *param_ty != Ty::ERROR
                                     {
                                         self.unify(arg_expr.ty, *param_ty, span);
+                                    } else if *param_ty != Ty::ERROR
+                                        && arg_expr.ty != Ty::ERROR
+                                        && matches!(
+                                            (self.ctx.ty_kind(*param_ty), self.ctx.ty_kind(arg_expr.ty)),
+                                            (TyKind::Adt(p_id, _), TyKind::Adt(a_id, _))
+                                                if p_id == a_id
+                                        )
+                                    {
+                                        // Concrete-Adt formal against same-Adt arg
+                                        // that still carries fresh inference vars
+                                        // (e.g. `f(Result::Ok(0))` where
+                                        // `f(r: Result<usize, i32>)`: arg type is
+                                        // `Result<{integer}, _>`, so `E` survives
+                                        // unpinned and becomes `Ty::ERROR` at zonk,
+                                        // making the ctor's aggregate substitution
+                                        // `Result<usize, ERROR>` and breaking
+                                        // layout/codegen). Unify so the formal's
+                                        // concrete args pin the arg's fresh vars.
+                                        self.unify(arg_expr.ty, *param_ty, span);
                                     }
                                     // Structural alignment: a formal that is an
                                     // `Adt`/`Ref(Adt)` whose generic args carry the
