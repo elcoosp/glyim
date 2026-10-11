@@ -660,7 +660,40 @@ impl<'a> FnCtxt<'a> {
                     let guard_thir = arm
                         .guard
                         .map(|guard_id| Box::new(self.check_expr(guard_id).0));
-                    let (body_expr, body_ty) = self.check_expr(arm.body);
+                    // ARM-STMT-BODY: a match-arm body that is *statement-shaped*
+                    // (`Result::Ok(n) => written += n`, `X => return y`) is a
+                    // statement, not a value expression. `check_expr`'s
+                    // `Expr::Assign` arm type-checks both sides and then
+                    // discards the assignment (it returns `Literal(Unit)`,
+                    // since THIR has no assignment-expression node), which
+                    // silently dropped every `written += n` arm -- the reason
+                    // `write_all` looped forever. Route the body through the
+                    // statement checker wrapped in a `Block { stmts: [stmt],
+                    // tail: Unit }`, mirroring the block-tail fix above.
+                    let (body_expr, body_ty) = if matches!(
+                        &self.body.exprs[arm.body],
+                        Expr::Assign { .. } | Expr::Let { .. }
+                    ) {
+                        let stmt = self.check_stmt_to_thir(arm.body, false);
+                        let unit = thir::Expr {
+                            kind: thir::ExprKind::Literal(thir::Literal::Unit),
+                            ty: Ty::UNIT,
+                            span,
+                        };
+                        (
+                            thir::Expr {
+                                kind: thir::ExprKind::Block {
+                                    stmts: vec![stmt],
+                                    tail: Some(Box::new(unit)),
+                                },
+                                ty: Ty::UNIT,
+                                span,
+                            },
+                            Ty::UNIT,
+                        )
+                    } else {
+                        self.check_expr(arm.body)
+                    };
                     self.env.leave_scope();
                     if body_ty != Ty::ERROR {
                         self.unify(body_ty, result_ty, span);
