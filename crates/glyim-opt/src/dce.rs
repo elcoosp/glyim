@@ -29,8 +29,16 @@ fn collect_used_locals(body: &Body) -> HashSet<LocalIdx> {
     for bb in 0..body.basic_blocks.len() {
         let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb as u32)];
         for stmt in &block.statements {
-            if let StatementKind::Assign(_, rvalue) = &stmt.kind {
+            if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                 collect_uses_in_rvalue(rvalue, &mut used);
+                // DCE-LHS-PROJECTION: a projected assignment
+                // (`p[Deref] = v`, `arr[i] = v`) reads the base local and any
+                // `Index(l)` local. Ignoring the LHS let DCE delete the store
+                // feeding it, so the projected write hit an uninitialized local.
+                if !place.projection.is_empty() {
+                    used.insert(place.local);
+                    collect_projection_locals(&place.projection, &mut used);
+                }
             }
         }
         collect_uses_in_terminator(&block.terminator, &mut used);

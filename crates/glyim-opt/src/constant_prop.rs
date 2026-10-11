@@ -421,7 +421,21 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
                 if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                     out.remove(&place.local);
                     defined.insert(place.local);
-                    if place.projection.is_empty()
+                    // CONSTPROP-ALIAS-KILL: a write through a pointer
+                    // (`p[Deref] = v`, `p[Deref, Field(0)] = v`) can alias *any*
+                    // local. Removing only `place.local`'s constant left the
+                    // aliased local folded: `x = 0; p = &x; *p = 7; x`
+                    // propagated `x = 0` and folded the return to 0. Kill every
+                    // tracked constant on such a write (same conservatism as
+                    // the `Call` terminator below).
+                    if place
+                        .projection
+                        .iter()
+                        .any(|p| matches!(p, ProjectionElem::Deref))
+                    {
+                        out.clear();
+                        defined.clear();
+                    } else if place.projection.is_empty()
                         && let Some(c) =
                             evaluate_rvalue_to_const(rvalue, &out, ctx, body.locals[place.local].ty)
                     {
@@ -477,7 +491,17 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
             if let StatementKind::Assign(place, rvalue) = &mut stmt.kind {
                 replace_in_rvalue(rvalue, &map);
                 let local = place.local;
-                if place.projection.is_empty() {
+                // CONSTPROP-ALIAS-KILL-RW: mirror the analysis loop. A write
+                // through a `Deref` can alias any local, so it must drop every
+                // tracked constant — otherwise `x = 0; p = &x; *p = 7; x`
+                // keeps `x = 0` in the map and folds the final read to 0.
+                if place
+                    .projection
+                    .iter()
+                    .any(|p| matches!(p, ProjectionElem::Deref))
+                {
+                    map.clear();
+                } else if place.projection.is_empty() {
                     let ty = local_tys[local.index()];
                     match evaluate_rvalue_to_const(rvalue, &map, ctx, ty) {
                         Some(c) => {
