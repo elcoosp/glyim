@@ -180,3 +180,143 @@ match r {
     Result::Ok(n) => n,     // pushed (0, bb_b)  <-- same key
     Result::Err(_) => 9,
 }
+
+---
+
+## 7. Session 9 addendum — remaining T140 stubs are features, not patches
+
+After fixing 6 bugs and closing ~15 stubs, the remaining T140 items each
+need a real feature. None is a one-line fix.
+
+### `ptr::add` / `ptr::sub` / `ptr::addr` / `ptr::is_null`
+
+`check_expr.rs` (~line 2871) recognizes these on a `RawPtr` receiver and
+returns dispatch `None`. The `None` arm of the `match dispatch` in
+`Expr::MethodCall` then emits an **indirect call** on the receiver value, so
+`p.add(2)` panics with "indirect call through non-function value". There is
+no pointer-arithmetic MIR.
+
+**Design:** add a `MethodDispatch::Builtin`-style path (or a new
+`MethodDispatch::PtrArith { op }`) for raw-pointer receivers, lowered to a
+`Rvalue::BinaryOp(Add/Sub, ptr, byte_offset)` scaled by `size_of::<T>()`
+(now available — see `aa409971`), plus interpreter handling for
+pointer +/- integer. ~half a day.
+
+### `ptr::copy` / `copy_nonoverlapping`
+
+Need a byte-memcpy intrinsic. With `ptr::add` working (above), a pure-Glyim
+byte loop becomes possible; but for large copies an intrinsic is wanted.
+Either way it depends on `ptr::add`.
+
+### `ptr::drop_in_place`
+
+Needs drop-glue lowering (call the pointed-to type's `Drop::drop`), which the
+backend already generates for scope drops — routing it through a raw pointer
+is the work.
+
+### `Chars::next` / `Lines::next`
+
+Need unicode scalar decoding (`char::from_u32` + UTF-8 byte walking) and
+`&str` iteration state. `Chars::next` currently fails with "invalid cast".
+
+### `UnsafeCell::get` runtime use
+
+`&self.value` records `InterpValue::Ref { frame, local }` into the **callee**
+frame, dead on return ("deref of Ref from dead frame"). The interpreter's
+`Ref` carries no projection, so a reference to a *field* cannot outlive the
+frame. Needs `InterpValue::Ref` to carry a projection path — a core
+representation change touching every `Ref` producer/consumer.
+
+### `panic_any`
+
+Blocked on the enum-match field-pattern fix (§6). Once `Ok(0)` vs `Ok(n)` is
+distinguished, `write_all` stops returning `Err`, `unwrap` stops panicking,
+and a real `panic_any` can be enabled.
+
+### Enum match field patterns (§6)
+
+The fix was implemented this session (sequential arm testing) and produced
+**correct MIR** for `Ok(0)`/`Ok(n)`/`Some(0)` — three minimal probes passed.
+But it regressed all 7 `println` fixtures with an abort traced to `main`'s
+frame that could not be explained from the MIR. It was **reverted** rather
+than left in. The specific open question: *why does sequential match lowering
+abort during `println` when the identical shape works for a standalone match?*
+The implementation is in the session's git history if someone wants to
+resume; the design is in §6.
+
+---
+
+**Session 9 end state: 4599 passing / 0 failing / 2 skipped.** Six compiler
+bugs fixed (extern abort fallthrough, `size_of`/`align_of` folding, deref-as-
+place, block-tail statement, DCE aliasing, const-prop aliasing) plus the
+enum-match root cause found and documented.
+
+---
+
+## 7. Session 9 addendum — remaining T140 stubs are features, not patches
+
+After fixing 6 bugs and closing ~15 stubs, the remaining T140 items each
+need a real feature. None is a one-line fix.
+
+### `ptr::add` / `ptr::sub` / `ptr::addr` / `ptr::is_null`
+
+`check_expr.rs` (~line 2871) recognizes these on a `RawPtr` receiver and
+returns dispatch `None`. The `None` arm of the `match dispatch` in
+`Expr::MethodCall` then emits an **indirect call** on the receiver value, so
+`p.add(2)` panics with "indirect call through non-function value". There is
+no pointer-arithmetic MIR.
+
+**Design:** add a `MethodDispatch::Builtin`-style path (or a new
+`MethodDispatch::PtrArith { op }`) for raw-pointer receivers, lowered to a
+`Rvalue::BinaryOp(Add/Sub, ptr, byte_offset)` scaled by `size_of::<T>()`
+(now available — see `aa409971`), plus interpreter handling for
+pointer +/- integer. ~half a day.
+
+### `ptr::copy` / `copy_nonoverlapping`
+
+Need a byte-memcpy intrinsic. With `ptr::add` working (above), a pure-Glyim
+byte loop becomes possible; but for large copies an intrinsic is wanted.
+Either way it depends on `ptr::add`.
+
+### `ptr::drop_in_place`
+
+Needs drop-glue lowering (call the pointed-to type's `Drop::drop`), which the
+backend already generates for scope drops — routing it through a raw pointer
+is the work.
+
+### `Chars::next` / `Lines::next`
+
+Need unicode scalar decoding (`char::from_u32` + UTF-8 byte walking) and
+`&str` iteration state. `Chars::next` currently fails with "invalid cast".
+
+### `UnsafeCell::get` runtime use
+
+`&self.value` records `InterpValue::Ref { frame, local }` into the **callee**
+frame, dead on return ("deref of Ref from dead frame"). The interpreter's
+`Ref` carries no projection, so a reference to a *field* cannot outlive the
+frame. Needs `InterpValue::Ref` to carry a projection path — a core
+representation change touching every `Ref` producer/consumer.
+
+### `panic_any`
+
+Blocked on the enum-match field-pattern fix (§6). Once `Ok(0)` vs `Ok(n)` is
+distinguished, `write_all` stops returning `Err`, `unwrap` stops panicking,
+and a real `panic_any` can be enabled.
+
+### Enum match field patterns (§6)
+
+The fix was implemented this session (sequential arm testing) and produced
+**correct MIR** for `Ok(0)`/`Ok(n)`/`Some(0)` — three minimal probes passed.
+But it regressed all 7 `println` fixtures with an abort traced to `main`'s
+frame that could not be explained from the MIR. It was **reverted** rather
+than left in. The specific open question: *why does sequential match lowering
+abort during `println` when the identical shape works for a standalone match?*
+The implementation is in the session's git history if someone wants to
+resume; the design is in §6.
+
+---
+
+**Session 9 end state: 4599 passing / 0 failing / 2 skipped.** Six compiler
+bugs fixed (extern abort fallthrough, `size_of`/`align_of` folding, deref-as-
+place, block-tail statement, DCE aliasing, const-prop aliasing) plus the
+enum-match root cause found and documented.
