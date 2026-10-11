@@ -65,13 +65,18 @@ fn null_mut<T>() -> *mut T {
 }
 
 /// Reads the value from `src` without moving it.
+///
+/// PTR-READWRITE: a raw deref. `unsafe { *src }` reads through the pointer.
 fn read<T>(src: *const T) -> T {
-    // compiler intrinsic - unsafe
+    unsafe { *src }
 }
 
 /// Writes `src` to `dst`.
+///
+/// PTR-READWRITE: a raw store. `unsafe { *dst = src }` writes through the
+/// pointer.
 fn write<T>(dst: *mut T, src: T) {
-    // compiler intrinsic - unsafe
+    unsafe { *dst = src }
 }
 
 /// Copies bytes from `src` to `dst`. The source and destination may overlap.

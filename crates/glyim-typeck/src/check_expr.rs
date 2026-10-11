@@ -186,6 +186,34 @@ impl<'a> FnCtxt<'a> {
                     thir_stmts.push(self.check_stmt_to_thir(stmt_id, false));
                 }
                 if let Some(tail_id) = tail {
+                    // TAIL-ASSIGN-STMT: a block tail that is statement-shaped
+                    // (`let x = ..` or `p = ..`) is a *statement*, not a value
+                    // expression. `check_expr`'s `Expr::Assign` arm type-checks
+                    // both sides and then discards the assignment (it returns
+                    // `Literal(Unit)`, since THIR has no assignment-expression
+                    // node). That silently dropped `unsafe { *p = 7 }` and any
+                    // `{ x = y }` block tail. Route it through the statement
+                    // checker so the store survives; the block's value is `()`.
+                    if matches!(
+                        &self.body.exprs[*tail_id],
+                        Expr::Assign { .. } | Expr::Let { .. }
+                    ) {
+                        thir_stmts.push(self.check_stmt_to_thir(*tail_id, false));
+                        let unit = thir::Expr {
+                            kind: thir::ExprKind::Literal(thir::Literal::Unit),
+                            ty: Ty::UNIT,
+                            span,
+                        };
+                        let block_expr = thir::Expr {
+                            kind: thir::ExprKind::Block {
+                                stmts: thir_stmts,
+                                tail: Some(Box::new(unit)),
+                            },
+                            ty: Ty::UNIT,
+                            span,
+                        };
+                        return (block_expr, Ty::UNIT);
+                    }
                     let (tail_expr, tail_ty) = self.check_expr(*tail_id);
                     let block_expr = thir::Expr {
                         kind: thir::ExprKind::Block {

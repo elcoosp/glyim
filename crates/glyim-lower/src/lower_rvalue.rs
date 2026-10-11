@@ -1456,6 +1456,20 @@ impl<'a> MirBuilder<'a> {
                 operand,
                 mutability: _,
             } => self.lower_expr_to_place(operand),
+            // PTR-DEREF-PLACE: `*p` on the LHS of an assignment (`*d = s`) is
+            // a *place* — the store must go THROUGH the pointer, not into a
+            // temporary. The previous code had no `Unary(Deref)` arm, so `*d`
+            // fell into the `_` fallback, which lowers it as an rvalue (a
+            // read) into a fresh local; the assignment then wrote to that
+            // temp and the raw store silently no-opped. Lower the operand to
+            // a place and add a `Deref` projection.
+            thir::ExprKind::Unary {
+                op: glyim_core::primitives::UnOp::Deref,
+                operand,
+            } => {
+                let base_place = self.lower_expr_to_place(operand);
+                self.place_with_projection(base_place, ProjectionElem::Deref)
+            }
             _ => {
                 let rvalue = self.lower_expr_to_rvalue(expr);
                 let local =
