@@ -332,10 +332,34 @@ impl TestCompiler for PipelineCompiler {
                 // linker is only invoked when codegen produced a real object
                 // (the production LLVM backend does; a mock backend that emits
                 // nothing will fail to link and we fall back to `None`).
-                let executable_path =
-                    glyim_cli::linker::invoke_linker(&output_path, &exe_path, None, None, None)
+                // Link with the `glyim-runtime` static library, mirroring
+                // the CLI's `--emit=exec` path. Without it the produced
+                // object has undefined `_glyim_panic` / `_glyim_stdout_write`
+                // / `_glyim_alloc` symbols and `cc` fails — the harness
+                // previously called `invoke_linker` (which doesn't add the
+                // runtime lib) and silently `.ok()`-swallowed the error, so
+                // every stdlib-using fixture appeared as "interp-only".
+                let executable_path = match glyim_cli::linker::find_runtime_staticlib() {
+                    Some(runtime_lib) => {
+                        let mut link_args = glyim_cli::linker::LinkArgs::default();
+                        link_args.objects.push(runtime_lib);
+                        glyim_cli::linker::link_with_args(
+                            &output_path,
+                            &exe_path,
+                            &link_args,
+                            None,
+                            Some(&target_triple),
+                        )
                         .ok()
-                        .map(|()| exe_path.clone());
+                        .map(|()| exe_path.clone())
+                    }
+                    None => {
+                        // No runtime staticlib → cannot link an executable.
+                        // Leave `executable_path` as `None`; the differential
+                        // test records the fixture as "interp-only".
+                        None
+                    }
+                };
                 CompileOutput {
                     diagnostics: expansion_diags,
                     syntax_tree: None,

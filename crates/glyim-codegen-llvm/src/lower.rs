@@ -1265,7 +1265,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         };
                         self.llvm_int_type(64).const_int(n, false)
                     }
-                    TyKind::Slice(_) => {
+                    // Slices and `str` are both lowered to the same
+                    // `{data_ptr, len}` fat-pointer struct, so `len` is
+                    // field 1 of that struct. The interpreter already
+                    // handles `TyKind::String` this way
+                    // (`InterpValue::String` exposes field 1 as byte
+                    // length); codegen previously only matched `Slice`,
+                    // so any `str::trim_*` (which lowers `s.len()` on a
+                    // `str`) panicked with `Len on non-array/slice type`.
+                    TyKind::Slice(_) | TyKind::String => {
                         let llvm_ty = self.llvm_type_for_ty(ty);
                         let val = self
                             .builder
@@ -1275,7 +1283,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             BasicValueEnum::StructValue(s) => s,
                             _ => {
                                 return Err(vec![GlyimDiagnostic::internal_error(
-                                    "slice value not a struct",
+                                    "slice/str value not a struct",
                                 )]);
                             }
                         };
@@ -1285,7 +1293,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .expect("extract value failed");
                         len_val.into_int_value()
                     }
-                    _ => panic!("Len on non-array/slice type"),
+                    other => {
+                        return Err(vec![GlyimDiagnostic::internal_error(format!(
+                            "Len on non-array/slice/str type: {:?}",
+                            other
+                        ))]);
+                    }
                 };
                 Ok(len.as_basic_value_enum())
             }
