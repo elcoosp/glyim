@@ -1824,12 +1824,28 @@ impl<'a> MirBuilder<'a> {
         // long comment that used to live here about not re-lowering the
         // scrutinee (side effects would run twice).
         let scrutinee_place = self.lower_expr_to_place(scrutinee);
+        // Auto-deref a reference scrutinee: `match &x { Variant::A(..) => .. }`
+        // and, crucially, `match self { .. }` inside an `impl` method (where
+        // `self: &Self` / `&mut Self`) both have scrutinee type `&Adt`, but
+        // the per-arm pattern tests and `bind_pattern` project `Field(i)`
+        // off the *underlying* Adt. Without the deref, `Place::ty()` bails
+        // with "Field projection on non-tuple/ADT type" and the pattern
+        // tests can't resolve field types. Materialize the dereferenced
+        // value into `scrut_local` (typed as the pointee) so every
+        // subsequent `Downcast+Field` projection sees a real ADT.
+        let (scrut_source, scrut_ty) = match self.ctx.ty_ctx().ty_kind(scrutinee.ty) {
+            TyKind::Ref(_, inner, _) => (
+                self.place_with_projection(scrutinee_place.clone(), ProjectionElem::Deref),
+                *inner,
+            ),
+            _ => (scrutinee_place.clone(), scrutinee.ty),
+        };
         let scrut_local =
-            self.alloc_local(scrutinee.ty, glyim_core::primitives::Mutability::Not, span);
+            self.alloc_local(scrut_ty, glyim_core::primitives::Mutability::Not, span);
         self.push_stmt(
             glyim_mir::StatementKind::Assign(
                 glyim_mir::Place::new(scrut_local),
-                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrutinee_place.clone())),
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrut_source)),
             ),
             span,
         );
