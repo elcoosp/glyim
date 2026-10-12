@@ -2835,12 +2835,39 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 target,
                 cleanup,
             } => {
-                let ty = self.place_ty(place);
-                let needs_drop = self.type_needs_drop(ty);
-                let is_owning = self.type_is_owning_pointer(ty);
-
                 let target_bb = *self.bb_map.get(target).unwrap();
                 let cleanup_bb = cleanup.map(|c| *self.bb_map.get(&c).unwrap());
+                // A `Drop` on a place whose *base local* is `()` or
+                // `Ty::ERROR` is spurious. Check the base local's declared
+                // type directly (before `place_ty`, which would log
+                // `Field projection on non-tuple/ADT type` for e.g.
+                // `_0.Field(0)` when `_0: ()`), so the skip is silent.
+                let base_local_ty = self.body.locals[place.local].ty;
+                if base_local_ty == Ty::ERROR || base_local_ty == Ty::UNIT {
+                    self.builder
+                        .build_unconditional_branch(target_bb)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "branch failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    return Ok(());
+                }
+                let ty = self.place_ty(place);
+                if ty == Ty::ERROR || ty == Ty::UNIT {
+                    self.builder
+                        .build_unconditional_branch(target_bb)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "branch failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    return Ok(());
+                }
+                let needs_drop = self.type_needs_drop(ty);
+                let is_owning = self.type_is_owning_pointer(ty);
 
                 if needs_drop || is_owning {
                     // T005-PATCHED-DECL [LL-15]: the runtime symbol takes
