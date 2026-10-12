@@ -3505,14 +3505,6 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             if !recv_val.is_struct_value() {
                 return Ok(false);
             }
-            // Same guard as the `len`/`is_empty` arm: only treat the receiver
-            // as a `{ptr, len}` fat pointer when it actually *is* one.
-            // `String` (AdtId 1050) is a 1-field wrapper around `Vec<u8>`; a
-            // `String::to_string()` call reaches this arm and previously
-            // panicked with `to_string len: ExtractOutOfRange`.
-            if recv_val.into_struct_value().get_type().count_fields() < 2 {
-                return Ok(false);
-            }
             let sv = recv_val.into_struct_value();
             let p = self.builder.build_extract_value(sv, 0, "ts_p")
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string ptr: {e:?}"))])?;
