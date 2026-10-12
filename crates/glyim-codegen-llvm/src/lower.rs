@@ -3513,13 +3513,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             let sv = recv_val.into_struct_value();
             let sty = sv.get_type();
-            let (p_i, l) = if sty.count_fields() >= 2 {
-                // A `&str` fat pointer: `{ ptr, i64 }` — fields 0 and 1.
+            // Produce `(ptr, len)` regardless of which shape the receiver has.
+            let (p, l) = if sty.count_fields() >= 2 {
+                // A `&str` fat pointer: `{ ptr, i64 }` — field 0 is already a
+                // pointer, field 1 is the length.
                 let p = self.builder.build_extract_value(sv, 0, "ts_p")
-                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string ptr: {e:?}"))])?;
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string ptr: {e:?}"))])?
+                    .into_pointer_value();
                 let l = self.builder.build_extract_value(sv, 1, "ts_l")
                     .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string len: {e:?}"))])?;
-                (p.into_int_value(), l)
+                (p, l)
             } else if sty.count_fields() == 1 {
                 // `String` is `{ [3 x i64] }` — field 0 is the `[ptr, cap, len]`
                 // array. Extract the array, then its elements 0 and 2. No
@@ -3527,17 +3530,18 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let arr = self.builder.build_extract_value(sv, 0, "ts_arr")
                     .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string arr: {e:?}"))])?
                     .into_array_value();
-                let p = self.builder.build_extract_value(arr, 0, "ts_pi")
-                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string pi: {e:?}"))])?;
+                let p_i = self.builder.build_extract_value(arr, 0, "ts_pi")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string pi: {e:?}"))])?
+                    .into_int_value();
                 let l = self.builder.build_extract_value(arr, 2, "ts_li")
                     .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string li: {e:?}"))])?;
-                (p.into_int_value(), l)
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+                let p = self.builder.build_int_to_ptr(p_i, ptr_ty, "ts_inttoptr")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string inttoptr: {e:?}"))])?;
+                (p, l)
             } else {
                 return Ok(false);
             };
-            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
-            let p = self.builder.build_int_to_ptr(p_i, ptr_ty, "ts_p_ptr")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string inttoptr: {e:?}"))])?;
             let helper = self.declare_void_helper(
                 "glyim_string_from_bytes",
                 &[
