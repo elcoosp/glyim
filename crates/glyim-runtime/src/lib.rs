@@ -1964,9 +1964,13 @@ pub unsafe extern "C" fn glyim_string_from_bytes(
         unsafe { std::ptr::copy_nonoverlapping(src, alloc, len) };
         (alloc, len)
     };
+    // `String` layout is `{ ptr, capacity, len }` (it wraps a `Vec<u8>`,
+    // itself `{ ptr, capacity } + len`). Write ptr at 0, capacity at 8
+    // (== len, since we never over-allocate), len at 16.
     unsafe {
         std::ptr::write_unaligned(out as *mut *mut u8, ptr);
         std::ptr::write_unaligned((out as *mut u8).add(8) as *mut usize, len);
+        std::ptr::write_unaligned((out as *mut u8).add(16) as *mut usize, len);
     }
 }
 
@@ -1987,10 +1991,12 @@ pub unsafe extern "C" fn glyim_string_push_str(
     if str_header.is_null() || add_len == 0 {
         return;
     }
+    // `String` layout is `{ ptr, capacity, len }`; read/write len at offset
+    // 16, not 8 (which is capacity — reading it as len gave a bogus value).
     let old_ptr =
         unsafe { std::ptr::read_unaligned(str_header as *const *mut u8) };
     let old_len =
-        unsafe { std::ptr::read_unaligned((str_header as *const u8).add(8) as *const usize) };
+        unsafe { std::ptr::read_unaligned((str_header as *const u8).add(16) as *const usize) };
     let new_len = old_len + add_len;
     let new_ptr = unsafe { glyim_alloc(new_len, 1) };
     if old_len > 0 && !old_ptr.is_null() {
@@ -2000,5 +2006,6 @@ pub unsafe extern "C" fn glyim_string_push_str(
     unsafe {
         std::ptr::write_unaligned(str_header as *mut *mut u8, new_ptr);
         std::ptr::write_unaligned((str_header as *mut u8).add(8) as *mut usize, new_len);
+        std::ptr::write_unaligned((str_header as *mut u8).add(16) as *mut usize, new_len);
     }
 }

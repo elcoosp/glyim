@@ -3453,15 +3453,21 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let header_ptr = if recv_val.is_pointer_value() {
                 recv_val.into_pointer_value()
             } else if recv_val.is_struct_value() {
-                // Struct value receiver: store into a temp alloca, pass its
-                // address, then reload. (Non-mutating in-place for a by-value
-                // receiver; the emitter passes a place, so this is the
-                // fallback.)
-                let alloca = self.builder.build_alloca(recv_val.get_type(), "ps_hdr")
-                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("alloca: {e:?}"))])?;
-                self.builder.build_store(alloca, recv_val)
-                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("store: {e:?}"))])?;
-                alloca
+                // Struct-value receiver: the helper mutates the header
+                // through the pointer we pass, so hand it the caller's place.
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self.builder.build_alloca(recv_val.get_type(), "ps_hdr")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("alloca: {e:?}"))])?;
+                    self.builder.build_store(alloca, recv_val)
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("store: {e:?}"))])?;
+                    alloca
+                }
             } else {
                 return Ok(false);
             };
@@ -3506,10 +3512,32 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 return Ok(false);
             }
             let sv = recv_val.into_struct_value();
-            let p = self.builder.build_extract_value(sv, 0, "ts_p")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string ptr: {e:?}"))])?;
-            let l = self.builder.build_extract_value(sv, 1, "ts_l")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string len: {e:?}"))])?;
+            let sty = sv.get_type();
+            let (p_i, l) = if sty.count_fields() >= 2 {
+                // A `&str` fat pointer: `{ ptr, i64 }` — fields 0 and 1.
+                let p = self.builder.build_extract_value(sv, 0, "ts_p")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string ptr: {e:?}"))])?;
+                let l = self.builder.build_extract_value(sv, 1, "ts_l")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string len: {e:?}"))])?;
+                (p.into_int_value(), l)
+            } else if sty.count_fields() == 1 {
+                // `String` is `{ [3 x i64] }` — field 0 is the `[ptr, cap, len]`
+                // array. Extract the array, then its elements 0 and 2. No
+                // struct-to-struct bitcast (which hung LLVM's verifier).
+                let arr = self.builder.build_extract_value(sv, 0, "ts_arr")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string arr: {e:?}"))])?
+                    .into_array_value();
+                let p = self.builder.build_extract_value(arr, 0, "ts_pi")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string pi: {e:?}"))])?;
+                let l = self.builder.build_extract_value(arr, 2, "ts_li")
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string li: {e:?}"))])?;
+                (p.into_int_value(), l)
+            } else {
+                return Ok(false);
+            };
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+            let p = self.builder.build_int_to_ptr(p_i, ptr_ty, "ts_p_ptr")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("to_string inttoptr: {e:?}"))])?;
             let helper = self.declare_void_helper(
                 "glyim_string_from_bytes",
                 &[
