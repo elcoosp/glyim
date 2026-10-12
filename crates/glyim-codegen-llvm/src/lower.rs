@@ -3540,6 +3540,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             if !recv_val.is_struct_value() {
                 return Ok(false);
             }
+            // Fall through for a receiver that is NOT a 2-field fat pointer.
+            // `String` (AdtId 1050) is a 1-field wrapper around `Vec<u8>`, and
+            // the stdlib gives it its own `impl String { fn len(&self) -> usize
+            // { self.inner.len() } }`. Typeck registers a `(1050, "len")`
+            // builtin that shadows the impl, so codegen saw a `String` struct
+            // with one field and tried to `extractvalue(_, 1)` — out of range,
+            // "fat-pointer len extract failed". Returning `Ok(false)` here
+            // lets the call fall through to the normal `Call` path, which
+            // dispatches to `String::len`'s body (and thence `Vec::len`'s
+            // builtin, whose receiver *is* the 2-field `{buf, len}` struct).
+            let recv_struct_ty = recv_val.into_struct_value().get_type();
+            if recv_struct_ty.count_fields() < 2 {
+                return Ok(false);
+            }
             let len_val = self
                 .builder
                 .build_extract_value(recv_val.into_struct_value(), 1, "fat_len")
