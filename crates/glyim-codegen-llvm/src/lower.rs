@@ -3875,7 +3875,37 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // callees `substs` is empty and the generic signature is already
                 // concrete, so `concretize_fn_sig` is a no-op.
                 let sig = if substs.is_empty() {
-                    generic_sig
+                    // Builtin trait-impl methods (`Option::<T>::unwrap`,
+                    // `Result::<T,E>::unwrap`, …) are registered as generic
+                    // `fn(Self) -> T` with a `Param(T)`, but their MIR call
+                    // carries an *empty* substitution — the concrete `T`
+                    // lives in the receiver's type (`Option<i32>` →
+                    // `Subst([i32])`). Without this inference,
+                    // `concretize_fn_sig` had nothing to substitute and
+                    // `fn_abi_of` panicked with `UnknownType(Param)`.
+                    // The receiver is always `args[0]` for an inherent
+                    // method.
+                    let inferred = args
+                        .first()
+                        .map(|a| self.operand_ty(a))
+                        .and_then(|t| match self.ty_ctx.ty_kind(t) {
+                            TyKind::Adt(_, s) => {
+                                Some(self.ty_ctx.substitution_args(*s).to_vec())
+                            }
+                            TyKind::Ref(_, inner, _) => match self.ty_ctx.ty_kind(*inner) {
+                                TyKind::Adt(_, s) => {
+                                    Some(self.ty_ctx.substitution_args(*s).to_vec())
+                                }
+                                _ => None,
+                            },
+                            _ => None,
+                        });
+                    match inferred {
+                        Some(map) if !map.is_empty() => {
+                            Self::concretize_fn_sig(&generic_sig, &map, self.ty_ctx)
+                        }
+                        _ => generic_sig,
+                    }
                 } else {
                     let param_map = self.ty_ctx.substitution_args(substs).to_vec();
                     Self::concretize_fn_sig(&generic_sig, &param_map, self.ty_ctx)
