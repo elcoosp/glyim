@@ -20,7 +20,7 @@ glyim-proc-macro = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tempfile = "3"
+tempfile = "3.27"
 serde_json = { workspace = true }
 [dev-dependencies]
 glyim-test = { workspace = true }

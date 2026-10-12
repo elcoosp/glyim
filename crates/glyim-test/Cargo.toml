@@ -10,7 +10,7 @@ json-output = ["serde", "serde_json"]
 # `PipelineCompiler` harness produces a real native object (via
 # `glyim-codegen-llvm`), links it, and executes it — turning the M5 fixtures
 # into a true Linux runtime proof instead of a mock-codegen no-op. Only the
-# `test-linux-runtime` CI job enables this (it sets LLVM_SYS_220_PREFIX and
+# `test-linux-runtime` CI job enables this (it sets LLVM_SYS_231_PREFIX and
 # GLYIM_TEST_REAL_LLVM).
 #
 # NOTE (2026-08-28): the native async codegen path is currently broken (the

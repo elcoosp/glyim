@@ -23,8 +23,8 @@ For each task:
 ### 0.1 Build & batch checkpoint
 
 ```bash
-# If LLVM 22 is unavailable, build with: cargo build --workspace --no-default-features
-cargo build --workspace                    # baseline build (needs LLVM 22: set LLVM_SYS_220_PREFIX)
+# If LLVM 23 is unavailable, build with: cargo build --workspace --no-default-features
+cargo build --workspace                    # baseline build (needs LLVM 23: set LLVM_SYS_231_PREFIX)
 cargo test --workspace                     # full suite — must be green (or green + previously-skipped) before continuing
 ```
 

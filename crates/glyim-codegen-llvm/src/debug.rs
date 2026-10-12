@@ -628,15 +628,15 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         let expr = self.builder.create_expression(vec![]);
 
         // NOTE: we deliberately bypass `inkwell`'s `insert_declare_at_end`
-        // wrapper here. Under the `llvm22-1` feature inkwell aliases
+        // wrapper here. Under the `llvm23-1` feature inkwell aliases
         // `LLVMDIBuilderInsertDeclareRecordAtEnd` to that name and then wraps
         // the result in `InstructionValue::new(value_ref as LLVMValueRef)`. In
-        // LLVM 22 the call returns an `LLVMDbgRecordRef` (the "new debug info
+        // LLVM 23 the call returns an `LLVMDbgRecordRef` (the "new debug info
         // format"), not a `Value`, so the cast makes `is_instruction()` return
         // null and the `debug_assert!` inside `InstructionValue::new` panics
         // non-deterministically (the flaky `test_debug_declare_local_emits_`
         // `intrinsic` failure). We never use the return value, so we call the
-        // correct LLVM-22 API directly via `inkwell::llvm_sys` (the exact same
+        // correct LLVM-23 API directly via `inkwell::llvm_sys` (the exact same
         // crate instance inkwell links, so the raw pointer types match) and
         // drop the result — emitting the `llvm.dbg.declare` record without the
         // broken `InstructionValue` wrapping.

@@ -754,7 +754,7 @@ fn tier5_2_reference_debug_type_is_real_pointer() {
     // Reference, raw pointer, and slice must all emit real DWARF pointer
     // shapes (not opaque blobs). Force retention of the created DI types into
     // the module IR via global metadata so we can assert on the produced
-    // DWARF (declaring locals is broken under LLVM 22 in this repo, but the
+    // DWARF (declaring locals is broken under LLVM 23 in this repo, but the
     // type construction itself is what Tier 5.2 targets). Force retention of
     // the created DI types into the module IR by wrapping each in a global
     // variable expression (which references the DIType and is emitted into

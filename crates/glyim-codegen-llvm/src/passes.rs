@@ -111,7 +111,7 @@ pub fn emit_thinlto_bitcode<'ctx>(
         );
     }
     // Serialize to a memory buffer first, then write the bytes to disk. Under
-    // LLVM 22 `LLVMWriteBitcodeToFile` silently emits a 0-byte file for
+    // LLVM 23 `LLVMWriteBitcodeToFile` silently emits a 0-byte file for
     // content-bearing modules (it works for empty modules, which is why the
     // regression only shows up with real code); `LLVMWriteBitcodeToMemoryBuffer`
     // is reliable, so we dump that buffer to `out_path` ourselves.
@@ -179,31 +179,57 @@ pub(crate) fn run_llvm_passes_with<'ctx>(
 ) -> Result<(), String> {
     check_llvm_version_and_passes();
 
-    let pass_str: &str = if let Some(custom) = custom {
-        custom
+    // LLVM 23 removed the `Os` and `Oz` pass-pipeline presets. Their
+    // diagnostic says to use `O2` in conjunction with the `optsize` /
+    // `minsize` function attribute instead, which is what we do here: pick
+    // the `O2` pipeline and (when the caller asked for size optimization)
+    // tag every function in the module with `optsize` (light) or `minsize`
+    // (aggressive) before running the pipeline.
+    let (pass_str, size_attr): (&str, Option<&str>) = if let Some(custom) = custom {
+        (custom, None)
     } else {
         match (opt_level, opt_for_size) {
             // Level 0: no optimization
-            (0, _) => "default<O0>",
+            (0, _) => ("default<O0>", None),
             // Level 1: light optimization
-            (1, false) => "default<O1>",
-            (1, true) => "default<Os>",
+            (1, false) => ("default<O1>", None),
+            (1, true) => ("default<O2>", Some("optsize")),
             // Level 2: standard optimization
-            (2, false) => "default<O2>",
-            (2, true) => "default<Oz>",
+            (2, false) => ("default<O2>", None),
+            (2, true) => ("default<O2>", Some("minsize")),
             // Level 3: aggressive optimization
-            (3, false) => "default<O3>",
-            (3, true) => "default<Oz>",
-            // Level 4+: still O3 (or Oz if size-optimizing)
-            (_, false) => "default<O3>",
-            (_, true) => "default<Oz>",
+            (3, false) => ("default<O3>", None),
+            (3, true) => ("default<O2>", Some("minsize")),
+            // Level 4+: still O3 (or O2+minsize if size-optimizing)
+            (_, false) => ("default<O3>", None),
+            (_, true) => ("default<O2>", Some("minsize")),
         }
     };
+
+    if let Some(attr_name) = size_attr {
+        apply_size_attribute(module, attr_name);
+    }
 
     let opts = PassBuilderOptions::create();
     module
         .run_passes(pass_str, target_machine, opts)
         .map_err(|e| format!("Failed to run LLVM passes: {}", e))
+}
+
+/// Tag every function in `module` with the named enum function attribute
+/// (`optsize` or `minsize`). LLVM 23 dropped the `Os`/`Oz` pipeline presets
+/// and expects callers to use `O2` together with one of these attributes to
+/// request size-oriented optimization.
+fn apply_size_attribute<'ctx>(module: &Module<'ctx>, attr_name: &str) {
+    use inkwell::attributes::{Attribute, AttributeLoc};
+    let context = module.get_context();
+    let kind_id = Attribute::get_named_enum_kind_id(attr_name);
+    let attr = context.create_enum_attribute(kind_id, 0);
+    let mut func = module.get_first_function();
+    while let Some(f) = func {
+        f.add_attribute(AttributeLoc::Function, attr);
+        func = f.get_next_function();
+    }
 }
 
 #[cfg(test)]

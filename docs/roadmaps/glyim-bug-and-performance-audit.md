@@ -15,7 +15,7 @@ Work top-to-bottom. For each issue:
 2. **Find** the code shown under **Where** (exact function + line range given).
 3. **Apply** the fix shown in the diff block (lines with `-` are what you delete, `+` are what you write).
 4. **Verify** with the command under **Check**. Do not continue until it passes.
-5. After every 10 fixes, run the full suite: `cargo test --workspace` (build with `--no-default-features` if you lack LLVM 22).
+5. After every 10 fixes, run the full suite: `cargo test --workspace` (build with `--no-default-features` if you lack LLVM 23).
 
 Rules of engagement:
 
@@ -3807,7 +3807,7 @@ for child in node.children_with_tokens() {
 
 ## 8. Cross-cutting verification plan
 
-Run these after the corresponding sections, in order. Build without LLVM if needed: `cargo build --workspace --no-default-features` (bytecode path) — but the LL-* fixes need `LLVM_SYS_220_PREFIX` set.
+Run these after the corresponding sections, in order. Build without LLVM if needed: `cargo build --workspace --no-default-features` (bytecode path) — but the LL-* fixes need `LLVM_SYS_231_PREFIX` set.
 
 1. **Lexer/parser (FE):** add the failing inputs as fixtures in `crates/glyim-frontend/src/tests/` — `x %= 2`, `(1,)`, `x as u8 as u32`, `Vec<u8>::new()`, `-3..=3`, `&&5`, `x @ 1..=5`, `continue 'a;`, `| 1 => …`, `pub(in crate::foo)`, `extern crate foo;`, `const _`, `0x`, `1e_`, unterminated `/*`. Each becomes a snapshot or parse-must-succeed test.
 2. **Solver (SOLVE):** `cargo test -p glyim-solve -p glyim-typeck`. Add: `(a,b)~(b,a)` int-var cycle test; `impl<T: Foo> Foo for T {}` no-crash test; `&i32 → &str` non-coercible test.

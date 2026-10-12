@@ -77,8 +77,8 @@ Crates for code generation and runtime support.
 
 | Crate | Version | Purpose | Rationale |
 | :--- | :--- | :--- | :--- |
-| **`inkwell`** | `0.9.0` | LLVM Bindings | Rust wrappers around LLVM C++ API. Used by `glyim-codegen-llvm` for IR generation and optimization passes. |
-| **`llvm-sys`** | `221.0.0` | Raw LLVM Bindings | The underlying FFI layer. We explicitly vendor this or pin a compatible version to ensure ABI stability for `inkwell`. |
+| **`inkwell`** | `0.10.0` (git master, LLVM 23) | LLVM Bindings | Rust wrappers around LLVM C++ API. Used by `glyim-codegen-llvm` for IR generation and optimization passes. |
+| **`llvm-sys`** | `231.0.1` | Raw LLVM Bindings | The underlying FFI layer. We explicitly vendor this or pin a compatible version to ensure ABI stability for `inkwell`. |
 | **`tokio`** | `1.52.3` | Async Runtime | Async runtime for `glyim-orchestrator` (distributed builds) and optional compiler server. |
 | **`serde`** | `1.0.228` | Serialization | Used for configuration (`glyim-config`), artifact metadata, and network protocols in `glyim-server`. |
 | **`tracing-subscriber`** | `0.3.23` | Log Formatting | Human-readable log output layer for `tracing`, integrating with `miette` for colored terminal output. |
@@ -99,7 +99,7 @@ A matrix view of how external dependencies map to internal crates (non-exhaustiv
 | `glyim-lsp` | `async-lsp`, `tower`, `rowan` |
 | `glyim-diag` | `miette`, `owo-colors`, `textwrap` |
 | `glyim-cli` | `clap` |
-| `glyim-codegen-llvm` | `inkwell` (linked against `llvm-sys` 221.x) |
+| `glyim-codegen-llvm` | `inkwell` (linked against `llvm-sys` 231.x) |
 | `glyim-server` | `tokio`, `tower`, `serde` |
 
 ---
@@ -116,7 +116,7 @@ A matrix view of how external dependencies map to internal crates (non-exhaustiv
 **Alternatives Considered:**
 *   **`logos`**: Considered for parsing, but `chumsky` was chosen for better error recovery support in an indentation-sensitive grammar.
 *   **`cranelift`**: Considered as a primary backend for tiered compilation due to faster compile times. Currently adopted as an **experimental** backend (`glyim-codegen-cranelift`) not in v1.0 scope, but `inkwell` is the primary supported path.
-*   **`llvm-sys` versions**: While 221 is the latest major version, we pin this tightly via `inkwell` to ensure our passes work reliably against the API surface.
+*   **`llvm-sys` versions**: While 231 is the latest major version, we pin this tightly via `inkwell` to ensure our passes work reliably against the API surface.
 
 ---
 ```

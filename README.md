@@ -7,7 +7,7 @@
   <p>
     <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
-    <img src="https://img.shields.io/badge/LLVM-22-262D3A?style=flat-square&logo=llvm" alt="LLVM"/>
+    <img src="https://img.shields.io/badge/LLVM-23-262D3A?style=flat-square&logo=llvm" alt="LLVM"/>
     <img src="https://img.shields.io/badge/Crates-20%2B-6F4E37?style=flat-square" alt="Crates"/>
     <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend"/>
     <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP"/>
@@ -82,7 +82,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 
 ### Code Generation
 
-- **LLVM backend** (`glyim-codegen-llvm`) using `inkwell`/LLVM 22 — produces native object files with real ABI lowering, debug info, exception handling (Itanium + SEH), and Link-Time Optimization (`fat` / `thin`).
+- **LLVM backend** (`glyim-codegen-llvm`) using `inkwell`/LLVM 23 — produces native object files with real ABI lowering, debug info, exception handling (Itanium + SEH), and Link-Time Optimization (`fat` / `thin`).
 - **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate.
 
 ### Tooling
@@ -181,11 +181,11 @@ source.g
 ### Prerequisites
 
 - **Rust** — latest stable, 2024 edition (Rust 1.94+ recommended).
-- **LLVM 22** — required only for the LLVM backend. Set `LLVM_SYS_220_PREFIX` to your LLVM installation prefix before building.
+- **LLVM 23** — required only for the LLVM backend. Set `LLVM_SYS_231_PREFIX` to your LLVM installation prefix before building.
 - **`watchexec`** — optional, for the `justfile` recipes.
 
 > [!TIP]
-> If you don't have LLVM 22 installed, build with `--no-default-features` (or simply skip the `glyim-codegen-llvm` crate) and use the bytecode backend — the full pipeline still works end-to-end through MIR interpretation and the bytecode VM.
+> If you don't have LLVM 23 installed, build with `--no-default-features` (or simply skip the `glyim-codegen-llvm` crate) and use the bytecode backend — the full pipeline still works end-to-end through MIR interpretation and the bytecode VM.
 
 ### Building
 

@@ -1,2 +1,9 @@
 [net]
 git-fetch-with-cli = true
+
+# LLVM 23 (brew `llvm@23`) discovery for `llvm-sys` 231 and `inkwell`'s
+# `llvm23-1` feature. `llvm-sys`'s build script reads
+# `LLVM_SYS_<MAJOR><MINOR>_PREFIX` (e.g. `231` for 23.1.x).
+[env]
+LLVM_SYS_231_PREFIX = "/opt/homebrew/opt/llvm@23"
+LLVM_SYS_231_STRICT_VERSIONING = "0"

@@ -4,11 +4,11 @@ edition.workspace = true
 version.workspace = true
 
 [dependencies]
-inkwell = { workspace = true, features = ["llvm22-1"] }
-# Raw FFI bindings for the LLVM-C funclet (exception-handling) API, which the
-# pinned inkwell 0.10 does not wrap. Version must match the llvm-sys instance
-# inkwell links (221.0.1) so the raw pointers resolve against the same libLLVM.
-llvm-sys = "221"
+inkwell = { workspace = true, features = ["llvm23-1"] }
+# Raw FFI bindings for the LLVM-C funclet (exception-handling) API, which
+# inkwell does not wrap. Version must match the llvm-sys instance inkwell
+# links (231.0.1) so the raw pointers resolve against the same libLLVM.
+llvm-sys = "231"
 glyim-codegen = { workspace = true }
 glyim-mir = { workspace = true }
 glyim-diag = { workspace = true }

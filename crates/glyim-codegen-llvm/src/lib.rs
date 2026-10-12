@@ -425,7 +425,7 @@ impl LlvmBackend {
         let ty_ctx = ty_ctx.as_ref();
 
         let mut paths = Vec::with_capacity(bodies.len());
-        // The bitcode writer needs a data layout on the module; LLVM 22 emits an
+        // The bitcode writer needs a data layout on the module; LLVM 23 emits an
         // empty (0-byte) bitcode file for a content-bearing module that has no
         // layout string set. Derive it from the target so the per-module summary
         // the thin-link consumes (via `glyim-cli`'s `llvm-lto2` driver) is

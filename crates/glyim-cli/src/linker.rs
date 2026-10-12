@@ -339,12 +339,12 @@ fn detect_unix_linker() -> String {
 /// Locate an LLVM tool (`llvm-lto2`, `llvm-lto`, `opt`, …) from the same LLVM
 /// distribution `glyim-codegen-llvm` was built against.
 ///
-/// Discovery order (plan §1.2): first check `$LLVM_SYS_220_PREFIX/bin/<name>`
+/// Discovery order (plan §1.2): first check `$LLVM_SYS_231_PREFIX/bin/<name>`
 /// (the env var the toolchain is built against on this host), then fall back to
 /// a `PATH` probe (consistent with `detect_unix_linker`). Absence is a clear,
 /// actionable error rather than a silent wrong-answer.
 fn find_llvm_tool(name: &str) -> Result<std::path::PathBuf, String> {
-    if let Ok(prefix) = std::env::var("LLVM_SYS_220_PREFIX") {
+    if let Ok(prefix) = std::env::var("LLVM_SYS_231_PREFIX") {
         let candidate = std::path::PathBuf::from(prefix).join("bin").join(name);
         if candidate.exists() {
             return Ok(candidate);
@@ -355,8 +355,8 @@ fn find_llvm_tool(name: &str) -> Result<std::path::PathBuf, String> {
         return Ok(std::path::PathBuf::from(name));
     }
     Err(format!(
-        "{name} not found on PATH and LLVM_SYS_220_PREFIX is unset or missing it; \
-         ThinLTO requires the llvm-lto2 tool from the same LLVM 22 distribution \
+        "{name} not found on PATH and LLVM_SYS_231_PREFIX is unset or missing it; \
+         ThinLTO requires the llvm-lto2 tool from the same LLVM 23 distribution \
          glyim-codegen-llvm was built against."
     ))
 }
