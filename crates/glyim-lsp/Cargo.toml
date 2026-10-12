@@ -6,8 +6,8 @@ license.workspace = true
 description = "Language Server Protocol implementation for Glyim"
 
 [dependencies]
-notify = "6.1"
-crossbeam-channel = "0.5"
+notify = "8.2"
+crossbeam-channel = "0.5.17"
 glyim-db = { path = "../glyim-db" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-diag = { path = "../glyim-diag" }
@@ -16,14 +16,14 @@ glyim-frontend = { path = "../glyim-frontend" }
 glyim-core = { path = "../glyim-core" }
 glyim-span = { path = "../glyim-span" }
 async-lsp = { git = "https://github.com/elcoosp/async-lsp", features = ["omni-trait", "stdio", "tokio"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.53", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = "1.0"
 tracing = "0.1"
-dashmap = "6.1"
+dashmap = "6.2"
 parking_lot = "0.12"
-url = "2.5"
-file_url = "0.3"
+url = "2.5.8"
+file_url = "0.3.2"
 glyim-def-map = { workspace = true }
 glyim-type = { workspace = true }
 glyim-typeck = { workspace = true }
@@ -33,4 +33,3 @@ lsp-types = "0.97.0"
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
 glyim-test = { workspace = true }
-tempfile = "3"

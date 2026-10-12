@@ -10,4 +10,4 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
-tempfile = "3.14"
+tempfile = "3.27"
