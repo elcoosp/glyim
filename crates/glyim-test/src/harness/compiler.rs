@@ -188,8 +188,13 @@ impl TestCompiler for PipelineCompiler {
             }
             i += 1;
         }
+        // Default to the *host* triple (mirrors the executor). The
+        // differential test compiles once and links the LLVM object; a
+        // hardcoded Linux triple produces an ELF that macOS's `cc` cannot
+        // link, so every fixture silently fell back to the interpreter and
+        // the LLVM side was never actually exercised.
         let target_triple = target_triple
-            .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string());
+            .unwrap_or_else(host_target_triple);
 
         // T140-PATCHED-HARNESS: honor `// compile-flags: --with-stdlib` by
         // prepending the assembled minimal stdlib, exactly like
@@ -223,7 +228,9 @@ impl TestCompiler for PipelineCompiler {
 
         let config = CrateConfig {
             name: format!("test_{}", file_id.to_raw()),
-            target_triple,
+            // Clone: `target_triple` is still needed below to build the
+            // `LlvmBackend` for the same triple (see `.with_target(&target_triple)`).
+            target_triple: target_triple.clone(),
             opt_level,
         };
 
@@ -291,7 +298,7 @@ impl TestCompiler for PipelineCompiler {
         let real_backend_local: Option<glyim_codegen_llvm::LlvmBackend> = if self.real_llvm {
             use glyim_pipeline::Pipeline;
             let mut real = glyim_codegen_llvm::LlvmBackend::with_db(&db)
-                .with_target("x86_64-unknown-linux-gnu");
+                .with_target(&target_triple);
             if let Some(main_id) = Pipeline::entry_main_local_id(&mut db, &path) {
                 real = real.with_entry_main(main_id);
             }
@@ -354,5 +361,22 @@ impl TestCompiler for PipelineCompiler {
                 }
             }
         }
+    }
+}
+
+/// Best-effort Rust target triple for the host, mirroring
+/// `executor::host_target_triple`. Kept local so `compiler.rs` doesn't have
+/// to `pub use` it.
+fn host_target_triple() -> String {
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    match (arch, os) {
+        ("x86_64", "macos") => "x86_64-apple-darwin".to_string(),
+        ("aarch64", "macos") => "aarch64-apple-darwin".to_string(),
+        ("x86_64", "linux") => "x86_64-unknown-linux-gnu".to_string(),
+        ("aarch64", "linux") => "aarch64-unknown-linux-gnu".to_string(),
+        ("x86_64", "windows") => "x86_64-pc-windows-msvc".to_string(),
+        ("aarch64", "windows") => "aarch64-pc-windows-msvc".to_string(),
+        _ => format!("{}-{}", arch, os),
     }
 }
