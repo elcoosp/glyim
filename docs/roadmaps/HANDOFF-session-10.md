@@ -134,4 +134,3 @@ probes; matrix still 4599/0/2.
 
 - `docs/roadmaps/glyim-fix-plan.md` — original 202-task plan.
 - `docs/roadmaps/audit-status.md` — prior audit status.
-- `.fix-log/HANDOFF-session-4-archive.md` — session-4 handoff, preserved.
