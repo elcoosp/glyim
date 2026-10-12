@@ -1,6 +1,6 @@
 # HANDOFF — session 10 (COMPLETE)
 
-**HEAD**: `ce5ee8ae`
+**HEAD**: `0bfae79f`
 **Matrix**: 4599 passing / 0 failing / 2 skipped
 **Working tree**: only `docs/roadmaps/better-testing.md` untracked (not mine)
 
@@ -109,6 +109,26 @@ Marker comments: `T###-PATCHED`, `T###-REVIEWED`, `T###-REVISED`,
 `docs(session): ...` / `test(area): ...`.
 
 ---
+
+## 4.1. Additional fixes landed (post-handoff)
+
+Two more fixes landed after the initial handoff doc:
+
+- `b7bcbc47` **lower**: auto-deref reference scrutinees in `lower_match`.
+  `match self { .. }` inside an `impl` method (and any
+  `match &x { Variant::A(..) => .. }`) has scrutinee type `&Adt`, but the
+  per-arm pattern tests project `Field(i)` off the underlying Adt. Without
+  a `Deref`, `Place::ty()` bailed with "Field projection on non-tuple/ADT
+  type" 15x during stdlib compilation. Materialize the pointee into
+  `scrut_local`.
+
+- `0bfae79f` **codegen-llvm**: skip `Drop` on unit/error-typed base local.
+  A drop-elaboration-synthesized `Drop` on a place whose base is `()` (e.g.
+  `_0.Field(0)` when `_0: ()`) is spurious. Check the base local's
+  declared type *before* calling `place_ty()`, branch past the drop.
+
+Result: zero `Place::ty()` error noise on the hello-world and println
+probes; matrix still 4599/0/2.
 
 ## 5. Other useful docs
 
