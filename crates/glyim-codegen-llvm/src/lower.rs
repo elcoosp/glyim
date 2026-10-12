@@ -1177,6 +1177,34 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             Rvalue::Ref(place, _borrow_kind) => {
                 let ptr = self.place_ptr(place)?;
+                // A reference to an *unsized* place (`str` / `[T]`) is itself
+                // a fat pointer `{ data_ptr, len }`, not a bare address. The
+                // place is materialized on the stack as a `{ ptr, i64 }`
+                // struct, so `place_ptr` returns the address of that struct.
+                // Returning it directly and letting the caller store it as
+                // `&str` wrote only the 8-byte pointer into a 16-byte slot
+                // (with garbage in the length half) — the cause of the
+                // `str::trim()` cluster returning wrong lengths and of
+                // `let t: &str = "abc".trim(); t.len()` segfaulting.
+                // Load the whole fat pointer instead.
+                let pointee_ty = self.place_ty(place);
+                let is_unsized = matches!(
+                    self.ty_ctx.ty_kind(pointee_ty),
+                    glyim_type::TyKind::Slice(_) | glyim_type::TyKind::String
+                );
+                if is_unsized {
+                    let llvm_pointee_ty = self.llvm_type_for_ty(pointee_ty);
+                    let val = self
+                        .builder
+                        .build_load(llvm_pointee_ty, ptr, "fat_ref_load")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "load fat reference failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    return Ok(val);
+                }
                 Ok(ptr.as_basic_value_enum())
             }
             Rvalue::Aggregate(kind, operands) => {
