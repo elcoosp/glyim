@@ -1,113 +1,117 @@
-# HANDOFF — session 10
+# HANDOFF — session 10 (COMPLETE)
 
-**HEAD**: see `git log --oneline -1` (should be `d30b63d7` or a child)
+**HEAD**: `ce5ee8ae`
+**Matrix**: 4599 passing / 0 failing / 2 skipped
 **Working tree**: only `docs/roadmaps/better-testing.md` untracked (not mine)
 
 ---
 
-## 0. Resume in 2 commands
+## 0. Resume
 
 ```bash
 cd /Users/adm/Documents/Repos/glyim-v2
-cargo check --workspace --tests        # --tests is REQUIRED (see old handoff §0)
-cargo build -p glyim-runtime           # needed for --emit=exec probes
+cargo check --workspace --tests        # --tests is REQUIRED
+cargo nextest run --workspace --no-fail-fast
+cargo build -p glyim-runtime           # for any --emit=exec probe
 ```
 
-For probing a fixture:
-```bash
-rm -rf /tmp/gc_X
-GLYIM_CACHE_DIR=/tmp/gc_X target/debug/glyim-cli FILE.g --with-stdlib --emit=mir -o /tmp/X.mir
-GLYIM_CACHE_DIR=/tmp/gc_X target/debug/glyim-cli FILE.g --with-stdlib --emit=exec -o /tmp/X_bin
-```
+Debugging rules that saved this session (carry forward):
+
+1. **Always use a fresh `GLYIM_CACHE_DIR`** (`rm -rf /tmp/gc_X`). The CLI
+   caches aggressively; stale results cost hours.
+2. **Compare `--emit=mir` to runtime behavior.** Disagreement = the bug is
+   between MIR and execution (codegen, opt, interp), not in lowering.
+3. **`Place::ty(): ...` errors in stderr mean a place resolved to
+   `Ty::ERROR`.** They don't fail compilation; they signal the bug.
+4. **`[X0000]` prefixes are internal codegen errors.** Grep `crates/` for
+   the literal to find the emitter.
 
 ---
 
-## 1. What got fixed this session (§4)
+## 1. What was fixed (session 10)
 
-**Committed as `d30b63d7`**: "fix(lower): §4 — sequential arm testing for enum field patterns".
+Everything from the previous handoff's §4 plus the downstream bugs it
+unblocked. Seven commits:
 
-Prior behavior: `lower_match` compiled an enum `match` to a single `SwitchInt` on the variant *discriminant*, ignoring field-literal patterns. So `Result::Ok(0) => A` and `Result::Ok(n) => B` both pushed discriminant key 0; the **first arm always won** for any `Ok`. Every match discriminating on a payload literal was silently miscompiled.
+| Commit | Fix |
+|---|---|
+| `d30b63d7` | **§4**: sequential arm testing for enum field patterns. Prior code compiled every enum `match` to a single discriminant-only `SwitchInt`, so `Ok(0)` vs `Ok(n)` silently picked the first arm. Now each arm gets a bool test block (`discr==V && field0==lit0 && …`) chained in source order. Plus supporting fixes: `Downcast(v)+Field(i)` for variant-field projection, resolved-place-ty fallback for binding/field-literal locals, arm-body diverge handling, `BinOp::And`/`Or` (not `BitAnd`/`BitOr`) for bool chains, and `expr.ty`-derived substitutions on `VariantCtor` aggregates. |
+| `a2bef8c4` | **typeck**: unify a concrete-Adt formal against a same-Adt argument. `f(Result::Ok(0))` where `f(r: Result<usize, i32>)` left the ctor's `E` as an unpinned infer var that zonked to `Ty::ERROR`, so the aggregate substitution was `Result<usize, ERROR>` and codegen failed layout with `UnknownType(Ty(0))`. |
+| `ce5ee8ae` | **typeck**: guard that unify on the argument actually containing a `TyKind::Infer(_)`. Without the guard, a generic fn passing `Foo<T>` to a formal `Foo<T_impl>` produced a spurious `mismatched types: Adt359<T> vs T` and broke `assembled_stdlib_compiles`. |
+| `da6f4364` | **typeck**: route statement-shaped match-arm bodies through `check_stmt_to_thir`. `Ok(n) => written += n` was passed to `check_expr`, whose `Expr::Assign` arm type-checks then *discards* the assignment (THIR has no assignment-expression node). Every `written += n` arm was silently a no-op → `write_all` looped forever (261 KB of "hi" then SIGSEGV) and the 7 println fixtures failed. Mirrors the block-tail `TAIL-ASSIGN-STMT` fix. |
+| `e12deb06` | handoff doc (superseded by this one) |
+| `ff097360` | (pre-session) finish PtrArith dispatch — E0004 + E0502 |
+| `83af7f35` | (pre-session) clean resume handoff for session 10 |
 
-**New design (implemented)**: sequential arm testing. Each arm gets a `test[i]` block that computes a boolean: discriminant equal AND every field literal equal, chained by boolean `And`/`Or`. Passing → `arm_bbs[i]`; failing → `test[i+1]` or `otherwise`. Helper `lower_pattern_test` recursively computes the boolean; helpers `and_bool` / `or_bool` emit `BinOp::And` / `BinOp::Or` on bool.
+**Verified working**:
+- `probe_println_function.g`, `probe_println_macro.g`, `stdout_after_loop.g`,
+  `stdout_conditional.g`, `stdout_middle_line.g`, `stdout_two_lines.g` — all
+  `exit=0` with correct stdout.
+- `assembled_stdlib_compiles` — green.
+- User-declared enums matching `R::Ok(0)` vs `R::Ok(n)` — correct.
+- stdlib `Result<usize, i32>` matching `Result::Ok(0)` vs `Result::Ok(n)` — correct.
 
-Supporting fixes in the same file (`crates/glyim-lower/src/lower_rvalue.rs`):
-1. `bind_pattern` Struct arm and `lower_pattern_test` Struct arm now project variant fields through `Downcast(variant_idx) + Field(idx)` so `Place::ty()` resolves the field's real type rather than erroring.
-2. `bind_pattern`'s `Binding` arm falls back to `init_local`'s type when `pat.ty == Ty::ERROR`.
-3. `lower_pattern_test`'s Literal/Range arms use the resolved place type for the comparison constant (falling back to `pat.ty`).
-4. `literal_to_mir_const` coerces `Literal::Int` to `MirConstKind::Uint` when the target type is unsigned.
-5. `lower_arm_body` skips the trailing `Assign`+`Goto(merge)` when the arm body is `!`-typed (avoids overwriting a `Return` terminator).
-6. `ExprKind::VariantCtor` arm in `lower_expr_to_rvalue` derives the aggregate's substitution from `expr.ty` instead of hardcoding `Substitution::empty()`.
-
-Unit tests under `crates/glyim-lower/src/tests/` were updated to the new bool-switch-chain MIR shape (match.rs, match_advanced.rs, or_patterns.rs, range_patterns.rs, slice_patterns.rs).
-
-**Verified working** (probe): user-declared enum with usize payload, matching `R::Ok(0)` vs `R::Ok(n)` vs `R::Err(_)` all return correct values.
-
----
-
-## 2. What is STILL BROKEN (the actual remaining task)
-
-**Symptom A** (`--emit=exec` / `--emit=obj` on any stdlib program touching `Result`):
-```
-[X0000] layout error building aggregate: UnknownType(Ty(0)) @0..0
-```
-emitted from `crates/glyim-codegen-llvm/src/lower.rs:1348` (`build_layout_aggregate`).
-
-**Symptom B** (interp path, used by `cargo nextest run -p glyim-test run_pass_corpus_passes`):
-```
-TMP-INTERP-ERR: Panic("program aborted")
-TMP-INTERP-ERR: TimedOut
-```
-7 println fixtures fail (exit 101), and 5 `emit_modes` tests fail.
-
-**Key evidence** (this session): with the current tree, `--emit=mir` on a program that constructs `Result::Ok(...)` produces aggregates with **correct** substitutions:
-```
-Aggregate(Adt(AdtId(1011), VariantIdx(0), Substitution(index=113, len=2)), ...)
-```
-So **lowering is now correct**. The `UnknownType(Ty(0))` error is emitted **during codegen**, not lowering. Something in `glyim-codegen-llvm` is asked to lower an aggregate whose type argument resolves to `Ty::ERROR` even though the MIR aggregate itself is well-formed.
-
-**Next step** (for the next agent):
-
-1. Add a TMP eprintln to `build_layout_aggregate` in `glyim-codegen-llvm/src/lower.rs` printing `agg_ty`, `variant`, and the caller (a stack trace or a callsite tag). Find which aggregate in the println path has `agg_ty == Ty::ERROR`.
-2. Trace where that aggregate's `agg_ty` comes from — most likely `place.ty()` on the destination local, and the destination local was allocated with `expr.ty` (or similar) which typeck left as `Ty::ERROR` somewhere in stdlib code.
-3. Once identified, the fix is very likely another "prefer the resolved place type / substitution's concrete type" patch, mirroring the ones committed this session.
-
-Reproducer probes already in place under `/tmp/` (may be gone — recreate):
-- `/tmp/ur.g` — `Result<usize, i32>` payload discrimination, exits 0 today (fresh cache).
-- `/tmp/c2.g` — basic `Ok(_) => 1` match on `Result<usize, i32>`; still triggers the layout error.
-- `crates/glyim-test/tests/run-pass/probe_println_function.g` — full path.
-
-The `write_all` MIR (crates/glyim-lang-std/lib/io.g) has the crucial arm shape:
-```
-match self.write(&buf[written..]) {
-    Result::Ok(0) => return Result::Err(...),   // diverging
-    Result::Ok(n) => written += n,              // statement-shaped
-    Result::Err(e) => return Result::Err(e),    // diverging
-}
-```
-Prior to §4, arm 1 always won; §4 fixed that. The remaining failure is upstream of arm selection: the `Result` value itself is mis-typed somewhere before codegen sees it.
+**Remaining known issue** (minor, not blocking):
+- `probe_string_push_str.g` produces no binary under `--emit=exec`. It's a
+  separate stdlib path (`String::push_str`), not related to the enum-match
+  family. The harness `run_pass_corpus_passes` passes regardless (it uses
+  the interpreter path, not exec).
+- `Place::ty(): Field projection on non-tuple/ADT type` is still logged
+  many times during stdlib compilation, but does not affect correctness
+  of the paths we exercise. Worth investigating as a cleanup task: the
+  logs are noise that will hide future real errors.
 
 ---
 
-## 3. Debugging rules that worked this session
+## 2. The bugs, in the order they were discovered
 
-1. **Always use a fresh `GLYIM_CACHE_DIR`** (`rm -rf /tmp/gc_X`). The CLI caches aggressively and stale results cost ~2 hours this session.
-2. **Compare `--emit=mir` with the actual runtime behavior.** When they disagree, the bug is *between* MIR and execution (codegen, optimization, or interp), not in lowering.
-3. **`GLYIM_TMP_CTOR=1`** was used as a probe env var to print every `VariantCtor` lowering — a useful pattern.
-4. **`Place::ty()` errors are logged at `error!` level and do NOT fail compilation.** They *do* indicate that the place's type resolved to `Ty::ERROR`. Grep for `Place::ty():` in stderr to find these.
-5. The `[X0000]` prefix marks an internal error emitted by codegen. Grep `crates/` for the literal to find the emitter.
+1. **Discriminant-only switch** (§4 root cause): the original miscompile.
+2. **Missing `Downcast` before `Field`** in `bind_pattern` +
+   `lower_pattern_test`: `Place::ty()` bailed, field locals got `Ty::ERROR`.
+3. **`pat.ty` unreliable** for field literals/bindings inside variant
+   patterns: fell back to resolved place type.
+4. **`lower_arm_body` overwrote `Return`** with `Goto(merge)` for diverging
+   arm bodies.
+5. **Bool `BitAnd`/`BitOr` unsupported** by the interpreter: switch to
+   `BinOp::And`/`Or`.
+6. **`VariantCtor` aggregate substitution hardcoded empty**: for generic
+   enums, layout computing couldn't resolve fields.
+7. **Call-site arg unification skipped concrete-Adt formals**: the ctor's
+   fresh infer vars were never pinned.
+8. **Statement-shaped match-arm bodies were silently discarded**: the
+   direct cause of the `write_all` infinite loop.
+
+Each was verified with an isolated probe before the next was addressed.
+The `.fix-log`-style TMP-eprintln probes (`GLYIM_TMP_CTOR`,
+`GLYIM_TMP_AGG`) were the key debugging tools; keep them in mind for the
+next similar bug.
 
 ---
 
-## 4. Matrix status at commit d30b63d7
+## 3. Files touched this session
 
-- `cargo check --workspace --tests`: clean (warnings only).
-- `cargo nextest run --workspace`: 4599 run, ~4590 pass, ~9 fail (the 7 println fixtures + 2 emit_modes).
-- `cargo nextest run -p glyim-lower -p glyim-mir-interp`: green (the §4 unit-test updates).
+- `crates/glyim-lower/src/lower_rvalue.rs` — §4 match lowering, Downcast
+  projections, resolved-place types, arm-body diverge, bool helpers,
+  variant-ctor substitutions.
+- `crates/glyim-lower/src/tests/{match,match_advanced,or_patterns,range_patterns,slice_patterns}.rs`
+  — updated to the new bool-switch-chain MIR shape.
+- `crates/glyim-typeck/src/check_expr.rs` — Call-arm unify, match-arm
+  statement-body routing, `ty_contains_infer` helper.
+- `docs/roadmaps/HANDOFF-session-10.md` — this file.
+
+---
+
+## 4. Conventions
+
+Marker comments: `T###-PATCHED`, `T###-REVIEWED`, `T###-REVISED`,
+`T###-DEFERRED`. Commit style:
+`fix(wave-N): TIDs (brief)` / `feat(...)` / `perf(...)` / `chore(...)` /
+`docs(session): ...` / `test(area): ...`.
 
 ---
 
 ## 5. Other useful docs
 
-- `docs/roadmaps/HANDOFF-session-9.md` (or the resume handoff committed as `83af7f35`) — enum match field pattern bug (§4 there) is now fixed.
-- `docs/roadmaps/glyim-fix-plan.md` — original 202-task plan; sessions 1–4 handled waves 1–4; §4 here is T140 [STD-15].
-- `docs/roadmaps/better-testing.md` — untracked, not mine.
+- `docs/roadmaps/glyim-fix-plan.md` — original 202-task plan.
+- `docs/roadmaps/audit-status.md` — prior audit status.
+- `.fix-log/HANDOFF-session-4-archive.md` — session-4 handoff, preserved.
