@@ -3672,15 +3672,92 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             return Ok(true);
         }
-        // Coerce the receiver value to the destination LLVM type:
-        // * same type → pass through
-        // * thin pointer → thin pointer → bitcast
-        // * fat pointer `{ptr, i64}` → thin pointer → extract field 0
-        // (Fat pointer receivers only arise for `as_ptr`-like methods whose
-        // destination is a thin pointer; `as_bytes` keeps the fat pointer.)
+        // Coerce the receiver value to the destination LLVM type. Three
+        // shapes are possible for the receiver and three for the destination:
+        //
+        //   receiver  |  destination  |  action
+        //   ----------+---------------+---------------------------------------
+        //   T         |  T            |  pass through
+        //   `{ptr,i64}` | `{ptr,i64}` |  pass through (same type)
+        //   `{ptr,i64}` |  thin ptr    |  extract field 0
+        //   thin ptr  |  thin ptr    |  bitcast
+        //   `{[3xi64]}` (String) | `{ptr,i64}` |  unpack inner array words 0,2
+        //   `{[3xi64]}` (String) |  thin ptr    |  unpack word 0 → inttoptr
         let mut val = recv_val;
         if val.get_type() != dest_llvm_ty {
-            if val.is_struct_value() && dest_llvm_ty.is_pointer_type() {
+            // `String` → fat pointer (e.g. `String::as_bytes`, `String::as_str`
+            // via the same coercion path).
+            let is_string_struct = val.is_struct_value()
+                && val.into_struct_value().get_type().count_fields() == 1;
+            if is_string_struct && dest_llvm_ty.is_struct_type() {
+                let sv = val.into_struct_value();
+                let arr = self
+                    .builder
+                    .build_extract_value(sv, 0, "as_bytes_arr")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_bytes array extract failed: {:?}",
+                            e
+                        ))]
+                    })?
+                    .into_array_value();
+                let p_i = self
+                    .builder
+                    .build_extract_value(arr, 0, "as_bytes_pi")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_bytes ptr extract failed: {:?}",
+                            e
+                        ))]
+                    })?
+                    .into_int_value();
+                let l = self
+                    .builder
+                    .build_extract_value(arr, 2, "as_bytes_li")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_bytes len extract failed: {:?}",
+                            e
+                        ))]
+                    })?;
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+                let p = self
+                    .builder
+                    .build_int_to_ptr(p_i, ptr_ty, "as_bytes_p")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_bytes inttoptr failed: {:?}",
+                            e
+                        ))]
+                    })?;
+                let dst_sty = dest_llvm_ty.into_struct_type();
+                let mut agg = dst_sty.get_undef();
+                agg = self
+                    .builder
+                    .build_insert_value(agg, p, 0, "as_bytes_i0")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_bytes insert 0 failed: {:?}",
+                            e
+                        ))]
+                    })?
+                    .into_struct_value();
+                agg = self
+                    .builder
+                    .build_insert_value(agg, l, 1, "as_bytes_i1")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_bytes insert 1 failed: {:?}",
+                            e
+                        ))]
+                    })?
+                    .into_struct_value();
+                val = agg.as_basic_value_enum();
+            }
+            if val.get_type() != dest_llvm_ty
+                && val.is_struct_value()
+                && dest_llvm_ty.is_pointer_type()
+            {
                 val = self
                     .builder
                     .build_extract_value(val.into_struct_value(), 0, "fat_data_ptr")
@@ -3705,8 +3782,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .as_basic_value_enum();
                 } else {
                     return Err(vec![GlyimDiagnostic::internal_error(format!(
-                        "unsupported intrinsic `{}` receiver/destination shape",
-                        method
+                        "unsupported intrinsic `{}` receiver/destination shape (recv={:?}, dst={:?})",
+                        method,
+                        val.get_type(),
+                        dest_llvm_ty
                     ))]);
                 }
             }
