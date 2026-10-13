@@ -286,6 +286,89 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(v))
             }
+            (1020, "pop") => {
+                // Returns Option<T>: `None` (tag 0) when empty, else
+                // `Some(elem)` (tag 1). The interpreter models `Option` as
+                // `Aggregate([Int(tag), payload])` (see `enum_tag` /
+                // `enum_payload`).
+                match arg_operands.first() {
+                    Some(Operand::Copy(p) | Operand::Move(p)) => {
+                        let mut v = self.read_place(p)?;
+                        let removed = Self::vec_pop(&mut v);
+                        self.write_place(p, v)?;
+                        Ok(Some(removed))
+                    }
+                    _ => Ok(Some(InterpValue::Aggregate(vec![
+                        InterpValue::Int(0),
+                        InterpValue::Unit,
+                    ]))),
+                }
+            }
+            (1020, "insert") => {
+                let idx = match args.get(1) {
+                    Some(InterpValue::Uint(n)) => *n as usize,
+                    Some(InterpValue::Int(n)) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                let elem = args.get(2).cloned().unwrap_or(InterpValue::Unit);
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    Self::vec_insert(v, idx, elem);
+                })?;
+                Ok(Some(v))
+            }
+            (1020, "reserve") => {
+                // Model limitation: the interpreter's Vec has no separate
+                // capacity word, so `reserve` is a no-op. Assertions should
+                // use `capacity() >= len()`, which this satisfies.
+                let v = self.builtin_deref(&receiver)?;
+                Ok(Some(v))
+            }
+            (1020, "capacity") => {
+                // Model limitation: the interpreter's Vec is
+                // `[elements, len]` with no separate capacity word, so it
+                // reports `len`. Real codegen reports the grown capacity
+                // (`>= len`). A fixture must therefore assert only
+                // `capacity() >= len()`.
+                let v = self.builtin_deref(&receiver)?;
+                Ok(Some(InterpValue::Uint(Self::vec_len(&v) as u128)))
+            }
+            (1020, "set_len") => {
+                let n = match args.get(1) {
+                    Some(InterpValue::Uint(n)) => *n as usize,
+                    Some(InterpValue::Int(n)) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.len() == 2 {
+                            fields[1] = InterpValue::Uint(n as u128);
+                        }
+                    }
+                })?;
+                Ok(Some(v))
+            }
+            (1020, "truncate") => {
+                let n = match args.get(1) {
+                    Some(InterpValue::Uint(n)) => *n as usize,
+                    Some(InterpValue::Int(n)) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.len() == 2 {
+                            let cur = match &fields[1] {
+                                InterpValue::Uint(x) => *x as usize,
+                                InterpValue::Int(x) => (*x).max(0) as usize,
+                                _ => 0,
+                            };
+                            if cur > n {
+                                fields[1] = InterpValue::Uint(n as u128);
+                            }
+                        }
+                    }
+                })?;
+                Ok(Some(v))
+            }
             (1020, "remove") => {
                 let idx = match args.get(1) {
                     Some(InterpValue::Uint(n)) => *n as usize,
@@ -597,6 +680,68 @@ impl<'tcx> Interpreter<'tcx> {
             }
         }
         InterpValue::Unit
+    }
+
+    /// Pop the last element, returning `Some(elem)` / `None` in the
+    /// interpreter's `Option` shape (`Aggregate([Int(tag), payload])`).
+    fn vec_pop(v: &mut InterpValue) -> InterpValue {
+        if let InterpValue::Aggregate(fields) = v {
+            if fields.len() == 2 {
+                let len = match &fields[1] {
+                    InterpValue::Uint(n) => *n as usize,
+                    InterpValue::Int(n) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                if len == 0 {
+                    return InterpValue::Aggregate(vec![
+                        InterpValue::Int(0),
+                        InterpValue::Unit,
+                    ]);
+                }
+                let elem = if let InterpValue::Aggregate(buf) = &mut fields[0] {
+                    while buf.len() < len {
+                        buf.push(InterpValue::Unit);
+                    }
+                    if buf.len() >= len && len >= 1 {
+                        buf.remove(len - 1)
+                    } else {
+                        InterpValue::Unit
+                    }
+                } else {
+                    InterpValue::Unit
+                };
+                fields[1] = InterpValue::Uint((len - 1) as u128);
+                return InterpValue::Aggregate(vec![InterpValue::Int(1), elem]);
+            }
+        }
+        InterpValue::Aggregate(vec![InterpValue::Int(0), InterpValue::Unit])
+    }
+
+    /// Insert `elem` at `idx`, shifting the tail up.
+    fn vec_insert(v: &mut InterpValue, idx: usize, elem: InterpValue) {
+        if let InterpValue::Aggregate(fields) = v {
+            if fields.len() == 2 {
+                let len = match &fields[1] {
+                    InterpValue::Uint(n) => *n as usize,
+                    InterpValue::Int(n) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                if idx > len {
+                    return;
+                }
+                if let InterpValue::Aggregate(buf) = &mut fields[0] {
+                    while buf.len() < len {
+                        buf.push(InterpValue::Unit);
+                    }
+                    if idx >= buf.len() {
+                        buf.push(elem);
+                    } else {
+                        buf.insert(idx, elem);
+                    }
+                }
+                fields[1] = InterpValue::Uint((len + 1) as u128);
+            }
+        }
     }
 
     fn vec_remove(v: &mut InterpValue, idx: usize) -> InterpValue {

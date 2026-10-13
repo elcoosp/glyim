@@ -3373,6 +3373,45 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         self.module.add_function(name, fn_ty, None)
     }
 
+    /// Resolve the receiver of a builtin method to a pointer to its
+    /// in-memory header. A receiver that arrives as a pointer is used
+    /// directly; one that arrives as a struct value is resolved to the
+    /// caller's place pointer (so mutations are visible), falling back to a
+    /// fresh alloca only when there is no place. Returns `Ok(None)` for any
+    /// other shape, letting the caller decline the lowering.
+    fn receiver_header_ptr(
+        &self,
+        recv: &Operand,
+        recv_val: BasicValueEnum<'ctx>,
+        tag: &str,
+    ) -> CompResult<Option<PointerValue<'ctx>>> {
+        if recv_val.is_pointer_value() {
+            return Ok(Some(recv_val.into_pointer_value()));
+        }
+        if recv_val.is_struct_value() {
+            if let Operand::Copy(p) | Operand::Move(p) = recv {
+                return Ok(Some(self.place_ptr(p)?));
+            }
+            let alloca = self
+                .builder
+                .build_alloca(recv_val.get_type(), &format!("{tag}_hdr"))
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{tag} hdr alloca: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(alloca, recv_val)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{tag} hdr store: {e:?}"
+                    ))]
+                })?;
+            return Ok(Some(alloca));
+        }
+        Ok(None)
+    }
+
     fn try_lower_builtin_intrinsic(
         &mut self,
         fn_id: glyim_core::def_id::FnDefId,
@@ -3390,6 +3429,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "to_string" | "as_str" | "new" | "push_str" | "push"
                 | "clear" | "into_bytes" | "from" | "remove" | "to_vec"
                 | "as_slice" | "as_ref" | "from_utf8_lossy"
+                | "capacity" | "set_len" | "truncate"
+                | "pop" | "insert" | "reserve"
                 | "is_some" | "is_none" | "is_ok" | "is_err"
                 | "unwrap" | "expect" | "unwrap_err" | "expect_err"
                 | "unwrap_or" | "unwrap_or_default"
@@ -3740,6 +3781,575 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "as_slice branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-CAPACITY / BC-SET-LEN: `capacity()` reads word 1 (byte 8) of
+        // the 24-byte `{ptr, cap, len}` header; `set_len(n)` writes word 2
+        // (byte 16). Both are shared by `Vec`, `String` and `str`, so they
+        // are gated on all three AdtIds.
+        if method == "capacity" && matches!(_recv_adt.to_raw(), 1020 | 1050 | 1061) {
+            let header_ptr = match self.receiver_header_ptr(recv, recv_val, "cap")? {
+                Some(p) => p,
+                None => return Ok(false),
+            };
+            let base = self
+                .builder
+                .build_bit_cast(
+                    header_ptr,
+                    self.context.ptr_type(AddressSpace::default()),
+                    "cap_base",
+                )
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "capacity bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let eight = self.llvm_int_type(64).const_int(8, false);
+            let cap_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[eight], "cap_ptr")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!("capacity gep: {e:?}"))]
+            })?;
+            let cap = self
+                .builder
+                .build_load(self.llvm_int_type(64), cap_ptr, "cap_load")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "capacity load: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(dest_ptr, cap)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "capacity store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("capacity target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "capacity branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        if method == "set_len" && matches!(_recv_adt.to_raw(), 1020 | 1050 | 1061) {
+            let header_ptr = match self.receiver_header_ptr(recv, recv_val, "sl")? {
+                Some(p) => p,
+                None => return Ok(false),
+            };
+            let Some(n_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let n_val = self.lower_operand(n_op)?.into_int_value();
+            let i64_ty = self.llvm_int_type(64);
+            let n64 = if n_val.get_type().get_bit_width() < 64 {
+                self.builder
+                    .build_int_z_extend(n_val, i64_ty, "sl_zext")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "set_len zext: {e:?}"
+                        ))]
+                    })?
+            } else {
+                n_val
+            };
+            let base = self
+                .builder
+                .build_bit_cast(
+                    header_ptr,
+                    self.context.ptr_type(AddressSpace::default()),
+                    "sl_base",
+                )
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "set_len bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let off = i64_ty.const_int(16, false);
+            let len_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[off], "sl_ptr")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!("set_len gep: {e:?}"))]
+            })?;
+            self.builder
+                .build_store(len_ptr, n64)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "set_len store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("set_len target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "set_len branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-TRUNCATE: `Vec::<T>::truncate(&mut self, n)` clamps the length
+        // word to `n` (a no-op when `len <= n`). Capacity and buffer are
+        // retained, matching `Vec::truncate`. Gated on Vec (1020) — the
+        // method is not registered for `String`/`str`.
+        if method == "truncate" && _recv_adt.to_raw() == 1020 {
+            let header_ptr = match self.receiver_header_ptr(recv, recv_val, "tr")? {
+                Some(p) => p,
+                None => return Ok(false),
+            };
+            let Some(n_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let n_val = self.lower_operand(n_op)?.into_int_value();
+            let i64_ty = self.llvm_int_type(64);
+            let n64 = if n_val.get_type().get_bit_width() < 64 {
+                self.builder
+                    .build_int_z_extend(n_val, i64_ty, "tr_zext")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "truncate zext: {e:?}"
+                        ))]
+                    })?
+            } else {
+                n_val
+            };
+            let base = self
+                .builder
+                .build_bit_cast(
+                    header_ptr,
+                    self.context.ptr_type(AddressSpace::default()),
+                    "tr_base",
+                )
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "truncate bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let off = i64_ty.const_int(16, false);
+            let len_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[off], "tr_ptr")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!("truncate gep: {e:?}"))]
+            })?;
+            let len = self
+                .builder
+                .build_load(i64_ty, len_ptr, "tr_len")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "truncate load: {e:?}"
+                    ))]
+                })?
+                .into_int_value();
+            let gt = self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::UGT, len, n64, "tr_gt")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "truncate cmp: {e:?}"
+                    ))]
+                })?;
+            let clamped = self
+                .builder
+                .build_select(gt, n64, len, "tr_clamp")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "truncate select: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(len_ptr, clamped)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "truncate store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("truncate target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "truncate branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-VEC-POP: `Vec::<T>::pop(&mut self) -> Option<T>`. Reads the
+        // length word (before mutating), calls `glyim_vec_pop` to write the
+        // last element to a temp and decrement the length, then selects
+        // between `None` (variant 0) and `Some(payload)` (variant 1) built
+        // via `build_layout_aggregate` (Option's LLVM type is an
+        // opaque-sized struct, not `{tag, payload}`).
+        if method == "pop" && _recv_adt.to_raw() == 1020 {
+            let header_ptr = match self.receiver_header_ptr(recv, recv_val, "pop")? {
+                Some(p) => p,
+                None => return Ok(false),
+            };
+            let recv_ty_rust = match recv {
+                Operand::Copy(p) | Operand::Move(p) => self.place_ty(p),
+                _ => return Ok(false),
+            };
+            // Element type: prefer the receiver's `Vec<T>` argument, but
+            // fall back to the *destination*'s `Option<T>` payload — the
+            // receiver's substitution can be an un-substituted `ERROR`
+            // placeholder at this point, while the destination type is
+            // always concrete (typeck resolved it). Both must agree.
+            let elem_ty = {
+                let from_recv = {
+                    let inner = match self.ty_ctx.ty_kind(recv_ty_rust) {
+                        TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => *i,
+                        _ => recv_ty_rust,
+                    };
+                    match self.ty_ctx.ty_kind(inner) {
+                        TyKind::Adt(_, s) => self
+                            .ty_ctx
+                            .substitution_args(*s)
+                            .first()
+                            .and_then(|a| match a {
+                                GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            }),
+                        _ => None,
+                    }
+                };
+                let concrete = |t: Option<Ty>| match t {
+                    Some(t)
+                        if !matches!(
+                            self.ty_ctx.ty_kind(t),
+                            TyKind::Error | TyKind::Infer(_) | TyKind::Param(_)
+                        ) =>
+                    {
+                        Some(t)
+                    }
+                    _ => None,
+                };
+                let from_dest = {
+                    let dty = self.place_ty(destination);
+                    match self.ty_ctx.ty_kind(dty) {
+                        TyKind::Adt(_, s) => self
+                            .ty_ctx
+                            .substitution_args(*s)
+                            .first()
+                            .and_then(|a| match a {
+                                GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            }),
+                        _ => None,
+                    }
+                };
+                concrete(from_recv).or_else(|| concrete(from_dest))
+            };
+            let Some(elem_ty) = elem_ty else {
+                return Ok(false);
+            };
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size = layout_computer
+                .layout_of(elem_ty)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec pop layout: {e:?}"
+                    ))]
+                })?;
+            let elem_llvm_ty = self.llvm_type_for_ty(elem_ty);
+            let i64_ty = self.llvm_int_type(64);
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let base = self
+                .builder
+                .build_bit_cast(header_ptr, i8_ptr, "pop_base")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "pop bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let off16 = i64_ty.const_int(16, false);
+            let len_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[off16], "pop_lp")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!("pop gep: {e:?}"))]
+            })?;
+            let len = self
+                .builder
+                .build_load(i64_ty, len_ptr, "pop_len")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!("pop lload: {e:?}"))]
+                })?
+                .into_int_value();
+            let is_empty = self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    len,
+                    i64_ty.const_zero(),
+                    "pop_empty",
+                )
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!("pop cmp: {e:?}"))]
+                })?;
+            let temp = self
+                .builder
+                .build_alloca(elem_llvm_ty, "pop_tmp")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "pop tmp alloca: {e:?}"
+                    ))]
+                })?;
+            let helper = self.declare_void_helper(
+                "glyim_vec_pop",
+                &[i8_ptr.into(), i64_ty.into(), i8_ptr.into()],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                header_ptr.into(),
+                i64_ty.const_int(elem_size, false).into(),
+                temp.into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "pop_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!("pop call: {e:?}"))]
+                })?;
+            let payload = self
+                .builder
+                .build_load(elem_llvm_ty, temp, "pop_payload")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "pop pload: {e:?}"
+                    ))]
+                })?;
+            let dest_ty = self.place_ty(destination);
+            let none_val = self.build_layout_aggregate(
+                dest_ty,
+                Some(VariantIdx::from_raw(0)),
+                &[],
+            )?;
+            let some_val = self.build_layout_aggregate(
+                dest_ty,
+                Some(VariantIdx::from_raw(1)),
+                &[payload],
+            )?;
+            let result = self
+                .builder
+                .build_select(is_empty, none_val, some_val, "pop_sel")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "pop select: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(dest_ptr, result)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "pop store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("pop target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "pop branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-VEC-INSERT: `Vec::<T>::insert(&mut self, index, value)`.
+        // Delegates to `glyim_vec_insert` (grow + memmove tail + store).
+        if method == "insert" && _recv_adt.to_raw() == 1020 {
+            let header_ptr = match self.receiver_header_ptr(recv, recv_val, "ins")? {
+                Some(p) => p,
+                None => return Ok(false),
+            };
+            let Some(idx_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let idx_val = self.lower_operand(idx_op)?.into_int_value();
+            let i64_ty = self.llvm_int_type(64);
+            let idx64 = if idx_val.get_type().get_bit_width() < 64 {
+                self.builder
+                    .build_int_z_extend(idx_val, i64_ty, "ins_zext")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "insert zext: {e:?}"
+                        ))]
+                    })?
+            } else {
+                idx_val
+            };
+            let Some(elem_op) = args.get(2) else {
+                return Ok(false);
+            };
+            let elem_val = self.lower_operand(elem_op)?;
+            let elem_llvm_ty = elem_val.get_type();
+            let temp = self
+                .builder
+                .build_alloca(elem_llvm_ty, "ins_tmp")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "insert tmp alloca: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(temp, elem_val)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "insert tmp store: {e:?}"
+                    ))]
+                })?;
+            let elem_ty_rust = self.operand_ty(elem_op);
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size = layout_computer
+                .layout_of(elem_ty_rust)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "insert layout: {e:?}"
+                    ))]
+                })?;
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let helper = self.declare_void_helper(
+                "glyim_vec_insert",
+                &[i8_ptr.into(), i64_ty.into(), i8_ptr.into(), i64_ty.into()],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                header_ptr.into(),
+                idx64.into(),
+                temp.into(),
+                i64_ty.const_int(elem_size, false).into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "insert_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "insert call: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("insert target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "insert branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-VEC-RESERVE: `Vec::<T>::reserve(&mut self, additional)`.
+        // Grows capacity to hold at least `len + additional`; a no-op when
+        // capacity already suffices.
+        if method == "reserve" && _recv_adt.to_raw() == 1020 {
+            let header_ptr = match self.receiver_header_ptr(recv, recv_val, "res")? {
+                Some(p) => p,
+                None => return Ok(false),
+            };
+            let Some(n_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let n_val = self.lower_operand(n_op)?.into_int_value();
+            let i64_ty = self.llvm_int_type(64);
+            let n64 = if n_val.get_type().get_bit_width() < 64 {
+                self.builder
+                    .build_int_z_extend(n_val, i64_ty, "res_zext")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "reserve zext: {e:?}"
+                        ))]
+                    })?
+            } else {
+                n_val
+            };
+            let recv_ty_rust = match recv {
+                Operand::Copy(p) | Operand::Move(p) => self.place_ty(p),
+                _ => return Ok(false),
+            };
+            let elem_ty = {
+                let inner = match self.ty_ctx.ty_kind(recv_ty_rust) {
+                    TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => *i,
+                    _ => recv_ty_rust,
+                };
+                match self.ty_ctx.ty_kind(inner) {
+                    TyKind::Adt(_, s) => self
+                        .ty_ctx
+                        .substitution_args(*s)
+                        .first()
+                        .and_then(|a| match a {
+                            GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        }),
+                    _ => None,
+                }
+            };
+            let Some(elem_ty) = elem_ty else {
+                return Ok(false);
+            };
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size = layout_computer
+                .layout_of(elem_ty)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "reserve layout: {e:?}"
+                    ))]
+                })?;
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let helper = self.declare_void_helper(
+                "glyim_vec_reserve",
+                &[i8_ptr.into(), i64_ty.into(), i64_ty.into()],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                header_ptr.into(),
+                n64.into(),
+                i64_ty.const_int(elem_size, false).into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "reserve_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "reserve call: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("reserve target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "reserve branch: {e:?}"
                         ))]
                     })?;
             }

@@ -2146,6 +2146,152 @@ pub unsafe extern "C" fn glyim_vec_remove(
     }
 }
 
+/// Pop the last element of the `Vec<T>` whose 24-byte `{ptr, cap, len}`
+/// header lives at `vec_header`, writing its bytes to `out`. Decrements the
+/// length word when non-empty; a no-op on an empty vector (the caller emits
+/// the `Option::None` discriminant separately). Capacity is retained.
+///
+/// # Safety
+/// `vec_header` must point to 24 writable bytes holding a valid header;
+/// `out` must be valid for `elem_size` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_vec_pop(
+    vec_header: *mut u8,
+    elem_size: usize,
+    out: *mut u8,
+) {
+    if vec_header.is_null() || elem_size == 0 || out.is_null() {
+        return;
+    }
+    let ptr =
+        unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
+    let len = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize)
+    };
+    if len == 0 || ptr.is_null() {
+        return;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(ptr.add((len - 1) * elem_size), out, elem_size);
+        std::ptr::write_unaligned(
+            (vec_header as *mut u8).add(16) as *mut usize,
+            len - 1,
+        );
+    }
+}
+
+/// Insert `elem` at `index` in the `Vec<T>` whose header lives at
+/// `vec_header`. Grows the buffer (via `glyim_alloc` / `glyim_dealloc`) when
+/// full, shifts the tail up by one slot (`memmove`), writes the element, and
+/// increments the length. `index > len` is a no-op.
+///
+/// # Safety
+/// `vec_header` must point to 24 writable bytes holding a valid header;
+/// `elem` must be valid for `elem_size` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_vec_insert(
+    vec_header: *mut u8,
+    index: usize,
+    elem: *const u8,
+    elem_size: usize,
+) {
+    if vec_header.is_null() || elem_size == 0 || elem.is_null() {
+        return;
+    }
+    let mut ptr =
+        unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
+    let mut cap = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(8) as *const usize)
+    };
+    let len = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize)
+    };
+    if index > len {
+        return;
+    }
+    if len == cap {
+        let nc = (len + 1).next_power_of_two().max(8);
+        let new_buf = unsafe { glyim_alloc(nc * elem_size, 8) };
+        if new_buf.is_null() {
+            return;
+        }
+        if len > 0 && !ptr.is_null() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(ptr, new_buf, len * elem_size);
+            }
+            unsafe { glyim_dealloc(ptr, cap * elem_size, 8) };
+        }
+        ptr = new_buf;
+        cap = nc;
+        unsafe {
+            std::ptr::write_unaligned(vec_header as *mut *mut u8, ptr);
+            std::ptr::write_unaligned(
+                (vec_header as *mut u8).add(8) as *mut usize,
+                cap,
+            );
+        }
+    }
+    let tail = len - index;
+    if tail > 0 {
+        unsafe {
+            std::ptr::copy(
+                ptr.add(index * elem_size),
+                ptr.add((index + 1) * elem_size),
+                tail * elem_size,
+            );
+        }
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(elem, ptr.add(index * elem_size), elem_size);
+        std::ptr::write_unaligned(
+            (vec_header as *mut u8).add(16) as *mut usize,
+            len + 1,
+        );
+    }
+}
+
+/// Ensure the `Vec<T>` at `vec_header` has capacity for at least
+/// `required_cap` elements, growing the buffer if needed. Never shrinks.
+///
+/// # Safety
+/// `vec_header` must point to 24 writable bytes holding a valid header.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_vec_reserve(
+    vec_header: *mut u8,
+    required_cap: usize,
+    elem_size: usize,
+) {
+    if vec_header.is_null() || elem_size == 0 {
+        return;
+    }
+    let ptr =
+        unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
+    let cap = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(8) as *const usize)
+    };
+    let len = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize)
+    };
+    if cap >= required_cap {
+        return;
+    }
+    let nc = required_cap.next_power_of_two().max(8);
+    let new_buf = unsafe { glyim_alloc(nc * elem_size, 8) };
+    if new_buf.is_null() {
+        return;
+    }
+    if len > 0 && !ptr.is_null() {
+        unsafe {
+            std::ptr::copy_nonoverlapping(ptr, new_buf, len * elem_size);
+        }
+        unsafe { glyim_dealloc(ptr, cap * elem_size, 8) };
+    }
+    unsafe {
+        std::ptr::write_unaligned(vec_header as *mut *mut u8, new_buf);
+        std::ptr::write_unaligned((vec_header as *mut u8).add(8) as *mut usize, nc);
+    }
+}
+
 /// Copy the slice `{slice_ptr, len}` into a fresh `Vec<T>` at `out`.
 /// Allocates `len * elem_size` bytes (capacity == length) and memcpys the
 /// elements. A zero-length slice produces a null buffer / zero capacity.
