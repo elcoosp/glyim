@@ -40,6 +40,11 @@ trait Ord: Eq + PartialOrd {
         match self.cmp(&other) {
             Ordering::Less | Ordering::Equal => other,
             Ordering::Greater => self,
+            // The memory-order variants are not part of the `Ord` total
+            // order; they exist so atomic call sites (`Ordering::SeqCst`)
+            // resolve. `cmp` never yields them, so these arms are
+            // unreachable for well-typed code.
+            Ordering::Acquire | Ordering::Release | Ordering::Relaxed | Ordering::SeqCst => self,
         }
     }
 
@@ -47,6 +52,7 @@ trait Ord: Eq + PartialOrd {
         match self.cmp(&other) {
             Ordering::Less | Ordering::Equal => self,
             Ordering::Greater => other,
+            Ordering::Acquire | Ordering::Release | Ordering::Relaxed | Ordering::SeqCst => self,
         }
     }
 
@@ -65,6 +71,14 @@ enum Ordering {
     Equal,
     /// Greater than.
     Greater,
+    /// Acquire ordering (atomic).
+    Acquire,
+    /// Release ordering (atomic).
+    Release,
+    /// Relaxed ordering (atomic).
+    Relaxed,
+    /// Sequentially consistent ordering (atomic).
+    SeqCst,
 }
 
 /// Compares and returns the minimum of two values.
