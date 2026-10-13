@@ -38,20 +38,52 @@ as_slice, as_ref}`, `String::{clear, from, from_utf8_lossy, into_bytes}`,
 `str::clear`, `slice::to_vec`. Fixtures in
 `crates/glyim-test/tests/run-pass/behavior/`.
 
-### 1b. Blocked — closure-passing builtins
+### 1b. Blocked — closures are broken in the LLVM backend
+
+The closure-passing builtins (`Option::map`, `Result::{map,map_err,map_or}`,
+`Option::unwrap_or_else`) cannot be fixed as builtin arms: they are blocked
+on a more fundamental gap. **Closures do not work in the LLVM backend at
+all.**
+
+Verified this session:
+
+| Program | Interpreter | LLVM backend |
+|---|---|---|
+| `let f = \|x: i32\| x + 1; f(5)` | works (exit 6) | `Layout error: UnknownType(Ty(22677))` |
+| `fn apply(f: fn(i32) -> i32, x: i32) -> i32` + `apply(\|x\| x+1, 5)` | — | compiles + links, then **SIGBUS** at runtime |
+
+The interpreter handles closures; the LLVM backend does not.
+
+Why this was never noticed: **the test tree has zero closure coverage.**
+No fixture in `run-pass/`, `ui/`, or `no-ice/` uses closure syntax
+(`= |x| …`). So the entire closure subsystem is untested on the LLVM side.
+
+The builtin-arm symptoms observed for the closure-passing methods are
+downstream of this:
 
 | Method | Symptom |
 |---|---|
 | `Option::map` | `layout error building aggregate: UnknownType(Ty(0))` |
 | `Result::map` | same class |
-| `Result::map_err` | ICE |
+| `Result::map_err` | `fn_abi_of failed: UnknownType(Ty(169))` |
 | `Result::map_or` | undefined `__glyim_fn_9122` |
-| `Option::unwrap_or_else` | untested, same class |
 
-These take a `fn(T) -> U` argument. The failure is in resolving/​lowering the
-closure argument's monomorphized body, not in the builtin dispatch itself.
-Needs closure-call lowering through the builtin arm before the arm can be
-written.
+**Do not** attempt the builtin arms first. The prerequisite is making
+closures work on the LLVM backend at all:
+
+1. Add closure fixtures to the corpus (currently zero) — start with the two
+   verified-failing cases above. This is the smallest useful first step and
+   would surface the SIGBUS in CI.
+2. Diagnose `UnknownType(Ty(22677))` in `layout_of` for a closure value.
+   Likely the closure's ADT type is registered in the type arena but not
+   with the layout computer, or a closure-signature type is left
+   un-substituted.
+3. Diagnose the SIGBUS on the `fn(i32)->i32`-parameter path. This one
+   compiles and links, so it is a runtime-ABI bug (calling convention or
+   capture-arg layout), not a missing-lowering bug.
+
+Only once a bare closure call works end-to-end does an `Option::map` arm
+become meaningful.
 
 ### 1c. Atomics — mostly done
 
