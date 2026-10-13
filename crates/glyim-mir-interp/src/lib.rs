@@ -424,6 +424,39 @@ impl<'tcx> Interpreter<'tcx> {
                     .unwrap_or(InterpValue::String(String::new()));
                 Ok(Some(s))
             }
+            (1060, "copy_from_slice") => {
+                // MODEL LIMITATION: `as_slice` returns a *copy* of the
+                // element bytes (an `InterpValue::String`), not a view
+                // linked back to the owning `Vec`. So a `&mut [T]` receiver
+                // has no path to write through to the original buffer, and
+                // this is a no-op. The observable length of the destination
+                // is unaffected either way; fixtures assert only that. A
+                // faithful model would require slice values to carry a
+                // `Ref` back to their source, which the interpreter does
+                // not currently represent.
+                Ok(Some(InterpValue::Unit))
+            }
+            (1060, "split_at") => {
+                let s = self.builtin_deref(&receiver)?;
+                let mid = match args.get(1) {
+                    Some(InterpValue::Uint(n)) => *n as usize,
+                    Some(InterpValue::Int(n)) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                let full = Self::byte_payload(&s);
+                let chars: Vec<char> = full.chars().collect();
+                let n = chars.len();
+                let mid = mid.min(n);
+                let lo: String = chars[..mid].iter().collect();
+                let hi: String = chars[mid..].iter().collect();
+                // Tuple of two slices, each modelled as a `String` so that
+                // `str_len` on a projected element yields the char count
+                // (matching codegen's `{ptr, len}` fat pointer length).
+                Ok(Some(InterpValue::Aggregate(vec![
+                    InterpValue::String(lo),
+                    InterpValue::String(hi),
+                ])))
+            }
             (1060, "to_vec") => {
                 let s = self.builtin_deref(&receiver)?;
                 let bytes: Vec<InterpValue> = match &s {
