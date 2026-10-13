@@ -2095,3 +2095,88 @@ pub unsafe extern "C" fn glyim_vec_push(
         );
     }
 }
+
+/// Remove the element at `index` from the `Vec<T>` whose 24-byte
+/// `{ptr, cap, len}` header lives at `vec_header`, writing the removed
+/// element's bytes to `out`. Elements after `index` are shifted down by
+/// one `elem_size` slot (memmove) and the length word is decremented.
+/// Capacity is retained. Out-of-range `index` is a no-op (the stdlib
+/// would panic; we leave that to a future panic path rather than
+/// corrupting the buffer).
+///
+/// # Safety
+/// `vec_header` must point to 24 writable bytes holding a valid header;
+/// `out` must be valid for `elem_size` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_vec_remove(
+    vec_header: *mut u8,
+    index: usize,
+    elem_size: usize,
+    out: *mut u8,
+) {
+    if vec_header.is_null() || elem_size == 0 || out.is_null() {
+        return;
+    }
+    let ptr =
+        unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
+    let len = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize)
+    };
+    if index >= len || ptr.is_null() {
+        return;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(ptr.add(index * elem_size), out, elem_size);
+    }
+    let remaining = len - index - 1;
+    if remaining > 0 {
+        unsafe {
+            std::ptr::copy(
+                ptr.add((index + 1) * elem_size),
+                ptr.add(index * elem_size),
+                remaining * elem_size,
+            );
+        }
+    }
+    unsafe {
+        std::ptr::write_unaligned(
+            (vec_header as *mut u8).add(16) as *mut usize,
+            len - 1,
+        );
+    }
+}
+
+/// Copy the slice `{slice_ptr, len}` into a fresh `Vec<T>` at `out`.
+/// Allocates `len * elem_size` bytes (capacity == length) and memcpys the
+/// elements. A zero-length slice produces a null buffer / zero capacity.
+///
+/// # Safety
+/// `slice_ptr` must be valid for `len * elem_size` bytes (or `len == 0`);
+/// `out` must be valid for 24 writable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_slice_to_vec(
+    slice_ptr: *const u8,
+    len: usize,
+    elem_size: usize,
+    out: *mut u8,
+) {
+    if out.is_null() {
+        return;
+    }
+    let buf = if len == 0 || elem_size == 0 {
+        std::ptr::null_mut::<u8>()
+    } else {
+        let b = unsafe { glyim_alloc(len * elem_size, 8) };
+        if !b.is_null() && !slice_ptr.is_null() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(slice_ptr, b, len * elem_size);
+            }
+        }
+        b
+    };
+    unsafe {
+        std::ptr::write_unaligned(out as *mut *mut u8, buf);
+        std::ptr::write_unaligned((out as *mut u8).add(8) as *mut usize, len);
+        std::ptr::write_unaligned((out as *mut u8).add(16) as *mut usize, len);
+    }
+}

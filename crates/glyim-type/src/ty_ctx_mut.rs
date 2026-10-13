@@ -2421,7 +2421,7 @@ self.register_builtin_methods();
             (vec_id, "from_raw_parts", vec![], vec_ty),
             (string_id, "new", vec![], string_ty),
             (string_id, "with_capacity", vec![usize_ty], string_ty),
-            (string_id, "from", vec![], string_ty),
+            (string_id, "from", vec![ref_str_ty], string_ty),
             (string_id, "from_utf8", vec![vec_u8_ty], string_from_utf8_result),
             (
                 string_id,

@@ -3388,6 +3388,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             method.as_str(),
             "as_bytes" | "as_ptr" | "as_mut_ptr" | "len" | "is_empty"
                 | "to_string" | "as_str" | "new" | "push_str" | "push"
+                | "clear" | "into_bytes" | "from" | "remove" | "to_vec"
+                | "as_slice" | "as_ref" | "from_utf8_lossy"
                 | "is_some" | "is_none" | "is_ok" | "is_err"
                 | "unwrap" | "expect" | "unwrap_err" | "expect_err"
                 | "unwrap_or" | "unwrap_or_default"
@@ -3612,6 +3614,576 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "vec push branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-CLEAR: `Vec::<T>::clear` / `String::clear` / `str::clear`.
+        // All three share the same 24-byte `{ptr, cap, len}` header, so
+        // clearing is a single store of zero at byte offset 16 (the length
+        // word). Capacity and buffer pointer are retained, matching the
+        // "keeps capacity" contract.
+        // BC-AS-SLICE: `Vec::<T>::as_slice(&self) -> &[T]` (and
+        // `Vec::as_ref`, same shape). Vec's 24-byte `{ptr, cap, len}`
+        // header → the `{ptr, len}` fat pointer: read word 0 (ptr) and
+        // word 2 (len). Gated on Vec's AdtId (1020).
+        if matches!(method.as_str(), "as_slice" | "as_ref")
+            && _recv_adt.to_raw() == 1020
+            && dest_llvm_ty.is_struct_type()
+            && dest_llvm_ty.into_struct_type().count_fields() >= 2
+        {
+            let header_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self
+                        .builder
+                        .build_alloca(recv_val.get_type(), "as_hdr")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "as_slice hdr alloca: {e:?}"
+                            ))]
+                        })?;
+                    self.builder
+                        .build_store(alloca, recv_val)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "as_slice hdr store: {e:?}"
+                            ))]
+                        })?;
+                    alloca
+                }
+            } else {
+                return Ok(false);
+            };
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let base = self
+                .builder
+                .build_bit_cast(header_ptr, i8_ptr, "as_base")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_slice bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let zero = self.llvm_int_type(64).const_zero();
+            let six = self.llvm_int_type(64).const_int(16, false);
+            let data_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[zero], "as_dp")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!("as_slice dp: {e:?}"))]
+            })?;
+            let len_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[six], "as_lp")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!("as_slice lp: {e:?}"))]
+            })?;
+            let p_loaded = self
+                .builder
+                .build_load(i8_ptr, data_ptr, "as_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_slice pload: {e:?}"
+                    ))]
+                })?;
+            let l_loaded = self
+                .builder
+                .build_load(self.llvm_int_type(64), len_ptr, "as_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_slice lload: {e:?}"
+                    ))]
+                })?;
+            let dst = dest_llvm_ty.into_struct_type();
+            let mut agg = dst.get_undef();
+            agg = self
+                .builder
+                .build_insert_value(agg, p_loaded, 0, "as_i0")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_slice i0: {e:?}"
+                    ))]
+                })?
+                .into_struct_value();
+            agg = self
+                .builder
+                .build_insert_value(agg, l_loaded, 1, "as_i1")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_slice i1: {e:?}"
+                    ))]
+                })?
+                .into_struct_value();
+            self.builder
+                .build_store(dest_ptr, agg)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_slice store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("as_slice target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "as_slice branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        if method == "clear" && matches!(_recv_adt.to_raw(), 1020 | 1050 | 1061) {
+            let header_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self
+                        .builder
+                        .build_alloca(recv_val.get_type(), "vc_hdr")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec clear hdr alloca: {e:?}"
+                            ))]
+                        })?;
+                    self.builder
+                        .build_store(alloca, recv_val)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec clear hdr store: {e:?}"
+                            ))]
+                        })?;
+                    alloca
+                }
+            } else {
+                return Ok(false);
+            };
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let base = self
+                .builder
+                .build_bit_cast(header_ptr, i8_ptr, "vc_base")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec clear bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let off = self.llvm_int_type(64).const_int(16, false);
+            let len_ptr = unsafe {
+                self.builder.build_in_bounds_gep(
+                    self.context.i8_type(),
+                    base,
+                    &[off],
+                    "vc_len_ptr",
+                )
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "vec clear gep: {e:?}"
+                ))]
+            })?;
+            self.builder
+                .build_store(len_ptr, self.llvm_int_type(64).const_zero())
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec clear store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("vec clear target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "vec clear branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-INTO-BYTES: `String::into_bytes(self) -> Vec<u8>`. Both are
+        // the 24-byte `{ptr, cap, len}` header (see `BC-CLEAR`), so this is
+        // a pure reinterpret: `memcpy` the header to the destination. The
+        // receiver is consumed (`self` by value), so ownership transfers
+        // cleanly — no double-free. Gated on String's AdtId (1050).
+        if method == "into_bytes" && _recv_adt.to_raw() == 1050 {
+            let src_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self
+                        .builder
+                        .build_alloca(recv_val.get_type(), "ib_src")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "into_bytes src alloca: {e:?}"
+                            ))]
+                        })?;
+                    self.builder
+                        .build_store(alloca, recv_val)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "into_bytes src store: {e:?}"
+                            ))]
+                        })?;
+                    alloca
+                }
+            } else {
+                return Ok(false);
+            };
+            let size = self.llvm_int_type(64).const_int(24, false);
+            self.builder
+                .build_memcpy(dest_ptr, 8, src_ptr, 8, size)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "into_bytes memcpy: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("into_bytes target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "into_bytes branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-STRING-FROM: `String::from(&str)` and
+        // `String::from_utf8_lossy(&[u8])`. Both take a `{ptr, i64}` fat
+        // pointer and produce a `String` (a 24-byte `{ptr, cap, len}`
+        // header), so both lower to `glyim_string_from_bytes` — allocate +
+        // copy the source bytes. The "lossy" validity check is a no-op for
+        // the byte-exact payloads this compiler carries. Gated on String's
+        // AdtId (1050).
+        if matches!(method.as_str(), "from" | "from_utf8_lossy")
+            && _recv_adt.to_raw() == 1050
+        {
+            if !recv_val.is_struct_value() {
+                return Ok(false);
+            }
+            let sv = recv_val.into_struct_value();
+            if sv.get_type().count_fields() < 2 {
+                return Ok(false);
+            }
+            let p = self
+                .builder
+                .build_extract_value(sv, 0, "from_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "from ptr: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let l = self
+                .builder
+                .build_extract_value(sv, 1, "from_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "from len: {e:?}"
+                    ))]
+                })?;
+            let helper = self.declare_void_helper(
+                "glyim_string_from_bytes",
+                &[
+                    self.context.ptr_type(AddressSpace::default()).into(),
+                    self.llvm_int_type(64).into(),
+                    self.context.ptr_type(AddressSpace::default()).into(),
+                ],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> =
+                vec![p.into(), l.into(), dest_ptr.into()];
+            self.builder
+                .build_call(helper, &cargs, "from_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "from call: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("from target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "from branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-VEC-REMOVE: `Vec::<T>::remove(&mut self, index) -> T`. Gated
+        // on Vec's AdtId (1020). The runtime helper shifts the tail down
+        // and returns the removed element via an out-pointer.
+        if method == "remove" && _recv_adt.to_raw() == 1020 {
+            let header_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self
+                        .builder
+                        .build_alloca(recv_val.get_type(), "vr_hdr")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec remove hdr alloca: {e:?}"
+                            ))]
+                        })?;
+                    self.builder
+                        .build_store(alloca, recv_val)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec remove hdr store: {e:?}"
+                            ))]
+                        })?;
+                    alloca
+                }
+            } else {
+                return Ok(false);
+            };
+            let Some(idx_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let idx_val = self.lower_operand(idx_op)?;
+            let i64_ty = self.llvm_int_type(64);
+            let idx_i64 = if idx_val.get_type() == i64_ty.into() {
+                idx_val.into_int_value()
+            } else if idx_val.is_int_value() {
+                let iv = idx_val.into_int_value();
+                let from_bits = iv.get_type().get_bit_width();
+                if from_bits < 64 {
+                    self.builder
+                        .build_int_z_extend(iv, i64_ty, "vr_idx_zext")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec remove idx zext: {e:?}"
+                            ))]
+                        })?
+                } else {
+                    iv
+                }
+            } else {
+                return Ok(false);
+            };
+            // Element Rust type / size.
+            let recv_ty_rust = match recv {
+                Operand::Copy(p) | Operand::Move(p) => self.place_ty(p),
+                _ => return Ok(false),
+            };
+            let vec_elem_ty = match self.ty_ctx.ty_kind(recv_ty_rust) {
+                TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
+                    match self.ty_ctx.ty_kind(*inner) {
+                        TyKind::Adt(_, substs) => self
+                            .ty_ctx
+                            .substitution_args(*substs)
+                            .first()
+                            .and_then(|a| match a {
+                                GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            }),
+                        _ => None,
+                    }
+                }
+                TyKind::Adt(_, substs) => self
+                    .ty_ctx
+                    .substitution_args(*substs)
+                    .first()
+                    .and_then(|a| match a {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    }),
+                _ => None,
+            };
+            let Some(elem_ty) = vec_elem_ty else {
+                return Ok(false);
+            };
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size = layout_computer
+                .layout_of(elem_ty)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec remove layout: {e:?}"
+                    ))]
+                })?;
+            // Out pointer: allocate a slot of dest type.
+            let out_alloca = self
+                .builder
+                .build_alloca(dest_llvm_ty, "vr_out")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec remove out alloca: {e:?}"
+                    ))]
+                })?;
+            let helper = self.declare_void_helper(
+                "glyim_vec_remove",
+                &[
+                    self.context.ptr_type(AddressSpace::default()).into(),
+                    i64_ty.into(),
+                    i64_ty.into(),
+                    self.context.ptr_type(AddressSpace::default()).into(),
+                ],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                header_ptr.into(),
+                idx_i64.into(),
+                i64_ty.const_int(elem_size, false).into(),
+                out_alloca.into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "vec_remove_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec remove call: {e:?}"
+                    ))]
+                })?;
+            let out_val = self
+                .builder
+                .build_load(dest_llvm_ty, out_alloca, "vr_load")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec remove load: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(dest_ptr, out_val)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec remove store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("vec remove target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "vec remove branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-SLICE-TO-VEC: `[T]::to_vec(&self) -> Vec<T>`. Gated on slice's
+        // AdtId (1060). The receiver is a `{ptr, i64}` fat pointer; the
+        // helper allocates capacity == length and memcpys.
+        if method == "to_vec" && _recv_adt.to_raw() == 1060 {
+            if !recv_val.is_struct_value() {
+                return Ok(false);
+            }
+            let sv = recv_val.into_struct_value();
+            if sv.get_type().count_fields() < 2 {
+                return Ok(false);
+            }
+            let p = self
+                .builder
+                .build_extract_value(sv, 0, "tv_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "to_vec ptr: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let l = self
+                .builder
+                .build_extract_value(sv, 1, "tv_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "to_vec len: {e:?}"
+                    ))]
+                })?;
+            // Element size from the slice's Rust element type.
+            let recv_ty_rust = match recv {
+                Operand::Copy(place) | Operand::Move(place) => self.place_ty(place),
+                _ => return Ok(false),
+            };
+            let elem_ty = match self.ty_ctx.ty_kind(recv_ty_rust) {
+                TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
+                    match self.ty_ctx.ty_kind(*inner) {
+                        TyKind::Slice(e) => *e,
+                        _ => return Ok(false),
+                    }
+                }
+                TyKind::Slice(e) => *e,
+                _ => return Ok(false),
+            };
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size = layout_computer
+                .layout_of(elem_ty)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "to_vec layout: {e:?}"
+                    ))]
+                })?;
+            let i64_ty = self.llvm_int_type(64);
+            let helper = self.declare_void_helper(
+                "glyim_slice_to_vec",
+                &[
+                    self.context.ptr_type(AddressSpace::default()).into(),
+                    i64_ty.into(),
+                    i64_ty.into(),
+                    self.context.ptr_type(AddressSpace::default()).into(),
+                ],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                p.into(),
+                l.into(),
+                i64_ty.const_int(elem_size, false).into(),
+                dest_ptr.into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "to_vec_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "to_vec call: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("to_vec target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "to_vec branch: {e:?}"
                         ))]
                     })?;
             }

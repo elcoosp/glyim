@@ -286,6 +286,87 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(v))
             }
+            (1020, "remove") => {
+                let idx = match args.get(1) {
+                    Some(InterpValue::Uint(n)) => *n as usize,
+                    Some(InterpValue::Int(n)) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                match arg_operands.first() {
+                    Some(Operand::Copy(p) | Operand::Move(p)) => {
+                        let mut v = self.read_place(p)?;
+                        let removed = Self::vec_remove(&mut v, idx);
+                        self.write_place(p, v)?;
+                        Ok(Some(removed))
+                    }
+                    _ => Ok(Some(InterpValue::Unit)),
+                }
+            }
+            (1020, "clear") => {
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.len() == 2 {
+                            if let InterpValue::Aggregate(buf) = &mut fields[0] {
+                                buf.clear();
+                            }
+                            fields[1] = InterpValue::Uint(0);
+                        } else {
+                            fields.clear();
+                        }
+                    }
+                })?;
+                Ok(Some(v))
+            }
+            (1050, "clear") | (1061, "clear") => {
+                let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    *v = InterpValue::String(String::new());
+                })?;
+                Ok(Some(v))
+            }
+            (1050, "from") | (1050, "from_utf8_lossy") => {
+                // `String::from(&str)`: the argument is the string view.
+                let s = args
+                    .first()
+                    .cloned()
+                    .map(|v| self.builtin_deref(&v))
+                    .transpose()?
+                    .unwrap_or(InterpValue::String(String::new()));
+                Ok(Some(s))
+            }
+            (1060, "to_vec") => {
+                let s = self.builtin_deref(&receiver)?;
+                let bytes: Vec<InterpValue> = match &s {
+                    InterpValue::String(st) => st
+                        .as_bytes()
+                        .iter()
+                        .map(|b| InterpValue::Uint(*b as u128))
+                        .collect(),
+                    InterpValue::Aggregate(f) => f.clone(),
+                    _ => Vec::new(),
+                };
+                let n = bytes.len() as u128;
+                Ok(Some(InterpValue::Aggregate(vec![
+                    InterpValue::Aggregate(bytes),
+                    InterpValue::Uint(n),
+                ])))
+            }
+            (1050, "into_bytes") => {
+                let s = self.builtin_deref(&receiver)?;
+                let bytes: Vec<InterpValue> = match &s {
+                    InterpValue::String(st) => st
+                        .as_bytes()
+                        .iter()
+                        .map(|b| InterpValue::Uint(*b as u128))
+                        .collect(),
+                    InterpValue::Aggregate(fields) => fields.clone(),
+                    _ => Vec::new(),
+                };
+                let n = bytes.len() as u128;
+                Ok(Some(InterpValue::Aggregate(vec![
+                    InterpValue::Aggregate(bytes),
+                    InterpValue::Uint(n),
+                ])))
+            }
             // UNSAFECELL-NEW: `UnsafeCell::new(v)` is a single-field wrapper.
             (1005, "new") => {
                 let v = args.first().cloned().unwrap_or(InterpValue::Unit);
@@ -484,6 +565,37 @@ impl<'tcx> Interpreter<'tcx> {
         if let InterpValue::Aggregate(fields) = v {
             if fields.len() >= 2 {
                 return fields[1].clone();
+            }
+        }
+        InterpValue::Unit
+    }
+
+    fn vec_remove(v: &mut InterpValue, idx: usize) -> InterpValue {
+        if let InterpValue::Aggregate(fields) = v {
+            if fields.len() == 2 {
+                let len = match &fields[1] {
+                    InterpValue::Uint(n) => *n as usize,
+                    InterpValue::Int(n) => (*n).max(0) as usize,
+                    _ => 0,
+                };
+                if idx >= len {
+                    return InterpValue::Unit;
+                }
+                let removed = if let InterpValue::Aggregate(buf) = &mut fields[0] {
+                    while buf.len() < len {
+                        buf.push(InterpValue::Unit);
+                    }
+                    let r = if idx < buf.len() {
+                        buf.remove(idx)
+                    } else {
+                        InterpValue::Unit
+                    };
+                    r
+                } else {
+                    InterpValue::Unit
+                };
+                fields[1] = InterpValue::Uint((len - 1) as u128);
+                return removed;
             }
         }
         InterpValue::Unit
