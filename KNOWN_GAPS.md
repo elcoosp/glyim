@@ -55,10 +55,45 @@ written.
 
 ### 1c. Blocked — atomics
 
-`AtomicBool::{fetch_and, fetch_or}` — ICE. The atomic builtins have no
-codegen arm and no runtime helper (only `load`/`store`/`compare_exchange`
-resolve, via the stdlib `sync.g` impls). Needs `glyim_atomic_*` runtime
-helpers mirroring `glyim_atomic_u8_*`.
+**Every** `AtomicBool` / `AtomicUsize` / `AtomicU8` method fails at link
+time with an undefined `__glyim_fn_NNNN` — not just `fetch_and`/`fetch_or`.
+
+Mechanism (verified this session):
+
+- `resolve_method_call` consults the builtin table
+  (`lookup_builtin_method`) **before** the HIR impl scan. The atomic
+  builtin entries in `ty_ctx_mut.rs` (~line 2453) therefore win, and
+  their `FnDefId`s have no MIR body → undefined symbol at link.
+- `sync.g` **does** contain real bodies — `new`, `load`, `store`,
+  `compare_exchange` (AtomicBool) and `new`, `load`, `store`,
+  `fetch_add`, `fetch_sub`, `compare_exchange` (AtomicUsize) — each
+  calling a `glyim_atomic_*` runtime helper that already exists. But
+  those impls are **unreachable**, shadowed by the builtin table.
+
+**Do not** try to fix this by deleting the builtin entries. That was
+tried: the methods then fail *earlier*, with ``no method `load` found``.
+The HIR impl scan does not reach `sync.g`'s atomic impls (different
+module; receiver-unification does not cover the `Atomic*` ADTs). The
+builtin table is load-bearing for **resolution**, not only lowering.
+
+Correct fix (~300–400 lines, 4 files):
+
+1. `crates/glyim-codegen-llvm/src/lower.rs` — codegen arms for the 8
+   atomic methods, calling the existing runtime helpers
+   (`glyim_atomic_u8_{load,store,cas}`,
+   `glyim_atomic_usize_{load,store,fetch_add,fetch_sub}`).
+2. `crates/glyim-runtime/src/lib.rs` — add `glyim_atomic_u8_fetch_and` /
+   `_fetch_or` (the other 7 helpers exist at lines 1758–1860).
+3. `crates/glyim-mir-interp/src/lib.rs` — the interpreter has **zero**
+   atomic arms, so any atomic fixture fails the differential
+   (`interp_only` or a disagreement) unless arms are added.
+4. Fixtures.
+
+Related and **fixed** in the same investigation: `cmp.g`'s `Ordering`
+lacked the four memory-order variants (`Acquire` / `Release` / `Relaxed`
+/ `SeqCst`) that `sync.g` uses, so *every* atomic call site failed
+type-check with `TyKind::Error` before even reaching codegen. `cmp.g`
+now declares all seven, matching the compiler's canonical ADT 1015.
 
 ### 1d. Blocked — iterator protocol
 
@@ -69,8 +104,8 @@ helpers mirroring `glyim_atomic_u8_*`.
 
 | Method | Symptom |
 |---|---|
-| `slice::copy_from_slice` | undefined `__glyim_fn_9092` |
-| `slice::split_at` | undefined `__glyim_fn_9164` (returns a tuple of two fat pointers) |
+| `slice::copy_from_slice` | undefined `__glyim_fn_9092` |  **← fixed**
+| `slice::split_at` | undefined `__glyim_fn_9164` (returns a tuple of two fat pointers) |  **← fixed**
 | `String::from_utf8` | `ambiguous method 'len' found in multiple impls` (typeck, on the `Result` it returns) |
 
 ### 1f. `Vec::pop` — inference ordering (category b)
