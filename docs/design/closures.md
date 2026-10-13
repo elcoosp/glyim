@@ -10,14 +10,27 @@ commit `be038762`, with the exact file:line shown.
 
 ## 1. Verified findings
 
-Closures are **broken end-to-end in the LLVM backend**. The interpreter
-handles them; the LLVM backend does not.
+Closures are **broken on both backends**, in different ways. (An earlier
+revision of this doc claimed the interpreter handled them; that was wrong —
+see the correction note below.)
 
 | Program | Interpreter | LLVM backend |
 |---|---|---|
-| `let f = |x: i32| -> i32 { x + 1 }; f(5)` | works | `Layout error: UnknownType(Ty(22677))` |
-| `let f = |x: i32| x + 1; f(5)` | works | same |
-| `apply(|x| x + 1, 5)` where `fn apply(f: fn(i32)->i32, ..)` | — | compiles + links, then **SIGBUS** |
+| `let f = || 7; f()` | works (exit 7) | not yet tested |
+| `let f = |x: i32| -> i32 { x + 1 }; f(5)` | **exit 101 (panic)** | `Layout error: UnknownType(Ty(22677))` |
+| `let f = |x: i32| x + 1; f(5)` | **exit 101 (panic)** | same |
+| `let n = 1; let f = |x: i32| { x + n }; f(5)` | **exit 101 (panic)** | same |
+| `apply(|x| x + 1, 5)` where `fn apply(f: fn(i32)->i32, ..)` | not yet tested | compiles + links, then **SIGBUS** |
+
+So: the interpreter supports **zero-argument** closures but panics on any
+closure with a parameter; the LLVM backend fails to lay out the closure
+signature at all.
+
+**Correction note.** An earlier version of this doc asserted "the
+interpreter handles them; the LLVM backend does not". That came from a
+single probe fixture (`_tmp_closure_probe.g`) that reported a pass. That
+probe is not trustworthy: it was removed before the result could be
+reproduced, and the identical program now fails. The claim is retracted.
 
 **Why it was never noticed:** the test tree has **zero closure coverage**.
 No fixture in `run-pass/`, `ui/`, or `no-ice/` uses closure syntax. The
