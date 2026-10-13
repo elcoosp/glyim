@@ -2,7 +2,6 @@
 
 use glyim_core::def_id::{AdtId, ConstDefId, FnDefId};
 use glyim_core::interner::Name;
-use glyim_core::primitives::IntTy;
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
 use glyim_solve::InferenceTable;
@@ -55,6 +54,16 @@ impl<'a> FnCtxt<'a> {
     }
 
     pub fn check_path(&mut self, path: &Path, span: Span) -> (thir::Expr, Ty) {
+        // Every path the parser produces has at least one segment, but a
+        // defensively-empty path must be a diagnostic, not an index panic.
+        // Bind the last segment once; all uses below go through `last_seg`.
+        let Some(last_seg) = path.segments.last() else {
+            self.diagnostics.push(GlyimDiagnostic::type_error(
+                span,
+                "empty path in value position".to_string(),
+            ));
+            return (thir::Expr::err(span), Ty::ERROR);
+        };
         // 1. Local variable (already bound in this scope).
         if let Some(name) = path.as_name() {
             if let Some(var_info) = self.env.lookup_by_name(name) {
@@ -439,10 +448,7 @@ impl<'a> FnCtxt<'a> {
             // used set directly, returning a literal of the primitive type.
             {
                 let first_name = self.ctx.name_str(path.segments[0].name).to_string();
-                let last_name = self
-                    .ctx
-                    .name_str(path.segments.last().unwrap().name)
-                    .to_string();
+                let last_name = self.ctx.name_str(last_seg.name).to_string();
                 let prim_ty_hint = match first_name.as_str() {
                     "usize" => Some((
                         self.ctx
@@ -536,9 +542,8 @@ impl<'a> FnCtxt<'a> {
             if first_is_self {
                 if let Some(self_ty) = self.param_map.get(&self_kw).copied() {
                     if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(self_ty) {
-                        if let Some((fn_id, sig)) = self
-                            .ctx
-                            .lookup_builtin_method(*adt_id, path.segments.last().unwrap().name)
+                        if let Some((fn_id, sig)) =
+                            self.ctx.lookup_builtin_method(*adt_id, last_seg.name)
                         {
                             let output = sig.output;
                             let empty_substs = self.ctx.intern_substitution(vec![]);
@@ -597,10 +602,7 @@ impl<'a> FnCtxt<'a> {
                     }
                 };
             if let Some((adt_id, adt_ty)) = adt_lookup {
-                if let Some((fn_id, sig)) = self
-                    .ctx
-                    .lookup_builtin_method(adt_id, path.segments.last().unwrap().name)
-                {
+                if let Some((fn_id, sig)) = self.ctx.lookup_builtin_method(adt_id, last_seg.name) {
                     // Instantiate the output type against the *callee* ADT's own
                     // generic substitution (so `Vec::new` yields `Vec<T>` with
                     // `T` left as a fresh inference variable, matching how the
@@ -673,7 +675,7 @@ impl<'a> FnCtxt<'a> {
                         continue;
                     }
                     for m in &impl_item.methods {
-                        if m.name != path.segments.last().unwrap().name {
+                        if m.name != last_seg.name {
                             continue;
                         }
                         let Some(body_id) = m.body else { continue };

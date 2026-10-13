@@ -14,8 +14,8 @@ use glyim_span::Span;
 use glyim_type::*;
 
 use crate::{
-    BytecodeBackend, LayoutProvider, OP_ADD, OP_LEN, OP_LOAD_CONST, OP_LOAD_LOCAL,
-    OP_LOAD_LOCAL_ADDR, OP_MUL, OP_SUB,
+    BytecodeBackend, LayoutProvider, OP_ADD, OP_LEN, OP_LOAD_CONST, OP_LOAD_LOCAL_ADDR, OP_MUL,
+    OP_SUB,
 };
 use std::sync::Arc;
 

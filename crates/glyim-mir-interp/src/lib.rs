@@ -505,7 +505,7 @@ impl<'tcx> Interpreter<'tcx> {
             // wrap the payload as a `String`. The `format!("{}", x)`
             // expansion emits `(x).to_string().as_str()`, so both are on
             // the path.
-            (1061, "as_str") | (1050, "as_str") => {
+            (1061, "as_str") => {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
@@ -593,7 +593,7 @@ impl<'tcx> Interpreter<'tcx> {
     }
 
     fn builtin_deref(&self, v: &InterpValue) -> InterpResult<InterpValue> {
-        let result = match v {
+        match v {
             InterpValue::Ref { frame, local } => self
                 .locals_for_ref_frame(*frame)
                 .and_then(|locals| locals.get(*local).and_then(|o| o.as_ref()).cloned())
@@ -603,8 +603,7 @@ impl<'tcx> Interpreter<'tcx> {
                     ))
                 }),
             other => Ok(other.clone()),
-        };
-        result
+        }
     }
 
     /// T140-PATCHED-MUTRECV: read-modify-write the receiver of a builtin
@@ -654,16 +653,6 @@ impl<'tcx> Interpreter<'tcx> {
                 ))
             }
             None => Ok(InterpValue::Unit),
-        }
-    }
-
-    fn builtin_store_back(&mut self, receiver: &InterpValue, val: InterpValue) -> InterpResult<()> {
-        match receiver {
-            InterpValue::Ref { frame, local } => {
-                let place = Place::new(LocalIdx::from_raw(*local as u32));
-                self.write_place_frame(*frame, &place, val)
-            }
-            _ => Ok(()),
         }
     }
 
@@ -759,12 +748,12 @@ impl<'tcx> Interpreter<'tcx> {
                     while buf.len() < len {
                         buf.push(InterpValue::Unit);
                     }
-                    let r = if idx < buf.len() {
+
+                    if idx < buf.len() {
                         buf.remove(idx)
                     } else {
                         InterpValue::Unit
-                    };
-                    r
+                    }
                 } else {
                     InterpValue::Unit
                 };

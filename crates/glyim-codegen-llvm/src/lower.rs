@@ -3459,9 +3459,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // `{ptr, i64}`); `String::new` is all-zero; `push_str` mutates the
         // receiver's `{ptr, len}` header in place via the runtime helper.
         if method == "as_str" {
-            let stored = if recv_val.get_type() == dest_llvm_ty {
-                recv_val
-            } else if recv_val.is_struct_value() && dest_llvm_ty.is_struct_type() {
+            let stored = if recv_val.get_type() == dest_llvm_ty
+                || (recv_val.is_struct_value() && dest_llvm_ty.is_struct_type())
+            {
                 recv_val
             } else {
                 return Ok(false);
@@ -5451,7 +5451,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         _ => None,
                     }
                 };
-                let mut sig = if call_substs_usable {
+                let sig = if call_substs_usable {
                     let param_map = self.ty_ctx.substitution_args(substs).to_vec();
                     Self::concretize_fn_sig(&generic_sig, &param_map, self.ty_ctx)
                 } else {
@@ -5916,7 +5916,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             } else {
                 self.builder
                     .build_indirect_call(fn_type, func_val, &metadata_args, "call")
-                    .map(|call_site| {
+                    .inspect(|call_site| {
                         // T115-PATCHED [LL-20]: set the call-site convention
                         // to match the callee's declared ABI. Direct calls
                         // inherit the callee's convention automatically,
@@ -5925,7 +5925,6 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         // (8). Calling fastcc through a ccc site silently
                         // drops the return value on AArch64.
                         call_site.set_call_convention(8u32);
-                        call_site
                     })
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
@@ -6488,14 +6487,16 @@ pub(crate) fn lower_body<'ctx>(
     // Walk the ABI arg list, tracking the LLVM param index as we go and
     // skipping `Ignore` entries (which contribute no LLVM param).
     let mut next_llvm_param: u32 = llvm_param_offset;
-    let mut mir_local_idx: u32 = 1;
-    for arg_abi in fn_abi
+    // MIR arg locals are numbered sequentially from 1, so the loop index
+    // doubles as the local counter.
+    for (arg_pos, arg_abi) in fn_abi
         .as_ref()
         .map(|abi| abi.args.as_slice())
         .unwrap_or(&[])
+        .iter()
+        .enumerate()
     {
-        let local_idx = LocalIdx::from_raw(mir_local_idx);
-        mir_local_idx += 1;
+        let local_idx = LocalIdx::from_raw(1 + arg_pos as u32);
         if matches!(arg_abi.mode, glyim_layout::PassMode::Ignore) {
             // No LLVM param for this ABI entry; skip.
             continue;

@@ -6,7 +6,7 @@ use glyim_def_map::build_def_map;
 use glyim_frontend::{lex, parse_to_syntax};
 use glyim_hir::pipeline_api::lower_crate_for_pipeline;
 use notify::RecommendedWatcher;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tracing::debug;
@@ -227,7 +227,7 @@ impl AnalysisDriver {
 
     fn extract_dependencies(
         &self,
-        path: &PathBuf,
+        path: &Path,
         hir: &glyim_hir::CrateHir,
         interner: &glyim_core::Interner,
     ) {
@@ -293,7 +293,7 @@ impl AnalysisDriver {
 
         let mut graph = self.dep_graph.write();
         for dep in deps {
-            graph.add_dep(path.clone(), dep);
+            graph.add_dep(path.to_path_buf(), dep);
         }
     }
 }

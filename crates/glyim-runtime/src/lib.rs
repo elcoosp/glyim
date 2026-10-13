@@ -1951,7 +1951,7 @@ pub unsafe extern "C" fn glyim_string_from_bytes(src: *const u8, len: usize, out
     let (ptr, _) = if len == 0 {
         (std::ptr::null_mut::<u8>(), 0usize)
     } else {
-        let alloc = unsafe { glyim_alloc(len, 1) };
+        let alloc = glyim_alloc(len, 1);
         unsafe { std::ptr::copy_nonoverlapping(src, alloc, len) };
         (alloc, len)
     };
@@ -1988,7 +1988,7 @@ pub unsafe extern "C" fn glyim_string_push_str(
     let old_len =
         unsafe { std::ptr::read_unaligned((str_header as *const u8).add(16) as *const usize) };
     let new_len = old_len + add_len;
-    let new_ptr = unsafe { glyim_alloc(new_len, 1) };
+    let new_ptr = glyim_alloc(new_len, 1);
     if old_len > 0 && !old_ptr.is_null() {
         unsafe { std::ptr::copy_nonoverlapping(old_ptr, new_ptr, old_len) };
     }
@@ -2032,7 +2032,7 @@ pub unsafe extern "C" fn glyim_vec_push(vec_header: *mut u8, elem: *const u8, el
         cap
     } else {
         let nc = (len + 1).next_power_of_two().max(8);
-        let new_buf = unsafe { glyim_alloc(nc * elem_size, 8) };
+        let new_buf = glyim_alloc(nc * elem_size, 8);
         if new_buf.is_null() {
             // Allocation failure: nothing to do beyond not corrupting state.
             return;
@@ -2159,7 +2159,7 @@ pub unsafe extern "C" fn glyim_vec_insert(
     }
     if len == cap {
         let nc = (len + 1).next_power_of_two().max(8);
-        let new_buf = unsafe { glyim_alloc(nc * elem_size, 8) };
+        let new_buf = glyim_alloc(nc * elem_size, 8);
         if new_buf.is_null() {
             return;
         }
@@ -2214,7 +2214,7 @@ pub unsafe extern "C" fn glyim_vec_reserve(
         return;
     }
     let nc = required_cap.next_power_of_two().max(8);
-    let new_buf = unsafe { glyim_alloc(nc * elem_size, 8) };
+    let new_buf = glyim_alloc(nc * elem_size, 8);
     if new_buf.is_null() {
         return;
     }
@@ -2250,7 +2250,7 @@ pub unsafe extern "C" fn glyim_slice_to_vec(
     let buf = if len == 0 || elem_size == 0 {
         std::ptr::null_mut::<u8>()
     } else {
-        let b = unsafe { glyim_alloc(len * elem_size, 8) };
+        let b = glyim_alloc(len * elem_size, 8);
         if !b.is_null() && !slice_ptr.is_null() {
             unsafe {
                 std::ptr::copy_nonoverlapping(slice_ptr, b, len * elem_size);

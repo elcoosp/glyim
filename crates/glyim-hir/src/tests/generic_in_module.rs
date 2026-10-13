@@ -22,7 +22,7 @@ fn lower_first_struct_generics(src: &str) -> usize {
         for id in items {
             let item = hir.items.get(*id)?;
             match &item.kind {
-                ItemKind::Struct(s) => return Some(item.clone()),
+                ItemKind::Struct(_s) => return Some(item.clone()),
                 ItemKind::Mod(m) => {
                     if let Some(found) = walk(hir, &m.children) {
                         return Some(found);

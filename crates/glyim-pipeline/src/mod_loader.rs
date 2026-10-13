@@ -280,9 +280,9 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
             }
             // read identifier (char-by-char to preserve UTF-8 boundaries)
             let name_start = j;
-            let mut chars_at = source[j..].char_indices();
+            let chars_at = source[j..].char_indices();
             let mut consumed = 0usize;
-            while let Some((off, ch)) = chars_at.next() {
+            for (off, ch) in chars_at {
                 if ch == '_' || ch.is_alphanumeric() {
                     consumed = off + ch.len_utf8();
                 } else {

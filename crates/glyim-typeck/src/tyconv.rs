@@ -1319,10 +1319,7 @@ pub(crate) fn resolve_name_to_adt_ty(
             // canonical builtin 1010) is already handled above: `canonical_id`
             // — a name-keyed lookup into `ctx.adt_by_name` — takes precedence
             // whenever it resolves to an id that has a real `adt_def`.
-            match from_defmap {
-                Some(id) => id,
-                None => return None,
-            }
+            from_defmap?
         }
     };
     let arity = ctx.adt_generic_arity(adt_id);

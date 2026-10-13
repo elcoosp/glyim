@@ -813,9 +813,10 @@ impl ReferenceGraph {
             }
         }
 
-        // T129-PATCHED [LSP-5]: release the mutable borrow held by
-        // `add_ref` before the post-pass mutates `self.references`.
-        drop(add_ref);
+        // T129-PATCHED [LSP-5]: the `add_ref` closure's mutable borrow of
+        // `self.references` ends at its last use above (NLL), so the
+        // post-pass can mutate `self.references` directly — no explicit
+        // `drop` needed (`drop` on a closure is a no-op).
 
         // T129-PATCHED [LSP-5]: post-pass to mark item-level definitions.
         // Any `is_definition=true` ref whose span matches a HIR item's own

@@ -72,11 +72,8 @@ fn collect_operand_uses(op: &Operand, used: &mut HashSet<LocalIdx>) {
 /// carry constants, not locals. `Deref`/`Field`/`Downcast` name nothing.
 fn collect_projection_locals(proj: &[ProjectionElem], used: &mut HashSet<LocalIdx>) {
     for p in proj {
-        match p {
-            ProjectionElem::Index(l) => {
-                used.insert(*l);
-            }
-            _ => {}
+        if let ProjectionElem::Index(l) = p {
+            used.insert(*l);
         }
     }
 }
@@ -108,7 +105,6 @@ fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
         // deref (e.g. `&x as *const i32; *p`), and the deref then read an
         // uninitialized local. `Neg`/`Not` read their operand too.
         Rvalue::UnaryOp(_, op) => collect_operand_uses(op, used),
-        _ => {}
     }
 }
 

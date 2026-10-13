@@ -1,7 +1,7 @@
 use crate::{ImplDef, SimpleTraitSolver, SolverResult, TraitContext, TraitDef, TraitSolver};
 use glyim_core::Interner;
 use glyim_core::def_id::{ImplDefId, TraitDefId};
-use glyim_test::{test_ty_ctx, with_fresh_ty_ctx};
+use glyim_test::test_ty_ctx;
 use glyim_type::{ImplPolarity, Predicate, Substitution, TraitPredicate, TraitRef, TyCtxMut};
 
 fn empty_subst(ctx: &mut TyCtxMut) -> Substitution {
@@ -388,9 +388,9 @@ fn t17_multiple_impls_for_same_trait() {
 #[test]
 fn t18_iterator_next_info_uses_real_option_adt() {
     use glyim_core::def_id::FnDefId;
-    use glyim_type::{Ty, TyKind};
+    use glyim_type::TyKind;
 
-    let mut trait_ctx = TraitContext::new();
+    let trait_ctx = TraitContext::new();
     let solver = SimpleTraitSolver::new(&trait_ctx);
 
     // Without a registered `next` fn def, resolution yields None.

@@ -638,7 +638,7 @@ pub(crate) fn lower_impl_def(
         let mut params = Vec::new();
         let mut body_params = Vec::new();
         let mut temp_pats = IndexVec::new();
-        let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
+        let _temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         for child in method_node.children() {
             if child.kind() == SyntaxKind::ParamList {
@@ -806,7 +806,7 @@ pub(crate) fn lower_trait_def(
         let mut params = Vec::new();
         let mut body_params = Vec::new();
         let mut temp_pats = IndexVec::new();
-        let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
+        let _temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         for child in method_node.children() {
             if child.kind() == SyntaxKind::ParamList {

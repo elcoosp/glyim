@@ -318,10 +318,10 @@ impl Pipeline {
         let expanded_root = {
             let mut hygiene = glyim_span::HygieneCtx::new();
             let mut expander = glyim_meta::Expander::new(&mut hygiene);
-            if let Some(reg) = proc_registry {
-                if !reg.is_empty() {
-                    expander.with_proc_registry(Some(reg));
-                }
+            if let Some(reg) = proc_registry
+                && !reg.is_empty()
+            {
+                expander.with_proc_registry(Some(reg));
             }
             let (expanded, expand_diags) = expander.expand_crate(&parse_result.root);
             sink_cell.borrow_mut().extend(expand_diags);
@@ -752,7 +752,6 @@ impl MirCompilation {
 /// This is the entry point used by `glyip test` and other runners that execute
 /// MIR bodies directly (e.g. via the in-process `glyim_mir_interp` interpreter)
 /// instead of producing a native object file.
-
 pub fn compile_file_to_mir(
     db: &mut Database,
     path: &Path,

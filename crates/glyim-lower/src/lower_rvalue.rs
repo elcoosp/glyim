@@ -1,6 +1,5 @@
 use crate::builder::{LoopInfo, MirBuilder};
 use crate::lower_terminator::TerminatorExt;
-use glyim_const_eval::{ConstEvaluator, ConstValue};
 use glyim_core::TargetInfo;
 use glyim_core::primitives::{BinOp, Mutability};
 use glyim_diag::GlyimDiagnostic;
@@ -2028,14 +2027,12 @@ impl<'a> MirBuilder<'a> {
             thir::PatternKind::Or(subpats) => {
                 let mut acc: Option<LocalIdx> = None;
                 for sub in subpats {
-                    match self.lower_pattern_test(sub, scrut_place, span) {
-                        None => return None,
-                        Some(l) => {
-                            acc = Some(match acc {
-                                None => l,
-                                Some(prev) => self.or_bool(prev, l, span),
-                            });
-                        }
+                    {
+                        let l = self.lower_pattern_test(sub, scrut_place, span)?;
+                        acc = Some(match acc {
+                            None => l,
+                            Some(prev) => self.or_bool(prev, l, span),
+                        });
                     }
                 }
                 acc
@@ -2265,15 +2262,6 @@ impl<'a> MirBuilder<'a> {
         }
     }
 
-    fn literal_to_u128(&self, lit: &thir::Literal) -> Option<u128> {
-        match lit {
-            thir::Literal::Int(v, _) => Some(*v as u128),
-            thir::Literal::Uint(v, _) => Some(*v),
-            thir::Literal::Bool(b) => Some(*b as u128),
-            thir::Literal::Char(ch) => Some(*ch as u128),
-            _ => None,
-        }
-    }
     fn lower_arm_body(
         &mut self,
         arm: &thir::MatchArm,
@@ -2304,35 +2292,6 @@ impl<'a> MirBuilder<'a> {
             arm.body.span,
         );
     }
-    /// Evaluate a `const { .. }` pattern's body by fetching the original HIR
-    /// body and evaluating it via `glyim-const-eval`.
-
-    fn const_block_to_u128(&mut self, const_body: &glyim_typeck::thir::Body) -> Option<u128> {
-        // Use const_body.owner.local_id to get the LocalDefId
-        let hir_body = self.ctx.hir_body(const_body.owner.local_id)?;
-
-        let root =
-            glyim_hir::ExprId::from_raw(u32::try_from(hir_body.exprs.len().checked_sub(1)?).ok()?);
-        // Lowering runs on a *frozen* `TyCtx` (`LowerCtx::ty_ctx` returns `&TyCtx`,
-        // never `&mut TyCtxMut`), so we cannot build the primitive `Ty` map that
-        // `with_ty_ctx` requires. User-facing const-cast legality is enforced by
-        // the typeck evaluator (which holds a `TyCtxMut`); this lowering-time
-        // const evaluation intentionally relies on the primitive-conversion
-        // allowlist only — a documented exception, not a silent gap.
-        let mut evaluator = ConstEvaluator::new(hir_body);
-        let value = evaluator.evaluate(root).ok()?;
-
-        match value {
-            ConstValue::Int(v, _) => Some(v as u128), // handles both positive and negative via two's complement
-            ConstValue::Uint(v, _) => Some(v),
-            ConstValue::Bool(b) => Some(b as u128),
-            ConstValue::Char(c) => Some(c as u128),
-            ConstValue::FloatBits(..) | ConstValue::String(_) | ConstValue::Unit => None,
-            ConstValue::Tuple(_) | ConstValue::Array(_) | ConstValue::Struct(_) => None,
-            ConstValue::Range(..) => None,
-        }
-    }
-
     // ---- Field resolution helpers ----
     fn resolve_field_index(
         &self,

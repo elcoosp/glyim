@@ -227,7 +227,7 @@ fn byte_literal_lowers_as_u8_literal() {
     assert!(
         lit_id.is_some(),
         "b'0' must lower to Literal::Uint(48, Some(U8)); body dump: {:?}",
-        &ctx.hir.bodies[body_id].exprs
+        ctx.hir.bodies[body_id].exprs
     );
 }
 

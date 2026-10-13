@@ -41,8 +41,6 @@ pub(crate) enum PtrArithOp {
     IsNull,
     IsNotNull,
     Addr,
-    Add,
-    Sub,
 }
 
 fn op_is_not_null(op: &PtrArithOp) -> bool {
@@ -1717,10 +1715,6 @@ impl<'a> FnCtxt<'a> {
                                     span,
                                 }
                             }
-                            PtrArithOp::Add | PtrArithOp::Sub => {
-                                // Not yet expanded (needs elem size).
-                                thir::Expr::err(span)
-                            }
                         }
                     }
                     None => {
@@ -2853,7 +2847,7 @@ impl<'a> FnCtxt<'a> {
         let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
             Some(hit) => hit,
             None => {
-                let adt_name = self.ctx.adt_def(adt_id).map(|_| ()).and_then(|_| {
+                let adt_name = self.ctx.adt_def(adt_id).map(|_| ()).and({
                     // The name isn't stored on AdtDef; recover it via
                     // a reverse lookup in `adt_by_name`. Walk the whole
                     // map (small) to find the AdtId we want.

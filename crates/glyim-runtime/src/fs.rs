@@ -694,45 +694,6 @@ pub unsafe extern "C" fn glyim_fs_canonicalize(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Plan §3.2.2: the `(ptr, len)` slice helpers must reject a length that
-    /// would overflow `isize` rather than handing it to `from_raw_parts`,
-    /// which would otherwise produce a fatally mis-sized slice. This is a
-    /// defense-in-depth guard against a codegen backend emitting a wrong
-    /// length over the FFI boundary.
-    #[test]
-    #[should_panic(expected = "exceeds isize::MAX")]
-    fn slice_from_raw_parts_rejects_overflow_len() {
-        let overflow_len = (isize::MAX as usize).wrapping_add(1);
-        // null ptr + overflow len: the debug_assert must fire before any
-        // `from_raw_parts` reconstruction.
-        let _ = unsafe { slice_from_raw_parts(std::ptr::null(), overflow_len) };
-    }
-
-    #[test]
-    #[should_panic(expected = "exceeds isize::MAX")]
-    fn slice_from_raw_parts_mut_rejects_overflow_len() {
-        let overflow_len = (isize::MAX as usize).wrapping_add(1);
-        let _ = unsafe { slice_from_raw_parts_mut(std::ptr::null_mut(), overflow_len) };
-    }
-
-    /// A zero-length slice from a *valid* (non-null, aligned) pointer is
-    /// always safe and must NOT panic — the guard only rejects overflowing
-    /// lengths. (A null pointer is never valid for `from_raw_parts`, even at
-    /// len 0; that case is handled by the FFI callers' `is_null()` checks.)
-    #[test]
-    fn zero_len_slice_from_valid_ptr_is_safe() {
-        let mut sentinel = 0u8;
-        let s = unsafe { slice_from_raw_parts(&sentinel as *const u8, 0) };
-        assert!(s.is_empty());
-        let m = unsafe { slice_from_raw_parts_mut(&mut sentinel as *mut u8, 0) };
-        assert!(m.is_empty());
-    }
-}
-
 // ---------------------------------------------------------------------------
 // T012-PATCHED [STD-6]: fd-based / nofollow metadata
 // ---------------------------------------------------------------------------
@@ -910,5 +871,44 @@ pub unsafe extern "C" fn glyim_fs_symlink_metadata(
             FS_OK
         }
         Err(e) => io_err_to_errno(&e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Plan §3.2.2: the `(ptr, len)` slice helpers must reject a length that
+    /// would overflow `isize` rather than handing it to `from_raw_parts`,
+    /// which would otherwise produce a fatally mis-sized slice. This is a
+    /// defense-in-depth guard against a codegen backend emitting a wrong
+    /// length over the FFI boundary.
+    #[test]
+    #[should_panic(expected = "exceeds isize::MAX")]
+    fn slice_from_raw_parts_rejects_overflow_len() {
+        let overflow_len = (isize::MAX as usize).wrapping_add(1);
+        // null ptr + overflow len: the debug_assert must fire before any
+        // `from_raw_parts` reconstruction.
+        let _ = unsafe { slice_from_raw_parts(std::ptr::null(), overflow_len) };
+    }
+
+    #[test]
+    #[should_panic(expected = "exceeds isize::MAX")]
+    fn slice_from_raw_parts_mut_rejects_overflow_len() {
+        let overflow_len = (isize::MAX as usize).wrapping_add(1);
+        let _ = unsafe { slice_from_raw_parts_mut(std::ptr::null_mut(), overflow_len) };
+    }
+
+    /// A zero-length slice from a *valid* (non-null, aligned) pointer is
+    /// always safe and must NOT panic — the guard only rejects overflowing
+    /// lengths. (A null pointer is never valid for `from_raw_parts`, even at
+    /// len 0; that case is handled by the FFI callers' `is_null()` checks.)
+    #[test]
+    fn zero_len_slice_from_valid_ptr_is_safe() {
+        let mut sentinel = 0u8;
+        let s = unsafe { slice_from_raw_parts(&sentinel as *const u8, 0) };
+        assert!(s.is_empty());
+        let m = unsafe { slice_from_raw_parts_mut(&mut sentinel as *mut u8, 0) };
+        assert!(m.is_empty());
     }
 }

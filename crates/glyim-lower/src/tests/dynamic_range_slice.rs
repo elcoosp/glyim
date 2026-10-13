@@ -193,19 +193,6 @@ fn open_ended_range_index_lowers() {
     );
 }
 
-/// Out-of-bounds dynamic slices must hit a panic path rather than silently
-/// compute a dangling `{ ptr, len }`. `lower_dynamic_range_slice` routes the
-/// failing bounds-check edge to `TerminatorKind::Unreachable` (the panic
-/// landing), so an `Unreachable` terminator in the lowered body is the
-/// observable proof that `start <= end` / `end <= len` are asserted.
-fn has_unreachable_terminator(result: &crate::lower::LowerResult) -> bool {
-    result
-        .body
-        .basic_blocks
-        .iter()
-        .any(|bb| matches!(bb.terminator.kind, glyim_mir::TerminatorKind::Unreachable))
-}
-
 /// T099-REGRESSION: does the body contain an `Assert` terminator with
 /// `AssertMessage::BoundsCheck`?
 fn has_bounds_check_assert(result: &crate::lower::LowerResult) -> bool {

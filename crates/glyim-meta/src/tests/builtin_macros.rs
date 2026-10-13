@@ -245,7 +245,7 @@ fn test_include_macro() {
     let args = SyntaxNode::new_root(builder.finish());
     let name = expander.interner().intern("include");
 
-    let result = expander.expand(name, &args, span);
+    let _result = expander.expand(name, &args, span);
     // T171-PATCHED [MAC-8]: `include!` for source-code inclusion is not
     // yet wired through the full tokenizer/parser; the expander emits an
     // explicit "not yet supported" diagnostic rather than producing a

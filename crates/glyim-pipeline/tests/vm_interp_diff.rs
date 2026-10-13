@@ -30,7 +30,6 @@
 //! this test covers self-contained `main` bodies only. Extending it to calls
 //! needs that assembly path (see the session handoff).
 
-use glyim_codegen::CodegenBackend;
 use glyim_core::TargetInfo;
 use glyim_core::def_id::{CrateId, DefId, LocalDefId};
 use glyim_db::{CrateConfig, Database};

@@ -11,7 +11,6 @@
 
 use crate::*;
 use glyim_core::{CrateId, DefId, FnDefId, IndexVec, LocalDefId, Mutability};
-use glyim_mir::*;
 use glyim_span::Span;
 use glyim_test::test_ty_ctx;
 use glyim_type::{Substitution, Ty};

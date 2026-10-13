@@ -71,38 +71,6 @@ pub struct CliArgs {
     pub with_stdlib: bool,
 }
 
-/// run.
-
-/// Build a `use X::*;` prelude from every `pub mod X {` block in the
-/// assembled stdlib. `io`/`fs`/`net`/`process` are skipped because their
-/// own `Result`/`Error` aliases would shadow the user-facing core types.
-fn generate_stdlib_prelude(stdlib_src: &str) -> String {
-    const SHADOW: &[&str] = &["io", "fs", "net", "process"];
-    let mut out = String::new();
-    let mut seen = std::collections::HashSet::new();
-    for line in stdlib_src.lines() {
-        let t = line.trim_start();
-        let Some(rest) = t.strip_prefix("pub mod ") else {
-            continue;
-        };
-        let name = rest
-            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-            .next()
-            .unwrap_or("");
-        if name.is_empty() {
-            continue;
-        }
-        if SHADOW.contains(&name) {
-            continue;
-        }
-        if !seen.insert(name.to_string()) {
-            continue;
-        }
-        out.push_str(&format!("use {name}::*;\n"));
-    }
-    out
-}
-
 /// Prepend the assembled minimal standard library to `input`'s VFS content.
 /// After this call the pipeline reads `stdlib + \n + user_source` instead of
 /// the raw file, which puts `println`, `Vec`, `Option`, `Result`, … in scope
@@ -354,15 +322,15 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
 
     let mut db = Database::new(config);
     // Tier 1.1: --with-stdlib prepends the assembled stdlib + prelude
-    if args.with_stdlib {
-        if let Err(diags) = inject_assembled_stdlib(&mut db, input) {
-            for d in diags {
-                eprintln!("{}", d.message);
-            }
-            return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
-                "--with-stdlib: failed to inject assembled stdlib",
-            )]);
+    if args.with_stdlib
+        && let Err(diags) = inject_assembled_stdlib(&mut db, input)
+    {
+        for d in diags {
+            eprintln!("{}", d.message);
         }
+        return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
+            "--with-stdlib: failed to inject assembled stdlib",
+        )]);
     }
 
     // Phase 8 / plan §9.2: if the user listed proc-macro dependency crates,

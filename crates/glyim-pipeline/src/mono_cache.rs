@@ -44,19 +44,6 @@ impl PipelineMonoCache {
     }
 }
 
-/// T101-PATCHED [LOW-10]: build a pipeline mono cache with
-/// polymorphization dedup applied. The pipeline now supplies the
-/// pre-substitution body map to MonoCtx (via
-/// `with_pre_subst_bodies`), so `analyze_used_params` sees
-/// `TyKind::Param` and the dedup is correct.
-pub(crate) fn build_mono_cache(
-    ctx: &mut glyim_lower::MonoCtx,
-    ty_ctx: &mut TyCtxMut,
-) -> PipelineMonoCache {
-    ctx.polymorphize_and_deduplicate(ty_ctx);
-    PipelineMonoCache::from_items(ctx.items())
-}
-
 pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx) -> Body {
     // To perform recursive substitution, we need a mutable context to allocate new types.
     // We create a fresh `TyCtxMut` from the interner for this purpose.
@@ -283,10 +270,10 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     glyim_mir::MirConstKind::ConstRef(_, const_substs) => {
                         *const_substs = substitute_substitution(*const_substs, substs, ctx, frozen);
                     }
-                    glyim_mir::MirConstKind::VirtualMethod { self_ty, .. } => {
-                        if let Some(st) = self_ty {
-                            *st = substitute_ty(*st, substs, ctx, frozen);
-                        }
+                    glyim_mir::MirConstKind::VirtualMethod {
+                        self_ty: Some(st), ..
+                    } => {
+                        *st = substitute_ty(*st, substs, ctx, frozen);
                     }
                     _ => {}
                 }

@@ -1,7 +1,7 @@
 use crate::tests::support::MockLowerCtx;
 use glyim_core::def_id::{CrateId, DefId, LocalDefId};
 use glyim_core::primitives::{IntTy, Mutability};
-use glyim_mir::{BasicBlockIdx, Operand, Rvalue, StatementKind};
+use glyim_mir::{Rvalue, StatementKind};
 use glyim_span::Span;
 use glyim_type::{TyCtxMut, TyKind};
 use glyim_typeck::thir::{

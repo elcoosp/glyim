@@ -279,10 +279,10 @@ impl<'a> MonoCtx<'a> {
         // though `VirtualMethod` is rare. Skip the clone (and the whole
         // pass) when nothing needs rewriting.
         let has_virtual_method = body.basic_blocks.iter().any(|b| {
-            if let TerminatorKind::Call { func, .. } = &b.terminator.kind {
-                if let Operand::Constant(c) = func {
-                    return matches!(c.kind, MirConstKind::VirtualMethod { .. });
-                }
+            if let TerminatorKind::Call { func, .. } = &b.terminator.kind
+                && let Operand::Constant(c) = func
+            {
+                return matches!(c.kind, MirConstKind::VirtualMethod { .. });
             }
             false
         });

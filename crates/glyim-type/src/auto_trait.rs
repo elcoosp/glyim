@@ -70,8 +70,8 @@ impl AdtRepr {
 ///     `unsafe impl<T: ?Sized + Sync> Sync for &mut T`).
 ///   * `*const T` / `*mut T` are `!Send + !Sync` in Rust (matches
 ///     stdlib's `impl<T: ?Sized> !Send for *mut T`).
-/// The compiler already matches Rust on both points; the plan's
-/// proposals were reviewed and rejected.
+///     The compiler already matches Rust on both points; the plan's
+///     proposals were reviewed and rejected.
 ///
 /// The *real* remaining work — user-registered manual / negative impls —
 /// requires:

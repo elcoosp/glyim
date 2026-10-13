@@ -2941,7 +2941,7 @@ fn test_float_constant_emits() {
 // ============================================================================
 #[test]
 fn t99_cross_backend_execution_computes_value() {
-    use glyim_bytecode_vm::{Module, Value, Vm};
+    use glyim_bytecode_vm::{Module, Vm};
 
     // Body computes: l1 = 3; l2 = 4; l3 = l1 + l2; l4 = 2; l5 = l3 * l4;
     // (i.e. (3 + 4) * 2 == 14, stored in local 5). Straight-line, no control

@@ -347,7 +347,6 @@ fn canonical_enum_adt_id(
 
 #[tracing::instrument(level = "info", skip(ctx, solver))]
 /// typeck_crate.
-
 pub fn typeck_crate(
     mut ctx: TyCtxMut,
     def_map: &glyim_def_map::CrateDefMap,

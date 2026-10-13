@@ -223,12 +223,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Backwards-compat alias — some call sites still reference
-    /// `parse_bitwise_expr`. It now walks the full three-level chain.
-    pub(crate) fn parse_bitwise_expr(&mut self) {
-        self.parse_bit_or_expr();
-    }
-
     pub(crate) fn parse_additive_expr(&mut self) {
         // See `parse_or_expr` — checkpoint taken once, never reset.
         let cp = self.checkpoint();

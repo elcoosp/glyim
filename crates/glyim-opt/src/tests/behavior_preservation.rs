@@ -32,7 +32,7 @@ fn assert_optimization_preserves(
     blocks: Vec<BasicBlockData>,
     return_ty: glyim_type::Ty,
 ) {
-    let mut ctx_mut = test_ty_ctx();
+    let ctx_mut = test_ty_ctx();
     let body = build_test_body(locals, blocks, 0, return_ty);
     let ctx = ctx_mut.freeze();
 

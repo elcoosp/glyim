@@ -621,7 +621,7 @@ mod tests;
 
 #[cfg(test)]
 mod t104_tests {
-    use super::*;
+
     // T104 regression tests live in tests/write_conflicts.rs.
     #[test]
     fn t104_note_terminator_write_check_exists() {
@@ -630,6 +630,5 @@ mod t104_tests {
         // placeholder pointing at the real functional tests in
         // `tests/write_conflicts.rs`, which exercise the checker via
         // full body construction.
-        assert!(true);
     }
 }
