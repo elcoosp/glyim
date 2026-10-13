@@ -4,6 +4,25 @@ use rowan::Language;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_type(&mut self) {
+        // FE-6 sibling: types recurse just as hard as expressions
+        // (`&&&&…T`, `A<A<A<…>>>`). Without this guard a deeply nested
+        // type overflows the stack — a SIGSEGV the CLI's `catch_unwind`
+        // cannot convert into an ICE report. Same policy as parse_expr:
+        // emit a diagnostic, consume one token for forward progress,
+        // and unwind to the caller.
+        if self.recursion_depth > super::MAX_EXPR_DEPTH {
+            self.error("type nested too deeply");
+            if self.current().is_some() {
+                self.bump();
+            }
+            return;
+        }
+        self.recursion_depth += 1;
+        self.parse_type_inner();
+        self.recursion_depth -= 1;
+    }
+
+    fn parse_type_inner(&mut self) {
         match self.current_kind() {
             SyntaxKind::AndAnd => {
                 if let Some(_tok) = self.current() {
