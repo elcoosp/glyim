@@ -104,16 +104,41 @@ pub fn inject_assembled_stdlib(
 }
 
 pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
-    // Capture args (incl. `--error-format`) before entering the panic catcher,
+    // Capture args (incl. `error-format`) before entering the panic catcher,
     // so we can print any returned diagnostics in the requested format.
     let cli_args = CliArgs::parse();
     let error_format = cli_args.error_format.clone();
+
+    // T-ICE-6: install a hook that *silences* the default panic printer and
+    // records the payload. During catch_unwind the default hook would print
+    // a raw `thread 'main' panicked at …` line on top of our ICE report; the
+    // ICE report itself is the correct user-facing output, and it should
+    // contain the panic message.
+    let panic_message: std::sync::Arc<std::sync::Mutex<Option<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
+    {
+        let sink = panic_message.clone();
+        std::panic::set_hook(Box::new(move |info| {
+            let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "<non-string panic payload>".to_string()
+            };
+            if let Ok(mut slot) = sink.lock() {
+                *slot = Some(msg);
+            }
+        }));
+    }
+
     // Plan §3.1.2b: catch unexpected panics in the driver and turn them into a
     // structured ICE report instead of a raw Rust backtrace. A language
     // toolchain must never crash on user input with an unreadable stack trace —
     // an ICE with the compiler version + input + backtrace path is the
     // production-grade behaviour (rustc's `RUST_BACKTRACE` model).
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_with_args(cli_args)));
+    let _ = std::panic::take_hook();
     match result {
         Ok(inner) => {
             if let Err(diags) = &inner {
@@ -123,11 +148,18 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
         }
         Err(_payload) => {
             let backtrace = std::backtrace::Backtrace::force_capture();
+            let panic_msg = panic_message
+                .lock()
+                .ok()
+                .and_then(|slot| slot.clone())
+                .unwrap_or_else(|| "<unknown>".to_string());
             let report = format!(
                 "glyim internal compiler error (ICE): the compiler panicked.\n\
                  version: {}\n\
+                 panic message: {}\n\
                  Please file a bug report. Backtrace saved below.\n\n{:?}",
                 env!("CARGO_PKG_VERSION"),
+                panic_msg,
                 backtrace,
             );
             let path = std::env::temp_dir().join("glyim-ice.txt");
@@ -135,7 +167,7 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
             eprintln!(
                 "error: glyim panicked (ICE). Backtrace saved to {}:
 
-please file a bug report at <https://github.com/elcoosp/glyim-v2/issues> \
+please file a bug report at <https://github.com/elcoosp/glyim/issues> \
 with the input file and the backtrace.",
                 path.display()
             );
