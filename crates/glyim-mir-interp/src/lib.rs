@@ -467,7 +467,36 @@ impl<'tcx> Interpreter<'tcx> {
             }
             (1020, "as_slice") | (1020, "as_ref") => {
                 let s = self.builtin_deref(&receiver)?;
-                Ok(Some(InterpValue::String(Self::byte_payload(&s))))
+                // VEC-AS-SLICE: a `Vec` is modelled as
+                // `Aggregate([Aggregate(elements), Uint(len)])`. The old
+                // `byte_payload(&s)` recursed into the first *element* and
+                // produced NUL bytes — it was written for `String`/`&str`,
+                // where the payload IS the bytes — so `v.as_slice().len()`
+                // was wrong (0 or 1 instead of the element count). Model
+                // the slice as a one-char-per-element `String` so `str_len`
+                // equals the element count and `to_vec` /
+                // `from_utf8_lossy` round-trip.
+                let elems: Vec<InterpValue> = match &s {
+                    InterpValue::Aggregate(fields) if fields.len() == 2 => {
+                        match &fields[0] {
+                            InterpValue::Aggregate(buf) => buf.clone(),
+                            _ => Vec::new(),
+                        }
+                    }
+                    _ => Vec::new(),
+                };
+                let slice: String = elems
+                    .iter()
+                    .map(|e| match e {
+                        InterpValue::Uint(n) => {
+                            char::from_u32((*n as u32) & 0xff).unwrap_or('\u{0}')
+                        }
+                        InterpValue::Int(n) => char::from_u32(((*n).max(0) as u32) & 0xff)
+                            .unwrap_or('\u{0}'),
+                        _ => '\u{0}',
+                    })
+                    .collect();
+                Ok(Some(InterpValue::String(slice)))
             }
             _ => Ok(None),
         }
