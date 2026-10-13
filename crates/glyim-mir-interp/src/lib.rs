@@ -2214,17 +2214,33 @@ impl<'tcx> Interpreter<'tcx> {
                         }
                         base_len - (*to as usize)
                     } else {
+                        if base_len < *from as usize {
+                            return Err(InterpError::Panic(format!(
+                                "subslice start {} out of bounds (len {})",
+                                from, base_len
+                            )));
+                        }
                         (*from) as usize
                     };
                     let end = if *from_end {
-                        if base_len < *to as usize {
+                        // T-ICE-2: the guard here checked `to` while the
+                        // arithmetic subtracts `from` — `from > base_len`
+                        // underflowed (panic in debug, wrapped huge length
+                        // in release). Check the operand actually used.
+                        if base_len < *from as usize {
                             return Err(InterpError::Panic(format!(
-                                "subslice from end to {} out of bounds (len {})",
-                                to, base_len
+                                "subslice from end offset {} out of bounds (len {})",
+                                from, base_len
                             )));
                         }
                         base_len - (*from as usize)
                     } else {
+                        if base_len < *to as usize {
+                            return Err(InterpError::Panic(format!(
+                                "subslice end {} out of bounds (len {})",
+                                to, base_len
+                            )));
+                        }
                         (*to) as usize
                     };
                     if start > end {
