@@ -21,6 +21,8 @@
 //!    active (their dest local is live) and check for conflicts with
 //!    place accesses in the statement. Two-phase borrows in reservation
 //!    phase are treated as shared borrows for conflict purposes.
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 mod liveness;
 pub use fixedbitset::FixedBitSet;

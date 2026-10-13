@@ -6,6 +6,8 @@
 //! [F18] Separate `IndexVec`s for `TyVar`, `IntVar`, and
 //! `FloatVar`. The type system prevents constructing
 //! `InferVar::Int(TyVar(0))` because `Int` takes an `IntVar`.
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
 #![allow(
     clippy::cloned_ref_to_slice_refs,

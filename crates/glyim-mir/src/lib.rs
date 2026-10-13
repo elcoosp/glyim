@@ -3,6 +3,8 @@
 //! [F2] Uses `Ty::ERROR` instead of `Ty::from_raw(0)`.
 //! [F9] `Place::ty()` matches on `&TyKind` and extracts `Copy`
 //! fields (`Ty`, `Substitution`) without cloning the entire TyKind.
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::*;
