@@ -831,7 +831,11 @@ impl<'tcx> Interpreter<'tcx> {
         match v {
             InterpValue::String(s) => s.clone(),
             InterpValue::Aggregate(fields) if !fields.is_empty() => Self::byte_payload(&fields[0]),
-            InterpValue::Uint(n) => "\u{0}".repeat(*n as usize),
+            // T-ICE-3: `n` is program-controlled; a hostile program could
+            // request gigabytes of NUL bytes and OOM the host. Cap the
+            // payload at 16 MiB — larger writes are truncated. This is a
+            // debugging interpreter, and truncation beats a killed host.
+            InterpValue::Uint(n) => "\u{0}".repeat((*n).min(16 * 1024 * 1024) as usize),
             _ => String::new(),
         }
     }
