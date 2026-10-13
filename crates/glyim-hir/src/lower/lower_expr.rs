@@ -26,7 +26,10 @@ use crate::{
     Body, Expr, ExprId, Literal, MatchArm, Pat, PatId, Path as HirPath, PathSegment, Span,
 };
 
-use super::{ first_ident_text_with_depth, is_expr_node, is_type_node, lower_item::lower_param, lower_pat::lower_pat, lower_type::lower_type_ref, node_span, is_pat_node };
+use super::{
+    first_ident_text_with_depth, is_expr_node, is_pat_node, is_type_node, lower_item::lower_param,
+    lower_pat::lower_pat, lower_type::lower_type_ref, node_span,
+};
 
 pub(crate) fn lower_block_to_expr(
     node: &SyntaxNode,
@@ -99,7 +102,8 @@ pub(crate) fn lower_block_to_expr(
                 }
                 let mut consumed = false;
                 if let (Some(pat), Some(rhs)) = (pat_node, expr_node.clone())
-                    && let Some(pat_id) = lower_pat(&pat, interner, &mut body.pats, &mut body.pat_spans, diags)
+                    && let Some(pat_id) =
+                        lower_pat(&pat, interner, &mut body.pats, &mut body.pat_spans, diags)
                 {
                     let rhs_expr_id = lower_expr(&rhs, interner, body, diags, struct_field_map);
                     if let Some(rhs_id) = rhs_expr_id {
@@ -150,8 +154,7 @@ pub(crate) fn lower_block_to_expr(
                         if let Some(prev) = pending.take() {
                             stmts.push(prev);
                         }
-                        let lowered =
-                            lower_expr(&rhs, interner, body, diags, struct_field_map);
+                        let lowered = lower_expr(&rhs, interner, body, diags, struct_field_map);
                         if lowered.is_none() {
                             diags.push(GlyimDiagnostic::internal_error(format!(
                                 "failed to lower a statement's RHS expression; \
@@ -433,7 +436,8 @@ fn lower_closure_expr(
         match child.kind() {
             SyntaxKind::ParamList => {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (_, pat_id) = lower_param(&param_node, interner, &mut body.pats, &mut body.pat_spans);
+                    let (_, pat_id) =
+                        lower_param(&param_node, interner, &mut body.pats, &mut body.pat_spans);
                     params.push(pat_id);
                 }
             }
@@ -1083,8 +1087,7 @@ pub(crate) fn lower_literal_with_diags(
         SyntaxKind::IntLit => {
             let (num_str, suffix) = split_int_literal(&text);
             let span = token_span(token);
-            let (value, is_unsigned) =
-                parse_int_with_prefix(&num_str, &text, span, diags);
+            let (value, is_unsigned) = parse_int_with_prefix(&num_str, &text, span, diags);
             if let Some(suffix) = suffix {
                 match suffix.as_str() {
                     "i8" => return Literal::Int(value, Some(IntTy::I8)),
@@ -1246,21 +1249,24 @@ fn parse_int_with_prefix(
     diags: &mut Vec<GlyimDiagnostic>,
 ) -> (i128, bool) {
     let s = s.trim_start_matches('+');
-    let (radix, digits): (u32, &str) = if let Some(d) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        (16, d)
-    } else if let Some(d) = s.strip_prefix("0o").or_else(|| s.strip_prefix("0O")) {
-        (8, d)
-    } else if let Some(d) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
-        (2, d)
-    } else {
-        (10, s)
-    };
+    let (radix, digits): (u32, &str) =
+        if let Some(d) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+            (16, d)
+        } else if let Some(d) = s.strip_prefix("0o").or_else(|| s.strip_prefix("0O")) {
+            (8, d)
+        } else if let Some(d) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+            (2, d)
+        } else {
+            (10, s)
+        };
     let unsigned = digits.starts_with('-');
     // Try `i128` first; large-but-valid unsigned literals (`u64::MAX`, …) fall
     // back to `u128`, which `i128::try_from` narrows when it fits.
-    let parsed: Option<i128> = i128::from_str_radix(digits, radix)
-        .ok()
-        .or_else(|| u128::from_str_radix(digits, radix).ok().and_then(|u| i128::try_from(u).ok()));
+    let parsed: Option<i128> = i128::from_str_radix(digits, radix).ok().or_else(|| {
+        u128::from_str_radix(digits, radix)
+            .ok()
+            .and_then(|u| i128::try_from(u).ok())
+    });
     match parsed {
         Some(v) => (v, unsigned),
         None => {
@@ -1518,7 +1524,11 @@ fn lower_method_call_expr(
             .filter(is_type_node)
             .filter_map(|c| super::lower_type::lower_type_ref(&c, interner))
             .collect();
-        if collected.is_empty() { None } else { Some(collected) }
+        if collected.is_empty() {
+            None
+        } else {
+            Some(collected)
+        }
     };
 
     let expr = Expr::MethodCall {
@@ -1714,16 +1724,15 @@ fn lower_while_expr(
     diags: &mut Vec<GlyimDiagnostic>,
     struct_field_map: &HashMap<Name, Vec<Name>>,
 ) -> Option<ExprId> {
-
     // Script 118: distinguish `while let PAT = EXPR { BODY }` from plain
     // `while COND { BODY }`. The parser emits `KwLet` as a token child of
     // the WhileExpr node for the let form (see `parse_while_expr`); plain
     // while has no such token. We must handle the let form separately:
     // the pattern binds variables into the body's scope, and the condition
     // is a *pattern match*, not a boolean expression.
-    let has_let = node
-        .children_with_tokens()
-        .any(|el| matches!(&el, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwLet));
+    let has_let = node.children_with_tokens().any(
+        |el| matches!(&el, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwLet),
+    );
 
     if has_let {
         // `while let PAT = RHS { BODY }` desugars to:
@@ -1768,7 +1777,13 @@ fn lower_while_expr(
         // Lower the RHS expression.
         let rhs_id = lower_expr(&rhs_node, interner, body, diags, struct_field_map)?;
         // Lower the pattern via the same helper the match arm uses.
-        let pat_id = super::lower_pat::lower_pat(&pat_node, interner, &mut body.pats, &mut body.pat_spans, diags)?;
+        let pat_id = super::lower_pat::lower_pat(
+            &pat_node,
+            interner,
+            &mut body.pats,
+            &mut body.pat_spans,
+            diags,
+        )?;
         // Lower the body block.
         let body_id = lower_expr(&block_node, interner, body, diags, struct_field_map)?;
 
@@ -1860,7 +1875,13 @@ fn lower_for_expr(
     })?;
     let iterable_node = children.find(|c| is_expr_node(c) || c.kind() == SyntaxKind::RangeExpr)?;
     let body_node = children.find(|c| c.kind() == SyntaxKind::Block)?;
-    let pat_id = lower_pat(&pat_node, interner, &mut body.pats, &mut body.pat_spans, diags)?;
+    let pat_id = lower_pat(
+        &pat_node,
+        interner,
+        &mut body.pats,
+        &mut body.pat_spans,
+        diags,
+    )?;
     let iterable_id = lower_expr(&iterable_node, interner, body, diags, struct_field_map)?;
     let body_id = lower_expr(&body_node, interner, body, diags, struct_field_map)?;
     let expr = Expr::For {
@@ -2186,12 +2207,10 @@ fn lower_range_expr(
     // end were swapped for every open-start range. Detect the leading
     // `..` / `..=` token and, if present, treat the single child as
     // the *end* and leave `start` as `None`.
-    let leading_dotdot = node.children_with_tokens().next().is_some_and(|el| {
-        matches!(
-            el.kind(),
-            SyntaxKind::DotDot | SyntaxKind::DotDotEq
-        )
-    });
+    let leading_dotdot = node
+        .children_with_tokens()
+        .next()
+        .is_some_and(|el| matches!(el.kind(), SyntaxKind::DotDot | SyntaxKind::DotDotEq));
     let (start, end) = if leading_dotdot {
         let end = children
             .first()

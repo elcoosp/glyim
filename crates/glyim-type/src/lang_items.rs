@@ -81,7 +81,6 @@ pub enum LangItem {
     Ordering,
     /// The `ExitStatus` builtin type.
     ExitStatus,
-
 }
 
 impl LangItem {
@@ -132,7 +131,6 @@ impl LangItem {
         }
     }
 }
-
 
 /// Error returned when a lang-item registration or lookup fails.
 #[derive(Debug, Clone, PartialEq, Eq)]

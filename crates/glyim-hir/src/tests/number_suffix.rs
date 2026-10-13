@@ -101,7 +101,11 @@ fn test_int_literal_overflow_reports_error() {
     let mut interner = glyim_core::Interner::default();
     let mut diags = Vec::new();
     let lit = crate::lower::lower_literal_with_diags(&tok, &mut interner, &mut diags);
-    assert_eq!(lit, Literal::Int(0, None), "overflowing literal degrades to 0");
+    assert_eq!(
+        lit,
+        Literal::Int(0, None),
+        "overflowing literal degrades to 0"
+    );
     assert_eq!(diags.len(), 1, "exactly one overflow diagnostic");
     assert!(
         diags[0].message.contains("too large"),
@@ -117,7 +121,11 @@ fn test_hex_literal_overflow_reports_error() {
     let mut interner = glyim_core::Interner::default();
     let mut diags = Vec::new();
     let _ = crate::lower::lower_literal_with_diags(&tok, &mut interner, &mut diags);
-    assert_eq!(diags.len(), 1, "one overflow diagnostic for the hex literal");
+    assert_eq!(
+        diags.len(),
+        1,
+        "one overflow diagnostic for the hex literal"
+    );
 }
 
 /// HIR-15 sanity: a literal that *does* fit still lowers without diagnostics.

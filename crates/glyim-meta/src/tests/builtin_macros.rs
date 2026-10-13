@@ -263,7 +263,6 @@ fn test_include_macro() {
         "diagnostic should name include!: {:?}",
         result.diagnostics
     );
-
 }
 
 #[test]

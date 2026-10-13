@@ -14,8 +14,8 @@
 //! field offsets, spurious generic instantiations) fails here instead of
 //! surviving to a user.
 
+use glyim_test::harness::TestRunner;
 use glyim_test::harness::executor::TestOutcome;
-use glyim_test::harness::{TestRunner};
 
 fn corpus_root() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

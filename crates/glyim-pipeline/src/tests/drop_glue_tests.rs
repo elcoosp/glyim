@@ -201,10 +201,7 @@ fn slice_drop_glue_loop_drops_each_element() {
                 &s.kind,
                 glyim_mir::StatementKind::Assign(
                     _,
-                    glyim_mir::Rvalue::BinaryOp(
-                        glyim_core::primitives::BinOp::Lt,
-                        _
-                    )
+                    glyim_mir::Rvalue::BinaryOp(glyim_core::primitives::BinOp::Lt, _)
                 )
             )
         })
@@ -234,10 +231,7 @@ fn slice_drop_glue_loop_drops_each_element() {
     match &body_bb.terminator.kind {
         TerminatorKind::Drop { place, .. } => {
             assert!(
-                place
-                    .projection
-                    .iter()
-                    .any(|p| matches!(
+                place.projection.iter().any(|p| matches!(
                     p,
                     glyim_mir::ProjectionElem::Index(_)
                         | glyim_mir::ProjectionElem::ConstantIndex { .. }

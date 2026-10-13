@@ -270,10 +270,7 @@ fn find_bodyless_mods(source: &str) -> Vec<ModDecl> {
         // and the subsequent `&source[name_start..j]` panicked with
         // "byte index is not a char boundary" — an ICE on user input.
         // Iterate by chars so we always land on a boundary.
-        if c == b'm'
-            && source[i..].starts_with("mod")
-            && is_ident_boundary_before(source, i)
-        {
+        if c == b'm' && source[i..].starts_with("mod") && is_ident_boundary_before(source, i) {
             let mut j = i + 3;
             // skip whitespace (bytes are fine here — ASCII whitespace is
             // single-byte, and non-ASCII whitespace is not valid in this

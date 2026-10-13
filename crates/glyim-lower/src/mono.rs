@@ -85,7 +85,8 @@ pub struct MonoCtx<'a> {
     /// wrong-code bug the earlier T101 deferral note flagged. When this
     /// is None (unit tests), deduplication falls back to the previous
     /// (incorrect-but-narrower) behavior.
-    pre_subst_bodies: Option<&'a std::collections::HashMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>>,
+    pre_subst_bodies:
+        Option<&'a std::collections::HashMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>>,
 }
 
 impl<'a> MonoCtx<'a> {
@@ -188,10 +189,8 @@ impl<'a> MonoCtx<'a> {
                     // same key used for fn bodies. Falls back to the
                     // dummy body only if the pipeline never registered
                     // one (i.e. an older caller that predates T177).
-                    let key = DefId::new(
-                        CrateId::from_raw(0),
-                        LocalDefId::from_raw(def_id.to_raw()),
-                    );
+                    let key =
+                        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(def_id.to_raw()));
                     let empty_substs = Substitution::empty();
                     mir_bodies(key, &empty_substs)
                 }
@@ -219,21 +218,18 @@ impl<'a> MonoCtx<'a> {
                 // pipeline-supplied def_to_module map. Fall back to 0 when
                 // the map is absent or the def isn't found (e.g. drop glue).
                 source_module: match (&item, self.def_to_module) {
-                    (MonoItem::Fn { def_id, .. }, Some(map)) => {
-                        map.get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
-                            .copied()
-                            .unwrap_or(0)
-                    }
-                    (MonoItem::Const { def_id, .. }, Some(map)) => {
-                        map.get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
-                            .copied()
-                            .unwrap_or(0)
-                    }
-                    (MonoItem::Static { def_id }, Some(map)) => {
-                        map.get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
-                            .copied()
-                            .unwrap_or(0)
-                    }
+                    (MonoItem::Fn { def_id, .. }, Some(map)) => map
+                        .get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                        .copied()
+                        .unwrap_or(0),
+                    (MonoItem::Const { def_id, .. }, Some(map)) => map
+                        .get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                        .copied()
+                        .unwrap_or(0),
+                    (MonoItem::Static { def_id }, Some(map)) => map
+                        .get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                        .copied()
+                        .unwrap_or(0),
                     _ => 0,
                 },
             });

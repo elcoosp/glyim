@@ -1,6 +1,7 @@
 mod auto_trait;
 mod auto_traits;
 mod binder;
+mod builtin_registry;
 mod compile_fail;
 mod const_val;
 mod context_api;
@@ -45,4 +46,3 @@ mod traits;
 mod type_construction;
 mod type_display;
 mod type_idx;
-mod builtin_registry;

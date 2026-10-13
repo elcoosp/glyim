@@ -270,7 +270,6 @@ impl OutputCheck {
     }
 }
 
-
 /// T196-PATCHED [HARNESS-9]: line-anchored stdout matcher. A single-line
 /// expectation matches a whole line; a multi-line expectation matches the
 /// joined sequence of lines. This prevents partial-line false positives

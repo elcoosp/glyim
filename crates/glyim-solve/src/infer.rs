@@ -751,14 +751,18 @@ impl InferenceTable {
                     // unrelated unit structs like `iter::Empty`; without
                     // this arm the two 0-field ADTs produce a spurious
                     // "mismatched types: AdtX vs AdtY".
-                    let unit_a = ctx.adt_def(id_a).map(|d| {
-                        d.fields.is_empty()
-                            && d.variants.iter().all(|v| v.fields.is_empty())
-                    }).unwrap_or(false);
-                    let unit_b = ctx.adt_def(id_b).map(|d| {
-                        d.fields.is_empty()
-                            && d.variants.iter().all(|v| v.fields.is_empty())
-                    }).unwrap_or(false);
+                    let unit_a = ctx
+                        .adt_def(id_a)
+                        .map(|d| {
+                            d.fields.is_empty() && d.variants.iter().all(|v| v.fields.is_empty())
+                        })
+                        .unwrap_or(false);
+                    let unit_b = ctx
+                        .adt_def(id_b)
+                        .map(|d| {
+                            d.fields.is_empty() && d.variants.iter().all(|v| v.fields.is_empty())
+                        })
+                        .unwrap_or(false);
                     if unit_a && unit_b {
                         return Ok(Vec::new());
                     }

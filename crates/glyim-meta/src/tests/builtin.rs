@@ -333,9 +333,7 @@ fn vfs_backed_line_column_and_include() {
         "include! must produce the 'not yet supported' diagnostic"
     );
     assert!(
-        inc_diags
-            .iter()
-            .any(|d| d.message.contains("include!")),
+        inc_diags.iter().any(|d| d.message.contains("include!")),
         "diagnostic should name include!: {:?}",
         inc_diags
     );
@@ -368,10 +366,7 @@ fn expand_with_builtin(source: &str) -> (String, Vec<glyim_diag::GlyimDiagnostic
         let id = expander.interner().intern(name);
         expander.register_macro(MacroDef {
             name: id,
-            kind: MacroKind::Builtin {
-                name: id,
-                handler,
-            },
+            kind: MacroKind::Builtin { name: id, handler },
             span: Span::DUMMY,
         });
     }

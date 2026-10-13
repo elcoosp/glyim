@@ -93,10 +93,7 @@ fn all_emit_modes_succeed_on_hello_world() {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
-        assert!(
-            out.exists(),
-            "--emit={mode} must write {out:?}",
-        );
+        assert!(out.exists(), "--emit={mode} must write {out:?}",);
         assert!(
             std::fs::metadata(&out).unwrap().len() > 0,
             "--emit={mode} produced an empty file at {out:?}",
@@ -256,10 +253,7 @@ fn object_has_no_unresolved_glyim_fn_symbols() {
             defined.insert(name.to_string());
         }
     }
-    let missing: Vec<_> = undefined
-        .iter()
-        .filter(|n| !defined.contains(*n))
-        .collect();
+    let missing: Vec<_> = undefined.iter().filter(|n| !defined.contains(*n)).collect();
     assert!(
         missing.is_empty(),
         "object references undefined `__glyim_fn_*` symbols: {missing:?}\n\

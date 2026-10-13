@@ -78,7 +78,12 @@ impl CompileCache {
             return Self::open(dir);
         }
         if let Some(home) = std::env::var_os("HOME") {
-            return Self::open(PathBuf::from(home).join(".glyip").join("cache").join("glyim"));
+            return Self::open(
+                PathBuf::from(home)
+                    .join(".glyip")
+                    .join("cache")
+                    .join("glyim"),
+            );
         }
         Self::open(std::env::temp_dir().join("glyim-cache"))
     }
@@ -255,7 +260,9 @@ mod tests {
         std::fs::write(&src, b"\x7fELF...").unwrap();
         cache.store(key, &src);
 
-        let hit = cache.lookup(key).expect("store must make the object visible");
+        let hit = cache
+            .lookup(key)
+            .expect("store must make the object visible");
         assert_eq!(std::fs::read(hit).unwrap(), b"\x7fELF...");
     }
 }

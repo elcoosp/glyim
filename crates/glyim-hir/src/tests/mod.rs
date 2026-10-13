@@ -1,6 +1,7 @@
 mod async_desugar;
 mod expr_lowering;
 mod field_access;
+mod generic_in_module;
 mod lower_comprehensive;
 mod lower_edge;
 mod lower_enum;
@@ -18,4 +19,3 @@ mod lower_type;
 mod number_suffix;
 mod pattern_lowering;
 mod type_lowering;
-mod generic_in_module;

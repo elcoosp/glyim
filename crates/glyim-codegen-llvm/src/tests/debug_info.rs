@@ -8,7 +8,10 @@ use glyim_mir::{
     SourceInfo, Statement, StatementKind, Terminator, TerminatorKind, VarDebugInfo,
     VarDebugInfoValue,
 };
-use glyim_span::{ByteIdx, ExpnData, ExpnId, ExpnKind, FileId, HygieneCtx, Mark, Span, SyntaxContext, Transparency};
+use glyim_span::{
+    ByteIdx, ExpnData, ExpnId, ExpnKind, FileId, HygieneCtx, Mark, Span, SyntaxContext,
+    Transparency,
+};
 use glyim_type::{TyCtxMut, TyKind};
 use inkwell::context::Context;
 use std::collections::HashMap;

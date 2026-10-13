@@ -179,7 +179,11 @@ impl TestCompiler for PipelineCompiler {
                 i += 1;
             } else if let Some(v) = f.strip_prefix("-O") {
                 // `-O` = 2; `-O0`..`-O3` = explicit.
-                opt_level = if v.is_empty() { 2 } else { v.parse().unwrap_or(2) };
+                opt_level = if v.is_empty() {
+                    2
+                } else {
+                    v.parse().unwrap_or(2)
+                };
             } else if let Some(v) = f.strip_prefix("--target=") {
                 target_triple = Some(v.to_string());
             } else if f == "--target" && i + 1 < flags.len() {
@@ -193,8 +197,7 @@ impl TestCompiler for PipelineCompiler {
         // hardcoded Linux triple produces an ELF that macOS's `cc` cannot
         // link, so every fixture silently fell back to the interpreter and
         // the LLVM side was never actually exercised.
-        let target_triple = target_triple
-            .unwrap_or_else(host_target_triple);
+        let target_triple = target_triple.unwrap_or_else(host_target_triple);
 
         // T140-PATCHED-HARNESS: honor `// compile-flags: --with-stdlib` by
         // prepending the assembled minimal stdlib, exactly like
@@ -269,8 +272,7 @@ impl TestCompiler for PipelineCompiler {
             // separators (walking the green token stream so token boundaries
             // are preserved) so rowan reparses it faithfully (Phase 9.2).
             let expanded_src = glyim_meta::join_tokens_with_spaces(&expanded);
-            db.vfs()
-                .add_file_content(&path, Arc::from(expanded_src));
+            db.vfs().add_file_content(&path, Arc::from(expanded_src));
         }
 
         let output_path =
@@ -297,8 +299,8 @@ impl TestCompiler for PipelineCompiler {
         #[cfg(feature = "real-llvm")]
         let real_backend_local: Option<glyim_codegen_llvm::LlvmBackend> = if self.real_llvm {
             use glyim_pipeline::Pipeline;
-            let mut real = glyim_codegen_llvm::LlvmBackend::with_db(&db)
-                .with_target(&target_triple);
+            let mut real =
+                glyim_codegen_llvm::LlvmBackend::with_db(&db).with_target(&target_triple);
             if let Some(main_id) = Pipeline::entry_main_local_id(&mut db, &path) {
                 real = real.with_entry_main(main_id);
             }

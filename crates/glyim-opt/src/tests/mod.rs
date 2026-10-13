@@ -1,14 +1,14 @@
+mod behavior_preservation;
 mod cfg_simplify;
 mod cfg_simplify_tests;
 mod const_prop_tests;
 mod constant_prop;
 mod constant_prop_tests;
 mod dce;
+mod dce_projection_uses;
 mod dce_tests;
 mod drop_elaboration;
 mod noop;
 pub mod testutil;
 mod unreachable_elim;
 mod unreachable_elim_tests;
-mod behavior_preservation;
-mod dce_projection_uses;

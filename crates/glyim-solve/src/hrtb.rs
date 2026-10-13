@@ -71,8 +71,7 @@ fn build_region_substitution(
         match var {
             BoundVariableKind::Region(_) => {
                 if placeholder_idx < placeholders.len() {
-                    region_map
-                        .push(Region::Placeholder(placeholders[placeholder_idx].clone()));
+                    region_map.push(Region::Placeholder(placeholders[placeholder_idx].clone()));
                     placeholder_idx += 1;
                 } else {
                     region_map.push(Region::Erased);

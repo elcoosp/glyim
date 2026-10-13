@@ -222,7 +222,11 @@ fn dce_removes_unused_assignment_still_preserves() {
     assert_eq!(after, 7, "optimized body must still return 7");
 
     let before_stmts: usize = body.basic_blocks.iter().map(|b| b.statements.len()).sum();
-    let after_stmts: usize = optimized.basic_blocks.iter().map(|b| b.statements.len()).sum();
+    let after_stmts: usize = optimized
+        .basic_blocks
+        .iter()
+        .map(|b| b.statements.len())
+        .sum();
     assert!(
         after_stmts < before_stmts,
         "DCE should have removed the dead assignment (before={before_stmts}, after={after_stmts})"

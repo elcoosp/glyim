@@ -34,13 +34,24 @@ fn enum_field_write_preserves_discriminant() {
         }])
     };
     let (f0, f1) = (mk_fields(&mut ctx_mut), mk_fields(&mut ctx_mut));
-    let (n0, n1) = (ctx_mut.resolver().intern("A"), ctx_mut.resolver().intern("B"));
+    let (n0, n1) = (
+        ctx_mut.resolver().intern("A"),
+        ctx_mut.resolver().intern("B"),
+    );
     let adt_def = AdtDef {
         kind: AdtKind::Enum,
         fields: IndexVec::new(),
         variants: vec![
-            VariantDef { name: n0, fields: f0, style: VariantStyle::Tuple },
-            VariantDef { name: n1, fields: f1, style: VariantStyle::Tuple },
+            VariantDef {
+                name: n0,
+                fields: f0,
+                style: VariantStyle::Tuple,
+            },
+            VariantDef {
+                name: n1,
+                fields: f1,
+                style: VariantStyle::Tuple,
+            },
         ],
         generic_params: vec![],
     };
@@ -62,7 +73,11 @@ fn enum_field_write_preserves_discriminant() {
             kind: StatementKind::Assign(
                 Place::new(ev),
                 Rvalue::Aggregate(
-                    AggregateKind::Adt(adt_id, VariantIdx::from_raw(0), tcx.intern_substitution(vec![])),
+                    AggregateKind::Adt(
+                        adt_id,
+                        VariantIdx::from_raw(0),
+                        tcx.intern_substitution(vec![]),
+                    ),
                     vec![Operand::Constant(MirConst {
                         kind: MirConstKind::Int(10),
                         ty: i32_ty,

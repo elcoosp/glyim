@@ -111,11 +111,7 @@ fn interpret_bodies(
     // owner. If it is absent (no `main`, or a fixture that never defines one)
     // fall back to the first body, preserving the historical behaviour.
     let main_body: &Arc<glyim_mir::Body> = entry_main
-        .and_then(|raw| {
-            bodies.iter().find(|b| {
-                b.owner.local_id.to_raw() == raw
-            })
-        })
+        .and_then(|raw| bodies.iter().find(|b| b.owner.local_id.to_raw() == raw))
         .unwrap_or_else(|| &bodies[0]);
 
     // Set up the interpreter and register every body.

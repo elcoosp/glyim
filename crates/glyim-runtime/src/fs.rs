@@ -795,7 +795,11 @@ fn meta_to_raw(meta: &std::fs::Metadata) -> MetadataRaw {
     }
     #[cfg(not(unix))]
     fn perms(meta: &std::fs::Metadata) -> u32 {
-        if meta.permissions().readonly() { 0o444 } else { 0o666 }
+        if meta.permissions().readonly() {
+            0o444
+        } else {
+            0o666
+        }
     }
 
     let file_type = if meta.is_file() {

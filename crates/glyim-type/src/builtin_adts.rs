@@ -146,11 +146,7 @@ mod tests {
                 "{} has AdtId {id} outside the reserved 1000..2000 range",
                 b.name(),
             );
-            assert!(
-                seen.insert(id),
-                "duplicate AdtId {id} (from {})",
-                b.name(),
-            );
+            assert!(seen.insert(id), "duplicate AdtId {id} (from {})", b.name(),);
         }
     }
 
@@ -160,7 +156,11 @@ mod tests {
         for b in BuiltinAdt::ALL {
             let n = b.name();
             assert!(seen.insert(n), "duplicate name {n}");
-            assert_eq!(BuiltinAdt::from_name(n), Some(*b), "round-trip failed for {n}");
+            assert_eq!(
+                BuiltinAdt::from_name(n),
+                Some(*b),
+                "round-trip failed for {n}"
+            );
         }
         assert_eq!(BuiltinAdt::from_name("NotAThing"), None);
     }

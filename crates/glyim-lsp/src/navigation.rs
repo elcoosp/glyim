@@ -111,13 +111,12 @@ pub fn find_references(
     // only refs sharing the same `owner_item_id` are returned.
     let cursor_offset = {
         let sm = db.source_maps.read();
-        sm.get(&file_id)
-            .and_then(|s| {
-                s.line_col_to_offset(
-                    params.text_document_position.position.line as usize,
-                    params.text_document_position.position.character as usize,
-                )
-            })
+        sm.get(&file_id).and_then(|s| {
+            s.line_col_to_offset(
+                params.text_document_position.position.line as usize,
+                params.text_document_position.position.character as usize,
+            )
+        })
     };
     let scope_owner: Option<u32> = cursor_offset
         .and_then(|off| {
@@ -128,7 +127,13 @@ pub fn find_references(
                     && off < r.span.hi.to_usize()
             })
         })
-        .and_then(|r| if r.is_item_level { None } else { r.owner_item_id });
+        .and_then(|r| {
+            if r.is_item_level {
+                None
+            } else {
+                r.owner_item_id
+            }
+        });
     let source_maps = db.source_maps.read();
     let mut locations = Vec::new();
     for r in references {

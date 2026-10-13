@@ -39,17 +39,25 @@ fn run_binop_kind(
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
-    let c1 = Operand::Constant(MirConst { kind: lhs, ty, span: Span::DUMMY });
-    let c2 = Operand::Constant(MirConst { kind: rhs, ty, span: Span::DUMMY });
+    let c1 = Operand::Constant(MirConst {
+        kind: lhs,
+        ty,
+        span: Span::DUMMY,
+    });
+    let c2 = Operand::Constant(MirConst {
+        kind: rhs,
+        ty,
+        span: Span::DUMMY,
+    });
     body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
         statements: vec![Statement {
-            kind: StatementKind::Assign(
-                Place::new(res),
-                Rvalue::BinaryOp(op, Box::new((c1, c2))),
-            ),
+            kind: StatementKind::Assign(Place::new(res), Rvalue::BinaryOp(op, Box::new((c1, c2)))),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
-        terminator: Terminator { kind: TerminatorKind::Return, source_info: SourceInfo::new(Span::DUMMY) },
+        terminator: Terminator {
+            kind: TerminatorKind::Return,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
         is_cleanup: false,
     }]);
     let frozen = tcx.freeze();
@@ -94,7 +102,11 @@ fn int_to_int_cast_truncates() {
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(u8_ty, Mutability::Mut),
     ]);
-    let c = Operand::Constant(MirConst { kind: MirConstKind::Int(-1), ty: i32_ty, span: Span::DUMMY });
+    let c = Operand::Constant(MirConst {
+        kind: MirConstKind::Int(-1),
+        ty: i32_ty,
+        span: Span::DUMMY,
+    });
     body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
@@ -103,7 +115,10 @@ fn int_to_int_cast_truncates() {
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
-        terminator: Terminator { kind: TerminatorKind::Return, source_info: SourceInfo::new(Span::DUMMY) },
+        terminator: Terminator {
+            kind: TerminatorKind::Return,
+            source_info: SourceInfo::new(Span::DUMMY),
+        },
         is_cleanup: false,
     }]);
     let frozen = tcx.freeze();

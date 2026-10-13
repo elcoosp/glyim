@@ -273,7 +273,10 @@ fn dce_keeps_store_used_by_drop_terminator() {
         // type (`i32`). The DCE pass itself is the unit under test and must
         // keep the store regardless of the dropped type.
         let block0 = make_block(
-            vec![assign_stmt(Place::new(local(1)), const_int_rvalue(42, i32_ty))],
+            vec![assign_stmt(
+                Place::new(local(1)),
+                const_int_rvalue(42, i32_ty),
+            )],
             Terminator {
                 kind: TerminatorKind::Drop {
                     place: Place::new(local(1)),
@@ -290,11 +293,9 @@ fn dce_keeps_store_used_by_drop_terminator() {
     crate::dce::run(&ctx, &mut body);
     let block = &body.basic_blocks[bb(0)];
 
-    let kept = block.statements.iter().any(|stmt| {
-        matches!(&stmt.kind, StatementKind::Assign(p, _) if p.local == local(1))
-    });
-    assert!(
-        kept,
-        "the store feeding `Drop(_1)` must survive DCE"
-    );
+    let kept = block
+        .statements
+        .iter()
+        .any(|stmt| matches!(&stmt.kind, StatementKind::Assign(p, _) if p.local == local(1)));
+    assert!(kept, "the store feeding `Drop(_1)` must survive DCE");
 }

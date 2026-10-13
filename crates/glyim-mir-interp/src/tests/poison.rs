@@ -40,10 +40,7 @@ fn sentinel_call_body(fn_id_raw: u32) -> Body {
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
-                        kind: MirConstKind::Fn(
-                            FnDefId::from_raw(fn_id_raw),
-                            Substitution::empty(),
-                        ),
+                        kind: MirConstKind::Fn(FnDefId::from_raw(fn_id_raw), Substitution::empty()),
                         ty: Ty::ERROR,
                         span: Span::DUMMY,
                     }),

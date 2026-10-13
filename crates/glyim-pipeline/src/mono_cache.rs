@@ -346,12 +346,8 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                             *elem_ty = substitute_ty(*elem_ty, substs, &mut sub_ctx, ty_ctx);
                         }
                         glyim_mir::AggregateKind::Adt(_, _, adt_substs) => {
-                            *adt_substs = substitute_substitution(
-                                *adt_substs,
-                                substs,
-                                &mut sub_ctx,
-                                ty_ctx,
-                            );
+                            *adt_substs =
+                                substitute_substitution(*adt_substs, substs, &mut sub_ctx, ty_ctx);
                         }
                         glyim_mir::AggregateKind::Closure(_, closure_substs) => {
                             *closure_substs = substitute_substitution(
@@ -891,9 +887,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
         source_info: SourceInfo::new(Span::DUMMY),
     }));
     let latch_bb = body.basic_blocks.push(BasicBlockData::new(Terminator {
-        kind: TerminatorKind::Goto {
-            target: header_bb,
-        },
+        kind: TerminatorKind::Goto { target: header_bb },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
 
@@ -929,10 +923,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
                 discr: Operand::Copy(Place::new(cond_local)),
                 switch_ty: Ty::BOOL,
                 // true (1) -> body; otherwise -> exit.
-                targets: SwitchTargets::new(
-                    Box::new([(1, body_bb)]),
-                    exit_bb,
-                ),
+                targets: SwitchTargets::new(Box::new([(1, body_bb)]), exit_bb),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
@@ -978,9 +969,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
             source_info: SourceInfo::new(Span::DUMMY),
         });
         block0.terminator = Terminator {
-            kind: TerminatorKind::Goto {
-                target: header_bb,
-            },
+            kind: TerminatorKind::Goto { target: header_bb },
             source_info: SourceInfo::new(Span::DUMMY),
         };
     }

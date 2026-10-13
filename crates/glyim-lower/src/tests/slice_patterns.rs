@@ -109,12 +109,17 @@ fn slice_pattern_lowering_emits_len_and_switch() {
             .iter()
             .any(|s| matches!(s.kind, StatementKind::Assign(_, Rvalue::Len(_))))
     });
-    assert!(has_len, "No Rvalue::Len emitted anywhere in slice-pattern match");
+    assert!(
+        has_len,
+        "No Rvalue::Len emitted anywhere in slice-pattern match"
+    );
 
     // A bool `SwitchInt` must terminate the test chain.
-    let has_switch = mir_body
-        .basic_blocks
-        .iter()
-        .any(|bb| matches!(bb.terminator.kind, glyim_mir::TerminatorKind::SwitchInt { .. }));
+    let has_switch = mir_body.basic_blocks.iter().any(|bb| {
+        matches!(
+            bb.terminator.kind,
+            glyim_mir::TerminatorKind::SwitchInt { .. }
+        )
+    });
     assert!(has_switch, "No SwitchInt emitted for slice-pattern match");
 }

@@ -61,14 +61,9 @@ impl Gate for BannedPatternGate {
                     // silently skip the file. Previously an unreadable
                     // (or non-UTF-8) changed file passed the banned-pattern
                     // gate unchecked.
-                    let content: Result<String, std::io::Error> =
-                        std::fs::read_to_string(&path);
+                    let content: Result<String, std::io::Error> = std::fs::read_to_string(&path);
                     if let Err(e) = &content {
-                        violations.push(format!(
-                            "{}: unreadable: {}",
-                            path.display(),
-                            e
-                        ));
+                        violations.push(format!("{}: unreadable: {}", path.display(), e));
                     }
                     if let Ok(content) = content {
                         check_content_for_violations(
@@ -93,14 +88,9 @@ impl Gate for BannedPatternGate {
                         // T153-PATCHED [PILOT-11]: same as above — log
                         // unreadable files as violations instead of
                         // silently skipping them.
-                        let content: Result<String, std::io::Error> =
-                            std::fs::read_to_string(path);
+                        let content: Result<String, std::io::Error> = std::fs::read_to_string(path);
                         if let Err(e) = &content {
-                            violations.push(format!(
-                                "{}: unreadable: {}",
-                                path.display(),
-                                e
-                            ));
+                            violations.push(format!("{}: unreadable: {}", path.display(), e));
                         }
                         if let Ok(content) = content {
                             check_content_for_violations(

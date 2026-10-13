@@ -384,9 +384,7 @@ impl<'a> FnCtxt<'a> {
                         // literal bitwise expression.
                         if !matches!(
                             self.ctx.ty_kind(operand_ty),
-                            TyKind::Int(_)
-                                | TyKind::Uint(_)
-                                | TyKind::Infer(InferVar::Int(_))
+                            TyKind::Int(_) | TyKind::Uint(_) | TyKind::Infer(InferVar::Int(_))
                         ) && operand_ty != Ty::ERROR
                         {
                             self.diagnostics.push(GlyimDiagnostic::type_error(
@@ -953,14 +951,15 @@ impl<'a> FnCtxt<'a> {
                 {
                     let expected = fn_sig.inputs.len() as usize;
                     if arg_exprs.len() != expected {
-                        self.diagnostics.push(glyim_diag::GlyimDiagnostic::type_error(
-                            span,
-                            format!(
-                                "this function takes {} argument(s) but {} were supplied",
-                                expected,
-                                arg_exprs.len()
-                            ),
-                        ));
+                        self.diagnostics
+                            .push(glyim_diag::GlyimDiagnostic::type_error(
+                                span,
+                                format!(
+                                    "this function takes {} argument(s) but {} were supplied",
+                                    expected,
+                                    arg_exprs.len()
+                                ),
+                            ));
                     }
                 }
 
@@ -1031,13 +1030,13 @@ impl<'a> FnCtxt<'a> {
                         );
                     }
                     TyKind::Error => (false, FnDefId::from_raw(0), true),
-                // Script 412: an unresolved `Infer` callee. Treat as
-                // callable (returning Ty::ERROR) rather than emitting
-                // "call to non-function type". This covers cases where a
-                // value's type was left as an inference variable by an
-                // upstream substitution step (e.g. `f()` where `f` was
-                // bound from a `.take().expect()` chain that lost `F`).
-                TyKind::Infer(InferVar::Ty(_)) => (false, FnDefId::from_raw(0), true),
+                    // Script 412: an unresolved `Infer` callee. Treat as
+                    // callable (returning Ty::ERROR) rather than emitting
+                    // "call to non-function type". This covers cases where a
+                    // value's type was left as an inference variable by an
+                    // upstream substitution step (e.g. `f()` where `f` was
+                    // bound from a `.take().expect()` chain that lost `F`).
+                    TyKind::Infer(InferVar::Ty(_)) => (false, FnDefId::from_raw(0), true),
                     TyKind::Param(p) => {
                         // `f()` where `f: F` and `F: FnOnce(..) -> R`. The
                         // bound's signature was recorded by
@@ -1135,14 +1134,9 @@ impl<'a> FnCtxt<'a> {
                                 // diagnostic.
                                 if let TyKind::Param(pt) = self.ctx.ty_kind(*param_ty) {
                                     subst.insert(pt.index, GenericArg::Ty(arg_expr.ty));
-                                } else if matches!(
-                                    self.ctx.ty_kind(*param_ty),
-                                    TyKind::Infer(_)
-                                ) && arg_expr.ty != Ty::ERROR
-                                    && !matches!(
-                                        self.ctx.ty_kind(arg_expr.ty),
-                                        TyKind::Infer(_)
-                                    )
+                                } else if matches!(self.ctx.ty_kind(*param_ty), TyKind::Infer(_))
+                                    && arg_expr.ty != Ty::ERROR
+                                    && !matches!(self.ctx.ty_kind(arg_expr.ty), TyKind::Infer(_))
                                 {
                                     // Formal is a fresh inference variable, arg
                                     // is concrete: unify. This pins the generic
@@ -1263,9 +1257,14 @@ impl<'a> FnCtxt<'a> {
                             }
                             _ => Vec::new(),
                         };
-                        let arity = base_substs
-                            .len()
-                            .max(subst.keys().copied().max().map(|k| k as usize + 1).unwrap_or(0));
+                        let arity = base_substs.len().max(
+                            subst
+                                .keys()
+                                .copied()
+                                .max()
+                                .map(|k| k as usize + 1)
+                                .unwrap_or(0),
+                        );
                         let new_substs = self.ctx.intern_substitution(
                             (0..arity)
                                 .map(|i| {
@@ -1273,9 +1272,7 @@ impl<'a> FnCtxt<'a> {
                                         .get(&(i as u32))
                                         .cloned()
                                         .or_else(|| base_substs.get(i).cloned())
-                                        .unwrap_or_else(|| {
-                                            GenericArg::Ty(self.ctx.error_ty())
-                                        })
+                                        .unwrap_or_else(|| GenericArg::Ty(self.ctx.error_ty()))
                                 })
                                 .collect(),
                         );
@@ -1407,10 +1404,8 @@ impl<'a> FnCtxt<'a> {
                         // one — passing an existing `&T`/`&mut T` through
                         // as-is (both subtype to `&T`).
                         let recv_for_call = {
-                            let formal_first: Option<Ty> = self
-                                .ctx
-                                .fn_sig(fn_def_id)
-                                .and_then(|sig| {
+                            let formal_first: Option<Ty> =
+                                self.ctx.fn_sig(fn_def_id).and_then(|sig| {
                                     self.ctx
                                         .substitution_args(sig.inputs)
                                         .first()
@@ -1419,10 +1414,8 @@ impl<'a> FnCtxt<'a> {
                                             _ => None,
                                         })
                                 });
-                            let recv_is_ref = matches!(
-                                self.ctx.ty_kind(recv_expr.ty),
-                                TyKind::Ref(_, _, _),
-                            );
+                            let recv_is_ref =
+                                matches!(self.ctx.ty_kind(recv_expr.ty), TyKind::Ref(_, _, _),);
                             let formal_ref_mutability: Option<glyim_core::primitives::Mutability> =
                                 formal_first.and_then(|t| match self.ctx.ty_kind(t) {
                                     TyKind::Ref(_, _, m) => Some(*m),
@@ -1495,9 +1488,9 @@ impl<'a> FnCtxt<'a> {
                             }
                             match self.ctx.ty_kind(recv_inner) {
                                 TyKind::Adt(_, s) if !s.is_empty() => *s,
-                                TyKind::Slice(e) | TyKind::Array(e, _) => self
-                                    .ctx
-                                    .intern_substitution(vec![GenericArg::Ty(*e)]),
+                                TyKind::Slice(e) | TyKind::Array(e, _) => {
+                                    self.ctx.intern_substitution(vec![GenericArg::Ty(*e)])
+                                }
                                 _ => self.ctx.intern_substitution(vec![]),
                             }
                         };
@@ -1531,8 +1524,7 @@ impl<'a> FnCtxt<'a> {
                         // move. Local-binding receivers (`fut.poll()` where
                         // `fut: F`) are left untouched — autoref there breaks
                         // the async desugar's interpreter path.
-                        let is_field_recv =
-                            matches!(recv_expr.kind, thir::ExprKind::Field { .. });
+                        let is_field_recv = matches!(recv_expr.kind, thir::ExprKind::Field { .. });
                         let recv_for_call = if !is_field_recv {
                             recv_expr.clone()
                         } else {
@@ -1540,7 +1532,9 @@ impl<'a> FnCtxt<'a> {
                                 let target_local = trait_def_id.to_raw();
                                 let mut found: Option<glyim_hir::TypeRef> = None;
                                 'outer: for (_id, item) in self.hir.items.iter_enumerated() {
-                                    let glyim_hir::ItemKind::Trait(tr) = &item.kind else { continue };
+                                    let glyim_hir::ItemKind::Trait(tr) = &item.kind else {
+                                        continue;
+                                    };
                                     let tp = glyim_hir::Path {
                                         segments: vec![glyim_hir::PathSegment {
                                             name: item.name,
@@ -1549,9 +1543,16 @@ impl<'a> FnCtxt<'a> {
                                         kind: glyim_core::path::PathKind::Plain,
                                     };
                                     let Some(tid) = crate::tyconv::resolve_path_to_trait_def_id(
-                                        self.def_map, self.ctx, &tp, span,
-                                    ) else { continue };
-                                    if tid.to_raw() != target_local { continue; }
+                                        self.def_map,
+                                        self.ctx,
+                                        &tp,
+                                        span,
+                                    ) else {
+                                        continue;
+                                    };
+                                    if tid.to_raw() != target_local {
+                                        continue;
+                                    }
                                     for m in &tr.methods {
                                         if m.name == *method
                                             && let Some(first) = m.params.first()
@@ -1630,15 +1631,12 @@ impl<'a> FnCtxt<'a> {
                         // literals) are left untouched — they either already
                         // produce the right value or were being handled
                         // correctly before.
-                        let is_field_recv =
-                            matches!(recv_expr.kind, thir::ExprKind::Field { .. });
+                        let is_field_recv = matches!(recv_expr.kind, thir::ExprKind::Field { .. });
                         let recv_for_call = if is_field_recv {
                             // If the field's own type is already a reference,
                             // pass through. Otherwise autoref by `&mut`.
-                            let already_ref = matches!(
-                                self.ctx.ty_kind(recv_expr.ty),
-                                TyKind::Ref(_, _, _),
-                            );
+                            let already_ref =
+                                matches!(self.ctx.ty_kind(recv_expr.ty), TyKind::Ref(_, _, _),);
                             if already_ref {
                                 recv_expr
                             } else {
@@ -2356,9 +2354,7 @@ impl<'a> FnCtxt<'a> {
                     // denote `T`; lowering inserts a `Deref` when the body
                     // touches a by-ref capture. `ByValue` keeps the value type.
                     let cap_ty = match kind {
-                        thir::CaptureKind::ByRef(m) => {
-                            self.ctx.mk_ref(Region::Erased, ty, m)
-                        }
+                        thir::CaptureKind::ByRef(m) => self.ctx.mk_ref(Region::Erased, ty, m),
                         thir::CaptureKind::ByValue => ty,
                     };
                     captures.push((id, kind, cap_ty));
@@ -2651,8 +2647,7 @@ impl<'a> FnCtxt<'a> {
         // `[T; N]`, `(T, U)`, …) came back with the param intact, so
         // `Vec::<i32> { data: 0 as *mut i32, .. }` unified `*mut i32`
         // against `*mut T` and reported "mismatched types: i32 vs T".
-        let mut map: std::collections::HashMap<u32, GenericArg> =
-            std::collections::HashMap::new();
+        let mut map: std::collections::HashMap<u32, GenericArg> = std::collections::HashMap::new();
         for (i, arg) in self.ctx.substitution_args(substs).iter().enumerate() {
             map.insert(i as u32, arg.clone());
         }
@@ -2701,7 +2696,6 @@ impl<'a> FnCtxt<'a> {
     /// `FnDefId` for codegen. `None` if no builtin method matches this receiver
     /// + name (so the caller falls through to user-impl / generic dispatch).
     fn try_builtin_method(&mut self, step_ty: Ty, method_name: Name) -> Option<(Ty, FnDefId)> {
-
         // T179-PATCHED [TCK-29]: universal `into`/`to_owned`/`to_string`/
         // `clone` are now gated on a real receiver-shape decision. The
         // pre-fix code accepted any receiver (`Mutex.to_string()`,
@@ -2849,7 +2843,7 @@ impl<'a> FnCtxt<'a> {
         }
 
         let adt_id = lookup_id?;
-                // Script 122: the stdlib declares its own `Result`/`Option`/`Vec`/etc.
+        // Script 122: the stdlib declares its own `Result`/`Option`/`Vec`/etc.
         // in `.g` files, giving them AdtIds distinct from the builtin table's
         // (Result=1010, Option=1011, Vec, String, ...). So a `Result<Layout,
         // LayoutError>::expect` call from stdlib code looks up under the
@@ -2859,16 +2853,12 @@ impl<'a> FnCtxt<'a> {
         let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
             Some(hit) => hit,
             None => {
-                let adt_name = self
-                    .ctx
-                    .adt_def(adt_id)
-                    .map(|_| ())
-                    .and_then(|_| {
-                        // The name isn't stored on AdtDef; recover it via
-                        // a reverse lookup in `adt_by_name`. Walk the whole
-                        // map (small) to find the AdtId we want.
-                        None::<()>
-                    });
+                let adt_name = self.ctx.adt_def(adt_id).map(|_| ()).and_then(|_| {
+                    // The name isn't stored on AdtDef; recover it via
+                    // a reverse lookup in `adt_by_name`. Walk the whole
+                    // map (small) to find the AdtId we want.
+                    None::<()>
+                });
                 let _ = adt_name;
                 // Cheaper: try the canonical builtin AdtIds for common names.
                 // T093-PATCHED [TCK-27]: consult the receiver ADT's real
@@ -3053,8 +3043,9 @@ impl<'a> FnCtxt<'a> {
                     );
                 }
                 "addr" => {
-                    let usize_ty =
-                        self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
+                    let usize_ty = self
+                        .ctx
+                        .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
                     return (
                         usize_ty,
                         Some(MethodDispatch::PtrArith(PtrArithOp::Addr, inner_ty)),
@@ -3067,9 +3058,10 @@ impl<'a> FnCtxt<'a> {
                 "as_ptr" => {
                     // `*mut T` -> `*const T`; `*const T` -> itself.
                     let new_ty = match mutability {
-                        glyim_core::primitives::Mutability::Mut => self
-                            .ctx
-                            .mk_ty(TyKind::RawPtr(inner_ty, glyim_core::primitives::Mutability::Not)),
+                        glyim_core::primitives::Mutability::Mut => self.ctx.mk_ty(TyKind::RawPtr(
+                            inner_ty,
+                            glyim_core::primitives::Mutability::Not,
+                        )),
                         glyim_core::primitives::Mutability::Not => recv_ty,
                     };
                     return (new_ty, None);
@@ -3077,9 +3069,10 @@ impl<'a> FnCtxt<'a> {
                 "as_mut_ptr" => {
                     // `*const T` -> `*mut T` (unsafe); `*mut T` -> itself.
                     let new_ty = match mutability {
-                        glyim_core::primitives::Mutability::Not => self
-                            .ctx
-                            .mk_ty(TyKind::RawPtr(inner_ty, glyim_core::primitives::Mutability::Mut)),
+                        glyim_core::primitives::Mutability::Not => self.ctx.mk_ty(TyKind::RawPtr(
+                            inner_ty,
+                            glyim_core::primitives::Mutability::Mut,
+                        )),
                         glyim_core::primitives::Mutability::Mut => recv_ty,
                     };
                     return (new_ty, None);
@@ -3181,8 +3174,7 @@ impl<'a> FnCtxt<'a> {
                     if step_is_str_like {
                         let is_slice_like = matches!(
                             impl_item.self_ty,
-                            glyim_hir::TypeRef::Slice(_)
-                                | glyim_hir::TypeRef::Array { .. }
+                            glyim_hir::TypeRef::Slice(_) | glyim_hir::TypeRef::Array { .. }
                         );
                         let is_string_adt = matches!(
                             this.ctx.ty_kind(impl_self_ty),
@@ -3285,8 +3277,10 @@ impl<'a> FnCtxt<'a> {
                                     let step_kind = format!("{:?}", this.ctx.ty_kind(step_ty));
                                     let self_kind = format!("{:?}", this.ctx.ty_kind(impl_self_ty));
                                     let hir_kind = format!("{:?}", impl_item.self_ty);
-                                    eprintln!("[CAND] method={} step_ty={} hir_self={} resolved={}",
-                                        mn, step_kind, hir_kind, self_kind);
+                                    eprintln!(
+                                        "[CAND] method={} step_ty={} hir_self={} resolved={}",
+                                        mn, step_kind, hir_kind, self_kind
+                                    );
                                 }
                             }
                             found.push((impl_self_ty, return_ty, dispatch));
@@ -3591,7 +3585,7 @@ impl<'a> FnCtxt<'a> {
             }
         }
 
-                // Script 79: when multiple candidates match, prefer candidates
+        // Script 79: when multiple candidates match, prefer candidates
         // whose impl self_ty is *not* a fresh inference variable (either
         // directly or nested inside a Slice/Ref/Array/Adt). The slice impl
         // `impl<T> [T]` matches a `str` receiver only because `T` unifies
@@ -3638,7 +3632,6 @@ impl<'a> FnCtxt<'a> {
             }
         }
         if candidates.len() > 1 {
-
             let list: Vec<String> = candidates
                 .iter()
                 .map(|(self_ty, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))

@@ -279,12 +279,14 @@ impl TyCtxMut {
         // per commit ad48841c) can default to `Ty::F64` during zonk,
         // mirroring how `Infer(Int)` defaults to `Ty::I32`.
         assert_eq!(
-            ctx.alloc_ty_internal(TyKind::Float(glyim_core::primitives::FloatTy::F32)).to_raw(),
+            ctx.alloc_ty_internal(TyKind::Float(glyim_core::primitives::FloatTy::F32))
+                .to_raw(),
             Ty::F32.to_raw(),
             "Ty::F32 sentinel mismatch"
         );
         assert_eq!(
-            ctx.alloc_ty_internal(TyKind::Float(glyim_core::primitives::FloatTy::F64)).to_raw(),
+            ctx.alloc_ty_internal(TyKind::Float(glyim_core::primitives::FloatTy::F64))
+                .to_raw(),
             Ty::F64.to_raw(),
             "Ty::F64 sentinel mismatch"
         );
@@ -717,7 +719,6 @@ impl TyCtxMut {
 
     /// register_adt.
 
-
     pub fn register_adt(&mut self, id: AdtId, def: AdtDef) {
         if std::env::var("GLYIM_DBG_REGISTER_ADT").is_ok() {
             let prev_params = self
@@ -840,7 +841,6 @@ impl TyCtxMut {
         // If unavailable, fall back to the numeric form.
         format!("{:?}", name)
     }
-
 
     /// Allocate a fresh compiler-synthesized `AdtId` that cannot collide with
     /// user-defined ADTs or the builtin fixed-id ADTs (ranges, etc.).
@@ -1295,7 +1295,8 @@ impl TyCtxMut {
             inherent_method_fns: self.inherent_method_fns.clone(),
             inherent_methods_by_name: self.inherent_methods_by_name.clone(),
             builtin_fn_index: {
-                let mut m: std::collections::HashMap<FnDefId, (AdtId, Name)> = std::collections::HashMap::new();
+                let mut m: std::collections::HashMap<FnDefId, (AdtId, Name)> =
+                    std::collections::HashMap::new();
                 for ((adt, name), (fn_id, _)) in self.builtin_method_fns.iter() {
                     m.insert(*fn_id, (*adt, *name));
                 }
@@ -1337,7 +1338,8 @@ impl TyCtxMut {
             inherent_method_fns: self.inherent_method_fns.clone(),
             inherent_methods_by_name: self.inherent_methods_by_name.clone(),
             builtin_fn_index: {
-                let mut m: std::collections::HashMap<FnDefId, (AdtId, Name)> = std::collections::HashMap::new();
+                let mut m: std::collections::HashMap<FnDefId, (AdtId, Name)> =
+                    std::collections::HashMap::new();
                 for ((adt, name), (fn_id, _)) in self.builtin_method_fns.iter() {
                     m.insert(*fn_id, (*adt, *name));
                 }
@@ -1691,9 +1693,7 @@ impl TyCtxMut {
             generic_params: vec![self.resolver.intern("T")],
         };
         self.register_adt(AdtId::from_raw(1020), vec_def.clone());
-        self.lang_items
-            .register(LangItem::Vec, def_id(1020))
-            .ok();
+        self.lang_items.register(LangItem::Vec, def_id(1020)).ok();
         self.register_adt_with_name(self.resolver.intern("Vec"), AdtId::from_raw(1020), vec_def);
         // `Vec` is an owning builtin (it owns a heap buffer) — record that it
         // carries a `Drop` impl so `needs_drop` is correct (see `mark_has_drop`).
@@ -1968,7 +1968,7 @@ impl TyCtxMut {
 
         // Populate the builtin inherent-method table (Vec/String/Result/Option
         // methods the stdlib calls but which have no user `impl` block).
-                // Script 137: register by name the builtin ADTs that lacked a name
+        // Script 137: register by name the builtin ADTs that lacked a name
         // mapping. `adt_id_by_name` is used by use-site ADT resolution
         // (resolve_name_to_adt_ty, Script 127) to prefer the canonical
         // builtin AdtId over the def-map's id. Without these name
@@ -2027,7 +2027,7 @@ impl TyCtxMut {
             }
         }
 
-self.register_builtin_methods();
+        self.register_builtin_methods();
 
         // Register builtin/lang TRAITS by name so `impl Future for X`,
         // `T: Clone`, `impl Drop for Y`, `T: Deref`, etc. resolve. The
@@ -2240,10 +2240,8 @@ self.register_builtin_methods();
         // Precomputed here because `self.mk_ty` needs `&mut self` and cannot
         // be called inside the entries vec literal (which already borrows it).
         let string_from_utf8_result = {
-            let s = self.intern_substitution(vec![
-                GenericArg::Ty(string_ty),
-                GenericArg::Ty(vec_u8_ty),
-            ]);
+            let s = self
+                .intern_substitution(vec![GenericArg::Ty(string_ty), GenericArg::Ty(vec_u8_ty)]);
             self.mk_ty(TyKind::Adt(result_id, s))
         };
         // `String::as_str` output is `&str`.
@@ -2422,7 +2420,12 @@ self.register_builtin_methods();
             (string_id, "new", vec![], string_ty),
             (string_id, "with_capacity", vec![usize_ty], string_ty),
             (string_id, "from", vec![ref_str_ty], string_ty),
-            (string_id, "from_utf8", vec![vec_u8_ty], string_from_utf8_result),
+            (
+                string_id,
+                "from_utf8",
+                vec![vec_u8_ty],
+                string_from_utf8_result,
+            ),
             (
                 string_id,
                 "from_utf8_lossy",
@@ -2552,10 +2555,7 @@ self.register_builtin_methods();
             (
                 slice_id,
                 "from_raw_parts",
-                vec![
-                    self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not)),
-                    usize_ty,
-                ],
+                vec![self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not)), usize_ty],
                 ref_slice_t,
             ),
             // Box<T>
@@ -2601,20 +2601,20 @@ self.register_builtin_methods();
         // requiring a real impl block on a primitive type (which the
         // language does not permit).
         let prim_bit_methods: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
-            (usize_ty, "is_power_of_two",  vec![], bool_ty),
+            (usize_ty, "is_power_of_two", vec![], bool_ty),
             (usize_ty, "next_power_of_two", vec![], usize_ty),
-            (usize_ty, "leading_zeros",    vec![], u32_ty),
-            (usize_ty, "trailing_zeros",   vec![], u32_ty),
-            (usize_ty, "count_ones",       vec![], u32_ty),
-            (usize_ty, "count_zeros",      vec![], u32_ty),
-            (u32_ty,   "is_power_of_two",  vec![], bool_ty),
-            (u32_ty,   "next_power_of_two", vec![], u32_ty),
-            (u32_ty,   "leading_zeros",    vec![], u32_ty),
-            (u32_ty,   "trailing_zeros",   vec![], u32_ty),
-            (u32_ty,   "count_ones",       vec![], u32_ty),
-            (u64_ty,   "is_power_of_two",  vec![], bool_ty),
-            (u64_ty,   "next_power_of_two", vec![], u64_ty),
-            (u8_ty,    "is_power_of_two",  vec![], bool_ty),
+            (usize_ty, "leading_zeros", vec![], u32_ty),
+            (usize_ty, "trailing_zeros", vec![], u32_ty),
+            (usize_ty, "count_ones", vec![], u32_ty),
+            (usize_ty, "count_zeros", vec![], u32_ty),
+            (u32_ty, "is_power_of_two", vec![], bool_ty),
+            (u32_ty, "next_power_of_two", vec![], u32_ty),
+            (u32_ty, "leading_zeros", vec![], u32_ty),
+            (u32_ty, "trailing_zeros", vec![], u32_ty),
+            (u32_ty, "count_ones", vec![], u32_ty),
+            (u64_ty, "is_power_of_two", vec![], bool_ty),
+            (u64_ty, "next_power_of_two", vec![], u64_ty),
+            (u8_ty, "is_power_of_two", vec![], bool_ty),
             // Script 225: min/max/abs/clamp on integer receivers. The stdlib's
             // raw_vec.g calls `required_cap.next_power_of_two().max(8)`; without
             // these, the receiver is a valid `Uint(Usize)` but the method
@@ -2622,15 +2622,15 @@ self.register_builtin_methods();
             (usize_ty, "max", vec![usize_ty], usize_ty),
             (usize_ty, "min", vec![usize_ty], usize_ty),
             (usize_ty, "clamp", vec![usize_ty, usize_ty], usize_ty),
-            (u64_ty,   "max", vec![u64_ty], u64_ty),
-            (u64_ty,   "min", vec![u64_ty], u64_ty),
-            (u32_ty,   "max", vec![u32_ty], u32_ty),
-            (u32_ty,   "min", vec![u32_ty], u32_ty),
-            (u8_ty,    "max", vec![u8_ty], u8_ty),
-            (u8_ty,    "min", vec![u8_ty], u8_ty),
-            (i32_ty,   "max", vec![i32_ty], i32_ty),
-            (i32_ty,   "min", vec![i32_ty], i32_ty),
-            (i32_ty,   "abs", vec![], i32_ty),
+            (u64_ty, "max", vec![u64_ty], u64_ty),
+            (u64_ty, "min", vec![u64_ty], u64_ty),
+            (u32_ty, "max", vec![u32_ty], u32_ty),
+            (u32_ty, "min", vec![u32_ty], u32_ty),
+            (u8_ty, "max", vec![u8_ty], u8_ty),
+            (u8_ty, "min", vec![u8_ty], u8_ty),
+            (i32_ty, "max", vec![i32_ty], i32_ty),
+            (i32_ty, "min", vec![i32_ty], i32_ty),
+            (i32_ty, "abs", vec![], i32_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_bit_methods {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
@@ -2659,20 +2659,20 @@ self.register_builtin_methods();
         // requiring a real impl block on a primitive type (which the
         // language does not permit).
         let prim_bit_methods: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
-            (usize_ty, "is_power_of_two",  vec![], bool_ty),
+            (usize_ty, "is_power_of_two", vec![], bool_ty),
             (usize_ty, "next_power_of_two", vec![], usize_ty),
-            (usize_ty, "leading_zeros",    vec![], u32_ty),
-            (usize_ty, "trailing_zeros",   vec![], u32_ty),
-            (usize_ty, "count_ones",       vec![], u32_ty),
-            (usize_ty, "count_zeros",      vec![], u32_ty),
-            (u32_ty,   "is_power_of_two",  vec![], bool_ty),
-            (u32_ty,   "next_power_of_two", vec![], u32_ty),
-            (u32_ty,   "leading_zeros",    vec![], u32_ty),
-            (u32_ty,   "trailing_zeros",   vec![], u32_ty),
-            (u32_ty,   "count_ones",       vec![], u32_ty),
-            (u64_ty,   "is_power_of_two",  vec![], bool_ty),
-            (u64_ty,   "next_power_of_two", vec![], u64_ty),
-            (u8_ty,    "is_power_of_two",  vec![], bool_ty),
+            (usize_ty, "leading_zeros", vec![], u32_ty),
+            (usize_ty, "trailing_zeros", vec![], u32_ty),
+            (usize_ty, "count_ones", vec![], u32_ty),
+            (usize_ty, "count_zeros", vec![], u32_ty),
+            (u32_ty, "is_power_of_two", vec![], bool_ty),
+            (u32_ty, "next_power_of_two", vec![], u32_ty),
+            (u32_ty, "leading_zeros", vec![], u32_ty),
+            (u32_ty, "trailing_zeros", vec![], u32_ty),
+            (u32_ty, "count_ones", vec![], u32_ty),
+            (u64_ty, "is_power_of_two", vec![], bool_ty),
+            (u64_ty, "next_power_of_two", vec![], u64_ty),
+            (u8_ty, "is_power_of_two", vec![], bool_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_bit_methods {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
@@ -2739,7 +2739,12 @@ self.register_builtin_methods();
         for (adt_id, name, inputs, output) in entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
             if std::env::var("GLYIM_DBG_FNID").is_ok() {
-                eprintln!("[FNID] builtin adt={:?} fn_id={} name={}", adt_id, fn_id.to_raw(), name);
+                eprintln!(
+                    "[FNID] builtin adt={:?} fn_id={} name={}",
+                    adt_id,
+                    fn_id.to_raw(),
+                    name
+                );
             }
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
@@ -2779,7 +2784,9 @@ self.register_builtin_methods();
 
     /// Name-keyed inherent-method lookup.
     pub fn inherent_method_by_name(&self, type_name: Name, method_name: Name) -> Option<FnDefId> {
-        self.inherent_methods_by_name.get(&(type_name, method_name)).copied()
+        self.inherent_methods_by_name
+            .get(&(type_name, method_name))
+            .copied()
     }
 
     /// Look up a builtin inherent method on a *primitive* numeric receiver

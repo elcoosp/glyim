@@ -72,8 +72,7 @@ fn match_literal_to_switch_int() {
         // Sequential-arm-testing shape: the switch discriminates a *bool*
         // produced by the arm's pattern test (see `lower_pattern_test`), so
         // there are no literal-value branches to check here.
-        if let TerminatorKind::SwitchInt { .. } =
-            &result.body.basic_blocks[bb_idx].terminator.kind
+        if let TerminatorKind::SwitchInt { .. } = &result.body.basic_blocks[bb_idx].terminator.kind
         {
         }
     }

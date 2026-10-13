@@ -117,9 +117,7 @@ pub extern "C" fn glyim_stdout_flush(_fd: i32) -> i32 {
 /// `35` (`EWOULDBLOCK`) / `11` (`EAGAIN`) map to `WouldBlock`.
 #[unsafe(no_mangle)]
 pub extern "C" fn glyim_errno() -> i32 {
-    std::io::Error::last_os_error()
-        .raw_os_error()
-        .unwrap_or(0)
+    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
 #[cfg(unix)]

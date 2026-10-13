@@ -3,11 +3,15 @@ use glyim_core::def_id::LocalDefId;
 use glyim_core::interner::{Interner, Name};
 use glyim_core::primitives::*;
 use glyim_diag::GlyimDiagnostic;
+use glyim_span::Span;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 use std::collections::HashMap;
-use glyim_span::Span;
 
-use crate::{AssociatedTy, Body, BodyId, ConstItem, EnumItem, Field, FnItem, GenericParam, GenericParamKind, ImplItem, ImplMethod, Item, ItemId, ItemKind, ModItem, Param, Pat, PatId, Path, StaticItem, StructItem, TraitItem, TraitMethod, TypeAliasItem, TypeRef, Variant, Visibility};
+use crate::{
+    AssociatedTy, Body, BodyId, ConstItem, EnumItem, Field, FnItem, GenericParam, GenericParamKind,
+    ImplItem, ImplMethod, Item, ItemId, ItemKind, ModItem, Param, Pat, PatId, Path, StaticItem,
+    StructItem, TraitItem, TraitMethod, TypeAliasItem, TypeRef, Variant, Visibility,
+};
 
 /// Collect generic type parameters from a `TypeParamList` child node (e.g. the
 /// `<T, U>` of `struct S<T, U>` / `enum E<T>` / `fn f<T>`). The parser emits a
@@ -168,7 +172,8 @@ pub(crate) fn lower_fn_def(
     for child in node.children() {
         if child.kind() == SyntaxKind::ParamList {
             for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
+                let (p, pat_id) =
+                    lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
                 params.push(p);
                 body_params.push(pat_id);
             }
@@ -634,11 +639,12 @@ pub(crate) fn lower_impl_def(
         let mut body_params = Vec::new();
         let mut temp_pats = IndexVec::new();
         let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
-    let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
+        let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         for child in method_node.children() {
             if child.kind() == SyntaxKind::ParamList {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
+                    let (p, pat_id) =
+                        lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
                     params.push(p);
                     body_params.push(pat_id);
                 }
@@ -801,11 +807,12 @@ pub(crate) fn lower_trait_def(
         let mut body_params = Vec::new();
         let mut temp_pats = IndexVec::new();
         let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
-    let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
+        let mut temp_pat_spans: IndexVec<PatId, Span> = IndexVec::new();
         for child in method_node.children() {
             if child.kind() == SyntaxKind::ParamList {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (p, pat_id) = lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
+                    let (p, pat_id) =
+                        lower_param(&param_node, interner, &mut temp_pats, &mut temp_pat_spans);
                     params.push(p);
                     body_params.push(pat_id);
                 }
@@ -966,7 +973,7 @@ pub(crate) fn lower_const_def(
             owner,
             exprs: IndexVec::new(),
             pats: IndexVec::new(),
-        pat_spans: IndexVec::new(),
+            pat_spans: IndexVec::new(),
             params: Vec::new(),
             span: node_span(node),
             expr_spans: IndexVec::new(),
@@ -1061,7 +1068,7 @@ pub(crate) fn lower_static_def(
             owner,
             exprs: IndexVec::new(),
             pats: IndexVec::new(),
-        pat_spans: IndexVec::new(),
+            pat_spans: IndexVec::new(),
             params: Vec::new(),
             span: node_span(node),
             expr_spans: IndexVec::new(),

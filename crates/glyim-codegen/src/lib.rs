@@ -130,7 +130,9 @@ impl LayoutProvider for GlyimLayoutProvider {
 
     fn variant_type(&self, enum_ty: Ty, variant_idx: VariantIdx) -> Ty {
         use glyim_type::TyKind;
-        let Some(ctx) = self.ctx() else { return Ty::ERROR };
+        let Some(ctx) = self.ctx() else {
+            return Ty::ERROR;
+        };
         match ctx.ty_kind(enum_ty) {
             TyKind::Adt(adt_id, _substs) => ctx.variant_type(*adt_id, variant_idx.to_raw()),
             _ => Ty::ERROR,
@@ -309,9 +311,7 @@ impl BytecodeBackend {
                     bc.push(OP_ADD);
                 }
                 ProjectionElem::Index(local) => {
-                    let elem_size = self
-                        .layout_provider
-                        .size_of(self.element_ty_of(current_ty));
+                    let elem_size = self.layout_provider.size_of(self.element_ty_of(current_ty));
                     if elem_size == 0 {
                         // ZST array/slice element: every element aliases the same
                         // base address, so the byte offset is always 0. This is
@@ -396,9 +396,7 @@ impl BytecodeBackend {
                     min_length: _,
                     from_end,
                 } => {
-                    let elem_size = self
-                        .layout_provider
-                        .size_of(self.element_ty_of(current_ty));
+                    let elem_size = self.layout_provider.size_of(self.element_ty_of(current_ty));
                     let index_val = if *from_end {
                         // For arrays the length is known at compile time, so the
                         // from-end index can be resolved to a constant offset.
@@ -460,9 +458,7 @@ impl BytecodeBackend {
                     to: _,
                     from_end: _,
                 } => {
-                    let elem_size = self
-                        .layout_provider
-                        .size_of(self.element_ty_of(current_ty));
+                    let elem_size = self.layout_provider.size_of(self.element_ty_of(current_ty));
                     let byte_offset = *from * elem_size;
                     bc.push(OP_LOAD_CONST);
                     bc.extend_from_slice(&(byte_offset as i64).to_le_bytes());

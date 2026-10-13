@@ -13,7 +13,7 @@
 //! corpora.
 
 use glyim_test::harness::compiler::{CompileOutput, PipelineCompiler, TestCompiler};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -29,7 +29,9 @@ fn corpus_root() -> PathBuf {
 fn collect_g_files(root: &std::path::Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     fn walk(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
@@ -73,8 +75,12 @@ fn compiler_never_panics_on_no_ice_corpus() {
         let file_clone = file.clone();
         let source_clone = source.clone();
         let result = catch_unwind(AssertUnwindSafe(|| {
-            let _out: CompileOutput =
-                compiler.compile(&source_clone, &file_clone, glyim_span::FileId::from_raw(1), &[]);
+            let _out: CompileOutput = compiler.compile(
+                &source_clone,
+                &file_clone,
+                glyim_span::FileId::from_raw(1),
+                &[],
+            );
         }));
 
         if let Err(payload) = result {

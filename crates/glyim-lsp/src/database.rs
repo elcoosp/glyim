@@ -296,7 +296,11 @@ mod source_map_tests {
     use std::path::PathBuf;
 
     fn sm(content: &str) -> SourceMap {
-        SourceMap::new(PathBuf::from("/t.g"), FileId::from_raw(1), content.to_string())
+        SourceMap::new(
+            PathBuf::from("/t.g"),
+            FileId::from_raw(1),
+            content.to_string(),
+        )
     }
 
     /// INF-11: LSP columns are UTF-16 code units. Round-trip on ASCII.

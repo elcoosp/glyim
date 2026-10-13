@@ -36,12 +36,8 @@ impl LspState {
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         // T130-PATCHED [LSP-6]: driver needs the sender to enqueue
         // dependent re-analysis.
-        let driver = crate::driver::AnalysisDriver::new(
-            self.analysis.clone(),
-            rx,
-            cache_dir,
-            tx.clone(),
-        );
+        let driver =
+            crate::driver::AnalysisDriver::new(self.analysis.clone(), rx, cache_dir, tx.clone());
         tokio::spawn(driver.run());
         self.driver_tx = Some(tx);
     }

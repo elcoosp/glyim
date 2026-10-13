@@ -87,7 +87,11 @@ impl AnalysisDriver {
             let mut shutdown = false;
 
             let mut absorb = |msg: AnalysisMessage| match msg {
-                AnalysisMessage::FileChanged { path, content, version } => {
+                AnalysisMessage::FileChanged {
+                    path,
+                    content,
+                    version,
+                } => {
                     latest_changes.insert(path, (content, version));
                 }
                 AnalysisMessage::FileClosed { path } => {

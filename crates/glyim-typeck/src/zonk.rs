@@ -44,8 +44,8 @@
 //! will fail that assert in debug builds *at the source*, before any
 //! downstream phase has a chance to misinterpret the raw type.
 
-use glyim_solve::InferenceTable;
 use glyim_core::def_id::AdtId;
+use glyim_solve::InferenceTable;
 use glyim_type::{GenericArg, Substitution, Ty, TyCtx, TyKind};
 
 use crate::thir;
@@ -188,9 +188,7 @@ fn walk_expr(ctx: &TyCtx, expr: &thir::Expr, f: &mut impl FnMut(Ty)) {
                 walk_expr(ctx, e, f);
             }
         }
-        thir::ExprKind::Struct {
-            fields, spread, ..
-        } => {
+        thir::ExprKind::Struct { fields, spread, .. } => {
             for (_name, e) in fields {
                 walk_expr(ctx, e, f);
             }
@@ -226,9 +224,7 @@ fn walk_expr(ctx: &TyCtx, expr: &thir::Expr, f: &mut impl FnMut(Ty)) {
 
 fn walk_stmt(ctx: &TyCtx, stmt: &thir::Stmt, f: &mut impl FnMut(Ty)) {
     match stmt {
-        thir::Stmt::Let {
-            ty, pat, init, ..
-        } => {
+        thir::Stmt::Let { ty, pat, init, .. } => {
             f(*ty);
             walk_pattern(ctx, pat, f);
             if let Some(i) = init {
@@ -393,9 +389,7 @@ fn zonk_ty(infer: &InferenceTable, ctx: &TyCtx, ty: Ty) -> Ty {
             let mut new_args: Vec<GenericArg> = Vec::with_capacity(args.len());
             for a in args {
                 match a {
-                    GenericArg::Ty(t) => {
-                        new_args.push(GenericArg::Ty(zonk_ty(infer, ctx, *t)))
-                    }
+                    GenericArg::Ty(t) => new_args.push(GenericArg::Ty(zonk_ty(infer, ctx, *t))),
                     other => new_args.push(other.clone()),
                 }
             }
@@ -455,9 +449,7 @@ fn zonk_body(infer: &InferenceTable, ctx: &TyCtx, body: &mut thir::Body) {
 
 fn zonk_stmt(infer: &InferenceTable, ctx: &TyCtx, stmt: &mut thir::Stmt) {
     match stmt {
-        thir::Stmt::Let {
-            ty, pat, init, ..
-        } => {
+        thir::Stmt::Let { ty, pat, init, .. } => {
             *ty = zonk_ty(infer, ctx, *ty);
             zonk_pattern(infer, ctx, pat);
             if let Some(i) = init {
@@ -614,9 +606,7 @@ fn zonk_expr(infer: &InferenceTable, ctx: &TyCtx, expr: &mut thir::Expr) {
                 zonk_expr(infer, ctx, e);
             }
         }
-        thir::ExprKind::Struct {
-            fields, spread, ..
-        } => {
+        thir::ExprKind::Struct { fields, spread, .. } => {
             for (_name, e) in fields {
                 zonk_expr(infer, ctx, e);
             }
@@ -696,7 +686,6 @@ fn walk_ty(ctx: &TyCtx, ty: Ty, f: &mut impl FnMut(Ty)) {
         _ => {}
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // ADT definitions

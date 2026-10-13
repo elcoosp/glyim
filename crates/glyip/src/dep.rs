@@ -261,7 +261,6 @@ impl HttpRegistryClient {
     }
 }
 
-
 #[cfg(feature = "registry")]
 impl RegistryClient for HttpRegistryClient {
     fn fetch_index(&self, name: &str) -> GlyipResult<IndexEntry> {

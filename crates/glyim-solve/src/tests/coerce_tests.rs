@@ -273,8 +273,16 @@ fn test_coerce_ref_pointee_must_match() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let str_ty = ctx_mut.mk_ty(TyKind::String);
-    let ref_i32 = ctx_mut.mk_ref(Region::Erased, i32_ty, glyim_core::primitives::Mutability::Not);
-    let ref_str = ctx_mut.mk_ref(Region::Erased, str_ty, glyim_core::primitives::Mutability::Not);
+    let ref_i32 = ctx_mut.mk_ref(
+        Region::Erased,
+        i32_ty,
+        glyim_core::primitives::Mutability::Not,
+    );
+    let ref_str = ctx_mut.mk_ref(
+        Region::Erased,
+        str_ty,
+        glyim_core::primitives::Mutability::Not,
+    );
     let ctx = ctx_mut.freeze();
     assert!(
         !crate::fulfill::can_coerce(&ctx, ref_i32, ref_str),
@@ -292,8 +300,16 @@ fn test_coerce_ref_pointee_must_match() {
 fn test_coerce_ref_same_pointee_still_works() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let ref_i32 = ctx_mut.mk_ref(Region::Erased, i32_ty, glyim_core::primitives::Mutability::Not);
-    let refmut_i32 = ctx_mut.mk_ref(Region::Erased, i32_ty, glyim_core::primitives::Mutability::Mut);
+    let ref_i32 = ctx_mut.mk_ref(
+        Region::Erased,
+        i32_ty,
+        glyim_core::primitives::Mutability::Not,
+    );
+    let refmut_i32 = ctx_mut.mk_ref(
+        Region::Erased,
+        i32_ty,
+        glyim_core::primitives::Mutability::Mut,
+    );
     let ctx = ctx_mut.freeze();
     assert!(crate::fulfill::can_coerce(&ctx, ref_i32, ref_i32));
     assert!(crate::fulfill::can_coerce(&ctx, refmut_i32, ref_i32));

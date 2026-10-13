@@ -33,7 +33,6 @@ use glyim_core::def_id::AdtId;
 ///   * a fieldless (C-like) enum ↔ int/uint
 ///   * identical types are always allowed
 pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
-
     use TyKind::*;
 
     // Script 97: int <-> raw-pointer casts. Both directions are legal in
@@ -46,16 +45,12 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
     // variants; unsigned literals are `Infer(Int(_))` until zonked.)
     match (ctx.ty_kind(from), ctx.ty_kind(to)) {
         (
-            TyKind::Int(_)
-                | TyKind::Uint(_)
-                | TyKind::Infer(InferVar::Int(_)),
+            TyKind::Int(_) | TyKind::Uint(_) | TyKind::Infer(InferVar::Int(_)),
             TyKind::RawPtr(_, _),
         ) => return true,
         (
             TyKind::RawPtr(_, _),
-            TyKind::Int(_)
-                | TyKind::Uint(_)
-                | TyKind::Infer(InferVar::Int(_)),
+            TyKind::Int(_) | TyKind::Uint(_) | TyKind::Infer(InferVar::Int(_)),
         ) => return true,
         _ => {}
     }

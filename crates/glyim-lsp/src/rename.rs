@@ -95,14 +95,12 @@ pub fn rename_symbol(
         // would rename unrelated `x`s in every other function that
         // shares the name. Item-level names (free fns, structs, enums)
         // stay global so cross-module renames work as before.
-        let cursor_ref = references
-            .iter()
-            .find(|r| {
-                !r.span.is_dummy()
-                    && r.file_id == file_id
-                    && r.span.lo.to_usize() <= offset
-                    && offset < r.span.hi.to_usize()
-            });
+        let cursor_ref = references.iter().find(|r| {
+            !r.span.is_dummy()
+                && r.file_id == file_id
+                && r.span.lo.to_usize() <= offset
+                && offset < r.span.hi.to_usize()
+        });
         let scope_owner: Option<u32> = match cursor_ref {
             Some(r) if !r.is_item_level => r.owner_item_id,
             _ => None,

@@ -147,9 +147,7 @@ impl<'a> FnCtxt<'a> {
                 // the actual `AdtDef` is registered under the canonical
                 // builtin id (1010). Without this, every `Option::Some(x)`
                 // produced Adt9 which never unified with Adt1010.
-                let adt_id = crate::canonical_enum_adt_id(
-                    self.ctx, self.def_map, *enum_local,
-                );
+                let adt_id = crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
                 // Plan unstub-5 P5: for a *generic* enum `Poll<T>`, the variant
                 // value/pattern type must carry one inference variable per
                 // generic parameter (so `Poll::Ready(x)` infers `Poll<i32>`
@@ -175,28 +173,27 @@ impl<'a> FnCtxt<'a> {
                 // The turbofish is written on the *enum* path segment
                 // (`segments[0]` for `Enum::<..>::Variant`), so read it from
                 // the first segment that carries `generic_args`.
-                let explicit_args: Option<Vec<glyim_hir::TypeRef>> = path
-                    .segments
-                    .iter()
-                    .find_map(|s| s.generic_args.clone());
+                let explicit_args: Option<Vec<glyim_hir::TypeRef>> =
+                    path.segments.iter().find_map(|s| s.generic_args.clone());
                 let mut subst_map: std::collections::HashMap<u32, GenericArg> =
                     std::collections::HashMap::new();
                 let mut subst_args: Vec<GenericArg> = Vec::with_capacity(arity);
                 for i in 0..arity {
-                    let seeded = explicit_args
-                        .as_ref()
-                        .and_then(|args| args.get(i))
-                        .map(|ty_ref| {
-                            crate::tyconv::resolve_type_ref(
-                                self.ctx,
-                                self.infer,
-                                self.def_map,
-                                self.diagnostics,
-                                ty_ref,
-                                &self.param_map,
-                                span,
-                            )
-                        });
+                    let seeded =
+                        explicit_args
+                            .as_ref()
+                            .and_then(|args| args.get(i))
+                            .map(|ty_ref| {
+                                crate::tyconv::resolve_type_ref(
+                                    self.ctx,
+                                    self.infer,
+                                    self.def_map,
+                                    self.diagnostics,
+                                    ty_ref,
+                                    &self.param_map,
+                                    span,
+                                )
+                            });
                     let arg_ty = match seeded {
                         Some(t) if t != Ty::ERROR => t,
                         _ => {
@@ -442,18 +439,61 @@ impl<'a> FnCtxt<'a> {
             // used set directly, returning a literal of the primitive type.
             {
                 let first_name = self.ctx.name_str(path.segments[0].name).to_string();
-                let last_name = self.ctx.name_str(path.segments.last().unwrap().name).to_string();
+                let last_name = self
+                    .ctx
+                    .name_str(path.segments.last().unwrap().name)
+                    .to_string();
                 let prim_ty_hint = match first_name.as_str() {
-                    "usize" => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize)), true)),
-                    "u64"   => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U64)), true)),
-                    "u32"   => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U32)), true)),
-                    "u16"   => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U16)), true)),
-                    "u8"    => Some((self.ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8)), true)),
-                    "isize" => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::Isize)), false)),
-                    "i64"   => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I64)), false)),
-                    "i32"   => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32)), false)),
-                    "i16"   => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I16)), false)),
-                    "i8"    => Some((self.ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I8)), false)),
+                    "usize" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize)),
+                        true,
+                    )),
+                    "u64" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U64)),
+                        true,
+                    )),
+                    "u32" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U32)),
+                        true,
+                    )),
+                    "u16" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U16)),
+                        true,
+                    )),
+                    "u8" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8)),
+                        true,
+                    )),
+                    "isize" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Int(glyim_core::primitives::IntTy::Isize)),
+                        false,
+                    )),
+                    "i64" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I64)),
+                        false,
+                    )),
+                    "i32" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32)),
+                        false,
+                    )),
+                    "i16" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I16)),
+                        false,
+                    )),
+                    "i8" => Some((
+                        self.ctx
+                            .mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I8)),
+                        false,
+                    )),
                     _ => None,
                 };
                 if let Some((ty, is_uint)) = prim_ty_hint
@@ -655,9 +695,7 @@ impl<'a> FnCtxt<'a> {
                         // `OO::<T>::new() -> OO<T>` becomes `-> OO<?fresh>`.
                         let mut subst: std::collections::HashMap<u32, GenericArg> =
                             std::collections::HashMap::new();
-                        for (impl_param_idx, _gp) in
-                            impl_item.generic_params.iter().enumerate()
-                        {
+                        for (impl_param_idx, _gp) in impl_item.generic_params.iter().enumerate() {
                             let v = self.infer.new_ty_var(self.ctx);
                             let fresh = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
                             subst.insert(impl_param_idx as u32, GenericArg::Ty(fresh));
@@ -689,9 +727,10 @@ impl<'a> FnCtxt<'a> {
                             .unwrap_or(0);
                         let subst_args: Vec<GenericArg> = (0..arity)
                             .map(|i| {
-                                subst.get(&(i as u32)).cloned().unwrap_or_else(|| {
-                                    GenericArg::Ty(self.ctx.error_ty())
-                                })
+                                subst
+                                    .get(&(i as u32))
+                                    .cloned()
+                                    .unwrap_or_else(|| GenericArg::Ty(self.ctx.error_ty()))
                             })
                             .collect();
                         let fn_substs = self.ctx.intern_substitution(subst_args);
@@ -974,7 +1013,6 @@ impl<'a> FnCtxt<'a> {
         variant_idx: glyim_core::def_id::VariantIdx,
         span: Span,
     ) -> (thir::Expr, Ty) {
-
         if super::check_expr::dbg_flags::vexpr() {
             eprintln!("[VEXPR] adt_id={:?} variant_idx={:?}", adt_id, variant_idx);
         }

@@ -162,7 +162,7 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
                 interner: inter.clone(),
                 variant_map: Default::default(),
                 max_local_def_id: 0,
-        def_to_module: Default::default(),
+                def_to_module: Default::default(),
             },
             TraitDefId::from_raw(0),
         )

@@ -2,6 +2,7 @@ mod code_action;
 mod code_action_tests;
 mod completion;
 mod completion_tests;
+mod conformance;
 mod diagnostics;
 mod diagnostics_tests;
 mod document_symbol_tests;
@@ -21,7 +22,6 @@ mod reference_graph;
 mod symbol_index;
 mod uri_tests;
 mod workspace_symbol_tests;
-mod conformance;
 // New test modules for M10
 mod common;
 mod driver_tests;

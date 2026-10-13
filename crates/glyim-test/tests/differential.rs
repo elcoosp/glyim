@@ -18,10 +18,10 @@
 
 #![cfg(feature = "real-llvm")]
 
+use glyim_test::harness::TestRunner;
 use glyim_test::harness::compiler::{PipelineCompiler, TestCompiler};
 use glyim_test::harness::interpreter_runner::InterpRunner;
 use glyim_test::harness::runner::ProgramRunner;
-use glyim_test::harness::TestRunner;
 use glyim_test::mock::MockCodegen;
 
 use std::sync::Arc;
@@ -126,10 +126,7 @@ fn llvm_and_interp_agree_on_run_pass_corpus() {
             .map(|d| d.message.clone())
             .collect();
         if !errs.is_empty() {
-            disagreements.push(format!(
-                "{}: compile errors: {:?}",
-                test.name, errs
-            ));
+            disagreements.push(format!("{}: compile errors: {:?}", test.name, errs));
             continue;
         }
 

@@ -75,11 +75,11 @@ fn register_builtin_traits(
 pub mod mod_loader;
 mod mono_cache;
 mod pipeline_context;
+use glyim_span::FileId;
 use mono_cache::{
     PipelineMonoCache, compute_max_cgus, make_drop_glue_provider, make_mir_body_provider,
 };
 use pipeline_context::{PipelineBorrowckCtx, PipelineLowerCtx};
-use glyim_span::FileId;
 
 /// Pipeline.
 pub struct Pipeline;
@@ -576,14 +576,12 @@ impl Pipeline {
             // T124-PATCHED [PIPE-4]: supply the def-id-to-module map so
             // each MonoItemData::source_module reflects its declaring
             // module. Converts ModuleId → u32 for the MonoCtx API.
-            let def_to_module_u32: std::collections::HashMap<
-                glyim_core::def_id::LocalDefId,
-                u32,
-            > = def_map
-                .def_to_module
-                .iter()
-                .map(|(k, v)| (*k, v.to_raw()))
-                .collect();
+            let def_to_module_u32: std::collections::HashMap<glyim_core::def_id::LocalDefId, u32> =
+                def_map
+                    .def_to_module
+                    .iter()
+                    .map(|(k, v)| (*k, v.to_raw()))
+                    .collect();
             mono_ctx.with_def_to_module(&def_to_module_u32);
             // T101-PATCHED [LOW-10]: supply the *pre-substitution* body
             // map so polymorphization can see `TyKind::Param`. The bodies
@@ -609,7 +607,10 @@ impl Pipeline {
             // / pathological mono-set sizes surface as diagnostics instead of
             // being silently ignored.
             let mut post_diags = check_unsized_locals(mono_ctx.items(), ty_ctx_ref);
-            post_diags.extend(check_unresolved_virtual_methods(mono_ctx.items(), ty_ctx_ref));
+            post_diags.extend(check_unresolved_virtual_methods(
+                mono_ctx.items(),
+                ty_ctx_ref,
+            ));
             post_diags.extend(check_unused_generic_params(
                 mono_ctx.items(),
                 Some(&mir_bodies_map),
@@ -787,7 +788,7 @@ pub fn compile_file_to_mir(
     let mut hygiene = glyim_span::HygieneCtx::new();
     let mut expander = glyim_meta::Expander::new(&mut hygiene);
     let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
-if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
+    if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
         let dump = expanded_root.text().to_string();
         let dump_path =
             std::env::temp_dir().join(format!("glyim_expanded_{}.g", std::process::id()));
@@ -961,7 +962,6 @@ pub fn emit_mir(
         return Err(sink_cell.into_inner().into_diagnostics());
     }
 
-
     let (def_map, def_diagnostics) =
         glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
     sink_cell.borrow_mut().extend(def_diagnostics);
@@ -1088,8 +1088,7 @@ pub fn emit_llvm_ir(
         ir.push_str(&one);
         ir.push('\n');
     }
-    std::fs::write(output, ir)
-        .map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
+    std::fs::write(output, ir).map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
     Ok(())
 }
 
@@ -1152,7 +1151,9 @@ fn closure_body_has_unmonomorphized_ty(body: &glyim_mir::Body, ctx: &glyim_type:
 fn ty_has_unmono(ty: glyim_type::Ty, ctx: &glyim_type::TyCtx) -> bool {
     use glyim_type::{GenericArg, TyKind};
     fn go(ty: glyim_type::Ty, ctx: &glyim_type::TyCtx, depth: u32) -> bool {
-        if depth > 64 { return true; }
+        if depth > 64 {
+            return true;
+        }
         match ctx.ty_kind(ty).clone() {
             TyKind::Error
             | TyKind::Param(_)
@@ -1172,4 +1173,3 @@ fn ty_has_unmono(ty: glyim_type::Ty, ctx: &glyim_type::TyCtx) -> bool {
     }
     go(ty, ctx, 0)
 }
-

@@ -81,9 +81,7 @@ fn test_pat_binding_mut_is_tracked() {
         for &sid in stmts {
             if let Expr::Let { pat, .. } = &body.exprs[sid]
                 && let Pat::Binding {
-                    name,
-                    mutability,
-                    ..
+                    name, mutability, ..
                 } = &body.pats[*pat]
                 && name == &interner.intern("x")
             {
@@ -106,9 +104,7 @@ fn test_pat_binding_mut_is_tracked() {
         for &sid in stmts {
             if let Expr::Let { pat, .. } = &body.exprs[sid]
                 && let Pat::Binding {
-                    name,
-                    mutability,
-                    ..
+                    name, mutability, ..
                 } = &body.pats[*pat]
                 && name == &interner.intern("y")
             {

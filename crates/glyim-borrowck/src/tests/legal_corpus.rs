@@ -110,9 +110,7 @@ fn drop_after_move_is_accepted() {
     // destructor, but the *shape* is what a needs-drop local produces).
     let blocks = vec![
         BasicBlockData {
-            statements: vec![
-                move_stmt(LocalIdx::from_raw(1), LocalIdx::from_raw(2)),
-            ],
+            statements: vec![move_stmt(LocalIdx::from_raw(1), LocalIdx::from_raw(2))],
             terminator: drop_term(LocalIdx::from_raw(2), 1),
             is_cleanup: false,
         },
@@ -125,11 +123,7 @@ fn drop_after_move_is_accepted() {
     let body = Body {
         owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
         basic_blocks: IndexVec::from_raw(blocks),
-        locals: IndexVec::from_raw(vec![
-            decl(ty),
-            decl(ty),
-            decl(ty),
-        ]),
+        locals: IndexVec::from_raw(vec![decl(ty), decl(ty), decl(ty)]),
         arg_count: 0,
         return_ty: Ty::UNIT,
         span: Span::DUMMY,

@@ -42,7 +42,10 @@ pub fn check_unsized_locals(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDia
 /// here, at monomorphization time, as a clean spanned diagnostic so it never
 /// reaches codegen. Mirrors rustc's `E0277` ("the trait bound `X: Trait` is
 /// not satisfied").
-pub fn check_unresolved_virtual_methods(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDiagnostic> {
+pub fn check_unresolved_virtual_methods(
+    items: &[MonoItemData],
+    ctx: &TyCtx,
+) -> Vec<GlyimDiagnostic> {
     let mut diags = Vec::new();
     for item in items {
         for block in item.body.basic_blocks.iter() {
@@ -131,10 +134,7 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
 pub fn check_unused_generic_params(
     items: &[MonoItemData],
     pre_mono_bodies: Option<
-        &std::collections::HashMap<
-            glyim_core::def_id::DefId,
-            std::sync::Arc<glyim_mir::Body>,
-        >,
+        &std::collections::HashMap<glyim_core::def_id::DefId, std::sync::Arc<glyim_mir::Body>>,
     >,
     ctx: &TyCtx,
 ) -> Vec<GlyimDiagnostic> {

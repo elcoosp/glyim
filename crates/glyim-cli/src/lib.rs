@@ -69,7 +69,6 @@ pub struct CliArgs {
     /// project template will grow a native equivalent in v0.2.
     #[arg(long = "with-stdlib", default_value_t = false)]
     pub with_stdlib: bool,
-
 }
 
 /// run.
@@ -83,14 +82,22 @@ fn generate_stdlib_prelude(stdlib_src: &str) -> String {
     let mut seen = std::collections::HashSet::new();
     for line in stdlib_src.lines() {
         let t = line.trim_start();
-        let Some(rest) = t.strip_prefix("pub mod ") else { continue };
+        let Some(rest) = t.strip_prefix("pub mod ") else {
+            continue;
+        };
         let name = rest
             .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
             .next()
             .unwrap_or("");
-        if name.is_empty() { continue; }
-        if SHADOW.contains(&name) { continue; }
-        if !seen.insert(name.to_string()) { continue; }
+        if name.is_empty() {
+            continue;
+        }
+        if SHADOW.contains(&name) {
+            continue;
+        }
+        if !seen.insert(name.to_string()) {
+            continue;
+        }
         out.push_str(&format!("use {name}::*;\n"));
     }
     out
@@ -123,7 +130,8 @@ pub fn inject_assembled_stdlib(
     // generic definitions (`Once<T>`, `Repeat<T>`, …), causing the
     // "generic type `Once` expects 0 type argument(s)" cascade.
     let combined = format!("{stdlib}\n{user}\n");
-    db.vfs().add_file_content(input, std::sync::Arc::from(combined));
+    db.vfs()
+        .add_file_content(input, std::sync::Arc::from(combined));
     Ok(())
 }
 
@@ -313,10 +321,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // so the local `cc`/`ld64` on macOS/Windows refused to link
     // (`ld: unknown file type`). Falls back inside the helper to the
     // historical default if `rustc -vV` cannot be queried.
-    let target_triple = args
-        .target
-        .clone()
-        .unwrap_or_else(host_target_triple);
+    let target_triple = args.target.clone().unwrap_or_else(host_target_triple);
 
     // Parse the requested LTO strategy (Phase 10.2). `Thin` is a tracked gap
     // (linker-driver integration); surface it as an explicit error rather than
@@ -351,13 +356,14 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // Tier 1.1: --with-stdlib prepends the assembled stdlib + prelude
     if args.with_stdlib {
         if let Err(diags) = inject_assembled_stdlib(&mut db, input) {
-            for d in diags { eprintln!("{}", d.message); }
+            for d in diags {
+                eprintln!("{}", d.message);
+            }
             return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
                 "--with-stdlib: failed to inject assembled stdlib",
             )]);
         }
     }
-
 
     // Phase 8 / plan §9.2: if the user listed proc-macro dependency crates,
     // run the two-stage proc-macro build (compile each for the HOST triple to
@@ -437,9 +443,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         None
     };
     let mut cache_key: Option<String> = None;
-    if cacheable
-        && let Some(c) = cache.as_ref()
-    {
+    if cacheable && let Some(c) = cache.as_ref() {
         // T128-PATCHED [CLI-4]: hash each proc-macro dependency file's
         // bytes into the cache key. Also mix the LTO kind so fat/incremental
         // (once implemented) do not serve cross-config objects.

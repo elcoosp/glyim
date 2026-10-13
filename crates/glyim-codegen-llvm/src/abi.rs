@@ -109,7 +109,7 @@ impl LayoutComputer for FullLayoutComputer<'_> {
         let layout = self.layout_of_compute(ty)?;
         self.cache.borrow_mut().insert(ty, layout.clone());
         Ok(layout)
-}
+    }
 
     fn fn_abi_of(&self, sig: &glyim_type::FnSig) -> Result<FnAbi, LayoutError> {
         let ret_layout = self.layout_of(sig.output)?;
@@ -360,7 +360,6 @@ impl FullLayoutComputer<'_> {
             }
             _ => self.simple.layout_of(ty),
         }
-    
     }
 }
 

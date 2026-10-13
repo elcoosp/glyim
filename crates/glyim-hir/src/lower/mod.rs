@@ -118,7 +118,6 @@ pub(crate) fn is_pat_node(node: &SyntaxNode) -> bool {
     )
 }
 
-
 pub(crate) fn node_span(node: &SyntaxNode) -> Span {
     let range = node.text_range();
     let lo = ByteIdx::from_raw(u32::from(range.start()));

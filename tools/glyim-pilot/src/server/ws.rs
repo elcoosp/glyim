@@ -123,58 +123,57 @@ impl WsServer {
                             match msg {
                                 Ok(Message::Text(text)) => {
                                     match serde_json::from_str::<ExtensionMessage>(&text) {
-                                      Ok(ext_msg) => {
-                                        // T155-PATCHED [PILOT-13]: reject
-                                        // protocol-version mismatches instead
-                                        // of silently dropping them.
-                                        if let Err(ver) = ext_msg.validate_version() {
-                                            tracing::warn!(peer = %addr, "rejected: {ver}");
-                                            continue;
-                                        }
-                                        // T016-PATCHED-WS [PILOT-1]: reject
-                                        // any message whose session_id (or
-                                        // trace_id) is not a strictly
-                                        // validated identifier. The id is
-                                        // later joined into the worktree
-                                        // directory path and git branch
-                                        // name; accepting attacker-chosen
-                                        // values over the unauthenticated
-                                        // local WebSocket lets a local
-                                        // attacker create files/refs
-                                        // outside the worktree base.
-                                        let sid = ext_msg.session_id().map(|s| s.to_string());
-                                        let tid = ext_msg.trace_id().map(|s| s.to_string());
-                                        let mut rejected = false;
-                                        if let Some(s) = sid.as_deref() {
-                                            if let Err(e) = crate::error::validate_id(s) {
-                                                tracing::warn!(peer = %addr, "rejected message (session_id): {e}");
-                                                rejected = true;
+                                        Ok(ext_msg) => {
+                                            // T155-PATCHED [PILOT-13]: reject
+                                            // protocol-version mismatches instead
+                                            // of silently dropping them.
+                                            if let Err(ver) = ext_msg.validate_version() {
+                                                tracing::warn!(peer = %addr, "rejected: {ver}");
+                                                continue;
                                             }
-                                        }
-                                        if !rejected {
-                                            if let Some(t) = tid.as_deref() {
-                                                if let Err(e) = crate::error::validate_id(t) {
-                                                    tracing::warn!(peer = %addr, "rejected message (trace_id): {e}");
+                                            // T016-PATCHED-WS [PILOT-1]: reject
+                                            // any message whose session_id (or
+                                            // trace_id) is not a strictly
+                                            // validated identifier. The id is
+                                            // later joined into the worktree
+                                            // directory path and git branch
+                                            // name; accepting attacker-chosen
+                                            // values over the unauthenticated
+                                            // local WebSocket lets a local
+                                            // attacker create files/refs
+                                            // outside the worktree base.
+                                            let sid = ext_msg.session_id().map(|s| s.to_string());
+                                            let tid = ext_msg.trace_id().map(|s| s.to_string());
+                                            let mut rejected = false;
+                                            if let Some(s) = sid.as_deref() {
+                                                if let Err(e) = crate::error::validate_id(s) {
+                                                    tracing::warn!(peer = %addr, "rejected message (session_id): {e}");
                                                     rejected = true;
                                                 }
                                             }
+                                            if !rejected {
+                                                if let Some(t) = tid.as_deref() {
+                                                    if let Err(e) = crate::error::validate_id(t) {
+                                                        tracing::warn!(peer = %addr, "rejected message (trace_id): {e}");
+                                                        rejected = true;
+                                                    }
+                                                }
+                                            }
+                                            if rejected {
+                                                continue;
+                                            }
+                                            let _ = event_tx
+                                                .send(ServerEvent::Message {
+                                                    session_id: sid,
+                                                    trace_id: tid,
+                                                    msg: ext_msg,
+                                                })
+                                                .await;
                                         }
-                                        if rejected {
-                                            continue;
+                                        Err(e) => {
+                                            let preview: String = text.chars().take(200).collect();
+                                            tracing::warn!(peer = %addr, "undecodable message ({e}): {preview}");
                                         }
-                                        let _ = event_tx
-                                            .send(ServerEvent::Message {
-                                                session_id: sid,
-                                                trace_id: tid,
-                                                msg: ext_msg,
-                                            })
-                                            .await;
-                                      }
-                                      Err(e) => {
-                                        let preview: String =
-                                            text.chars().take(200).collect();
-                                        tracing::warn!(peer = %addr, "undecodable message ({e}): {preview}");
-                                      }
                                     }
                                 }
                                 Ok(Message::Ping(data)) => {

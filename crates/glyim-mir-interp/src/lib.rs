@@ -234,8 +234,12 @@ impl<'tcx> Interpreter<'tcx> {
         let receiver = args.first().cloned().unwrap_or(InterpValue::Unit);
 
         match (adt_id.to_raw(), method.as_str()) {
-            (1010, "is_some") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) == Some(1)))),
-            (1010, "is_none") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) != Some(1)))),
+            (1010, "is_some") => Ok(Some(InterpValue::Bool(
+                Self::enum_tag(&receiver) == Some(1),
+            ))),
+            (1010, "is_none") => Ok(Some(InterpValue::Bool(
+                Self::enum_tag(&receiver) != Some(1),
+            ))),
             (1010, "unwrap") | (1010, "expect") => {
                 if Self::enum_tag(&receiver) == Some(1) {
                     Ok(Some(Self::enum_payload(&receiver)))
@@ -252,8 +256,12 @@ impl<'tcx> Interpreter<'tcx> {
                     Ok(Some(args.get(1).cloned().unwrap_or(InterpValue::Unit)))
                 }
             }
-            (1011, "is_ok") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) == Some(0)))),
-            (1011, "is_err") => Ok(Some(InterpValue::Bool(Self::enum_tag(&receiver) != Some(0)))),
+            (1011, "is_ok") => Ok(Some(InterpValue::Bool(
+                Self::enum_tag(&receiver) == Some(0),
+            ))),
+            (1011, "is_err") => Ok(Some(InterpValue::Bool(
+                Self::enum_tag(&receiver) != Some(0),
+            ))),
             (1011, "unwrap") | (1011, "expect") => {
                 if Self::enum_tag(&receiver) == Some(0) {
                     Ok(Some(Self::enum_payload(&receiver)))
@@ -560,12 +568,10 @@ impl<'tcx> Interpreter<'tcx> {
                 // equals the element count and `to_vec` /
                 // `from_utf8_lossy` round-trip.
                 let elems: Vec<InterpValue> = match &s {
-                    InterpValue::Aggregate(fields) if fields.len() == 2 => {
-                        match &fields[0] {
-                            InterpValue::Aggregate(buf) => buf.clone(),
-                            _ => Vec::new(),
-                        }
-                    }
+                    InterpValue::Aggregate(fields) if fields.len() == 2 => match &fields[0] {
+                        InterpValue::Aggregate(buf) => buf.clone(),
+                        _ => Vec::new(),
+                    },
                     _ => Vec::new(),
                 };
                 let slice: String = elems
@@ -574,8 +580,9 @@ impl<'tcx> Interpreter<'tcx> {
                         InterpValue::Uint(n) => {
                             char::from_u32((*n as u32) & 0xff).unwrap_or('\u{0}')
                         }
-                        InterpValue::Int(n) => char::from_u32(((*n).max(0) as u32) & 0xff)
-                            .unwrap_or('\u{0}'),
+                        InterpValue::Int(n) => {
+                            char::from_u32(((*n).max(0) as u32) & 0xff).unwrap_or('\u{0}')
+                        }
                         _ => '\u{0}',
                     })
                     .collect();
@@ -650,11 +657,7 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
-    fn builtin_store_back(
-        &mut self,
-        receiver: &InterpValue,
-        val: InterpValue,
-    ) -> InterpResult<()> {
+    fn builtin_store_back(&mut self, receiver: &InterpValue, val: InterpValue) -> InterpResult<()> {
         match receiver {
             InterpValue::Ref { frame, local } => {
                 let place = Place::new(LocalIdx::from_raw(*local as u32));
@@ -693,10 +696,7 @@ impl<'tcx> Interpreter<'tcx> {
                     _ => 0,
                 };
                 if len == 0 {
-                    return InterpValue::Aggregate(vec![
-                        InterpValue::Int(0),
-                        InterpValue::Unit,
-                    ]);
+                    return InterpValue::Aggregate(vec![InterpValue::Int(0), InterpValue::Unit]);
                 }
                 let elem = if let InterpValue::Aggregate(buf) = &mut fields[0] {
                     while buf.len() < len {
@@ -841,9 +841,7 @@ impl<'tcx> Interpreter<'tcx> {
     fn byte_payload(v: &InterpValue) -> String {
         match v {
             InterpValue::String(s) => s.clone(),
-            InterpValue::Aggregate(fields) if !fields.is_empty() => {
-                Self::byte_payload(&fields[0])
-            }
+            InterpValue::Aggregate(fields) if !fields.is_empty() => Self::byte_payload(&fields[0]),
             InterpValue::Uint(n) => "\u{0}".repeat(*n as usize),
             _ => String::new(),
         }
@@ -1138,15 +1136,15 @@ impl<'tcx> Interpreter<'tcx> {
                             ));
                         }
                         // T140-PATCHED-RETURN-NEVER: a `!`- or `()`-returning function may
-                // never write its return slot (fn 307 in the stdlib is a
-                // `-> !` stub whose body is just `StorageLive(1); Return`).
-                // Treat an uninitialized local 0 as `Unit` rather than a
-                // hard "read from uninitialized local 0" panic.
-                let ret_val = self
-                    .locals
-                    .first()
-                    .and_then(|opt| opt.clone())
-                    .unwrap_or(InterpValue::Unit);
+                        // never write its return slot (fn 307 in the stdlib is a
+                        // `-> !` stub whose body is just `StorageLive(1); Return`).
+                        // Treat an uninitialized local 0 as `Unit` rather than a
+                        // hard "read from uninitialized local 0" panic.
+                        let ret_val = self
+                            .locals
+                            .first()
+                            .and_then(|opt| opt.clone())
+                            .unwrap_or(InterpValue::Unit);
                         bb_idx = frame.target_bb;
                         self.locals = frame.locals;
                         self.local_decls = caller_body.locals.iter().cloned().collect();
@@ -1199,7 +1197,8 @@ impl<'tcx> Interpreter<'tcx> {
                         ..
                     }) = &func
                     {
-                        let recv = self_ty.or_else(|| args.first().and_then(|a| self.operand_ty(a)));
+                        let recv =
+                            self_ty.or_else(|| args.first().and_then(|a| self.operand_ty(a)));
                         if let Some(recv_ty) = recv {
                             let resolved =
                                 self.tcx
@@ -1239,9 +1238,7 @@ impl<'tcx> Interpreter<'tcx> {
                     // interpreter had no equivalent and panicked `function
                     // not found` for any stdlib code calling `Vec::push`,
                     // `Option::unwrap`, etc.
-                    if let Some(ret) =
-                        self.try_call_builtin(&callee_id, &arg_values, &args)?
-                    {
+                    if let Some(ret) = self.try_call_builtin(&callee_id, &arg_values, &args)? {
                         self.write_place(&destination, ret)?;
                         if let Some(t) = target {
                             bb_idx = t;
@@ -1262,9 +1259,7 @@ impl<'tcx> Interpreter<'tcx> {
                         }
                         self.current_body = Some(body);
                         self.current_bb = bb_idx;
-                        return Err(InterpError::Panic(
-                            "extern call has no continuation".into(),
-                        ));
+                        return Err(InterpError::Panic("extern call has no continuation".into()));
                     }
 
                     let callee_body =
@@ -1305,8 +1300,7 @@ impl<'tcx> Interpreter<'tcx> {
                         // and if it *does* return, `handle_return` below
                         // raises a clear InterpError instead of silently
                         // jumping to an arbitrary block.
-                        bb: next_bb
-                            .unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
+                        bb: next_bb.unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
                         locals: std::mem::take(&mut self.locals),
                         return_place: destination,
                         // T108-PATCHED [INT-5]: same sentinel for the
@@ -1453,9 +1447,7 @@ impl<'tcx> Interpreter<'tcx> {
             StatementKind::Assign(place, rvalue) => {
                 // MIR-13/14: the destination local's declared type drives
                 // width-correct arithmetic and casts.
-                let dest_ty = self
-                    .current_local_ty(place.local)
-                    .unwrap_or(Ty::ERROR);
+                let dest_ty = self.current_local_ty(place.local).unwrap_or(Ty::ERROR);
                 let val = self.eval_rvalue(rvalue, dest_ty)?;
                 self.write_place(place, val)?;
             }
@@ -1624,10 +1616,12 @@ impl<'tcx> Interpreter<'tcx> {
                     // not an identity. `(-1i32) as u8` must give 255, matching
                     // the LLVM backend.
                     CastKind::IntToInt => match val {
-                        InterpValue::Int(v) => Ok(InterpValue::Int(self.trunc_to_ty(v, *target_ty))),
-                        InterpValue::Uint(v) => {
-                            Ok(InterpValue::Uint(self.trunc_to_ty(v as i128, *target_ty) as u128))
+                        InterpValue::Int(v) => {
+                            Ok(InterpValue::Int(self.trunc_to_ty(v, *target_ty)))
                         }
+                        InterpValue::Uint(v) => Ok(InterpValue::Uint(
+                            self.trunc_to_ty(v as i128, *target_ty) as u128,
+                        )),
                         other => Ok(other),
                     },
                     CastKind::IntToFloat => match val {
@@ -1919,12 +1913,8 @@ impl<'tcx> Interpreter<'tcx> {
             // reached the fallthrough and panicked. Promote both operands
             // to `Int(i128)` and recurse — the `(Int, Int)` arm above
             // handles every op. Depth is bounded at 2.
-            (Int(a), Uint(b)) => {
-                self.eval_binary_op(op, &Int(*a), &Int(*b as i128), dest_ty)
-            }
-            (Uint(a), Int(b)) => {
-                self.eval_binary_op(op, &Int(*a as i128), &Int(*b), dest_ty)
-            }
+            (Int(a), Uint(b)) => self.eval_binary_op(op, &Int(*a), &Int(*b as i128), dest_ty),
+            (Uint(a), Int(b)) => self.eval_binary_op(op, &Int(*a as i128), &Int(*b), dest_ty),
             // T140-PATCHED-BYTEPTR-ARITH: `InterpValue::String` stands in for
             // a byte pointer (see `byte_payload`). `buf.as_ptr() + offset` in
             // the MIR's sub-slice lowering reaches this fallthrough as
@@ -2422,9 +2412,8 @@ impl<'tcx> Interpreter<'tcx> {
                             )));
                         }
                         let inner = fields[adjusted].clone();
-                        fields[adjusted] = self.write_through_projections_with_locals(
-                            inner, rest, val, field_ty,
-                        )?;
+                        fields[adjusted] =
+                            self.write_through_projections_with_locals(inner, rest, val, field_ty)?;
                         Ok(InterpValue::Aggregate(fields))
                     }
                     _ => Err(InterpError::Panic(
@@ -2459,9 +2448,8 @@ impl<'tcx> Interpreter<'tcx> {
                             )));
                         }
                         let inner = elems[idx_u].clone();
-                        elems[idx_u] = self.write_through_projections_with_locals(
-                            inner, rest, val, elem_ty,
-                        )?;
+                        elems[idx_u] =
+                            self.write_through_projections_with_locals(inner, rest, val, elem_ty)?;
                         Ok(InterpValue::Aggregate(elems))
                     }
                     _ => Err(InterpError::Panic(
@@ -2480,7 +2468,10 @@ impl<'tcx> Interpreter<'tcx> {
                         let tag = it.next().unwrap_or(InterpValue::Int(0));
                         let payload = InterpValue::Aggregate(it.collect());
                         let written = self.write_through_projections_with_locals(
-                            payload, rest, val, Ty::ERROR,
+                            payload,
+                            rest,
+                            val,
+                            Ty::ERROR,
                         )?;
                         match written {
                             InterpValue::Aggregate(payload_fields) => {

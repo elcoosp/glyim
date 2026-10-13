@@ -108,7 +108,10 @@ fn test_ref_mut_mismatch_err() {
     // Reference mutability is intentionally NOT a unification constraint in
     // this compiler (`&mut T` vs `&T` at FFI boundaries must unify). Only the
     // pointees are unified. See the `Ref` arm in `infer.rs`.
-    assert!(result.is_ok(), "ref mutability must not be a hard constraint");
+    assert!(
+        result.is_ok(),
+        "ref mutability must not be a hard constraint"
+    );
 }
 
 #[test]
@@ -804,7 +807,10 @@ fn test_unify_ptr_mutability_mismatch() {
     // Raw-pointer mutability is intentionally NOT a constraint in this
     // compiler (stdlib passes `*const u8` to `*mut u8` extern fns). Only the
     // pointees are unified. See the `RawPtr` arm in `infer.rs`.
-    assert!(result.is_ok(), "raw-ptr mutability must not be a hard constraint");
+    assert!(
+        result.is_ok(),
+        "raw-ptr mutability must not be a hard constraint"
+    );
 }
 
 #[test]

@@ -51,8 +51,8 @@ fn assembled_stdlib_declares_prelude_modules() {
 
     // Modules the assembler wraps as `pub mod X { ... }`.
     let required = [
-        "cmp", "option", "result", "iter", "ops", "default", "mem", "ptr", "cell",
-        "marker", "convert", "hint", "vec", "boxed", "rc", "string", "raw_vec", "alloc",
+        "cmp", "option", "result", "iter", "ops", "default", "mem", "ptr", "cell", "marker",
+        "convert", "hint", "vec", "boxed", "rc", "string", "raw_vec", "alloc",
     ];
     let missing: Vec<&str> = required
         .iter()

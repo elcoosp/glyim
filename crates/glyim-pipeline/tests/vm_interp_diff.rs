@@ -30,12 +30,12 @@
 //! this test covers self-contained `main` bodies only. Extending it to calls
 //! needs that assembly path (see the session handoff).
 
-use glyim_core::def_id::{CrateId, DefId, LocalDefId};
-use glyim_core::TargetInfo;
-use glyim_db::{CrateConfig, Database};
-use glyim_mir_interp::{Interpreter, InterpValue};
 use glyim_codegen::CodegenBackend;
-use glyim_pipeline::{compile_file_to_mir, Pipeline};
+use glyim_core::TargetInfo;
+use glyim_core::def_id::{CrateId, DefId, LocalDefId};
+use glyim_db::{CrateConfig, Database};
+use glyim_mir_interp::{InterpValue, Interpreter};
+use glyim_pipeline::{Pipeline, compile_file_to_mir};
 
 fn run_dual(src: &str) -> (i64, i64) {
     let dir = std::env::temp_dir();
@@ -66,7 +66,9 @@ fn run_dual(src: &str) -> (i64, i64) {
     for b in mir.bodies.values() {
         interp.add_function(b.owner, (**b).clone());
     }
-    interp.run_body(&main_body).expect("interpreter must run clean");
+    interp
+        .run_body(&main_body)
+        .expect("interpreter must run clean");
     let interp_val = match interp.get_return_value() {
         Some(InterpValue::Int(n)) => n as i64,
         Some(InterpValue::Uint(n)) => n as i64,
@@ -75,10 +77,8 @@ fn run_dual(src: &str) -> (i64, i64) {
     };
 
     // --- bytecode VM ---
-    let backend = glyim_codegen::BytecodeBackend::with_ty_ctx(
-        mir.ty_ctx.clone(),
-        TargetInfo::default(),
-    );
+    let backend =
+        glyim_codegen::BytecodeBackend::with_ty_ctx(mir.ty_ctx.clone(), TargetInfo::default());
     let (bytes, block_offsets) = backend
         .generate_function_with_blocks(&main_body)
         .expect("bytecode generation must succeed");
@@ -100,7 +100,10 @@ fn run_dual(src: &str) -> (i64, i64) {
 
 fn assert_agree(src: &str, expected: i64) {
     let (interp, vm) = run_dual(src);
-    assert_eq!(interp, expected, "interpreter disagrees with expected value");
+    assert_eq!(
+        interp, expected,
+        "interpreter disagrees with expected value"
+    );
     assert_eq!(vm, expected, "bytecode VM disagrees with expected value");
     assert_eq!(vm, interp, "bytecode VM and interpreter disagree");
 }

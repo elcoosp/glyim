@@ -1,5 +1,5 @@
+use glyim_test::harness::{TestMode, TestRunner};
 use std::path::PathBuf;
-use glyim_test::harness::{TestRunner, TestMode};
 
 #[test]
 fn compile_pass_tests() {

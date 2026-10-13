@@ -33,7 +33,6 @@
 // inside `#[cfg(test)]` modules so test helpers stay concise.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
-pub mod zonk;
 mod check_body;
 mod check_expr;
 mod check_pat;
@@ -45,6 +44,7 @@ pub mod thir;
 /// tyconv.
 pub mod tyconv;
 mod unify;
+pub mod zonk;
 
 use std::collections::HashMap;
 
@@ -57,7 +57,10 @@ use glyim_diag::GlyimDiagnostic;
 use glyim_hir::{ExprId, ItemId, ItemKind};
 use glyim_solve::{FulfillmentCtx, InferenceTable, Obligation, ObligationCause, TraitContext};
 use glyim_span::Span;
-use glyim_type::{ AdtDef, AdtKind, FieldDef, FnSig, GenericArg, ImplPolarity, MethodDef, Predicate, TraitDef, TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, VariantDef, TyKind };
+use glyim_type::{
+    AdtDef, AdtKind, FieldDef, FnSig, GenericArg, ImplPolarity, MethodDef, Predicate, TraitDef,
+    TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, TyKind, VariantDef,
+};
 
 #[derive(Clone, Debug)]
 /// TypeckResult.
@@ -179,15 +182,15 @@ fn adt_id_for_item(
         return existing;
     }
     {
-                        let id = ctx.next_synthetic_adt_id();
-                        if std::env::var("GLYIM_DBG_SYNTH").is_ok() {
-                            eprintln!(
-                                "[SYNTH] name={:?} synthetic_id={:?} module={:?}",
-                                name, id, module_id
-                            );
-                        }
-                        id
-                    }
+        let id = ctx.next_synthetic_adt_id();
+        if std::env::var("GLYIM_DBG_SYNTH").is_ok() {
+            eprintln!(
+                "[SYNTH] name={:?} synthetic_id={:?} module={:?}",
+                name, id, module_id
+            );
+        }
+        id
+    }
 }
 
 fn register_adt_item(
@@ -394,7 +397,7 @@ pub fn typeck_crate(
     // style types are reported unresolved. Registration is idempotent, so the
     // later `register_adt` calls in `check_fn_items_in_module` are harmless.
 
-// Pass 1: register every ADT's name -> id BEFORE resolving any field
+    // Pass 1: register every ADT's name -> id BEFORE resolving any field
     // types. The async state-machine desugar emits a `FooState` enum whose
     // variant field types reference *other* generated ADTs (e.g.
     // `S0 { fut0: depFuture }`), and those referenced ADTs may be registered
@@ -426,9 +429,9 @@ pub fn typeck_crate(
                         for bound in bounds {
                             if let glyim_hir::TypeRef::Path(p) = bound {
                                 if let Some(name) = p.as_name() {
-                                    if let Some(local) = tyconv::resolve_path_to_local_def_id(
-                                        &ctx, def_map, p,
-                                    ) {
+                                    if let Some(local) =
+                                        tyconv::resolve_path_to_local_def_id(&ctx, def_map, p)
+                                    {
                                         let tid = TraitDefId::from_raw(local.to_raw());
                                         ctx.param_bounds
                                             .entry(gp.name)
@@ -447,9 +450,9 @@ pub fn typeck_crate(
                         for bound in bounds {
                             if let glyim_hir::TypeRef::Path(p) = bound {
                                 if let Some(name) = p.as_name() {
-                                    if let Some(local) = tyconv::resolve_path_to_local_def_id(
-                                        &ctx, def_map, p,
-                                    ) {
+                                    if let Some(local) =
+                                        tyconv::resolve_path_to_local_def_id(&ctx, def_map, p)
+                                    {
                                         let tid = TraitDefId::from_raw(local.to_raw());
                                         ctx.param_bounds
                                             .entry(gp.name)
@@ -507,7 +510,7 @@ pub fn typeck_crate(
             def_map.root,
         );
     }
-        // Const pre-registration pass (Script 60): register every const's
+    // Const pre-registration pass (Script 60): register every const's
     // declared type BEFORE any body checking runs. Without this, bodies in
     // other modules that reference a const (`GLOBAL.alloc(...)` in boxed.g,
     // rc.g, raw_vec.g) hit `check_path` -> `const_ty(ConstDefId)` and find
@@ -528,7 +531,9 @@ pub fn typeck_crate(
             F: FnMut(&glyim_hir::Item, ModuleId),
         {
             for item_id in items {
-                let Some(item) = hir.items.get(*item_id) else { continue };
+                let Some(item) = hir.items.get(*item_id) else {
+                    continue;
+                };
                 match &item.kind {
                     ItemKind::Mod(m) => {
                         let child_mod = def_map.modules[module_id]
@@ -561,7 +566,9 @@ pub fn typeck_crate(
             .collect();
 
         let mut register_const_type = |item: &glyim_hir::Item, module_id: ModuleId| {
-            let ItemKind::Const(c) = &item.kind else { return };
+            let ItemKind::Const(c) = &item.kind else {
+                return;
+            };
             let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                 Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
                 None => return, // unregistered const — the later branch handles it
@@ -579,7 +586,13 @@ pub fn typeck_crate(
             );
             ctx.register_const_ty(const_def_id, const_ty);
         };
-        visit_consts(hir, &top_level_ids, def_map, def_map.root, &mut register_const_type);
+        visit_consts(
+            hir,
+            &top_level_ids,
+            def_map,
+            def_map.root,
+            &mut register_const_type,
+        );
     }
 
     // 1. Coherence pass
@@ -1203,10 +1216,7 @@ fn pre_register_fn_sigs_in_module(
                 // (the id alone is opaque).
                 {
                     let name_str = ctx.name_str(item.name).to_string();
-                    if matches!(
-                        name_str.as_str(),
-                        "size_of" | "align_of" | "needs_drop"
-                    ) {
+                    if matches!(name_str.as_str(), "size_of" | "align_of" | "needs_drop") {
                         ctx.const_fns.insert(fn_id, name_str);
                     }
                 }
@@ -1494,14 +1504,13 @@ fn check_fn_items_in_module(
                     .map(|(id, _, _)| *id);
                 if let Some(enum_local) = enum_local {
                     let adt_id = if let Some(builtin) =
-                    glyim_type::builtin_adts::BuiltinAdt::from_name(
-                        def_map.interner.resolve(item.name),
-                    )
-                {
-                    AdtId::from_raw(builtin.adt_id())
-                } else {
-                    AdtId::from_raw(enum_local.to_raw())
-                };
+                        glyim_type::builtin_adts::BuiltinAdt::from_name(
+                            def_map.interner.resolve(item.name),
+                        ) {
+                        AdtId::from_raw(builtin.adt_id())
+                    } else {
+                        AdtId::from_raw(enum_local.to_raw())
+                    };
                     // The enum's own generic params (e.g. `T` in `Poll<T>`) must
                     // be in scope when resolving variant field types, so
                     // `Ready(T)` yields a `TyKind::Param` rather than an
@@ -1568,14 +1577,13 @@ fn check_fn_items_in_module(
                     .map(|(id, _, _)| *id);
                 if let Some(struct_local) = struct_local {
                     let adt_id = if let Some(builtin) =
-                    glyim_type::builtin_adts::BuiltinAdt::from_name(
-                        def_map.interner.resolve(item.name),
-                    )
-                {
-                    AdtId::from_raw(builtin.adt_id())
-                } else {
-                    AdtId::from_raw(struct_local.to_raw())
-                };
+                        glyim_type::builtin_adts::BuiltinAdt::from_name(
+                            def_map.interner.resolve(item.name),
+                        ) {
+                        AdtId::from_raw(builtin.adt_id())
+                    } else {
+                        AdtId::from_raw(struct_local.to_raw())
+                    };
                     // Generic params of the struct are in scope when resolving
                     // its field types (e.g. `struct S<T> { x: T }`). Build the
                     // param map so `T` resolves to a type parameter.
@@ -1739,7 +1747,8 @@ fn check_fn_items_in_module(
                         _ => None,
                     };
                     if let Some(tn) = self_type_name {
-                        ctx.inherent_methods_by_name.insert((tn, method_name), fn_def_id);
+                        ctx.inherent_methods_by_name
+                            .insert((tn, method_name), fn_def_id);
                     }
                     if let Some(self_ty) = self_ty_opt
                         && let glyim_type::TyKind::Adt(self_adt_id, _) = ctx.ty_kind(self_ty)
@@ -1848,15 +1857,13 @@ fn check_fn_items_in_module(
                                     // The lookup must use a *ctx*-interned
                                     // `Name` (`adt_by_name` is keyed by ctx's
                                     // interner, not the HIR/def-map interner).
-                                    let name_str =
-                                        def_map.interner.resolve(first.name).to_string();
+                                    let name_str = def_map.interner.resolve(first.name).to_string();
                                     let ctx_name = ctx.resolver().intern(&name_str);
                                     if ctx.adt_id_by_name(ctx_name).is_none() {
                                         let adt_id = if let Some(builtin) =
                                             glyim_type::builtin_adts::BuiltinAdt::from_name(
                                                 &name_str,
-                                            )
-                                        {
+                                            ) {
                                             AdtId::from_raw(builtin.adt_id())
                                         } else {
                                             AdtId::from_raw(def_id.to_raw())

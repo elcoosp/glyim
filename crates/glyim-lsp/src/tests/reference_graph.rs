@@ -21,8 +21,8 @@ fn test_insert_and_find() {
         def_id: None,
 
         owner_item_id: None,
-            is_item_level: false,
-            };
+        is_item_level: false,
+    };
 
     graph.insert_test_reference("my_func", ref1);
 

@@ -522,7 +522,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
             owner: original_body.owner,
             exprs: original_body.exprs.clone(),
             pats: IndexVec::new(),
-        pat_spans: IndexVec::new(),
+            pat_spans: IndexVec::new(),
             params: Vec::new(),
             span: original_body.span,
             expr_spans: original_body.expr_spans.clone(),

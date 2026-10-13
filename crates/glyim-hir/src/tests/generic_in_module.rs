@@ -5,11 +5,11 @@
 //! struct Once<T> { .. } }` loses the type parameter, producing 41 errors
 //! like "generic type `Once` expects 0 type argument(s), found 1".
 
+use crate::ItemKind;
+use crate::lower::lower_crate_raw;
 use glyim_core::interner::Interner;
 use glyim_frontend::parse_to_syntax;
 use glyim_span::FileId;
-use crate::lower::lower_crate_raw;
-use crate::ItemKind;
 
 fn lower_first_struct_generics(src: &str) -> usize {
     let root = parse_to_syntax(src, FileId::BOGUS).root;
@@ -51,9 +51,7 @@ fn crate_root_generic_struct_retains_type_param() {
 #[test]
 fn module_wrapped_generic_struct_retains_type_param() {
     // The bug: `pub mod m { pub struct Foo<T> { .. } }` — HIR drops `<T>`.
-    let n = lower_first_struct_generics(
-        "pub mod m {\n    pub struct Foo<T> { x: T }\n}\n",
-    );
+    let n = lower_first_struct_generics("pub mod m {\n    pub struct Foo<T> { x: T }\n}\n");
     assert_eq!(
         n, 1,
         "module-wrapped struct must retain its 1 generic param (Script 27 red)"

@@ -531,8 +531,7 @@ impl<'a> ExpanderImpl<'a> {
     ///   2. `args_tt == [Token(LParen), ..., Token(RParen)]`
     fn extract_paren_args(args_tt: &[TokenTree]) -> Vec<TokenTree> {
         if args_tt.len() == 1 {
-            if let TokenTree::Group(SyntaxKind::LParen, inner, SyntaxKind::RParen) = &args_tt[0]
-            {
+            if let TokenTree::Group(SyntaxKind::LParen, inner, SyntaxKind::RParen) = &args_tt[0] {
                 return inner.clone();
             }
         }
@@ -558,12 +557,8 @@ impl<'a> ExpanderImpl<'a> {
         for (i, tt) in args.iter().enumerate() {
             if let TokenTree::Token(kind, _) = tt {
                 match kind {
-                    SyntaxKind::LParen
-                    | SyntaxKind::LBracket
-                    | SyntaxKind::LBrace => depth += 1,
-                    SyntaxKind::RParen
-                    | SyntaxKind::RBracket
-                    | SyntaxKind::RBrace => depth -= 1,
+                    SyntaxKind::LParen | SyntaxKind::LBracket | SyntaxKind::LBrace => depth += 1,
+                    SyntaxKind::RParen | SyntaxKind::RBracket | SyntaxKind::RBrace => depth -= 1,
                     SyntaxKind::Comma if depth == 0 => {
                         return (args[..i].to_vec(), args[i + 1..].to_vec());
                     }
@@ -669,8 +664,7 @@ impl<'a> ExpanderImpl<'a> {
                             // T170-PATCHED [MAC-7]: escape quotes and
                             // backslashes so an env value like `a"b` or
                             // `a\\b` doesn't corrupt the produced literal.
-                            let escaped =
-                                val.replace('\\', "\\\\").replace('"', "\\\"");
+                            let escaped = val.replace('\\', "\\\\").replace('"', "\\\"");
                             let lit = SmolStr::from(format!("\"{}\"", escaped));
                             vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
                         }
@@ -705,9 +699,7 @@ impl<'a> ExpanderImpl<'a> {
                         let token = match std::env::var(var_name) {
                             Ok(val) => {
                                 // T170-PATCHED [MAC-7]: same escaping as env!.
-                                let escaped = val
-                                    .replace('\\', "\\\\")
-                                    .replace('"', "\\\"");
+                                let escaped = val.replace('\\', "\\\\").replace('"', "\\\"");
                                 SmolStr::from(format!("Some(\"{}\")", escaped))
                             }
                             Err(_) => SmolStr::from("None"),
@@ -1079,8 +1071,10 @@ impl<'a> ExpanderImpl<'a> {
                     let (fmt, rest) = take_fmt(inner)?;
                     let open = fmt.find("{}")?;
                     let (before, after) = (&fmt[..open], &fmt[open + 2..]);
-                    if before.contains('{') || before.contains('}')
-                        || after.contains('{') || after.contains('}')
+                    if before.contains('{')
+                        || before.contains('}')
+                        || after.contains('{')
+                        || after.contains('}')
                     {
                         return None;
                     }
@@ -1202,7 +1196,10 @@ impl<'a> ExpanderImpl<'a> {
                 let (pat, _trailing) = Self::split_top_level_comma(&rest);
 
                 let mut match_body: Vec<TokenTree> = Vec::new();
-                match_body.push(TokenTree::Token(SyntaxKind::KwMatch, SmolStr::from("match")));
+                match_body.push(TokenTree::Token(
+                    SyntaxKind::KwMatch,
+                    SmolStr::from("match"),
+                ));
                 match_body.push(TokenTree::Group(
                     SyntaxKind::LParen,
                     scrut,
@@ -1215,7 +1212,10 @@ impl<'a> ExpanderImpl<'a> {
                 arms.push(TokenTree::Token(SyntaxKind::Comma, SmolStr::from(",")));
                 arms.push(TokenTree::Token(SyntaxKind::Underscore, SmolStr::from("_")));
                 arms.push(TokenTree::Token(SyntaxKind::FatArrow, SmolStr::from("=>")));
-                arms.push(TokenTree::Token(SyntaxKind::KwFalse, SmolStr::from("false")));
+                arms.push(TokenTree::Token(
+                    SyntaxKind::KwFalse,
+                    SmolStr::from("false"),
+                ));
                 match_body.push(TokenTree::Group(
                     SyntaxKind::LBrace,
                     arms,
@@ -1344,21 +1344,11 @@ impl<'a> ExpanderImpl<'a> {
                 self.emit_token(*kind, text.as_str(), builder, prev);
             }
             TokenTree::Group(delim_open, children, delim_close) => {
-                self.emit_token(
-                    *delim_open,
-                    delim_token_text(*delim_open),
-                    builder,
-                    prev,
-                );
+                self.emit_token(*delim_open, delim_token_text(*delim_open), builder, prev);
                 for child in children {
                     self.build_token_tree_green(child, builder, _mark, prev);
                 }
-                self.emit_token(
-                    *delim_close,
-                    delim_token_text(*delim_close),
-                    builder,
-                    prev,
-                );
+                self.emit_token(*delim_close, delim_token_text(*delim_close), builder, prev);
             }
             TokenTree::DollarCrate => {
                 self.emit_token(SyntaxKind::KwCrate, "crate", builder, prev);

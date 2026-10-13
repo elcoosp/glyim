@@ -169,10 +169,19 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
             return Some(path);
         }
     }
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
     let candidates = [
-        std::path::PathBuf::from("target").join(profile).join("libglyim_runtime.a"),
-        std::path::PathBuf::from("..").join("target").join(profile).join("libglyim_runtime.a"),
+        std::path::PathBuf::from("target")
+            .join(profile)
+            .join("libglyim_runtime.a"),
+        std::path::PathBuf::from("..")
+            .join("target")
+            .join(profile)
+            .join("libglyim_runtime.a"),
     ];
     for c in &candidates {
         if c.exists() {
@@ -400,7 +409,6 @@ pub fn thin_lto_link(
         .collect();
     Ok(outs)
 }
-
 
 /// On Unix, ensure `path` is executable. The linker usually produces a +x
 /// binary, but if `path` already existed with a non-executable mode (e.g. a

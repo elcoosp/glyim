@@ -202,21 +202,11 @@ impl ReferenceGraph {
             // T053-PATCHED [LSP-4]: prefer the real pattern span when the
             // lowering recorded one. Synthesized patterns (async desugar)
             // still come back as `Span::DUMMY`; callers skip those.
-            let pat_span = body
-                .pat_spans
-                .get(pat_id)
-                .copied()
-                .unwrap_or(Span::DUMMY);
+            let pat_span = body.pat_spans.get(pat_id).copied().unwrap_or(Span::DUMMY);
             match pat {
                 Pat::Binding { name, .. } => {
                     let name_str = interner.resolve(*name).to_string();
-                    add_ref(
-                        &name_str,
-                        pat_span,
-                        true,
-                        ReferenceKind::Definition,
-                        access,
-                    );
+                    add_ref(&name_str, pat_span, true, ReferenceKind::Definition, access);
                 }
                 Pat::Struct { fields, .. } => {
                     for (_, pat_id) in fields {
@@ -560,11 +550,7 @@ impl ReferenceGraph {
                         // span covered the whole `x = 5;` statement, so a
                         // rename generated an edit that rewrote the entire
                         // assignment (`z;`) and destroyed the initializer.
-                        let lhs_span = body
-                            .expr_spans
-                            .get(*lhs)
-                            .copied()
-                            .unwrap_or(span);
+                        let lhs_span = body.expr_spans.get(*lhs).copied().unwrap_or(span);
                         add_ref(
                             &name_str,
                             lhs_span,

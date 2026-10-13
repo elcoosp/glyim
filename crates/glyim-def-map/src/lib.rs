@@ -901,10 +901,7 @@ fn collect_items(
                     {
                         diagnostics.push(GlyimDiagnostic::parse_error(
                             node_span(&child),
-                            format!(
-                                "duplicate definition of `{}`",
-                                interner.resolve(name_dup)
-                            ),
+                            format!("duplicate definition of `{}`", interner.resolve(name_dup)),
                         ));
                         continue;
                     }

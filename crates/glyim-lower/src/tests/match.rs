@@ -57,10 +57,14 @@ fn match_expr_to_switch_int() {
         "match lowering should not error: {:?}",
         result.diagnostics
     );
-    let has_switch = result
-        .body
-        .basic_blocks
-        .iter()
-        .any(|bb| matches!(bb.terminator.kind, glyim_mir::TerminatorKind::SwitchInt { .. }));
-    assert!(has_switch, "expected at least one SwitchInt for literal match");
+    let has_switch = result.body.basic_blocks.iter().any(|bb| {
+        matches!(
+            bb.terminator.kind,
+            glyim_mir::TerminatorKind::SwitchInt { .. }
+        )
+    });
+    assert!(
+        has_switch,
+        "expected at least one SwitchInt for literal match"
+    );
 }

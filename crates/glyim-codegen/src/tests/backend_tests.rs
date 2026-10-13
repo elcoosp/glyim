@@ -3021,7 +3021,12 @@ fn t99_cross_backend_execution_computes_value() {
     // that the value 14 was computed. The value-identity check moves to the
     // `vm_interp_diff` differential test, which covers this end to end.
     let module = Module::new(
-        vec![glyim_bytecode_vm::Function::with_blocks(bytes, 6, 0, Vec::new())],
+        vec![glyim_bytecode_vm::Function::with_blocks(
+            bytes,
+            6,
+            0,
+            Vec::new(),
+        )],
         0,
     );
     let mut vm = Vm::new();
@@ -3087,8 +3092,7 @@ fn rt11_bool_switch_true_target_is_branch_value_1() {
     let true_target = u32::from_le_bytes([bc[pos + 1], bc[pos + 2], bc[pos + 3], bc[pos + 4]]);
     // Then OP_JUMP with the false target.
     assert_eq!(bc[pos + 5], OP_JUMP, "expected OP_JUMP after OP_JUMP_IF");
-    let false_target =
-        u32::from_le_bytes([bc[pos + 6], bc[pos + 7], bc[pos + 8], bc[pos + 9]]);
+    let false_target = u32::from_le_bytes([bc[pos + 6], bc[pos + 7], bc[pos + 8], bc[pos + 9]]);
 
     assert_eq!(
         true_target, 1,

@@ -218,7 +218,10 @@ fn byte_literal_lowers_as_u8_literal() {
     let lit_id = find_expr_in_body(&ctx.hir, body_id, |e| {
         matches!(
             e,
-            Expr::Literal(crate::Literal::Uint(48, Some(glyim_core::primitives::UintTy::U8)))
+            Expr::Literal(crate::Literal::Uint(
+                48,
+                Some(glyim_core::primitives::UintTy::U8)
+            ))
         )
     });
     assert!(
@@ -250,7 +253,10 @@ fn byte_literal_inside_cast_lowers_the_let_statement() {
     let has_byte = body.exprs.iter().any(|e| {
         matches!(
             e,
-            Expr::Literal(crate::Literal::Uint(48, Some(glyim_core::primitives::UintTy::U8)))
+            Expr::Literal(crate::Literal::Uint(
+                48,
+                Some(glyim_core::primitives::UintTy::U8)
+            ))
         )
     });
     assert!(
@@ -305,11 +311,17 @@ fn kitchen_sink_body_lowers_all_statements() {
     let has_binary = body.exprs.iter().any(|e| matches!(e, Expr::Binary { .. }));
     let has_call = body.exprs.iter().any(|e| matches!(e, Expr::Call { .. }));
     let has_index = body.exprs.iter().any(|e| matches!(e, Expr::Index { .. }));
-    let has_method = body.exprs.iter().any(|e| matches!(e, Expr::MethodCall { .. }));
+    let has_method = body
+        .exprs
+        .iter()
+        .any(|e| matches!(e, Expr::MethodCall { .. }));
     let has_byte_lit = body.exprs.iter().any(|e| {
         matches!(
             e,
-            Expr::Literal(crate::Literal::Uint(48, Some(glyim_core::primitives::UintTy::U8)))
+            Expr::Literal(crate::Literal::Uint(
+                48,
+                Some(glyim_core::primitives::UintTy::U8)
+            ))
         )
     });
 

@@ -52,10 +52,7 @@ fn mir_of(dir: &std::path::Path, src_text: &str) -> String {
 #[test]
 fn plus_assign_lowers_to_add() {
     let dir = tempdir();
-    let mir = mir_of(
-        &dir,
-        "fn main() { let mut i = 0; i += 1; let _ = i; }",
-    );
+    let mir = mir_of(&dir, "fn main() { let mut i = 0; i += 1; let _ = i; }");
     assert!(
         mir.contains("BinaryOp(Add"),
         "`i += 1` must lower to `i = i + 1` (BinaryOp Add); got:\n{mir}"
@@ -67,10 +64,7 @@ fn plus_assign_lowers_to_add() {
 #[test]
 fn star_assign_lowers_to_mul() {
     let dir = tempdir();
-    let mir = mir_of(
-        &dir,
-        "fn main() { let mut x = 2; x *= 3; let _ = x; }",
-    );
+    let mir = mir_of(&dir, "fn main() { let mut x = 2; x *= 3; let _ = x; }");
     assert!(
         mir.contains("BinaryOp(Mul"),
         "`x *= 3` must lower to `x = x * 3` (BinaryOp Mul); got:\n{mir}"

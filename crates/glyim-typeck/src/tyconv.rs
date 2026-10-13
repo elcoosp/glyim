@@ -449,8 +449,7 @@ pub fn resolve_fn_sig(
             // representation: the call-site logic in `check_expr.rs`
             // already maps `Param(i)` to the actual argument type, so
             // the sig instantiates correctly.
-            let fresh_index = (generic_params.len() as u32)
-                .wrapping_add(impl_trait_param_counter);
+            let fresh_index = (generic_params.len() as u32).wrapping_add(impl_trait_param_counter);
             impl_trait_param_counter = impl_trait_param_counter.wrapping_add(1);
             let param_name = ctx
                 .resolver()
@@ -586,7 +585,6 @@ pub fn resolve_path_type(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Ty {
-
     // Check param_map first for generic params
     if let Some(name) = path.as_name()
         && let Some(&ty) = param_map.get(&name)
@@ -636,7 +634,8 @@ pub fn resolve_path_type(
                             .map(|d| d.associated_types.contains(&aname))
                             .unwrap_or(false)
                     });
-                    matching.map(|(_, tid)| *tid)
+                    matching
+                        .map(|(_, tid)| *tid)
                         .or_else(|| list.first().map(|(_, tid)| *tid))
                 }
                 None => None,
@@ -991,7 +990,6 @@ pub(crate) fn resolve_path_to_local_def_id(
     None
 }
 
-
 /// Resolve a (possibly multi‑segment) path to an `AdtId`, walking the module
 /// tree like `resolve_path_to_local_def_id`. Used by struct/variant *patterns*
 /// (plan §9.4 multi‑segment path support) where the final segment names an ADT.
@@ -1080,7 +1078,7 @@ pub(crate) fn resolve_path_to_trait_def_id(
     if let Some(local) = resolve_path_to_local_def_id(ctx, def_map, path) {
         return Some(TraitDefId::from_raw(local.to_raw()));
     }
-        // Script 89: module-scoped trait fallback. The impl header's trait
+    // Script 89: module-scoped trait fallback. The impl header's trait
     // path (`impl GlobalAlloc for Global` inside `pub mod alloc { ... }`)
     // resolves `GlobalAlloc` in the *crate root* scope by default, but the
     // trait lives in `alloc`'s scope. When the primary lookup fails and
@@ -1187,7 +1185,6 @@ pub(crate) fn resolve_name_to_adt_ty(
     param_map: &HashMap<Name, Ty>,
     span: Span,
 ) -> Option<Ty> {
-
     let name = path.as_name()?;
 
     // stdlib-completion: expand a registered type alias BEFORE falling back to
@@ -1234,7 +1231,13 @@ pub(crate) fn resolve_name_to_adt_ty(
                 if let Some(args) = args {
                     for arg in args {
                         let resolved = resolve_type_ref(
-                            ctx, infer, def_map, diagnostics, arg, param_map, span,
+                            ctx,
+                            infer,
+                            def_map,
+                            diagnostics,
+                            arg,
+                            param_map,
+                            span,
                         );
                         substs.push(GenericArg::Ty(resolved));
                     }

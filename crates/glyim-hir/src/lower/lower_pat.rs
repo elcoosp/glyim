@@ -105,13 +105,18 @@ pub(crate) fn lower_pat(
                         )
                     })
                     .and_then(|n| lower_pat(&n, interner, pats, pat_spans, diags));
-                Some(push_pat(pats, pat_spans, node, Pat::Binding {
-                    name,
-                    // HIR-12: the parser bumps `KwMut` inside `PatIdent`; read
-                    // it so `let mut x = ..` / `(mut x, ..)` bind mutably.
-                    mutability: pat_ident_mutability(node),
-                    subpattern: subpat,
-                }))
+                Some(push_pat(
+                    pats,
+                    pat_spans,
+                    node,
+                    Pat::Binding {
+                        name,
+                        // HIR-12: the parser bumps `KwMut` inside `PatIdent`; read
+                        // it so `let mut x = ..` / `(mut x, ..)` bind mutably.
+                        mutability: pat_ident_mutability(node),
+                        subpattern: subpat,
+                    },
+                ))
             }
         }
         SyntaxKind::PatWild => Some(push_pat(pats, pat_spans, node, Pat::Wild)),
@@ -167,11 +172,16 @@ pub(crate) fn lower_pat(
                     _ => {}
                 }
             }
-            Some(push_pat(pats, pat_spans, node, Pat::Range {
-                start,
-                end,
-                inclusive,
-            }))
+            Some(push_pat(
+                pats,
+                pat_spans,
+                node,
+                Pat::Range {
+                    start,
+                    end,
+                    inclusive,
+                },
+            ))
         }
         SyntaxKind::PatOr => {
             let mut flat = Vec::new();
@@ -245,7 +255,8 @@ pub(crate) fn lower_pat(
                                         | SyntaxKind::PatRange
                                         | SyntaxKind::PatSlice
                                 )
-                                && let Some(pat_id) = lower_pat(&sub_n, interner, pats, pat_spans, diags)
+                                && let Some(pat_id) =
+                                    lower_pat(&sub_n, interner, pats, pat_spans, diags)
                             {
                                 let field_name = {
                                     let s = sub_n.text().to_string();
@@ -304,7 +315,8 @@ pub(crate) fn lower_pat(
                         }
                         if has_colon {
                             if let Some(sub_n) = subpattern_node
-                                && let Some(pat_id) = lower_pat(&sub_n, interner, pats, pat_spans, diags)
+                                && let Some(pat_id) =
+                                    lower_pat(&sub_n, interner, pats, pat_spans, diags)
                             {
                                 fields.push((name, pat_id));
                             }
@@ -318,11 +330,16 @@ pub(crate) fn lower_pat(
                             // shorthand binding whenever any *other* field
                             // carried `mut` (or when the outer `let mut x
                             // = ...` preceded the struct pattern).
-                            let binding_id = push_pat(pats, pat_spans, n, Pat::Binding {
-                                name,
-                                mutability: pat_ident_mutability(n),
-                                subpattern: None,
-                            });
+                            let binding_id = push_pat(
+                                pats,
+                                pat_spans,
+                                n,
+                                Pat::Binding {
+                                    name,
+                                    mutability: pat_ident_mutability(n),
+                                    subpattern: None,
+                                },
+                            );
                             fields.push((name, binding_id));
                         }
                     }
@@ -334,7 +351,12 @@ pub(crate) fn lower_pat(
             }
 
             let path = path?;
-            Some(push_pat(pats, pat_spans, node, Pat::Struct { path, fields, rest }))
+            Some(push_pat(
+                pats,
+                pat_spans,
+                node,
+                Pat::Struct { path, fields, rest },
+            ))
         }
         SyntaxKind::UsePath => {
             let mut segments = Vec::new();

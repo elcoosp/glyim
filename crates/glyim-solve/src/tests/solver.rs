@@ -96,19 +96,26 @@ fn t08_builtin_traits_proven_structurally() {
 
     let ty_ctx = c.freeze();
 
-    let prove = |solver: &mut SimpleTraitSolver, id: TraitDefId, sub: Substitution| -> SolverResult {
-        let pred = TraitPredicate {
-            trait_ref: TraitRef { def_id: id, substs: sub },
-            polarity: ImplPolarity::Positive,
+    let prove =
+        |solver: &mut SimpleTraitSolver, id: TraitDefId, sub: Substitution| -> SolverResult {
+            let pred = TraitPredicate {
+                trait_ref: TraitRef {
+                    def_id: id,
+                    substs: sub,
+                },
+                polarity: ImplPolarity::Positive,
+            };
+            solver.can_prove(&ty_ctx, &pred)
         };
-        solver.can_prove(&ty_ctx, &pred)
-    };
 
     // `Copy`
     assert_eq!(prove(&mut solver, copy_id, i32_sub), SolverResult::Proven);
     assert_eq!(prove(&mut solver, copy_id, arr_sub), SolverResult::Proven);
     // `String` is not `Copy` (owning, non-primitive) -> DefiniteNo.
-    assert_eq!(prove(&mut solver, copy_id, str_sub), SolverResult::DefiniteNo);
+    assert_eq!(
+        prove(&mut solver, copy_id, str_sub),
+        SolverResult::DefiniteNo
+    );
 
     // `Sized`
     assert_eq!(prove(&mut solver, sized_id, i32_sub), SolverResult::Proven);
@@ -389,7 +396,11 @@ fn t18_iterator_next_info_uses_real_option_adt() {
     // Without a registered `next` fn def, resolution yields None.
     let mut ctx = test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32));
-    assert!(solver.iterator_next_info(&mut ctx, i32_ty, i32_ty).is_none());
+    assert!(
+        solver
+            .iterator_next_info(&mut ctx, i32_ty, i32_ty)
+            .is_none()
+    );
 
     // With a `next` fn def registered, resolution yields a real info struct
     // whose `option_ty` is the builtin `Option` ADT (id 1010), not a magic id.

@@ -91,12 +91,7 @@ impl<'a> FnCtxt<'a> {
     }
 
     /// Type-check a pattern, producing the THIR pattern and binding names.
-    pub fn check_pattern(
-        &mut self,
-        pat_id: PatId,
-        expected_ty: Ty,
-        span: Span,
-    ) -> thir::Pattern {
+    pub fn check_pattern(&mut self, pat_id: PatId, expected_ty: Ty, span: Span) -> thir::Pattern {
         let pat = &self.body.pats[pat_id];
         match pat {
             Pat::Wild => thir::Pattern::wild(expected_ty, span),
@@ -122,8 +117,8 @@ impl<'a> FnCtxt<'a> {
                 if ctx_name != *name {
                     self.env.add_alias(ctx_name, id);
                 }
-                let sub =
-                    subpattern.map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty, span)));
+                let sub = subpattern
+                    .map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty, span)));
                 thir::Pattern {
                     kind: thir::PatternKind::Binding {
                         var_id: thir::LocalVarId::from_raw(id.to_raw()),
@@ -142,7 +137,8 @@ impl<'a> FnCtxt<'a> {
                     Some(local) => {
                         if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
                             // Script 139: canonicalize the enum's AdtId.
-                            let adt_id = crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
+                            let adt_id =
+                                crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
                             thir::Pattern {
                                 kind: thir::PatternKind::Struct {
                                     adt_id,
@@ -233,13 +229,10 @@ impl<'a> FnCtxt<'a> {
                         // because the name doesn't resolve to a real
                         // variant. Fall back to a Binding when the path
                         // is single-segment and Plain-kind.
-                        let is_single_segment_plain = matches!(
-                            path.kind,
-                            glyim_core::path::PathKind::Plain
-                        ) && path.segments.len() == 1;
-                        if is_single_segment_plain
-                            && let Some(name) = path.as_name()
-                        {
+                        let is_single_segment_plain =
+                            matches!(path.kind, glyim_core::path::PathKind::Plain)
+                                && path.segments.len() == 1;
+                        if is_single_segment_plain && let Some(name) = path.as_name() {
                             let ctx_name = self.remap_name(name);
                             let id = self.env.add_binding(name, expected_ty, Mutability::Not);
                             if ctx_name != name {
@@ -424,10 +417,7 @@ impl<'a> FnCtxt<'a> {
                                     let mut m = std::collections::HashMap::new();
                                     for (idx, arg) in args.iter().enumerate() {
                                         if let glyim_type::GenericArg::Ty(t) = arg {
-                                            m.insert(
-                                                idx as u32,
-                                                glyim_type::GenericArg::Ty(*t),
-                                            );
+                                            m.insert(idx as u32, glyim_type::GenericArg::Ty(*t));
                                         }
                                     }
                                     m

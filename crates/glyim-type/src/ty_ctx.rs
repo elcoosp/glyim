@@ -701,7 +701,9 @@ impl TyCtx {
 
     /// Name-keyed inherent-method lookup.
     pub fn inherent_method_by_name(&self, type_name: Name, method_name: Name) -> Option<FnDefId> {
-        self.inherent_methods_by_name.get(&(type_name, method_name)).copied()
+        self.inherent_methods_by_name
+            .get(&(type_name, method_name))
+            .copied()
     }
 
     /// Name of the C symbol for an `extern` function, if this id names one.

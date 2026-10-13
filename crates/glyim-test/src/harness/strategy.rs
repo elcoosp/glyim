@@ -151,11 +151,7 @@ impl UiTestStrategy {
 /// Format a diagnostic set in rustc's `error[CODE]: message` + source excerpt
 /// style. The test file name is normalized to `$FILE` so the snapshot is
 /// portable across machines.
-fn format_diagnostics(
-    diagnostics: &[GlyimDiagnostic],
-    source: &str,
-    test_path: &Path,
-) -> String {
+fn format_diagnostics(diagnostics: &[GlyimDiagnostic], source: &str, test_path: &Path) -> String {
     let file_name = test_path
         .file_name()
         .and_then(|n| n.to_str())
@@ -218,7 +214,12 @@ fn format_diagnostics(
                     .to_usize()
                     .saturating_sub(primary.lo.to_usize())
                     .max(1);
-                out.push_str(&format!("{} | {}{}\n", gutter, caret_pad, "^".repeat(caret_len)));
+                out.push_str(&format!(
+                    "{} | {}{}\n",
+                    gutter,
+                    caret_pad,
+                    "^".repeat(caret_len)
+                ));
             }
         }
         out.push('\n');
@@ -256,9 +257,10 @@ impl RunPassStrategy {
         let result = if let Some(exe_path) = executable_path.filter(|p| p.exists()) {
             // Native path: a real executable was produced and linked.
             ProgramRunner::new(exe_path).run(timeout)
-        } else if let (Some(bodies), Some(ty_ctx)) =
-            (output.mir_bodies.first().map(|_| &output.mir_bodies), output.ty_ctx.as_ref())
-        {
+        } else if let (Some(bodies), Some(ty_ctx)) = (
+            output.mir_bodies.first().map(|_| &output.mir_bodies),
+            output.ty_ctx.as_ref(),
+        ) {
             // Portable fallback: no native executable (mock backend or a host
             // without LLVM/linker). Drive the MIR interpreter instead. This
             // exercises the same exit-code / stdout contract as the native
@@ -333,9 +335,10 @@ impl RunFailStrategy {
 
         let result = if let Some(exe_path) = executable_path.filter(|p| p.exists()) {
             ProgramRunner::new(exe_path).run(timeout)
-        } else if let (Some(bodies), Some(ty_ctx)) =
-            (output.mir_bodies.first().map(|_| &output.mir_bodies), output.ty_ctx.as_ref())
-        {
+        } else if let (Some(bodies), Some(ty_ctx)) = (
+            output.mir_bodies.first().map(|_| &output.mir_bodies),
+            output.ty_ctx.as_ref(),
+        ) {
             crate::harness::interpreter_runner::InterpRunner::new(
                 bodies.clone(),
                 ty_ctx.clone(),

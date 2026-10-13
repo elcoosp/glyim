@@ -50,5 +50,9 @@ fn expected_set_has_no_duplicates() {
     let mut sorted = set.clone();
     sorted.sort_unstable();
     sorted.dedup();
-    assert_eq!(set.len(), sorted.len(), "duplicate provider in expected set");
+    assert_eq!(
+        set.len(),
+        sorted.len(),
+        "duplicate provider in expected set"
+    );
 }

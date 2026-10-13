@@ -1153,8 +1153,7 @@ impl<'a> ConstEvaluator<'a> {
                         return Ok(false);
                     }
                     for (pat_field_name, pat_id) in fields.iter() {
-                        let Some((_, val)) =
-                            vals.iter().find(|(name, _)| name == pat_field_name)
+                        let Some((_, val)) = vals.iter().find(|(name, _)| name == pat_field_name)
                         else {
                             return Ok(false);
                         };

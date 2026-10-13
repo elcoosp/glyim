@@ -130,21 +130,29 @@ fn const_prop_uses_entry_state_not_exit_state() {
     for _ in 0..4 {
         mk_local(&mut body);
     }
-    let c = |n: i128| Operand::Constant(MirConst {
-        kind: MirConstKind::Int(n),
-        ty: i32_ty,
-        span: Span::DUMMY,
-    });
+    let c = |n: i128| {
+        Operand::Constant(MirConst {
+            kind: MirConstKind::Int(n),
+            ty: i32_ty,
+            span: Span::DUMMY,
+        })
+    };
     let asn = |dst: u32, rv: Rvalue| Statement {
         kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(dst)), rv),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
         statements: vec![
-            asn(1, Rvalue::Use(c(10))),                              // _1 = 10
-            asn(2, Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1))))), // _2 = move _1
-            asn(1, Rvalue::Use(c(3))),                               // _1 = 3
-            asn(3, Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1))))), // _3 = move _1
+            asn(1, Rvalue::Use(c(10))), // _1 = 10
+            asn(
+                2,
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
+            ), // _2 = move _1
+            asn(1, Rvalue::Use(c(3))),  // _1 = 3
+            asn(
+                3,
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
+            ), // _3 = move _1
         ],
         terminator: Terminator {
             kind: TerminatorKind::Return,

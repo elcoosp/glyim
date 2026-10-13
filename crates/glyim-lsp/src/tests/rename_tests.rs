@@ -185,7 +185,10 @@ fn test_rename_let_binding_edits_only_the_identifier() {
     let params = RenameParams {
         text_document_position: TextDocumentPositionParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
-            position: Position { line: 1, character: 8 },
+            position: Position {
+                line: 1,
+                character: 8,
+            },
         },
         new_name: "z".to_string(),
         work_done_progress_params: Default::default(),

@@ -38,11 +38,8 @@ fn glyim_bin() -> PathBuf {
 struct Scratch(PathBuf);
 impl Scratch {
     fn new(name: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "glyim_cache_it_{}_{}",
-            std::process::id(),
-            name
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("glyim_cache_it_{}_{}", std::process::id(), name));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         Self(dir)
@@ -106,7 +103,11 @@ fn identical_rebuild_is_a_hit_and_byte_identical() {
         ],
     );
     assert!(ok, "cold compile must succeed");
-    assert_eq!(count_objects(cache.path()), 1, "cold compile caches one object");
+    assert_eq!(
+        count_objects(cache.path()),
+        1,
+        "cold compile caches one object"
+    );
 
     let obj_b = work.path().join("b.o");
     let (_o, stderr_b, ok) = run(
@@ -128,7 +129,11 @@ fn identical_rebuild_is_a_hit_and_byte_identical() {
         stderr_b.contains("cache hit"),
         "warm compile must be a cache hit; stderr:\n{stderr_b}"
     );
-    assert_eq!(count_objects(cache.path()), 1, "warm compile adds no object");
+    assert_eq!(
+        count_objects(cache.path()),
+        1,
+        "warm compile adds no object"
+    );
 
     assert_eq!(
         std::fs::read(&obj_a).unwrap(),
@@ -180,7 +185,11 @@ fn changing_source_invalidates_the_cache() {
         !stderr.contains("cache hit"),
         "changed source must miss; stderr:\n{stderr}"
     );
-    assert_eq!(count_objects(cache.path()), 2, "miss caches a second object");
+    assert_eq!(
+        count_objects(cache.path()),
+        2,
+        "miss caches a second object"
+    );
 }
 
 #[test]
@@ -192,7 +201,11 @@ fn changing_an_external_module_invalidates_the_cache() {
         "mod helper;\nfn main() -> i32 { helper::value() }\n",
     )
     .unwrap();
-    std::fs::write(work.path().join("helper.g"), "pub fn value() -> i32 { 1 }\n").unwrap();
+    std::fs::write(
+        work.path().join("helper.g"),
+        "pub fn value() -> i32 { 1 }\n",
+    )
+    .unwrap();
 
     let args = |out: &str| {
         vec![
@@ -218,7 +231,11 @@ fn changing_an_external_module_invalidates_the_cache() {
     assert!(stderr.contains("cache hit"), "unchanged modules must hit");
 
     // Edit the *helper*: the flattened source changes, so the key changes.
-    std::fs::write(work.path().join("helper.g"), "pub fn value() -> i32 { 2 }\n").unwrap();
+    std::fs::write(
+        work.path().join("helper.g"),
+        "pub fn value() -> i32 { 2 }\n",
+    )
+    .unwrap();
     let c = args("c.o");
     let c: Vec<&str> = c.iter().map(String::as_str).collect();
     let (_o, stderr, _ok) = run(cache.path(), &c);

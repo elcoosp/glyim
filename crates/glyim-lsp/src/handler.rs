@@ -11,13 +11,10 @@ use crate::rename::rename_symbol;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
 
-use lsp_types::notification::{
-    DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument,
-};
+use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
 use lsp_types::request::{
     CodeActionRequest, Completion, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
-    GotoDefinition, HoverRequest, Initialize, References, Rename, Shutdown,
-    WorkspaceSymbolRequest,
+    GotoDefinition, HoverRequest, Initialize, References, Rename, Shutdown, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -181,50 +178,44 @@ pub fn build_router(
     // full text (this server negotiates FULL sync) via `analysis_tx`.
     let db_open = db.clone();
     let tx_open = _analysis_tx.clone();
-    router.notification::<DidOpenTextDocument>(
-        move |_, params: DidOpenTextDocumentParams| {
-            let path = path_from_uri(&params.text_document.uri);
-            let content = params.text_document.text;
-            let version = params.text_document.version;
-            let _ = db_open.file_map.write().get_or_create(&path);
-            let _ = tx_open.try_send(AnalysisMessage::FileChanged {
-                path,
-                content,
-                version,
-            });
-            ControlFlow::Continue(())
-        },
-    );
+    router.notification::<DidOpenTextDocument>(move |_, params: DidOpenTextDocumentParams| {
+        let path = path_from_uri(&params.text_document.uri);
+        let content = params.text_document.text;
+        let version = params.text_document.version;
+        let _ = db_open.file_map.write().get_or_create(&path);
+        let _ = tx_open.try_send(AnalysisMessage::FileChanged {
+            path,
+            content,
+            version,
+        });
+        ControlFlow::Continue(())
+    });
 
     let db_change = db.clone();
     let tx_change = _analysis_tx.clone();
-    router.notification::<DidChangeTextDocument>(
-        move |_, params: DidChangeTextDocumentParams| {
-            // FULL sync: the last content change carries the whole document.
-            let path = path_from_uri(&params.text_document.uri);
-            let version = params.text_document.version;
-            if let Some(change) = params.content_changes.into_iter().last() {
-                let _ = db_change.file_map.write().get_or_create(&path);
-                let _ = tx_change.try_send(AnalysisMessage::FileChanged {
-                    path,
-                    content: change.text,
-                    version,
-                });
-            }
-            ControlFlow::Continue(())
-        },
-    );
+    router.notification::<DidChangeTextDocument>(move |_, params: DidChangeTextDocumentParams| {
+        // FULL sync: the last content change carries the whole document.
+        let path = path_from_uri(&params.text_document.uri);
+        let version = params.text_document.version;
+        if let Some(change) = params.content_changes.into_iter().last() {
+            let _ = db_change.file_map.write().get_or_create(&path);
+            let _ = tx_change.try_send(AnalysisMessage::FileChanged {
+                path,
+                content: change.text,
+                version,
+            });
+        }
+        ControlFlow::Continue(())
+    });
 
     let db_close = db.clone();
     let tx_close = _analysis_tx.clone();
-    router.notification::<DidCloseTextDocument>(
-        move |_, params: DidCloseTextDocumentParams| {
-            let path = path_from_uri(&params.text_document.uri);
-            let _ = db_close.file_map.write().remove(&path);
-            let _ = tx_close.try_send(AnalysisMessage::FileClosed { path });
-            ControlFlow::Continue(())
-        },
-    );
+    router.notification::<DidCloseTextDocument>(move |_, params: DidCloseTextDocumentParams| {
+        let path = path_from_uri(&params.text_document.uri);
+        let _ = db_close.file_map.write().remove(&path);
+        let _ = tx_close.try_send(AnalysisMessage::FileClosed { path });
+        ControlFlow::Continue(())
+    });
 
     router
 }

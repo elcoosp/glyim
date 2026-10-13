@@ -47,7 +47,12 @@ fn unsatisfied_trait_bound_is_a_diagnostic_not_a_panic() {
 
     let out = dir.join("b.o");
     let output = Command::new(cli_bin())
-        .args([src.to_str().unwrap(), "--emit=obj", "-o", out.to_str().unwrap()])
+        .args([
+            src.to_str().unwrap(),
+            "--emit=obj",
+            "-o",
+            out.to_str().unwrap(),
+        ])
         .output()
         .expect("spawn glyim-cli");
 

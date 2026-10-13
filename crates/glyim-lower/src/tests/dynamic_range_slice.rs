@@ -206,7 +206,6 @@ fn has_unreachable_terminator(result: &crate::lower::LowerResult) -> bool {
         .any(|bb| matches!(bb.terminator.kind, glyim_mir::TerminatorKind::Unreachable))
 }
 
-
 /// T099-REGRESSION: does the body contain an `Assert` terminator with
 /// `AssertMessage::BoundsCheck`?
 fn has_bounds_check_assert(result: &crate::lower::LowerResult) -> bool {

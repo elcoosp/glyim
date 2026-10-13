@@ -250,7 +250,6 @@ fn expand_api_with_builtin_file_macro() {
     );
 }
 
-
 /// HIR-2 regression: a repetition over a *multi-token* fragment must expand to
 /// exactly one item per matched iteration, not one per captured token.
 ///
@@ -293,7 +292,6 @@ fn main() {
         expanded_text
     );
 }
-
 
 /// HIR-2 follow-on: the green→text round-trip in `expand_node_recursive`
 /// reconstructs source from token texts. Without a separator, `let` and `_`

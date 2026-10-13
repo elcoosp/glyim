@@ -114,9 +114,7 @@ fn evaluate_rvalue_to_const(
                             // constant-folded value only when `r != 0`.
                             l.checked_div(r).unwrap_or(0)
                         }
-                        glyim_core::primitives::BinOp::Rem => {
-                            l.checked_rem(r).unwrap_or(0)
-                        }
+                        glyim_core::primitives::BinOp::Rem => l.checked_rem(r).unwrap_or(0),
                         _ => return None,
                     };
                     Some(MirConst {
@@ -136,9 +134,7 @@ fn evaluate_rvalue_to_const(
                             // constant-folded value only when `r != 0`.
                             l.checked_div(r).unwrap_or(0)
                         }
-                        glyim_core::primitives::BinOp::Rem => {
-                            l.checked_rem(r).unwrap_or(0)
-                        }
+                        glyim_core::primitives::BinOp::Rem => l.checked_rem(r).unwrap_or(0),
                         _ => return None,
                     };
                     Some(MirConst {
@@ -456,7 +452,10 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
             // survive across a call and produce a wrong result, e.g.
             //   let mut a = 5; let r = &mut a; inc(r); a + 1  // must be 7
             // would fold `a + 1` to 6.
-            if matches!(&block.terminator.kind, glyim_mir::TerminatorKind::Call { .. }) {
+            if matches!(
+                &block.terminator.kind,
+                glyim_mir::TerminatorKind::Call { .. }
+            ) {
                 out.clear();
             }
 

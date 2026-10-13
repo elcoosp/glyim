@@ -34,8 +34,8 @@ fn setup_test_db_with_references() -> (Arc<AnalysisDatabase>, FileMap, PathBuf) 
         def_id: None,
 
         owner_item_id: None,
-            is_item_level: false,
-            };
+        is_item_level: false,
+    };
     let use_ref = Reference {
         file_id,
         span,
@@ -46,8 +46,8 @@ fn setup_test_db_with_references() -> (Arc<AnalysisDatabase>, FileMap, PathBuf) 
         def_id: None,
 
         owner_item_id: None,
-            is_item_level: false,
-            };
+        is_item_level: false,
+    };
     graph.insert_test_reference("foo", def_ref);
     graph.insert_test_reference("foo", use_ref);
 

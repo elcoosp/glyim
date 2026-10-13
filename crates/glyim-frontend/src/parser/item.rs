@@ -69,7 +69,10 @@ impl<'a> Parser<'a> {
                 self.bump(); // const
                 // FE-14: an anonymous const (`const _: T = …;`) uses `_`, which
                 // lexes as `Underscore`, not `Ident`.
-                if matches!(self.current_kind(), SyntaxKind::Ident | SyntaxKind::Underscore) {
+                if matches!(
+                    self.current_kind(),
+                    SyntaxKind::Ident | SyntaxKind::Underscore
+                ) {
                     self.bump();
                 } else {
                     self.error("expected name or `_` after `const`");
@@ -93,7 +96,10 @@ impl<'a> Parser<'a> {
                     self.bump();
                 }
                 // FE-14: allow `static _: T = …;`.
-                if matches!(self.current_kind(), SyntaxKind::Ident | SyntaxKind::Underscore) {
+                if matches!(
+                    self.current_kind(),
+                    SyntaxKind::Ident | SyntaxKind::Underscore
+                ) {
                     self.bump();
                 } else {
                     self.error("expected name or `_` after `static`");

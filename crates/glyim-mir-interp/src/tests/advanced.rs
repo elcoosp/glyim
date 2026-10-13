@@ -704,6 +704,8 @@ fn interpret_wrapping_mul() {
     interp.run_body(&body).unwrap();
     assert_eq!(
         interp.get_local_value(LocalIdx::from_raw(1)),
-        Some(&InterpValue::Int((i32::MAX as i128).wrapping_mul(2) as i32 as i128))
+        Some(&InterpValue::Int(
+            (i32::MAX as i128).wrapping_mul(2) as i32 as i128
+        ))
     );
 }

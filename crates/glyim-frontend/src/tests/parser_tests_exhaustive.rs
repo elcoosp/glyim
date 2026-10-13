@@ -336,7 +336,11 @@ fn test_chained_casts() {
 #[test]
 fn test_triple_chained_casts() {
     let result = parse_to_syntax("fn f() { let y = 1 as i32 as i64 as u64; }", file_id());
-    assert!(result.diagnostics.is_empty(), "got: {:?}", result.diagnostics);
+    assert!(
+        result.diagnostics.is_empty(),
+        "got: {:?}",
+        result.diagnostics
+    );
 }
 
 // ─── FE-12/13/14/17/18 batch ───

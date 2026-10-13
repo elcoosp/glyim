@@ -290,8 +290,8 @@ fn execute_inner(
     let file_id = next_file_id();
 
     let compile_span = tracing::info_span!("compile", file_id = file_id.to_raw());
-    let output = compile_span
-        .in_scope(|| compiler.compile(&test.source, &test.path, file_id, &flags));
+    let output =
+        compile_span.in_scope(|| compiler.compile(&test.source, &test.path, file_id, &flags));
 
     let run_timeout = std::time::Duration::from_secs(test.config.timeout_secs);
 
@@ -341,22 +341,17 @@ where
 
     match rx.recv_timeout(timeout) {
         Ok(result) => Ok(result),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            Err(TimeoutError { timeout_secs })
-        }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(TimeoutError { timeout_secs }),
         // T144-PATCHED [HARNESS-4]: `Disconnected` means the worker thread
         // panicked (or dropped the sender) before sending a result. The
         // previous `Err(_)` collapsed this into a `TimeoutError`, hiding
         // the real ICE. Surface it distinctly so the caller can classify
         // the failure.
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            Err(TimeoutError {
-                timeout_secs: 0,
-            })
+            Err(TimeoutError { timeout_secs: 0 })
         }
     }
 }
-
 
 /// Best-effort Rust target triple for the host executing the tests. Mirrors
 /// the mapping `glyim-cli::host_target_triple` uses for proc-macro builds so
