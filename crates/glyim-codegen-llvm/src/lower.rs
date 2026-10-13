@@ -3387,7 +3387,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         if !matches!(
             method.as_str(),
             "as_bytes" | "as_ptr" | "as_mut_ptr" | "len" | "is_empty"
-                | "to_string" | "as_str" | "new" | "push_str"
+                | "to_string" | "as_str" | "new" | "push_str" | "push"
+                | "is_some" | "is_none" | "is_ok" | "is_err"
+                | "unwrap" | "expect" | "unwrap_err" | "expect_err"
+                | "unwrap_or" | "unwrap_or_default"
         ) {
             return Ok(false);
         }
@@ -3497,6 +3500,120 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let tb = *self.bb_map.get(target_bb).expect("push_str target");
                 self.builder.build_unconditional_branch(tb)
                     .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
+            }
+            return Ok(true);
+        }
+
+        // BC-VEC-PUSH: `Vec::<T>::push(&mut self, value: T)`. Inline lowering
+        // via the `glyim_vec_push` runtime helper. Vec's LLVM layout is
+        // `{buf: {ptr, cap}, len}` == `{ptr, cap, len}` at bytes 0/8/16 —
+        // the same shape as `String`, so the same header-pointer path used
+        // by `push_str` applies. Gated on Vec's AdtId (1020) so it does not
+        // shadow `String::push(u8)` / `str::push(u8)`.
+        if method == "push" && _recv_adt.to_raw() == 1020 {
+            let header_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self
+                        .builder
+                        .build_alloca(recv_val.get_type(), "vp_hdr")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec push hdr alloca: {e:?}"
+                            ))]
+                        })?;
+                    self.builder
+                        .build_store(alloca, recv_val)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec push hdr store: {e:?}"
+                            ))]
+                        })?;
+                    alloca
+                }
+            } else {
+                return Ok(false);
+            };
+            let Some(elem_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let elem_val = self.lower_operand(elem_op)?;
+            let elem_ty = elem_val.get_type();
+            let elem_alloca = self
+                .builder
+                .build_alloca(elem_ty, "vp_elem")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec push elem alloca: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(elem_alloca, elem_val)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec push elem store: {e:?}"
+                    ))]
+                })?;
+            // Size of the element type via the layout computer, not
+            // `LLVMType::size_of()` — the latter returns a `ConstantExpr`
+            // (not a `ConstantInt`) without an attached target data layout
+            // on the inkwell context, and `.get_zero_extended_constant()`
+            // then yields `None`. The Ty-based layout is authoritative
+            // anyway.
+            let elem_ty_rust = self.operand_ty(elem_op);
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size_u64 = layout_computer
+                .layout_of(elem_ty_rust)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec push: layout_of element failed: {:?}",
+                        e
+                    ))]
+                })?;
+            let helper = self.declare_void_helper(
+                "glyim_vec_push",
+                &[
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .into(),
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .into(),
+                    self.llvm_int_type(64).into(),
+                ],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                header_ptr.into(),
+                elem_alloca.into(),
+                self.llvm_int_type(64)
+                    .const_int(elem_size_u64, false)
+                    .into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "vec_push_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "vec push call: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("vec push target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "vec push branch: {e:?}"
+                        ))]
+                    })?;
             }
             return Ok(true);
         }
@@ -3672,6 +3789,305 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             return Ok(true);
         }
+        // Enum-payload builtins (`Option` / `Result`). The receiver is the
+        // enum value; `_recv_adt.to_raw()` is 1010 for `Option`, 1011 for
+        // `Result`. The enum LLVM type is an *opaque sized struct*
+        // (`opaque_sized_type(size, align)`), NOT `{tag, payload}` — so we
+        // must not use `build_extract_value` on the SSA value. Instead we
+        // reuse the existing layout-aware machinery:
+        //   * `lower_discriminant(recv_place)` reads the tag word at its
+        //     real byte offset (see `abi.rs`'s enum layout);
+        //   * a projected place `[Downcast(v), Field(0)]` reaches the
+        //     selected variant's payload using the same offsets
+        //     `build_layout_aggregate` writes through.
+        //
+        // Tag convention (mirrors `glyim-mir-interp`):
+        //   Option: None = 0, Some = 1
+        //   Result: Ok   = 0, Err  = 1
+        if matches!(
+            method.as_str(),
+            "is_some"
+                | "is_none"
+                | "is_ok"
+                | "is_err"
+                | "unwrap"
+                | "expect"
+                | "unwrap_err"
+                | "expect_err"
+                | "unwrap_or"
+                | "unwrap_or_default"
+        ) {
+            use inkwell::IntPredicate;
+            let recv_place = match recv {
+                Operand::Copy(p) | Operand::Move(p) => p,
+                Operand::Constant(_) => return Ok(false),
+            };
+            let is_option = _recv_adt.to_raw() == 1010;
+            // The tag value that means "the payload we want is present":
+            //   Some = 1 for `Option`; Ok = 0 for `Result`.
+            let present_tag: u64 = if is_option { 1 } else { 0 };
+            let err_tag: u64 = if is_option { 0 } else { 1 };
+
+            let tag_i64 = {
+                let tag = self.lower_discriminant(recv_place)?.into_int_value();
+                let i64_ty = self.llvm_int_type(64);
+                if tag.get_type() == i64_ty {
+                    tag
+                } else {
+                    self.builder
+                        .build_int_z_extend(tag, i64_ty, "enum_tag64")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "enum tag zext: {e:?}"
+                            ))]
+                        })?
+                }
+            };
+
+            // ------------------------------------------------------------------
+            // Boolean tests: `is_some` / `is_none` / `is_ok` / `is_err`.
+            // ------------------------------------------------------------------
+            if matches!(
+                method.as_str(),
+                "is_some" | "is_none" | "is_ok" | "is_err"
+            ) {
+                let want: u64 = match method.as_str() {
+                    // `is_some` / `is_ok` test the payload-present variant.
+                    "is_some" | "is_ok" => present_tag,
+                    // `is_none` / `is_err` test the other variant.
+                    "is_none" | "is_err" => err_tag,
+                    _ => unreachable!(),
+                };
+                let i64_ty = self.llvm_int_type(64);
+                let want_v = i64_ty.const_int(want, false);
+                let eq = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, tag_i64, want_v, "is_eq")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "is_* cmp: {e:?}"
+                        ))]
+                    })?;
+                let stored: BasicValueEnum = if dest_llvm_ty.is_int_type() {
+                    let dty = dest_llvm_ty.into_int_type();
+                    if dty.get_bit_width() == 1 {
+                        eq.into()
+                    } else {
+                        self.builder
+                            .build_int_z_extend(eq, dty, "is_zext")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "is_* zext: {e:?}"
+                                ))]
+                            })?
+                            .into()
+                    }
+                } else {
+                    return Ok(false);
+                };
+                self.builder.build_store(dest_ptr, stored).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_* store: {e:?}"
+                    ))]
+                })?;
+                if let Some(t) = target {
+                    let tb = *self.bb_map.get(t).expect("is_* target");
+                    self.builder
+                        .build_unconditional_branch(tb)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "is_* br: {e:?}"
+                            ))]
+                        })?;
+                }
+                return Ok(true);
+            }
+
+            // ------------------------------------------------------------------
+            // Payload-extracting methods:
+            //   unwrap / expect          -> present variant
+            //   unwrap_err / expect_err  -> error variant (Result only)
+            //   unwrap_or / _default     -> present variant, alt on miss
+            // ------------------------------------------------------------------
+            let (want_tag, take_err, store_default_on_miss) = match method.as_str() {
+                "unwrap" | "expect" => (present_tag, false, false),
+                "unwrap_err" | "expect_err" => {
+                    if is_option {
+                        // Not a real method on `Option`; bail to the normal
+                        // path (which will emit a proper diagnostic).
+                        return Ok(false);
+                    }
+                    (err_tag, true, false)
+                }
+                "unwrap_or" | "unwrap_or_default" => (present_tag, false, true),
+                _ => unreachable!(),
+            };
+
+            let Some(target_idx) = target else {
+                return Ok(false);
+            };
+            let target_bb = *self.bb_map.get(target_idx).expect("payload target");
+            let Some(current_fn) = self
+                .builder
+                .get_insert_block()
+                .and_then(|b| b.get_parent())
+            else {
+                return Err(vec![GlyimDiagnostic::internal_error(
+                    "payload: no current function",
+                )]);
+            };
+            let ok_bb = self
+                .context
+                .append_basic_block(current_fn, "payload_ok");
+            let bad_bb = self
+                .context
+                .append_basic_block(current_fn, "payload_bad");
+
+            let i64_ty = self.llvm_int_type(64);
+            let want_v = i64_ty.const_int(want_tag, false);
+            let eq = self
+                .builder
+                .build_int_compare(IntPredicate::EQ, tag_i64, want_v, "payload_eq")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "payload cmp: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_conditional_branch(eq, ok_bb, bad_bb)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "payload br: {e:?}"
+                    ))]
+                })?;
+
+            // --- Present branch: extract payload, store into destination.
+            self.builder.position_at_end(ok_bb);
+            let variant_for_payload: u32 = if take_err {
+                err_tag as u32
+            } else {
+                present_tag as u32
+            };
+            let mut proj: Vec<ProjectionElem> = recv_place.projection.to_vec();
+            proj.push(ProjectionElem::Downcast(VariantIdx::from_raw(
+                variant_for_payload,
+            )));
+            proj.push(ProjectionElem::Field(FieldIdx::from_raw(0)));
+            let payload_place = Place {
+                local: recv_place.local,
+                projection: proj.into_boxed_slice(),
+            };
+            let payload_ptr = self.place_ptr(&payload_place)?;
+            let payload_val = self
+                .builder
+                .build_load(dest_llvm_ty, payload_ptr, "payload_load")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "payload load: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_store(dest_ptr, payload_val)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "payload store: {e:?}"
+                    ))]
+                })?;
+            self.builder
+                .build_unconditional_branch(target_bb)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "payload br2: {e:?}"
+                    ))]
+                })?;
+
+            // --- Miss branch: abort (unwrap/expect/_err) or store alternate.
+            self.builder.position_at_end(bad_bb);
+            if store_default_on_miss {
+                let alt_val: BasicValueEnum = if method == "unwrap_or" {
+                    match args.get(1) {
+                        Some(op) => self.lower_operand(op)?,
+                        None => return Ok(false),
+                    }
+                } else {
+                    // `unwrap_or_default`: `Default::default()` of the
+                    // destination type. `const_zero` is correct for the
+                    // primitive and opaque-aggregate types this compiler
+                    // emits.
+                    dest_llvm_ty.const_zero()
+                };
+                // Coerce the alternate value's type to the destination type
+                // when the mismatch is only integer width/signedness.
+                let alt_val = if alt_val.get_type() == dest_llvm_ty {
+                    alt_val
+                } else if alt_val.is_int_value() && dest_llvm_ty.is_int_type() {
+                    let from = alt_val.into_int_value();
+                    let to = dest_llvm_ty.into_int_type();
+                    let from_bits = from.get_type().get_bit_width();
+                    let to_bits = to.get_bit_width();
+                    if from_bits == to_bits {
+                        from.as_basic_value_enum()
+                    } else if from_bits < to_bits {
+                        self.builder
+                            .build_int_z_extend(from, to, "alt_zext")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "alt zext: {e:?}"
+                                ))]
+                            })?
+                            .into()
+                    } else {
+                        self.builder
+                            .build_int_truncate(from, to, "alt_trunc")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "alt trunc: {e:?}"
+                                ))]
+                            })?
+                            .into()
+                    }
+                } else {
+                    // Unsupported coercion shape; let the normal path
+                    // diagnose.
+                    return Ok(false);
+                };
+                self.builder
+                    .build_store(dest_ptr, alt_val)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "alt store: {e:?}"
+                        ))]
+                    })?;
+                self.builder
+                    .build_unconditional_branch(target_bb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "alt br: {e:?}"
+                        ))]
+                    })?;
+            } else {
+                let abort_fn = self
+                    .module
+                    .get_function("glyim_process_abort")
+                    .unwrap_or_else(|| {
+                        let fn_ty = self.context.void_type().fn_type(&[], false);
+                        self.module
+                            .add_function("glyim_process_abort", fn_ty, None)
+                    });
+                self.builder.build_call(abort_fn, &[], "").map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "abort call: {e:?}"
+                    ))]
+                })?;
+                self.builder.build_unreachable().map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "abort un: {e:?}"
+                    ))]
+                })?;
+            }
+            return Ok(true);
+        }
+
         // Coerce the receiver value to the destination LLVM type. Three
         // shapes are possible for the receiver and three for the destination:
         //
@@ -3874,42 +4290,234 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // previous top-level-only handling missed. For non-generic
                 // callees `substs` is empty and the generic signature is already
                 // concrete, so `concretize_fn_sig` is a no-op.
-                let sig = if substs.is_empty() {
-                    // Builtin trait-impl methods (`Option::<T>::unwrap`,
-                    // `Result::<T,E>::unwrap`, …) are registered as generic
-                    // `fn(Self) -> T` with a `Param(T)`, but their MIR call
-                    // carries an *empty* substitution — the concrete `T`
-                    // lives in the receiver's type (`Option<i32>` →
-                    // `Subst([i32])`). Without this inference,
-                    // `concretize_fn_sig` had nothing to substitute and
-                    // `fn_abi_of` panicked with `UnknownType(Param)`.
-                    // The receiver is always `args[0]` for an inherent
-                    // method.
-                    let inferred = args
-                        .first()
-                        .map(|a| self.operand_ty(a))
-                        .and_then(|t| match self.ty_ctx.ty_kind(t) {
-                            TyKind::Adt(_, s) => {
-                                Some(self.ty_ctx.substitution_args(*s).to_vec())
-                            }
-                            TyKind::Ref(_, inner, _) => match self.ty_ctx.ty_kind(*inner) {
+                // The call-site `substs` occasionally still carries
+                // unresolved inference vars even for a builtin method whose
+                // receiver is fully concrete (`Vec::<i32>::push` with
+                // `substs = [Infer(TyVar(0))]` — the value that would have
+                // become `i32`). Substituting `Param(0)` with that `Infer`
+                // leaves the sig with an `Infer` input and ICEs
+                // `fn_abi_of` with `UnknownType`. Treat any `Infer`/`Param`
+                // in the call-site substs as "not yet concrete" and derive
+                // the substitution map from the receiver's own ADT substs
+                // instead. The receiver is always `args[0]` for an inherent
+                // method.
+                let call_substs_usable = {
+                    let args_slice = self.ty_ctx.substitution_args(substs);
+                    !args_slice.is_empty()
+                        && args_slice.iter().all(|a| match a {
+                            GenericArg::Ty(t) => !matches!(
+                                self.ty_ctx.ty_kind(*t),
+                                TyKind::Infer(_) | TyKind::Param(_)
+                            ),
+                            _ => true,
+                        })
+                };
+                let infer_from_receiver = |this: &Self| -> Option<Vec<GenericArg>> {
+                    let recv_ty = args.first().map(|a| this.operand_ty(a))?;
+                    match this.ty_ctx.ty_kind(recv_ty) {
+                        TyKind::Adt(_, s) => {
+                            Some(this.ty_ctx.substitution_args(*s).to_vec())
+                        }
+                        TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
+                            match this.ty_ctx.ty_kind(*inner) {
                                 TyKind::Adt(_, s) => {
-                                    Some(self.ty_ctx.substitution_args(*s).to_vec())
+                                    Some(this.ty_ctx.substitution_args(*s).to_vec())
                                 }
                                 _ => None,
-                            },
-                            _ => None,
-                        });
-                    match inferred {
+                            }
+                        }
+                        _ => None,
+                    }
+                };
+                let mut sig = if call_substs_usable {
+                    let param_map = self.ty_ctx.substitution_args(substs).to_vec();
+                    Self::concretize_fn_sig(&generic_sig, &param_map, self.ty_ctx)
+                } else {
+                    match infer_from_receiver(self) {
                         Some(map) if !map.is_empty() => {
                             Self::concretize_fn_sig(&generic_sig, &map, self.ty_ctx)
                         }
                         _ => generic_sig,
                     }
-                } else {
-                    let param_map = self.ty_ctx.substitution_args(substs).to_vec();
-                    Self::concretize_fn_sig(&generic_sig, &param_map, self.ty_ctx)
                 };
+                // Builtin trait-impl methods (`Option::<T>::unwrap`,
+                // `Result::<T,E>::unwrap`, …) are registered with an
+                // *unresolved inference var* as the return type (e.g.
+                // `Infer(TyVar(2))`), not a `Param`. `concretize_fn_sig`
+                // only substitutes `Param`, so the sig output stays
+                // `Infer` and `fn_abi_of` panics with `UnknownType`.
+                //
+                // The concrete result type is known: it is exactly the
+                // type of the destination place, which typeck resolved
+                // (`Option::unwrap` on `Option<i32>` → `i32`). Override
+                // the sig output with it whenever the registered output
+                // is still an unresolved inference var.
+                let mut sig = sig;
+                if matches!(self.ty_ctx.ty_kind(sig.output), TyKind::Infer(_)) {
+                    let dest_ty = self.place_ty(destination);
+                    if !matches!(self.ty_ctx.ty_kind(dest_ty), TyKind::Infer(_)) {
+                        sig.output = dest_ty;
+                    }
+                }
+                // Same class of bug as the output override above: a call to a
+                // generic function whose registered `FnSig` still carries a
+                // not-yet-concrete `Infer` in an *input* (or nested inside
+                // the output's ADT substitution — `MaybeUninit<i32>::new(5)`
+                // registers `fn(Infer) -> MaybeUninit<Infer>`). `fn_abi_of`
+                // then panics with `UnknownType`. The concrete type is the
+                // corresponding argument's own type, which typeck resolved.
+                //
+                // Build an `Infer → concrete` map by aligning the generic
+                // signature's still-`Infer` input Tys with the operands'
+                // concrete Tys, then rewrite both `sig.inputs` and
+                // `sig.output` through it. `concretize_fn_sig` only
+                // substitutes `Param`, not `Infer`, so it cannot do this.
+                {
+                    let arg_tys: Vec<Ty> = args.iter().map(|a| self.operand_ty(a)).collect();
+                    let gen_inputs = self.ty_ctx.substitution_args(sig.inputs).to_vec();
+                    let mut infer_map: Vec<(u32, Ty)> = Vec::new();
+                    for (i, g) in gen_inputs.iter().enumerate() {
+                        if let GenericArg::Ty(t) = g {
+                            if let TyKind::Infer(glyim_type::InferVar::Ty(var)) =
+                                self.ty_ctx.ty_kind(*t)
+                            {
+                                if let Some(conc) = arg_tys.get(i) {
+                                    if !matches!(
+                                        self.ty_ctx.ty_kind(*conc),
+                                        TyKind::Infer(_)
+                                    ) {
+                                        infer_map.push((var.to_raw(), *conc));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !infer_map.is_empty() {
+                        fn subst_infer(
+                            ty: Ty,
+                            map: &[(u32, Ty)],
+                            ctx: &mut TyCtxMut,
+                            frozen: &TyCtx,
+                        ) -> Ty {
+                            match frozen.ty_kind(ty).clone() {
+                                TyKind::Infer(glyim_type::InferVar::Ty(v)) => map
+                                    .iter()
+                                    .find(|(k, _)| *k == v.to_raw())
+                                    .map(|(_, c)| *c)
+                                    .unwrap_or(ty),
+                                TyKind::Infer(_) => ty,
+                                TyKind::Adt(id, sub) => {
+                                    let args = frozen.substitution_args(sub);
+                                    let mut new_args: Vec<GenericArg> = Vec::new();
+                                    let mut changed = false;
+                                    for a in args.iter() {
+                                        match a {
+                                            GenericArg::Ty(t) => {
+                                                let nt = subst_infer(*t, map, ctx, frozen);
+                                                if nt != *t { changed = true; }
+                                                new_args.push(GenericArg::Ty(nt));
+                                            }
+                                            other => new_args.push(other.clone()),
+                                        }
+                                    }
+                                    if changed {
+                                        let s = ctx.intern_substitution(new_args);
+                                        ctx.mk_ty(TyKind::Adt(id, s))
+                                    } else {
+                                        ty
+                                    }
+                                }
+                                TyKind::Ref(r, inner, m) => {
+                                    let ni = subst_infer(inner, map, ctx, frozen);
+                                    if ni == inner { ty } else { ctx.mk_ty(TyKind::Ref(r, ni, m)) }
+                                }
+                                TyKind::RawPtr(inner, m) => {
+                                    let ni = subst_infer(inner, map, ctx, frozen);
+                                    if ni == inner { ty } else { ctx.mk_ty(TyKind::RawPtr(ni, m)) }
+                                }
+                                TyKind::Tuple(sub) => {
+                                    let args = frozen.substitution_args(sub);
+                                    let mut new_args: Vec<GenericArg> = Vec::new();
+                                    let mut changed = false;
+                                    for a in args.iter() {
+                                        match a {
+                                            GenericArg::Ty(t) => {
+                                                let nt = subst_infer(*t, map, ctx, frozen);
+                                                if nt != *t { changed = true; }
+                                                new_args.push(GenericArg::Ty(nt));
+                                            }
+                                            other => new_args.push(other.clone()),
+                                        }
+                                    }
+                                    if changed {
+                                        let s = ctx.intern_substitution(new_args);
+                                        ctx.mk_ty(TyKind::Tuple(s))
+                                    } else {
+                                        ty
+                                    }
+                                }
+                                _ => ty,
+                            }
+                        }
+                        let mut ctx = TyCtxMut::from_ty_ctx(self.ty_ctx);
+                        let mut new_inputs: Vec<GenericArg> = Vec::new();
+                        for g in gen_inputs.iter() {
+                            match g {
+                                GenericArg::Ty(t) => {
+                                    new_inputs.push(GenericArg::Ty(
+                                        subst_infer(*t, &infer_map, &mut ctx, self.ty_ctx),
+                                    ));
+                                }
+                                other => new_inputs.push(other.clone()),
+                            }
+                        }
+                        let new_output =
+                            subst_infer(sig.output, &infer_map, &mut ctx, self.ty_ctx);
+                        sig.inputs = ctx.intern_substitution(new_inputs);
+                        sig.output = new_output;
+                    }
+                }
+                // Companion pass for the *`Param`* case (assoc-fn calls with
+                // empty call-site substs, e.g. `MaybeUninit::<i32>::new(5)`
+                // where the MIR gives no substitution but the registered sig
+                // is `fn(Param(0)) -> MaybeUninit<Param(0)>`). Build a
+                // partial `Param(idx) -> concrete arg type` map, then let
+                // `concretize_fn_sig` do the (recursive, ADT-aware) rewrite.
+                {
+                    let arg_tys: Vec<Ty> = args.iter().map(|a| self.operand_ty(a)).collect();
+                    let gen_inputs = self.ty_ctx.substitution_args(sig.inputs).to_vec();
+                    let mut pmap: Vec<Option<Ty>> = Vec::new();
+                    for (i, g) in gen_inputs.iter().enumerate() {
+                        if let GenericArg::Ty(t) = g {
+                            if let TyKind::Param(p) = self.ty_ctx.ty_kind(*t) {
+                                let idx = p.index as usize;
+                                if pmap.len() <= idx {
+                                    pmap.resize(idx + 1, None);
+                                }
+                                if pmap[idx].is_none() {
+                                    if let Some(conc) = arg_tys.get(i) {
+                                        if !matches!(
+                                            self.ty_ctx.ty_kind(*conc),
+                                            TyKind::Infer(_) | TyKind::Param(_)
+                                        ) {
+                                            pmap[idx] = Some(*conc);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if pmap.iter().any(|x| x.is_some()) {
+                        let map_args: Vec<GenericArg> = pmap
+                            .into_iter()
+                            .map(|x| match x {
+                                Some(t) => GenericArg::Ty(t),
+                                None => GenericArg::Ty(Ty::ERROR),
+                            })
+                            .collect();
+                        sig = Self::concretize_fn_sig(&sig, &map_args, self.ty_ctx);
+                    }
+                }
                 let fn_name = match self.ty_ctx.extern_fn_name(def_id) {
                     Some(ext) => ext.to_string(),
                     None => format!("__glyim_fn_{}", def_id.to_raw()),

@@ -1647,18 +1647,38 @@ impl TyCtxMut {
         );
 
         // Register `Vec<T>` - ID 1020.
-        // An owning collection. We register only its name + generic arity so the
-        // frontend resolves `Vec<T>` as a type; the concrete field layout is
-        // irrelevant to type resolution (std constructs `Vec` through
-        // `Vec::new`/`with_capacity` etc., never via struct literals).
+        // An owning collection. Its registered `AdtDef` must mirror the
+        // real on-stack layout, because codegen reads/writes the vector
+        // header by *word offset* (`glyim_vec_push` writes ptr/cap/len at
+        // bytes 0/8/16; the `len` builtin extracts word 2). The stdlib
+        // `Vec<T>` is `{ buf: RawVec<T>, len: usize }` where `RawVec<T>`
+        // is `{ ptr: *mut T, cap: usize }` — i.e. three words:
+        //
+        //     [ buf.ptr: *mut T ][ buf.cap: usize ][ len: usize ]
+        //
+        // Modelling this as a single `buf: T` field (as it was before)
+        // gave `Vec<i32>` a 4-byte layout and made `len` read word 2 of a
+        // 1-word array — an `ExtractOutOfRange`. No struct literal ever
+        // constructs `Vec`, so the field *types* only matter for layout;
+        // the pointer/`usize` triple produces exactly the 24-byte
+        // align-8 layout codegen assumes.
         let vec_t_var = self.mk_ty(TyKind::Param(ParamTy {
             index: 0,
             name: self.resolver.intern("T"),
         }));
+        let usize_ty = self.mk_ty(TyKind::Uint(UintTy::Usize));
         let mut vec_field_defs = IndexVec::new();
         vec_field_defs.push(FieldDef {
-            name: self.resolver.intern("buf"),
-            ty: vec_t_var,
+            name: self.resolver.intern("buf_ptr"),
+            ty: self.mk_ty(TyKind::RawPtr(vec_t_var, Mutability::Mut)),
+        });
+        vec_field_defs.push(FieldDef {
+            name: self.resolver.intern("buf_cap"),
+            ty: usize_ty,
+        });
+        vec_field_defs.push(FieldDef {
+            name: self.resolver.intern("len"),
+            ty: usize_ty,
         });
         let vec_def = AdtDef {
             kind: AdtKind::Struct,

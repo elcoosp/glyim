@@ -2009,3 +2009,81 @@ pub unsafe extern "C" fn glyim_string_push_str(
         std::ptr::write_unaligned((str_header as *mut u8).add(16) as *mut usize, new_len);
     }
 }
+
+/// Append one `elem_size`-byte element to the `Vec<T>` whose 24-byte header
+/// lives at `vec_header`. The layout is `{ buf: {ptr, cap}, len }`:
+/// - ptr at byte 0,
+/// - cap at byte 8,
+/// - len at byte 16.
+///
+/// Grows the underlying buffer via `glyim_alloc` / `glyim_dealloc` when full
+/// (`cap == len`). The growth policy is `(len+1).next_power_of_two().max(8)`,
+/// mirroring `RawVec::reserve` in the stdlib.
+///
+/// # Safety
+/// `vec_header` must point to 24 writable bytes holding a valid `{ptr, cap, len}`
+/// produced by `Vec::new()` (zero-initialized) or a prior `glyim_vec_push`;
+/// `elem` must be valid for `elem_size` bytes and its byte representation must
+/// be trivially copyable into the new slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_vec_push(
+    vec_header: *mut u8,
+    elem: *const u8,
+    elem_size: usize,
+) {
+    if vec_header.is_null() || elem_size == 0 {
+        return;
+    }
+    let ptr = unsafe {
+        std::ptr::read_unaligned(vec_header as *const *mut u8)
+    };
+    let cap = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(8) as *const usize)
+    };
+    let len = unsafe {
+        std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize)
+    };
+
+    // Grow if full. Element alignment is taken as 8 for the allocation, which
+    // is conservative enough for every primitive element type this compiler
+    // currently monomorphizes; grow policy mirrors RawVec::reserve.
+    let new_cap = if len < cap {
+        cap
+    } else {
+        let nc = (len + 1).next_power_of_two().max(8);
+        let new_buf = unsafe { glyim_alloc(nc * elem_size, 8) };
+        if new_buf.is_null() {
+            // Allocation failure: nothing to do beyond not corrupting state.
+            return;
+        }
+        if len > 0 && !ptr.is_null() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(ptr, new_buf, len * elem_size);
+            }
+            unsafe {
+                glyim_dealloc(ptr, cap * elem_size, 8);
+            }
+        }
+        unsafe {
+            std::ptr::write_unaligned(vec_header as *mut *mut u8, new_buf);
+            std::ptr::write_unaligned(
+                (vec_header as *mut u8).add(8) as *mut usize,
+                nc,
+            );
+        }
+        nc
+    };
+    let _ = new_cap;
+
+    // Write element at ptr[len * elem_size].
+    let buf = unsafe {
+        std::ptr::read_unaligned(vec_header as *const *mut u8)
+    };
+    unsafe {
+        std::ptr::copy_nonoverlapping(elem, buf.add(len * elem_size), elem_size);
+        std::ptr::write_unaligned(
+            (vec_header as *mut u8).add(16) as *mut usize,
+            len + 1,
+        );
+    }
+}
