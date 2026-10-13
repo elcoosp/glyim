@@ -6,71 +6,96 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+
+# Reusable LLVM 23 install for Ubuntu runners.
+# NOTE: history had `./llvm.sh 22` next to `llvm-23-dev` packages; the
+# mismatch broke resolution. The script version and the package versions
+# must both be 23.
+x-llvm23-ubuntu: &llvm23-ubuntu
+  run: |
+    wget -q https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
+    sudo ./llvm.sh 23
+    sudo apt-get install -y llvm-23-dev libpolly-23-dev
+    echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
 
 jobs:
   test-ubuntu:
     name: Test (ubuntu-latest)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install LLVM 23
-        run: |
-          wget -q https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y llvm-23-dev libpolly-23-dev
-          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
+        <<: *llvm23-ubuntu
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install nextest
         uses: taiki-e/install-action@nextest
       - name: Run tests
         run: cargo nextest run --workspace
 
   test-linux-runtime:
-    name: M5 runtime proof (ubuntu-latest)
+    name: M5 runtime proof — strict (ubuntu-latest)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install LLVM 23
-        run: |
-          wget -q https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y llvm-23-dev libpolly-23-dev
-          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
+        <<: *llvm23-ubuntu
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install nextest
         uses: taiki-e/install-action@nextest
-      - name: Run M5 runtime fixtures (run-pass + multi-await compile-fail)
-        # The async v1 (`two_step`) runtime proof: compile an `async fn` through the
-        # real pipeline, link a native binary, and (run-pass) execute it. Fixtures
-        # live in crates/glyim-test/tests/runtime/m5/ and are gated to
-        # x86_64-unknown-linux-gnu. On this native-Linux runner the produced ELF
-        # actually runs (the macOS/Windows runners cannot, so they Ignore it).
-        #
-        # The driver (crates/glyim-test/tests/runtime.rs) asserts the safety-net
-        # contract: multi-await must NOT emit the async-v2 diagnostic (no silent
-        # miscompile); single-await must not miscompile (the known native-codegen
-        # gap is tolerated here, see below).
-        #
-        # STRICT PATH (currently disabled on this job): setting
-        # `GLYIM_TEST_REAL_LLVM=1` and passing `--features glyim-test/real-llvm`
-        # swaps the harness's mock codegen for the REAL `LlvmBackend` and makes
-        # the driver REQUIRE `Passed` (real codegen + link + run) instead of
-        # tolerating `CompilationFailed`. That path is wired and correct, but the
-        # native async codegen is currently broken (glyim-codegen-llvm panics in
-        # `fn_abi_of` for monomorphized `block_on<F>`/`poll` types — tracked
-        # gap), so enabling it now would make this job red. Enable it once that
-        # codegen gap is fixed; the failure is the intended honest signal that
-        # the gap is (or is not) closed.
-        run: cargo nextest run -p glyim-test --test runtime
+      - name: "Run M5 runtime fixtures (strict: real LLVM codegen + link + run)"
+        # STRICT PATH: build the fixtures with the real LlvmBackend, link
+        # them natively, execute them, and REQUIRE Passed. The harness
+        # tolerates mock-codegen `CompilationFailed` only when
+        # GLYIM_TEST_REAL_LLVM is unset; setting it (plus the `real-llvm`
+        # feature) makes CompilationFailed a hard failure. The runtime.rs
+        # header (2026-09-21) records that the fn_abi_of codegen gap is
+        # closed, so this must stay green.
+        env:
+          GLYIM_TEST_REAL_LLVM: "1"
+        run: cargo nextest run -p glyim-test --test runtime --features glyim-test/real-llvm
+
+  test-differential:
+    name: Differential — LLVM native vs MIR interpreter (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM 23
+        <<: *llvm23-ubuntu
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Compile every run-pass fixture with both backends and compare
+        # The project's strongest silent-miscompile detector: each run-pass
+        # fixture is compiled once, executed natively (LLVM) and in the MIR
+        # interpreter, and exit code + stdout must agree. Status at
+        # commit 60452ca6: 0 disagreements. Any disagreement is a release
+        # blocker, not a flake.
+        env:
+          GLYIM_TEST_REAL_LLVM: "1"
+        run: cargo nextest run -p glyim-test --test differential --features glyim-test/real-llvm
 
   test-macos:
     name: Test (macos-latest)
     runs-on: macos-latest
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - name: Install LLVM 23
@@ -78,6 +103,7 @@ jobs:
           brew install llvm@23
           echo "LLVM_SYS_231_PREFIX=$(brew --prefix llvm@23)" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install nextest
         uses: taiki-e/install-action@nextest
       - name: Run tests
@@ -86,9 +112,11 @@ jobs:
   test-windows:
     name: Test (windows-latest, runtime)
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install nextest
         uses: taiki-e/install-action@nextest
       - name: Build runtime
@@ -99,27 +127,65 @@ jobs:
   miri-check:
     name: Miri (nightly, type/check crates)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
       - name: Install Miri
         uses: taiki-e/install-action@miri
       - name: Run Miri on type-checking crates
-        # Miri won't run through LLVM-heavy crates; test the pure-Rust
+        # Miri can't run LLVM-heavy crates; exercise the pure-Rust
         # analysis crates (glyim-type, glyim-borrowck, glyim-solve).
         run: |
           cargo miri test -p glyim-type
           cargo miri test -p glyim-borrowck
           cargo miri test -p glyim-solve
 
-  dead-code-check:
-    name: Dead-code burndown
+  lint:
+    name: Format + Clippy (-D warnings)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        # This is the project's own quality bar (tools/glyim-pilot
+        # ClippyGate: every warning fatal, workspace-wide).
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Warn-fallback heuristics
+        # Previously orphaned script: fails if a `tracing::warn!` in the
+        # hot crates is followed by a silent numeric/None fallback.
+        run: bash .github/scripts/check-warn-fallbacks.sh
+
+  supply-chain:
+    name: cargo-deny (advisories + licenses)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+      - name: cargo deny check
+        run: cargo deny check
+
+  dead-code-check:
+    name: Dead-code burndown
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Check for dead code in codegen crates
-        # Plan §5: dead-code burndown (CLIF target exists before emitting).
+        # Warnings are printed AND made fatal for these two crates only,
+        # so the job can actually fail (the old version could not).
         run: |
-          cargo clippy -p glyim-codegen -- -W dead_code
-          cargo clippy -p glyim-frontend -- -W dead_code
+          cargo clippy -p glyim-codegen --all-targets -- -W dead_code -D warnings
+          cargo clippy -p glyim-frontend --all-targets -- -W dead_code -D warnings

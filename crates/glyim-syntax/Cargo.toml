@@ -1,5 +1,6 @@
 [package]
 name = "glyim-syntax"
+license.workspace = true
 edition.workspace = true
 version.workspace = true
 

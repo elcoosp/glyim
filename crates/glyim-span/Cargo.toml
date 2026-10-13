@@ -1,5 +1,6 @@
 [package]
 name = "glyim-span"
+license.workspace = true
 edition.workspace = true
 version.workspace = true
 

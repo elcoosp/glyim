@@ -1,5 +1,6 @@
 [package]
 name = "glyim-pipeline"
+license.workspace = true
 edition.workspace = true
 version.workspace = true
 

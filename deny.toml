@@ -1,0 +1,45 @@
+# cargo-deny policy. Run: cargo deny check
+# CI job `supply-chain` enforces this on every push/PR.
+
+[advisories]
+version = 2
+yanked = "warn"
+
+[licenses]
+version = 2
+# The workspace is MIT. Allow the common permissive licenses its 400+
+# transitive dependencies use. If a future dependency adds a license not
+# listed here, cargo-deny fails the build — that is the intended tripwire:
+# review the dependency, then extend this list deliberately.
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "Zlib",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# inkwell is intentionally pinned to a git rev (see the triple-lock note in
+# docs: inkwell rev <-> llvm-sys 231 <-> system LLVM 23.1).
+# async-lsp is elcoosp's fork of the async-lsp crate (used by glyim-lsp),
+# pinned by rev in Cargo.lock. Reviewed 2026-10-13: legitimate project fork.
+allow-git = [
+  "https://github.com/TheDan64/inkwell",
+  "https://github.com/elcoosp/async-lsp",
+]
