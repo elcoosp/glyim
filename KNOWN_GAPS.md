@@ -53,47 +53,33 @@ closure argument's monomorphized body, not in the builtin dispatch itself.
 Needs closure-call lowering through the builtin arm before the arm can be
 written.
 
-### 1c. Blocked — atomics
+### 1c. Atomics — mostly done
 
-**Every** `AtomicBool` / `AtomicUsize` / `AtomicU8` method fails at link
-time with an undefined `__glyim_fn_NNNN` — not just `fetch_and`/`fetch_or`.
+`AtomicBool` / `AtomicUsize` / `AtomicU8`: `new`, `load`, `store`,
+`fetch_and`, `fetch_or`, `fetch_add`, `fetch_sub` are lowered inline
+(codegen + interp), with runtime helpers. Fixtures in
+`behavior/atomic_*.g`.
 
-Mechanism (verified this session):
+Three sub-items were fixed along the way (each its own commit):
 
-- `resolve_method_call` consults the builtin table
-  (`lookup_builtin_method`) **before** the HIR impl scan. The atomic
-  builtin entries in `ty_ctx_mut.rs` (~line 2453) therefore win, and
-  their `FnDefId`s have no MIR body → undefined symbol at link.
-- `sync.g` **does** contain real bodies — `new`, `load`, `store`,
-  `compare_exchange` (AtomicBool) and `new`, `load`, `store`,
-  `fetch_add`, `fetch_sub`, `compare_exchange` (AtomicUsize) — each
-  calling a `glyim_atomic_*` runtime helper that already exists. But
-  those impls are **unreachable**, shadowed by the builtin table.
+1. The `Atomic*` ADTs were registered as **zero-field structs** (0 bytes)
+   while `sync.g` declares them as `struct AtomicX { v: UnsafeCell<T> }`.
+   `AtomicBool::new(true)` stored `const_zero()` into a 0-byte alloca and
+   discarded the value. Now registered with the bare integer field
+   (`u8`/`usize`/`i32`/`u32`).
+2. `cmp.g`'s `Ordering` lacked the four memory-order variants, so every
+   atomic call site failed type-check before reaching codegen.
+3. `glyim_atomic_u8_fetch_and` / `_fetch_or` runtime helpers added.
 
-**Do not** try to fix this by deleting the builtin entries. That was
-tried: the methods then fail *earlier*, with ``no method `load` found``.
-The HIR impl scan does not reach `sync.g`'s atomic impls (different
-module; receiver-unification does not cover the `Atomic*` ADTs). The
-builtin table is load-bearing for **resolution**, not only lowering.
+**Still open:** `compare_exchange` (all three atomic types). Needs
+`Result` aggregate construction in codegen, plus a
+`glyim_atomic_usize_cas` runtime helper (only the `u8` CAS exists).
 
-Correct fix (~300–400 lines, 4 files):
-
-1. `crates/glyim-codegen-llvm/src/lower.rs` — codegen arms for the 8
-   atomic methods, calling the existing runtime helpers
-   (`glyim_atomic_u8_{load,store,cas}`,
-   `glyim_atomic_usize_{load,store,fetch_add,fetch_sub}`).
-2. `crates/glyim-runtime/src/lib.rs` — add `glyim_atomic_u8_fetch_and` /
-   `_fetch_or` (the other 7 helpers exist at lines 1758–1860).
-3. `crates/glyim-mir-interp/src/lib.rs` — the interpreter has **zero**
-   atomic arms, so any atomic fixture fails the differential
-   (`interp_only` or a disagreement) unless arms are added.
-4. Fixtures.
-
-Related and **fixed** in the same investigation: `cmp.g`'s `Ordering`
-lacked the four memory-order variants (`Acquire` / `Release` / `Relaxed`
-/ `SeqCst`) that `sync.g` uses, so *every* atomic call site failed
-type-check with `TyKind::Error` before even reaching codegen. `cmp.g`
-now declares all seven, matching the compiler's canonical ADT 1015.
+Mechanism note (kept from the earlier investigation, still true): the
+builtin method table **shadows** `sync.g`'s atomic impls, so do NOT try
+to fix atomics by deleting the builtin entries — the methods then fail
+earlier with ``no method `load` found``. The table is load-bearing for
+resolution.
 
 ### 1d. Blocked — iterator protocol
 
