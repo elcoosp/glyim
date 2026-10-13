@@ -948,10 +948,18 @@ pub extern "C" fn glyim_process_exit(code: i32) -> ! {
 
 /// Abort the current process immediately.
 ///
-/// This function never returns. On Unix, sends `SIGABRT`.
+/// This function never returns. Terminates the process with exit code
+/// `101`, matching the interpreter's `InterpError::Panic` mapping
+/// (`interpreter_runner.rs`: a `Panic` from a `-> !` abort hook becomes
+/// `exit_code: 101`). Using `std::process::abort()` here — as this did
+/// before — raised `SIGABRT`, which `ExitStatus::code()` reports as
+/// `None`, so the LLVM and interpreter sides disagreed on the observable
+/// exit status for `core/abort_stops.g` (interp=101, llvm=None). This
+/// keeps the fixture's `// exit-code: 101` contract satisfied on both
+/// backends.
 #[unsafe(no_mangle)]
 pub extern "C" fn glyim_process_abort() -> ! {
-    std::process::abort()
+    std::process::exit(101)
 }
 
 /// Get the process ID of the calling process.

@@ -668,8 +668,34 @@ impl<'a> FnCtxt<'a> {
                                 subst.entry(i as u32).or_insert_with(|| a.clone());
                             }
                         }
-                        let empty_substs = self.ctx.intern_substitution(vec![]);
-                        let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, empty_substs));
+                        // Build the FnDef's substitution from the same
+                        // `subst` map that instantiates the signature
+                        // below. Using `empty_substs` here was the root
+                        // cause of the `MaybeUninit::<T>::new` /
+                        // `Vec::<T>::new` codegen ICE: the FnRef carried
+                        // `FnDef(id, [])`, so MIR emitted `Fn(id, [])`,
+                        // monomorphization enqueued the *generic* body with
+                        // `Param(0)` unsubstituted, and `fn_abi_of` panicked
+                        // on the still-`Param` slot. With the arity-correct
+                        // substitution the call site's unification pins the
+                        // fresh vars (or the `Call` wrapper's argument-derived
+                        // `subst` layers over them), and mono enqueues the
+                        // concrete instance.
+                        let arity = subst
+                            .keys()
+                            .copied()
+                            .max()
+                            .map(|k| k as usize + 1)
+                            .unwrap_or(0);
+                        let subst_args: Vec<GenericArg> = (0..arity)
+                            .map(|i| {
+                                subst.get(&(i as u32)).cloned().unwrap_or_else(|| {
+                                    GenericArg::Ty(self.ctx.error_ty())
+                                })
+                            })
+                            .collect();
+                        let fn_substs = self.ctx.intern_substitution(subst_args);
+                        let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
                         // Re-register the sig with the substituted param types
                         // so call-argument checking sees concrete expected
                         // types (mirrors the builtin branch above).
