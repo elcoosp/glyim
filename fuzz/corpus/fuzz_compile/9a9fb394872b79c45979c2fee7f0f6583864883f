@@ -1,2 +1,0 @@
-// to-tsmantity(42) ede: compile-pasidentity<T>(x: T) -> x} {T
-  fn main() -> i32 { identity(42) (42) }

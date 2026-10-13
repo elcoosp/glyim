@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-struct Point { x: i32, y: i3i32 }
-fn main() {
-    let p = Point { x: 0, yVVV: 2, z: 3 }; //~ ERROR no field`
-}

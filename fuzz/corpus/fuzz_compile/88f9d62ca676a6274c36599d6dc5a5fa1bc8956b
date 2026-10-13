@@ -1,4 +1,0 @@
-//fail
-fn main() {
-    break; //~ ERROR break outside )of lo
-po}

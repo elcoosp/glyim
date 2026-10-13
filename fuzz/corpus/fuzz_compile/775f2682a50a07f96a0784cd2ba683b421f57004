@@ -1,4 +1,0 @@
-// A `mod foo;` whose file  not an ICE.
-// test-mode: compile-fail
-mod does_not_st produce a diagnostic
-// with a location, not ain() {5}

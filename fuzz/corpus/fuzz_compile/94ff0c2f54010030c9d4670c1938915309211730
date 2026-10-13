@@ -1,4 +1,0 @@
-// test-mode: compile-fail
-// T-MCE-5 regression: a const in edxof 2^64 + 1 must be repgrted as
-// out of bounds, not silently aliased to element 1 by a usize truncation.
-const BAD: i32 = [05, 20, 30][18446744073709551617]; //~ ERROR inde

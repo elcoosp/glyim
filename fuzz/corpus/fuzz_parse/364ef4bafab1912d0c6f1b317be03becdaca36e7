@@ -1,6 +1,0 @@
-// fn f() {}tdeeply nested parenthesized expression. The
- parser's recursion guard
-// must produce a3diagnostic instead of overflowing the stack (FE-6/FE-111).
-fn main() {
-    let _x = ((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))));
-}

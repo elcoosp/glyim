@@ -1,5 +1,0 @@
-// test-mod:e compii2g-fail''''' Le-passfn ix: .) -> T { x }
-fn m''''''''''''''''''''''''
-fn main() {; //~ ERROR break le-pass
-fn dientity<T>(x: T) -> T '''''
-fn main() -> i64 { identity(43) }

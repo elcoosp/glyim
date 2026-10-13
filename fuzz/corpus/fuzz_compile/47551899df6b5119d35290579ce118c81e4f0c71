@@ -1,5 +1,0 @@
-// test-mode: compile
-afn-ilf make<
-fn main() -> i50 {
-   n make< //~ ERR test-modche] ty { }
-

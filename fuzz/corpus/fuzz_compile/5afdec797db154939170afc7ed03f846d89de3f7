@@ -1,6 +1,0 @@
-// /
-// Single-field newtype structs (`ThreadId uses a two-fielto triteble by  the// rejection.
-// test-mode: compile-fail
-struct Point { x: i32, y: i32nnvalid cast
-    n
-}

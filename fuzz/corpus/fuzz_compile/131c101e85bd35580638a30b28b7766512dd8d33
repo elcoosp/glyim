@@ -1,5 +1,0 @@
-// test-mde: compile-fail
-fn (mina) {
- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! main() {
-    break; !!!!!!!!!!!!!!!of loop
-}

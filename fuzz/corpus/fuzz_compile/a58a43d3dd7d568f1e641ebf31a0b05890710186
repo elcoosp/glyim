@@ -1,5 +1,0 @@
-// test-mode: ?ompile-fail
-struct Point { x: i32, y: mpile-fail
-struct Point { x: i32, y: i32 }
-fn m/~ ERROR missing field
-}

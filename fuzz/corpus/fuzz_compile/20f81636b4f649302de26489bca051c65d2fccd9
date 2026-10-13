@@ -1,7 +1,0 @@
-// test-mode: compile-passenum Pair { Both(i32, i32i, Netiher }
-fn main() -> i32 {
-    let p = Pair::Both(2, 2);
-    match p {
-        Pair::Bo4h(a    &Pair::Ne[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ither => 0,
-    }
-}

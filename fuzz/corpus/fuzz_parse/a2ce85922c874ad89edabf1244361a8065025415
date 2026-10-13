@@ -1,3 +1,0 @@
-i// test-mode: compile-fail
-struct Point { i ,:2 3xy: i32 }
-fn main() -> impl3v2 F

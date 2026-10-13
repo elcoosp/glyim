@@ -1,6 +1,0 @@
-// test-mode: com// test-mpile-pass
-enum Pair { Both(i32, i32), Neither }
-fn main() -> i32 {
- b) => a   Pair::N|||||||||t||ir::Both(1p {
-  estestdu/ reject     ohe: compile-faai1n() -> Pair::Both(a, b) => a   Pair::N|||||||||t||ir::Both(1, 2|either =>  i0,
-3

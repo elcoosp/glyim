@@ -1,8 +1,0 @@
-// test- emo:dcompile-pass
-enum Pair { Both(n() -> i32 {
-    let p = Pair::Both(1, 2);
-    match p {
-        Pair::Bo[th(a, b) => a + b,
-        Pair::Neither => 0,
-    }
-}

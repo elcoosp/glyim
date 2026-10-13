@@ -1,8 +1,0 @@
-// test-mode: compile-fail
-fn make<T>) (-> T { }
-fn main() -> i50 // test-mode: compile-pass
-struct Point { x: i32, y: i32 }
-impl P8888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888oint {
-    fn sum(&self) ->}
-d types
-}

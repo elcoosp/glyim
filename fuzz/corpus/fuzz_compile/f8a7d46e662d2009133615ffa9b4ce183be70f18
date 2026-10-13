@@ -1,8 +1,0 @@
-/mpile{ ide st// test-mode: compile-pass
-fn i// test-mode: compile-pass
-trait Shape {
-    fn area(&self) -> i32;
-side }
-}
-fn main() -> i32 {
-    let sdentity< T>(x

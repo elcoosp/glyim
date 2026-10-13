@@ -1,4 +1,0 @@
-//bounds, on.
-const BAD: i32 = [05, 20, 15808]; //~ ERROR index out of bounds
-
-fn main() {}

@@ -1,4 +1,0 @@
-// tePoint { x: 10, y: 20  -> i32 {
-  . let p = Point { x: 1};
-   //~ ERROR pass
-enum P

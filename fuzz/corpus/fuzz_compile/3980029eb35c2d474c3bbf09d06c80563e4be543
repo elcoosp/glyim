@@ -1,4 +1,0 @@
-// test-mode: compile-pass
-struct Point({ x: i32, y: i32 }
-impl Point {
-    fn sum(&s 1, y

@@ -1,3 +1,0 @@
-+/ test-mode: compile-fail
-struct Point({ x: i32, y: py: 2, z: 3 }; //~ ERROR no field `z`
-,}

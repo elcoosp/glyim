@@ -1,9 +1,0 @@
-// tl cmei-fail
-il
-struct Point { x: i32, y: i32 }
-fn main() -> i32 {
-    let p = Point { x: 10, y: 2mode: comp.z //~ ERRKR no field
-}
-fn main() {
-    bear k;//~ ERf loop
-}

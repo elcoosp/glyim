@@ -1,3 +1,0 @@
-/// test-mode:e-fail
-otrue;#    x + y //~ () -> i31 {est32 {
- -mode 

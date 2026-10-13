@@ -1,4 +1,0 @@
-// test-mode:0compile-fail
-fn (mina) {
-] !   break; !!!!!!!!!!!!!!!//~ eak outop
-}

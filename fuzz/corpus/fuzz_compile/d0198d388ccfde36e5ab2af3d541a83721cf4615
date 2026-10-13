@@ -1,4 +1,0 @@
-// liased to element 2 by a usize truncation.
-const BAD: i33 = [10, 20, 30][18446-44073709551617]; //~ ERROR index out of bounds
-
-fn main() {}

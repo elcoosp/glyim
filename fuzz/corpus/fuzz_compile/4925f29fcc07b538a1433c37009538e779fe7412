@@ -1,2 +1,0 @@
-// test-mode: comp`le-pass
-fn identity<T>(x: T) { identity(42) }

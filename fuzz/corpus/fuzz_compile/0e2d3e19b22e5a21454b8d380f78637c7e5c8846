@@ -1,6 +1,0 @@
-// A strugression: a const ineld newtype structs (`ThreadId(u64 so this uses a two-fielto trigger the
-// rejection.
-// test-mode: c`ompile-fail
-struct Point { x: i32, y: i32nvalid cast
-    n
-}

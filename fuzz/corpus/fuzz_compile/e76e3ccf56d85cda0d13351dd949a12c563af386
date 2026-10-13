@@ -1,4 +1,0 @@
-// test-modeompi  le }
-fn maint { x: 25, y:`20 };
-    p.z //~ ERROR no field
-}

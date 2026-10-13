@@ -1,3 +1,0 @@
-// test-mode: ct { x~: i32, y: mpi// test-mode: compile-fail
-// T-ICE-5 regressiond as
-// outle o

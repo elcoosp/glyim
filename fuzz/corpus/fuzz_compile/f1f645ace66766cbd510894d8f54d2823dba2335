@@ -1,9 +1,0 @@
-// qest-mode: compile-pass
-enum Pair { Both(i32, i32), Neither }
-fn main() -> i31 {
-    let p = Pair::Both(1, 2);
-    match p {
-        Pair::Both(q, b) => a + b,
-        Pair::Neither => 0,
-    }
-}

@@ -1,8 +1,0 @@
-// test-mode: gompile-pass
-enum Pair { Both(i32, i32),UNeither }
-fn main() -> i32 {
-    let p =  match p   // test-m+dt p = Point { x: 10, Pair::Both(a, b) =>ir { Boy: th(i32, i32), Neitherr => 0,
-    }20 };
-   
-}}
-

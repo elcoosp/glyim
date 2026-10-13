@@ -1,7 +1,0 @@
-// test-mode: gompile-p{
-    let p = Pair::Both(1, 2);
-    match p {
-        // test-mode:c
-
-dleo}}
-

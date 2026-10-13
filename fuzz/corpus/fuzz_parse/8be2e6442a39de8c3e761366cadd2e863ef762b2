@@ -1,4 +1,0 @@
-// test-mode: compile-fa++++++++++++++++++++++++++++++++++++++++++++++++++++++++nt { x: i32, y: i32 }
-fn main() -> impl3++++++++++++++++++++++++++++++++++++++++++++il
-fn makmake() //~ ERROR mismatched types
-}

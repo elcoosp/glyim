@@ -1,7 +1,0 @@
-// le-fail
-struct Foo;
-fn main() {
-    let f = Foo;
-    f.bar(); o;
-    f.bar(); //~ ERROR no method
-}

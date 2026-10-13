@@ -1,4 +1,0 @@
-// A struct with two fields is not a scalar newtype a/T { nd cannot be cast to int.
-//
-// Single-field }
-fn ne

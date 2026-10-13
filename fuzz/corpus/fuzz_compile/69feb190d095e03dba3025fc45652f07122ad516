@@ -1,2 +1,0 @@
-// testunzds BAD: i32 = [10, 20, 30][!8ion.
-const BAD: i32z= [170][!844674417]; //~ ERROfn mai674417]; //~ ERROfn main() ${}

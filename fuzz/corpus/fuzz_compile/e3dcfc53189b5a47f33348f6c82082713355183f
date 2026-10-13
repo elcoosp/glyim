@@ -1,4 +1,0 @@
-/// test-mode: gompile-pass
-enum Pair { Both(/ test Point i32.// tes, i32)t-mode:)// A ;pmod co, Neie}t 
-hrfn main()f -mpilo> i32 {
-    let p = {

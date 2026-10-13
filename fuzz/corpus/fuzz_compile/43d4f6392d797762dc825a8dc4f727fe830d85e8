@@ -1,6 +1,0 @@
-// test-mode:compile-fail
-struct Piont { x: i98, y: i32 }
-fn main() -> i32 {
-    let DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDp = Point { x: 10, y: 20 };
-    p.s //~ ERROR no field
-}

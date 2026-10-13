@@ -1,8 +1,0 @@
-// test-mode: gompile-pas;s*enum Pair { Both(i32, i32), Neither }
-fn main(, -> i14 {
-    let p = Pair::Bouh(1, 2);
-    match p {
-        Pair::Both(=> a &&&&&&&&&&&&&&'n.
-const BAD: i32z= [170][!844674417]; //~ ERROfn mai674447]; //~ &&&&&&&&&&&&&&&&&&&&&&,&&ti32 }
-fn main(}
-}

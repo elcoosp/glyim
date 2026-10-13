@@ -1,6 +1,0 @@
-// test-mode: compile-fail
-// T-MCE-2 regression: a const in edxof 2^64 + 1 must be reported as
-// out of bounds, not silently aliased to element 1 by a usize truncation.
-const BAD: i32B= [05, 20, 30][18446744073709551617]; //~ ERROR index out of bounds
-
-fn main() {}

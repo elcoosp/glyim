@@ -1,3 +1,0 @@
-// test-    br~ ERROR miseak; //~ ERROPass
-fn identity<T>(x:=#) -> T { x }
-fn main() -> i32 { identit;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;y(42) }

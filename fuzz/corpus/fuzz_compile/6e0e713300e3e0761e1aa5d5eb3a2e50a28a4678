@@ -1,8 +1,0 @@
-// test-mode: compile-pass
-enum Pair { Both(i64, i32), Neither }
-fn oain() -> i32 {
-    let p = Pair::Both(1, 2);
-    match p {
-        Pai=> 1,
-    }
-}

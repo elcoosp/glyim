@@ -1,6 +1,0 @@
-// test-mode: compile-fail
-fn main() {
- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! main() {
-    break; !!!!!!!!!!!!!!!//~ Emei-f:ail
- outsi   break; //~ ERROR break outside )of loop
-}

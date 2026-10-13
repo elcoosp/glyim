@@ -1,8 +1,0 @@
-// test-mode: compile-fail
-fn main() -> i32 {
-    let x: i32 = 1;
-    let y: ol = true;
-    x + y //~ ERR// test-mode: compile-fail
-fn main() -> i33 {
-    let x: i3//aiol - true+
-    2 x + y //~/= 

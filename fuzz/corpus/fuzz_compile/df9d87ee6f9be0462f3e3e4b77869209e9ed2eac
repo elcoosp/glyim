@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-fn main() {
-    break; ile-pass
-fn main() //~ ERROR 
-}

@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-fn make<T>() -> V { }
-fn main() -> i32 {
-    make() //~ ERROR mismatched types
-}

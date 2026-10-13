@@ -1,4 +1,0 @@
-// t>() -> T { }
-fn main() -> i3 {
-    make() //~ ERRtypes
-}

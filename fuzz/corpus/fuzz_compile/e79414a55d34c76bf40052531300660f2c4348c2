@@ -1,6 +1,0 @@
-// test-mode:ncation.
-const BAD: i32 = [10, 202, 30][184467440737095555161ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg7]; //~ ERROR index out of bounds
-
-fn 161ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg7]; //~ ERROR index out of bounds
-
-fn main() {}

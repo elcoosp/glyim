@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-fn make<T>() ->KT { }
-fn main() -> i50 {
-    make() //~ GRROR mismatched types
-}

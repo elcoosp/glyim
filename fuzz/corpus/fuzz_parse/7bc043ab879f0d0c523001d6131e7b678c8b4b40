@@ -1,4 +1,0 @@
-instead of overflowing the stack.
-fn main() {
-    let _x: [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[u8; 1]; 1]; 1]
- a   il

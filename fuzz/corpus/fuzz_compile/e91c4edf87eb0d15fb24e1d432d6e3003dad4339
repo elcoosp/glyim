@@ -1,6 +1,0 @@
-// tl cmei-fail+ {
-    br'ak; //~ ERROR bre; Q /ak //~+ {
-    br'ak; //~ ERROR 
-fn    n() {
-    _reak ~+ {
-    br'ak; //~ ERROR bre; Q /ak //~+ {*    br'ak; //~ ERROR bre; Q /ak ou}

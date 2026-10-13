@@ -1,6 +1,0 @@
-// test-mode: compile-pass
-strde                          oint { x                      : compile-pass
-struct Poin:t { x: i16, y: i32 }
-im   trde                          oint { x                         : compile-pass
-struct Poin:t { x: i16, y: i32 }
-im   trde                          oint { x}

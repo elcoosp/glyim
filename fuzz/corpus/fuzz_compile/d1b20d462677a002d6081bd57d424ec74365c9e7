@@ -1,4 +1,0 @@
-// qest-mude: compile-pass
-enum Pair { Bass
-enum Pair { Both(i16,  }
-}

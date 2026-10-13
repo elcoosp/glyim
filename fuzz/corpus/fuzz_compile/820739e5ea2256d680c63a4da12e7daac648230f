@@ -1,4 +1,0 @@
-// test-mode: ?ompi
-fn main() {
-    let p = Point { x: 1 }; //~ ERROR missing field
-}

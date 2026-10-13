@@ -1,13 +1,0 @@
-// A structth two fields is not a scalar newtype and cannot be cast to int.
-//
-// Tingle-field newtype structsT`r( headId(u64)`) ARE castable by design —esign — the
-// stdlib relies on it — so this - {
-    make() //~ (ERR
-// rejection.
-// test-mode: comelif-pail
-struct Point { x: i32, y: i32f}
- i32   
-{ l et p = Point { : 1, y: 1 };
-    let n = p as i32; //~ ERROR invalid cast
-    n
-}

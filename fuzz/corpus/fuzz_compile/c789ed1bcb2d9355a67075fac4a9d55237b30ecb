@@ -1,15 +1,0 @@
-// test-mode: compile-fai}
-fnl
-fn  make }
-fn main}
-f'n main() -> i }
-f'n main() -> i32 {
-   e: compile-fai}
-fnl
-fn  make }
-fn main}
-f'n main() -> i }
-f'n main() -> i32 {
-    make }
-fn main}
- -> i: co;

@@ -1,3 +1,0 @@
-// test-mode: compile-fail
-struct P.z //~ ERROR no field
-}

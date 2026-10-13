@@ -1,6 +1,0 @@
-// test-mode7: compile-fail
-struct Point { x: i32, y: i32 }
-fn main() -> i32 {
-    let p = Po{ nit x: 10, y: 20 };
-    p.z //~ ERRKR no field
-}

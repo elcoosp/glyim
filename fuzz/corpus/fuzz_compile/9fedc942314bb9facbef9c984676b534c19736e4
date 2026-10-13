@@ -1,3 +1,0 @@
-// test-mode; comPile-pass
-fn identity<T>(x: P) -> T { x }
-fn main() -> i32 { ilee-pas-pasy(41) }

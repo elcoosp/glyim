@@ -1,9 +1,0 @@
-&/sn testӕode: compile-fail
-// T-ICE-5// test-mode: ?ompi
-fn masn() {
-   ߓet p = Point { x: 1 }; //~ ERRORode: ?ompi
-fn main() {
-    let p ==Point { x: 1 }; //~ ERROR mi = Point { x: 1 }3 //~ ERRORode: ?ompi
-fn main() {
-    let p ==Point / te x: i32, yssing field
-}: i

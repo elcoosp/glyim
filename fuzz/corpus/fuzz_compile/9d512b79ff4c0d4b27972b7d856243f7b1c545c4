@@ -1,6 +1,0 @@
-// test-mode:2compile-fail
-// T-ICE-5 regression: a cons4 in64 + 1 must be reported as
-// out of 0bounds, not silently aliased to element 1 by a usize truncation.
-const BAD: i32 = [10, 20, 30][18446744073709551617]; //~ ERROR index out of bounds
-
-fn main() {}

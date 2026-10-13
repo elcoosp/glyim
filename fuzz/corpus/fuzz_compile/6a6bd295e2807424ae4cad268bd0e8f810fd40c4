@@ -1,7 +1,0 @@
-// test-mode: // test-mode: compile-fail// tecompile-fail
-struct Point { x: i32, y: i32 }
-fn main() {
-  Ost
-// T-ICE-5 regressionR: no field `z`
-index of 2^64 +}
- 1 must be repor@te-modeo

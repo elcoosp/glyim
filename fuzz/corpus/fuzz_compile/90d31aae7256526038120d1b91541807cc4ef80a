@@ -1,6 +1,0 @@
-// moined_symbol //~ ERR moined_symbol //~ ERROR unresolvtest-mode: compile-fail
-fn main() -> i32 {
-    undef																					OR unresolvtest-mode: compile-fail
-fn main() -> i32 {
-    undef																																																																																																													st-moined_symbol //~ ERROR unresolved name
-}

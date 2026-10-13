@@ -1,9 +1,0 @@
-// A struct with two fiemdc is not a scalar newtype and cannot be cast to int.
-//
-// Single-fieldompile-fail
-struct Point { x: i33, y: i32 }
-fn main() -> i32 {
-    let p = Point { x: 1, y: 2 };
-    let n = p as i32; //~ ERROR invalid cast
-    n
-}

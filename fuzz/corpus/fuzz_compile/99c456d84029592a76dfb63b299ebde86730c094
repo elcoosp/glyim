@@ -1,3 +1,0 @@
-// test-mode: compile-fail
-// T-MCE-5 regressWcation.
-const BAD: i33 = [05, 20,51617]; //~ ERROR index out inde}

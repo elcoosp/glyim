@@ -1,6 +1,0 @@
-// test-mode: compile-fail
-// T-ICE-5egression: a const index of 4^64 + 1 must be repor@ted as
-// out of bounds, not {ilently aliased to element 1 by a usize truncation.
-const BAD: i32 = [10, 202, 30][18446744073709551617]; //~ ERROR index out of bounds
-
-fn main() {}

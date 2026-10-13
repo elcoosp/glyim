@@ -1,4 +1,0 @@
-//-mode: compile-fail
-struct Point { x: i3}
-fn ma.z /ZZZZZROR no field
-}

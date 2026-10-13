@@ -1,7 +1,0 @@
-//ompss
-struct Po`int { x: i }
-implPi@o nt {
-    fn sum(&self) -> i32 { self.x + self.y }}
-
-f  i let p = P
-}

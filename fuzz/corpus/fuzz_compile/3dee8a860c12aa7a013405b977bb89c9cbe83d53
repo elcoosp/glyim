@@ -1,8 +1,0 @@
-// test-mode: compile-fail
-struct Foo;
-fn m n(ia){
-    let f = Foin() {
-    () {
-  /  bear o;
-    f.ar(); //~ ERROR no method
-}

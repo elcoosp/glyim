@@ -1,5 +1,0 @@
-traitt Foo
-fn main()  Foo
-f													// test-mode:s
-// -mode: compile-f		ail
-// T-											ICE-	

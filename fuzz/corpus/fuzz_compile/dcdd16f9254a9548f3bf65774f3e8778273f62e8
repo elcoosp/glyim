@@ -1,3 +1,0 @@
-// test-mode: ?ompile-fail
-struct Poin2t { x: i32, y: i32####p = Poeld
-}

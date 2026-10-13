@@ -1,4 +1,0 @@
-// test-mode: compile-fail
-fn main() -> i32 {
-    unndiefed_symbol //~ ERROR unresolved name
-}

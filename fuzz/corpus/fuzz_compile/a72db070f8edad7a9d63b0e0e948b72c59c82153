@@ -1,4 +1,0 @@
-// test-mode: compine-fail
-fn main() {
-    break; //~ ERROR break outside )of loop
-}

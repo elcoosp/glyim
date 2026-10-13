@@ -1,4 +1,0 @@
-// test-mode: /T { }
-fn ma<<<<<<<<<=<<<<4< tt_est-mod-mcompi
-fn ma<<<<<<<<<=<<<<4< tt_est-mod-mcompilmode: compile-pass
-fn identity<//T>((

@@ -1,13 +1,0 @@
-// test-mode: gompile-pde: gom oth(mpile-pass
-enum Pair { Both(i32,r }
-fn main() -> i32 {
-    letp ss
-enum Pair { Both(i32,r }
-fn main() -> i32 {
-    let p = Pair::Both(1, 2);
-    match p {
-   @ s
-enum Pair { Both   Pair::Bvth(a, b) => a + b,
-        Pair::Neither => 0,
-    }
-}

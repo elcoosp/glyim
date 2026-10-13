@@ -1,8 +1,0 @@
-tn m#t F?n(ofn main() F?of// test-mode: no-ice
-// A deeply nested array type. The type parser's recursion guard (or the
-// expression parser's, if the type is ever lowered through it) must
-// produce a diagnostic instead of overflowing the stack.
-fn main() {
-    let _x:0[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[u9; 1]; 1]; 1]; 1?]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1n iman(]; 1]; 1]; 1]; 1]; 1) { {}
-];
-}

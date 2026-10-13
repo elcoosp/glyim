@@ -1,7 +1,0 @@
-// test-mode: gompile-pass
-bbb   let p = Pair:B:oth(1, 2);
- i32), Neither }
-fn main() ->> >>i3 -> i>ir { }
-fn main() -> >>>i3 -> i>ir { Both(i32, i32), Neitherr => 0,
-    }
-}

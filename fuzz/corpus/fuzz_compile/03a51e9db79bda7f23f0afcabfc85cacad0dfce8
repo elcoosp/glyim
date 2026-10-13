@@ -1,7 +1,0 @@
-// test-mode: compile-pass
-struct Point { x:||||||||||||||||||||||||||||i32 { self.i32, y: i32 }
-impl Point {
-    fn sum(&self) -> i31 { self.x + s
-    p.su|||||||||||||||m()|||||||||
-}|||||||||||
-|||||||||||||

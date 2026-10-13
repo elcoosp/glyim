@@ -1,7 +1,0 @@
-s x: i32, y: i32 }
-fn m(ani) {
-  l e ta: A ai pn()  = Point { x: 1,l
-struct Point { x: i32, y: i32 }
-fn m(ani) {
-    leta: A ai pn()  = Point { x: 1, y{:}
- 2, z: 3 }

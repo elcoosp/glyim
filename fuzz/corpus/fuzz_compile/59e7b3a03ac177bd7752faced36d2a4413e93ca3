@@ -1,7 +1,0 @@
-// test-mode: compile-paentity<T>4(x: T- )> T QQty<T>(x: QQ{ x }
-fn main() -> i32 { identity(4Q{ )> T QQty<T>(x: QQ{ x }
-fn main() -> i32 { identity(4Q{ x T
-fn main() -> i32 {paentity<T>4(x: T- )> T QQty<T>(x: T- )> T QQQ{ x }
-fn main() -> i32 { identity(4Q{ x x T
-fn main() -> i32 {paentity<T>4(x: T- )> T QQty<T>(x: T- )> T QQQ{ x }
-fn main() -> i32 { identity(4Q{ x  identity(48) }

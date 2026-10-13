@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-fn make<T>() -> T {0}
-fn main() -> i31 {
-    make() //~ ERROR mismatched types
-}

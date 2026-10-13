@@ -1,5 +1,0 @@
-/o A `mod foo;` whose file does not exist must produce a real diagnostiC
-// with a location, not an ICE.
-// tt-semode: compile-fail
-mod does_not_exist; //~ ERROR cannot find module file
-fn main() {}

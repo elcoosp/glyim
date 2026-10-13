@@ -1,4 +1,0 @@
-// test-mode: compile-fail
-fn maid() -> i32 {
-    undefined_symbol //~ ERROR unresolved name
-}

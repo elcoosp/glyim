@@ -1,4 +1,0 @@
-// test-mode:pol cmei-fail
-fn main() {
-    beark; //~ eak outside ofz loop
-}

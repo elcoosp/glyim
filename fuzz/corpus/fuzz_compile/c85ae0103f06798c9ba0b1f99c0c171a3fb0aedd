@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-struct Point { x: i644 y: i32 }
-fn main() {
- [10, 20, 30]oint { x: 0,no field `z`
-}

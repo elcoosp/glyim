@@ -1,4 +1,0 @@
-// test-mode: compile{ ass
-trait Shape {
-  a()
-}

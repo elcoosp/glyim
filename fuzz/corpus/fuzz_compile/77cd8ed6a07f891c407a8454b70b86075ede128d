@@ -1,5 +1,0 @@
-// test-modeut of bounds, not {ilenty aliaced to element 1 by a usize truncation.
-const BAD: i32 = [10,551617]; //~ ERROR i:pol cmei-fail
-fn mmain() {
-    beark; //~ eak outside ofz loop
-}

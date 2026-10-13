@@ -1,4 +1,0 @@
-// test-mode:pol ci-fail
-fn main() {
-    beark; // test-mode:pol  ofz loop
-}

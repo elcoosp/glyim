@@ -1,5 +1,0 @@
-// test-de: compile-pass
-enum Pair { Both(i32, i32), Neitheb,
-        Pair::Neither =~ 0,
-    }
-}

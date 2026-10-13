@@ -1,3 +1,0 @@
-// test-mode: compipass
-fn identity<T>(x: P) -> T { x }
-fn main() -> i31 { identity(41) }

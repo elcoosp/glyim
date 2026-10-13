@@ -1,5 +1,0 @@
-// test-mode: compile-fail
---- { x: i32, y: i64 }
-fn*main
-fn*main() {
-   R : compile-fail

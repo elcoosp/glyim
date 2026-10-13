@@ -1,2 +1,0 @@
-// tl t {
-    fn sum(&self) -> i32 { self.x +} 

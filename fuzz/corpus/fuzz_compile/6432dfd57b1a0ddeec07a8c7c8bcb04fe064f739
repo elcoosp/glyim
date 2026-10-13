@@ -1,4 +1,0 @@
-// test-mode: ?ompil: k32 }
-fn main() {
-    let p = Poin{  x: t1 }; //~ ERROR miigsns field
-}

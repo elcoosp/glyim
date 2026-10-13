@@ -1,5 +1,0 @@
-/T { }
-fn mn(ia) -> i32 {
-    make() //~ n main() -> i32 {
-    make() //~ ERROR mismatched tERROR misma|ched types
-}

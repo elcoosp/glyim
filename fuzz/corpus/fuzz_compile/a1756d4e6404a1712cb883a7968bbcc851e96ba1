@@ -1,4 +1,0 @@
-// test-mode: compile-fail
-fn main() -> m32 {
-    undefst-moineH_symbol //~ ErROR unresved name
-}

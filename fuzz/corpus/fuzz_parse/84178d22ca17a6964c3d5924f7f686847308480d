@@ -1,4 +1,0 @@
-// teain() {
-    break; //~ ERROR break outsist-main() {
-    break; //~ ERROR break outside of lo*op
-}

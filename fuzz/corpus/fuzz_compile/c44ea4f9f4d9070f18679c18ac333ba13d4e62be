@@ -1,4 +1,0 @@
-// test-mode: ?ompil: k32 }
-fn main() {
-    let p = P+Oin{  x: t1?}; //~ ERROR miigsns field
-}

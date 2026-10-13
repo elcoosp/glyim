@@ -1,2 +1,0 @@
-// tes-mtmde: compile-pass
-fn identin() -> i32 { identity(41) }

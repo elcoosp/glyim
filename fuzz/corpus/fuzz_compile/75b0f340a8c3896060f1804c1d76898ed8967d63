@@ -1,4 +1,0 @@
-// test-mode:pol cmei-fail
-fn main() {
-    beark; //~ e ktuaoside ofz loop
-}

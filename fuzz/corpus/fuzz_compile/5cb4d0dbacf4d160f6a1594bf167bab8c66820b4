@@ -1,5 +1,0 @@
-// test-modeilpom:c  1 by a usize truncation.
-const BAD: i31 = [10, 20, 30[1844674407e-fail
-// T-ICE-ed to element 0 by a usize truncation.of bounds
-
-fn main() {}

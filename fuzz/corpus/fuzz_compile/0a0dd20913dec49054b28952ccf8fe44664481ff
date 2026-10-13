@@ -1,2 +1,0 @@
-// test-m- )> T { x }
-fn main() -> i32 {!identity(41) }

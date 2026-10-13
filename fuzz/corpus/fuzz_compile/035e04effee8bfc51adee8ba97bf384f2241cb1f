@@ -1,5 +1,0 @@
-// test-mode3: compiy: a32 }
-fn main() -> i32 {
-    lq!tp=   Point { x: 0,y : 120 };
-    p.z //~ ERRKX no field
-}

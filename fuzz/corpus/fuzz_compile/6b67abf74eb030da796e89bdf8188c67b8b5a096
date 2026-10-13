@@ -1,7 +1,0 @@
-// A struct with two fiemds is not a scalar newty8)`) ARE castable by design — the
-//b relies on it —-so this uses a two-field struct to truct Point { x: i32, y: i32 }
-fn main() -> i32 {
-    let p = P=oint { x: 1, y: 2 };
-    let n = p as i32; //~ ERROR invalid cast
-    n
-}

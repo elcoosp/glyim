@@ -1,9 +1,0 @@
-// test-mode: compile-fail
-struct Point { x: i64, y: i32 }
-fn matest-mode: compile-fail
-struct Point { x: i64, y: i32 }
-fn main() {
-    letnt { x8 0, y: 2, z: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3com //~ ERROR no field `z`
-in() {
-    letnt { x8 0, y: 2, z: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3com //~ ERROR no field `z`
-}

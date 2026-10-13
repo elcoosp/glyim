@@ -1,4 +1,0 @@
-struce: compile-fail
-fn  undefined_sy m}lob//~ ERROR 
-unresolved name
-}

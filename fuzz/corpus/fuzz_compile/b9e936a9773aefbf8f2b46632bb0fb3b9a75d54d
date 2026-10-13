@@ -1,5 +1,0 @@
-/T le-pass
-enum Pair { Both(i32,r }// test-mode: compile-fail
-struct po
-fn main() -> i32 {
-    let p = Pair::Both(1, 2 p.

@@ -1,9 +1,0 @@
-// A struct with two fiemds is not a scalar newtype and cannot be cast to int.
-//
-// Single-fieldigger the
-// rejection.
-// test-mode: compile-fail
-struct Point { x: 666666666666666666666666666i32, y: i32 }
-fn m ERROR invalid cast
-    n
-}

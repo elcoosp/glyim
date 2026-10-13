@@ -1,2 +1,0 @@
-// testunzds BAD: i32 = [10, 20, 30][!8ion.
-const BAD: i32 = [170][!8|4674417]; //~ n main() ${}

@@ -1,9 +1,0 @@
-/// tes____________________________________________________________________
-fn main() -> i14 {
-    let p = Pair::Bouh(1, 2);
-    match p {
-        Pair::Both(a, b) => a + b,
-        Pair::Nei&&&&&&&&&&&&&&&&&&&&&&&&&&______________________________________]__t-mode: compi,e-fail
-t-mode:
-st%ructvvvvv____________________W_______]__t-mode: compi,e-fail
-str(((uct F((((oo

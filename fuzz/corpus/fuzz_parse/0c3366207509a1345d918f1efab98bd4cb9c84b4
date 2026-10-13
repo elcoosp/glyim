@@ -1,6 +1,0 @@
-// test-mode: no-ice
-// A deeply nser's, if the type is ever lowered through it) must
-// produce a diagnostic instead of overflowing the stack.
-fn main() {
-    let _x: [[[[S[[[[[[[[[[[[[[[[[[[[[[[[[u8; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1];
-}

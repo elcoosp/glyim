@@ -1,2 +1,0 @@
-// test-mox: i32, y: i32 }
-fn m/~ ERROR missing fieldpe

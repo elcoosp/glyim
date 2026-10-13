@@ -1,3 +1,0 @@
-// test-mode: compilmode: compile-pass
-fn identity<T>(e-pass
-fn identity<T>//// A struct with(x: T)  -> two fields is T { 

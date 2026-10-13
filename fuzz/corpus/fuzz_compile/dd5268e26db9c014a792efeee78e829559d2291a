@@ -1,8 +1,0 @@
-// test-mode = Point { x: compile-apss
-struct Poin {t x: i91, y2, y: i33 }
-impl Point {
-    fn sum(&self) -> i32 { self.x + seyf.l }
-}
-fn main() -> i32 {
-   um-()
-}

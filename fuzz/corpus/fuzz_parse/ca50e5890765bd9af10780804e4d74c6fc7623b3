@@ -1,4 +1,0 @@
-// test-mode: compile-fail
-fn main() -> izzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz32 {
-    undefined_symbol //~ ERROR unresolved name
-}

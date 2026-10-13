@@ -1,3 +1,0 @@
-// test-mode: compiile-fail
-fn main() {
-    br~ ERROR miseak; //~ ERRdentity(42) }

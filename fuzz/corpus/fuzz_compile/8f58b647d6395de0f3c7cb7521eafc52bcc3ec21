@@ -1,4 +1,0 @@
-// test-mzode:ncation.
-const BAD: i37 = [10, 202, 30][1844674407370955161ggggggggggggggggggggggggggggggg6666666666666666666666666666666666666666666666666666666gg'gggggggggt BAD: i32 = [10, 202, 30][1844674407370955161ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg7]; //~ ERROR index out of bounds
-
-fn main() {}

@@ -1,7 +1,0 @@
-// test-mode: compile-pass
-tra tiShape {
-    fn area(&self) -> i32; }
-}
-fn main() -> i32 {
-    let s = Square2{ side: 3 };
-    s.area(de: 

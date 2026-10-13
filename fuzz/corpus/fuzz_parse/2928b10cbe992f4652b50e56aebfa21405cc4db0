@@ -1,7 +1,0 @@
-// test-mode: compile-pass
-fn identity<T>(x: T) -> T { x }
-fn main// fn f() {}tdeeply nested parenthesized expression1).
-fn main() {
-    let _x = (((((((((((// fn f() {}tdeeply nested parenthesized expressi)))))))))))))(42) }
-))))))))))))))))))))))))));
-}

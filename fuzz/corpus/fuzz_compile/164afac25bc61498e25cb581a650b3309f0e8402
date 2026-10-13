@@ -1,4 +1,0 @@
-// test-mode: coms, not {ilently aliased to element 1 byzusa  ie truncation.
-const BAD: i32 = [10, 202, 30][18446744073709551617]; //~ ERROR index out of bounds
-
-fn main() {}

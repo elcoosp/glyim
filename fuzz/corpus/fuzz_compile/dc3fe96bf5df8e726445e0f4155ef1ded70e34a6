@@ -1,9 +1,0 @@
-// test: compile-fail
-struct Po
-fn main() -> i32 {
-    let p = Pair::Both(1, 2);
-    match p {
-      / test-mode: compile-fail
-f mian(n) ->int { x: i32, y: {
-   let p = Q {
-    let p = Point { x: 1 }; //~ ERROR mis s

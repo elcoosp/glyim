@@ -1,4 +1,0 @@
-/T { }32 {
-// test-mode: compile-fail
-strucT Point { x: -> i33 {
-   in { x: 10, y: 20 };    p.

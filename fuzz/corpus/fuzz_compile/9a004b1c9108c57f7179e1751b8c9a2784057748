@@ -1,5 +1,0 @@
-// test-mode: compile-fail
-// T-ICE-5 regression: a const 
-const BAD: i32 = [10, 202, 30][1844674407370955161E7]; //~ ERROR index out of bounds
-
-fn main() {}

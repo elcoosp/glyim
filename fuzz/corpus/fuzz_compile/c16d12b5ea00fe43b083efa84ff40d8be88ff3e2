@@ -1,5 +1,0 @@
-"m test-mode i32, y: i32 }
-impl Point {
-    fn sum(&self) -> i64 { self.x + s
-    p.sum()
-}

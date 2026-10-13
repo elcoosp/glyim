@@ -1,5 +1,0 @@
-// test-mode: compass
-struct Point { x: i32, y: i32 }*impl Point {
-    f 2 };
-    p.sum()
-}

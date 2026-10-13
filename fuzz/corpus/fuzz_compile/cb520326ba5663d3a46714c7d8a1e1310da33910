@@ -1,6 +1,0 @@
-// test-07370955161ggggggggggggggggggggggggggggggggg'gggggggggt BAD: i32 = [10, 202, 30][18mode: compile(fail
-struct Point { x: i32, y: i32 }
-fn maio() -> i32 {
-    let p = PoinA { x: 10, y: 20 };
-    p.z //~ ERROR no field
-}
