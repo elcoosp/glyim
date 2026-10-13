@@ -1041,7 +1041,17 @@ impl<'tcx> Interpreter<'tcx> {
                 return Err(InterpError::TimedOut);
             }
 
-            let terminator_kind = body.basic_blocks[bb_idx].terminator.kind.clone();
+            // T-ICE-4: a lowering bug feeding an out-of-range block index
+            // must surface as an InterpError, not a host panic.
+            let bb = body.basic_blocks.get(bb_idx).ok_or_else(|| {
+                InterpError::Panic(format!(
+                    "internal error: basic block index {:?} out of range (len {}); \
+                     this is a compiler bug in lowering, please report it",
+                    bb_idx,
+                    body.basic_blocks.len()
+                ))
+            })?;
+            let terminator_kind = bb.terminator.kind.clone();
 
             // Capture this block's cleanup edge (if any) before executing
             // statements, so a panic while evaluating a statement can be routed
@@ -1066,11 +1076,34 @@ impl<'tcx> Interpreter<'tcx> {
             // unnecessary. Removing it eliminates one alloc per executed
             // statement without changing semantics: on Err, the borrow
             // ends and `unwind_step` takes `&mut body` sequentially.
-            let stmt_count = body.basic_blocks[bb_idx].statements.len();
+            let stmt_count = body
+                .basic_blocks
+                .get(bb_idx)
+                .ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "internal error: basic block index {:?} out of range (len {}); \
+                         this is a compiler bug in lowering, please report it",
+                        bb_idx,
+                        body.basic_blocks.len()
+                    ))
+                })?
+                .statements
+                .len();
             let mut stmt_idx = 0;
             while stmt_idx < stmt_count {
                 let err = {
-                    let stmt = &body.basic_blocks[bb_idx].statements[stmt_idx];
+                    let stmt = &body
+                        .basic_blocks
+                        .get(bb_idx)
+                        .ok_or_else(|| {
+                            InterpError::Panic(format!(
+                                "internal error: basic block index {:?} out of range (len {}); \
+                                 this is a compiler bug in lowering, please report it",
+                                bb_idx,
+                                body.basic_blocks.len()
+                            ))
+                        })?
+                        .statements[stmt_idx];
                     self.execute_statement(stmt).err()
                 };
                 if let Some(e) = err {
@@ -1272,6 +1305,16 @@ impl<'tcx> Interpreter<'tcx> {
 
                     let mut callee_locals = vec![None; callee_body.locals.len()];
                     for (i, val) in arg_values.into_iter().enumerate() {
+                        // T-ICE-4: arg/local count mismatch is a lowering bug; fail loudly
+                        // but as an InterpError instead of an index panic.
+                        if i + 1 >= callee_locals.len() {
+                            return Err(InterpError::Panic(format!(
+                                "internal error: argument index {} exceeds callee local count {}; \
+                                 this is a compiler bug in lowering, please report it",
+                                i + 1,
+                                callee_locals.len()
+                            )));
+                        }
                         callee_locals[i + 1] = Some(val);
                     }
 
