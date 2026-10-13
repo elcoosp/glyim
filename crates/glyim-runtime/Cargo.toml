@@ -7,10 +7,6 @@ version.workspace = true
 [lib]
 crate-type = ["staticlib", "rlib"]
 
-[profile.dev]
-opt-level = 0
-debug = false
-
 [dependencies]
 socket2 = "0.6"
 libc = "0.2"

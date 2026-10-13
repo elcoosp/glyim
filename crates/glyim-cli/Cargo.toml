@@ -3,10 +3,6 @@ name = "glyim-cli"
 edition.workspace = true
 version.workspace = true
 
-[profile.dev]
-opt-level = 0
-debug = false
-
 [dependencies]
 glyim-lang-std = { workspace = true }
 glyim-db = { workspace = true }
