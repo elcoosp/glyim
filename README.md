@@ -184,18 +184,21 @@ source.g
 - **LLVM 23** — required only for the LLVM backend. Set `LLVM_SYS_231_PREFIX` to your LLVM installation prefix before building.
 - **`watchexec`** — optional, for the `justfile` recipes.
 
-> [!TIP]
-> If you don't have LLVM 23 installed, build with `--no-default-features` (or simply skip the `glyim-codegen-llvm` crate) and use the bytecode backend — the full pipeline still works end-to-end through MIR interpretation and the bytecode VM.
+> [!IMPORTANT]
+> The LLVM backend is a hard dependency of the pipeline — there is no
+> feature flag to build without it. Install LLVM 23 and set
+> `LLVM_SYS_231_PREFIX` (Homebrew: `$(brew --prefix llvm@23)`,
+> Debian/Ubuntu: `/usr/lib/llvm-23`).
 
 ### Building
 
 ```bash
-git clone https://github.com/elcoosp/glyim-v2
+git clone https://github.com/elcoosp/glyim
 cd glyim
 cargo build --release
 ```
 
-The compiler driver is then available at `target/release/glyim`.
+The compiler driver is then available at `target/release/glyim-cli` (invoke it as `glyim-cli`; rename or symlink to `glyim` if you prefer).
 
 ### Quick Start
 

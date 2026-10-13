@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: glyim-${{ github.ref_name }}-x86_64-linux.tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: glyim-${{ github.ref_name }}-aarch64-macos.tar.gz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM 23 (ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
+
+      - name: Install LLVM 23 (macos)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@23
+          echo "LLVM_SYS_231_PREFIX=$(brew --prefix llvm@23)" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Gate: the release tag must be green.
+      - name: Run workspace tests
+        run: cargo nextest run --workspace
+
+      - name: Build release binaries + runtime staticlib
+        run: cargo build --release -p glyim-cli -p glyip -p glyim-runtime
+
+      - name: Stage archive layout
+        shell: bash
+        run: |
+          stage=stage/glyim
+          mkdir -p "$stage/lib"
+          cp target/release/glyim-cli "$stage/"
+          cp target/release/glyip "$stage/"
+          cp target/release/libglyim_runtime.a "$stage/lib/"
+          cp README.md LICENSE CHANGELOG.md "$stage/" 2>/dev/null || true
+          cp -r crates/glyim-lang-core/lib "$stage/stdlib-core"
+          tar -czf "${{ matrix.archive }}" -C stage glyim
+          sha256sum "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: |
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
+
+  publish:
+    name: Attach archives to the GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

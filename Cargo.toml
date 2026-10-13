@@ -3,6 +3,8 @@ edition = "2024"
 version = "0.1.0"
 license = "MIT"
 rust-version = "1.85"
+repository = "https://github.com/elcoosp/glyim"
+readme = "README.md"
 
 [workspace]
 resolver = "3"
@@ -128,6 +130,11 @@ lto = "thin"
 codegen-units = 1
 panic = "unwind"
 strip = "debuginfo"
+# Correctness-first: an accidental overflow in compiler-internal arithmetic
+# becomes a loud ICE (caught by the driver's handler) instead of a silently
+# wrapped value. The interpreter/const-eval do their own checked math, so
+# compiled-program semantics are unaffected.
+overflow-checks = true
 
 # The LLVM backend and the const-evaluator are hot even in debug builds, so
 # give them a small opt level instead of the default 0 (plan §2.5).
