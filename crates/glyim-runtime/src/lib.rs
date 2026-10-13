@@ -1800,6 +1800,34 @@ pub unsafe extern "C" fn glyim_atomic_u8_cas(ptr: *mut u8, expected: u8, new: u8
     }
 }
 
+/// T014-PATCHED-RUNTIME: atomic fetch-and (`u8` bitwise AND).
+///
+/// Returns the previous value. Used by `AtomicBool::fetch_and`.
+///
+/// # Safety
+/// `ptr` must point to a live, 1-byte aligned `u8`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_u8_fetch_and(ptr: *mut u8, val: u8) -> u8 {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { (*(ptr as *const RtAtomicU8)).fetch_and(val, RtOrdering::SeqCst) }
+}
+
+/// T014-PATCHED-RUNTIME: atomic fetch-or (`u8` bitwise OR).
+///
+/// Returns the previous value. Used by `AtomicBool::fetch_or`.
+///
+/// # Safety
+/// `ptr` must point to a live, 1-byte aligned `u8`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_u8_fetch_or(ptr: *mut u8, val: u8) -> u8 {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { (*(ptr as *const RtAtomicU8)).fetch_or(val, RtOrdering::SeqCst) }
+}
+
 /// T014-PATCHED-RUNTIME: atomic load of a `usize`.
 ///
 /// # Safety
