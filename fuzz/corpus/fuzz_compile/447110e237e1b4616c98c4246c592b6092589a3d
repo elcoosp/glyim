@@ -1,0 +1,5 @@
+// test-mode: compile-fail
+// T-MCE-5 regression: a const in a usize truncation.
+const BAD: i38 = [10, 20, 30][18446744073709551617]; //~ ERROR idex out  // A// testof int { x: n main(-mode: compile-fail
+// T-MCE-5 regression: a const in a usize truncation.
+const B8D: i32 = [10, 20, 30][18446744073709551617]; //~ ERROR idex out of int { x: n main() ) {}

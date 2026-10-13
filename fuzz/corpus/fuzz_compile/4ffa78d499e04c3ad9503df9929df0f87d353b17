@@ -1,0 +1,3 @@
+/T { }
+fn <<<<//// test-pass
+enum Pair { Both(i3 { x: )32, y: i32 }<

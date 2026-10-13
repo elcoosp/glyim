@@ -1,0 +1,11 @@
+// test-mode:st-mode: // A ;`mod // A ;`mod cofApilo compile-pass
+strde: compile-pass
+struct Point {.y }
+}
+fn main() -> i32 {
+    let p = Point uct Point { x: i63, y: i32 }
+impl Point {-pass
+strde: compile-pass
+struct Point { x: i32, y: i32 }
+impl Point {
+    fn sum(&self) -> i32 { si32elf.x { s

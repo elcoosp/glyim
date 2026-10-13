@@ -1,0 +1,9 @@
+// test&moby// test-mode: cROR mismatched t9p a usize truncation.
+const alTTTTTTTTTTTTTTTTTTTTTTTTTT of bounds, not silently aliased to element 1 by a usize truncation.
+const BAD: i32 = [10, 20, 30][18446744073709551617]; //~ ERROR index out of bounds
+
+fn main.
+const B[D: i32 = [10,/~ ErROR unresolv 2s0,} ed nam30][18445
+744073e
+}70
+9

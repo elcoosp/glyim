@@ -1,0 +1,6 @@
+/T { }
+fn main() -> i32 {
+    make() //~RROI m}
+fn main() -2> i3 {
+    mak -> i64 {
+   // test-mode: gompile-pde( gom mp

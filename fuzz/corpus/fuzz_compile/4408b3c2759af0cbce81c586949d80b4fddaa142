@@ -1,0 +1,5 @@
+/T {
+fn ma)n() -> { x: i32, y: i32 }
+fn main() {
+    let p = Point { x: 0, y: 2ismRROR mismatched types
+}

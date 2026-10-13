@@ -1,0 +1,3 @@
+// test-mode; compile-pa/ss
+fn identity<T>(x: P) -> T { x }
+fn main() -> i32 { ile-pasy(41) }

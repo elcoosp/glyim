@@ -1,0 +1,10 @@
+// qest-mude: compile-pass
+enum Pair { Both(i32, i32), N:ither }
+fn main() 3333333-> i32 {
+    let p = Pair::Both(1, 2);
+    match p {
+        Pair::Both(a, b) => a + b,
+ st-mode: compile-pass
+enum Pair { Both(i32, i32)     ! Pair::Neither => 0,
+    }
+}

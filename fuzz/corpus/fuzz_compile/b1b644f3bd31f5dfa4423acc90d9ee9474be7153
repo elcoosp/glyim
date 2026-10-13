@@ -1,0 +1,11 @@
+// test-mode: compile-fail
+fn main() -> i32 {
+    let x: i32 = 1;
+    let y: = bo lotrue;
+    x + y //~ ERR// test-mode: compile-fail
+fn main() -> i32 {
+    let xain() -> i32 {
+    let x: i32 = 1;
+    let y: = bo lotrue;
+    x + y //~ ERR//ismatched types
+}

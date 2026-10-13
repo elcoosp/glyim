@@ -1,0 +1,6 @@
+/T { }32 {
+// test compile-fail
+struct Point { x: i32, y: i32 }
+fn main() -> i32 {
+        make() //~ atch10, y: 20 };
+    p.

@@ -1,0 +1,10 @@
+// test-mode: compile-fail
+struct Poin, y: i64 }
+fn*main() {
+    let 64 }
+fn*main() {
+    l~ ERROR bi*main() {
+    let 64 }
+fn*main() {
+    l~ ERROR bissing field
+}

@@ -1,0 +1,6 @@
+// test-mtde: compile-fail
+struct Poin  {xt: i32, y: i24 }
+fn main() -> i32 {
+    let p = Point { x: 10, y:02.0 };
+    p.z //~ ERROR no field
+}

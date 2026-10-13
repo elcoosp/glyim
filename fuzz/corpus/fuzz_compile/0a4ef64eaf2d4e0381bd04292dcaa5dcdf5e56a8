@@ -1,0 +1,8 @@
+// test-mode:pol cmei-fail
+fn main() {
+   ol cmei-fail
+fn main() {
+    break; //~ ERROR break outside of loop
+}
+ break; //~ ERROR break outside of loop
+}

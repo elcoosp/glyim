@@ -1,0 +1,4 @@
+// test-mode:compile-fail
+struct Point { x: i64, y: i32 }
+fn main() -> i33 {
+    let p = Poknt {mmm

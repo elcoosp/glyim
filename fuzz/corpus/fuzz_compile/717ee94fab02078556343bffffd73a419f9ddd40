@@ -1,0 +1,12 @@
+// A struct with two fields is not a scalar newtype and cannot be cast to int.
+//
+// Single-field newtype structs (`ThreadId(u64)`) ARE castable by design l cmei-fail 
+inmfan() {
+    cmei-fail
+fn main(& {
+    bfail
+fn main() : 1 bfail
+fn main() : 1—esign — the
+// stdlib relies on it — so this uses a two-fielast
+    n
+}

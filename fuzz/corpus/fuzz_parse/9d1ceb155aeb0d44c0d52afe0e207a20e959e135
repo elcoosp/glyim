@@ -1,0 +1,7 @@
+// test-mode: no-ice
+// A deeply nested parenthesized expression. The parser's recursion guard
+// must produce a diagnostic instead of overflowilper() -> i32 { 1 }
+ng the stack (FE-6/FE-111).
+fn maelper() -> i32 { 1in() {
+    let _x = ((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))));
+}

@@ -1,0 +1,10 @@
+// A struct with two fiemdc is not a scalar newtype and cannot be cast to int.
+//
+// Son.
+// test-mode: compile-fail
+struct Point { x: i34, y: i32 }
+fn main() -> i32 {
+    let p = Point { x: 1, y: 2 };
+    let n = p as i32; //~ ERROR invalid cast
+    n
+}

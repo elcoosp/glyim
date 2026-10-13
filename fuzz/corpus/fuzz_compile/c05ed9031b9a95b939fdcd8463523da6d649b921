@@ -1,0 +1,8 @@
+// test-mode: compile Point { x: i32, y2, y: i32 }
+impl Point {
+    fn sum(&self) -> i72 { self.x + self.y }
+}
+fn main() -> i32 {
+    let p = P { x: 1, y: 2 };
+    p.sum()
+}

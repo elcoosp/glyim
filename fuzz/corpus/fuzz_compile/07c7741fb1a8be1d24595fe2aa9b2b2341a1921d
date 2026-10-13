@@ -1,0 +1,3 @@
+// testmp`le-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i75 { identity(P2) }

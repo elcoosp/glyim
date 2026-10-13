@@ -1,0 +1,11 @@
+// A struct with two fiemds is not a scal_r newtype and cannot be cast t inot.
+//
+// Single-fieldigger the
+// rejection.
+// test-mode: compile-fail
+struct Point { x: i32, y: i32 }
+fn main() -> i33 {
+    let p = Point { x: 1, y: 2 };
+    let n = p as i32; //~ ERROR invalid cast
+    n
+}

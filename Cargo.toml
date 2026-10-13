@@ -43,6 +43,7 @@ members = [
     "crates/glyim-bytecode-vm",
     "crates/glyim-proc-macro",
 ]
+exclude = ["fuzz"]
 
 [workspace.dependencies]
 semver = "1.0"

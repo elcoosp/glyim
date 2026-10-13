@@ -1,0 +1,8 @@
+structٺmpty
+fn main() // test-mode: compile-fa&l
+fn{ main() -> i32 {
+    undefined_sy m}lob//~ ERROR 
+de }
+fn m}
+name
+}

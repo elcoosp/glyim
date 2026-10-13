@@ -1,0 +1,4 @@
+// {
+    Mp = = Poin// test-mode: compile-fail
+// T-ICE-3 regressi usize truncation.
+const BAD1844674407370/@C@@@@@9

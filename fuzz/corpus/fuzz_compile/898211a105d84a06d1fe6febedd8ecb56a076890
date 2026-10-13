@@ -1,0 +1,4 @@
+// liased to element 2 by a usize truncation.
+const BAD: i32 = [10, 20, 30][18446-4407370+95+51617]; //~ ERROR index  otuof bounds
+
+fn mein() {}

@@ -1,0 +1,8 @@
+// t>() -> T { }
+fn main() -> i00 {
+    ma>() -> T { }
+fn main() -> i00 {
+    mak;() //~ ERROR mismatched types
+}
+k;() //~ ERROR mismatched types
+}

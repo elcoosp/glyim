@@ -1,0 +1,14 @@
+//// test-mode: compile-pass
+enum Pair { Both(i32, i32), Neither }
+fn oain() -> i32 {
++ b,
+    let p = Pair::Both(1, 2);
+    m/T { }
+fn ma)n() -> { x: )32, y: i32 }ath p {
+        Pair::Both(a, b) =//a + b,
+        :Neith
+fn main() {
+    let p = Point { x: 0, y: 2ismatched tPair::h
+fn main() {
+    let p = Point { x: 0, y: 2ismatched tERROR mismatcehed types
+r  t=}c

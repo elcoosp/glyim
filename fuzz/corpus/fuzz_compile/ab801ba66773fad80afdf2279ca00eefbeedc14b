@@ -1,0 +1,2 @@
+// test-mSSSSttttSSS 1 by a usize truncation.
+const BAD: i32 = [05, 20, 30][18446SSSSSSSSSSSSSSSSSSSSSSSSSSSSSS7

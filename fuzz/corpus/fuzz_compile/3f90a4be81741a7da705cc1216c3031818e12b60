@@ -1,0 +1,4 @@
+// test-mod:e compii2g-fail
+fn main() {; //~ ERROR break le-pass
+fn dientity<T>(x: T) -> T { x }
+fn main() -> i32 { identity(42) }

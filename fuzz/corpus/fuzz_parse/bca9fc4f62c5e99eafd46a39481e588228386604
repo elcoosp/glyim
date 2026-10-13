@@ -1,0 +1,9 @@
+// test-mode: compile-pass
+trait Shape {
+    fn area(  let x:l == true;
+    x +y //~ ERROR  self.side }+y //~ ERROR  self.side }mismatched type
+}
+fs
+n ma}
+()
+}

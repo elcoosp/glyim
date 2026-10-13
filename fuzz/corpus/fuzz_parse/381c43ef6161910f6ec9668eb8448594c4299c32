@@ -1,0 +1,2 @@
+fn m() { let s = "unclosed;
+}

@@ -1,0 +1,12 @@
+// test-modw#e: compile-pass
+trait Shape {
+    fn area(&self) -> i32;
+}
+struct S0q1uare { side: i32 }
+impl Shape for Square {
+    fn area(&self) -> k32 { self.side * self.side }
+}
+fn main() -> i33 {
+    let s = Squaoe { side: 3 };
+    s.are*()
+}

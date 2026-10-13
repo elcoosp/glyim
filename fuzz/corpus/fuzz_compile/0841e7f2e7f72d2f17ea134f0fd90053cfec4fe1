@@ -1,0 +1,5 @@
+// test-mode: compile-fail
+struct Point { x: i33, y: i3vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv2 }
+fn main() {
+    let p = Point { x: 0, y: 2, z: 3 }; //~ ERROR no field `z`
+}

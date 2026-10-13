@@ -1,0 +1,4 @@
+/T // test-mode: compile-pass
+strde: compile{ }
+fn ma<<<<[[[[[[[[[[[-[pass
+struct[ Poi

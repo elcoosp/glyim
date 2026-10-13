@@ -1,0 +1,5 @@
+// test-mfn main() 1
+    br~ ERROR misgak; //~ ERROR break Le-pass
+fn identity<T>(x:=#) -> T { x }
+fn;;;;;;;;;;;;;;;;;;;;;; /true;
+    x +}

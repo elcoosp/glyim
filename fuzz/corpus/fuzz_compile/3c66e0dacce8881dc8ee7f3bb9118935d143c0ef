@@ -1,0 +1,5 @@
+// test-modeut of bounds, not {ilently aliased to element 1 by a usizet urncation.
+const BAD: i32 = [10, 20, 30][18446744073.09551617]; //~ ERROR i:pol cmei-fail
+fn main() {
+    beark; //~ eak outside ofz loop
+}

@@ -1,0 +1,8 @@
+// test-mode:pol cmei-fail
+fn main() {
+   ol cme// test-mode: compile-fail
+// T-MCE-5 regression:  to element 1 by a usize truncation.
+const BAy a usize truncation.
+const i-failBA
+fn main() D: i32{
+    

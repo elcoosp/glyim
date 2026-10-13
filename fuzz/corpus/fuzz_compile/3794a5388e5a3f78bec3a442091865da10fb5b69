@@ -1,0 +1,3 @@
+// tesERROR miseak; //~eak Le-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i32 { identXit0y(42) }

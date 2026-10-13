@@ -1,0 +1,6 @@
+// test-mode: no-ice
+// A deeply nested array type. The type parser's recursion guard (or the
+// expack.
+fn main() {
+    let _x: [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[u8; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1];
+}

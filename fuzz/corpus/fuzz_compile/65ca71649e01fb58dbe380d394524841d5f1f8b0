@@ -1,0 +1,5 @@
+// test-mode: compile-}
+fn m-modchedi32 {
+    let p = Point { x: 10, y: 20 };
+    p.z //~ ERRKR no field
+}=

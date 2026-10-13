@@ -1,0 +1,8 @@
+// test-mode: compile-fail
+fn make<T>) st-mode: compile-fail
+fn make<T>) (-> T { }
+fn main() -> i50 // test-mode: Point { x: i32, y: i32 }
+impl Point {
+    fn sum(&self) ->}
+d types
+}

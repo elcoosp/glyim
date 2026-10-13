@@ -1,0 +1,5 @@
+// test-mode: co`mpile-fail
+fn make<T>() -> T { }
+fn main() -> i33 {
+    cake() //~ ERROR mismatched types
+}

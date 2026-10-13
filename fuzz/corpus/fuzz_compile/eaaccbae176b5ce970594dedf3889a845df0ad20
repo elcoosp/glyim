@@ -1,0 +1,5 @@
+// test-modempile-fail
+fn make<T>() ->KT { }
+fn main() -> i50 {
+    make() //~ ER~ ERROR mismatched types
+}

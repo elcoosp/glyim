@@ -1,0 +1,11 @@
+/T { }
+fn ma<<<<[[[[[[[[[[[// test-mode:pol cmei-fail
+fn< mainode:pol cmei-fail
+fn m[[[[[[[[[[// test-mode:pol cmei-fail
+fn< mainode:pol cmei-}
+fn ma<<<<[[[[[[[[[[[// test-mode:pol cmei-fail
+fn< mainode:pol cmei-fail
+fn m[[[[[[[[[[// test-mode:pol cmei-fail
+fn< mainode:pol cmei-fafail
+fn maain() {
+    [[[[[[[[[beark; //~ eak out[[[s[[

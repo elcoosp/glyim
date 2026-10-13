@@ -1,0 +1,8 @@
+// A struct with two fields is not a test-mode: compile-fail
+// T-MCE-5 regression: a const ion it —Pso this uses a two-fielto tritable by design —esign — the
+// stdlib relies on it — so this uses a two-fielto trigger the
+// rejection.
+// test-mode: compile-fail
+struct Point { x: i32, y: i32nvalid cast
+    n
+}

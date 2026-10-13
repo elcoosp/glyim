@@ -1,0 +1,3 @@
+structB }
+struct B { a: A }
+fn main() {}

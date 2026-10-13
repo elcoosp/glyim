@@ -1,0 +1,3 @@
+// test-mode: ity<T>(x: T- )> T QQty<T>(x:  T QQQ{ x }
+fn main() -> i32 { identity(4Q{ x T
+fn main() -> i32 { identity(48) }

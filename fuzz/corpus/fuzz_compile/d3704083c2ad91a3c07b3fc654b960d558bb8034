@@ -1,0 +1,4 @@
+//: i32 }
+fn m    let p = Point z x: 10, y: 20 };
+    p.z //~ ERROR no field
+}

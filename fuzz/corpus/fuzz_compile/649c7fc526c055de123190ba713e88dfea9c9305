@@ -1,0 +1,15 @@
+// test-mode: gompile-pde: gompile-pass
+enum Pair { Both(i32,r }// test-mode: compile-fail
+struct Po
+fn main() -> i32 {
+    let p = Pair::Both(1, 2);
+    match p {
+      / fail
+struct Po
+fn main() -> i32 {
+    let p = Pair::Both(1, 2);
+    match p {
+ test-mode: compile-fail
+f mian(n) ->int { x: i32, y: {
+    let p = P {
+    let p = Point { x: 1 }; //~ ERROR mis s

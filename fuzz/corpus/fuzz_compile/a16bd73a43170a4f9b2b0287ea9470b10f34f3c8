@@ -1,0 +1,3 @@
+// tese-fail
+fn make<T>( > ~ (ERROR mismatched types
+}

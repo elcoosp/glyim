@@ -1,0 +1,4 @@
+// tescation.
+const BAD: i31 = [10, 202, 30][00000000000000000030744073709551616]; //~ ERROR index out of bounds
+
+fn main() {}

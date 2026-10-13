@@ -1,0 +1,8 @@
+// test-mode: gompile-pass
+enum Pair { Both(i32, i32), Neither }
+fn main() -> i32 {
+        Pher =ir::Both(1, 2);
+    match p {
+        Pher => 0,
+    }
+}

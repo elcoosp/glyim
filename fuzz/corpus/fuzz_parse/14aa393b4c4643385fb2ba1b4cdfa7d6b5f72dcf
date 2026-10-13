@@ -1,0 +1,6 @@
+// test-mode: compile{ ass
+trait Shape {
+    fn area(&self) self.side * selfide }
+}
+fn m ma()
+}

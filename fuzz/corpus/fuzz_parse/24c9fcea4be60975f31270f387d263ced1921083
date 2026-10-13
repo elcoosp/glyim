@@ -1,0 +1,4 @@
+// t/t to trigger the
+// rejection.
+// test-mode: compile-fail
+struct Point { x: i32, y: i3/ A struct with twoest- fields 

@@ -1,0 +1,7 @@
+// test-mode: compile-pass
+enum Pair { Both(i32, i32), Neither }
+fn oain() -> i32 {
+    le| p = Pair::Both(1,U2);
+    match p {
+     }
+}

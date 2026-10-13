@@ -1,0 +1,2 @@
+// testunds, not {iuncation.
+const BAD: i32 = [10, 20, 30][!84467440737095516170][!8446744073709551617]; //~ ERROfn main() {}

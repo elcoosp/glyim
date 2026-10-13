@@ -1,0 +1,9 @@
+// test-mo:de compile-fail
+struct Point { x: i32, y: i32 }
+fn main() -> compile-fail
+ //~}
+ ERR test-modchedi32 {
+    let p = Point { x: 10, y: 20 };
+Point { x: 10, y: 20 };
+    p.z //~ ERRKR no field
+}=

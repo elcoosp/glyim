@@ -1,0 +1,9 @@
+// test-mode: compilmode: compile-pass
+fn 222identity<T>(e-pass
+fn identity<T>(x i// tesu-mode: compile-pass
+trt-mode: compile-pass
+traipile-pass
+fn identity<T>(x: T) -> T { x }
+fn max0 T) -> ntity<T>(e-pass
+fn identity<T>(x: T) -> T { x }
+fn max:dentity(42) }in() -> i32 { identity(42) }

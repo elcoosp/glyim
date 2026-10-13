@@ -1,0 +1,4 @@
+// test-mode to element 1 by a uspol cmei-fail
+fn main() {
+    be=ark; //~ eak outside ofz loop
+}

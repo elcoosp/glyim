@@ -1,0 +1,3 @@
+// test-mode: compile-faiol = true;
+    x + y //~ ERROR mismatched types
+}

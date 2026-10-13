@@ -1,0 +1,5 @@
+// test-mode: compile-fail
+// T-ICE-3 regressi usize truncation.
+const BAD: i32 = [10, 202, 30][18446744073709551646744073709551617]; //~ ERROR index out of bounds
+
+fn main() {}

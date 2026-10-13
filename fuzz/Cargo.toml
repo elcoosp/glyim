@@ -1,0 +1,43 @@
+[package]
+name = "glyim-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+# The fuzz targets are a separate workspace; path-depend into the crates
+# under test. glyim-frontend is LLVM-free, so fuzz_parse builds anywhere.
+[dependencies.glyim-frontend]
+path = "../crates/glyim-frontend"
+
+[dependencies.glyim-span]
+path = "../crates/glyim-span"
+
+# fuzz_compile needs the pipeline (and thus llvm-sys + LLVM_SYS_231_PREFIX).
+[dependencies.glyim-pipeline]
+path = "../crates/glyim-pipeline"
+
+[dependencies.glyim-db]
+path = "../crates/glyim-db"
+
+# Prevent this workspace from participating in the parent workspace.
+[workspace]
+
+[[bin]]
+name = "fuzz_parse"
+path = "fuzz_targets/fuzz_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_compile"
+path = "fuzz_targets/fuzz_compile.rs"
+test = false
+doc = false
+bench = false

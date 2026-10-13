@@ -1,0 +1,19 @@
+// test-mode: compile-fail
+fn main() -> i32 {
+    let x: i32 = 1;
+    let y: bool = true;
+ true;
+    x + y //~ ERR!O3333333ched types
+}
+OR mismatcki32 = 1;
+    l3ched types
+}
+OR mismatcki32 = 1;
+    let y: bool = true;fail
+fn main() -> i32     {
+    et y: bool = true;fail
+fn main() -> i32     {
+    let x: i32 =`1;
+    let y: bool = true;
+    x + yd types
+}

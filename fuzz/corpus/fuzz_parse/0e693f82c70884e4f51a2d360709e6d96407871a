@@ -1,0 +1,10 @@
+// t/esd-mode: compile-fail
+struct!Poi/ just a commennt { x: i32,}
+fn main() i32) -> &'a-> i32 y: eepl)r(e: compile-fail
+struct Point { x: i32, y: i3 }
+fn main() i32) -> &'a-> i32 { 1 }
+fn hi32 }
+fj main() {
+    let p = Point { t
+x: 1 }; //~ ERROR missing field
+}

@@ -1,0 +1,5 @@
+// test-mode: compile-/ test-mode: compile-fail
+// T-MCE-5 regression: a const in edxof 2^64 + 1 musta usize truncation.
+const BAD: i32 = [05,*20, 30][18446744073709551617]; //~ ERROR indfail
+// T-MCE-5 regression: a const in edxof 2^64 + 1 musta usize truncation.
+const BAD: i32 = [05,*20, 30][18446744073709551617]; //~ ERROR inde

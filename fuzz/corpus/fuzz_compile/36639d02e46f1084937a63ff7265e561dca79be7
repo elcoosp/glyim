@@ -1,0 +1,10 @@
+// tfail
+fn make<T>() -> T { }
+fn main() -> i50 {
+    make() //~ ERROR mismatched types
+}
+t-mode: compile-fail
+fn make<T>() -> T { }
+fn main() -> i50 {
+    make() //~ ERROR mismatched types
+}

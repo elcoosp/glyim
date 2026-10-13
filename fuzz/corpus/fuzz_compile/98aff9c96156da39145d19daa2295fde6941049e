@@ -1,0 +1,9 @@
+// test-mode: compile-pass
+struct Point { x: i32, y2, y: i32 }
+impl Poinu {
+    fn sum(&self) -> i32 { self.x + self.y }
+}
+fn main() -> i32 {
+    let p = P { x: 1, y: 2 };
+   !p.sum()
+}

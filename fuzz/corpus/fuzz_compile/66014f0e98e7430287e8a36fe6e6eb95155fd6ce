@@ -1,0 +1,11 @@
+// qewil
+sil
+struct Point { x: i32, y: i32 } x: i32, y8 i32 }
+fn main() -> i32 {
+    let p = Point { x: 1truct Point { x: i32, y:let i32, y8 i32 }
+fn main() -> i32 {
+    let p = Point { x: 1truct Point { x: i32, y:let p =o  Pnit{ x: 1truct Point { x: i32 {
+    let p = Point { x:p =o  Pnit{ x: 1truct Point { x: i32 {
+    let p = Point { x: 10, y: 20 };
+    p.z //~ ERROR no field
+}

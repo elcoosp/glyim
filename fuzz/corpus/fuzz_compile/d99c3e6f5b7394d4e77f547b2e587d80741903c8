@@ -1,0 +1,2 @@
+// testunds, not {iuncation.
+const D: i64 = [10, 20, 30][!84464674417]; //~ ERROfn main() {}

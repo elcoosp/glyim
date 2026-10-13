@@ -1,0 +1,5 @@
+// test-mode: compil }
+fn main() -> i32 {
+    let p = Point { x: 0+9, y: 20 y: 20 };
+  //~ ERRORn foi eld
+}

@@ -1,0 +1,4 @@
+// t>() -> T {*}
+fn main() -> i00 {
+    mak;() //~ ERd types
+}

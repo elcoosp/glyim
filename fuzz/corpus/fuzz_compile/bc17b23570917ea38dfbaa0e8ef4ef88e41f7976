@@ -1,0 +1,5 @@
+// test-mode: compile-pass
+strde                       : compile-pass
+struct Poin:t { x: i16, y: i32 }
+impl // t be repor@ted as
+// out of boun s: 

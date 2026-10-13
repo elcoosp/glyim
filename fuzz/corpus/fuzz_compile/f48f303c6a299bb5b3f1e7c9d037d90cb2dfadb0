@@ -1,0 +1,4 @@
+// test-mode:pol ci-fail
+fn main() {
+    beark; //~ eak outsiZe ofz loop
+}

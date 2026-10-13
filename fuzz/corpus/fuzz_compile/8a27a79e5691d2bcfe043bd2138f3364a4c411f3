@@ -1,0 +1,5 @@
+// test-mode: compile-pass
+struct Point { x:uct Pnito { x: i32, y: i32 }
+fn.x + self.y fn main() -> i3Xt p = Point { x: 1, y: 2 };
+    p.sum()
+}

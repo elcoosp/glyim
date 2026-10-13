@@ -1,0 +1,7 @@
+// test-mode: compile-apss
+struct Point { x: if.y }
+}
+fn main() -> i32 {
+    let p = P { x: 1, y: 2 };
+    p.sum()
+}

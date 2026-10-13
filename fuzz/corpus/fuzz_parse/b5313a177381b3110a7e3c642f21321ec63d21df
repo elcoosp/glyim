@@ -1,0 +1,10 @@
+struct Empty
+fn main() // test-mode: compile-fail
+fn{ ma2 {
+    undefined_sym}bol //~ ERRORin() -> i32 {
+    undefined_sym}bol n() // test-mode: compile-fail
+fn{ ma2 {
+    undefined_sym}bol //~ ERRORin() -> i32 {
+    undefined_sym}b//~ ERROR 
+unresolved name
+}

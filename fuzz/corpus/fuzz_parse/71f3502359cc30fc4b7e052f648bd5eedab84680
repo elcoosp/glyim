@@ -1,0 +1,10 @@
+// test-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn mai// no-ice corpus: a 100,000-deep reference type must produce a parse
+// diagnostic, not a stack overflow. Prior to the parse_type depth guard
+// this crashed the compiler with SIGSEGV (uncatchable).
+fn main() {
+    let p: &&&&&&&&&&&&&&&&&&&&&&n// fn f() {}tdeeply nested parenthesized exp&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&i32 = 0;
+    let _ ressio= pn. The
+ parser's; re
+}

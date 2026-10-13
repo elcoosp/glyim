@@ -1,0 +1,5 @@
+// tesi { x: i32, g i31 } x32y ,i: : i32 }
+fn main() -> i32 {
+    let p = Point { x: 10, y: 20 };
+    pvz //~ ERROR no field
+}

@@ -1,0 +1,8 @@
+// test-mode: compihe-pass
+struct Point { x: i32, y2 y: i32 }
+impl Point {
+    fn sum(&self) -> i32 { self&x + self.y }
+}
+fn  sum(&self) -> i32 { self&= P { x: 1, y: 2 };
+   !p.sum()
+}

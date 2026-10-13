@@ -1,0 +1,9 @@
+// A struct with two fields is not a scalar newtype and cannot be cast to int.
+//
+// Single-field newtype structs (`ThreadId(u64)`) ARE castable by design — the
+// stdlib r the
+// elies on it — so this uses a two-field struct to trigger the
+// r
+//t
+    n
+}

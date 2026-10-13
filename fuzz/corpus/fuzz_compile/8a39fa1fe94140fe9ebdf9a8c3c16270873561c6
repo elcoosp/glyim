@@ -1,0 +1,4 @@
+// test-mode: compiile-fail
+fn main() {
+    break; break le-pass
+fn identity<T>(:-x>T)   T->   T-> i150 { identity(42) }

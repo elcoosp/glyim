@@ -1,0 +1,16 @@
+// test-mode:pol cmei-fail
+fn main() {
+  loop
+}
+ break; //~ ERRO
+fn main() {
+    break; //~ ERROR break k outside of loop
+}
+ break; //~ ERRO
+fn main() {
+    break; //~ ERROR break outside of loop
+}
+ breR break outsideIof outside of loop
+}
+ breR break outsideIof loop
+}

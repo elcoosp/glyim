@@ -1,0 +1,7 @@
+// test-mode: compile-fail
+struct Foo;
+fn main() {
+    rted as
+// ~ ERROR ofil
+thod
+}

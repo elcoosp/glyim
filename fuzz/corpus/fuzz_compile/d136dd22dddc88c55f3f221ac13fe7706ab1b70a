@@ -1,0 +1,7 @@
+// qest-Neither }
+fn main() -> i16 {
+    let p = Pair::Both(1, 02);
+    match p {
+ r => 0,
+    }
+}

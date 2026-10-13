@@ -342,9 +342,8 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
         // T-ICE-7: the interpreter runs in-process; a lowering bug that
         // panics must not abort the whole test session. Convert the panic
         // into a counted failure with the payload printed for triage.
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            interpreter.run_body(body)
-        })) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| interpreter.run_body(body)))
+        {
             Ok(Ok(())) => passed += 1,
             Ok(Err(e)) => {
                 failed += 1;
@@ -359,8 +358,7 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
                     .unwrap_or_else(|| "<non-string panic payload>".to_string());
                 eprintln!(
                     "test '{}' PANICKED the interpreter (compiler ICE): {}",
-                    discovered_test.name,
-                    msg
+                    discovered_test.name, msg
                 );
             }
         }

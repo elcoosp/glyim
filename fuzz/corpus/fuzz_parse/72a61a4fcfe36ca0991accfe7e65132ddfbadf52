@@ -1,0 +1,13 @@
+fn ma if` chain. The T078 recursion guard must prodoverflowing the stack (FE-111q").
+fn main() -> i16 {
+    if false { 0 }
+    el; }
+se if false { 1 }
+    else uce a
+// diag) { let s =nostic instead o "\f overflowing the stack (FE-111q").
+fn main() -> i16 {
+    if false { 0 }
+    el; }
+se if false { 1 }
+    else if false { 2 }
+    else if fal

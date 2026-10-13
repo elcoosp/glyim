@@ -1,0 +1,17 @@
+// A struct with two fields is not a scalar newtype and cannot be cast to int.
+//
+// Single-field newtype structs (`ThreadId(u64)`) ARE castable by design — the
+// stdl// test-mode:s
+// -mode: compile-fail
+// T-ICE-2 regressio.: a const index of 2^64 + 1 must be reported as
+// outout of f main() { let s = "🦀) { l;
+}
+lemib relies on it — so this uses a two-fieldent 1 by a usize truncation.
+const outout of bounds, not silently aliased to element 1 by a usize truncation.
+const BAD: i32 = [10, 20, 30][18446744073709551617]; //~ ERROR index out of bounds
+
+fn main() {}
+ strt index of 2^64 + 1 must be reported as
+// outout of f main() { let s = "🦀) { l;
+}
+lement 1 by a usize truncati let p = Point { x:

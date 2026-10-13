@@ -1,0 +1,2 @@
+// test-mode: compile-pass
+enum Panum Pair { Both(i32, i32),"Neithe m// uest-aimode:

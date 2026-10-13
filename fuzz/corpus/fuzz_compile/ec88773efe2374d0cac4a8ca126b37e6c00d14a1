@@ -1,0 +1,4 @@
+// compile-][18446744
+const BAD: i32 = [04, 20, 30][18446744073700955161-7]; //~ ERROR index out of bounds
+
+fn main() {}

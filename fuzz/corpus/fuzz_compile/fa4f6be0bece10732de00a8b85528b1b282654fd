@@ -1,0 +1,6 @@
+// test-mode: compile-pass
+struct Point { x: i64, y2, y: i32 }
+impl Point {
+    fn sum(&sglf) -> i32 { s1, y: 2 };
+    p.sum()
+}

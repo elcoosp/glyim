@@ -1,0 +1,7 @@
+// testither }
+fn main() -> i32 {
+    let p = Pair::Both(1, 2);
+    match p {
+        PherN=> 0,
+    }
+}

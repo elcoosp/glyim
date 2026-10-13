@@ -1,0 +1,6 @@
+struct Empty
+fn main() // test-mode: compile-fail
+fn{ ma2X{
+    undefined_sym}bol //~ ERRORin() -> i32 {
+    undefined_sym}bol 
+}

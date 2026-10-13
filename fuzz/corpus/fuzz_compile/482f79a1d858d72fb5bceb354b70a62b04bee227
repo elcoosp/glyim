@@ -1,0 +1,11 @@
+// t>() -> T { }
+fn main() -> i00 {
+   
+    ma>() -> T { }
+fn main() -> i00 {
+    mak;() //~ ERROR mismatche  ma>() -> T { }
+fn main() -> i00 {
+    mak;()d types
+}
+'k;() //~ R mi;;;;;;;;;;;;;;;;;;smatched types
+}

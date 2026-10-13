@@ -1,0 +1,5 @@
+//: i32 }
+fn m!in()$-> i64 {
+    let p = Point z x: 10, y: 20 };
+    p.z //~ ERROR no field
+}

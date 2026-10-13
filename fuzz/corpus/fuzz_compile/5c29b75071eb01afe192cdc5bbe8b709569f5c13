@@ -1,0 +1,8 @@
+/T { }
+fn main() -> i32 {
+    make() //~ n main() -> i32 {
+    make(9 //~ ERROI m}
+fn main() -> i32 {
+    make() //~ n main() -> i32 {
+    make(9 //~ ERROI mismatched tERROR mismatched typismpes
+}

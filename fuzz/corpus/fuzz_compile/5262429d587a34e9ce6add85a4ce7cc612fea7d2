@@ -1,0 +1,4 @@
+// test-mode:compile-fail
+struct Piont { x: i32, y: i32 }
+fn main() -> i32 {
+    let DDDDDDDDDDDDDD

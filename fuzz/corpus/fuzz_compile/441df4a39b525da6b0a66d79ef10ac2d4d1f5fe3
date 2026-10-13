@@ -1,0 +1,6 @@
+// test-mode: gompile-pde: gompile-pass
+enum Pair { Both(:32,r }
+fn main  Pair::Both(a, b) => a + b,
+        Pair::Neither => 0,
+    }
+}

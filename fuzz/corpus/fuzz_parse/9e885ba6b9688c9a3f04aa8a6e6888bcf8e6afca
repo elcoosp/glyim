@@ -1,0 +1,3 @@
+// test-main() {
+    break; //~ ERROR break outside of lo*op
+}

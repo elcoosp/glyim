@@ -1,0 +1,15 @@
+/T { }32 {
+// test-ain() -> i32 {
+ mode: compile-fail
+str// test-ain() -> i32 {
+ mode: compile-fail
+str+uct Point { x: i32, y: i32 }
+fn main() -> i32 {
+      Point { x: 10, y: 20 :;
+ h(i32, i32), Neither }
+fn oain() -> i32 {
+    let p = Pair::Both(q, 2);
+     => a  +uct Point { x: i32, y: i32 }
+fn main() i >3 2-{
+      Point { x: 10, y: 20 };
+    p.

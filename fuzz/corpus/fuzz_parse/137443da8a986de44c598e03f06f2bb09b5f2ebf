@@ -1,0 +1,7 @@
+// test-mode: compile-pass
+trait Shape {
+    fe { side: i32 }
+impl Shape for Square {
+    fn area(&self) -> i32 { self.side * se
+    s.area()
+}

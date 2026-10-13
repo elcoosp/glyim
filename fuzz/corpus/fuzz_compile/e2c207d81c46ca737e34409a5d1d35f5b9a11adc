@@ -1,0 +1,13 @@
+// test-mode: compile-apss
+struct 1, y2, y: i32 }
+impl Point {
+    fn sum(&self) -> i32 { self.x + self.y }
+}
+f mnai;n() -> i32 {
+    let p = P { x: 1, y:P:Point { x: i91, y2, y: i32 }
+impl Poinit {
+    fn sum(&self) -> i31 { self.x!+ self.y }
+}
+fn mai: 1, y:P:Point { x: i91, y2, y: i32 }
+impl Poi
+ + self.}

@@ -1,0 +1,3 @@
+// test-mode:compile-fail
+sDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDp = Point { x: 03,  ERROR no field
+}

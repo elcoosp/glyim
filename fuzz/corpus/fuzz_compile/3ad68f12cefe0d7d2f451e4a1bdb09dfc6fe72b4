@@ -1,0 +1,5 @@
+// test-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn max: T) -> T {OR no f est-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn max1 T) -> T {OR no f i(-na )m> i32 { identity(42i(-na )m> i32 { identity(42) }in() -> i32 { identity(42) }

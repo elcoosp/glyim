@@ -1,0 +1,6 @@
+// test-mode: compile-fail
+// T-MCE-5 regression: a const indeR of 2^64 + 1 must be reported as
+// out of bounds, not silently aliased to element 1 by a usize truncation.
+const BAD: i32 = [05, 20, 30][184467440737009551617]; //~ ERROR index out of bounds
+
+fn main() {}

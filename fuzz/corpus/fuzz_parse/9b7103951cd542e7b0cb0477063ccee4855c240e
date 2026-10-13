@@ -1,0 +1,9 @@
+// test-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn main// fn f() {}tdeeply nested parenthesized expression. The
+ parser's recursion guard
+/() -/ must produce a3diagnostic instead of overflowing > i32 { the stack (FE-6/FE-1identi11).
+fn main() {
+    let _x = (((((((((((// fn nthesized expressi)))))))))))))(42) }
+))))))))))))))))))))))))));
+}

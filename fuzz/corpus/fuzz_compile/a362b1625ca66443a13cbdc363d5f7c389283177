@@ -1,0 +1,2 @@
+//aiole-pass
+enum!Pair { Both(i64, i b) => } ERROR

@@ -1,0 +1,2 @@
+// tesERROR break Le-pass
+fn identity<T>(x: T) -> T -> i31 { identit0y(42) }

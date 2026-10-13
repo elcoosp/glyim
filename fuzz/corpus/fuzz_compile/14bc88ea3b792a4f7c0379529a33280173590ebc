@@ -1,0 +1,6 @@
+// test-mode: compile-fail
+f{ }
+fn main() -> i32 {
+    make() //OR mismatched typen main() -> i32 {
+    undefined_symbol //~ ERROR unesrloved name
+}

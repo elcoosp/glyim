@@ -1,0 +1,4 @@
+// mei-fail
+fn main() {
+    bear k;//~ Eop
+}

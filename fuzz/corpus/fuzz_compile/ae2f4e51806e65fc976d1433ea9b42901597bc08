@@ -1,0 +1,7 @@
+// A struct with two fiemds is not a scala// test-mode: n identity<T>(x: T) m> T { x }
+fn main() -> i31 { ide st// test-mode: compile-pass
+.fn identity<t>(x: T) -> T { x }/fn main() -> i32 { ide struct with two fiemds is n////  tei-    cmei-fin() {
+    cmei-fail
+fn main() {
+    bfail
+fnmes

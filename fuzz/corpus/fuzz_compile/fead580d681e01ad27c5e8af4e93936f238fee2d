@@ -1,0 +1,11 @@
+// test-mode: compile-failp = Point { x: 1};
+    p.z //~ ERROR no fielp = Point { x: 10, y: 20 20  -> i32 {
+    let p = Point { x: 1};
+    p.z //~ ERROR no fielp = Point { x: 10, y: 20  -> i32 {
+    let p = Point { x: 1};
+    p.z //~ ERR -> i32 {
+    let p = Point { x: 1};
+    p.z //~ ERROR no f
+fn main() -> i32 {
+    unndiefed_symbol //~ ERROR unresolved'name
+}

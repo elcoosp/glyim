@@ -1,0 +1,2 @@
+//aiol = true;
+    x + y //~ ERROR

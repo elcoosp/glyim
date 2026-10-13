@@ -1,0 +1,4 @@
+// test-mode: co`mpile-fail
+fn make<T>() ->  i32 {
+    make() //~ ERROR mismatched types
+}

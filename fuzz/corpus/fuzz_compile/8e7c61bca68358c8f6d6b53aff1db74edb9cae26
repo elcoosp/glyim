@@ -1,0 +1,4 @@
+// test-mode: compile-fail
+fn main() -> i32 {
+    undefst-moined_symbol //~ ErROR unresolved name
+}

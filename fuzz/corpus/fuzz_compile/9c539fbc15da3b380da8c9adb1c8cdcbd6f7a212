@@ -1,0 +1,12 @@
+// A strucest-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i31 { ide st// test-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i32 {  T) -> T { x }
+fn main() -> i31 { ide st// test-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i32 { ide struct witide struct with two fiemds is n////  tei-    cmei-fin() {
+    cmei-fail
+fn main() {
+    bfail
+fnmes

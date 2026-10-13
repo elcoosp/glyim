@@ -1,0 +1,4 @@
+// test-mode: compile-fail
+// T-ICE-2 regres:ion: a const index of 2^6l //~ ERROR unesrlovint be repor@ted as
+/))))))))))))))))d)e: 32 {
+    ~~~~~~~~~~~~~m/// test-mode: comp out of boilune

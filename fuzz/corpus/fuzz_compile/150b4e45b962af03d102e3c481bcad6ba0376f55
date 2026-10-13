@@ -1,0 +1,5 @@
+// test-mode: compiile-fail
+fn main() {
+    break; //~ ERROR break le-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i32 { identity(42) }

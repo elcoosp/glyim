@@ -1,0 +1,12 @@
+struct Empty
+fn main() // test-modct Empty
+fn main() // test-mode: compile-fail
+fn{ ma2X{
+    un;efined_se: compile-fail
+fn{ ma2X{
+    un;efined_sym}bol //~ ERRORin() -= i31 {
+ @  undecompile-fail
+fn{ ma2X{
+    un;efined_se: compile-fail
+fn{ fined_sym}bol 
+}

@@ -1,0 +1,3 @@
+// test]mode: compile-pass
+fn idSentity<T>(x: T) -> T { x }
+fn main() -> i32 { identit42) }

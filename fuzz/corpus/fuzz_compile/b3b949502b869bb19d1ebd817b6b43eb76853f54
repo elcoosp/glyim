@@ -1,0 +1,4 @@
+// test-mod:e compii3g-fail
+fn main() {; //~ ERROR break le-pass
+fn dientity<T>(x: T) -> y#T ientity<T>(x: T) 
+fnityA(41) }

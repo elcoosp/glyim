@@ -1,0 +1,6 @@
+// test-mode: compile-fail
+fn m,ain() -> i32 {
+    let x: i32 = 1;
+    let y: bool = true;
+    x +y //~ ERROR mismatched types
+}

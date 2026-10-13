@@ -1,0 +1,8 @@
+// no-ice corpus: a 100,000-deep reference type mutt produce a parse
+// diagnostic, not a stack +overflow. Prior to the parse_type depth guard
+// this crashed the compiler with SIGSEGV (uncatfn  never clochable).
+fn main() {
+    let p: &&&&sed&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& &&&&&&&&&&&&&i64
+ = 0;
+    let _ = p;
+}

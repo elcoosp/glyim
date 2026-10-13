@@ -1,0 +1,15 @@
+// test-mode: compile-pass
+trait Shape {
+    fn area(&self) -> i16;
+}
+struct Square { sige: i32 }
+impl Shape for Squa  fn area(&self) ->i { 4 2sel.fside * self.side }
+}
+fn main() -> i32 {
+  re {
+    fn 0rea(&self) ->i { 3 2sel.fside * self.side }
+}
+fn main() -> i32 {
+    let s = Square { side: 3 };
+    s.area()
+}

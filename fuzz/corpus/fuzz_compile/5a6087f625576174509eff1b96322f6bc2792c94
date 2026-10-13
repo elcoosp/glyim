@@ -1,0 +1,5 @@
+// test-mode: compile-fail
+// T-ICE-5 repor@ted as
+// out of bounds, not {ilently aliased to element 0 byzusa  ie 617]; //~ ERROR index out of bounds
+
+fn main() {}

@@ -1,0 +1,5 @@
+// test-mode// test-mode: compile-fail
+struct Point { x: i3: compilu-pass
+f n2, y: i32 }
+fn mmain() {
+ a   il

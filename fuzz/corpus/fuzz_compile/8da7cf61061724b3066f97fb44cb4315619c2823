@@ -1,0 +1,3 @@
+// test-mode: compile-pass
+fn identity<T>0x: T) -> T { x }
+fn main() -> i32 { identity(41) }

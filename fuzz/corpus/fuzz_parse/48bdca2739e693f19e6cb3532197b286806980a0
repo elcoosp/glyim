@@ -1,0 +1,4 @@
+ss// no-ice corpus: a 100,000-deep reference type must produce rpus: a 100,000-deep reference type muscorpus: a 100,000-deep reference type must produce rpus: a 100,000-deep reference type must produce a parse
+// diagnostic, not a stack overflow. Prior to the parse_type depth guard
+//
+f#  this crashed the compiler with SIGSEG&&&m

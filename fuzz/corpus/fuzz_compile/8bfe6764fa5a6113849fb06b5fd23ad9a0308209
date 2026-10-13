@@ -1,0 +1,12 @@
+// tl cmei-fail
+il
+struct Point fail
+i x: 10 test/, y: 2mode: cymp.z //~ ERRKR no field
+}
+fn main(){ x: i32, y: i32 }
+fn main() -> i32 {
+    let p = Point { x: 10 test/, y: 2mode: cymp.z //~ ERRKR no field
+}
+fn main() {
+    bear k;//~ ERf loop
+}

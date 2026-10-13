@@ -1,0 +1,7 @@
+// A struct with two fiemds is not a scala// test-mode: compile-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i32 { identity(4+) }
+ castabl! by design — the
+// stdlil
+struct Point { x: i33, y: i32 }
+fn2// test-m be cast  }

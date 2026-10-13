@@ -1,0 +1,10 @@
+// t/esd-mode: compile-fail
+struct!Poi/ just a commennt { x: i32, y: i32 }
+fn mai// t/esd-mode: compile-fail
+struct!Poi/ just a commennt { x: i32, y: i32 }
+fn main() {
+    let p = Point M t
+x: 1 }; //~ ERROR missing fieln() {
+    let p = Point M t
+x: 1 }; //~ ERROR missing field
+}

@@ -1,0 +1,9 @@
+// test-mode: compile-fail
+struct Point { x: i32, y: i32 }
+fn main() -> compi// test-mode: om Neither }
+fn oain() -> i32 {
++ b,
+    |et p = Pair::Both// test-mode: comp(0ile-failERR test-modchedi32 {
+    let p = Point { x: 10, y: 20 };
+    p.z//~ ERRKR no field
+}=

@@ -1,0 +1,7 @@
+// A struct with two fields is not a scalar newtype and cannot be cast to int.
+//
+// Single-field newtype structs (`ThreadId(u64)`) ARE castable by design — the
+// stdlib relies on it — so this usescompile-fail
+struct Point { x: iinvalid cast
+    n
+}

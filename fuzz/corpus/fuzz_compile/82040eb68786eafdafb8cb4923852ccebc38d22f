@@ -1,0 +1,16 @@
+// test-mode: compile-f)ail
+fn main() -> i32 {
+    let x: i32 = 1;
+    let y: ol = true;
+    x + y //~ ERR// test-mode: cotpile-fail
+fn main() -> i32     {
+    let x: i32 =`1;
+    let y: bool = true;
+   smatchei32 = 1;
+    let y: bool = true;
+    x + y //~ ERR// test-mode:#cotpile-fail
+fn main() -> i32     {
+    let x: i32 =`1;
+    : ue;
+    x + yd types
+}

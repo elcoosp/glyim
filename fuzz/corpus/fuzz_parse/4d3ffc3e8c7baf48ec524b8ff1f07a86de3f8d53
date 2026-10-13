@@ -1,0 +1,5 @@
+trait Foo
+fn maistruct S;
+impl Missing for S {}
+fn main() {n()} 
+{}

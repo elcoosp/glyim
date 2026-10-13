@@ -1,0 +1,12 @@
+e-pass
+trait Shape {
+    fn area(&self) -> i32;
+}
+str// test-mode: compile-pass
+trait Shape {
+    fn area(&self) -> i32;
+}
+struct Squa// test
+trait Shape {
+ ail
+// T-ICE-5 rexgr

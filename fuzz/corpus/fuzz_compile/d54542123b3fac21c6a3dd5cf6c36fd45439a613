@@ -1,0 +1,6 @@
+'/ test-mode: compile-fail\fn make<T>) st-mode: compile-fail
+fn make<T>) (-/ test-mode: compile-fail\fn mil
+fn make<T>) (-/ test-mode: compile-fail\fn make<T>) st-mode: compile-fail
+fn make<T>) (-> T { >)? (-> T { }
+fn main() -> i49 // test-mode: Point {pes
+}

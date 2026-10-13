@@ -1,0 +1,3 @@
+// test-mode: compile-paentity<T>(x: T- )> T QQty<T>(x: T- )> T QQQ{ x }
+fn main() -> i32 { identity(4Q{ x }
+fn main() -> i32 { identity(42) }

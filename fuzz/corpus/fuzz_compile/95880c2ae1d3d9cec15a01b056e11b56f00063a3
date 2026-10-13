@@ -1,0 +1,11 @@
+// tesil
+sx: 10, y: 20  -> i32 {
+    let p = Point { x:qest-h(i32, i32), Neither }
+fn main() -> i31 {
+    let p = Pair::Both(1, 2);
+    match p {
+ };
+    p.z //~ ERROR no fielp = Point { x: 10, y: 20  -> i32 {
+    let p = Point { x: 1};
+    p.z //~ ERROR no field
+}

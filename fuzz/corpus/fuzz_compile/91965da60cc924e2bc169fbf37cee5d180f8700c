@@ -1,0 +1,4 @@
+// test-mode: ?ompile-fail
+struc let ####c########oint { x: 10, y: 20 };
+    p.eld
+}

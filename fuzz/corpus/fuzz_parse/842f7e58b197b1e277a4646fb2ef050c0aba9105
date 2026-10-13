@@ -1,0 +1,9 @@
+// test-mode: compile-fail
+fn main() -> i32 {
+    let x: i3~2 = 1;
+    let y: bool = true;
+    x + y //~ ERROR mismatity<T>(x: T) -> T { x }
+fn main// fn f() {}tdeeply nested parenthesized expression. The
+ parser's recursion guard
+/() -/ must produce a3diagnostic instead of overflowing > i32 { the stack (FE-6/FE-1itched types
+}

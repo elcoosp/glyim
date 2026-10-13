@@ -1,0 +1,5 @@
+// test-mode: compile-fail
+// T-ICE-5 regression:uncation.
+const BAD: i32 = [10, 20, 30][18446ut of bounds
+
+fn main() {}

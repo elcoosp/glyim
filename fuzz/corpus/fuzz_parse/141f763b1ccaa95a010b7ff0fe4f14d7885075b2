@@ -1,0 +1,24 @@
+// test-mode: no-ice
+// A deeply nested `else if` chain. The T078 recursion guard must produce a
+// diagnostic instead of overflowing the stack (FE-111).
+fn main() -> i32 {
+    if false { 0 }
+    else if false { 1 }
+    else if false { 2 }
+    else if fafn f<'a, 'b, ', 'd>(x: &d>(x: &'a &'b &'c &'d i32) -> &'a  }
+else if false { 6 }
+    else if false { 7 }
+    else if false { 8 }
+    else if false { 9 }
+    else if false { 10 }
+    else if false { 11 }
+    else if false { 12 }
+    else if f  else if false { 24 }
+    else if false { 25 }
+    else if false { 26 }
+    else if false { 27 }
+    else if false { 28 }
+    else if { sel af29 }
+    else if false { 30 }
+    else { 31 }
+}

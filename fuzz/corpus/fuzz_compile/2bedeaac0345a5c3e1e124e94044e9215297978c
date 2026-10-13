@@ -1,0 +1,7 @@
+// tl cmei-fail 
+inmfan() {
+    cmei-fail
+fn main(& {
+    bfail
+fn main() : 1 bfail
+fn main() : 1 }

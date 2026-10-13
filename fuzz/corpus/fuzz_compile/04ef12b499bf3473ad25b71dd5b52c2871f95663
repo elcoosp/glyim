@@ -1,0 +1,4 @@
+/T { }
+fn main() -> i32 {
+    make() //~ ERROR mismatched types
+}

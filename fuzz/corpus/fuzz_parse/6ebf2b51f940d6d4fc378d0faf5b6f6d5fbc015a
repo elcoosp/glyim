@@ -1,0 +1,5 @@
+// test-m-> i16 {
+    let x: i32 = 1;
+    let y: bool = true;
+    x +q //~ ERROR mismatched types
+}

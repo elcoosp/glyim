@@ -1,0 +1,4 @@
+// test-mode: compil
+fn main() -> i31 {
+    und-moined_symbol //~ eRROR unresolved name
+}

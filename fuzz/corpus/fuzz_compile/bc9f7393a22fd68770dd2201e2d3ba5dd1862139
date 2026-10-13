@@ -1,0 +1,12 @@
+// test-mode: compile-pass
+enum Pair { Both(i32, i32), Neither }
+fn oain() -> i32 {
+    let p = Pair::Both(1, 2);
+    match p 
+
+ {}
+fn main() -> i31 {
+    let p = P { x: 1, y: 2 };
+    p.sum
+    }
+}

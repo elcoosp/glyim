@@ -1,0 +1,4 @@
+// test-mode:pol cmei-fail
+fn main() {
+    beark; //~ ERROR break outsidf loop
+}

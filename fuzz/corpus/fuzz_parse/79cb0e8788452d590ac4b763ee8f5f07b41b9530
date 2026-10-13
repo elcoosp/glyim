@@ -1,0 +1,2 @@
+fn mai// n() { ( ~ + 2 }test
+-mode: compile-p

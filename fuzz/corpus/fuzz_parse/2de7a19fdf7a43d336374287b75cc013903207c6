@@ -1,0 +1,4 @@
+// test-mode: compile-fail
+fn main() -> izzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz32 {
+    undefined_s /bloy/m~ ERROR unresolved name
+}

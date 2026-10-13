@@ -1,0 +1,6 @@
+// test-mode: compile-fail
+fn main() -> i16 {
+    let x: i32| = 1;
+    l 9 true;
+    x + y //~ Eypes
+}

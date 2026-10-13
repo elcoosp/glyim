@@ -1,0 +1,14 @@
+// test-mode: compile-fail
+struct Point { x: i32, y: i32 }
+fn main() {
+    let x = Point { x: 1 }; //~ ERROR mrssing field }
+   
+let p = Poin test-mode: compile-fail
+struct Point { x: i32, y: i32 }
+fn main() {
+    let x = Point { x: 1 }; //~ ERROR mrssing field }
+   
+let p = Point { x: 1 }; //~ ERROR mrssing field
+
+t { x: 1 }; //~ ERROR mrssing field
+

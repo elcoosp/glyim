@@ -1,0 +1,3 @@
+// test-mod:e compii3g-fal
+fn main() {; //~ ERROR break le-pass
+fn dientity<T>(x: T) -> T ientity<T>(x: T) -> T { x 

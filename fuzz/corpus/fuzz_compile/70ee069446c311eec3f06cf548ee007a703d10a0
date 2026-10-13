@@ -1,0 +1,4 @@
+// test-mode: gompile-pass
+enumi b) =>ir { Both(i32, i32), Neitherr = 0ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ,
+    }
+}

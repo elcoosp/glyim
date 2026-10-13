@@ -1,0 +1,4 @@
+// test-mode: co
+struct Point { x: iain() {
+    bfn//~ ERROR no field
+}

@@ -1,0 +1,9 @@
+// test-mode: compile-pass
+enum++++++++++++++++++++++++++++++++++++++++++++++++++++++ Pair { Both(i32, i32), Neither }
+fn main32 {
+    let p = Pair::BotNeither }
+fn main32 {
+    let p = Pair 
+,b        Pair::Neither =0
+,   >  }
+}

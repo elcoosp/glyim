@@ -1,0 +1,3 @@
+// tesERROR miseak; //~ ERROR break Le-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i31 { identity(42) }

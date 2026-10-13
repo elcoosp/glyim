@@ -1,0 +1,2 @@
+// test-mode: compile-paentity<T>(x: T- )> T { x }
+fn main() -> i32 { ident<ity(42) }

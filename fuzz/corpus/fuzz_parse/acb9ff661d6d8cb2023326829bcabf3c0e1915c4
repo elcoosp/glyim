@@ -1,0 +1,6 @@
+// t/esd-mode: compile-fail
+struct!Poi/ just a commennt { x: i32, y: i32 }
+fn main() {
+    let p = Point { t
+x: 1 }; //~ ERROR missing field
+}

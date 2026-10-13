@@ -1,0 +1,4 @@
+/// test-mode: gompile-pass
+enum Pair { Both(/ test Point i32, i32), Neither }
+fn main() -> i32 {
+    let p = {

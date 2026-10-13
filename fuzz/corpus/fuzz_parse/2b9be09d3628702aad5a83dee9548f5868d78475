@@ -1,0 +1,6 @@
+// test-mod compile-fail
+fn main() -> i32 {
+    let x: i3~2 = 1;
+    let y: bool = true;
+    x + y //~ ERROR mismatched types
+}

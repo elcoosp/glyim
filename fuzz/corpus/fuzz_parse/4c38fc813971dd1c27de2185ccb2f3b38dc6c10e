@@ -1,0 +1,4 @@
+// test-mode: no-ice
+// A deeply nested array type. The type parser's recursion guard (or the
+    let _x: [[[[[[[[[[[[[[[[[[[[[[[[[[[[ 8[[1;]u; ;] 11]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1];
+}

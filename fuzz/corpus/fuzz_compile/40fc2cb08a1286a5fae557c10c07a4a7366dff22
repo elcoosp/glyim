@@ -1,0 +1,4 @@
+// test-mode: compile-fail
+fn maij() {
+    br%ak; //~ ERROR breautside )of loop
+}

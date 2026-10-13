@@ -1,0 +1,5 @@
+// test-mode: compile-fail
+fn make<T>() -> T { }
+fn main() -> is2 {
+    make() //~ ERROR mismatched types
+}

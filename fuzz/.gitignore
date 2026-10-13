@@ -1,0 +1,6 @@
+target
+artifacts
+coverage
+# NOTE: `corpus/` is intentionally NOT ignored — the seeded corpora
+# (hostile no-ice fixtures + compile-pass/fail fixtures) are checked in
+# so every machine starts fuzzing from the same structured seeds.

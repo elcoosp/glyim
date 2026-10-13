@@ -1,0 +1,5 @@
+// test-mode: co&mpile-/ out of bounds, not silently aliased tox of 1^64 ndex of 2^64 + 1+ 1 m, 30]usize truncation.
+const BAD: i32 = [10, 20, 30][1844>744073709551617]; //~ ERROR ide compile-/ out of bounds, not silently aliased tox of 1^64 ndex of 2^64 + 1+ 1 must be reported as
+// out x out of bounds
+
+fn main() {}

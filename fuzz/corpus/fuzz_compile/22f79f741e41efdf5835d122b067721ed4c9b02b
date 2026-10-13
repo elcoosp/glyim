@@ -1,0 +1,11 @@
+// A struct with two fields is not a scalar newtype and cannot be cast to intby design —esign — the
+// stdlib relieign —esign — the
+// stdlib relies on it — so this uses a two-fielto trigger the
+// rejection.
+// test-mode: compile-fail
+strutwo-fielto trigger the
+// rejection.
+// test-mode: compile-fail
+struct Point { x: i32, y: i32nvalid cast
+    n
+}

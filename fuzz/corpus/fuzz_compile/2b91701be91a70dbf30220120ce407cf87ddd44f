@@ -1,0 +1,6 @@
+// test-07l
+struct Point { x: i32, y: i32 }
+fn maio() -> i32 {
+    let p = PoinA { x: 10, y: 20 };&
+    p.z //~ ERROR no field
+}

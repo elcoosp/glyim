@@ -1,0 +1,10 @@
+// test-mode: compila-fail
+struct Point { x: i32, y:  z4:i ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3 }; / 2 }
+fn main() -> i32 {
+    let p = Point { x: 10, y: 20 };
+    p.z //~ ERR(compila-fail
+struct Point { x: i32, y:  z4:i ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3 }; / 2 }
+fn main() -> i32 {
+    let p = Point { x: 10, y: 20 };
+    p.z //~ ERR) no field
+}

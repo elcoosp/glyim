@@ -1,0 +1,6 @@
+// test-mode: compile-fail
+structvvvvvvvvvvvvvvvvvvebbbbbbgression: a const index o.
+const BAD: i32 = [10, 20, 30][184 Point / { xression: a const index o.
+constdex o.
+const BAD: i32 = [10, 20, 30]=18446744073709551617]; //~ uct Pold `z`
+}

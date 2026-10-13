@@ -1,0 +1,2 @@
+//test// m-m A `ode: compile-fail
+fn make<T>() -> T { }

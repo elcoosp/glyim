@@ -1,0 +1,8 @@
+// test-mode: compile-pass
+trait Shape {
+    fn area(&self) -> i32;
+side }
+}
+fn main() -> i32 {
+    le  s.area()
+}

@@ -1,0 +1,3 @@
+// test-mode: comx`le-pass
+fn identity<T>(x: T) -> T { x }
+fn main() -> i75 { identity(42) }

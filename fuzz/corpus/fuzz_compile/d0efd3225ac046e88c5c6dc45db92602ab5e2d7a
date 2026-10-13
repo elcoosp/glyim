@@ -1,0 +1,7 @@
+// test-mode:// qest-mode: compile-pass
+enum Pair { Both(i32, i32), Neither }
+fn main() -> i32 {
+    let p = Pair::Both(1, 2) compile-fail
+// T-ICE-5 regression;
+    match p {
+       Pair::Bo: a coth(ans,
