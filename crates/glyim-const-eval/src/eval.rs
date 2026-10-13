@@ -437,6 +437,18 @@ impl<'a> ConstEvaluator<'a> {
             Expr::Index { base, index } => {
                 let base_val = self.evaluate_at_depth(*base, depth)?;
                 let idx_val = self.evaluate_at_depth(*index, depth)?;
+                // T-ICE-5: `idx as usize` truncated u128 indices on
+                // 64-bit hosts — `2^64 + 3` aliased to element 3 and
+                // silently read an in-bounds value. Reject oversized
+                // indices as out-of-bounds BEFORE the cast.
+                if let Some(idx) = idx_val.as_u128()
+                    && idx > usize::MAX as u128
+                {
+                    return Err(ConstEvalError::new(
+                        "index out of bounds in const eval",
+                        span,
+                    ));
+                }
                 if let Some(idx) = idx_val.as_u128() {
                     match &base_val {
                         ConstValue::Array(arr) => {
