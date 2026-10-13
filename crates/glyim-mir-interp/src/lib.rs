@@ -496,6 +496,85 @@ impl<'tcx> Interpreter<'tcx> {
                 let v = args.first().cloned().unwrap_or(InterpValue::Unit);
                 Ok(Some(InterpValue::Aggregate(vec![v])))
             }
+            // ATOMIC-BUILTINS: `AtomicBool` (1016), `AtomicUsize` (1017),
+            // `AtomicU8` (1018). Modelled as a single-field
+            // `Aggregate([stored])` (the `UnsafeCell` wrapper flattened).
+            // `load` reads the field; `store` and `fetch_*` write it back
+            // through `mutate_receiver` so a `&self` receiver still reaches
+            // the owning local.
+            (1016, "new") | (1017, "new") | (1018, "new") => {
+                let v = args.first().cloned().unwrap_or(InterpValue::Unit);
+                Ok(Some(InterpValue::Aggregate(vec![v])))
+            }
+            (1016, "load") | (1017, "load") | (1018, "load") => {
+                let s = self.builtin_deref(&receiver)?;
+                let v = match &s {
+                    InterpValue::Aggregate(fields) => {
+                        fields.first().cloned().unwrap_or(InterpValue::Unit)
+                    }
+                    other => other.clone(),
+                };
+                Ok(Some(v))
+            }
+            (1016, "store") | (1017, "store") | (1018, "store") => {
+                let new_val = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let _ = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.is_empty() {
+                            fields.push(new_val.clone());
+                        } else {
+                            fields[0] = new_val.clone();
+                        }
+                    }
+                })?;
+                Ok(Some(InterpValue::Unit))
+            }
+            (1016, "fetch_and") | (1016, "fetch_or") => {
+                let is_and = method.as_str() == "fetch_and";
+                let rhs = matches!(args.get(1), Some(InterpValue::Bool(true)));
+                let old = std::cell::Cell::new(false);
+                let _ = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.is_empty() {
+                            fields.push(InterpValue::Bool(false));
+                        }
+                        let cur = matches!(&fields[0], InterpValue::Bool(true));
+                        old.set(cur);
+                        fields[0] =
+                            InterpValue::Bool(if is_and { cur && rhs } else { cur || rhs });
+                    }
+                })?;
+                Ok(Some(InterpValue::Bool(old.get())))
+            }
+            (1017, "fetch_add") | (1017, "fetch_sub") => {
+                let is_add = method.as_str() == "fetch_add";
+                let rhs = match args.get(1) {
+                    Some(InterpValue::Uint(n)) => *n,
+                    Some(InterpValue::Int(n)) => *n as u128,
+                    _ => 0,
+                };
+                let old = std::cell::Cell::new(0u128);
+                let _ = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.is_empty() {
+                            fields.push(InterpValue::Uint(0));
+                        }
+                        let cur = match &fields[0] {
+                            InterpValue::Uint(n) => *n,
+                            InterpValue::Int(n) => *n as u128,
+                            _ => 0,
+                        };
+                        old.set(cur);
+                        let new = if is_add {
+                            cur.wrapping_add(rhs)
+                        } else {
+                            cur.wrapping_sub(rhs)
+                        };
+                        fields[0] = InterpValue::Uint(new);
+                    }
+                })?;
+                Ok(Some(InterpValue::Uint(old.get())))
+            }
             (1050, "new") => Ok(Some(InterpValue::String(String::new()))),
             // (str_id 1061 and string_id 1050 `push_str` are both handled below)
             (1050, "len") => {

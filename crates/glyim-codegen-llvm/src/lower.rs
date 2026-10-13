@@ -3430,9 +3430,309 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "expect_err"
                 | "unwrap_or"
                 | "unwrap_or_default"
+                | "load"
+                | "store"
+                | "fetch_and"
+                | "fetch_or"
+                | "fetch_add"
+                | "fetch_sub"
         ) {
             return Ok(false);
         }
+        // BC-ATOMICS: `AtomicBool` (1016), `AtomicUsize` (1017), `AtomicU8`
+        // (1018). The builtin method table resolves these (the `sync.g`
+        // impls are shadowed by `lookup_builtin_method`), so each must be
+        // lowered inline. Storage is a single integer field: `u8` for
+        // `AtomicBool`/`AtomicU8`, `usize` for `AtomicUsize`. Each method
+        // routes to a `glyim_atomic_*` runtime helper. Placed BEFORE the
+        // generic `new` arm, which stores `const_zero()` and would discard
+        // `AtomicBool::new(true)`'s argument — so `dest_ptr`/`dest_llvm_ty`
+        // are computed locally here.
+        {
+            let atomic_adt = _recv_adt.to_raw();
+            if matches!(atomic_adt, 1016 | 1017 | 1018)
+                && matches!(
+                    method.as_str(),
+                    "new" | "load" | "store" | "fetch_and" | "fetch_or" | "fetch_add"
+                        | "fetch_sub"
+                )
+            {
+                let is_bool = atomic_adt == 1016;
+                let is_usize = atomic_adt == 1017;
+                let storage_bits: u32 = if is_usize { 64 } else { 8 };
+                let storage_ty = self.llvm_int_type(storage_bits);
+                let ptr_ty = self.context.ptr_type(AddressSpace::default());
+                let dest_ptr = self.place_ptr(destination)?;
+                let dest_ty = self.place_ty(destination);
+                let dest_llvm_ty = self.llvm_type_for_ty(dest_ty);
+
+                // ---- new(value) : store the value into the destination ----
+                if method == "new" {
+                    let Some(val_op) = args.first() else {
+                        return Ok(false);
+                    };
+                    let val = self.lower_operand(val_op)?;
+                    if !val.is_int_value() {
+                        return Ok(false);
+                    }
+                    let iv = val.into_int_value();
+                    let from = iv.get_type().get_bit_width();
+                    let stored: BasicValueEnum = if from == storage_bits {
+                        iv.as_basic_value_enum()
+                    } else if from < storage_bits {
+                        self.builder
+                            .build_int_z_extend(iv, storage_ty, "at_new_ext")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic new zext: {e:?}"
+                                ))]
+                            })?
+                            .as_basic_value_enum()
+                    } else {
+                        self.builder
+                            .build_int_truncate(iv, storage_ty, "at_new_trunc")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic new trunc: {e:?}"
+                                ))]
+                            })?
+                            .as_basic_value_enum()
+                    };
+                    self.builder.build_store(dest_ptr, stored).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "atomic new store: {e:?}"
+                        ))]
+                    })?;
+                    if let Some(target_bb) = target {
+                        let tb = *self.bb_map.get(target_bb).expect("atomic new target");
+                        self.builder.build_unconditional_branch(tb).map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic new br: {e:?}"
+                            ))]
+                        })?;
+                    }
+                    return Ok(true);
+                }
+
+                // Every remaining arm needs the storage pointer.
+                let Some(recv) = args.first() else {
+                    return Ok(false);
+                };
+                let recv_val = self.lower_operand(recv)?;
+                let header_ptr = match self.receiver_header_ptr(recv, recv_val, "at")? {
+                    Some(p) => p,
+                    None => return Ok(false),
+                };
+
+                // ---- load(&self) -> T ----
+                if method == "load" {
+                    let name = if is_usize {
+                        "glyim_atomic_usize_load"
+                    } else {
+                        "glyim_atomic_u8_load"
+                    };
+                    let f = if let Some(f) = self.module.get_function(name) {
+                        f
+                    } else {
+                        let ft = storage_ty.fn_type(&[ptr_ty.into()], false);
+                        self.module.add_function(name, ft, None)
+                    };
+                    let raw = self
+                        .builder
+                        .build_call(f, &[header_ptr.into()], "at_ld")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("atomic load: {e:?}"))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("atomic load returned void")]
+                        })?;
+                    let stored: BasicValueEnum = if is_bool {
+                        let zero = storage_ty.const_zero();
+                        self.builder
+                            .build_int_compare(
+                                inkwell::IntPredicate::NE,
+                                raw.into_int_value(),
+                                zero,
+                                "at_ld_ne",
+                            )
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic load cmp: {e:?}"
+                                ))]
+                            })?
+                            .as_basic_value_enum()
+                    } else {
+                        raw
+                    };
+                    self.builder.build_store(dest_ptr, stored).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "atomic load store: {e:?}"
+                        ))]
+                    })?;
+                    if let Some(target_bb) = target {
+                        let tb = *self.bb_map.get(target_bb).expect("atomic load target");
+                        self.builder.build_unconditional_branch(tb).map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("atomic load br: {e:?}"))]
+                        })?;
+                    }
+                    return Ok(true);
+                }
+
+                // ---- store(&self, val) : () ----
+                if method == "store" {
+                    let Some(val_op) = args.get(1) else {
+                        return Ok(false);
+                    };
+                    let val = self.lower_operand(val_op)?;
+                    if !val.is_int_value() {
+                        return Ok(false);
+                    }
+                    let iv = val.into_int_value();
+                    let from = iv.get_type().get_bit_width();
+                    let stored = if from == storage_bits {
+                        iv
+                    } else if from < storage_bits {
+                        self.builder
+                            .build_int_z_extend(iv, storage_ty, "at_st_ext")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic store zext: {e:?}"
+                                ))]
+                            })?
+                    } else {
+                        self.builder
+                            .build_int_truncate(iv, storage_ty, "at_st_trunc")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic store trunc: {e:?}"
+                                ))]
+                            })?
+                    };
+                    let name = if is_usize {
+                        "glyim_atomic_usize_store"
+                    } else {
+                        "glyim_atomic_u8_store"
+                    };
+                    let f = if let Some(f) = self.module.get_function(name) {
+                        f
+                    } else {
+                        let ft = self
+                            .context
+                            .void_type()
+                            .fn_type(&[ptr_ty.into(), storage_ty.into()], false);
+                        self.module.add_function(name, ft, None)
+                    };
+                    self.builder
+                        .build_call(f, &[header_ptr.into(), stored.into()], "at_st")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("atomic store: {e:?}"))]
+                        })?;
+                    self.builder
+                        .build_store(dest_ptr, dest_llvm_ty?.const_zero())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic store unit: {e:?}"
+                            ))]
+                        })?;
+                    if let Some(target_bb) = target {
+                        let tb = *self.bb_map.get(target_bb).expect("atomic store target");
+                        self.builder.build_unconditional_branch(tb).map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic store br: {e:?}"
+                            ))]
+                        })?;
+                    }
+                    return Ok(true);
+                }
+
+                // ---- fetch_* : return the previous value ----
+                let fetch_helper = match method.as_str() {
+                    "fetch_and" if is_bool => Some("glyim_atomic_u8_fetch_and"),
+                    "fetch_or" if is_bool => Some("glyim_atomic_u8_fetch_or"),
+                    "fetch_add" if is_usize => Some("glyim_atomic_usize_fetch_add"),
+                    "fetch_sub" if is_usize => Some("glyim_atomic_usize_fetch_sub"),
+                    _ => None,
+                };
+                if let Some(name) = fetch_helper {
+                    let Some(val_op) = args.get(1) else {
+                        return Ok(false);
+                    };
+                    let val = self.lower_operand(val_op)?;
+                    if !val.is_int_value() {
+                        return Ok(false);
+                    }
+                    let iv = val.into_int_value();
+                    let from = iv.get_type().get_bit_width();
+                    let stored = if from == storage_bits {
+                        iv
+                    } else if from < storage_bits {
+                        self.builder
+                            .build_int_z_extend(iv, storage_ty, "at_f_ext")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic fetch zext: {e:?}"
+                                ))]
+                            })?
+                    } else {
+                        self.builder
+                            .build_int_truncate(iv, storage_ty, "at_f_trunc")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic fetch trunc: {e:?}"
+                                ))]
+                            })?
+                    };
+                    let f = if let Some(f) = self.module.get_function(name) {
+                        f
+                    } else {
+                        let ft = storage_ty.fn_type(&[ptr_ty.into(), storage_ty.into()], false);
+                        self.module.add_function(name, ft, None)
+                    };
+                    let raw = self
+                        .builder
+                        .build_call(f, &[header_ptr.into(), stored.into()], "at_f")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("atomic fetch: {e:?}"))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("atomic fetch returned void")]
+                        })?;
+                    let out: BasicValueEnum = if is_bool {
+                        let zero = storage_ty.const_zero();
+                        self.builder
+                            .build_int_compare(
+                                inkwell::IntPredicate::NE,
+                                raw.into_int_value(),
+                                zero,
+                                "at_f_ne",
+                            )
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic fetch cmp: {e:?}"
+                                ))]
+                            })?
+                            .as_basic_value_enum()
+                    } else {
+                        raw
+                    };
+                    self.builder.build_store(dest_ptr, out).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!("atomic fetch store: {e:?}"))]
+                    })?;
+                    if let Some(target_bb) = target {
+                        let tb = *self.bb_map.get(target_bb).expect("atomic fetch target");
+                        self.builder.build_unconditional_branch(tb).map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("atomic fetch br: {e:?}"))]
+                        })?;
+                    }
+                    return Ok(true);
+                }
+            }
+        }
+
         // BC-NEW-ZEROARG: `String::new()` / `Vec::new()` take no arguments,
         // so the `args.first()` guard below would bail before any per-method
         // arm. Handle the zero-arg constructors first. `dest` is the
