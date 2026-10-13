@@ -1821,25 +1821,46 @@ impl TyCtxMut {
         // (1018) as unit-struct builtins. Their methods (`load`/`store`/
         // `fetch_add`/`fetch_sub`/`compare_exchange`) live in the builtin
         // method table below, keyed on these ids.
-        let unit_struct = |this: &mut Self, name: &str, id: AdtId| {
+        // ATOMICS-LAYOUT: `AtomicBool`/`AtomicUsize`/`AtomicU8`/`AtomicI32`/
+        // `AtomicU32` are declared in `sync.g` as `struct AtomicX { v:
+        // UnsafeCell<T> }`, so each is exactly one `T` wide (`UnsafeCell<T>`
+        // is `repr(transparent)`). They used to be registered here with
+        // *zero* fields — a 0-byte LLVM type — so `AtomicBool::new(true)`
+        // stored `const_zero()` into a zero-byte alloca and silently
+        // discarded the value, and every `load` read nothing. The field
+        // type is the bare integer (`u8`/`usize`/…), which has the same
+        // size and alignment as the `UnsafeCell<T>` wrapper it stands in
+        // for. The builtin method table resolves the atomic methods, so
+        // `sync.g`'s own impl bodies (which would access `.v`) are never
+        // reached; only the layout matters here.
+        let atomic_struct = |this: &mut Self, name: &str, id: AdtId, field_ty: Ty| {
+            let mut fields = IndexVec::new();
+            fields.push(FieldDef {
+                name: this.resolver.intern("v"),
+                ty: field_ty,
+            });
             let def = AdtDef {
                 kind: AdtKind::Struct,
-                fields: IndexVec::new(),
+                fields: fields.clone(),
                 variants: vec![VariantDef {
                     name: this.resolver.intern(""),
                     style: crate::adt_def::VariantStyle::Unit,
-                    fields: IndexVec::new(),
+                    fields,
                 }],
                 generic_params: Vec::new(),
             };
             this.register_adt(id, def.clone());
             this.register_adt_with_name(this.resolver.intern(name), id, def);
         };
-        unit_struct(self, "AtomicBool", AdtId::from_raw(1016));
-        unit_struct(self, "AtomicUsize", AdtId::from_raw(1017));
-        unit_struct(self, "AtomicU8", AdtId::from_raw(1018));
-        unit_struct(self, "AtomicI32", AdtId::from_raw(1019));
-        unit_struct(self, "AtomicU32", AdtId::from_raw(1021));
+        let ab_u8 = self.mk_ty(TyKind::Uint(UintTy::U8));
+        let ab_usize = self.mk_ty(TyKind::Uint(UintTy::Usize));
+        let ab_i32 = self.mk_ty(TyKind::Int(IntTy::I32));
+        let ab_u32 = self.mk_ty(TyKind::Uint(UintTy::U32));
+        atomic_struct(self, "AtomicBool", AdtId::from_raw(1016), ab_u8);
+        atomic_struct(self, "AtomicUsize", AdtId::from_raw(1017), ab_usize);
+        atomic_struct(self, "AtomicU8", AdtId::from_raw(1018), ab_u8);
+        atomic_struct(self, "AtomicI32", AdtId::from_raw(1019), ab_i32);
+        atomic_struct(self, "AtomicU32", AdtId::from_raw(1021), ab_u32);
         // `ExitStatus` (1022) — a unit struct carrying a `code` field for the
         // stdlib's `Child::wait` result. Register with one `i32`-typed field.
         let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
