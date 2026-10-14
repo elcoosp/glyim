@@ -365,7 +365,25 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let callee = match module.get_function(&fn_name) {
                     Some(f) => f,
                     None => {
-                        let fn_type = if let Some(sig) = self.ty_ctx.fn_sig(*fn_def_id) {
+                        // A closure's `FnDefId` is a re-typed `ClosureId`
+                        // (see `check_expr`'s closure arm: `ClosureId::
+                        // from_raw(closure_adt.to_raw())` and the same value
+                        // is used as the `MirConstKind::Fn`'s `FnDefId`).
+                        // Closure signatures live in `closure_sigs`, not
+                        // `fn_sigs`, so the plain `fn_sig` lookup below
+                        // misses and would otherwise declare the closure
+                        // with a *void* type — which `lower_body` then
+                        // reuses (`module.get_function(&fn_name)`) when it
+                        // emits the actual body, silently giving every
+                        // closure a `void` signature and making the caller
+                        // see `unexpected call return kind` (the call
+                        // returns void while the ABI expected an int/struct).
+                        // Fall back to the closure sig for that case.
+                        let sig_opt = self.ty_ctx.fn_sig(*fn_def_id).cloned().or_else(|| {
+                            let cid = glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw());
+                            self.ty_ctx.closure_sig(cid).cloned()
+                        });
+                        let fn_type = if let Some(sig) = sig_opt.as_ref() {
                             self.llvm_fn_type_from_sig(sig)?
                         } else {
                             self.context.void_type().fn_type(&[], false)
@@ -6214,7 +6232,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     TyKind::Closure(closure_id, _) => *closure_id,
                     _ => unreachable!(),
                 };
-                let fn_sig = match self.ty_ctx.closure_sig(closure_id) {
+                let mut fn_sig = match self.ty_ctx.closure_sig(closure_id) {
                     Some(sig) => sig.clone(),
                     None => {
                         return Err(vec![GlyimDiagnostic::internal_error(format!(
@@ -6223,6 +6241,22 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         ))]);
                     }
                 };
+                // A closure whose body's result type was still an
+                // inference var at signature-registration time (e.g. the
+                // literal `|| 7`, whose body typeck left as
+                // `Infer(Int(IntVar(_)))`) leaves `closure_sig.output`
+                // unresolved, so `fn_abi_of` panics with
+                // `UnknownType(Infer)`. The call's *destination place* is
+                // the closure's concrete result type (typeck unified the
+                // two); substitute it whenever the registered output is
+                // still an unresolved inference var. Mirrors the FnDef
+                // arm's dest-type override below.
+                if matches!(self.ty_ctx.ty_kind(fn_sig.output), TyKind::Infer(_)) {
+                    let dest_ty = self.place_ty(destination);
+                    if !matches!(self.ty_ctx.ty_kind(dest_ty), TyKind::Infer(_)) {
+                        fn_sig.output = dest_ty;
+                    }
+                }
                 let capture_count = (fn_sig.inputs.len() as usize) - args.len();
                 let fn_name = format!("__glyim_fn_{}", closure_id.to_raw());
                 let direct_fn_val = self.module.get_function(&fn_name);

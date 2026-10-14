@@ -1237,6 +1237,16 @@ impl TyCtxMut {
         self.const_tys.get(&def_id).copied()
     }
 
+    /// Every registered closure id. Used by post-inference passes
+    /// (`glyim-typeck::zonk::zonk_closure_sigs`) that must fold inference
+    /// variables out of the closure signatures registered during body
+    /// checking — those signatures capture the closure body's result type
+    /// as it was at *registration* time (often a raw `Infer(Int(_))`),
+    /// which codegen then cannot lower.
+    pub fn closure_sig_ids(&self) -> Vec<ClosureId> {
+        self.closure_sigs.keys().copied().collect()
+    }
+
     /// register_closure_sig.
     pub fn register_closure_sig(&mut self, closure_id: ClosureId, sig: FnSig) {
         self.closure_sigs.insert(closure_id, sig);

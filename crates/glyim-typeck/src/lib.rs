@@ -1105,6 +1105,14 @@ pub fn typeck_crate(
     // ADT field vars are bound during body checking itself.)
     zonk::zonk_adt_defs(&infer, &mut ctx);
 
+    // Zonk registered closure signatures. `check_expr`'s closure arm
+    // records the closure's `FnSig` while the body's result type may
+    // still be an inference variable (`|| 7` → `Infer(Int(IntVar(_)))`);
+    // `zonk_bodies` folds the THIR body's `return_ty` but not this
+    // separate registry, so codegen's `fn_abi_of` would otherwise panic
+    // with `UnknownType(Infer)`.
+    zonk::zonk_closure_sigs(&infer, &mut ctx);
+
     // 3. Obligation fulfillment
     let frozen_ctx = ctx.freeze();
 

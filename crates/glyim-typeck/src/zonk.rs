@@ -698,6 +698,56 @@ fn walk_ty(ctx: &TyCtx, ty: Ty, f: &mut impl FnMut(Ty)) {
 /// pass rejects the ADT with `fn_abi_of failed: UnknownType(Infer(Ty(_)))`.
 ///
 /// Like [`zonk_bodies`], this runs *after* obligation fulfillment — the
+/// Fold inference variables out of every registered closure signature.
+///
+/// `check_expr`'s closure arm registers the closure's `FnSig` at a point
+/// where the body's result type may still be a raw inference variable
+/// (`|| 7` registers `output = Infer(Int(IntVar(_)))`). `zonk_bodies`
+/// later folds the *THIR body*'s `return_ty` through the inference table
+/// but leaves this separate registry untouched, so codegen's `lower_call`
+/// sees a closure sig whose `output` is `Infer`, and `fn_abi_of` panics
+/// with `UnknownType(Infer)`. Re-zonk every closure sig here, after the
+/// inference table is complete but before the context is frozen for
+/// codegen.
+///
+/// Uses the same `freeze` snapshot pattern as `zonk_adt_defs` so any
+/// freshly interned substitution shares the canonical arena with `ctx`.
+pub fn zonk_closure_sigs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut) {
+    let view = ctx.freeze();
+    let ids = ctx.closure_sig_ids();
+    let mut updated: Vec<(glyim_core::def_id::ClosureId, glyim_type::FnSig)> =
+        Vec::with_capacity(ids.len());
+    for id in ids {
+        let Some(sig) = view.closure_sig(id).cloned() else {
+            continue;
+        };
+        let mut new_inputs: Vec<glyim_type::GenericArg> = Vec::new();
+        for arg in view.substitution_args(sig.inputs) {
+            match arg {
+                glyim_type::GenericArg::Ty(t) => new_inputs
+                    .push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t))),
+                other => new_inputs.push(other.clone()),
+            }
+        }
+        let inputs = view.intern_substitution(new_inputs);
+        let output = zonk_ty(infer, &view, sig.output);
+        updated.push((
+            id,
+            glyim_type::FnSig {
+                inputs,
+                output,
+                c_variadic: sig.c_variadic,
+                unsafety: sig.unsafety,
+                abi: sig.abi,
+            },
+        ));
+    }
+    for (id, sig) in updated {
+        ctx.register_closure_sig(id, sig);
+    }
+}
+
+/// Like [`zonk_bodies`], this runs *after* obligation fulfillment — the
 /// inference table passed in is the same one that produced the ADT field
 /// types, so var bindings established during body type-checking are honoured
 /// here as well.
