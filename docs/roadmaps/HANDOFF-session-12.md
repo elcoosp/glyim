@@ -1,6 +1,6 @@
 # HANDOFF — session 12 (builtin dispatch + closures) — COMPLETE
 
-**HEAD**: `595abdc3`
+**HEAD**: the tip of `main` when this was written — the closure fixes landed in `1921092d` and its parents.
 **Working tree**: clean.
 **Matrix**: 4599/4599 workspace tests pass (2 skipped).
 **Differential**: **0 disagreements** on the run-pass corpus
