@@ -450,6 +450,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     inkwell::values::AggregateValueEnum::ArrayValue(a) => a.as_basic_value_enum(),
                 })
             }
+            MirConstKind::SizeOf(ty) => {
+                let lc = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+                let size = lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0);
+                let int_ty = self.llvm_type_for_ty(c.ty)?.into_int_type();
+                Ok(int_ty.const_int(size, false).into())
+            }
             MirConstKind::Error => {
                 // T140-PATCHED-LLVM-ERROR: `MirConstKind::Error` is emitted
                 // by lowering for compiler-synthetic builtin calls whose

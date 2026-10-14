@@ -553,6 +553,15 @@ pub enum MirConstKind {
     },
     /// Variant.
     Aggregate(Vec<MirConst>),
+    /// The size in bytes of a type, resolved *after* monomorphization.
+    /// The slice-range lowering (`lower_dynamic_range_slice`) needs
+    /// `size_of::<T>()` to scale a start index into a byte offset, but the
+    /// element type may still be a generic `Param(T)` at lowering time
+    /// (where `layout_of` fails). Baking `1` there miscompiles every
+    /// generic slice range (`&slice[1..]` advanced by 1 byte). Carrying the
+    /// type here defers the size computation to mono / const-fold, where the
+    /// type is concrete.
+    SizeOf(Ty),
     /// Variant.
     Error,
 }

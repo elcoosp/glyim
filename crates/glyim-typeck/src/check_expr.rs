@@ -636,7 +636,27 @@ impl<'a> FnCtxt<'a> {
                             pat: Box::new(pat_thir),
                             iterable: Box::new(iter_expr),
                             body: Box::new(body_expr),
-                            next: next_info,
+                            next: next_info.map(|mut n| {
+                                let elem = match self.ctx.ty_kind(iter_ty) {
+                                    TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                                        TyKind::Slice(e) => Some(*e),
+                                        _ => None,
+                                    },
+                                    TyKind::Slice(e) => Some(*e),
+                                    _ => None,
+                                };
+                                if let Some(e) = elem {
+                                    let mut map: std::collections::HashMap<u32, GenericArg> =
+                                        std::collections::HashMap::new();
+                                    map.insert(0, GenericArg::Ty(e));
+                                    map.insert(1, GenericArg::Ty(e));
+                                    n.option_ty = self.ctx.subst_ty(n.option_ty, &map);
+                                    let ss = self.ctx.intern_substitution(vec![GenericArg::Ty(e)]);
+                                    n.fn_substs = ss;
+                                    n.fn_ty = self.ctx.mk_ty(TyKind::FnDef(n.fn_def_id, ss));
+                                }
+                                n
+                            }),
                         },
                         ty: Ty::UNIT,
                         span,
@@ -3696,8 +3716,12 @@ impl<'a> FnCtxt<'a> {
                     if impl_trait_id != trait_def_id {
                         continue;
                     }
-                    let param_map =
-                        crate::tyconv::build_param_tys(self.ctx, &impl_item.generic_params);
+                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                    for gp in impl_item.generic_params.iter() {
+                        let var = self.infer.new_ty_var(self.ctx);
+                        let ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                        param_map.insert(gp.name, ty);
+                    }
                     let impl_self_ty = crate::tyconv::resolve_type_ref(
                         self.ctx,
                         self.infer,

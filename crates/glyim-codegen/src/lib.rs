@@ -1069,6 +1069,21 @@ impl BytecodeBackend {
                             self.emit_operand(bc, &Operand::Constant(e.clone()), local_tys)?;
                         }
                     }
+                    MirConstKind::SizeOf(ty) => {
+                        let size = match self.resolve_ty_ctx() {
+                            Some(ctx) => {
+                                let lc = glyim_layout::SimpleLayoutComputer::new(
+                                    &ctx,
+                                    glyim_core::primitives::TargetInfo::x86_64(),
+                                );
+                                lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0)
+                            }
+                            None => 0,
+                        };
+                        bc.push(OP_LOAD_CONST);
+                        bc.extend_from_slice(&(size as i64).to_le_bytes());
+                        self.const_is_int.borrow_mut().push(true);
+                    }
                     MirConstKind::Unit | MirConstKind::Error => {
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&0i64.to_le_bytes());

@@ -443,6 +443,7 @@ fn format_const(c: &glyim_mir::MirConst) -> String {
             let parts: Vec<String> = elems.iter().map(format_const).collect();
             format!("aggregate([{}])", parts.join(", "))
         }
+        glyim_mir::MirConstKind::SizeOf(t) => format!("size_of({:?})", t),
         glyim_mir::MirConstKind::Error => "<error>".to_string(),
         glyim_mir::MirConstKind::VirtualMethod {
             trait_def_id,

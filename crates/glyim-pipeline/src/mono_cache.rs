@@ -275,6 +275,9 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     } => {
                         *st = substitute_ty(*st, substs, ctx, frozen);
                     }
+                    glyim_mir::MirConstKind::SizeOf(t) => {
+                        *t = substitute_ty(*t, substs, ctx, frozen);
+                    }
                     _ => {}
                 }
                 Operand::Constant(mir_const)
@@ -328,6 +331,17 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                     // codegen's layout/code paths that read the aggregate
                     // kind (rather than the dest local's type) laid it out
                     // with `Param` → `UnknownType` ICE or wrong layout.
+                    Rvalue::Use(op) => {
+                        *op = substitute_operand(op.clone(), substs, &mut sub_ctx, ty_ctx);
+                    }
+                    Rvalue::BinaryOp(_, operands) => {
+                        let (l, r) = operands.as_mut();
+                        *l = substitute_operand(l.clone(), substs, &mut sub_ctx, ty_ctx);
+                        *r = substitute_operand(r.clone(), substs, &mut sub_ctx, ty_ctx);
+                    }
+                    Rvalue::UnaryOp(_, op) => {
+                        *op = substitute_operand(op.clone(), substs, &mut sub_ctx, ty_ctx);
+                    }
                     Rvalue::Aggregate(kind, _) => match kind {
                         glyim_mir::AggregateKind::Array(elem_ty) => {
                             *elem_ty = substitute_ty(*elem_ty, substs, &mut sub_ctx, ty_ctx);

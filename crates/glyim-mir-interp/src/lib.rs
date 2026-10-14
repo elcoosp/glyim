@@ -1941,6 +1941,14 @@ impl<'tcx> Interpreter<'tcx> {
                 }
                 Ok(InterpValue::Aggregate(values))
             }
+            MirConstKind::SizeOf(ty) => {
+                let lc = glyim_layout::SimpleLayoutComputer::new(
+                    self.tcx,
+                    glyim_core::primitives::TargetInfo::x86_64(),
+                );
+                let size = lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0);
+                Ok(InterpValue::Uint(size as u128))
+            }
             MirConstKind::Error => {
                 // T140-PATCHED-INTERP-ERROR: compiler-synthetic builtin calls
                 // (`into`/`to_string`/`clone`/`drop`) lower to an `Error`

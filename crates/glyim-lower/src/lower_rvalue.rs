@@ -11,6 +11,21 @@ use glyim_mir::{
 use glyim_type::{self, FieldIdx, Ty, TyKind};
 use glyim_typeck::thir;
 
+/// Whether `ty` is or contains a `TyKind::Param` / `TyKind::Infer` anywhere.
+fn contains_param(ctx: &glyim_type::TyCtx, ty: Ty) -> bool {
+    match ctx.ty_kind(ty) {
+        TyKind::Param(_) | TyKind::Infer(_) => true,
+        TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) | TyKind::Slice(i) | TyKind::Array(i, _) => {
+            contains_param(ctx, *i)
+        }
+        TyKind::Adt(_, s) | TyKind::Tuple(s) => ctx
+            .substitution_args(*s)
+            .iter()
+            .any(|a| matches!(a, glyim_type::GenericArg::Ty(t) if contains_param(ctx, *t))),
+        _ => false,
+    }
+}
+
 impl<'a> MirBuilder<'a> {
     // ---- Statement lowering ----
     /// lower_stmt.
@@ -2658,19 +2673,23 @@ impl<'a> MirBuilder<'a> {
 
         let layout_computer =
             glyim_layout::SimpleLayoutComputer::new(self.ctx.ty_ctx(), TargetInfo::x86_64());
-        let elem_layout =
-            layout_computer
-                .layout_of(elem_ty)
-                .unwrap_or(glyim_layout::Layout::scalar(
-                    glyim_layout::Size::bytes(1),
-                    glyim_layout::Align::ONE,
-                ));
-        let elem_size = elem_layout.size.0;
-
-        let elem_size_const = MirConst {
-            kind: MirConstKind::Uint(elem_size.into()),
-            ty: Ty::USIZE,
-            span,
+        // If the element type is (or contains) a generic `Param`, its layout
+        // is unknown here (`layout_of` fails). Baking a fallback size of 1
+        // miscompiled every generic slice range (`&slice[1..]` advanced by 1
+        // byte instead of `size_of::<T>()`). Emit a deferred
+        // `MirConstKind::SizeOf(elem_ty)` instead: mono substitutes the
+        // concrete type into it and the backends fold the real size.
+        let elem_size_const = match layout_computer.layout_of(elem_ty) {
+            Ok(l) if !contains_param(self.ctx.ty_ctx(), elem_ty) => MirConst {
+                kind: MirConstKind::Uint(l.size.0.into()),
+                ty: Ty::USIZE,
+                span,
+            },
+            _ => MirConst {
+                kind: MirConstKind::SizeOf(elem_ty),
+                ty: Ty::USIZE,
+                span,
+            },
         };
         let start_op = Operand::Copy(Place::new(start_local));
         let size_op = Operand::Constant(elem_size_const);

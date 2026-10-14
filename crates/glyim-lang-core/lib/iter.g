@@ -329,6 +329,20 @@ impl<'a, T> IntoIterator for &'a [T] {
     }
 }
 
+impl<'a, T> Iterator for &'a [T] {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<&'a T> {
+        let cur: &[T] = *self;
+        if cur.is_empty() {
+            Option::None
+        } else {
+            let first = &cur[0];
+            *self = &cur[1..];
+            Option::Some(first)
+        }
+    }
+}
+
 /// An iterator that iterates over a slice by reference.
 struct Iter<'a, T> {
     slice: &'a [T],
