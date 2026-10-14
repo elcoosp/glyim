@@ -758,8 +758,30 @@ impl<'a> MirBuilder<'a> {
                             expr.span,
                         );
                         self.current_block = Some(after_call_bb);
+                        // `next()` yields an `Option<Item>` *aggregate*.
+                        // `SwitchInt` must switch on its discriminant, not the
+                        // whole struct; compute `Rvalue::Discriminant` into a
+                        // local of the declared discriminant type. (Switching
+                        // on the aggregate made codegen load a struct where an
+                        // `IntValue` was expected.)
+                        let discr_local = self.alloc_local(
+                            iter_info.discr_ty,
+                            glyim_core::primitives::Mutability::Not,
+                            expr.span,
+                        );
+                        self.push_stmt(
+                            glyim_mir::StatementKind::StorageLive(discr_local),
+                            expr.span,
+                        );
+                        self.push_stmt(
+                            glyim_mir::StatementKind::Assign(
+                                glyim_mir::Place::new(discr_local),
+                                glyim_mir::Rvalue::Discriminant(glyim_mir::Place::new(option_local)),
+                            ),
+                            expr.span,
+                        );
                         let discr_op =
-                            glyim_mir::Operand::Copy(glyim_mir::Place::new(option_local));
+                            glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local));
                         let some_bb = self.new_block();
                         let none_bb = exit_bb;
                         let switch_targets =

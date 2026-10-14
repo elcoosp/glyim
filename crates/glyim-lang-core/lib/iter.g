@@ -375,3 +375,20 @@ impl IntoIterator for Range<usize> {
     type IntoIter = RangeIter;
     fn into_iter(self) -> RangeIter { RangeIter { range: self } }
 }
+
+// `Range<usize>` is itself an `Iterator` so a `for i in a..b` loop (which the
+// current desugar resolves via `Iterator::next` directly, without inserting an
+// `into_iter()` call) takes the real multi-iteration path. `IntoIterator`
+// above is kept for explicit `x.into_iter()` calls.
+impl Iterator for Range<usize> {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        if self.start < self.end {
+            let v = self.start;
+            self.start = self.start + 1;
+            Option::Some(v)
+        } else {
+            Option::None
+        }
+    }
+}
