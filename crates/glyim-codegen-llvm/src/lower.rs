@@ -3454,6 +3454,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "fetch_or"
                 | "fetch_add"
                 | "fetch_sub"
+                | "compare_exchange"
         ) {
             return Ok(false);
         }
@@ -3472,7 +3473,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 && matches!(
                     method.as_str(),
                     "new" | "load" | "store" | "fetch_and" | "fetch_or" | "fetch_add"
-                        | "fetch_sub"
+                        | "fetch_sub" | "compare_exchange"
                 )
             {
                 let is_bool = atomic_adt == 1016;
@@ -3659,6 +3660,123 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         self.builder.build_unconditional_branch(tb).map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "atomic store br: {e:?}"
+                            ))]
+                        })?;
+                    }
+                    return Ok(true);
+                }
+
+                // ---- compare_exchange(&self, expected, new, ..) -> Result<T, T> ----
+                //
+                // The runtime helper returns the previous value; CAS
+                // succeeded iff `prev == expected`. Build
+                // `Result::Ok(prev)` (variant 0) on success, else
+                // `Result::Err(prev)` (variant 1), mirroring the interp.
+                if method == "compare_exchange" {
+                    let Some(exp_op) = args.get(1) else {
+                        return Ok(false);
+                    };
+                    let Some(new_op) = args.get(2) else {
+                        return Ok(false);
+                    };
+                    let to_storage = |v: BasicValueEnum<'ctx>| -> CompResult<_> {
+                        let iv = v.into_int_value();
+                        let from = iv.get_type().get_bit_width();
+                        if from == storage_bits {
+                            Ok(iv)
+                        } else if from < storage_bits {
+                            self.builder
+                                .build_int_z_extend(iv, storage_ty, "at_cas_ext")
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "atomic cas zext: {e:?}"
+                                    ))]
+                                })
+                        } else {
+                            self.builder
+                                .build_int_truncate(iv, storage_ty, "at_cas_trunc")
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "atomic cas trunc: {e:?}"
+                                    ))]
+                                })
+                        }
+                    };
+                    let exp_llvm = to_storage(self.lower_operand(exp_op)?)?;
+                    let new_llvm = to_storage(self.lower_operand(new_op)?)?;
+                    let name = if is_usize {
+                        "glyim_atomic_usize_cas"
+                    } else {
+                        "glyim_atomic_u8_cas"
+                    };
+                    let f = if let Some(f) = self.module.get_function(name) {
+                        f
+                    } else {
+                        let ft = storage_ty.fn_type(
+                            &[ptr_ty.into(), storage_ty.into(), storage_ty.into()],
+                            false,
+                        );
+                        self.module.add_function(name, ft, None)
+                    };
+                    let prev = self
+                        .builder
+                        .build_call(f, &[header_ptr.into(), exp_llvm.into(), new_llvm.into()], "at_cas")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic cas: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("atomic cas returned void")]
+                        })?;
+                    let prev_iv = prev.into_int_value();
+                    let is_ok = self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::EQ, prev_iv, exp_llvm, "at_cas_ok")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic cas cmp: {e:?}"
+                            ))]
+                        })?;
+                    // Payload type: `bool` for AtomicBool, else the storage
+                    // integer. `prev` is the storage value; convert for bool.
+                    let payload: BasicValueEnum = if is_bool {
+                        let zero = storage_ty.const_zero();
+                        self.builder
+                            .build_int_compare(inkwell::IntPredicate::NE, prev_iv, zero, "at_cas_b")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "atomic cas bool: {e:?}"
+                                ))]
+                            })?
+                            .as_basic_value_enum()
+                    } else {
+                        prev_iv.as_basic_value_enum()
+                    };
+                    let ok_val =
+                        self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[payload])?;
+                    let err_val =
+                        self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(1)), &[payload])?;
+                    let result = self
+                        .builder
+                        .build_select(is_ok, ok_val, err_val, "at_cas_sel")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic cas sel: {e:?}"
+                            ))]
+                        })?;
+                    self.builder.build_store(dest_ptr, result).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "atomic cas store: {e:?}"
+                        ))]
+                    })?;
+                    if let Some(target_bb) = target {
+                        let tb = *self.bb_map.get(target_bb).expect("atomic cas target");
+                        self.builder.build_unconditional_branch(tb).map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic cas br: {e:?}"
                             ))]
                         })?;
                     }

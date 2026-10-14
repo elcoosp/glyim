@@ -575,6 +575,35 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(InterpValue::Uint(old.get())))
             }
+            // `compare_exchange(expected, new, ..) -> Result<T, T>`:
+            // succeed (variant 0 = `Ok`) iff the current value equals
+            // `expected`, otherwise (variant 1 = `Err`). Either way the
+            // payload is the *previous* value. Atomics are modelled as a
+            // single-field `Aggregate([stored])`, so the current value is
+            // `fields[0]`.
+            (1016, "compare_exchange") | (1017, "compare_exchange") => {
+                let expected = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let new_val = args.get(2).cloned().unwrap_or(InterpValue::Unit);
+                let prev = std::cell::Cell::new(InterpValue::Unit);
+                let _ = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
+                    if let InterpValue::Aggregate(fields) = v {
+                        if fields.is_empty() {
+                            fields.push(InterpValue::Unit);
+                        }
+                        let cur = fields[0].clone();
+                        prev.set(cur.clone());
+                        if cur == expected {
+                            fields[0] = new_val.clone();
+                        }
+                    }
+                })?;
+                let prev = prev.into_inner();
+                let tag = if prev == expected { 0 } else { 1 };
+                Ok(Some(InterpValue::Aggregate(vec![
+                    InterpValue::Int(tag),
+                    prev,
+                ])))
+            }
             (1050, "new") => Ok(Some(InterpValue::String(String::new()))),
             // (str_id 1061 and string_id 1050 `push_str` are both handled below)
             (1050, "len") => {

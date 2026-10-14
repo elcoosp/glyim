@@ -1852,6 +1852,36 @@ pub unsafe extern "C" fn glyim_atomic_usize_store(ptr: *mut usize, val: usize) {
     unsafe { (*(ptr as *const RtAtomicUsize)).store(val, RtOrdering::SeqCst) };
 }
 
+/// T014-PATCHED-RUNTIME: atomic compare-and-exchange of a `usize`.
+///
+/// Returns the *previous* value. The caller checks `prev == expected` to
+/// determine success (compare-exchange succeeds iff the prior value
+/// equalled `expected`).
+///
+/// # Safety
+/// `ptr` must point to a live, `usize`-aligned `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_atomic_usize_cas(
+    ptr: *mut usize,
+    expected: usize,
+    new: usize,
+) -> usize {
+    if ptr.is_null() {
+        return 0;
+    }
+    match unsafe {
+        (*(ptr as *const RtAtomicUsize)).compare_exchange(
+            expected,
+            new,
+            RtOrdering::SeqCst,
+            RtOrdering::SeqCst,
+        )
+    } {
+        Ok(prev) => prev,
+        Err(prev) => prev,
+    }
+}
+
 /// T014-PATCHED-RUNTIME: atomic fetch-and-add of a `usize`.
 ///
 /// Returns the previous value.
