@@ -157,6 +157,14 @@ Note: the commit message for `49c276e4` also describes an
 **not** actually wired in (the helper was added unused and later removed
 in `c8bbe21a`). The range cases work via the direct-`Iterator` path.
 
+**Fixed (codegen) — `&[T; N]` coercion length.** `let s: &[i32] = &a;`
+(where `a: [i32; 3]`) built a bare pointer in `Rvalue::Ref`, leaving the
+length half of the `{ptr, i64}` fat pointer uninitialized, so `s.len()`
+read stack garbage. `glyim-codegen-llvm` now builds the fat pointer with
+the array length. **Not covered by a fixture**: the interpreter models
+`&array` as a plain `Ref{frame,local}` (no fat pointer), so it reports a
+different length; matching the interp is separate work.
+
 **Still open — slice iteration (`for x in &slice`).** The `into_iter`
 desugar alone is **not** sufficient: an attempt that inserted
 `IntoIterator::into_iter(iterable)` for `&[T]` iterables built the call,

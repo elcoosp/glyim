@@ -1226,6 +1226,56 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })?;
                     return Ok(val);
                 }
+                // `&[T; N]` coerced to `&[T]`: the pointee is a fixed array
+                // (not `is_unsized`), so `place_ptr` gave only the array
+                // address — but the destination is the fat pointer
+                // `{ ptr, i64 }`. Build it with the array's length. Without
+                // this, the length half was left uninitialized and every
+                // `&slice.len()` read stack garbage.
+                if let TyKind::Array(_, count) = self.ty_ctx.ty_kind(pointee_ty) {
+                    let dest_is_fat_slice = matches!(
+                        self.ty_ctx.ty_kind(expected_ty),
+                        TyKind::Ref(_, inner, _)
+                            if matches!(self.ty_ctx.ty_kind(*inner), TyKind::Slice(_))
+                    );
+                    if dest_is_fat_slice {
+                        let n = match &count.kind {
+                            ConstKind::Uint(n) => *n as u64,
+                            ConstKind::Int(n) => (*n).max(0) as u64,
+                            _ => 0,
+                        };
+                        if let inkwell::types::BasicTypeEnum::StructType(st) =
+                            self.llvm_type_for_ty(expected_ty)?
+                        {
+                            let i64_ty = self.llvm_int_type(64);
+                            let agg = st.get_undef();
+                            let agg = self
+                                .builder
+                                .build_insert_value(agg, ptr, 0, "fat_slice_ptr")
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "fat slice ptr insert: {e:?}"
+                                    ))]
+                                })?
+                                .into_struct_value();
+                            let agg = self
+                                .builder
+                                .build_insert_value(
+                                    agg,
+                                    i64_ty.const_int(n, false),
+                                    1,
+                                    "fat_slice_len",
+                                )
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "fat slice len insert: {e:?}"
+                                    ))]
+                                })?
+                                .into_struct_value();
+                            return Ok(agg.as_basic_value_enum());
+                        }
+                    }
+                }
                 Ok(ptr.as_basic_value_enum())
             }
             Rvalue::Aggregate(kind, operands) => {
