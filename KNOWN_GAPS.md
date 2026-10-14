@@ -157,17 +157,22 @@ Note: the commit message for `49c276e4` also describes an
 **not** actually wired in (the helper was added unused and later removed
 in `c8bbe21a`). The range cases work via the direct-`Iterator` path.
 
-**Still open — a real `into_iter` desugar + slice iteration.**
-`for x in &slice` / `for x in [1,2,3]` still fail. `&[T]` has an
-`IntoIterator` impl in `iter.g` (`Iter<'a, T>`), but the `For` arm
-resolves `Iterator::next` on the iterable directly, so it never reaches
-it; and a bare array `[T; N]` has no impl at all (needs an array→slice
-borrow coercion). The proper fix is the `into_iter()` desugar in
-`check_expr`'s `For` arm: resolve `IntoIterator::into_iter(iterable)` →
-`IntoIter`, then `Iterator::next` on that (falling back to direct `next`
-for iterables that only implement `Iterator`). A `cp check_expr.rs`
-backup + full differential is essential before/after, since every
-attempt so far regressed stdlib lowering.
+**Still open — slice iteration (`for x in &slice`).** The `into_iter`
+desugar alone is **not** sufficient: an attempt that inserted
+`IntoIterator::into_iter(iterable)` for `&[T]` iterables built the call,
+but then failed with
+
+    mismatched types: <Self as Trait37>::Item vs &T
+    cannot dereference non-pointer type
+
+because `resolve_trait_method_fn` returns the `FnDefId` but does **not**
+resolve the associated-type projection in the resulting
+`Iter<'a, T>::Item` — the loop variable's type stays the unnormalized
+`<Iter<'a,T> as Iterator>::Item` instead of `&'a T`. So the real blocker
+is associated-type-projection normalization for trait-method resolution,
+not the desugar. Fix that first (`TyCtx::resolve_associated_type` is the
+existing hook), then the desugar; a bare array additionally needs an
+array→`&[T]` borrow coercion.
 
 ### 1e. Simple, unimplemented
 
