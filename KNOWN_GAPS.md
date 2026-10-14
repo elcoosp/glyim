@@ -165,22 +165,47 @@ the array length. **Not covered by a fixture**: the interpreter models
 `&array` as a plain `Ref{frame,local}` (no fat pointer), so it reports a
 different length; matching the interp is separate work.
 
-**Still open — slice iteration (`for x in &slice`).** The `into_iter`
-desugar alone is **not** sufficient: an attempt that inserted
-`IntoIterator::into_iter(iterable)` for `&[T]` iterables built the call,
-but then failed with
+**Still open — slice iteration (`for x in &slice`) and closure
+combinators — blocked on associated-type projection normalization.**
 
-    mismatched types: <Self as Trait37>::Item vs &T
-    cannot dereference non-pointer type
+Root cause (fully traced): **`TyKind::Projection` is never normalized
+anywhere.**
 
-because `resolve_trait_method_fn` returns the `FnDefId` but does **not**
-resolve the associated-type projection in the resulting
-`Iter<'a, T>::Item` — the loop variable's type stays the unnormalized
-`<Iter<'a,T> as Iterator>::Item` instead of `&'a T`. So the real blocker
-is associated-type-projection normalization for trait-method resolution,
-not the desugar. Fix that first (`TyCtx::resolve_associated_type` is the
-existing hook), then the desugar; a bare array additionally needs an
-array→`&[T]` borrow coercion.
+1. `glyim-typeck::zonk::zonk_ty` treats `TyKind::Projection(_)` as a leaf
+   (it is in the no-children arm), so a projection survives zonking.
+2. `TyCtx::resolve_associated_type` exists but is **never called** — it has
+   no call sites in the whole workspace.
+3. Even if it were called, `impl_assoc_types` is populated (in
+   `typeck_crate`, from `impl_item.associated_types`) with the impl's
+   **`Param`-based** assoc types: `impl<'a, T> Iterator for Iter<'a, T> {
+   type Item = &'a T; }` registers `Item = &'a Param(0)`, with no
+   substitution of the query's concrete args.
+
+Consequence: for `for x in &slice`, `Iterator::next`'s return type is
+`Option<<Iter<'a,T> as Iterator>::Item>`; the projection never becomes
+`&'a T`, so instantiating the call mismatches
+(`<Self as Trait37>::Item vs &T`) and the for-loop falls back to the
+single-iteration path (exit 116/100). The same unnormalized projection
+breaks the closure combinators (`Option::map` → `layout error building
+aggregate: UnknownType(Ty(0))`).
+
+**Proper fix (a real feature, ~3 layers):**
+
+1. Normalize `TyKind::Projection` during zonking: in `zonk_ty`, for a
+   `Projection` with a concrete self type, call `resolve_associated_type`
+   and recurse on the result (falling back to the raw projection if
+   unresolved).
+2. Make `resolve_associated_type` substitute the impl's generic params:
+   when it matches by `AdtId`, rebuild the found assoc type with the
+   query's substitution args (mirror `concretize_fn_sig`).
+3. Then wire the `into_iter` desugar in the `For` arm (probe `next`
+   directly; on failure resolve `IntoIterator::into_iter`, iterate its
+   result). A bare array additionally needs an array→`&[T]` borrow
+   coercion (now that `Rvalue::Ref` writes the fat-pointer length).
+
+Each of these was attempted in isolation this session and regressed the
+128-fixture differential, so they must be done together and validated as
+one change.
 
 ### 1e. Simple, unimplemented
 
