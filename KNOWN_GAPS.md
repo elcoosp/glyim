@@ -139,29 +139,35 @@ resolution.
 
 ### 1d. Iterator protocol — partial
 
-**Working:** `for i in 0usize..n` (a `Range<usize>`). Fixed by two changes
-(commit `2171bde9`): the for-loop `SwitchInt` now switches on the
-`Option`'s discriminant (it switched on the whole aggregate), and
-`Range<usize>` gained an `impl Iterator`.
+**Working — `for i in <int-range>`.** Both `for i in 0usize..n`
+(`Range<usize>`) and `for i in 0..5` (`Range<i32>`, the unsuffixed
+default) iterate correctly. Fixed by:
 
-**Still open — `for i in 0..5` (a `Range<i32>`).** Fails with
-`mismatched types: usize vs i32`. `0..5` is `Range<i32>` (the unsuffixed
-integer default), but the stdlib only implements `Iterator for
-Range<usize>`, so the for-loop's `Iterator::next` lookup binds the loop
-variable to `usize` and the range's `i32` bounds mismatch. Adding
-`impl Iterator for Range<i32>` does **not** fix it — the solver unifies
-`Range<?int>` against the `usize` impl first (`conflicting
-implementations`/wrong-variant). The correct fix is the `into_iter()`
-desugar: typeck's `For` arm (`check_expr.rs`) currently resolves
-`Iterator::next` on the *iterable* directly; it should resolve
-`IntoIterator::into_iter(iterable)` → `IntoIter`, then `Iterator::next` on
-that. That also unblocks the rest of the protocol.
+- commit `2171bde9`: the for-loop `SwitchInt` now switches on the
+  `Option`'s *discriminant* (it switched on the whole aggregate, which
+  codegen read as a struct where an `IntValue` was expected), and
+  `Range<usize>` gained an `impl Iterator`.
+- commit `49c276e4`: `Range<i32>` gained `Iterator` + `IntoIterator`
+  impls (`RangeIterI32`), declared *before* the `Range<usize>` impls so
+  the source-order impl scan binds an unresolved integer element to `i32`
+  (Rust's default) rather than `usize`.
 
-**Still open — slice iteration.** `slice::iter` / `iter_mut` →
-`no method 'iter' found`; `[T]::as_slice` on a bare array likewise. Needs
-the same `IntoIterator` wiring plus an `Iter`/`IntoIter` ADT for slices
-(the stdlib has `impl<'a, T> Iterator for Iter<'a, T>` in `iter.g`, but
-the for-loop path never reaches it without `into_iter`).
+Note: the commit message for `49c276e4` also describes an
+`IntoIterator::into_iter` desugar in the `For` arm, but that desugar was
+**not** actually wired in (the helper was added unused and later removed
+in `c8bbe21a`). The range cases work via the direct-`Iterator` path.
+
+**Still open — a real `into_iter` desugar + slice iteration.**
+`for x in &slice` / `for x in [1,2,3]` still fail. `&[T]` has an
+`IntoIterator` impl in `iter.g` (`Iter<'a, T>`), but the `For` arm
+resolves `Iterator::next` on the iterable directly, so it never reaches
+it; and a bare array `[T; N]` has no impl at all (needs an array→slice
+borrow coercion). The proper fix is the `into_iter()` desugar in
+`check_expr`'s `For` arm: resolve `IntoIterator::into_iter(iterable)` →
+`IntoIter`, then `Iterator::next` on that (falling back to direct `next`
+for iterables that only implement `Iterator`). A `cp check_expr.rs`
+backup + full differential is essential before/after, since every
+attempt so far regressed stdlib lowering.
 
 ### 1e. Simple, unimplemented
 
