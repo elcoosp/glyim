@@ -1,68 +1,90 @@
-# HANDOFF — session 12 (LLVM builtin dispatch) — COMPLETE
+# HANDOFF — session 12 (builtin dispatch + closures) — COMPLETE
 
-**HEAD**: `a5a7d72f`
-**Working tree**: clean (except this file until it is committed).
-**Matrix**: 4599/4599 workspace tests pass.
-**Differential**: **0 disagreements** (LLVM backend vs MIR interpreter,
-run-pass corpus). Session started at 4; ended at 0.
+**HEAD**: `cedf14ca`
+**Working tree**: clean.
+**Matrix**: 4599/4599 workspace tests pass (2 skipped).
+**Differential**: **0 disagreements** on the run-pass corpus
+(120 compared, 0 interp-only, 4 skipped = `// ignore` library fixtures).
+Session started at 4 disagreements; ends at 0.
 
 ---
 
-## 0. What landed
+## 0. What landed (in order)
 
 | Commit | Fix |
 |---|---|
-| `a5a7d72f` | Closure calls lowered inline; `zonk_closure_sigs` folds `Infer` out of closure signatures; `MirConstKind::Fn` falls back to `closure_sigs` when declaring a callee. |
-| (accumulated) | `Option`/`Result`/`Vec::push` inline builtin dispatch; receiver-inference fallback; dest-type override for `Infer` outputs; String/Vec layout fixes. |
+| `a5a7d72f` | Closure calls lowered inline; `zonk_closure_sigs`; `MirConstKind::Fn` falls back to `closure_sigs`. Plus the accumulated enum/`Vec` builtin work. |
+| `9766b87b` | `lower_body` shares closure param locals; `[T; N]::len` constant-folded; un-ignore 3 closure fixtures. |
+| `1921092d` | Closure value layout is `{fn_ptr, captures}`; `Place::ty` closure arm; captures read via projected places. Adds `closure_fnptr.g`. |
+| `cedf14ca` | `KNOWN_GAPS.md`: closures marked fixed; combinators still open. |
 
-The commit `a5a7d72f` is a single squash of everything that had piled
-up uncommitted across the session: the enum-payload builtins
-(`is_some`/`is_none`/`is_ok`/`is_err`/`unwrap`/`expect`/`unwrap_err`/
-`expect_err`/`unwrap_or`/`unwrap_or_default`), `Vec::push`, the
-receiver-inference fallback in `lower_call`, and the closure fixes.
+### The four closure bugs (all fixed)
 
-## 1. Environment gotchas (still true)
+1. **Signatures never zonked.** `closure_sigs` stored `Infer`-carrying
+   `FnSig`s; `zonk_bodies` didn't touch them → `fn_abi_of` ICE. Fixed by
+   `glyim-typeck::zonk::zonk_closure_sigs`.
+2. **Declared void.** `MirConstKind::Fn` looked up `fn_sigs` only, missing
+   `closure_sigs`, so closures got a placeholder `void` type. Fixed by the
+   fallback.
+3. **Param locals allocated twice.** `lower_closure` and `lower_body` each
+   allocated one → prologue wrote slot A, body read slot B. Fixed by sharing
+   via `local_var_map`.
+4. **No fn-pointer in the layout.** Only captures were counted, so a
+   non-capturing closure was zero-sized and stored through a null alloca
+   (SIGBUS in a `fn(..)` position). Fixed in `glyim-layout`, plus a
+   `Place::ty` closure arm and projected-place capture reads.
 
-- **`RUSTC_WRAPPER=kache`** — fine, leave it on. `touch` a source file
-  to force a rebuild if a change seems not to take.
-- **Read-only `.rmeta` in `target/`** — `chmod -R u+w target` fixes it.
-  Re-check after every failed build.
-- **No `timeout(1)` on macOS.**
+## 1. Process-leak hazard (READ THIS)
 
-## 2. Process-leak hazard (IMPORTANT)
+Running the differential via bare `cargo test` and then `kill -9`-ing the
+cargo parent **orphans its descendants** — the per-fixture `glyim-cli`
+compiles that spawn `cc`/`ld`. These accumulate and can OOM the machine.
 
-Running the differential via bare `cargo test` and then `kill -9`-ing
-the cargo parent **orphans its descendants** — the per-fixture
-`glyim-cli` compiles that spawn `cc`/`ld`. These accumulate and can OOM
-the machine. Two mitigations, both used successfully this session:
+Use the `/tmp` runners (recreate them if macOS pruned `/tmp`):
 
-- **Per-fixture**: `/tmp/run_fixture.py` — runs `glyim-cli --emit=exec`
-  on one `.g` file inside a `setsid` process group; on timeout it
-  `killpg`s the whole group. Never invoke `glyim-cli` in a shell loop.
-- **Full differential**: `/tmp/run_differential.py` — same technique,
-  but wrapping the whole `cargo test … differential` invocation with a
-  20-minute cap and `killpg` on timeout.
+- `/tmp/run_fixture.py <fixture.g> [--with-stdlib]` — one fixture, its own
+  `setsid` process group, `killpg` on timeout.
+- `/tmp/run_differential.py` — the whole differential, 20-min cap, `killpg`.
 
-Both scripts are on the machine but in `/tmp`, which macOS prunes —
-recreate them from the definitions below if missing.
+Both `setsid` the child so a timeout kills the **entire tree**, which a
+plain `kill -9 $pid` cannot do.
+
+## 2. Environment gotchas
+
+- `RUSTC_WRAPPER=kache` is fine — leave it on. `touch` a source file to
+  force a rebuild if a change seems not to take.
+- Read-only `.rmeta` in `target/` → `chmod -R u+w target`.
+- **Compile cache** can hide stale results: the CLI prints
+  `cache hit — skipping compilation` and skips typeck/codegen. Set
+  `GLYIM_CACHE_DIR=$(mktemp -d)` to force a fresh compile when probing.
+- No `timeout(1)` on macOS.
 
 ## 3. Debugging method that worked
 
-For an ICE inside `llvm_fn_type_from_sig_inner` / `fn_abi_of`:
+For an ICE in `fn_abi_of` / `llvm_fn_type_from_sig_inner`:
 
-1. Add a `std::env::var("GLYIM_TMP_W")`-gated probe at the panic site
-   that prints the offending `FnSig` (output + each input, with
-   `ty_kind`). This is far faster than guessing.
-2. `strings target/debug/glyim-cli | grep -c 'GLYIM_TMP_W'` before
-   trusting a probe's *absence* — 0 means the build is stale.
+1. Add a `std::env::var("GLYIM_TMP_W")`-gated probe at the panic site that
+   prints the `FnSig` (output + each input, with `ty_kind`). Far faster than
+   guessing.
+2. `strings target/debug/glyim-cli | grep -c 'GLYIM_TMP_W'` before trusting
+   a probe's *absence* — 0 means the build is stale.
 3. Remove the probe before committing.
 
-## 4. Remaining known issues (unchanged / not addressed this session)
+For closure bugs specifically, `glyim-cli --emit llvm-ir -o out.ll <fixture>`
+dumps the IR — the fastest way to see a wrong slot or a null-alloca store.
 
-- `probe_string_push_str` — verify it is still green (the `as_bytes`
-  shape was fixed in an earlier session).
-- Async / `block_on` codegen — documented in
-  `crates/glyim-test/Cargo.toml` as a known-broken path; not touched.
+## 4. Remaining known gaps (see `KNOWN_GAPS.md`)
+
+- **Closure-passing combinators** — `Option::map`, `Result::{map, map_err,
+  map_or}`, `Option::unwrap_or_else`. Neither backend implements them
+  (interp has no arms; codegen whitelist lacks them). A real feature on both
+  backends, not a one-liner.
+- **`Vec::pop().unwrap()` (KNOWN_GAPS 1f)** — the receiver is typed
+  `Vec<Error>`, so `pop`'s `Option<T>` payload never resolves. A typeck
+  inference-ordering issue, not codegen.
+- **`compare_exchange`** — needs `Result` aggregate construction + a
+  `glyim_atomic_usize_cas` helper.
+- **Async / `block_on`** — gated to Linux; not runnable on this host.
 
 ## 5. Resume
 
@@ -70,5 +92,6 @@ For an ICE inside `llvm_fn_type_from_sig_inner` / `fn_abi_of`:
 cd /Users/adm/Documents/Repos/glyim-v2
 chmod -R u+w target
 cargo build -p glyim-cli
-# recreate the runner scripts (see §2) if /tmp was pruned, then:
+# recreate /tmp/run_differential.py if needed, then:
 python3 /tmp/run_differential.py
+```
