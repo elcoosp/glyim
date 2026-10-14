@@ -150,13 +150,32 @@ resolution.
 | `slice::split_at` | undefined `__glyim_fn_9164` (returns a tuple of two fat pointers) |  **← fixed**
 | `String::from_utf8` | `ambiguous method 'len' found in multiple impls` (typeck, on the `Result` it returns) |
 
-### 1f. `Vec::pop` — inference ordering (category b)
+### 1f. `Vec::new()` element type never unified — inference ordering (category b)
 
-`v.pop()` alone compiles and runs. `v.pop().unwrap()` / `v.pop().is_some()`
-ICE with `fn_abi_of failed: UnknownType`, because the `Option<T>` payload
-stays an unresolved `Infer` when the result feeds another builtin. This is a
-typeck/monomorphization ordering issue, not codegen — the same class as the
-`MaybeUninit::<T>::new` bug fixed earlier (assoc-fn substs built empty).
+The root cause is upstream of `pop`. `let mut v = Vec::new(); v.push(5);`
+leaves `v` typed `Vec<Infer>` — the element type is **never unified with
+`i32`**. Evidence: the MIR for
+
+    fn main() -> i32 { let mut v = Vec::new(); v.push(5); let o = v.pop(); ... }
+
+prints every `Vec` local as `Adt1020<<error>>` and the `pop` result as
+`Adt1010<<error>>`. `Vec::new`'s registered output is `Vec<Param(0)>`; the
+`Param(0)` becomes a fresh inference var at the call site, but the later
+`v.push(5)` does not propagate `i32` back into it.
+
+Consequences:
+- `v.pop()` alone: the codegen `pop` arm bails (both the receiver's and the
+  destination's element types are non-concrete) and the call falls through to
+  `fn_abi_of` on `Option<Infer>` -> `UnknownType(Ty(22677))` ICE.
+- `v.pop().unwrap()`: the same ICE one step later.
+- `Vec::len()` after `push` works only because the `len` arm reads the
+  length word directly and never needs `T`.
+
+This is a typeck inference-ordering bug (the class the `MaybeUninit::new`
+fix addressed for associated functions), not an inline-lowering gap. The fix
+belongs in `check_expr`'s method-call path: when `push`'s element type is
+concrete and the receiver's element is still a fresh inference var, unify
+them. Out of scope for a codegen-only fix.
 
 ---
 
