@@ -70,13 +70,33 @@ Coverage: `behavior/closure_{bare,capture,inferred,no_args,fnptr}.g`.
 
 **Still open — closure-passing combinators.** `Option::map`,
 `Result::{map, map_err, map_or}`, `Option::unwrap_or_else`. Neither backend
-implements them: the interp has no `map`/`map_or`/`map_err` arms
-(`glyim-mir-interp` returns `Ok(None)` and falls through), and they are not
-in codegen's builtin whitelist, so the LLVM side emits an undefined
-`__glyim_fn_<id>` symbol (or, for `Option::map`, an aggregate-layout ICE on
-an unresolved `Infer` payload). These are a real feature to add on both
-backends (construct the result enum, invoke the passed closure, dispatch on
-the discriminant) — not a one-line builtin arm.
+implements them. This is a multi-layer feature, not a builtin arm.
+
+Diagnosis (verified by probe at the time of writing):
+
+1. `o.map(f)` resolves to `MethodDispatch::Static`, **not** `Builtin`. The
+   builtin fast-path gate in `resolve_method_call`
+   (`glyim-typeck/src/check_expr.rs`, the `is_builtin_adt` closure) lists
+   only `1020 | 1040 | 1050` (Vec / Box / String). `Option` (1010) and
+   `Result` (1011) are deliberately excluded.
+2. Simply widening `is_builtin_adt` to include `1010 | 1011` breaks the
+   stdlib: `Option`/`Result` also have *user* `impl` blocks in
+   `glyim-lang-core/lib/{option,result}.g`, and forcing the builtin table
+   first produces
+   `mismatched types: T vs <Self as Trait37>::Item` cascades (the generic
+   combinator impls in `iter.g` no longer agree with the builtin sigs).
+3. Even when dispatch reaches `try_builtin_method`, the closure argument
+   needs a `fn(T) -> U` expectation so `U` unifies. The mechanism exists
+   (`pending_closure_expectation`, set from the builtin sig's `inst_inputs`
+   in the `MethodCall` arg loop), but only fires for `MethodDispatch::Builtin`.
+
+So the fix is a real feature: decide how builtin `Option`/`Result` methods
+coexist with the stdlib's own impls (either drop the stdlib impls for the
+combinator methods, or make the builtin table the sole authority for them),
+then lower the combinators on both backends (codegen: construct the result
+enum + invoke the closure via the existing fn-pointer call path; interp: add
+the `map`/`map_or`/`map_err` arms). This is out of scope for a tail fix —
+it is its own work item.
 
 Remaining symptoms:
 
@@ -105,9 +125,11 @@ Three sub-items were fixed along the way (each its own commit):
    atomic call site failed type-check before reaching codegen.
 3. `glyim_atomic_u8_fetch_and` / `_fetch_or` runtime helpers added.
 
-**Still open:** `compare_exchange` (all three atomic types). Needs
-`Result` aggregate construction in codegen, plus a
-`glyim_atomic_usize_cas` runtime helper (only the `u8` CAS exists).
+**`compare_exchange` — DONE.** Lowered inline on both backends
+(commit `2c59c67f`): codegen builds `Result::Ok(prev)` / `Result::Err(prev)`
+from the CAS helper's return; the interp mutates in place on success.
+`glyim_atomic_usize_cas` added to the runtime. Fixtures:
+`behavior/atomic_{usize,bool}_compare_exchange*.g`.
 
 Mechanism note (kept from the earlier investigation, still true): the
 builtin method table **shadows** `sync.g`'s atomic impls, so do NOT try
