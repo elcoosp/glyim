@@ -1232,6 +1232,13 @@ impl TyCtxMut {
         self.fn_sigs.get(&def_id)
     }
 
+    /// Every registered function id. Used by `glyim-typeck::zonk::zonk_fn_sigs`
+    /// to fold inference variables out of builtin-method signatures that were
+    /// *re-registered* during body checking with unresolved `Infer` args.
+    pub fn fn_sig_ids(&self) -> Vec<FnDefId> {
+        self.fn_sigs.keys().copied().collect()
+    }
+
     /// Value type of a constant definition (mirrors `fn_sig` for consts).
     pub fn const_ty(&self, def_id: ConstDefId) -> Option<Ty> {
         self.const_tys.get(&def_id).copied()

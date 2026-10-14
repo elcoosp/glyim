@@ -697,6 +697,52 @@ fn walk_ty(ctx: &TyCtx, ty: Ty, f: &mut impl FnMut(Ty)) {
 /// never survives to codegen. Without this, `glyim-codegen-llvm`'s layout
 /// pass rejects the ADT with `fn_abi_of failed: UnknownType(Infer(Ty(_)))`.
 ///
+/// Fold inference variables out of every registered `fn_sigs` entry.
+///
+/// `try_builtin_method` re-registers a builtin method's signature with the
+/// receiver's substitution applied and any missing params replaced by fresh
+/// inference vars (`Vec::push` on `Vec<?T>` registers `fn(?T) -> ()`). Those
+/// vars are resolved during body checking, but the *signature* copy in
+/// `fn_sigs` keeps the raw `Infer`, so codegen's `fn_abi_of` panics with
+/// `UnknownType(Infer)`. `zonk_bodies` folds the THIR body but not this
+/// separate registry. Re-zonk every entry here, mirroring
+/// `zonk_closure_sigs`.
+pub fn zonk_fn_sigs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut) {
+    let view = ctx.freeze();
+    let ids = ctx.fn_sig_ids();
+    let mut updated: Vec<(glyim_core::def_id::FnDefId, glyim_type::FnSig)> =
+        Vec::with_capacity(ids.len());
+    for id in ids {
+        let Some(sig) = view.fn_sig(id).cloned() else {
+            continue;
+        };
+        let mut new_inputs: Vec<glyim_type::GenericArg> = Vec::new();
+        for arg in view.substitution_args(sig.inputs) {
+            match arg {
+                glyim_type::GenericArg::Ty(t) => {
+                    new_inputs.push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t)))
+                }
+                other => new_inputs.push(other.clone()),
+            }
+        }
+        let inputs = view.intern_substitution(new_inputs);
+        let output = zonk_ty(infer, &view, sig.output);
+        updated.push((
+            id,
+            glyim_type::FnSig {
+                inputs,
+                output,
+                c_variadic: sig.c_variadic,
+                unsafety: sig.unsafety,
+                abi: sig.abi,
+            },
+        ));
+    }
+    for (id, sig) in updated {
+        ctx.register_fn_sig(id, sig);
+    }
+}
+
 /// Like [`zonk_bodies`], this runs *after* obligation fulfillment — the
 /// Fold inference variables out of every registered closure signature.
 ///

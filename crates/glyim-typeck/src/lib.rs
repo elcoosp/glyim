@@ -1113,6 +1113,13 @@ pub fn typeck_crate(
     // with `UnknownType(Infer)`.
     zonk::zonk_closure_sigs(&infer, &mut ctx);
 
+    // Zonk registered function signatures. `try_builtin_method` re-registers
+    // a builtin method's instantiated `FnSig` with fresh inference vars for
+    // unresolved params; those are resolved during body checking but the
+    // signature copy in `fn_sigs` keeps the raw `Infer`, so codegen would
+    // panic with `UnknownType(Infer)`.
+    zonk::zonk_fn_sigs(&infer, &mut ctx);
+
     // 3. Obligation fulfillment
     let frozen_ctx = ctx.freeze();
 
