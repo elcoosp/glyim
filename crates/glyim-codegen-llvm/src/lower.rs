@@ -5179,13 +5179,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .build_bit_cast(vec_hdr, i8_ptr, "fu_base")
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu bitcast: {e:?}"))])?
                 .into_pointer_value();
+            // Byte-offset GEPs must use `i8` as the element type — using the
+            // pointer type here would advance by whole pointers (16 * 8 = 128
+            // bytes), reading the length word from out of bounds.
+            let i8_ty = self.context.i8_type();
             let ptr_ptr = unsafe {
-                self.builder.build_in_bounds_gep(i8_ptr, base_i8, &[i64_ty.const_zero()], "fu_pp")
+                self.builder.build_in_bounds_gep(i8_ty, base_i8, &[i64_ty.const_zero()], "fu_pp")
             }
             .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu gep0: {e:?}"))])?;
             let len_ptr = unsafe {
                 self.builder.build_in_bounds_gep(
-                    i8_ptr,
+                    i8_ty,
                     base_i8,
                     &[i64_ty.const_int(16, false)],
                     "fu_lp",

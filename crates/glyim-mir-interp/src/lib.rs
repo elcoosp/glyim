@@ -417,11 +417,12 @@ impl<'tcx> Interpreter<'tcx> {
             (1050, "from_utf8") => {
                 // `String::from_utf8(Vec<u8>) -> Result<String, Vec<u8>>`.
                 // The argument is a `Vec<u8>` modelled as
-                // `Aggregate([bytes, len])`; convert its byte payload to a
-                // `String` and validate UTF-8 (the interp always carries
-                // valid UTF-8, so the check is on the byte content).
+                // `Aggregate([buf, len])` with `buf = Aggregate([u8, …])`.
+                // Build the byte string from `buf`'s elements (NOT
+                // `byte_payload`, which would mis-read the length word as a
+                // repeat count for a `Vec`), validate, and tag the result.
                 let arg = args.first().cloned().unwrap_or(InterpValue::Unit);
-                let bytes = Self::byte_payload(&arg);
+                let bytes = Self::vec_u8_bytes(&arg);
                 if std::str::from_utf8(bytes.as_bytes()).is_ok() {
                     Ok(Some(InterpValue::Aggregate(vec![
                         InterpValue::Int(0),
@@ -999,6 +1000,35 @@ impl<'tcx> Interpreter<'tcx> {
             InterpValue::Uint(n) => "\u{0}".repeat((*n).min(16 * 1024 * 1024) as usize),
             _ => String::new(),
         }
+    }
+
+    /// Extract the byte content of a `Vec<u8>`-modelled value
+    /// (`Aggregate([buf, len])`, `buf = Aggregate([u8, …])`). Unlike
+    /// `byte_payload`, this reads the *elements*, not the length word.
+    fn vec_u8_bytes(v: &InterpValue) -> String {
+        if let InterpValue::Aggregate(fields) = v {
+            if let Some(buf) = fields.first() {
+                match buf {
+                    InterpValue::Aggregate(elems) => {
+                        let mut s = String::new();
+                        for e in elems {
+                            let b = match e {
+                                InterpValue::Uint(n) => *n as u32,
+                                InterpValue::Int(n) => (*n).max(0) as u32,
+                                _ => continue,
+                            };
+                            if let Some(c) = char::from_u32(b) {
+                                s.push(c);
+                            }
+                        }
+                        return s;
+                    }
+                    InterpValue::String(s) => return s.clone(),
+                    _ => {}
+                }
+            }
+        }
+        String::new()
     }
 
     /// T140-PATCHED-IO: dispatch an `extern "C"` FFI call by registered
