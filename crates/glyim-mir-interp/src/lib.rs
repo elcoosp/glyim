@@ -414,6 +414,26 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(v))
             }
+            (1050, "from_utf8") => {
+                // `String::from_utf8(Vec<u8>) -> Result<String, Vec<u8>>`.
+                // The argument is a `Vec<u8>` modelled as
+                // `Aggregate([bytes, len])`; convert its byte payload to a
+                // `String` and validate UTF-8 (the interp always carries
+                // valid UTF-8, so the check is on the byte content).
+                let arg = args.first().cloned().unwrap_or(InterpValue::Unit);
+                let bytes = Self::byte_payload(&arg);
+                if std::str::from_utf8(bytes.as_bytes()).is_ok() {
+                    Ok(Some(InterpValue::Aggregate(vec![
+                        InterpValue::Int(0),
+                        InterpValue::String(bytes),
+                    ])))
+                } else {
+                    Ok(Some(InterpValue::Aggregate(vec![
+                        InterpValue::Int(1),
+                        arg,
+                    ])))
+                }
+            }
             (1050, "from") | (1050, "from_utf8_lossy") => {
                 // `String::from(&str)`: the argument is the string view.
                 let s = args

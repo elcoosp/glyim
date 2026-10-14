@@ -1992,6 +1992,24 @@ pub extern "C" fn glyim_condvar_notify_all(id: usize) -> i32 {
     }
 }
 
+/// Validate that `len` bytes at `ptr` are well-formed UTF-8. Returns 1 if
+/// valid, 0 otherwise (or if `ptr` is null with a nonzero length). Used by
+/// `String::from_utf8`'s inline lowering.
+///
+/// # Safety
+/// `ptr` must be valid for `len` bytes (may be null when `len == 0`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_str_is_utf8(ptr: *const u8, len: usize) -> i32 {
+    if len == 0 {
+        return 1;
+    }
+    if ptr.is_null() {
+        return 0;
+    }
+    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+    i32::from(std::str::from_utf8(slice).is_ok())
+}
+
 /// LSP/format FFI: allocate a `{ptr, len}` String from raw bytes.
 ///
 /// Writes 16 bytes (pointer then length, both native-endian) to `out`.

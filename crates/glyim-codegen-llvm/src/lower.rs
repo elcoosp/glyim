@@ -3430,6 +3430,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "as_slice"
                 | "as_ref"
                 | "from_utf8_lossy"
+                | "from_utf8"
                 | "capacity"
                 | "set_len"
                 | "truncate"
@@ -5147,6 +5148,159 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     ))]
                 })?;
             }
+            return Ok(true);
+        }
+
+        // BC-STRING-FROM-UTF8: `String::from_utf8(Vec<u8>)
+        // -> Result<String, Vec<u8>>`. Validate the incoming bytes with the
+        // runtime UTF-8 checker; on success build `Result::Ok(String)`
+        // (variant 0), else `Result::Err(the original Vec<u8>)` (variant 1).
+        // Gated on String's AdtId (1050). The receiver here is the *argument*
+        // (`args[0]`), a `Vec<u8>` (`{ptr, cap, len}`).
+        if method == "from_utf8" && _recv_adt.to_raw() == 1050 {
+            let Some(vec_recv) = args.first() else {
+                return Ok(false);
+            };
+            let vec_val = self.lower_operand(vec_recv)?;
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let i64_ty = self.llvm_int_type(64);
+            // Read ptr (word 0) and len (word 2) out of the Vec header. The
+            // Vec value is an opaque-sized struct; go through its bytes.
+            let vec_hdr = if vec_val.is_struct_value() {
+                let Some(Operand::Copy(p) | Operand::Move(p)) = Some(vec_recv) else {
+                    return Ok(false);
+                };
+                self.place_ptr(p)?
+            } else {
+                return Ok(false);
+            };
+            let base_i8 = self
+                .builder
+                .build_bit_cast(vec_hdr, i8_ptr, "fu_base")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu bitcast: {e:?}"))])?
+                .into_pointer_value();
+            let ptr_ptr = unsafe {
+                self.builder.build_in_bounds_gep(i8_ptr, base_i8, &[i64_ty.const_zero()], "fu_pp")
+            }
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu gep0: {e:?}"))])?;
+            let len_ptr = unsafe {
+                self.builder.build_in_bounds_gep(
+                    i8_ptr,
+                    base_i8,
+                    &[i64_ty.const_int(16, false)],
+                    "fu_lp",
+                )
+            }
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu gep16: {e:?}"))])?;
+            let data_ptr = self
+                .builder
+                .build_load(i8_ptr, ptr_ptr, "fu_ptr")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu load ptr: {e:?}"))])?
+                .into_pointer_value();
+            let data_len = self
+                .builder
+                .build_load(i64_ty, len_ptr, "fu_len")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu load len: {e:?}"))])?
+                .into_int_value();
+            let check = self
+                .module
+                .get_function("glyim_str_is_utf8")
+                .unwrap_or_else(|| {
+                    let ft = self
+                        .context
+                        .i32_type()
+                        .fn_type(&[i8_ptr.into(), i64_ty.into()], false);
+                    self.module.add_function("glyim_str_is_utf8", ft, None)
+                });
+            let ok_i32 = self
+                .builder
+                .build_call(check, &[data_ptr.into(), data_len.into()], "fu_chk")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu chk: {e:?}"))])?
+                .try_as_basic_value()
+                .basic()
+                .ok_or_else(|| vec![GlyimDiagnostic::internal_error("utf8 check void")])?;
+            let is_ok = self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    ok_i32.into_int_value(),
+                    self.context.i32_type().const_zero(),
+                    "fu_isok",
+                )
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu cmp: {e:?}"))])?;
+            let Some(current_fn) = self
+                .builder
+                .get_insert_block()
+                .and_then(|b| b.get_parent())
+            else {
+                return Err(vec![GlyimDiagnostic::internal_error("fu: no fn")]);
+            };
+            let ok_bb = self.context.append_basic_block(current_fn, "fu_ok");
+            let err_bb = self.context.append_basic_block(current_fn, "fu_err");
+            let Some(target_idx) = target else {
+                return Ok(false);
+            };
+            let target_bb = *self.bb_map.get(target_idx).expect("fu target");
+            self.builder
+                .build_conditional_branch(is_ok, ok_bb, err_bb)
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu br: {e:?}"))])?;
+
+            // --- Ok branch: build a String header from the bytes.
+            self.builder.position_at_end(ok_bb);
+            // The Ok payload type is `dest_ty`'s variant-0 field 0 (`String`).
+            let ok_ty = match self.ty_ctx.ty_kind(dest_ty) {
+                TyKind::Adt(_, s) => self
+                    .ty_ctx
+                    .substitution_args(*s)
+                    .first()
+                    .and_then(|a| match a {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    }),
+                _ => None,
+            };
+            let Some(ok_ty) = ok_ty else {
+                return Ok(false);
+            };
+            let ok_llvm = self.llvm_type_for_ty(ok_ty)?;
+            let str_tmp = self
+                .builder
+                .build_alloca(ok_llvm, "fu_str")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu str alloca: {e:?}"))])?;
+            let mkstr = self.declare_void_helper(
+                "glyim_string_from_bytes",
+                &[i8_ptr.into(), i64_ty.into(), i8_ptr.into()],
+            );
+            self.builder
+                .build_call(
+                    mkstr,
+                    &[data_ptr.into(), data_len.into(), str_tmp.into()],
+                    "fu_mk",
+                )
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu mk: {e:?}"))])?;
+            let str_val = self
+                .builder
+                .build_load(ok_llvm, str_tmp, "fu_strv")
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu strload: {e:?}"))])?;
+            let ok_agg =
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[str_val])?;
+            self.builder
+                .build_store(dest_ptr, ok_agg)
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu ok store: {e:?}"))])?;
+            self.builder
+                .build_unconditional_branch(target_bb)
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu ok br: {e:?}"))])?;
+
+            // --- Err branch: `Result::Err(the original Vec<u8>)`.
+            self.builder.position_at_end(err_bb);
+            let err_agg =
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(1)), &[vec_val])?;
+            self.builder
+                .build_store(dest_ptr, err_agg)
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu err store: {e:?}"))])?;
+            self.builder
+                .build_unconditional_branch(target_bb)
+                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu err br: {e:?}"))])?;
             return Ok(true);
         }
 
