@@ -611,7 +611,31 @@ impl<'a> FnCtxt<'a> {
                         std::collections::HashMap::new();
                     if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
                         for (i, a) in self.ctx.substitution_args(*s).iter().enumerate() {
-                            subst.insert(i as u32, a.clone());
+                            let concrete = match a {
+                                GenericArg::Ty(t) => !matches!(
+                                    self.ctx.ty_kind(*t),
+                                    TyKind::Param(_) | TyKind::Infer(_) | TyKind::Error
+                                ),
+                                _ => true,
+                            };
+                            if concrete {
+                                subst.insert(i as u32, a.clone());
+                            }
+                        }
+                    }
+                    let n_params = self
+                        .ctx
+                        .adt_def(match self.ctx.ty_kind(adt_ty) {
+                            glyim_type::TyKind::Adt(id, _) => *id,
+                            _ => adt_id,
+                        })
+                        .map(|d| d.generic_params.len())
+                        .unwrap_or(0);
+                    for i in 0..(n_params as u32) {
+                        if let std::collections::hash_map::Entry::Vacant(e) = subst.entry(i) {
+                            let v = self.infer.new_ty_var(self.ctx);
+                            let fresh = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
+                            e.insert(GenericArg::Ty(fresh));
                         }
                     }
                     let output = self.ctx.subst_ty(sig.output, &subst);
