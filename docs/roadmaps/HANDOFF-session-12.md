@@ -1,6 +1,6 @@
 # HANDOFF — session 12 (builtin dispatch + closures) — COMPLETE
 
-**HEAD**: `cedf14ca`
+**HEAD**: `595abdc3`
 **Working tree**: clean.
 **Matrix**: 4599/4599 workspace tests pass (2 skipped).
 **Differential**: **0 disagreements** on the run-pass corpus
