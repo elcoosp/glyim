@@ -171,11 +171,23 @@ Consequences:
 - `Vec::len()` after `push` works only because the `len` arm reads the
   length word directly and never needs `T`.
 
+Precise blocker (found by probe): in the method-arg loop of `check_expr`,
+`v.push(5)` sees
+
+    arg[0] method=push  a_ty=Infer(Int(IntVar(240)))  expected=Infer(Ty(TyVar(_)))
+
+— the argument is an **int** inference var (the unsuffixed `5`), the
+expected (receiver element) is a **type** inference var. `unify` cannot
+connect an `InferVar::Int` to an `InferVar::Ty`, so `T` stays unresolved.
+A correct fix has to give `Vec::new()`'s element var the right *kind* — or
+unify the integer literal's default (`i32`) into it — which is a change to
+the inference engine's var representation, not a local patch. The
+`Vec::len()`-only fixtures pass because that arm reads the length word and
+never needs `T`.
+
 This is a typeck inference-ordering bug (the class the `MaybeUninit::new`
-fix addressed for associated functions), not an inline-lowering gap. The fix
-belongs in `check_expr`'s method-call path: when `push`'s element type is
-concrete and the receiver's element is still a fresh inference var, unify
-them. Out of scope for a codegen-only fix.
+fix addressed for associated functions), not an inline-lowering gap. Out of
+scope for a codegen-only fix.
 
 ---
 
