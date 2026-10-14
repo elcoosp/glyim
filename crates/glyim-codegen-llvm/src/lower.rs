@@ -5378,6 +5378,92 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             return Ok(true);
         }
 
+        // `[T; N]::len()` / `[T; N]::is_empty()` — a fixed-size array's length
+        // is known at compile time, so emit the constant `N` (or `N == 0`)
+        // directly. The method resolves against `Slice::len` (adt 1060) via
+        // array-to-slice autoderef, but the receiver's *static* type is the
+        // array, and by the time we get the operand value it is an array
+        // (`[N x T]`), not a fat pointer — the fat-pointer arm below would
+        // bail and the call would fall through to an undefined
+        // `__glyim_fn_<slice-len>` symbol.
+        if matches!(method.as_str(), "len" | "is_empty")
+            && let Some(arr_operand) = args.first()
+            && let TyKind::Array(_, count) = self.ty_ctx.ty_kind(self.operand_ty(arr_operand))
+        {
+            let n: u64 = match &count.kind {
+                ConstKind::Uint(n) => *n as u64,
+                ConstKind::Int(n) => (*n).max(0) as u64,
+                _ => 0,
+            };
+            let stored: BasicValueEnum = if method == "is_empty" {
+                let is_empty = self
+                    .llvm_int_type(1)
+                    .const_int((n == 0) as u64, false);
+                if dest_llvm_ty.is_int_type() && dest_llvm_ty.into_int_type().get_bit_width() == 1
+                {
+                    is_empty.into()
+                } else if dest_llvm_ty.is_int_type() {
+                    self.builder
+                        .build_int_z_extend(
+                            is_empty,
+                            dest_llvm_ty.into_int_type(),
+                            "arr_is_empty_ext",
+                        )
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "array is_empty ext: {e:?}"
+                            ))]
+                        })?
+                        .into()
+                } else {
+                    return Ok(false);
+                }
+            } else if dest_llvm_ty.is_int_type() {
+                let dest_int = dest_llvm_ty.into_int_type();
+                let bits = dest_int.get_bit_width();
+                let nv = self.llvm_int_type(64).const_int(n, false);
+                if bits == 64 {
+                    nv.into()
+                } else if bits < 64 {
+                    self.builder
+                        .build_int_truncate(nv, dest_int, "arr_len_trunc")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "array len trunc: {e:?}"
+                            ))]
+                        })?
+                        .into()
+                } else {
+                    self.builder
+                        .build_int_z_extend(nv, dest_int, "arr_len_zext")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "array len zext: {e:?}"
+                            ))]
+                        })?
+                        .into()
+                }
+            } else {
+                return Ok(false);
+            };
+            self.builder.build_store(dest_ptr, stored).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "array len store: {e:?}"
+                ))]
+            })?;
+            if let Some(t) = target {
+                let tb = *self.bb_map.get(t).expect("array len target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "array len br: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+
         // `len` / `is_empty` on a fat pointer `{data_ptr, len}` extract field
         // 1 (the length). `is_empty` further compares it to 0.
         if matches!(method.as_str(), "len" | "is_empty") {

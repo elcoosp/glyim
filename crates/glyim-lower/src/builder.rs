@@ -152,7 +152,21 @@ impl<'a> MirBuilder<'a> {
         self.current_block = Some(entry);
 
         for param in &thir.params {
-            let local = self.alloc_local(param.ty, Mutability::Not, param.span);
+            // For a closure, `lower_closure` has already allocated a local for
+            // this parameter and recorded it under `param.local` in
+            // `local_var_map` (so the closure-body prologue, which stores the
+            // incoming LLVM argument into locals `1..=arg_count`, lands in the
+            // SAME slot the body will read). Allocating a second local here and
+            // rebinding only `param.pat.var_id` produced a body that stored
+            // into one slot (the prologue's) and read from another (the body's)
+            // — every parametered closure read uninitialized stack. Reuse the
+            // existing local when present; for an ordinary function the map has
+            // no entry for `param.local`, so this allocates normally.
+            let local = if let Some(&existing) = self.local_var_map.get(&param.local) {
+                existing
+            } else {
+                self.alloc_local(param.ty, Mutability::Not, param.span)
+            };
             self.push_stmt(glyim_mir::StatementKind::StorageLive(local), param.span);
             match &param.pat.kind {
                 thir::PatternKind::Binding {
@@ -163,12 +177,18 @@ impl<'a> MirBuilder<'a> {
                 } => {
                     self.var_map.insert(*name, local);
                     self.local_var_map.insert(*var_id, local);
+                    // `param.local` and `param.pat`'s `var_id` may be distinct
+                    // ids for the same parameter; make both resolve to `local`.
+                    self.local_var_map.insert(param.local, local);
                     if let Some(sub) = subpattern {
                         self.bind_pattern(sub, Some(local), param.span);
                     }
                 }
-                thir::PatternKind::Wild => {}
+                thir::PatternKind::Wild => {
+                    self.local_var_map.insert(param.local, local);
+                }
                 _ => {
+                    self.local_var_map.insert(param.local, local);
                     self.bind_pattern(&param.pat, Some(local), param.span);
                 }
             }

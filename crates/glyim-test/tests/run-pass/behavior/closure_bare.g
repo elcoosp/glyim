@@ -1,6 +1,6 @@
-// ignore
-// LLVM backend: Layout error (UnknownType) on closure sig.
-// Interp: exit 101 on parametered closures. See docs/design/closures.md.
+// Closures now lower inline: the closure body is emitted as
+// `__glyim_fn_{closure_id}` with the parameter locals shared between the
+// prologue and the body, and the call site passes the incoming argument.
 // test-mode: run-pass
 // exit-code: 6
 // compile-flags: --with-stdlib
