@@ -38,28 +38,47 @@ as_slice, as_ref}`, `String::{clear, from, from_utf8_lossy, into_bytes}`,
 `str::clear`, `slice::to_vec`. Fixtures in
 `crates/glyim-test/tests/run-pass/behavior/`.
 
-### 1b. Blocked — closures are broken in the LLVM backend
+### 1b. Closures — FIXED; combinators still open
 
-The closure-passing builtins (`Option::map`, `Result::{map,map_err,map_or}`,
-`Option::unwrap_or_else`) cannot be fixed as builtin arms: they are blocked
-on a more fundamental gap. **Closures do not work in the LLVM backend at
-all.**
+Closures now work end-to-end on the LLVM backend. The original breakage had
+four independent causes, all now fixed:
 
-Verified this session:
+1. **Closure signatures were never zonked.** `TyCtxMut::closure_sigs`
+   stored each `FnSig` as registered during typeck, when the body's
+   result/parameter types could still be raw `Infer` vars. `zonk_bodies`
+   folded the THIR body but not this separate table, so `fn_abi_of`
+   panicked with `UnknownType(Infer)`. Fixed by
+   `glyim-typeck::zonk::zonk_closure_sigs`, called from `typeck_crate`.
+2. **Closures were declared with a void type.** `MirConstKind::Fn`'s
+   forward-declaration arm looked the callee up in `fn_sigs` only;
+   closure signatures live in `closure_sigs`, so every closure got a
+   placeholder `void` type that `lower_body` then reused. Fixed by
+   falling back to `closure_sigs`.
+3. **Closure parameter locals were allocated twice** — once by
+   `lower_closure`, once by `MirBuilder::lower_body` — so the prologue
+   stored the incoming argument into one slot and the body read another
+   (uninitialized stack). Fixed by sharing the local via
+   `local_var_map`.
+4. **Closure value layout had no fn-pointer field.** Only captures were
+   counted, so a non-capturing closure was zero-sized and its aggregate
+   store went through a null alloca; a closure in a `fn(..)`-typed
+   formal position SIGBUS'd. Fixed by making `TyKind::Closure` layout
+   `{ fn_ptr, captures... }`, adding a `Place::ty` arm for closure
+   `Field` projections, and reading captures via projected places.
 
-| Program | Interpreter | LLVM backend |
-|---|---|---|
-| `let f = \|x: i32\| x + 1; f(5)` | works (exit 6) | `Layout error: UnknownType(Ty(22677))` |
-| `fn apply(f: fn(i32) -> i32, x: i32) -> i32` + `apply(\|x\| x+1, 5)` | — | compiles + links, then **SIGBUS** at runtime |
+Coverage: `behavior/closure_{bare,capture,inferred,no_args,fnptr}.g`.
 
-The interpreter handles closures; the LLVM backend does not.
+**Still open — closure-passing combinators.** `Option::map`,
+`Result::{map, map_err, map_or}`, `Option::unwrap_or_else`. Neither backend
+implements them: the interp has no `map`/`map_or`/`map_err` arms
+(`glyim-mir-interp` returns `Ok(None)` and falls through), and they are not
+in codegen's builtin whitelist, so the LLVM side emits an undefined
+`__glyim_fn_<id>` symbol (or, for `Option::map`, an aggregate-layout ICE on
+an unresolved `Infer` payload). These are a real feature to add on both
+backends (construct the result enum, invoke the passed closure, dispatch on
+the discriminant) — not a one-line builtin arm.
 
-Why this was never noticed: **the test tree has zero closure coverage.**
-No fixture in `run-pass/`, `ui/`, or `no-ice/` uses closure syntax
-(`= |x| …`). So the entire closure subsystem is untested on the LLVM side.
-
-The builtin-arm symptoms observed for the closure-passing methods are
-downstream of this:
+Remaining symptoms:
 
 | Method | Symptom |
 |---|---|
@@ -67,23 +86,6 @@ downstream of this:
 | `Result::map` | same class |
 | `Result::map_err` | `fn_abi_of failed: UnknownType(Ty(169))` |
 | `Result::map_or` | undefined `__glyim_fn_9122` |
-
-**Do not** attempt the builtin arms first. The prerequisite is making
-closures work on the LLVM backend at all:
-
-1. Add closure fixtures to the corpus (currently zero) — start with the two
-   verified-failing cases above. This is the smallest useful first step and
-   would surface the SIGBUS in CI.
-2. Diagnose `UnknownType(Ty(22677))` in `layout_of` for a closure value.
-   Likely the closure's ADT type is registered in the type arena but not
-   with the layout computer, or a closure-signature type is left
-   un-substituted.
-3. Diagnose the SIGBUS on the `fn(i32)->i32`-parameter path. This one
-   compiles and links, so it is a runtime-ABI bug (calling convention or
-   capture-arg layout), not a missing-lowering bug.
-
-Only once a bare closure call works end-to-end does an `Option::map` arm
-become meaningful.
 
 ### 1c. Atomics — mostly done
 
