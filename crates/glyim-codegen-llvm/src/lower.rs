@@ -6346,19 +6346,33 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let capture_count = (fn_sig.inputs.len() as usize) - args.len();
                 let fn_name = format!("__glyim_fn_{}", closure_id.to_raw());
                 let direct_fn_val = self.module.get_function(&fn_name);
-                let func_val = self.lower_operand(func)?;
-                let struct_val = func_val.into_struct_value();
+                // The closure value is `{ fn_ptr, captures... }` — field 0 is
+                // the code pointer, fields 1..N the captures (see
+                // `lower_closure`). The closure's LLVM type is an
+                // *opaque-sized* struct (a single `{[K x i64]}` field), not a
+                // real multi-field struct, so `build_extract_value` on index
+                // >= 1 is out of range. Read each capture through a projected
+                // `Field` place instead: `place_ptr`'s `Field` arm uses the
+                // same per-field byte offsets `build_layout_aggregate` writes
+                // through, so writer and reader agree regardless of the
+                // opaque LLVM type.
+                let base_place = match func {
+                    Operand::Copy(p) | Operand::Move(p) => p.clone(),
+                    Operand::Constant(_) => {
+                        return Err(vec![GlyimDiagnostic::internal_error(
+                            "closure call operand is not a place",
+                        )]);
+                    }
+                };
                 let mut captures: Vec<BasicValueEnum<'ctx>> = Vec::new();
                 for i in 0..capture_count {
-                    let field_val = self
-                        .builder
-                        .build_extract_value(struct_val, i as u32, "capture")
-                        .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "extract closure capture failed: {:?}",
-                                e
-                            ))]
-                        })?;
+                    let mut proj = base_place.projection.to_vec();
+                    proj.push(ProjectionElem::Field(FieldIdx::from_raw((i + 1) as u32)));
+                    let cap_place = Place {
+                        local: base_place.local,
+                        projection: proj.into_boxed_slice(),
+                    };
+                    let field_val = self.lower_operand(&Operand::Copy(cap_place))?;
                     captures.push(field_val);
                 }
                 (fn_sig, direct_fn_val, Some(captures))

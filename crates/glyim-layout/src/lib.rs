@@ -1043,27 +1043,35 @@ impl SimpleLayoutComputer<'_> {
                 return Err(LayoutError::UnknownType(ty));
             }
             TyKind::Closure(_, substs) => {
+                // A closure value is `{ fn_ptr, captures... }`. The MIR
+                // builder's `Rvalue::Aggregate(Closure(..), operands)`
+                // puts the function pointer in operand 0, followed by one
+                // operand per captured variable (see
+                // `glyim-lower/src/builder.rs::lower_closure`). The layout
+                // must mirror that operand order: field 0 is the
+                // pointer-sized code pointer, fields 1..N are the captures.
+                // Previously only the captures were counted, so a
+                // non-capturing closure got `Layout::unit()` and its value
+                // was treated as zero-sized — the aggregate store then went
+                // through a null alloca (SIGBUS).
+                let ptr_size = Size::bytes(self.target.pointer_size());
+                let ptr_align = Align::from_bytes(self.target.pointer_align());
                 let args = self.ctx.substitution_args(*substs);
-                if args.is_empty() {
-                    return Ok(Layout::unit());
-                }
-                let mut field_layouts = Vec::with_capacity(args.len());
-                for arg in args {
-                    if let glyim_type::GenericArg::Ty(t) = arg {
-                        field_layouts.push(self.layout_of(*t)?);
-                    }
-                }
-                if field_layouts.is_empty() {
-                    return Ok(Layout::unit());
-                }
                 let mut size = Size::ZERO;
                 let mut align = Align::ONE;
                 let mut offsets = glyim_core::arena::IndexVec::new();
-                for layout in &field_layouts {
-                    let offset = size.align_to(layout.align);
-                    offsets.push(offset);
-                    size = offset + layout.size;
-                    align = align.max(layout.align);
+                let off0 = size.align_to(ptr_align);
+                offsets.push(off0);
+                size = off0 + ptr_size;
+                align = align.max(ptr_align);
+                for arg in args {
+                    if let glyim_type::GenericArg::Ty(t) = arg {
+                        let l = self.layout_of(*t)?;
+                        let offset = size.align_to(l.align);
+                        offsets.push(offset);
+                        size = offset + l.size;
+                        align = align.max(l.align);
+                    }
                 }
                 size = size.align_to(align);
                 Layout {

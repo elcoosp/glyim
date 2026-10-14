@@ -197,6 +197,36 @@ impl Place {
                     // `lower_dynamic_range_slice` derefs a `&[T]` to `[T]` and
                     // then projects `Field(0)`.
                     TyKind::Slice(_) | TyKind::String => Ty::USIZE,
+                    // A closure value is `{ fn_ptr, captures... }`: field 0
+                    // is the pointer-sized code pointer, fields 1..N are the
+                    // captured variables in `substs` order (see
+                    // `glyim-lower/src/builder.rs::lower_closure`, which
+                    // builds the aggregate as `[fn_operand, capture_0, ..]`).
+                    // Codegen reads a capture via `Field(1 + i)`; without
+                    // this arm `Place::ty` returned `Error` and codegen
+                    // panicked with "Attempted to lower TyKind::Error".
+                    TyKind::Closure(_closure_id, substs) => {
+                        if idx.to_raw() == 0 {
+                            // The code pointer; pointer-sized. Callers that
+                            // read it go through the function-pointer path,
+                            // not `lower_operand`, so `USIZE` is only ever
+                            // used for its size here.
+                            Ty::USIZE
+                        } else {
+                            let args = ctx.substitution_args(*substs);
+                            match args.get((idx.to_raw() - 1) as usize) {
+                                Some(GenericArg::Ty(t)) => *t,
+                                _ => {
+                                    tracing::error!(
+                                        "Place::ty(): Field({}) out of bounds for closure with {} captures",
+                                        idx.to_raw(),
+                                        args.len()
+                                    );
+                                    ctx.error_ty()
+                                }
+                            }
+                        }
+                    }
                     TyKind::Tuple(substs) => {
                         let args = ctx.substitution_args(*substs);
                         if let Some(GenericArg::Ty(field_ty)) = args.get(idx.to_raw() as usize) {
