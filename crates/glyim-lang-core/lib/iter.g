@@ -352,6 +352,46 @@ impl<'a, T> Iterator for Iter<'a, T> {
     }
 }
 
+/// Iterator for `Range<i32>` — the type `0..5` (unsuffixed bounds) produces.
+/// Declared before the `Range<usize>` impls so the trait-method scan, which
+/// walks impls in source order, binds an *unresolved* integer range element to
+/// `i32` (Rust's default) rather than `usize`.
+struct RangeIterI32 {
+    range: Range<i32>,
+}
+
+impl Iterator for RangeIterI32 {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        if self.range.start < self.range.end {
+            let v = self.range.start;
+            self.range.start = self.range.start + 1;
+            Option::Some(v)
+        } else {
+            Option::None
+        }
+    }
+}
+
+impl IntoIterator for Range<i32> {
+    type Item = i32;
+    type IntoIter = RangeIterI32;
+    fn into_iter(self) -> RangeIterI32 { RangeIterI32 { range: self } }
+}
+
+impl Iterator for Range<i32> {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        if self.start < self.end {
+            let v = self.start;
+            self.start = self.start + 1;
+            Option::Some(v)
+        } else {
+            Option::None
+        }
+    }
+}
+
 /// IntoIterator for Range<usize>
 struct RangeIter {
     range: Range<usize>,

@@ -3653,6 +3653,45 @@ impl<'a> FnCtxt<'a> {
     /// trait matches `trait_def_id` and whose `Self` type unifies with the
     /// receiver (with autoref/auto-deref, mirroring `resolve_method_call`),
     /// and returns that impl method's `FnDefId`.
+    /// Resolve `Iterator::next` for a for-loop iterable of type `iter_ty`.
+    /// Returns the info the MIR lowering needs, or `None` if `iter_ty` has no
+    /// `Iterator` impl.
+    fn resolve_for_next(&mut self, iter_ty: Ty, span: Span) -> Option<thir::ForIteratorNext> {
+        let iterator_name = self.ctx.resolver().intern("Iterator");
+        let iterator_path = glyim_hir::Path {
+            segments: vec![glyim_hir::PathSegment {
+                name: iterator_name,
+                generic_args: None,
+            }],
+            kind: glyim_core::path::PathKind::Plain,
+        };
+        let next_name = self.ctx.resolver().intern("next");
+        let trait_def_id = crate::tyconv::resolve_path_to_trait_def_id(
+            self.def_map,
+            self.ctx,
+            &iterator_path,
+            span,
+        )?;
+        let fn_def_id = self.resolve_trait_method_fn(iter_ty, trait_def_id, next_name, span)?;
+        let option_ty = self
+            .ctx
+            .fn_sig(fn_def_id)
+            .map(|s| s.output)
+            .unwrap_or_else(|| self.ctx.error_ty());
+        let ref_iter_ty = self.ctx.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
+        let fn_substs = self.ctx.intern_substitution(vec![]);
+        let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
+        let discr_ty = self.ctx.mk_ty(TyKind::Uint(UintTy::U8));
+        Some(thir::ForIteratorNext {
+            fn_def_id,
+            fn_substs,
+            option_ty,
+            discr_ty,
+            ref_iter_ty,
+            fn_ty,
+        })
+    }
+
     fn resolve_trait_method_fn(
         &mut self,
         recv_ty: Ty,
