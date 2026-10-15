@@ -3212,6 +3212,18 @@ impl<'a> FnCtxt<'a> {
                         this.diagnostics.truncate(diag_len);
                         continue;
                     }
+                    // Track whether this impl actually contributed a
+                    // candidate. `unify(step_ty, impl_self_ty)` above binds
+                    // side effects (e.g. `impl<T> Option<Option<T>>`'s
+                    // `unify(Adt(1010, [X]), Adt(1010, [Adt(1010, [T])]))`
+                    // binds `X := Adt(1010, [T])`). If the impl has no
+                    // method of the requested name (`flatten` when we asked
+                    // for `unwrap`), the loop pushes nothing — but the
+                    // binding would otherwise persist, orphaning X's real
+                    // payload type and later surfacing as
+                    // `Adt1010<?ty> vs i32`. Roll back unless a candidate
+                    // is actually pushed.
+                    let pushed_before = found.len();
                     for method in &impl_item.methods {
                         if method.name == method_name {
                             // Script 317: `param_map` currently holds only the
@@ -3299,6 +3311,19 @@ impl<'a> FnCtxt<'a> {
                             }
                             found.push((impl_self_ty, return_ty, dispatch));
                         }
+                    }
+                    // If this impl matched the receiver's self-type but had
+                    // no method of the requested name, discard the unify
+                    // bindings it installed — otherwise they leak. Every
+                    // `impl<T> Option<T>` visited for a call to a name it
+                    // doesn't define would otherwise leave
+                    // `X := <that impl's T>` behind (e.g.
+                    // `impl<T> Option<Option<T>>` visited for `.unwrap()`
+                    // binds the receiver's payload var to a nested Option),
+                    // orphaning the real payload type.
+                    if found.len() == pushed_before {
+                        this.infer.rollback_to(inf_snap);
+                        this.diagnostics.truncate(diag_len);
                     }
                 }
             }
