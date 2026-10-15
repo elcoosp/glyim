@@ -1066,12 +1066,33 @@ impl<'a> FnCtxt<'a> {
                     .map(|(l, _)| l.to_raw())
                     .unwrap_or_else(|| adt_id.to_raw()),
             );
-            let field_tys: Vec<Ty> = self
+            // Substitute the variant's DECLARED field types (which carry
+            // the enum's rigid `Param(i)`) through the SAME fresh vars
+            // `substs`/`enum_ty` above use. Registering the raw
+            // `Param(0)` input alongside an `Adt(id, [Infer(X)])` output
+            // leaves the input and output referencing DIFFERENT vars: the
+            // arg-unify records a subst for the rigid `Param`, but the
+            // output's `X` is never bound, so `let b = Some(8)` declares
+            // `b` as `Adt1010<<error>>`. Sharing the vars makes the
+            // registration idempotent with `check_path`'s (which already
+            // substitutes) and stops this path from clobbering it.
+            let mut subst_map: std::collections::HashMap<u32, GenericArg> =
+                std::collections::HashMap::new();
+            for (i, a) in self.ctx.substitution_args(substs).iter().enumerate() {
+                if let GenericArg::Ty(t) = a {
+                    subst_map.insert(i as u32, GenericArg::Ty(*t));
+                }
+            }
+            let declared: Vec<Ty> = self
                 .ctx
                 .adt_def(adt_id)
                 .and_then(|def| def.variants.get(variant_idx.index()))
                 .map(|v| v.fields.iter().map(|f| f.ty).collect())
                 .unwrap_or_default();
+            let field_tys: Vec<Ty> = declared
+                .iter()
+                .map(|t| self.ctx.subst_ty(*t, &subst_map))
+                .collect();
             let inputs = self
                 .ctx
                 .intern_substitution(field_tys.iter().map(|t| GenericArg::Ty(*t)).collect());

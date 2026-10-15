@@ -1,13 +1,10 @@
-// KNOWN FAILING — `Option::or(self, optb: Option<T>) -> Option<T>`.
-// `.or(b)` typechecks (returns `Option<i32>`) but codegen ICEs with
-// `[X0000] layout error building aggregate: UnknownType(Ty(0))`.
-// Suspected: `or`'s body returns `self`/`optb` (existing values) rather
-// than a fresh aggregate, and monomorphization of the generic impl body
-// leaves a `Param` unsubstituted in the returned ADT's substitution.
-// Tracked as a known gap; `ignore` keeps CI green while the fixture
-// documents the exact shape.
+// Regression: `Option::or(self, optb: Option<T>) -> Option<T>`.
+// `let b = Option::Some(8)` (no expected type) used to declare `b` as
+// `Adt1010<<error>>` in MIR — variant_expr registered the ctor's sig
+// with a rigid `Param(0)` input alongside an `Adt(id, [Infer(X)])`
+// output, so X was never bound. Passing `b` to `.or()` then ICEd.
+// Fixed by sharing the ctor vars between sig input and output.
 // test-mode: run-pass
-// ignore
 // exit-code: 8
 // compile-flags: --with-stdlib
 fn main() -> i32 {
