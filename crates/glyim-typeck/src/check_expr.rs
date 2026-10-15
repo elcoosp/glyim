@@ -1341,7 +1341,9 @@ impl<'a> FnCtxt<'a> {
                 // which we (a) hand to closure-literal args so their own
                 // params are seeded from the expected `fn(..)` signature, and
                 // (b) unify each arg against after checking it.
-                let (ret_ty, dispatch) = self.resolve_method_call(recv_ty, *method, span);
+                let has_closure_arg = args.iter().any(|&a| matches!(&self.body.exprs[a], Expr::Closure { .. }));
+                let (ret_ty, method_formals, method_own_generics, dispatch) =
+                    self.resolve_method_call(recv_ty, *method, span, has_closure_arg);
                 let ret_ty = self.extract_return_ty(ret_ty, span);
                 // Builtin method sigs list ONLY the explicit args (the
                 // receiver is not in `inputs`), so no skip.
@@ -1360,20 +1362,23 @@ impl<'a> FnCtxt<'a> {
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default(),
+                    Some(MethodDispatch::Static(_)) => method_formals.clone(),
                     _ => Vec::new(),
                 };
+                let is_static_dispatch = matches!(dispatch, Some(MethodDispatch::Static(_)));
                 let mut arg_exprs = Vec::with_capacity(args.len());
                 for (i, &arg_id) in args.iter().enumerate() {
                     let expected = expected_args.get(i).copied();
-                    if let (Some(exp), Expr::Closure { .. }) = (expected, &self.body.exprs[arg_id])
-                    {
+                    let is_closure_arg = matches!(&self.body.exprs[arg_id], Expr::Closure { .. });
+                    if let (Some(exp), true) = (expected, is_closure_arg) {
                         if matches!(self.ctx.ty_kind(exp), TyKind::FnPtr(_)) {
                             self.pending_closure_expectation = Some(exp);
+                            self.expr_cache.remove(&arg_id);
                         }
                     }
                     let (a_expr, a_ty) = self.check_expr(arg_id);
                     if let Some(exp) = expected {
-                        if exp != Ty::ERROR && a_ty != Ty::ERROR {
+                        if exp != Ty::ERROR && a_ty != Ty::ERROR && !is_static_dispatch {
                             self.unify(a_ty, exp, span);
                         }
                     }
@@ -1476,8 +1481,17 @@ impl<'a> FnCtxt<'a> {
                         // source. Without this, the callee was `FnDef(id, [])`,
                         // mono enqueued the generic body with `T`
                         // unsubstituted, and codegen ICEd.
-                        let substs = if let Some(explicit) = generic_args {
-                            let resolved: Vec<GenericArg> = explicit
+                        // Substitution for the callee `FnDef`. The
+                        // registered sig's generic params are
+                        // `[impl generics..., method generics...]`, so the
+                        // call site must supply BOTH: the receiver's ADT
+                        // args (for impl generics) followed by the method's
+                        // own instantiated generics. Missing the method
+                        // part left `Param(1)` (`U` on `Option::map`)
+                        // unsubstituted — codegen then hit `UnknownType`
+                        // on the closure's ABI.
+                        let impl_part: Vec<GenericArg> = if let Some(explicit) = generic_args {
+                            explicit
                                 .iter()
                                 .map(|tr| {
                                     GenericArg::Ty(crate::tyconv::resolve_type_ref(
@@ -1490,8 +1504,7 @@ impl<'a> FnCtxt<'a> {
                                         span,
                                     ))
                                 })
-                                .collect();
-                            self.ctx.intern_substitution(resolved)
+                                .collect()
                         } else {
                             let mut recv_inner = recv_ty;
                             for _ in 0..8 {
@@ -1505,13 +1518,18 @@ impl<'a> FnCtxt<'a> {
                                 }
                             }
                             match self.ctx.ty_kind(recv_inner) {
-                                TyKind::Adt(_, s) if !s.is_empty() => *s,
-                                TyKind::Slice(e) | TyKind::Array(e, _) => {
-                                    self.ctx.intern_substitution(vec![GenericArg::Ty(*e)])
+                                TyKind::Adt(_, s) if !s.is_empty() => {
+                                    self.ctx.substitution_args(*s).to_vec()
                                 }
-                                _ => self.ctx.intern_substitution(vec![]),
+                                TyKind::Slice(e) | TyKind::Array(e, _) => {
+                                    vec![GenericArg::Ty(*e)]
+                                }
+                                _ => Vec::new(),
                             }
                         };
+                        let mut all_substs = impl_part;
+                        all_substs.extend(method_own_generics.iter().cloned());
+                        let substs = self.ctx.intern_substitution(all_substs);
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {
                             kind: thir::ExprKind::FnRef(fn_def_id),
@@ -3011,7 +3029,8 @@ impl<'a> FnCtxt<'a> {
         recv_ty: Ty,
         method_name: Name,
         span: Span,
-    ) -> (Ty, Option<MethodDispatch>) {
+        need_formals: bool,
+    ) -> (Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>) {
         // §9.1 / §9.2: collect *every* impl whose Self type unifies with the
         // receiver and that defines `method_name`. If more than one matches,
         // this is an ambiguous method call — surface all candidates (rustc's
@@ -3047,12 +3066,16 @@ impl<'a> FnCtxt<'a> {
                 "is_null" => {
                     return (
                         Ty::BOOL,
+                        Vec::new(),
+                        Vec::new(),
                         Some(MethodDispatch::PtrArith(PtrArithOp::IsNull, inner_ty)),
                     );
                 }
                 "is_not_null" => {
                     return (
                         Ty::BOOL,
+                        Vec::new(),
+                        Vec::new(),
                         Some(MethodDispatch::PtrArith(PtrArithOp::IsNotNull, inner_ty)),
                     );
                 }
@@ -3062,12 +3085,14 @@ impl<'a> FnCtxt<'a> {
                         .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
                     return (
                         usize_ty,
+                        Vec::new(),
+                        Vec::new(),
                         Some(MethodDispatch::PtrArith(PtrArithOp::Addr, inner_ty)),
                     );
                 }
                 "add" | "sub" => {
                     // `p.add(n)` / `p.sub(n)` preserve the receiver's pointer type.
-                    return (recv_ty, None);
+                    return (recv_ty, Vec::new(), Vec::new(), None);
                 }
                 "as_ptr" => {
                     // `*mut T` -> `*const T`; `*const T` -> itself.
@@ -3078,7 +3103,7 @@ impl<'a> FnCtxt<'a> {
                         )),
                         glyim_core::primitives::Mutability::Not => recv_ty,
                     };
-                    return (new_ty, None);
+                    return (new_ty, Vec::new(), Vec::new(), None);
                 }
                 "as_mut_ptr" => {
                     // `*const T` -> `*mut T` (unsafe); `*mut T` -> itself.
@@ -3089,7 +3114,7 @@ impl<'a> FnCtxt<'a> {
                         )),
                         glyim_core::primitives::Mutability::Mut => recv_ty,
                     };
-                    return (new_ty, None);
+                    return (new_ty, Vec::new(), Vec::new(), None);
                 }
                 _ => {}
             }
@@ -3112,8 +3137,8 @@ impl<'a> FnCtxt<'a> {
         ];
 
         let recv_is_param = matches!(self.ctx.ty_kind(recv_ty), TyKind::Param(_));
-        let collect_for = |this: &mut Self, step_ty: Ty| -> Vec<(Ty, Ty, Option<MethodDispatch>)> {
-            let mut found: Vec<(Ty, Ty, Option<MethodDispatch>)> = Vec::new();
+        let collect_for = |this: &mut Self, step_ty: Ty| -> Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> {
+            let mut found: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> = Vec::new();
             for (_id, item) in this.hir.items.iter_enumerated() {
                 if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
                     // Instantiate the impl's generic params with *fresh
@@ -3309,7 +3334,60 @@ impl<'a> FnCtxt<'a> {
                                     );
                                 }
                             }
-                            found.push((impl_self_ty, return_ty, dispatch));
+                            // (a) Formals for closure seeding.
+                            // (b) Method's OWN generic args — appended
+                            //     to the call's `substs` so codegen sees
+                            //     a fully-substituted sig. The registered
+                            //     sig's generic params are
+                            //     [impl generics..., method generics...];
+                            //     the call site carries the receiver's
+                            //     args only, so without this the method's
+                            //     `Param(1)` (e.g. `U` on `Option::map`)
+                            //     is never substituted and codegen hits
+                            //     `UnknownType` on the closure's ABI.
+                            let formal_tys: Vec<Ty> = if need_formals {
+                                let self_name = this.ctx.resolver().intern("self");
+                                let skip = if method.params.first().map(|pp| pp.name == self_name).unwrap_or(false) { 1 } else { 0 };
+                                // Resolve each `method_pm` value through the
+                                // inference table before building formals.
+                                // The impl's `T` is bound (by the candidate
+                                // unify above) to the receiver's payload,
+                                // but `method_pm["T"]` still holds the raw
+                                // `Infer` var. Seeding a closure param with
+                                // that raw var makes the closure body's
+                                // `s.method()` dispatch against an
+                                // unresolved var — `no method found`
+                                // (thread.g's `Option<&String>.map(|s|
+                                // s.as_str())`). Resolving first gives the
+                                // closure `s: &String` (concrete), so its
+                                // methods resolve.
+                                let resolved_pm: std::collections::HashMap<Name, Ty> = method_pm
+                                    .iter()
+                                    .map(|(n, t)| {
+                                        (*n, this.infer.resolve_ty_shallow(this.ctx, *t))
+                                    })
+                                    .collect();
+                                method.params.iter().skip(skip).map(|pp| match &pp.ty {
+                                    Some(tr) => {
+                                        let t = crate::tyconv::resolve_type_ref(
+                                            this.ctx, this.infer, this.def_map, this.diagnostics,
+                                            tr, &resolved_pm, span,
+                                        );
+                                        if t == Ty::ERROR { let v = this.infer.new_ty_var(this.ctx); this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v))) } else { t }
+                                    }
+                                    None => { let v = this.infer.new_ty_var(this.ctx); this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v))) }
+                                }).collect()
+                            } else { Vec::new() };
+                            let method_own_generics: Vec<GenericArg> = method
+                                .generic_params
+                                .iter()
+                                .map(|gp| {
+                                    method_pm.get(&gp.name).copied()
+                                        .map(GenericArg::Ty)
+                                        .unwrap_or(GenericArg::Ty(Ty::ERROR))
+                                })
+                                .collect();
+                            found.push((impl_self_ty, return_ty, formal_tys, method_own_generics, dispatch));
                         }
                     }
                     // If this impl matched the receiver's self-type but had
@@ -3368,12 +3446,12 @@ impl<'a> FnCtxt<'a> {
         {
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
-                    return (out_ty, Some(MethodDispatch::Builtin(fn_id)));
+                    return (out_ty, Vec::new(), Vec::new(), Some(MethodDispatch::Builtin(fn_id)));
                 }
             }
         }
 
-        let mut candidates: Vec<(Ty, Ty, Option<MethodDispatch>)> = Vec::new();
+        let mut candidates: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> = Vec::new();
         for &step in steps.iter().chain(autoref_steps.iter()) {
             let found = collect_for(self, step);
             if !found.is_empty() {
@@ -3389,7 +3467,7 @@ impl<'a> FnCtxt<'a> {
             // applies to type-parameter receivers.
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
-                    return (out_ty, Some(MethodDispatch::Builtin(fn_id)));
+                    return (out_ty, Vec::new(), Vec::new(), Some(MethodDispatch::Builtin(fn_id)));
                 }
             }
             // Concrete ADT receiver with `impl Trait for Self`: resolve inherited
@@ -3460,6 +3538,8 @@ impl<'a> FnCtxt<'a> {
                                     candidates.push((
                                         recv_ty,
                                         return_ty,
+                                        Vec::new(),
+                                        Vec::new(),
                                         Some(MethodDispatch::Static(FnDefId::from_raw(
                                             local.to_raw(),
                                         ))),
@@ -3512,6 +3592,8 @@ impl<'a> FnCtxt<'a> {
                                             candidates.push((
                                                 recv_ty,
                                                 return_ty,
+                                                Vec::new(),
+                                                Vec::new(),
                                                 Some(MethodDispatch::Static(FnDefId::from_raw(
                                                     local.to_raw(),
                                                 ))),
@@ -3520,6 +3602,8 @@ impl<'a> FnCtxt<'a> {
                                             candidates.push((
                                                 recv_ty,
                                                 return_ty,
+                                                Vec::new(),
+                                                Vec::new(),
                                                 Some(MethodDispatch::Virtual(trait_id)),
                                             ));
                                         }
@@ -3580,6 +3664,8 @@ impl<'a> FnCtxt<'a> {
                                         candidates.push((
                                             recv_ty,
                                             return_ty,
+                                            Vec::new(),
+                                            Vec::new(),
                                             Some(MethodDispatch::Virtual(tid)),
                                         ));
                                         break;
@@ -3620,7 +3706,7 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                 }
-                return (Ty::ERROR, None);
+                return (Ty::ERROR, Vec::new(), Vec::new(), None);
             }
         }
 
@@ -3663,7 +3749,7 @@ impl<'a> FnCtxt<'a> {
             }
             let concrete: Vec<_> = candidates
                 .iter()
-                .filter(|(self_ty, _, _)| !has_infer_var(&*self.ctx, *self_ty))
+                .filter(|(self_ty, _, _, _, _)| !has_infer_var(&*self.ctx, *self_ty))
                 .cloned()
                 .collect();
             if !concrete.is_empty() {
@@ -3673,7 +3759,7 @@ impl<'a> FnCtxt<'a> {
         if candidates.len() > 1 {
             let list: Vec<String> = candidates
                 .iter()
-                .map(|(self_ty, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))
+                .map(|(self_ty, _, _, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))
                 .collect();
             self.diagnostics.push(GlyimDiagnostic::type_error(
                 span,
@@ -3686,10 +3772,10 @@ impl<'a> FnCtxt<'a> {
             ));
             // Still return the first candidate's type so downstream typing is
             // not worse than before; the diagnostic is the real signal.
-            return (candidates[0].1, None);
+            return (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), None);
         }
 
-        (candidates[0].1, candidates[0].2.clone())
+        (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), candidates[0].4.clone())
     }
 
     /// Resolve a path-qualified trait method call `Trait::method(receiver, ..)`
