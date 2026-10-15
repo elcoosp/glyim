@@ -640,6 +640,14 @@ pub enum Expr {
     Closure {
         /// Struct.
         params: Vec<PatId>,
+        /// Per-param type annotations written in source (`|x: &i32| ..`).
+        /// `Pat::Binding` has no `ty` field, so without this the annotation
+        /// is lost at HIR lowering — the typeck closure arm can then only
+        /// seed params from an expected `fn(..)` sig, and a closure used
+        /// standalone (`let f = |x: &i32| *x; f(&n)`) gets fresh unbound
+        /// vars, making `*x` fail with "cannot dereference non-pointer
+        /// type". Parallel to `params`; `None` where unannotated.
+        param_tys: Vec<Option<TypeRef>>,
         /// Struct.
         body: ExprId,
         /// Struct.

@@ -2283,6 +2283,7 @@ impl<'a> FnCtxt<'a> {
 
             Expr::Closure {
                 params,
+                param_tys,
                 body,
                 is_move,
             } => {
@@ -2316,9 +2317,34 @@ impl<'a> FnCtxt<'a> {
                     .unwrap_or_default();
                 let mut thir_params: Vec<thir::Param> = Vec::with_capacity(params.len());
                 for (param_idx, pat_id) in params.iter().enumerate() {
+                    // Param type: prefer an expected `fn(..)` signature
+                    // (seeded by the enclosing call), then the closure's
+                    // own written annotation (`|x: &i32| ..`), then a
+                    // fresh infer var. Without the annotation fallback a
+                    // standalone closure like `let f = |x: &i32| *x;`
+                    // gets an unbound param and `*x` fails with
+                    // "cannot dereference non-pointer type".
                     let ty = match expected_param_tys.get(param_idx).copied() {
                         Some(t) if t != Ty::ERROR => t,
-                        _ => self.fresh_infer_ty(),
+                        _ => match param_tys.get(param_idx).and_then(|o| o.as_ref()) {
+                            Some(tr) => {
+                                let resolved = crate::tyconv::resolve_type_ref(
+                                    self.ctx,
+                                    self.infer,
+                                    self.def_map,
+                                    self.diagnostics,
+                                    tr,
+                                    &self.param_map,
+                                    span,
+                                );
+                                if resolved == Ty::ERROR {
+                                    self.fresh_infer_ty()
+                                } else {
+                                    resolved
+                                }
+                            }
+                            None => self.fresh_infer_ty(),
+                        },
                     };
                     let local = self.bind_pattern(*pat_id, ty, Mutability::Not);
                     // Recover the binding name from the HIR pattern for the

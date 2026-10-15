@@ -75,6 +75,7 @@ fn closure_captures_enclosing_param() {
     let x_ref = exprs.push(Expr::Path(glyim_hir::Path::from_single(x_name)));
     let _closure = exprs.push(Expr::Closure {
         params: vec![y_pat],
+        param_tys: vec![],
         body: x_ref,
         is_move: false,
     });
@@ -185,6 +186,7 @@ fn move_closure_captures_by_value() {
     let x_ref = exprs.push(Expr::Path(glyim_hir::Path::from_single(x_name)));
     let _closure = exprs.push(Expr::Closure {
         params: vec![y_pat],
+        param_tys: vec![],
         body: x_ref,
         is_move: true,
     });

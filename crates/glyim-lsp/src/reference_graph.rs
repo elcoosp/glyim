@@ -677,6 +677,7 @@ impl ReferenceGraph {
                 }
                 Expr::Closure {
                     params,
+                    param_tys: _,
                     body: closure_body,
                     is_move: _,
                 } => {

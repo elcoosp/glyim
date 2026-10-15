@@ -2081,6 +2081,7 @@ fn copy_expr_renamed(
         },
         Expr::Closure {
             params,
+            param_tys,
             body,
             is_move,
         } => Expr::Closure {
@@ -2088,6 +2089,7 @@ fn copy_expr_renamed(
                 .iter()
                 .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
                 .collect(),
+            param_tys: param_tys.clone(),
             body: copy_expr_renamed(src, dst, *body, rename, interner),
             is_move: *is_move,
         },
@@ -2369,6 +2371,7 @@ fn copy_expr_subst_await(
         },
         Expr::Closure {
             params,
+            param_tys,
             body,
             is_move,
         } => Expr::Closure {
@@ -2376,6 +2379,7 @@ fn copy_expr_subst_await(
                 .iter()
                 .map(|p| copy_pat_renamed(src, dst, *p, rename, interner))
                 .collect(),
+            param_tys: param_tys.clone(),
             body: copy_expr_subst_await(src, dst, *body, rename, interner, await_eid, subst_name),
             is_move: *is_move,
         },

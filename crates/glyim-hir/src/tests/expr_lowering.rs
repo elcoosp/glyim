@@ -68,6 +68,7 @@ fn test_lower_closure_expr() {
     match &body.exprs[eid] {
         Expr::Closure {
             params,
+            param_tys: _,
             body: _,
             is_move: _,
         } => {

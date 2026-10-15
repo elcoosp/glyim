@@ -419,6 +419,7 @@ fn lower_closure_expr(
     struct_field_map: &HashMap<Name, Vec<Name>>,
 ) -> Option<ExprId> {
     let mut params = Vec::new();
+    let mut param_tys: Vec<Option<TypeRef>> = Vec::new();
     let mut body_expr = None;
     // T049-PATCHED [HIRX-3]: `KwMove` is a *token* kind, not a node
     // kind, so the previous `node.children()` loop never saw it and
@@ -436,9 +437,10 @@ fn lower_closure_expr(
         match child.kind() {
             SyntaxKind::ParamList => {
                 for param_node in child.children().filter(|c| c.kind() == SyntaxKind::Param) {
-                    let (_, pat_id) =
+                    let (param, pat_id) =
                         lower_param(&param_node, interner, &mut body.pats, &mut body.pat_spans);
                     params.push(pat_id);
+                    param_tys.push(param.ty);
                 }
             }
             _ if (is_expr_node(&child) || child.kind() == SyntaxKind::Block)
@@ -452,6 +454,7 @@ fn lower_closure_expr(
     let body_id = body_expr.unwrap_or_else(|| body.alloc_missing(node_span(node)));
     let expr = Expr::Closure {
         params,
+        param_tys,
         body: body_id,
         is_move,
     };
