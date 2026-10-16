@@ -105,18 +105,61 @@ pub(crate) fn lower_pat(
                         )
                     })
                     .and_then(|n| lower_pat(&n, interner, pats, pat_spans, diags));
-                Some(push_pat(
-                    pats,
-                    pat_spans,
-                    node,
+                // `ref x` / `ref mut x` — scan the node's tokens for
+                // `KwRef` (a sibling in the parser's output, like `KwMut`)
+                // and produce a `RefBinding` so typeck binds a reference.
+                // `ref x` / `ref mut x`: the parser bumps `ref` (and
+                // optionally `mut`) as tokens *before* the `PatIdent`
+                // node, so they appear as preceding siblings. Scan
+                // backwards past trivia AND past a `KwMut` — for
+                // `ref mut x` the nearest sibling is `mut`, with `ref`
+                // just behind it.
+                let has_ref = {
+                    let in_children = node.children_with_tokens().any(|c| {
+                        c.as_token().is_some_and(|t| t.kind() == SyntaxKind::KwRef)
+                    });
+                    let before = {
+                        let mut prev = node.prev_sibling_or_token();
+                        let mut found = false;
+                        let mut skipped_mut = false;
+                        while let Some(el) = prev {
+                            match el {
+                                glyim_syntax::SyntaxElement::Token(t) if t.kind().is_trivia() => {
+                                    prev = t.prev_sibling_or_token();
+                                }
+                                glyim_syntax::SyntaxElement::Token(t)
+                                    if t.kind() == SyntaxKind::KwMut && !skipped_mut =>
+                                {
+                                    skipped_mut = true;
+                                    prev = t.prev_sibling_or_token();
+                                }
+                                glyim_syntax::SyntaxElement::Token(t) => {
+                                    found = t.kind() == SyntaxKind::KwRef;
+                                    break;
+                                }
+                                glyim_syntax::SyntaxElement::Node(_) => break,
+                            }
+                        }
+                        found
+                    };
+                    in_children || before
+                };
+                let by_mut = pat_ident_mutability(node);
+                let pat = if has_ref {
+                    Pat::RefBinding {
+                        name,
+                        mutability: Mutability::Not,
+                        ref_mutability: by_mut,
+                        subpattern: subpat,
+                    }
+                } else {
                     Pat::Binding {
                         name,
-                        // HIR-12: the parser bumps `KwMut` inside `PatIdent`; read
-                        // it so `let mut x = ..` / `(mut x, ..)` bind mutably.
-                        mutability: pat_ident_mutability(node),
+                        mutability: by_mut,
                         subpattern: subpat,
-                    },
-                ))
+                    }
+                };
+                Some(push_pat(pats, pat_spans, node, pat))
             }
         }
         SyntaxKind::PatWild => Some(push_pat(pats, pat_spans, node, Pat::Wild)),

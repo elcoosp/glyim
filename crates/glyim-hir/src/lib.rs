@@ -738,6 +738,22 @@ pub enum Pat {
         /// Struct.
         subpattern: Option<PatId>,
     },
+    /// `ref x` / `ref mut x` — binds a *reference* to the matched place
+    /// instead of moving/copying it. A distinct variant (rather than a
+    /// `bool` field on `Binding`) so the 50+ existing `Pat::Binding`
+    /// sites need no edit. `Option::Some(ref v) => *v` requires this;
+    /// without it the `ref` was dropped and `v` typed `T`, so `*v`
+    /// reported "cannot dereference non-pointer type".
+    RefBinding {
+        /// Struct.
+        name: Name,
+        /// Mutability of the *binding* (`ref mut` → `Mut`).
+        mutability: Mutability,
+        /// Mutability of the *reference* (`ref mut` → `&mut T`).
+        ref_mutability: Mutability,
+        /// Struct.
+        subpattern: Option<PatId>,
+    },
     /// Variant.
     Struct {
         /// Struct.

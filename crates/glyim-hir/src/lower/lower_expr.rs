@@ -214,7 +214,7 @@ fn pat_to_expr(
 ) -> Option<ExprId> {
     match &body.pats[pat_id] {
         Pat::Wild => None,
-        Pat::Binding { name, .. } => {
+        Pat::Binding { name, .. } | Pat::RefBinding { name, .. } => {
             let path = HirPath::from_single(*name);
             let expr = Expr::Path(path);
             Some(body.alloc_expr(expr, span))

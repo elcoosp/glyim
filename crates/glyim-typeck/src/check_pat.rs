@@ -21,9 +21,8 @@ impl<'a> FnCtxt<'a> {
         out: &mut std::collections::HashSet<Name>,
     ) {
         match &pats[pat_id] {
-            Pat::Binding {
-                name, subpattern, ..
-            } => {
+            Pat::Binding { name, subpattern, .. }
+            | Pat::RefBinding { name, subpattern, .. } => {
                 out.insert(*name);
                 if let Some(sub) = subpattern {
                     Self::collect_binding_names(pats, *sub, out);
@@ -81,6 +80,17 @@ impl<'a> FnCtxt<'a> {
                 let id = self.env.add_binding(*name, ty, mutability);
                 thir::LocalVarId::from_raw(id.to_raw())
             }
+            Pat::RefBinding {
+                name, ref_mutability, ..
+            } => {
+                let ref_ty = self.ctx.mk_ref(
+                    glyim_type::Region::Erased,
+                    ty,
+                    *ref_mutability,
+                );
+                let id = self.env.add_binding(*name, ref_ty, mutability);
+                thir::LocalVarId::from_raw(id.to_raw())
+            }
             _ => {
                 let id = self
                     .env
@@ -95,6 +105,41 @@ impl<'a> FnCtxt<'a> {
         let pat = &self.body.pats[pat_id];
         match pat {
             Pat::Wild => thir::Pattern::wild(expected_ty, span),
+            Pat::RefBinding {
+                name,
+                mutability,
+                ref_mutability,
+                subpattern,
+            } => {
+                // `ref x` / `ref mut x`: the *pattern* still matches the
+                // expected place type (`T`), but the binding `x` refers to
+                // a reference to that place (`&T` / `&mut T`). Without this
+                // arm the `ref` keyword never made it to typeck, so `x`
+                // was bound as `T` and `*x` failed with
+                // "cannot dereference non-pointer type".
+                let ref_ty = self.ctx.mk_ref(
+                    glyim_type::Region::Erased,
+                    expected_ty,
+                    *ref_mutability,
+                );
+                let ctx_name = self.remap_name(*name);
+                let id = self.env.add_binding(*name, ref_ty, *mutability);
+                if ctx_name != *name {
+                    self.env.add_alias(ctx_name, id);
+                }
+                let sub = subpattern
+                    .map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty, span)));
+                thir::Pattern {
+                    kind: thir::PatternKind::Binding {
+                        var_id: thir::LocalVarId::from_raw(id.to_raw()),
+                        name: ctx_name,
+                        mutability: *mutability,
+                        subpattern: sub,
+                    },
+                    ty: expected_ty,
+                    span,
+                }
+            }
             Pat::Binding {
                 name,
                 mutability,

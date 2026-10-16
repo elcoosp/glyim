@@ -1148,7 +1148,7 @@ impl<'a> ConstEvaluator<'a> {
                     Ok(false)
                 }
             }
-            Pat::Binding { name, .. } => {
+            Pat::Binding { name, .. } | Pat::RefBinding { name, .. } => {
                 if let Some(scope) = self.env.last_mut() {
                     scope.insert(*name, value.clone());
                 }

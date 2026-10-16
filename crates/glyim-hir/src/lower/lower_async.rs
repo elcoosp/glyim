@@ -2163,6 +2163,17 @@ fn copy_pat_renamed(
             mutability: *mutability,
             subpattern: subpattern.map(|s| copy_pat_renamed(src, dst, s, rename, interner)),
         },
+        Pat::RefBinding {
+            name,
+            mutability,
+            ref_mutability,
+            subpattern,
+        } => Pat::RefBinding {
+            name: *name,
+            mutability: *mutability,
+            ref_mutability: *ref_mutability,
+            subpattern: subpattern.map(|s| copy_pat_renamed(src, dst, s, rename, interner)),
+        },
         Pat::Struct { path, fields, rest } => Pat::Struct {
             path: path.clone(),
             fields: fields
@@ -3549,7 +3560,7 @@ fn stmt_contains(body: &Body, container: ExprId, target: ExprId) -> bool {
 /// Get the bound name of a `Pat::Binding` (for `let x = ...`).
 fn pat_name(body: &Body, pat: PatId) -> Option<crate::Name> {
     match &body.pats[pat] {
-        Pat::Binding { name, .. } => Some(*name),
+        Pat::Binding { name, .. } | Pat::RefBinding { name, .. } => Some(*name),
         _ => None,
     }
 }
