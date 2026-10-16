@@ -265,6 +265,7 @@ fn main() {
         diagnostics: vec![],
         const_values: std::collections::HashMap::new(),
         expr_types,
+        unresolved_ty_var_spans: std::collections::HashMap::new(),
     };
     db.typeck
         .write()
@@ -446,6 +447,7 @@ fn main() {
         diagnostics: vec![],
         const_values: std::collections::HashMap::new(),
         expr_types,
+        unresolved_ty_var_spans: std::collections::HashMap::new(),
     };
     db.typeck
         .write()

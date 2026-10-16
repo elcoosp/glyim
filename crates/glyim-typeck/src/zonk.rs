@@ -862,3 +862,258 @@ pub fn adt_defs_have_infer_ints_or_floats(ctx: &TyCtx) -> bool {
     }
     false
 }
+
+// ---------------------------------------------------------------------------
+// Post-fulfillment: type-annotation-needed diagnostics
+// ---------------------------------------------------------------------------
+
+/// Find every *variant-constructor call* whose result type still contains an
+/// unbound `Infer(Ty(_))` after obligation fulfillment.
+///
+/// This is the concrete shape that ICEs the LLVM backend: `Result::Ok(5)`
+/// leaves `E` unconstrained, the MIR aggregate gets a substitution like
+/// `[i32, ERROR]`, and `layout_of` fails with `UnknownType(Ty(0))`. It is
+/// rustc's E0282 ("type annotations needed").
+///
+/// ## Why this is narrower than a general "unbound var" walk
+///
+/// A general walk over every expression's type also matches benign cases
+/// where Glyim's typeck can't fully resolve an associated type inside a
+/// *called* function's return type — `"3.14".parse::<f64>()` returns
+/// `Result<f64, <f64 as FromStr>::Err>`, and the projection's unbound var
+/// survives as `Infer(Ty(_))` in the call expression's type without ever
+/// reaching a value-construction site. Codegen does not ICE on those (the
+/// user often discards the value), so flagging them would reject programs
+/// the compiler can in fact build.
+///
+/// Restricting to `Call { func: <VariantCtor> }` expressions — the case
+/// where a value of the enum type is actually *constructed* with an
+/// unresolved generic field — targets exactly the unbound vars that will
+/// reach an `Aggregate` in MIR and break layout.
+pub fn collect_unresolved_ty_var_spans(
+    infer: &InferenceTable,
+    ctx: &TyCtx,
+    body: &thir::Body,
+) -> Vec<glyim_span::Span> {
+    let mut out: Vec<glyim_span::Span> = Vec::new();
+    walk_body_for_variant_ctor_calls(infer, ctx, body, &mut out);
+    out.sort_by_key(|s| (s.lo.to_raw(), s.hi.to_raw()));
+    out.dedup_by_key(|s| (s.lo.to_raw(), s.hi.to_raw()));
+    out
+}
+
+fn walk_body_for_variant_ctor_calls(
+    infer: &InferenceTable,
+    ctx: &TyCtx,
+    body: &thir::Body,
+    out: &mut Vec<glyim_span::Span>,
+) {
+    for stmt in &body.stmts {
+        walk_stmt_for_variant_ctor_calls(infer, ctx, stmt, out);
+    }
+}
+
+fn walk_stmt_for_variant_ctor_calls(
+    infer: &InferenceTable,
+    ctx: &TyCtx,
+    stmt: &thir::Stmt,
+    out: &mut Vec<glyim_span::Span>,
+) {
+    match stmt {
+        thir::Stmt::Let { init, .. } => {
+            if let Some(init) = init {
+                walk_expr_for_variant_ctor_calls(infer, ctx, init, out);
+            }
+        }
+        thir::Stmt::Expr { expr } => walk_expr_for_variant_ctor_calls(infer, ctx, expr, out),
+        thir::Stmt::Assign { lhs, rhs, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, lhs, out);
+            walk_expr_for_variant_ctor_calls(infer, ctx, rhs, out);
+        }
+        thir::Stmt::Return { value, .. } => {
+            if let Some(v) = value {
+                walk_expr_for_variant_ctor_calls(infer, ctx, v, out);
+            }
+        }
+    }
+}
+
+fn walk_expr_for_variant_ctor_calls(
+    infer: &InferenceTable,
+    ctx: &TyCtx,
+    expr: &thir::Expr,
+    out: &mut Vec<glyim_span::Span>,
+) {
+    // Detect `Call { func: <VariantCtor>, .. }` whose result type contains an
+    // unbound `Infer(Ty(_))`. The result type is `expr.ty` (the Call's
+    // output type).
+    if let thir::ExprKind::Call { func, args } = &expr.kind {
+        // Only the `VariantCtor` func-kind signals an enum-value
+        // construction. A `FnRef` whose type is `FnDef(..)` also matches
+        // ordinary function calls (`str::parse`, trait methods, …) whose
+        // return type may contain an unresolved associated type on the
+        // `Err` position (`Result<f64, <f64 as FromStr>::Err>`) — the
+        // resulting `Infer(Ty(_))` does not reach a value-construction
+        // site and codegen does not ICE on it, so flagging it would reject
+        // valid programs.
+        if matches!(func.kind, thir::ExprKind::VariantCtor { .. })
+            && has_unbound_ty_var(infer, ctx, expr.ty)
+        {
+            out.push(expr.span);
+        }
+        // Recurse into call arguments so nested ctor calls are visited.
+        for a in args {
+            walk_expr_for_variant_ctor_calls(infer, ctx, a, out);
+        }
+        walk_expr_for_variant_ctor_calls(infer, ctx, func, out);
+        return;
+    }
+    // Recurse into all other expression kinds.
+    match &expr.kind {
+        thir::ExprKind::Literal(_)
+        | thir::ExprKind::VarRef(_)
+        | thir::ExprKind::FnRef(_)
+        | thir::ExprKind::ConstRef(_)
+        | thir::ExprKind::VariantRef(_, _)
+        | thir::ExprKind::VariantCtor { .. }
+        | thir::ExprKind::TraitMethodRef { .. }
+        | thir::ExprKind::Continue
+        | thir::ExprKind::Err => {}
+        thir::ExprKind::Binary { lhs, rhs, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, lhs, out);
+            walk_expr_for_variant_ctor_calls(infer, ctx, rhs, out);
+        }
+        thir::ExprKind::Unary { operand, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, operand, out)
+        }
+        thir::ExprKind::Call { func, args } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, func, out);
+            for a in args {
+                walk_expr_for_variant_ctor_calls(infer, ctx, a, out);
+            }
+        }
+        thir::ExprKind::DynamicCall { receiver, args, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, receiver, out);
+            for a in args {
+                walk_expr_for_variant_ctor_calls(infer, ctx, a, out);
+            }
+        }
+        thir::ExprKind::If { cond, then_branch, else_branch } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, cond, out);
+            walk_expr_for_variant_ctor_calls(infer, ctx, then_branch, out);
+            if let Some(e) = else_branch {
+                walk_expr_for_variant_ctor_calls(infer, ctx, e, out);
+            }
+        }
+        thir::ExprKind::Match { scrutinee, arms } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, scrutinee, out);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    walk_expr_for_variant_ctor_calls(infer, ctx, g, out);
+                }
+                walk_expr_for_variant_ctor_calls(infer, ctx, &arm.body, out);
+            }
+        }
+        thir::ExprKind::Block { stmts, tail } => {
+            for s in stmts {
+                walk_stmt_for_variant_ctor_calls(infer, ctx, s, out);
+            }
+            if let Some(t) = tail {
+                walk_expr_for_variant_ctor_calls(infer, ctx, t, out);
+            }
+        }
+        thir::ExprKind::Ref { operand, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, operand, out)
+        }
+        thir::ExprKind::Field { receiver, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, receiver, out)
+        }
+        thir::ExprKind::Index { base, index } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, base, out);
+            walk_expr_for_variant_ctor_calls(infer, ctx, index, out);
+        }
+        thir::ExprKind::Cast { expr: e } => walk_expr_for_variant_ctor_calls(infer, ctx, e, out),
+        thir::ExprKind::While { cond, body } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, cond, out);
+            walk_expr_for_variant_ctor_calls(infer, ctx, body, out);
+        }
+        thir::ExprKind::Loop { body } => walk_expr_for_variant_ctor_calls(infer, ctx, body, out),
+        thir::ExprKind::For { iterable, body, .. } => {
+            walk_expr_for_variant_ctor_calls(infer, ctx, iterable, out);
+            walk_expr_for_variant_ctor_calls(infer, ctx, body, out);
+        }
+        thir::ExprKind::Array(elems) | thir::ExprKind::Tuple(elems) => {
+            for e in elems {
+                walk_expr_for_variant_ctor_calls(infer, ctx, e, out);
+            }
+        }
+        thir::ExprKind::Struct { fields, spread, .. } => {
+            for (_n, e) in fields {
+                walk_expr_for_variant_ctor_calls(infer, ctx, e, out);
+            }
+            if let Some(s) = spread {
+                walk_expr_for_variant_ctor_calls(infer, ctx, s, out);
+            }
+        }
+        thir::ExprKind::Break { value } | thir::ExprKind::Return { value } => {
+            if let Some(v) = value {
+                walk_expr_for_variant_ctor_calls(infer, ctx, v, out);
+            }
+        }
+        thir::ExprKind::Closure { .. } => {}
+        thir::ExprKind::Range { start, end, .. } => {
+            if let Some(s) = start {
+                walk_expr_for_variant_ctor_calls(infer, ctx, s, out);
+            }
+            if let Some(e) = end {
+                walk_expr_for_variant_ctor_calls(infer, ctx, e, out);
+            }
+        }
+        thir::ExprKind::Try { expr: e } => walk_expr_for_variant_ctor_calls(infer, ctx, e, out),
+    }
+}
+
+/// Whether `ty`, after a shallow resolve through `infer`, contains any
+/// unbound `Infer(Ty(_))` at any depth.
+fn has_unbound_ty_var(infer: &InferenceTable, ctx: &TyCtx, ty: Ty) -> bool {
+    let mut found = false;
+    walk_ty_resolved(infer, ctx, ty, &mut |t| {
+        if let TyKind::Infer(glyim_type::InferVar::Ty(v)) = ctx.ty_kind(t)
+            && infer.probe_ty_var(*v).is_none()
+        {
+            found = true;
+        }
+    });
+    found
+}
+
+fn walk_ty_resolved(infer: &InferenceTable, ctx: &TyCtx, ty: Ty, f: &mut impl FnMut(Ty)) {
+    let resolved = infer.resolve_ty_shallow(ctx, ty);
+    f(resolved);
+    match ctx.ty_kind(resolved) {
+        TyKind::Ref(_, inner, _)
+        | TyKind::RawPtr(inner, _)
+        | TyKind::Slice(inner)
+        | TyKind::Array(inner, _) => walk_ty_resolved(infer, ctx, *inner, f),
+        TyKind::Adt(_, s)
+        | TyKind::FnDef(_, s)
+        | TyKind::Closure(_, s)
+        | TyKind::Opaque(_, s)
+        | TyKind::Tuple(s) => {
+            for arg in ctx.substitution_args(*s) {
+                if let GenericArg::Ty(t) = arg {
+                    walk_ty_resolved(infer, ctx, *t, f);
+                }
+            }
+        }
+        TyKind::FnPtr(sig) => {
+            for arg in ctx.substitution_args(sig.inputs) {
+                if let GenericArg::Ty(t) = arg {
+                    walk_ty_resolved(infer, ctx, *t, f);
+                }
+            }
+            walk_ty_resolved(infer, ctx, sig.output, f);
+        }
+        _ => {}
+    }
+}

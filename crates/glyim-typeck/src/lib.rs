@@ -81,6 +81,17 @@ pub struct TypeckResult {
     /// resolved. Drives downstream consumers such as LSP completion
     /// filtering (Tier 6.4).
     pub expr_types: HashMap<LocalDefId, HashMap<ExprId, Ty>>,
+    /// Per-body list of spans whose `Ty` still carried an *unbound*
+    /// `Infer(Ty(_))` after obligation fulfillment — the "type annotations
+    /// needed" (rustc E0282) case. Collected here, but *not* emitted as a
+    /// diagnostic: typeck processes every body in the crate including
+    /// unused stdlib templates whose unbound generics are expected (they
+    /// never monomorphize). The pipeline consults this map after mono
+    /// discovery and emits the diagnostic only for owners that are
+    /// actually reachable — a `Result::Ok(5).unwrap()` at the top level
+    /// will error; the same shape inside a never-instantiated stdlib body
+    /// stays silent.
+    pub unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>>,
 }
 
 #[derive(Clone, Debug)]
@@ -1140,6 +1151,33 @@ pub fn typeck_crate(
 
     diagnostics.extend(fulfill.into_diagnostics());
 
+    // Type-annotation-needed check (rustc E0282). After obligation
+    // fulfillment every still-unbound `Infer(Ty(_))` represents a generic
+    // argument nothing in the program ever pinned: `Result::Ok(5).unwrap()`
+    // leaves `E` unconstrained, and `zonk_bodies` would fold that var to
+    // `Ty::ERROR`, which then reaches codegen inside the ADT substitution
+    // (`Adt(1011, [i32, ERROR])`) and ICEs the LLVM layout pass with
+    // `UnknownType(Ty(0))`.
+    //
+    // Collected per-owner into `unresolved_ty_var_spans` but *not* emitted
+    // here: typeck checks every body in the crate, including unused stdlib
+    // templates whose unbound generics are expected. The pipeline consults
+    // this map after mono discovery and emits the diagnostic only for
+    // owners that are actually reachable from `main`.
+    //
+    // Runs *before* the zonk passes below because once zonk has run the
+    // unbound var has been replaced by `Ty::ERROR` and the distinction
+    // between "no annotation possible" and "explicit error sentinel" is
+    // lost.
+    let mut unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>> =
+        HashMap::new();
+    for (owner, body) in thir_bodies.iter() {
+        let spans = zonk::collect_unresolved_ty_var_spans(&infer, &frozen_ctx, body);
+        if !spans.is_empty() {
+            unresolved_ty_var_spans.insert(*owner, spans);
+        }
+    }
+
     // Zonk THIR bodies: fold every `Ty` slot through the now-complete
     // inference table so that downstream phases (MIR lowering, codegen-llvm,
     // bytecode VM) never see a raw `Infer(Int(_))` / `Infer(Float(_))`.
@@ -1185,6 +1223,7 @@ pub fn typeck_crate(
         diagnostics,
         const_values: all_const_values.clone(),
         expr_types,
+        unresolved_ty_var_spans,
     };
     (frozen_ctx, result)
 }

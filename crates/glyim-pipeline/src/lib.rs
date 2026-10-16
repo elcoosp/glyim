@@ -640,6 +640,40 @@ impl Pipeline {
             return Err(sink_cell.into_inner().into_diagnostics());
         }
 
+        // Type-annotation-needed (rustc E0282) diagnostic emission.
+        // Typeck collected, per-owner, the spans whose `Ty` still carried an
+        // unbound `Infer(Ty(_))` after obligation fulfillment. Emitting
+        // those for *every* owner would flag unused stdlib template bodies
+        // whose unbound generics never get instantiated (they are never
+        // monomorphized); those are benign. We emit only for owners that
+        // actually reached the mono set — the same set that would reach
+        // codegen and ICE on the unbound var. Owners of an unmonomorphized
+        // stdlib body are dropped here and stay silent.
+        {
+            // FnDefId and LocalDefId share a raw id space (see
+            // `MonoCtx::collect`), so a simple raw comparison suffices.
+            let reachable: std::collections::HashSet<u32> = mono_items
+                .iter()
+                .filter_map(|item| match &item.item {
+                    glyim_lower::mono::MonoItem::Fn { def_id, .. } => Some(def_id.to_raw()),
+                    _ => None,
+                })
+                .collect();
+            let mut ann_diags: Vec<GlyimDiagnostic> = Vec::new();
+            for (owner, spans) in &typeck_result.unresolved_ty_var_spans {
+                if !reachable.contains(&owner.to_raw()) {
+                    continue;
+                }
+                for span in spans {
+                    ann_diags.push(GlyimDiagnostic::type_error(*span, "type annotations needed"));
+                }
+            }
+            if !ann_diags.is_empty() {
+                sink_cell.borrow_mut().extend(ann_diags);
+                return Err(sink_cell.into_inner().into_diagnostics());
+            }
+        }
+
         let cache = PipelineMonoCache::from_items(&mono_items);
         db.set_mono_cache(cache.symbols().to_vec());
 

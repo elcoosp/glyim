@@ -134,3 +134,55 @@ applies:
   an hour. `git checkout -- <file>` for probe rollback.
 - `strings target/debug/glyim-cli | grep -c 'GLYIM_TMP_XXX'` before
   trusting a probe's *absence* (0 = stale build).
+
+---
+
+## 7. Additional fix: type-annotation-needed diagnostic (rustc E0282)
+
+The `Result::Ok(5).unwrap()` shape (un-annotated `E` generic on `Result`)
+used to ICE the LLVM backend with `layout error building aggregate:
+UnknownType(Ty(0))`. Not a regression from this session — identical at
+base commit `26cbb7bd`. rustc rejects the same program with
+`E0282: type annotations needed`.
+
+**Fix**: after obligation fulfillment, typeck now walks every THIR body
+and collects spans of `VariantCtor` calls whose result type still
+contains an unbound `Infer(Ty(_))`. Spans are stored per-owner in
+`TypeckResult.unresolved_ty_var_spans`. The pipeline emits the
+diagnostic only for owners that actually reached the mono set — the
+same set that would reach codegen — so unused stdlib template bodies
+(which have unbound generics by design and are never monomorphized)
+stay silent.
+
+**Narrowing**: the walk is restricted to `Call { func: <VariantCtor> }`
+expressions. A general "any unbound var in any expression type" walk
+matched benign cases like `"3.14".parse::<f64>()`, whose return type
+`Result<f64, <f64 as FromStr>::Err>` carries an unresolved projection
+var that never reaches a value-construction site and does not ICE
+codegen. Only the enum-construction shape is flagged.
+
+---
+
+## 7. Additional fix: type-annotation-needed diagnostic (rustc E0282)
+
+The `Result::Ok(5).unwrap()` shape (un-annotated `E` generic on `Result`)
+used to ICE the LLVM backend with `layout error building aggregate:
+UnknownType(Ty(0))`. Not a regression from this session — identical at
+base commit `26cbb7bd`. rustc rejects the same program with
+`E0282: type annotations needed`.
+
+**Fix**: after obligation fulfillment, typeck now walks every THIR body
+and collects spans of `VariantCtor` calls whose result type still
+contains an unbound `Infer(Ty(_))`. Spans are stored per-owner in
+`TypeckResult.unresolved_ty_var_spans`. The pipeline emits the
+diagnostic only for owners that actually reached the mono set — the
+same set that would reach codegen — so unused stdlib template bodies
+(which have unbound generics by design and are never monomorphized)
+stay silent.
+
+**Narrowing**: the walk is restricted to `Call { func: <VariantCtor> }`
+expressions. A general "any unbound var in any expression type" walk
+matched benign cases like `"3.14".parse::<f64>()`, whose return type
+`Result<f64, <f64 as FromStr>::Err>` carries an unresolved projection
+var that never reaches a value-construction site and does not ICE
+codegen. Only the enum-construction shape is flagged.
