@@ -252,7 +252,12 @@ fn walk_pattern(ctx: &TyCtx, pat: &thir::Pattern, f: &mut impl FnMut(Ty)) {
         | thir::PatternKind::Range { .. }
         | thir::PatternKind::ConstBlock(_)
         | thir::PatternKind::Error => {}
-        thir::PatternKind::Binding { subpattern, .. } => {
+        thir::PatternKind::Binding {
+            binding_ty, subpattern, ..
+        } => {
+            if let Some(bt) = binding_ty {
+                f(*bt);
+            }
             if let Some(sub) = subpattern {
                 walk_pattern(ctx, sub, f);
             }
@@ -477,7 +482,12 @@ fn zonk_pattern(infer: &InferenceTable, ctx: &TyCtx, pat: &mut thir::Pattern) {
         | thir::PatternKind::Range { .. }
         | thir::PatternKind::ConstBlock(_)
         | thir::PatternKind::Error => {}
-        thir::PatternKind::Binding { subpattern, .. } => {
+        thir::PatternKind::Binding {
+            binding_ty, subpattern, ..
+        } => {
+            if let Some(bt) = binding_ty {
+                *bt = zonk_ty(infer, ctx, *bt);
+            }
             if let Some(sub) = subpattern {
                 zonk_pattern(infer, ctx, sub);
             }

@@ -207,6 +207,7 @@ fn match_enum_uses_discriminant_and_switch() {
                             var_id: thir::LocalVarId::from_raw(0),
                             name: x_name,
                             mutability: glyim_core::primitives::Mutability::Not,
+                            binding_ty: None,
                             subpattern: None,
                         },
                         ty: i32_ty,

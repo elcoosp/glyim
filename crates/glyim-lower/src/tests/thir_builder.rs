@@ -63,6 +63,7 @@ impl ThirBuilder {
                 var_id: thir::LocalVarId::from_raw(0),
                 name: n,
                 mutability: Mutability::Not,
+                binding_ty: None,
                 subpattern: None,
             },
             ty,

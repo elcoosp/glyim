@@ -133,6 +133,22 @@ impl<T> Option<T> {
         }
     }
 
+    /// Returns `None` if the option is `None`, otherwise calls `predicate`
+    /// with a reference to the wrapped value and returns `Some(t)` if it
+    /// returns `true`.
+    fn filter(self, predicate: fn(&T) -> bool) -> Option<T> {
+        match self {
+            Option::Some(ref val) => {
+                if predicate(val) {
+                    self
+                } else {
+                    Option::None
+                }
+            }
+            Option::None => Option::None,
+        }
+    }
+
     /// Converts from `&Option<T>` to `Option<&T>`.
     fn as_ref(&self) -> Option<&T> {
         match self {

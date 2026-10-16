@@ -384,6 +384,7 @@ impl Pattern {
                 var_id,
                 name,
                 mutability,
+                binding_ty: None,
                 subpattern: None,
             },
             ty,
@@ -469,6 +470,11 @@ pub enum PatternKind {
         name: Name,
         /// Struct.
         mutability: Mutability,
+        /// For a `ref`/`ref mut` binding: the *variable's* type
+        /// (`&T`/`&mut T`), which differs from the pattern's place type
+        /// `T`. MIR lowering allocates the local from this when `Some`,
+        /// and emits a borrow of the matched place rather than a copy.
+        binding_ty: Option<Ty>,
         /// Struct.
         subpattern: Option<Box<Pattern>>,
     },
@@ -522,12 +528,14 @@ impl std::fmt::Debug for PatternKind {
                 var_id,
                 name,
                 mutability,
+                binding_ty,
                 subpattern,
             } => f
                 .debug_struct("Binding")
                 .field("var_id", var_id)
                 .field("name", name)
                 .field("mutability", mutability)
+                .field("binding_ty", binding_ty)
                 .field("subpattern", subpattern)
                 .finish(),
             PatternKind::Struct {
@@ -580,11 +588,13 @@ impl Clone for PatternKind {
                 var_id,
                 name,
                 mutability,
+                binding_ty,
                 subpattern,
             } => PatternKind::Binding {
                 var_id: *var_id,
                 name: *name,
                 mutability: *mutability,
+                binding_ty: *binding_ty,
                 subpattern: subpattern.clone(),
             },
             PatternKind::Struct {

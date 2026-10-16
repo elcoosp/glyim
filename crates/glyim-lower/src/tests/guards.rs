@@ -44,6 +44,7 @@ fn lower_guard_branch() {
             var_id: glyim_typeck::thir::LocalVarId::from_raw(0),
             name: b.make_name("n"),
             mutability: glyim_core::primitives::Mutability::Not,
+            binding_ty: None,
             subpattern: None,
         },
         i32_ty,

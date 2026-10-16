@@ -173,6 +173,7 @@ impl<'a> MirBuilder<'a> {
                     name,
                     var_id,
                     mutability: _,
+                    binding_ty: _,
                     subpattern,
                 } => {
                     self.var_map.insert(*name, local);
@@ -181,7 +182,12 @@ impl<'a> MirBuilder<'a> {
                     // ids for the same parameter; make both resolve to `local`.
                     self.local_var_map.insert(param.local, local);
                     if let Some(sub) = subpattern {
-                        self.bind_pattern(sub, Some(local), param.span);
+                        self.bind_pattern(
+                            sub,
+                            Some(glyim_mir::Place::new(local)),
+                            Some(glyim_mir::Place::new(local)),
+                            param.span,
+                        );
                     }
                 }
                 thir::PatternKind::Wild => {
@@ -189,7 +195,12 @@ impl<'a> MirBuilder<'a> {
                 }
                 _ => {
                     self.local_var_map.insert(param.local, local);
-                    self.bind_pattern(&param.pat, Some(local), param.span);
+                    self.bind_pattern(
+                        &param.pat,
+                        Some(glyim_mir::Place::new(local)),
+                        Some(glyim_mir::Place::new(local)),
+                        param.span,
+                    );
                 }
             }
         }

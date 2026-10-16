@@ -51,7 +51,12 @@ impl<'a> MirBuilder<'a> {
                 } else {
                     None
                 };
-                self.bind_pattern(pat, init_local, *span);
+                self.bind_pattern(
+                    pat,
+                    init_local.map(glyim_mir::Place::new),
+                    init_local.map(glyim_mir::Place::new),
+                    *span,
+                );
                 if let thir::PatternKind::Binding {
                     name: bind_name, ..
                 } = &pat.kind
@@ -836,7 +841,12 @@ impl<'a> MirBuilder<'a> {
                             ),
                             expr.span,
                         );
-                        self.bind_pattern(pat, Some(payload_local), expr.span);
+                        self.bind_pattern(
+                            pat,
+                            Some(glyim_mir::Place::new(payload_local)),
+                            Some(glyim_mir::Place::new(payload_local)),
+                            expr.span,
+                        );
                         let _ = self.lower_expr_to_rvalue(body);
                         if self.current_block.is_some() {
                             self.terminate(
@@ -1508,10 +1518,17 @@ impl<'a> MirBuilder<'a> {
 
     // ---- Pattern binding ----
     /// bind_pattern.
+    ///
+    /// `copy_place` is the place a by-value binding moves from (usually a
+    /// temp copy of the matched value); `orig_place` is the *original*
+    /// place a `ref`/`ref mut` binding borrows, so `*v = ..` writes
+    /// through to the scrutinee rather than into a copy. When the two are
+    /// the same (e.g. a `let` binding) callers pass the same place twice.
     pub fn bind_pattern(
         &mut self,
         pat: &thir::Pattern,
-        init_local: Option<LocalIdx>,
+        copy_place: Option<glyim_mir::Place>,
+        orig_place: Option<glyim_mir::Place>,
         span: glyim_span::Span,
     ) {
         match &pat.kind {
@@ -1520,20 +1537,55 @@ impl<'a> MirBuilder<'a> {
                 name,
                 var_id,
                 mutability,
+                binding_ty,
                 subpattern,
             } => {
-                // Prefer `init_local`'s resolved type when `pat.ty` is
-                // `Ty::ERROR`. Typeck leaves the binding's own type as
-                // `Ty::ERROR` for a binding *inside a variant-field pattern*
-                // (`Ok(n)` on `Result<usize, E>`), so `n` would be
-                // error-typed and `written += n` would build an `Add` on an
-                // error operand. The `init_local` was allocated by the
-                // enclosing `Struct`/`Tuple` arm from the resolved
-                // `Downcast+Field` place type; inheriting its type here fixes
-                // the binding.
+                // A `ref`/`ref mut` binding typed `&T`: store a *borrow* of
+                // the ORIGINAL place (not the temp copy) so writes through
+                // `*v` reach the scrutinee.
+                if let Some(bt) = binding_ty {
+                    if let Some(place) = orig_place.clone() {
+                        let local = self.alloc_local(*bt, *mutability, span);
+                        self.var_map.insert(*name, local);
+                        self.local_var_map.insert(*var_id, local);
+                        self.push_stmt(glyim_mir::StatementKind::StorageLive(local), span);
+                        // Borrow kind from the reference's own mutability
+                        // (`&mut T` vs `&T`), not the binding's `mutability`
+                        // (`ref mut v` binds a `&mut T` with a non-mut
+                        // binding).
+                        let borrow = match self.ctx.ty_ctx().ty_kind(*bt) {
+                            TyKind::Ref(_, _, glyim_core::primitives::Mutability::Mut) => {
+                                glyim_mir::BorrowKind::Mut {
+                                    allow_two_phase_borrow: false,
+                                }
+                            }
+                            _ => glyim_mir::BorrowKind::Shared,
+                        };
+                        self.push_stmt(
+                            glyim_mir::StatementKind::Assign(
+                                glyim_mir::Place::new(local),
+                                glyim_mir::Rvalue::Ref(place, borrow),
+                            ),
+                            span,
+                        );
+                        if let Some(sub) = subpattern {
+                            self.bind_pattern(
+                                sub,
+                                Some(glyim_mir::Place::new(local)),
+                                Some(glyim_mir::Place::new(local)),
+                                span,
+                            );
+                        }
+                        return;
+                    }
+                }
+                // Plain binding: prefer the copy place's resolved type when
+                // `pat.ty` is `Ty::ERROR` (typeck leaves a variant-field
+                // binding error-typed; the enclosing arm typed the copy
+                // from the resolved `Downcast+Field` place).
                 let local_ty = if pat.ty == Ty::ERROR {
-                    match init_local {
-                        Some(init) => self.locals[init].ty,
+                    match &copy_place {
+                        Some(p) => p.ty(self.ctx.ty_ctx(), &self.locals),
                         None => pat.ty,
                     }
                 } else {
@@ -1543,32 +1595,34 @@ impl<'a> MirBuilder<'a> {
                 self.var_map.insert(*name, local);
                 self.local_var_map.insert(*var_id, local);
                 self.push_stmt(glyim_mir::StatementKind::StorageLive(local), span);
-                // Phase 4 (GLYIM_DESTUB_PLAN): pre-allocate + initialize the
-                // drop-flag for a droppable `let`-bound local at its
-                // declaration site (dominates all later paths), so a later
-                // partial move (`register_partial_move`) can clear it.
                 if self.ctx.ty_ctx().needs_drop(pat.ty) {
                     self.register_drop_flag_init(local, span);
                 }
-                if let Some(init) = init_local {
-                    let place = glyim_mir::Place::new(local);
-                    let rvalue = glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(
-                        glyim_mir::Place::new(init),
-                    ));
-                    self.push_stmt(glyim_mir::StatementKind::Assign(place, rvalue), span);
+                if let Some(p) = copy_place {
+                    let rvalue = glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(p));
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(glyim_mir::Place::new(local), rvalue),
+                        span,
+                    );
                 }
                 if let Some(sub) = subpattern {
-                    self.bind_pattern(sub, Some(local), span);
+                    self.bind_pattern(
+                        sub,
+                        Some(glyim_mir::Place::new(local)),
+                        Some(glyim_mir::Place::new(local)),
+                        span,
+                    );
                 }
             }
             thir::PatternKind::Wild => {}
             thir::PatternKind::Tuple(fields) => {
-                if let Some(init) = init_local {
-                    let init_place = glyim_mir::Place::new(init);
+                if let (Some(init), Some(orig)) = (copy_place.clone(), orig_place.clone()) {
                     for (idx, field_pat) in fields.iter().enumerate() {
                         let field_proj = ProjectionElem::Field(FieldIdx::from_raw(idx as u32));
-                        let field_place =
-                            self.place_with_projection(init_place.clone(), field_proj);
+                        let copy_field =
+                            self.place_with_projection(init.clone(), field_proj.clone());
+                        let orig_field =
+                            self.place_with_projection(orig.clone(), field_proj);
                         let temp_local = self.alloc_local(
                             field_pat.ty,
                             glyim_core::primitives::Mutability::Not,
@@ -1578,11 +1632,16 @@ impl<'a> MirBuilder<'a> {
                         self.push_stmt(
                             glyim_mir::StatementKind::Assign(
                                 glyim_mir::Place::new(temp_local),
-                                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(field_place)),
+                                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(copy_field)),
                             ),
                             span,
                         );
-                        self.bind_pattern(field_pat, Some(temp_local), span);
+                        self.bind_pattern(
+                            field_pat,
+                            Some(glyim_mir::Place::new(temp_local)),
+                            Some(orig_field),
+                            span,
+                        );
                     }
                 }
             }
@@ -1592,8 +1651,8 @@ impl<'a> MirBuilder<'a> {
                 fields,
                 rest: _rest,
             } => {
-                if let Some(init) = init_local {
-                    let init_place = glyim_mir::Place::new(init);
+                if let (Some(init), Some(orig)) = (copy_place.clone(), orig_place.clone()) {
+                    let init_place = init;
                     // For an enum scrutinee, insert a `Downcast` before the
                     // `Field` projection. Without it, `Place::ty()` on the
                     // field place bails with "Field projection on
@@ -1603,13 +1662,14 @@ impl<'a> MirBuilder<'a> {
                     // folding to a constant) -- the reason `write_all` never
                     // advanced `written` and looped forever / panicked.
                     let is_enum = self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum;
-                    let field_base = if is_enum {
-                        self.place_with_projection(
-                            init_place.clone(),
-                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(*variant_idx)),
+                    let (field_base, orig_base) = if is_enum {
+                        let dc = ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(*variant_idx));
+                        (
+                            self.place_with_projection(init_place.clone(), dc.clone()),
+                            self.place_with_projection(orig.clone(), dc),
                         )
                     } else {
-                        init_place.clone()
+                        (init_place.clone(), orig.clone())
                     };
                     for field_pat in fields {
                         let field_idx =
@@ -1639,6 +1699,14 @@ impl<'a> MirBuilder<'a> {
                         } else {
                             place_field_ty
                         };
+                        // The corresponding field on the ORIGINAL place —
+                        // a `ref`/`ref mut` sub-pattern borrows this, so
+                        // `*v = ..` writes through to the scrutinee rather
+                        // than into the temp copy.
+                        let orig_field = self.place_with_projection(
+                            orig_base.clone(),
+                            ProjectionElem::Field(field_idx),
+                        );
                         let temp_local = self.alloc_local(
                             field_ty,
                             glyim_core::primitives::Mutability::Not,
@@ -1655,13 +1723,23 @@ impl<'a> MirBuilder<'a> {
                             ),
                             field_pat.span,
                         );
-                        self.bind_pattern(&field_pat.pattern, Some(temp_local), field_pat.span);
+                        self.bind_pattern(
+                            &field_pat.pattern,
+                            Some(glyim_mir::Place::new(temp_local)),
+                            Some(orig_field),
+                            field_pat.span,
+                        );
                     }
                 }
             }
             thir::PatternKind::Or(pats) => {
                 if let Some(first_pat) = pats.first() {
-                    self.bind_pattern(first_pat, init_local, span);
+                    self.bind_pattern(
+                        first_pat,
+                        copy_place,
+                        orig_place,
+                        span,
+                    );
                 }
             }
             // `Literal` and `ConstBlock` patterns bind no names of their
@@ -1680,8 +1758,8 @@ impl<'a> MirBuilder<'a> {
                 slice,
                 suffix,
             } => {
-                if let Some(init) = init_local {
-                    let init_place = glyim_mir::Place::new(init);
+                if let (Some(init), Some(orig)) = (copy_place.clone(), orig_place.clone()) {
+                    let init_place = init;
 
                     for (i, sub_pat) in prefix.iter().enumerate() {
                         let proj = ProjectionElem::ConstantIndex {
@@ -1689,7 +1767,8 @@ impl<'a> MirBuilder<'a> {
                             min_length: (prefix.len() + suffix.len()) as u64,
                             from_end: false,
                         };
-                        let elem_place = self.place_with_projection(init_place.clone(), proj);
+                        let elem_place = self.place_with_projection(init_place.clone(), proj.clone());
+                        let orig_elem = self.place_with_projection(orig.clone(), proj);
                         let temp_local = self.alloc_local(
                             sub_pat.ty,
                             glyim_core::primitives::Mutability::Not,
@@ -1703,7 +1782,12 @@ impl<'a> MirBuilder<'a> {
                             ),
                             span,
                         );
-                        self.bind_pattern(sub_pat, Some(temp_local), span);
+                        self.bind_pattern(
+                            sub_pat,
+                            Some(glyim_mir::Place::new(temp_local)),
+                            Some(orig_elem),
+                            span,
+                        );
                     }
 
                     for (i, sub_pat) in suffix.iter().enumerate() {
@@ -1712,7 +1796,8 @@ impl<'a> MirBuilder<'a> {
                             min_length: (prefix.len() + suffix.len()) as u64,
                             from_end: true,
                         };
-                        let elem_place = self.place_with_projection(init_place.clone(), proj);
+                        let elem_place = self.place_with_projection(init_place.clone(), proj.clone());
+                        let orig_elem = self.place_with_projection(orig.clone(), proj);
                         let temp_local = self.alloc_local(
                             sub_pat.ty,
                             glyim_core::primitives::Mutability::Not,
@@ -1726,7 +1811,12 @@ impl<'a> MirBuilder<'a> {
                             ),
                             span,
                         );
-                        self.bind_pattern(sub_pat, Some(temp_local), span);
+                        self.bind_pattern(
+                            sub_pat,
+                            Some(glyim_mir::Place::new(temp_local)),
+                            Some(orig_elem),
+                            span,
+                        );
                     }
 
                     if let Some(rest_pat) = slice {
@@ -1735,7 +1825,8 @@ impl<'a> MirBuilder<'a> {
                             to: suffix.len() as u64,
                             from_end: true,
                         };
-                        let rest_place = self.place_with_projection(init_place.clone(), proj);
+                        let rest_place = self.place_with_projection(init_place.clone(), proj.clone());
+                        let orig_rest = self.place_with_projection(orig.clone(), proj);
                         let temp_local = self.alloc_local(
                             rest_pat.ty,
                             glyim_core::primitives::Mutability::Not,
@@ -1749,7 +1840,12 @@ impl<'a> MirBuilder<'a> {
                             ),
                             span,
                         );
-                        self.bind_pattern(rest_pat, Some(temp_local), span);
+                        self.bind_pattern(
+                            rest_pat,
+                            Some(glyim_mir::Place::new(temp_local)),
+                            Some(orig_rest),
+                            span,
+                        );
                     }
                 }
             }
@@ -1847,7 +1943,7 @@ impl<'a> MirBuilder<'a> {
         self.push_stmt(
             glyim_mir::StatementKind::Assign(
                 glyim_mir::Place::new(scrut_local),
-                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrut_source)),
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(scrut_source.clone())),
             ),
             span,
         );
@@ -1915,7 +2011,12 @@ impl<'a> MirBuilder<'a> {
             // slice-dispatch matches (as before) where the historical
             // behaviour was to not bind at all.
             if !slice_dispatch {
-                self.bind_pattern(&arm.pat, Some(scrut_local), arm.pat.span);
+                self.bind_pattern(
+                    &arm.pat,
+                    Some(glyim_mir::Place::new(scrut_local)),
+                    Some(scrut_source.clone()),
+                    arm.pat.span,
+                );
             }
             if let Some(guard) = &arm.guard {
                 let guard_op = self.lower_expr_to_operand(guard);
