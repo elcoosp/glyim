@@ -1,7 +1,6 @@
-// KNOWN FAILING — `ref` binding on a named struct field.
+// Regression: `ref` binding on a named struct field.
 // Same root as match_struct_named_fields.g.
 // test-mode: run-pass
-// ignore
 // exit-code: 12
 // compile-flags: --with-stdlib
 // needs-llvm
