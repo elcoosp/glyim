@@ -228,7 +228,7 @@ impl<'a> FnCtxt<'a> {
                     .unwrap_or(false);
 
                 if has_fields {
-                    let ctor_fn_def_id = FnDefId::from_raw(local.to_raw());
+                    let ctor_fn_def_id = self.ctx.alloc_variant_ctor_fn_def_id();
                     let declared_field_tys: Vec<Ty> = self
                         .ctx
                         .adt_def(adt_id)
@@ -1058,14 +1058,7 @@ impl<'a> FnCtxt<'a> {
             .map(|v| !v.fields.is_empty())
             .unwrap_or(false);
         if has_fields {
-            let ctor_fn_def_id = FnDefId::from_raw(
-                self.def_map
-                    .variant_map
-                    .iter()
-                    .find(|(_, (e, _))| e.to_raw() == adt_id.to_raw())
-                    .map(|(l, _)| l.to_raw())
-                    .unwrap_or_else(|| adt_id.to_raw()),
-            );
+            let ctor_fn_def_id = self.ctx.alloc_variant_ctor_fn_def_id();
             // Substitute the variant's DECLARED field types (which carry
             // the enum's rigid `Param(i)`) through the SAME fresh vars
             // `substs`/`enum_ty` above use. Registering the raw

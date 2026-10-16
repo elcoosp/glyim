@@ -261,6 +261,15 @@ pub(crate) fn lower_pat(
             let mut path = None;
             let mut fields = Vec::new();
             let mut rest = false;
+            // `P { x: a, y: b }`: the outer loop below walks the PatStruct's
+            // direct children, which include BOTH the field-ident nodes
+            // (`x`, `y`) AND the sub-pattern ident nodes (`a`, `b`). A
+            // sub-pattern consumed via `x: a` must not then be re-visited
+            // as if it were a shorthand field — that produced spurious
+            // extra fields (`a`, `b`), so typeck reported "no field `a`".
+            // Record every node used as a sub-pattern and skip it.
+            let mut consumed: std::collections::HashSet<(u32, u32)> =
+                std::collections::HashSet::new();
 
             for child in node.children_with_tokens() {
                 match &child {
@@ -310,6 +319,11 @@ pub(crate) fn lower_pat(
                         }
                     }
                     glyim_syntax::SyntaxElement::Node(n) if n.kind() == SyntaxKind::PatIdent => {
+                        let r = n.text_range();
+                        let (s, e) = (u32::from(r.start()), u32::from(r.end()));
+                        if consumed.iter().any(|(cs, ce)| *cs <= s && e <= *ce) {
+                            continue;
+                        }
                         let field_name_text = first_ident_text(n).unwrap_or_default();
                         let name = interner.intern(&field_name_text);
                         let mut has_colon = false;
@@ -328,7 +342,9 @@ pub(crate) fn lower_pat(
                                             has_colon = true;
                                         }
                                         glyim_syntax::SyntaxElement::Token(t)
-                                            if t.kind().is_trivia() =>
+                                            if t.kind().is_trivia()
+                                                || t.kind() == SyntaxKind::KwRef
+                                                || t.kind() == SyntaxKind::KwMut =>
                                         {
                                             continue;
                                         }
@@ -343,6 +359,7 @@ pub(crate) fn lower_pat(
                                                     | SyntaxKind::PatOr
                                                     | SyntaxKind::PatRange
                                                     | SyntaxKind::PatSlice
+                                                    | SyntaxKind::PatRef
                                             ) =>
                                         {
                                             if has_colon {
@@ -361,6 +378,8 @@ pub(crate) fn lower_pat(
                                 && let Some(pat_id) =
                                     lower_pat(&sub_n, interner, pats, pat_spans, diags)
                             {
+                                let sr = sub_n.text_range();
+                                consumed.insert((u32::from(sr.start()), u32::from(sr.end())));
                                 fields.push((name, pat_id));
                             }
                         } else {
@@ -442,6 +461,57 @@ pub(crate) fn lower_pat(
                 kind: PathKind::Plain,
             };
             Some(push_pat(pats, pat_spans, node, Pat::Path(path)))
+        }
+        SyntaxKind::PatRef => {
+            // `ref x` / `ref mut x`. The parser wraps them in a `PatRef`
+            // node containing the `KwRef` token (plus optional `KwMut`)
+            // followed by the inner `PatIdent`. Lower the inner pattern,
+            // then — when it is a plain binding — rebuild it as a
+            // `RefBinding` so typeck/LIR know to bind a reference.
+            let ref_mutability = if node
+                .children_with_tokens()
+                .any(|el| el.as_token().is_some_and(|t| t.kind() == SyntaxKind::KwMut))
+            {
+                Mutability::Mut
+            } else {
+                Mutability::Not
+            };
+            let inner = node.children().find(|ch| {
+                matches!(
+                    ch.kind(),
+                    SyntaxKind::PatIdent
+                        | SyntaxKind::PatWild
+                        | SyntaxKind::PatLit
+                        | SyntaxKind::PatTuple
+                        | SyntaxKind::PatStruct
+                        | SyntaxKind::PatOr
+                        | SyntaxKind::PatRange
+                        | SyntaxKind::PatSlice
+                        | SyntaxKind::PatRef
+                )
+            });
+            let inner = inner?;
+            let inner_id = lower_pat(&inner, interner, pats, pat_spans, diags)?;
+            let rebound = match pats[inner_id].clone() {
+                Pat::Binding {
+                    name, subpattern, ..
+                } => Some(Pat::RefBinding {
+                    name,
+                    mutability: Mutability::Not,
+                    ref_mutability,
+                    subpattern,
+                }),
+                // `ref` on a non-binding inner pattern (`ref (a, b)`):
+                // fall back to the inner pattern as-lowered.
+                _ => None,
+            };
+            match rebound {
+                Some(rb) => {
+                    pats[inner_id] = rb;
+                    Some(inner_id)
+                }
+                None => Some(inner_id),
+            }
         }
         _ => {
             diags.push(GlyimDiagnostic::internal_error(format!(

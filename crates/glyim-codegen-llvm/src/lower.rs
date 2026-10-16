@@ -7004,10 +7004,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 AnyValueEnum::ArrayValue(v) => BasicValueEnum::ArrayValue(v),
                 AnyValueEnum::VectorValue(v) => BasicValueEnum::VectorValue(v),
                 AnyValueEnum::ScalableVectorValue(v) => BasicValueEnum::ScalableVectorValue(v),
-                _ => {
-                    return Err(vec![GlyimDiagnostic::internal_error(
-                        "unexpected call return kind",
-                    )]);
+                other => {
+                    return Err(vec![GlyimDiagnostic::internal_error(format!(
+                        "unexpected call return kind: {:?}",
+                        other
+                    ))]);
                 }
             };
             let dest_ptr = self.place_ptr(destination)?;

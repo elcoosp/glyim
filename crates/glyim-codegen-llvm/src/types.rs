@@ -54,18 +54,46 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             context.ptr_type(inkwell::AddressSpace::default()).into()
         }
         TyKind::Tuple(subst) => {
+            // Structural tuple: one LLVM field per element, in order, so a
+            // `{i32, i32}` (not the opaque `{[2 x i32]}` `opaque_sized_type`
+            // produced). The opaque form has a single field, so
+            // `lower_const`'s `build_insert_value(cur, val, i)` for the 2nd
+            // element failed with `ExtractOutOfRange`. Structural tuples
+            // also lay out identically to `glyim-layout`'s tuple offsets, so
+            // the byte-GEP store path in `build_layout_aggregate` is
+            // unaffected. Fall back to the opaque form only if an element
+            // type can't be lowered.
             let args = ctx.substitution_args(*subst);
-            if args.is_empty() {
-                return Ok(context.struct_type(&[], false).into());
+            let mut fields: Vec<BasicTypeEnum<'ctx>> = Vec::with_capacity(args.len());
+            let mut ok = true;
+            for a in args {
+                if let glyim_type::GenericArg::Ty(t) = a {
+                    match llvm_type_for_ty(ctx, target_info, context, *t) {
+                        Ok(bt) => fields.push(bt),
+                        Err(_) => {
+                            ok = false;
+                            break;
+                        }
+                    }
+                } else {
+                    ok = false;
+                    break;
+                }
             }
-            let layout_computer = glyim_layout::SimpleLayoutComputer::new(ctx, target_info.clone());
-            let layout = layout_computer
-                .layout_of(ty)
-                .unwrap_or_else(|_| glyim_layout::Layout::unit());
-            if layout.size.0 == 0 {
-                return Ok(context.struct_type(&[], false).into());
+            if ok {
+                context.struct_type(&fields, false).into()
+            } else {
+                let layout_computer =
+                    glyim_layout::SimpleLayoutComputer::new(ctx, target_info.clone());
+                let layout = layout_computer
+                    .layout_of(ty)
+                    .unwrap_or_else(|_| glyim_layout::Layout::unit());
+                if layout.size.0 == 0 {
+                    context.struct_type(&[], false).into()
+                } else {
+                    opaque_sized_type(context, layout.size.0, layout.align.0)
+                }
             }
-            opaque_sized_type(context, layout.size.0, layout.align.0)
         }
         TyKind::Array(elem, count) => {
             let elem_llvm = llvm_type_for_ty(ctx, target_info, context, *elem)?;
