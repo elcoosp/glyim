@@ -4,6 +4,7 @@
 // test-mode: run-pass
 // exit-code: 5
 // compile-flags: --with-stdlib
+// needs-llvm
 fn main() -> i32 {
     let mut o = Option::Some(5);
     match o {
