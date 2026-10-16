@@ -1506,7 +1506,22 @@ impl<'a> FnCtxt<'a> {
                                 })
                                 .collect()
                         } else {
-                            let mut recv_inner = recv_ty;
+                            // NESTED-UNWRAP-FIX: resolve the receiver through
+                            // the inference table *before* reading its ADT
+                            // args. `resolve_method_call` above unified the
+                            // `Infer(TyVar)` the receiver arrived as against
+                            // the concrete impl's self type (`Option<i32>`
+                            // for the nested `.unwrap().unwrap()`), but the
+                            // `recv_ty` binding this arm reads is the
+                            // pre-unification value. Without resolution,
+                            // peeling refs off `Infer(TyVar(11747))` hits no
+                            // `TyKind::Adt` arm, `impl_part` comes back empty,
+                            // and the call site emits `FnDef(362, [])` while
+                            // the definition is `FnDef(362, [Option<i32>])`
+                            // — the link fails on an undefined `__glyim_fn_362`.
+                            let resolved_recv_ty =
+                                self.infer.resolve_ty_shallow(self.ctx, recv_ty);
+                            let mut recv_inner = resolved_recv_ty;
                             for _ in 0..8 {
                                 let inner = match self.ctx.ty_kind(recv_inner) {
                                     TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => Some(*i),
@@ -1694,7 +1709,43 @@ impl<'a> FnCtxt<'a> {
                         } else {
                             recv_expr
                         };
-                        let substs = self.ctx.intern_substitution(vec![]);
+                        // NESTED-UNWRAP-FIX: mirror the `MethodDispatch::Static`
+                        // arm and derive the callee's `FnDef` substitution
+                        // from the receiver's own ADT args. Previously this
+                        // was hardcoded to `[]`, so a call to
+                        // `Option::<Option<i32>>::unwrap` on a receiver of
+                        // type `Option<i32>` emitted `FnDef(362, [])` while
+                        // the impl-method body was enqueued by mono under
+                        // `FnDef(362, [<Option<i32>>])` — a different mangled
+                        // symbol. Link then failed with an undefined
+                        // `__glyim_fn_362`.
+                        //
+                        // Peel any `&`/`&mut`/`*`/`*mut` layers off the
+                        // *original* (pre-autoref) receiver type to reach the
+                        // ADT, then read its generic args. Slice/array
+                        // receivers fall back to the element type. Anything
+                        // else stays empty (truly non-generic builtin).
+                        let builtin_substs: Vec<GenericArg> = {
+                            let mut recv_inner = recv_ty;
+                            for _ in 0..8 {
+                                match self.ctx.ty_kind(recv_inner) {
+                                    TyKind::Ref(_, i, _) | TyKind::RawPtr(i, _) => {
+                                        recv_inner = *i;
+                                    }
+                                    _ => break,
+                                }
+                            }
+                            match self.ctx.ty_kind(recv_inner) {
+                                TyKind::Adt(_, s) if !s.is_empty() => {
+                                    self.ctx.substitution_args(*s).to_vec()
+                                }
+                                TyKind::Slice(e) | TyKind::Array(e, _) => {
+                                    vec![GenericArg::Ty(*e)]
+                                }
+                                _ => Vec::new(),
+                            }
+                        };
+                        let substs = self.ctx.intern_substitution(builtin_substs);
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {
                             kind: thir::ExprKind::FnRef(fn_def_id),

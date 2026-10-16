@@ -3,7 +3,6 @@
 // Adt1010<?ty>": the inner unwrap's return var isn't linked to the outer's
 // payload var. Pre-existing; same "unlinked infer var" class.
 // test-mode: run-pass
-// ignore
 // exit-code: 6
 // compile-flags: --with-stdlib
 // needs-llvm
