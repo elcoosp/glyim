@@ -158,6 +158,7 @@ pub struct TyCtxMut {
     /// Counter for synthetic `FnDefId`s handed out to builtin methods. Seeded
     /// far above user/closure fn ids so it can never collide.
     next_builtin_fn_id: u32,
+    next_ctor_fn_id: u32,
 }
 
 impl TyCtxMut {
@@ -202,6 +203,7 @@ impl TyCtxMut {
             const_fns: HashMap::new(),
             primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
+            next_ctor_fn_id: 500_000,
         };
         // sentinels
         assert_eq!(
@@ -345,6 +347,7 @@ impl TyCtxMut {
             const_fns: HashMap::new(),
             primitive_method_fns: HashMap::new(),
             next_builtin_fn_id: 9_000,
+            next_ctor_fn_id: 500_000,
         }
     }
 
@@ -983,6 +986,18 @@ impl TyCtxMut {
     }
 
     /// register_fn_sig.
+    /// Fresh per-call-site `FnDefId` for a variant-ctor registration.
+    /// The shared `variant_map` id is re-registered on every ctor call
+    /// with fresh vars, so nested same-variant ctors (`Some(Some(6))`)
+    /// clobbered each other's sig. MIR lowering reads
+    /// `ExprKind::VariantCtor { adt_id, variant_idx }`, not this id, so a
+    /// fresh id is safe.
+    pub fn alloc_variant_ctor_fn_def_id(&mut self) -> FnDefId {
+        let id = FnDefId::from_raw(self.next_ctor_fn_id);
+        self.next_ctor_fn_id += 1;
+        id
+    }
+
     pub fn register_fn_sig(&mut self, def_id: FnDefId, sig: FnSig) {
         self.fn_sigs.insert(def_id, sig);
     }
