@@ -237,3 +237,42 @@ Verified working at runtime (all via `--with-stdlib --emit=exec` + `./out`):
 Plus all previous fixes still hold (`Option<Option<i32>>` nested unwrap,
 annotated `Result<Result<i32,i32>,i32>` unwrap, `.map`/`.and_then`, and the
 E0282 rejection of un-annotated `Result::Ok(5)`).
+
+---
+
+## 9. Anti-regression fixtures added
+
+Six behavior fixtures under `crates/glyim-test/tests/run-pass/behavior/`
+lock in each distinct bug class fixed this session. The point of each is
+that it would have *failed* before its corresponding fix:
+
+| Fixture | Locks in | Failure mode if it regresses |
+|---|---|---|
+| `generic_fn_distinct_instantiations.g` | Per-`(FnDefId, Substitution)` symbol mangling (commit `89e278df`) | Link error: undefined `__glyim_fn_<id>` |
+| `generic_fn_raw_body_filtered.g` | Raw-generic bodies filtered out of `all_bodies` (commit `a12da7de`) | ICE: `UnknownType(Ty(16))` in `fn_abi_of` |
+| `generic_method_infer_receiver.g` | `MethodDispatch::Static`/`Builtin` resolve receiver through `infer.resolve_ty_shallow` (commit `521f7bd3`) | Link error, or wrong-ABI call |
+| `generic_method_turbofish_all_primitives.g` | Method turbofish goes into the method's own generics, not the impl's (commit `e77fcc94`) | Runtime SIGSEGV (exit 139) |
+| `nested_result_unwrap.g` | All of the above, at `Result<Result<i32,i32>,i32>` | Compile / link / runtime depending on which layer regresses |
+| `mixed_adt_nested_unwrap.g` | Mangled key distinguishes `Option<X>::unwrap` from `Result<X, Y>::unwrap` at same substitution *length* | Link error or wrong-ABI call |
+
+They are deliberately *behavioral* (they run and assert on the exit code)
+rather than compile-only: the `FromStr` bug specifically slipped past the
+existing compile-only `primitive_trait_impl` tests, because the miscompiled
+program built fine but stored through a null pointer at runtime.
+
+`crates/glyim-test/tests/ui/type_annotations_needed.g` (added earlier this
+session, commit `5d022ec8`) locks in the E0282 diagnostic for un-annotated
+`Result::Ok(..)` — the fixture is a real UI snapshot, not a compile-fail
+marker, so the *text* of the diagnostic is pinned too.
+
+### Known gap (documented, not fixed)
+
+`crates/glyim-test/tests/ui/parse_result_used_in_match.g` is marked
+`// ignore`. Using the parsed value in a `match`
+(`match "42".parse::<i32>() { Result::Ok(v) => v, .. }`) hits
+`internal compiler error: TyKind::Projection reached LLVM codegen – type
+normalization incomplete`. The `Err` payload's type `<T as FromStr>::Err`
+is not normalized before codegen. This is a distinct bug from anything
+fixed this session (the discard-only use of `parse` works). The fixture
+exists so the gap is *visible* and so the eventual fix has a place to
+attach; removing the `// ignore` line makes it a live test.
