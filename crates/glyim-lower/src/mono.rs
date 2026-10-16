@@ -207,7 +207,20 @@ impl<'a> MonoCtx<'a> {
             self.devirtualize(&mut body);
 
             self.scan_body_for_refs(&body);
-            let symbol = format!("{:?}", item);
+            // Mangle the symbol from the *same* `(FnDefId, Substitution)`
+            // pair that produced this MonoItem. That pair uniquely
+            // identifies an instantiation, so the definition and every
+            // call site that constructed the same `MirConstKind::Fn(def,
+            // substs)` resolve to the same symbol — while two distinct
+            // instantiations of the same generic fn (e.g. `Option<i32>::
+            // unwrap` vs `Option<Option<i32>>::unwrap`) get distinct
+            // symbols and no longer collide on the plain `__glyim_fn_<id>`.
+            let symbol = match &item {
+                MonoItem::Fn { def_id, substs } => {
+                    mangle_fn_symbol(def_id.to_raw(), *substs)
+                }
+                _ => format!("{:?}", item),
+            };
             let id = self.items.push(MonoItemData {
                 item: item.clone(),
                 body,

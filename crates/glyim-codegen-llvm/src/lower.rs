@@ -356,10 +356,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     _ => unreachable!(),
                 }
             }
-            MirConstKind::Fn(fn_def_id, _substs) => {
+            MirConstKind::Fn(fn_def_id, substs) => {
+                // Mangle from the *same* `(FnDefId, Substitution)` pair the
+                // pipeline used to define the body, so the const operand's
+                // symbol matches the definition. See
+                // `glyim_type::mangle_fn_symbol`.
                 let fn_name = match self.ty_ctx.extern_fn_name(*fn_def_id) {
                     Some(ext) => ext.to_string(),
-                    None => format!("__glyim_fn_{}", fn_def_id.to_raw()),
+                    None => glyim_type::mangle_fn_symbol(fn_def_id.to_raw(), *substs),
                 };
                 let module = self.module;
                 let callee = match module.get_function(&fn_name) {
@@ -6616,9 +6620,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         sig = Self::concretize_fn_sig(&sig, &map_args, self.ty_ctx);
                     }
                 }
+                // Mangle from the *same* `(FnDefId, Substitution)` pair
+                // `MonoCtx::collect` used to define the body, so a call
+                // site and its definition agree on the symbol even when
+                // the generic fn is instantiated twice at different types
+                // (the nested `Option<Option<i32>>::unwrap` bug).
                 let fn_name = match self.ty_ctx.extern_fn_name(def_id) {
                     Some(ext) => ext.to_string(),
-                    None => format!("__glyim_fn_{}", def_id.to_raw()),
+                    None => glyim_type::mangle_fn_symbol(def_id.to_raw(), substs),
                 };
                 let fn_val = match self.module.get_function(&fn_name) {
                     Some(v) => v,
@@ -7235,8 +7244,21 @@ pub(crate) fn lower_body<'ctx>(
     source_map: HashMap<FileId, (String, String)>,
     hygiene: Option<HygieneCtx>,
     entry_main: Option<u32>,
+    symbol: Option<&str>,
 ) -> CompResult<()> {
-    let fn_name = format!("__glyim_fn_{}", body.owner.local_id.to_raw());
+    // When the pipeline supplies a symbol, it is the mangled name derived
+    // from this body's `(FnDefId, Substitution)` pair (see
+    // `glyim_type::mangle_fn_symbol`). That guarantees the definition's
+    // symbol matches what `lower_call`'s FnDef arm computes at each call
+    // site — which is what fixes nested `Option<Option<i32>>::unwrap`
+    // (the two instantiations of `Option::<T>::unwrap` otherwise collide
+    // on the plain `__glyim_fn_362`, so the second one's caller resolves
+    // against the first's ABI). Fall back to the legacy un-suffixed form
+    // when no symbol was threaded (test helpers, single-body emits).
+    let fn_name = match symbol {
+        Some(s) => s.to_string(),
+        None => format!("__glyim_fn_{}", body.owner.local_id.to_raw()),
+    };
     let layout_computer = FullLayoutComputer::new(ty_ctx, target_info.clone());
     let fn_def_id = glyim_core::def_id::FnDefId::from_raw(body.owner.local_id.to_raw());
     // Build the FnSig from the (already-monomorphized) body so that generic /

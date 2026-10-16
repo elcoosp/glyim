@@ -20,7 +20,7 @@ fn s08_t21_generate_output_is_elf() {
         glyim_core::LocalDefId::from_raw(100),
     )));
     let bodies = vec![body];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(result.is_ok(), "generate should succeed");
 
     let mut file = std::fs::File::open(&output).expect("output file should exist");
@@ -46,7 +46,7 @@ fn s08_t22_generate_output_non_empty() {
     )));
     let bodies = vec![body];
     backend
-        .generate(&bodies, &output)
+        .generate(&crate::tests::to_pairs(&bodies), &output)
         .expect("generate should succeed");
 
     let metadata = std::fs::metadata(&output).expect("output file should exist");
@@ -113,7 +113,7 @@ fn s08_t25_generate_after_many_functions() {
             )))
         })
         .collect();
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(
         result.is_ok(),
         "generate after many generate_function calls should succeed"
@@ -155,7 +155,7 @@ fn s08_t27_emit_thinlto_bitcode_files_writes_one_bc_per_cgu() {
             )))
         })
         .collect();
-    let result = backend.emit_thinlto_bitcode_files(&bodies, &out_dir);
+    let result = backend.emit_thinlto_bitcode_files(&crate::tests::to_pairs(&bodies), &out_dir);
     assert!(
         result.is_ok(),
         "emit_thinlto_bitcode_files should succeed: {:?}",

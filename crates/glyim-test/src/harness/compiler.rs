@@ -367,7 +367,15 @@ impl TestCompiler for PipelineCompiler {
                     syntax_tree: None,
                     def_map: Some(artifacts.def_map),
                     typeck_result: Some(artifacts.typeck_result),
-                    mir_bodies: artifacts.mir_bodies,
+                    // `CompileArtifacts.mir_bodies` carries the mangled LLVM
+                    // symbol alongside each body for codegen's benefit. The
+                    // interpreter runner downstream only cares about the body,
+                    // so strip the symbol here.
+                    mir_bodies: artifacts
+                        .mir_bodies
+                        .into_iter()
+                        .map(|(_sym, b)| b)
+                        .collect(),
                     ty_ctx: Some(artifacts.ty_ctx),
                     executable_path,
                     entry_main,

@@ -38,7 +38,7 @@ pub trait CodegenBackend {
     /// name.
     fn name(&self) -> &'static str;
     /// generate.
-    fn generate(&self, bodies: &[Arc<Body>], output: &Path) -> CompResult<()>;
+    fn generate(&self, bodies: &[(String, Arc<Body>)], output: &Path) -> CompResult<()>;
     /// generate_function.
     fn generate_function(&self, body: &Arc<Body>) -> CompResult<Vec<u8>>;
 }
@@ -615,9 +615,9 @@ impl CodegenBackend for BytecodeBackend {
         "bytecode"
     }
 
-    fn generate(&self, bodies: &[Arc<Body>], output: &Path) -> CompResult<()> {
+    fn generate(&self, bodies: &[(String, Arc<Body>)], output: &Path) -> CompResult<()> {
         let mut module_bytes: Vec<u8> = Vec::new();
-        for body in bodies {
+        for (_symbol, body) in bodies {
             let fn_bytes = self.generate_function(body)?;
             module_bytes.extend_from_slice(&fn_bytes);
         }

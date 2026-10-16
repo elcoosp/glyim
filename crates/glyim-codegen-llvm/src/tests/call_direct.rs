@@ -395,7 +395,7 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     let module = backend
         .lower_bodies_to_module(
             &inkwell_ctx,
-            &[Arc::new(closure_body), Arc::new(caller_body)],
+            &crate::tests::to_pairs(&[Arc::new(closure_body), Arc::new(caller_body)]),
         )
         .expect("lowering caller + closure body failed");
     let ir = module.print_to_string().to_string();

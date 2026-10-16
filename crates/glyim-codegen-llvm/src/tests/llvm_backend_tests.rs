@@ -21,7 +21,7 @@ fn s08_t02_generate_empty_bodies_creates_module() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_test_empty.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(result.is_ok(), "generate with no bodies should succeed");
 }
 
@@ -30,7 +30,7 @@ fn s08_t03_generate_returns_ok() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_test_ok.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(result.is_ok());
 }
 
@@ -47,8 +47,8 @@ fn s08_t05_multiple_generate_calls_reuse_context() {
     let output2 = tpath("glyim_test_reuse2.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
 
-    let r1 = backend.generate(&bodies, &output1);
-    let r2 = backend.generate(&bodies, &output2);
+    let r1 = backend.generate(&crate::tests::to_pairs(&bodies), &output1);
+    let r2 = backend.generate(&crate::tests::to_pairs(&bodies), &output2);
 
     assert!(r1.is_ok(), "First generate call should succeed");
     assert!(
@@ -80,7 +80,7 @@ fn s08_t07_with_target_constructor() {
     // Verify it doesn't crash on generate
     let output = tpath("glyim_test_aarch64.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(
         result.is_ok(),
         "generate with aarch64 target should succeed"
@@ -102,7 +102,7 @@ fn s08_t09_generate_with_single_body() {
         glyim_core::LocalDefId::from_raw(0),
     )));
     let bodies = vec![body];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(result.is_ok(), "generate with single body should succeed");
     // Verify output file was created
     assert!(output.exists(), "output file should exist after generate");
@@ -120,7 +120,7 @@ fn s08_t10_generate_with_multiple_bodies() {
         )));
         bodies.push(body);
     }
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(result.is_ok(), "generate with 5 bodies should succeed");
     assert!(
         output.exists(),
@@ -140,7 +140,7 @@ fn s08_t11_stress_many_bodies() {
         )));
         bodies.push(body);
     }
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(
         result.is_ok(),
         "generate with 100 bodies should succeed without crash"
@@ -189,7 +189,7 @@ fn s08_t14_different_output_paths() {
     let output = std::env::temp_dir()
         .join(format!("glyim_nonexistent_dir_{}", std::process::id()))
         .join("output.o");
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     // Should return an error because directory doesn't exist
     assert!(
         result.is_err(),
@@ -227,7 +227,7 @@ fn s08_t16_generate_with_invalid_triple() {
     let backend = LlvmBackend::default().with_target("nonexistent-unknown-unknown");
     let output = tpath("glyim_test_invalid_triple.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(result.is_err(), "invalid triple should cause error");
 }
 
@@ -244,7 +244,7 @@ fn s08_t17_generate_function_then_generate() {
     // Then call generate with multiple bodies
     let output = tpath("glyim_test_mixed.o");
     let bodies = vec![body.clone()];
-    let r2 = backend.generate(&bodies, &output);
+    let r2 = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     assert!(
         r2.is_ok(),
         "generate after generate_function should succeed"
@@ -264,7 +264,7 @@ fn s08_t18_generate_to_readonly_directory() {
     let backend = LlvmBackend::new();
     let output = dir.path().join("test.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     // Should error because write fails
     assert!(
         result.is_err(),
@@ -316,7 +316,7 @@ fn s08_t27_generate_with_directory_path_errors() {
     let dir = tempfile::tempdir().expect("failed to create tempdir");
     let output = dir.path(); // This is a directory, not a file
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), output);
     assert!(
         result.is_err(),
         "generate with a directory path should error"
@@ -396,7 +396,7 @@ fn s08_t32_wasm_triple_produces_wasm_object() {
         glyim_core::LocalDefId::from_raw(200),
     )));
     let bodies = vec![body];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     // If LLVM has wasm target support, this will succeed; if not, may error.
     // We just care that it doesn't panic.
     if result.is_ok() {
@@ -456,7 +456,7 @@ fn s08_t35_with_target_empty_string() {
     assert_eq!(backend.name(), "llvm");
     let output = tpath("glyim_test_empty_triple.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, &output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
     // Should error because empty triple is invalid.
     assert!(result.is_err(), "empty triple should cause generate error");
 }

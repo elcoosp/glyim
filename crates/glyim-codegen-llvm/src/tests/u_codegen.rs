@@ -68,6 +68,7 @@ fn lower_to_ir(body: &Body, ctx: &glyim_type::TyCtx) -> String {
         HashMap::new(),
         None,
         None,
+        None,
     );
     assert!(result.is_ok(), "lower_body failed: {:?}", result.err());
     module.print_to_string().to_string()
@@ -382,6 +383,7 @@ fn test_const_ref_has_initializer() {
         &ctx,
         false,
         HashMap::new(),
+        None,
         None,
         None,
     );

@@ -27,7 +27,7 @@ fn s08_t41_generate_returns_error_for_invalid_path() {
     // Use a path with invalid characters (on Unix, /tmp works fine; use a deeply nested nonexistent dir)
     let output = Path::new("/tmp/nonexistent/nested/deeply/output.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    let result = backend.generate(&bodies, output);
+    let result = backend.generate(&crate::tests::to_pairs(&bodies), output);
     assert!(result.is_err());
     // The error should be an internal error (target machine file write failure)
     let err = result.unwrap_err();
@@ -69,7 +69,7 @@ fn s08_t44_generate_with_empty_bodies_produces_valid_object() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_empty_module.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    backend.generate(&bodies, &output).unwrap();
+    backend.generate(&crate::tests::to_pairs(&bodies), &output).unwrap();
     // Verify ELF magic if x86_64-unknown-linux-gnu (default)
     let mut buf = [0u8; 4];
     std::fs::File::open(&output)

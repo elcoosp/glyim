@@ -59,7 +59,13 @@ fn test_mock_codegen_generate() {
         glyim_core::def_id::CrateId::from_raw(0),
         glyim_core::def_id::LocalDefId::from_raw(0),
     )));
-    let result = mock.generate(&[body], std::path::Path::new("test.o"));
+    // `generate` now takes `(symbol, body)` pairs — the mangled FnDef
+    // symbol the pipeline threads through for per-instantiation uniqueness
+    // (see HANDOFF_SESSION_13_FINAL.md §2). This test doesn't exercise
+    // generic instantiations, so the plain legacy form is fine.
+    let body = body;
+    let symbol = format!("__glyim_fn_{}", body.owner.local_id.to_raw());
+    let result = mock.generate(&[(symbol, body)], std::path::Path::new("test.o"));
     assert!(result.is_ok());
     assert_eq!(mock.calls().len(), 1);
     assert_eq!(mock.calls()[0].body_count, 1);

@@ -49,3 +49,20 @@ pub enum GenericArg {
     #[allow(missing_docs)]
     Const(Const),
 }
+
+/// Mangle a `(FnDefId, Substitution)` pair into a stable, LLVM-safe symbol.
+///
+/// The `(index, len)` of the interned substitution uniquely identifies the
+/// instantiation's concrete type arguments, so two call sites that resolve
+/// to the same concrete arguments produce the same symbol, and two
+/// different instantiations (e.g. `Option<i32>::unwrap` vs
+/// `Option<Option<i32>>::unwrap`) produce different ones. An empty
+/// substitution keeps the un-suffixed legacy name so non-generic functions
+/// (`main`, etc.) don't churn.
+pub fn mangle_fn_symbol(def_id: u32, substs: Substitution) -> String {
+    if substs.is_empty() {
+        format!("__glyim_fn_{}", def_id)
+    } else {
+        format!("__glyim_fn_{}_{}_{}", def_id, substs.index(), substs.len())
+    }
+}

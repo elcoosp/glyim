@@ -94,7 +94,7 @@ pub struct CompileArtifacts {
     /// Struct.
     pub typeck_result: glyim_typeck::TypeckResult,
     /// Struct.
-    pub mir_bodies: Vec<Arc<glyim_mir::Body>>,
+    pub mir_bodies: Vec<(String, Arc<glyim_mir::Body>)>,
     /// Struct.
     pub ty_ctx: Arc<glyim_type::TyCtx>,
     /// Non-error diagnostics (warnings, notes) produced during a *successful*
@@ -123,8 +123,14 @@ pub(crate) struct PreparedCompilation {
     pub typeck_result: glyim_typeck::TypeckResult,
     /// Frozen type context (also published on the `Database`).
     pub ty_ctx: Arc<glyim_type::TyCtx>,
-    /// Monomorphized + optimized MIR bodies, ready for codegen.
-    pub all_bodies: Vec<Arc<Body>>,
+    /// Monomorphized + optimized MIR bodies, ready for codegen, each paired
+    /// with its mangled LLVM symbol (`__glyim_fn_<id>[_<i>_<len>]`, see
+    /// `glyim_type::mangle_fn_symbol`). Threading the symbol from mono
+    /// through to codegen is what guarantees the *definition* the pipeline
+    /// emits matches the *call-site* symbol codegen computes — so two
+    /// instantiations of the same generic fn no longer collide on a plain
+    /// `__glyim_fn_<id>`.
+    pub all_bodies: Vec<(String, Arc<Body>)>,
     /// Non-error diagnostics accumulated during the front half.
     pub warnings: Vec<GlyimDiagnostic>,
 }
@@ -497,7 +503,11 @@ impl Pipeline {
 
         db.set_ty_ctx(ty_ctx);
 
-        let mut closure_bodies_codegen: Vec<Arc<Body>> = Vec::new();
+        // Each closure body is emitted by codegen with the plain
+        // `__glyim_fn_<closure_id>` symbol (see lower_call's closure arm);
+        // closures never have generic substitutions. Pair each with its
+        // symbol so the pipeline's all_bodies stays uniform.
+        let mut closure_bodies_codegen: Vec<(String, Arc<Body>)> = Vec::new();
         let mir_bodies_map: std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>> = {
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
@@ -549,7 +559,12 @@ impl Pipeline {
                         return Err(sink_cell.into_inner().into_diagnostics());
                     }
                     let c_opt = glyim_opt::optimize(ty_ctx_ref, &c_mir_arc);
-                    closure_bodies_codegen.push(Arc::new(c_opt.body));
+                    let c_body = c_opt.body;
+                    let c_sym = format!(
+                        "__glyim_fn_{}",
+                        c_body.owner.local_id.to_raw()
+                    );
+                    closure_bodies_codegen.push((c_sym, Arc::new(c_body)));
                 }
             }
             bodies
@@ -631,11 +646,33 @@ impl Pipeline {
         let max_cgus = codegen_units.unwrap_or_else(compute_max_cgus);
         let cgus = partition(&mono_items, max_cgus);
 
-        let all_bodies: Vec<Arc<Body>> = if cgus.is_empty() {
-            mir_bodies_map.into_values().collect()
+        // Pair each body with its mangled symbol. The symbol must be the
+        // *same* string a call site's `lower_call` / `MirConstKind::Fn`
+        // arm computes for this `(FnDefId, Substitution)` — otherwise the
+        // linker sees an undefined reference and the ABI mismatches. The
+        // `MonoItemData.symbol` field already holds the mangled form (see
+        // `MonoCtx::collect`), so the CGU path just reads it; the empty-CGU
+        // fallback (no mono roots) uses the legacy plain form since those
+        // bodies were never substituted.
+        let all_bodies: Vec<(String, Arc<Body>)> = if cgus.is_empty() {
+            mir_bodies_map
+                .into_iter()
+                .map(|(_def_id, body)| {
+                    let sym = format!(
+                        "__glyim_fn_{}",
+                        body.owner.local_id.to_raw()
+                    );
+                    (sym, body)
+                })
+                .collect()
         } else {
             cgus.iter()
-                .flat_map(|cgu_indices| cgu_indices.iter().map(|&idx| mono_items[idx].body.clone()))
+                .flat_map(|cgu_indices| {
+                    cgu_indices.iter().map(|&idx| {
+                        let item = &mono_items[idx];
+                        (item.symbol.clone(), item.body.clone())
+                    })
+                })
                 .collect()
         };
         // Closure bodies are emitted after the functions that call them; LLVM
@@ -651,7 +688,7 @@ impl Pipeline {
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
             let before = all_bodies.len();
-            all_bodies.retain(|b| !body_is_raw_generic(b, ty_ctx_ref));
+            all_bodies.retain(|(_sym, b)| !body_is_raw_generic(b, ty_ctx_ref));
             let dropped = before - all_bodies.len();
             if dropped > 0 && std::env::var_os("GLYIM_TMP_FILT").is_some() {
                 eprintln!(
@@ -1093,9 +1130,9 @@ pub fn emit_llvm_ir(
     // emitted, silently dropping the rest of the crate from the IR).
     let backend = LlvmBackend::with_db(db).with_debug_info(false);
     let mut ir = String::new();
-    for body in &prepared.all_bodies {
+    for (symbol, body) in &prepared.all_bodies {
         let one = backend
-            .emit_ir_to_string(&prepared.ty_ctx, body)
+            .emit_ir_to_string(&prepared.ty_ctx, body, Some(symbol.as_str()))
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
                     "LLVM IR generation failed: {:?}",

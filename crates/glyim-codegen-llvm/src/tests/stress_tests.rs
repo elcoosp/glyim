@@ -25,7 +25,7 @@ fn s08_t36_concurrent_generate_independent_backends() {
                     glyim_core::LocalDefId::from_raw(i * 1000),
                 )));
                 let bodies = vec![body];
-                let result = backend.generate(&bodies, &output_path);
+                let result = backend.generate(&crate::tests::to_pairs(&bodies), &output_path);
                 assert!(result.is_ok(), "concurrent generate in thread {} failed", i);
                 // Clean up
                 std::fs::remove_file(output).ok();
@@ -88,10 +88,10 @@ fn s08_t39_generate_to_file_then_overwrite() {
         glyim_core::LocalDefId::from_raw(999),
     )));
     let bodies = vec![body.clone()];
-    backend.generate(&bodies, &output).expect("first write");
+    backend.generate(&crate::tests::to_pairs(&bodies), &output).expect("first write");
     let first_size = std::fs::metadata(&output).expect("file should exist").len();
     // Overwrite same file
-    backend.generate(&bodies, &output).expect("overwrite");
+    backend.generate(&crate::tests::to_pairs(&bodies), &output).expect("overwrite");
     let second_size = std::fs::metadata(&output).expect("file should exist").len();
     // Size should be similar (identical object, same target).
     assert_eq!(

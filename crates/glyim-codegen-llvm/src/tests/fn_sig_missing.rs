@@ -52,7 +52,7 @@ fn t53_body_without_fn_sig_lowers_via_fallback() {
     let backend = LlvmBackend::new();
     let context = inkwell::context::Context::create();
     let module = backend
-        .lower_body_to_module_with_ctx(&context, &body, &frozen)
+        .lower_body_to_module_with_ctx(&context, &body, &frozen, None)
         .expect(
             "lowering a body without a registered FnSig must fall back to \
              the body-derived signature and succeed",

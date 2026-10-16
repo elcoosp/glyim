@@ -49,7 +49,7 @@ impl CodegenBackend for MockCodegen {
     fn name(&self) -> &'static str {
         "mock"
     }
-    fn generate(&self, bodies: &[Arc<Body>], output: &Path) -> CompResult<()> {
+    fn generate(&self, bodies: &[(String, Arc<Body>)], output: &Path) -> CompResult<()> {
         self.calls.lock().push(CodegenCall {
             body_count: bodies.len(),
             output_path: output.to_path_buf(),

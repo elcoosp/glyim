@@ -45,3 +45,20 @@ mod type_lowering;
 mod u_codegen;
 mod unary_ops;
 mod unsigned_cmp;
+
+
+/// Test-only helper: pair each `Arc<Body>` with the plain legacy LLVM
+/// symbol (`__glyim_fn_<local_id>`). Tests don't exercise generic
+/// instantiations, so the un-mangled form is sufficient — it's what the
+/// pipeline would produce for a non-generic fn.
+pub(crate) fn to_pairs(
+    bodies: &[std::sync::Arc<glyim_mir::Body>],
+) -> Vec<(String, std::sync::Arc<glyim_mir::Body>)> {
+    bodies
+        .iter()
+        .map(|b| {
+            let sym = format!("__glyim_fn_{}", b.owner.local_id.to_raw());
+            (sym, b.clone())
+        })
+        .collect()
+}

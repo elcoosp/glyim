@@ -128,7 +128,7 @@ impl LlvmBackend {
     pub fn lower_bodies_to_module<'ctx>(
         &self,
         context: &'ctx Context,
-        bodies: &[Arc<Body>],
+        bodies: &[(String, Arc<Body>)],
     ) -> CompResult<inkwell::module::Module<'ctx>> {
         let module = context.create_module("glyim_module");
         let triple = inkwell::targets::TargetTriple::create(&self.target_triple);
@@ -139,7 +139,7 @@ impl LlvmBackend {
             .and_then(|h| h.read().unwrap().clone())
             .ok_or_else(|| vec![GlyimDiagnostic::internal_error("no TyCtx available")])?;
         let ty_ctx = ty_ctx.as_ref();
-        for body in bodies {
+        for (symbol, body) in bodies {
             crate::lower::lower_body(
                 context,
                 &module,
@@ -150,6 +150,7 @@ impl LlvmBackend {
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
                 self.entry_main,
+                Some(symbol.as_str()),
             )?;
         }
         Ok(module)
@@ -219,21 +220,30 @@ impl LlvmBackend {
     }
 
     /// Generate LLVM IR for a single MIR body without needing to set the TyCtx in the backend.
-    pub fn emit_ir_to_string(&self, ctx: &TyCtx, body: &Body) -> CompResult<String> {
+    pub fn emit_ir_to_string(
+        &self,
+        ctx: &TyCtx,
+        body: &Body,
+        symbol: Option<&str>,
+    ) -> CompResult<String> {
         let context = Context::create();
-        let module = self.lower_body_to_module_with_ctx(&context, body, ctx)?;
+        let module = self.lower_body_to_module_with_ctx(&context, body, ctx, symbol)?;
         Ok(module.print_to_string().to_string())
     }
 
     /// emit_ir_to_string_with_handle.
-    pub fn emit_ir_to_string_with_handle(&self, body: &Body) -> CompResult<String> {
+    pub fn emit_ir_to_string_with_handle(
+        &self,
+        body: &Body,
+        symbol: Option<&str>,
+    ) -> CompResult<String> {
         let context = Context::create();
         let ty_ctx = self
             .ty_ctx_handle
             .as_ref()
             .and_then(|h| h.read().unwrap().clone())
             .ok_or_else(|| vec![GlyimDiagnostic::internal_error("no TyCtx available")])?;
-        let module = self.lower_body_to_module_with_ctx(&context, body, ty_ctx.as_ref())?;
+        let module = self.lower_body_to_module_with_ctx(&context, body, ty_ctx.as_ref(), symbol)?;
         Ok(module.print_to_string().to_string())
     }
 
@@ -241,7 +251,7 @@ impl LlvmBackend {
     /// (`.s`) to `output`, honoring the configured target triple and opt level.
     /// Mirrors [`CodegenBackend::generate`] but uses `FileType::Assembly` instead
     /// of `FileType::Object` (plan §18.3: `--emit=asm`).
-    pub fn emit_assembly(&self, bodies: &[Arc<Body>], output: &Path) -> CompResult<()> {
+    pub fn emit_assembly(&self, bodies: &[(String, Arc<Body>)], output: &Path) -> CompResult<()> {
         let context = Context::create();
         let module = context.create_module("glyim_module");
         let triple = TargetTriple::create(&self.target_triple);
@@ -252,7 +262,7 @@ impl LlvmBackend {
             .and_then(|h| h.read().unwrap().clone())
             .ok_or_else(|| vec![GlyimDiagnostic::internal_error("no TyCtx available")])?;
         let ty_ctx = ty_ctx.as_ref();
-        for body in bodies.iter() {
+        for (symbol, body) in bodies.iter() {
             crate::lower::lower_body(
                 &context,
                 &module,
@@ -263,6 +273,7 @@ impl LlvmBackend {
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
                 self.entry_main,
+                Some(symbol.as_str()),
             )?;
         }
         let target = Target::from_triple(&triple).map_err(|e| {
@@ -310,6 +321,7 @@ impl LlvmBackend {
         context: &'ctx Context,
         body: &Body,
         ctx: &TyCtx,
+        symbol: Option<&str>,
     ) -> CompResult<inkwell::module::Module<'ctx>> {
         let module = context.create_module("glyim_module");
         let triple = TargetTriple::create(&self.target_triple);
@@ -324,6 +336,7 @@ impl LlvmBackend {
             self.source_map.clone(),
             self.hygiene_ctx.clone(),
             self.entry_main,
+            symbol,
         )?;
         Ok(module)
     }
@@ -388,6 +401,7 @@ impl LlvmBackend {
             self.source_map.clone(),
             self.hygiene_ctx.clone(),
             self.entry_main,
+            None,
         )?;
         Ok(module)
     }
@@ -412,7 +426,7 @@ impl LlvmBackend {
     /// for the per-module writer and `KNOWN_GAPS.md` Phase 10.2 for the design.
     pub fn emit_thinlto_bitcode_files(
         &self,
-        bodies: &[Arc<Body>],
+        bodies: &[(String, Arc<Body>)],
         out_dir: &Path,
     ) -> CompResult<Vec<PathBuf>> {
         let context = &self.context;
@@ -451,7 +465,7 @@ impl LlvmBackend {
                 )]
             })?;
         let data_layout = target_machine.get_target_data().get_data_layout();
-        for (i, body) in bodies.iter().enumerate() {
+        for (i, (symbol, body)) in bodies.iter().enumerate() {
             let module = context.create_module(&format!("glyim_cgu_{}", i));
             module.set_triple(&triple);
             module.set_data_layout(&data_layout);
@@ -465,6 +479,7 @@ impl LlvmBackend {
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
                 self.entry_main,
+                Some(symbol.as_str()),
             )?;
             // No optimization here: ThinLTO optimizes per-CGU during the
             // thin-link once all summaries are visible.
@@ -482,7 +497,7 @@ impl CodegenBackend for LlvmBackend {
         "llvm"
     }
 
-    fn generate(&self, bodies: &[Arc<Body>], output: &Path) -> CompResult<()> {
+    fn generate(&self, bodies: &[(String, Arc<Body>)], output: &Path) -> CompResult<()> {
         // ThinLTO does not produce a single merged object here: per-CGU bitcode
         // emission + the thin-link are driven by `glyim-cli` via
         // `emit_thinlto_bitcode_files` + the `thin_lto_link` driver. Bailing out
@@ -501,7 +516,7 @@ impl CodegenBackend for LlvmBackend {
             .and_then(|h| h.read().unwrap().clone())
             .ok_or_else(|| vec![GlyimDiagnostic::internal_error("no TyCtx available")])?;
         let ty_ctx = ty_ctx.as_ref();
-        for body in bodies.iter() {
+        for (symbol, body) in bodies.iter() {
             crate::lower::lower_body(
                 context,
                 &module,
@@ -512,6 +527,7 @@ impl CodegenBackend for LlvmBackend {
                 self.source_map.clone(),
                 self.hygiene_ctx.clone(),
                 self.entry_main,
+                Some(symbol.as_str()),
             )?;
         }
         let target = Target::from_triple(&triple).map_err(|e| {
@@ -593,6 +609,7 @@ impl CodegenBackend for LlvmBackend {
             self.source_map.clone(),
             self.hygiene_ctx.clone(),
             self.entry_main,
+            None,
         )?;
         let target = Target::from_triple(&triple).map_err(|e| {
             vec![GlyimDiagnostic::internal_error(format!(

@@ -87,7 +87,7 @@ fn test_o0_no_optimizations() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("lowering failed");
     assert!(
         count_allocas(&module) > 0,
@@ -102,7 +102,7 @@ fn test_o2_mem2reg() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("lowering failed");
 
     // Run optimization passes manually (lower_bodies_to_module does not run passes)
@@ -136,7 +136,7 @@ fn test_oz_size_optimization() {
         .with_opt_for_size(true);
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
-    let result = backend.lower_bodies_to_module(&context, &[body]);
+    let result = backend.lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]));
     assert!(result.is_ok(), "Oz lowering should succeed");
 }
 
@@ -179,7 +179,7 @@ fn test_lto_across_cgus() {
     let bodies = vec![Arc::new(callee_body), Arc::new(caller_body)];
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &bodies)
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&bodies))
         .expect("LTO lowering failed");
     assert!(
         module.get_functions().count() >= 2,
@@ -194,7 +194,7 @@ fn test_o1_runs_pass_pipeline() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("O1 lowering failed");
     assert!(
         module.verify().is_ok(),
@@ -209,7 +209,7 @@ fn test_o3_aggressive_optimization() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("O3 lowering failed");
     assert!(
         module.verify().is_ok(),
@@ -227,7 +227,7 @@ fn test_o0_with_size_opt_does_not_crash() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("O0+size lowering failed");
     assert!(
         module.verify().is_ok(),
@@ -242,7 +242,7 @@ fn test_opt_out_of_range_defaults_to_aggressive() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("opt=4 lowering failed");
     assert!(
         module.verify().is_ok(),
@@ -263,7 +263,7 @@ fn test_multiple_bodies_pass_together() {
     let body2 = Arc::new(body2_raw);
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body1, body2])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body1, body2]))
         .expect("multi-body lowering failed");
     assert!(
         module.verify().is_ok(),
@@ -283,7 +283,7 @@ fn test_empty_body_passes_without_error() {
     let backend = LlvmBackend::new().with_ty_ctx(ctx).with_opt_level(2);
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[empty_body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[empty_body]))
         .expect("empty body lowering failed");
     assert!(
         module.verify().is_ok(),
@@ -298,7 +298,7 @@ fn test_verify_module_after_optimization() {
     let body = Arc::new(simple_body_with_local(int_ty));
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("lowering failed");
     if let Err(msg) = module.verify() {
         panic!("Module verification failed after passes: {}", msg);
@@ -329,7 +329,7 @@ fn test_o2_mem2reg_debug() {
 
     let context = Context::create();
     let module = backend
-        .lower_bodies_to_module(&context, &[body])
+        .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("lowering failed");
 
     // Dump before passes
