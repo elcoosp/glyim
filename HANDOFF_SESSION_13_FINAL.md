@@ -1,188 +1,136 @@
 # HANDOFF — session 13 (final)
 
-## 0. FIRST: get back to green
+## 0. Status: GREEN, the last bug is fixed
 
-The working tree currently has **uncommitted, broken** changes (a
-`Body.symbol` threading attempt). Restore the last green state first:
+The one remaining bug from §2 of the previous handoff
+(nested `Option<Option<i32>>::unwrap` chains) is fixed. All 4599 tests
+pass. The fixture `behavior/option_nested_unwrap.g` is un-ignored and
+runs in the corpus.
 
-    cd /Users/adm/Documents/Repos/glyim-v2
-    git checkout -- crates
-    cargo build -p glyim-cli
-    cargo nextest run --workspace    # expect 4599/4599
+    cargo nextest run --workspace    # 4599/4599
 
-- **Committed HEAD**: `26cbb7bd` — clean, 4599/4599 green.
-- Only untracked file: `HANDOFF_SESSION_13_UPDATE.md` (older notes).
+## 1. New commits on top of `26cbb7bd`
 
-## 1. What is committed and fixed (16 commits from `6c528649`)
+    665af582  test(behavior): cleanup option_nested_unwrap.g header + un-ignore
+    521f7bd3  fix(typeck): resolve receiver through infer table when extracting callee substs
+    89e278df  fix(codegen): thread mangled FnDef symbol through mono → codegen
+    a12da7de  fix(pipeline): drop raw-generic bodies (return_ty = Param/Bound/Projection) from all_bodies
 
-   26cbb7bd  test(behavior): un-ignore struct-pattern + tuple + ref fixtures
-   7c59a2b9  fix(type): per-call-site variant-ctor FnDefId allocator
-   7b1f38c8  fix(hir,typeck,codegen): struct-pattern fields, tuple types, fresh ctor ids
-   3db58e69  test(behavior): anti-regression fixtures
-   8e6af6f0  fix(lower,typeck): 'ref'/'ref mut' bind a borrow of the matched place
-   118a18d1  test(behavior): gate ref-pattern fixtures
-   9a4a4fdb  fix(hir,typeck): Pat::RefBinding variant
-   23044196  fix(hir,typeck): closure param type annotations
-   400a2653  fix(typeck): share ctor vars between sig input/output
-   86e41177  test(behavior): document bug fixtures
-   b2aa766d  test(behavior): regression fixtures
-   8cdf704f  feat(typeck): closure-combinator support
-   7c18ba49  fix(typeck): roll back receiver unify on no match
-   b79eb98b  fix(solve): don't clobber a bound Infer var
+## 2. Root causes fixed this session
 
-**11 root-cause bugs fixed**, each with a passing behavior fixture under
-`crates/glyim-test/tests/run-pass/behavior/`. Verified working:
+Nested unwrap was failing for **three** stacked reasons, each fixed in
+its own commit:
 
-    Option::Some(5).unwrap()                    -> 5
-    Option::Some(5).map(|x| x + 1).unwrap()     -> 6
-    Option::Some(3).and_then(|x| Some(x+6))     -> 9
-    Option::None.or(Option::Some(8))            -> 8
-    Option::Some(5).filter(|x| *x > 0)          -> 5
-    Option::Some(ref v) => *v                   -> works (ref patterns)
-    Option::Some(ref mut v) => *v = ..          -> works (write-through)
-    P { x: a, y: b } => a + b                   -> works (struct patterns)
-    (10, 20)  /  (ref a, ref b)                 -> works (tuples)
-    |x: &i32| *x                                -> works (annotated closures)
+### 2.1 Raw-generic bodies leaked into `all_bodies`
+`MonoCtx::collect` enqueued the *unsubstituted* body of
+`Option::<T>::unwrap` alongside its substituted instantiation. The raw
+body's `return_ty` was `Param(0)`, which `fn_abi_of` → `layout_of`
+cannot handle (`UnknownType(Ty(16))`).
 
-## 2. THE ONE REMAINING BUG — nested ADT unwrap
+**Fix** (`a12da7de`): `prepare_compilation` filters `all_bodies` with
+`body_is_raw_generic` (return type is `Param`/`Bound`/`Projection`).
+Checking `return_ty` alone (not locals) avoids dropping valid
+error-typed bodies (`vec_is_empty.g`, `unsafecell_new.g`).
 
-    fn main() -> i32 {
-        Option::Some(Option::Some(6)).unwrap().unwrap()
-    }
+### 2.2 Symbol collision between instantiations
+Even after the raw body is filtered, both `Option<i32>::unwrap` and
+`Option<Option<i32>>::unwrap` mangled to the plain `__glyim_fn_362`.
+The first definition wins, the second call site hits an undefined
+symbol at link.
 
-Fails with:
+**Fix** (`89e278df`):
+- New `glyim_type::mangle_fn_symbol(def_id, substs)` returns
+  `__glyim_fn_<id>_<index>_<len>` for non-empty substitutions, the plain
+  `__glyim_fn_<id>` for empty ones.
+- `MonoItemData.symbol` is now derived from the item's
+  `(FnDefId, Substitution)` pair.
+- `PreparedCompilation.all_bodies` and `CompileArtifacts.mir_bodies`
+  changed from `Vec<Arc<Body>>` to `Vec<(String, Arc<Body>)>`, threading
+  the symbol through `CodegenBackend::generate` / `emit_assembly` /
+  `emit_ir_to_string` / `emit_thinlto_bitcode_files` down to
+  `lower_body`, which uses it as the LLVM function name.
+- The two call-site mangle points (`MirConstKind::Fn` const operand and
+  `lower_call`'s FnDef arm) compute the same name from their
+  `(def_id, substs)`.
 
-    [X0000] fn type lowering failed: fn_abi_of failed: UnknownType(Ty(16))
+### 2.3 Typeck didn't give the inner call concrete substs
+With (2.1) and (2.2) in place, link still failed because the *inner*
+`.unwrap()` in the chain emitted `FnDef(362, [])` — empty substs —
+while the definition was `FnDef(362, [Option<i32>])`. Probes showed:
 
-Same for `Result<Result<i32,i32>,i32>` unwrap chains.
+    [GLYIM_MC] method=unwrap kind=Static recv_ty=Infer(TyVar(11747))
+    [GLYIM_STATIC] fn_def=362 impl_part_len=0
 
-### Root cause (proven with probes)
+`resolve_method_call` unified the receiver against `Option<i32>`, but
+the `recv_ty` binding the dispatch arm reads is the *pre*-unification
+`Infer` value; peeling refs off an `Infer` reaches no `TyKind::Adt`
+arm, so `impl_part` came back empty.
 
-`FnDefId 362` (stdlib `Option::<T>::unwrap`) is instantiated **twice**
-and BOTH bodies reach codegen:
+**Fix** (`521f7bd3`):
+- `MethodDispatch::Builtin` now derives the callee substs from the
+  receiver's own ADT args (peeling refs/raw pointers), mirroring the
+  `Static` arm. Previously it hardcoded `FnDef(id, [])` for *every*
+  builtin, so a builtin fn that reached codegen with a generic impl
+  substitution had no matching call-site name.
+- `MethodDispatch::Static` calls
+  `self.infer.resolve_ty_shallow(self.ctx, recv_ty)` before reading
+  the ADT args, so a receiver that arrived as `Infer(TyVar)` (unified
+  by `resolve_method_call` but not yet reflected in the local binding)
+  yields the concrete `Option<i32>` substitution.
 
-    [PL] all_bodies owner=362 symbol=Some("__glyim_fn_362_10433_1") return_ty=Ty(195)  # Adt(1010,[i32]) — GOOD
-    [PL] all_bodies owner=362 symbol=None                          return_ty=Ty(16)   # Param(0)        — RAW GENERIC
+## 3. Verified working (all run via `--with-stdlib --emit=exec`)
 
-`Ty(16)` is `Param(0)` (a rigid generic param). `fn_abi_of` cannot
-`layout_of` a `Param`, so it ICEs. Two independent defects:
+    Option::Some(Option::Some(6)).unwrap().unwrap()         -> 6
+    Result::Ok(Result::Ok(7)).unwrap().unwrap()             -> 7
+    Option::Some(Result::Ok(8)).unwrap().unwrap()           -> 8
+    Result::Ok(Option::Some(9)).unwrap().unwrap()           -> 9
+    Option::Some(Option::Some(Option::Some(3)))....         -> 3
+    let o: Option<Option<i32>> = ...; o.unwrap().unwrap()   -> 4
+    Option::Some(5).unwrap()                                -> 5
+    Option::Some(5).map(|x| x + 1).unwrap()                 -> 6
+    Option::Some(3).and_then(|x| Option::Some(x+6)).unwrap()-> 9
+    Option::None.or(Option::Some(8)).unwrap()               -> 8
+    Option::Some(5).filter(|x| *x > 0).unwrap()             -> 5
 
-1. **The raw generic body is emitted alongside the substituted one.**
-   Even after mangling, the raw body shares the plain name and ICEs.
-2. **Symbol collision.** Before the raw body is dealt with, every
-   instantiation emits `__glyim_fn_362`, so the first definition wins and
-   later callers hit a mismatched ABI (`call void @__glyim_fn_362`).
+## 4. Where the design lives
 
-### What I tried and why it failed
+- `crates/glyim-type/src/substitution.rs` — `mangle_fn_symbol`
+- `crates/glyim-pipeline/src/lib.rs` — `body_is_raw_generic`,
+  `closure_body_has_unmonomorphized_ty`, and the `all_bodies` assembly
+  that reads `MonoItemData.symbol`
+- `crates/glyim-lower/src/mono.rs` — `MonoCtx::collect` symbol
+  computation
+- `crates/glyim-codegen/src/lib.rs` — `CodegenBackend::generate`
+  signature
+- `crates/glyim-codegen-llvm/src/lib.rs` — every `lower_body` caller
+  now passes the symbol; the test helpers use `crate::tests::to_pairs`
+- `crates/glyim-codegen-llvm/src/lower.rs` — `lower_body`'s
+  `symbol: Option<&str>` parameter and the two mangle call sites
+- `crates/glyim-typeck/src/check_expr.rs` — the `Static` / `Builtin`
+  arms of the `MethodCall` dispatch now derive callee substs from the
+  (infer-resolved) receiver
 
-- **Mangle in `mono.rs` only** — codegen recomputes the symbol; it
-  doesn't read `MonoItemData.symbol`.
-- **Hash the concrete `FnSig`** — the definition and call sites compute
-  *different* sigs (definition uses the substituted body's locals; the
-  call site uses the receiver-resolved sig), so they hash to different
-  names and the link breaks with `UnknownType(Ty(16))`.
-- **`Body.symbol: Option<String>`** — correct in principle. Added the
-  field, `mangle_fn_symbol` in `glyim-type`, `substitute_body` sets it,
-  `lower_body` reads it, and call sites mangle from their `FnDef` substs.
-  **The `(index, len)` of the substitution is the right mangling key.**
-  But the workspace has ~200 `Body {` literals and my bulk-edit scripts
-  kept mismatching (`basic_blocks:` vs shorthand `basic_blocks,`,
-  HIR/THIR `Body` vs MIR `Body`), leaving the build broken.
+## 5. Known remaining work (not blocking)
 
-### THE FIX (recommended, concrete)
+The `unlinked-infer-var` class noted in the previous handoff had a
+broader surface. This session fixed the slice that surfaced for nested
+ADT unwrap. If future fixtures hit the same "plain `__glyim_fn_<id>`
+referenced but not defined" link error, the same two-step diagnostic
+applies:
 
-The working-tree changes I left are 90% of the way. Two clean steps:
+1. `--emit=mir` and grep for `Fn(FnDefId(<id>), Substitution(..., len=0))`
+   — an empty substitution where the receiver has concrete ADT args.
+2. If the call site is `Static`/`Builtin`, check that the receiver was
+   resolved through `infer.resolve_ty_shallow` before the ADT-args
+   extraction.
 
-**Step A — deal with the raw generic body.** There is already a helper
-`closure_body_has_unmonomorphized_ty(body, ctx)` in
-`crates/glyim-pipeline/src/lib.rs` (~line 1159) that checks body
-**locals** for `Param`/`Error`/`Projection`. Extend it to also check
-`body.return_ty`, then filter `all_bodies` right after it is built
-(after `let ty_ctx = db.get_ty_ctx()...`):
-
-    fn closure_body_has_unmonomorphized_ty(body: &Body, ctx: &TyCtx) -> bool {
-        ty_has_unmono(body.return_ty, ctx)
-            || body.locals.iter().any(|l| ty_has_unmono(l.ty, ctx))
-    }
-    // ... after all_bodies is assembled:
-    all_bodies.retain(|b| !closure_body_has_unmonomorphized_ty(b, &ty_ctx));
-
-**Step B — mangle the symbol.** Add to `crates/glyim-type/src/substitution.rs`:
-
-    pub fn mangle_fn_symbol(def_id: u32, substs: Substitution) -> String {
-        if substs.is_empty() {
-            format!("__glyim_fn_{}", def_id)
-        } else {
-            format!("__glyim_fn_{}_{}_{}", def_id, substs.index(), substs.len())
-        }
-    }
-
-Then use it at three sites in `crates/glyim-codegen-llvm/src/lower.rs`:
-  - `lower_body` (~line 7239): name from the body's *substs*. Note
-    `lower_body` receives only `body` — the cleanest source of truth is
-    to thread the symbol from the pipeline (see Step C), OR compute it
-    from the substituted `return_ty`/locals via a `substs`-equivalent.
-  - `lower_call` FnDef arm (~line 6640): `self.operand_ty(func)` gives
-    `TyKind::FnDef(_, substs)` — mangle from that.
-  - `MirConstKind::Fn` arm (~line 360): mangle from the const's `substs`.
-
-**Step C (if threading from pipeline is preferred — more robust).**
-Change `CodegenBackend::generate(&[Arc<Body>])` to
-`generate(&[(String, Arc<Body>)])` in `crates/glyim-codegen/src/lib.rs`,
-and pass `MonoItemData.symbol` (already `fn_symbol(def_id, substs)`)
-through `all_bodies` in `crates/glyim-pipeline/src/lib.rs`. This avoids
-recomputing the symbol in codegen entirely and guarantees the definition
-and call sites agree.
-
-## 3. Dead ends — DO NOT repeat
-
-1. Threading `param_map` through `resolve_qualified_path` — no-op, wrong
-   function (`Option<U>` is single-segment, resolved by
-   `resolve_name_to_adt_ty`).
-2. Widening `resolve_method_call` to return arg types — `i32 vs usize`
-   stdlib regression.
-3. Rigid `Param(i)` in ctor sigs — `T vs &T` / `parameter index
-   mismatch` regressions.
-4. Resolving the ctor output at the Call site or the `let` site — the
-   `Some(8)` local is error-typed for a *different* reason (the shared
-   ctor FnDefId; fixed in `7c59a2b9`).
-5. Hashing the concrete `FnSig` for the symbol — def and call site
-   compute different sigs; link breaks.
-
-## 4. Environment gotchas (all cost real time)
+## 6. Environment gotchas (still valid)
 
 - `RUSTC_WRAPPER=kache` is set. Force rebuilds with `touch <file>`.
-- A **compile cache** in `glyim-cli` skips work and prints
-  `cache hit — skipping compilation`; set `GLYIM_CACHE_DIR=$(mktemp -d)`
-  to bypass.
-- Read-only `.rmeta` in `target/` breaks builds: `chmod -R u+w target`.
-- No `timeout(1)` on macOS; use the `setsid` + `killpg` runner pattern.
-- **Never remove probe code with `sed`/`python` line matching** — it has
-  deleted live code and left unbalanced braces multiple times this
-  session. Use `git checkout -- <file>` to undo probe experiments.
+- `GLYIM_CACHE_DIR=$(mktemp -d)` bypasses the CLI compile cache.
+- Read-only `.rmeta` in `target/`: `chmod -R u+w target`.
+- Never remove probe code with `sed`/`python` line matching — the
+  session-death-by-unbalanced-braces is still the easiest way to lose
+  an hour. `git checkout -- <file>` for probe rollback.
 - `strings target/debug/glyim-cli | grep -c 'GLYIM_TMP_XXX'` before
   trusting a probe's *absence* (0 = stale build).
-
-## 5. Debugging method that worked
-
-Env-gated `eprintln!` probes + `GLYIM_CACHE_DIR=$(mktemp -d)`. The
-decisive probes this session:
-
-    GLYIM_TMP_PL=1    # print every body in all_bodies with owner/symbol/return_ty
-    GLYIM_TMP_LB=1    # print every body reaching lower_body
-    GLYIM_TMP_FILT=1  # print how many un-monomorphized bodies were dropped
-
-## 6. Test assets
-
-- Canonical reproducer: `/tmp/p_map.g`, `/tmp/p_some.g` (may be pruned —
-  recreate: `fn main() -> i32 { Option::Some(Option::Some(6)).unwrap().unwrap() }`).
-- Ignore-marked fixture: `crates/glyim-test/tests/run-pass/behavior/option_nested_unwrap.g`.
-  Un-ignore it once the bug is fixed.
-- 67 behavior fixtures all pass at `26cbb7bd`.
-
-## 7. Tree state at handoff
-
-- HEAD: `26cbb7bd` (green base).
-- Working tree: **DIRTY** — the `Body.symbol` attempt (broken build).
-  Run `git checkout -- crates` to restore green before doing anything.
-- Untracked: `HANDOFF_SESSION_13_UPDATE.md`, `HANDOFF_SESSION_13_FINAL.md`.
