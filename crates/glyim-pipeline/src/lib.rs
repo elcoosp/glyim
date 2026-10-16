@@ -643,6 +643,24 @@ impl Pipeline {
         let mut all_bodies = all_bodies;
         all_bodies.extend(closure_bodies_codegen);
 
+        // Step A (HANDOFF_SESSION_13_FINAL.md §2): drop *raw generic* bodies
+        // (return_ty is `Param`/`Bound`/`Projection`) before emission. These
+        // leak through mono and would ICE `fn_abi_of` on `UnknownType(Param)`.
+        // See `body_is_raw_generic` for why we only test the return type.
+        {
+            let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
+            let ty_ctx_ref = ty_ctx_guard.as_ref();
+            let before = all_bodies.len();
+            all_bodies.retain(|b| !body_is_raw_generic(b, ty_ctx_ref));
+            let dropped = before - all_bodies.len();
+            if dropped > 0 && std::env::var_os("GLYIM_TMP_FILT").is_some() {
+                eprintln!(
+                    "[GLYIM_FILT] dropped {} raw-generic bodies from all_bodies",
+                    dropped
+                );
+            }
+        }
+
         let ty_ctx = db.get_ty_ctx().expect("TyCtx not initialized");
         // Any Error-severity diagnostic short-circuits above, so everything
         // left in the sink is advisory. Surface it on the success value so the
@@ -1145,6 +1163,26 @@ mod tests;
 
 fn closure_body_has_unmonomorphized_ty(body: &glyim_mir::Body, ctx: &glyim_type::TyCtx) -> bool {
     body.locals.iter().any(|l| ty_has_unmono(l.ty, ctx))
+}
+
+/// Step A (HANDOFF_SESSION_13_FINAL.md §2): a body is a *raw generic* body if
+/// its `return_ty` is a rigid, unsubstituted type parameter (`Param`),
+/// higher-ranked `Bound`, or an unnormalized `Projection`. Those cannot be
+/// monomorphized (no concrete `T` to substitute) and must not reach codegen:
+/// `fn_abi_of` calls `layout_of`, which ICEs with `UnknownType(Param)`.
+///
+/// We deliberately do *not* test locals here. Error-typed locals (and, in a
+/// few edge cases, `Bound`/`Opaque` locals) are legitimate in fully
+/// monomorphized bodies; flagging on them dropped valid bodies such as
+/// `core/unsafecell_new.g` and `behavior/vec_is_empty.g`. Checking the
+/// `return_ty` alone is enough to identify the specific raw-body leak that
+/// motivated this filter.
+fn body_is_raw_generic(body: &glyim_mir::Body, ctx: &glyim_type::TyCtx) -> bool {
+    use glyim_type::TyKind;
+    matches!(
+        ctx.ty_kind(body.return_ty),
+        TyKind::Param(_) | TyKind::Bound(_, _) | TyKind::Projection(_)
+    )
 }
 
 fn ty_has_unmono(ty: glyim_type::Ty, ctx: &glyim_type::TyCtx) -> bool {
