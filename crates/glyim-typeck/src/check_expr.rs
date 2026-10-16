@@ -1241,7 +1241,16 @@ impl<'a> FnCtxt<'a> {
                                 }
                             }
                         }
-                        let ret = self.ctx.subst_ty(sig.output, &subst);
+                        // NOTE: `ret` is computed AFTER `new_substs` below.
+                        // The arg-derived `subst` map is empty when the
+                        // generic parameter appears only in an explicit
+                        // turbofish (`str::parse::<f64>` takes a `&str`
+                        // argument, not a `T`), so `subst_ty(sig.output,
+                        // &subst)` would leave `Result<T, T::Err>`
+                        // unsubstituted. The correct substitution comes from
+                        // `new_substs` (base = existing `FnDef` substs, i.e.
+                        // the turbofish; override = arg-derived `subst`).
+                        //
                         // Rebuild the callee's `FnDef` type carrying the inferred
                         // substitution. Without this, the `FnRef` node keeps the
                         // unbound generic type (`FnDef(id, [])`), so MIR lowering
@@ -1295,6 +1304,24 @@ impl<'a> FnCtxt<'a> {
                                 .collect(),
                         );
                         let callee_ty = self.ctx.mk_ty(TyKind::FnDef(def_id, new_substs));
+                        // Build the return type from the *final* substs. The
+                        // arg-derived `subst` map alone is empty when the
+                        // generic parameter appears only in an explicit
+                        // turbofish (`str::parse::<f64>` takes a `&str`
+                        // argument, not a `T`). For `str::parse::<f64>` this
+                        // turns `sig.output = Result<T, <T as FromStr>::Err>`
+                        // into `Result<f64, <f64 as FromStr>::Err>`. Without
+                        // it, zonk folded `Param(0)` to `Ty::ERROR`, giving
+                        // the caller a `Result<ERROR, ...>` destination local
+                        // and the runtime store went through a null pointer.
+                        let final_subst_map: std::collections::HashMap<u32, GenericArg> = self
+                            .ctx
+                            .substitution_args(new_substs)
+                            .iter()
+                            .enumerate()
+                            .map(|(i, a)| (i as u32, a.clone()))
+                            .collect();
+                        let ret = self.ctx.subst_ty(sig.output, &final_subst_map);
                         (ret, callee_ty)
                     } else {
                         (self.instantiate_fn_sig(def_id, span), func_ty)
@@ -1408,6 +1435,7 @@ impl<'a> FnCtxt<'a> {
                 }
                 let thir_expr = match dispatch {
                     Some(MethodDispatch::Static(fn_def_id)) => {
+
                         // Static dispatch: call the concrete impl function
                         // directly. `self` is the first argument (the
                         // receiver); the remaining `arg_exprs` are the
@@ -1490,35 +1518,26 @@ impl<'a> FnCtxt<'a> {
                         // part left `Param(1)` (`U` on `Option::map`)
                         // unsubstituted — codegen then hit `UnknownType`
                         // on the closure's ABI.
-                        let impl_part: Vec<GenericArg> = if let Some(explicit) = generic_args {
-                            explicit
-                                .iter()
-                                .map(|tr| {
-                                    GenericArg::Ty(crate::tyconv::resolve_type_ref(
-                                        self.ctx,
-                                        self.infer,
-                                        self.def_map,
-                                        self.diagnostics,
-                                        tr,
-                                        &self.param_map,
-                                        span,
-                                    ))
-                                })
-                                .collect()
-                        } else {
-                            // NESTED-UNWRAP-FIX: resolve the receiver through
-                            // the inference table *before* reading its ADT
-                            // args. `resolve_method_call` above unified the
-                            // `Infer(TyVar)` the receiver arrived as against
-                            // the concrete impl's self type (`Option<i32>`
-                            // for the nested `.unwrap().unwrap()`), but the
-                            // `recv_ty` binding this arm reads is the
-                            // pre-unification value. Without resolution,
-                            // peeling refs off `Infer(TyVar(11747))` hits no
-                            // `TyKind::Adt` arm, `impl_part` comes back empty,
-                            // and the call site emits `FnDef(362, [])` while
-                            // the definition is `FnDef(362, [Option<i32>])`
-                            // — the link fails on an undefined `__glyim_fn_362`.
+                        // The impl-level substitution comes *only* from the
+                        // receiver's own ADT args. It is never the turbofish:
+                        // a method turbofish (`x.parse::<f64>()`,
+                        // `it.map::<U, F>(..)`) always names the *method's*
+                        // own generic parameters, not the impl's, so it
+                        // belongs in `method_part` below.
+                        //
+                        // NESTED-UNWRAP-FIX: resolve the receiver through the
+                        // inference table *before* reading its ADT args.
+                        // `resolve_method_call` above unified the `Infer(TyVar)`
+                        // the receiver arrived as against the concrete impl's
+                        // self type (`Option<i32>` for the nested
+                        // `.unwrap().unwrap()`), but the `recv_ty` binding this
+                        // arm reads is the pre-unification value. Without
+                        // resolution, peeling refs off `Infer(TyVar(11747))`
+                        // hits no `TyKind::Adt` arm, `impl_part` comes back
+                        // empty, and the call site emits `FnDef(362, [])` while
+                        // the definition is `FnDef(362, [Option<i32>])` — the
+                        // link fails on an undefined `__glyim_fn_362`.
+                        let impl_part: Vec<GenericArg> = {
                             let resolved_recv_ty =
                                 self.infer.resolve_ty_shallow(self.ctx, recv_ty);
                             let mut recv_inner = resolved_recv_ty;
@@ -1542,8 +1561,139 @@ impl<'a> FnCtxt<'a> {
                                 _ => Vec::new(),
                             }
                         };
+                        // Method-level substitution: the turbofish, when
+                        // present, IS the source of truth for the method's
+                        // own generic parameters (`str::parse::<f64>` →
+                        // `[f64]`). Without a turbofish, fall back to the
+                        // fresh inference vars `resolve_method_call` produced
+                        // from the impl/method parameter map (e.g.
+                        // `Option::map`'s `U` and `F`, whose `substs` are
+                        // inferred from the argument closure).
+                        //
+                        // Previously the turbofish was placed into
+                        // `impl_part`, which for `impl str { fn
+                        // parse<T>(&self) }` produced `all_substs = [f64,
+                        // <fresh T>]` (arity 2) instead of `[f64]` (arity
+                        // 1). The extra fresh var made the substituted
+                        // callee body keep `Param(0)` in its return type
+                        // (`Result<T, T::Err>` never got f64), and codegen
+                        // stored the result through a null pointer — the
+                        // `"3.14".parse::<f64>()` runtime segfault.
+                        let method_part: Vec<GenericArg> = if let Some(explicit) = generic_args {
+                            explicit
+                                .iter()
+                                .map(|tr| {
+                                    GenericArg::Ty(crate::tyconv::resolve_type_ref(
+                                        self.ctx,
+                                        self.infer,
+                                        self.def_map,
+                                        self.diagnostics,
+                                        tr,
+                                        &self.param_map,
+                                        span,
+                                    ))
+                                })
+                                .collect()
+                        } else {
+                            method_own_generics.iter().cloned().collect()
+                        };
+                        // Bind the method's own *fresh inference vars* (from
+                        // `resolve_method_call`'s `method_own_generics`) to
+                        // the turbofish args. `resolve_method_call` returns a
+                        // `ret_ty` whose method-level parameters are these
+                        // fresh `Infer` vars, not `Param(i)` — so `subst_ty`
+                        // can't reach them (it only maps `Param`). Unifying
+                        // the two makes the inference table bind `T := f64`,
+                        // and the subsequent `resolve_ty_shallow` on `ret_ty`
+                        // folds `Result<T, T::Err>` down to `Result<f64, ...>`.
+                        //
+                        // Without this the caller's destination local kept
+                        // `Result<ERROR, ...>` (after zonk folded the still-
+                        // unbound Infer to ERROR) and the runtime store went
+                        // through a null pointer — the `"3.14".parse::<f64>()`
+                        // segfault.
+                        for (own, explicit) in
+                            method_own_generics.iter().zip(method_part.iter())
+                        {
+                            if let (GenericArg::Ty(own_ty), GenericArg::Ty(exp_ty)) = (own, explicit)
+                            {
+                                if matches!(self.ctx.ty_kind(*own_ty), TyKind::Infer(_))
+                                    && !matches!(self.ctx.ty_kind(*exp_ty), TyKind::Infer(_))
+                                {
+                                    self.unify(*own_ty, *exp_ty, span);
+                                }
+                            }
+                        }
+                        // Substitute `ret_ty` through the *whole*
+                        // `all_substs` map. This handles three cases:
+                        //   1. Method-level `Param(i)` at index `i` in the
+                        //      method's own parameter space → maps to
+                        //      `all_substs[impl_part.len() + i]`. That's
+                        //      `[f64]` for `str::parse::<f64>`, resolving
+                        //      `T := f64`.
+                        //   2. `Self`-rooted `Param(i)` (impl-level) → maps
+                        //      to `all_substs[i]` (`[..impl_part..]`).
+                        //   3. `Projection` types like `<T as FromStr>::Err`:
+                        //      `subst_ty`'s Projection arm recurses into the
+                        //      projection's *self* type and rewrites it
+                        //      through `substs` first, then tries to resolve.
+                        //      Without this, `<T as Trait6>::Err` stayed
+                        //      unnormalized and codegen couldn't lay out the
+                        //      destination local — the runtime store went
+                        //      through a null pointer.
+                        //
+                        // Indexing: the method's own `Param(i)` appears as
+                        // `Param(i)` in `ret_ty` (indices are per-
+                        // `resolve_type_ref`'s `pm` map), so the whole-map
+                        // substitution needs to align method indices with
+                        // their position in `all_substs`. For `impl str {
+                        // fn parse<T> }`, impl arity is 0, so the method's
+                        // `Param(0)` is at position 0 — the whole-map
+                        // approach works directly. When there *are* impl
+                        // generics, the method's output Param(i) still refers
+                        // to the *method's* own params, but that space's
+                        // ordering was captured in `method_pm` at
+                        // `resolve_method_call` time; the whole-map version
+                        // *does* handle that path in practice because
+                        // `resolve_type_ref`'s `pm` is built from
+                        // `param_map` (impl) then `method_pm` (method), and
+                        // the resulting `Param(i)` uses the *whole* map's
+                        // index space. So the whole-map substitution is the
+                        // correct one.
+                        let full_map: std::collections::HashMap<u32, GenericArg> = {
+                            let mut m: std::collections::HashMap<u32, GenericArg> = impl_part
+                                .iter()
+                                .enumerate()
+                                .map(|(i, a)| (i as u32, a.clone()))
+                                .collect();
+                            for (i, a) in method_own_generics.iter().enumerate() {
+                                let idx = (impl_part.len() + i) as u32;
+                                let resolved = match a {
+                                    GenericArg::Ty(t) => GenericArg::Ty(
+                                        self.infer.resolve_ty_shallow(self.ctx, *t),
+                                    ),
+                                    other => other.clone(),
+                                };
+                                m.insert(idx, resolved);
+                            }
+                            m
+                        };
+                        let ret_ty = self.ctx.subst_ty(ret_ty, &full_map);
+                        // Rebuild `method_part` from the *resolved* method
+                        // generics so the callee's `FnDef` substitution
+                        // carries the concrete type.
+                        let method_part_resolved: Vec<GenericArg> = method_own_generics
+                            .iter()
+                            .map(|a| match a {
+                                GenericArg::Ty(t) => GenericArg::Ty(
+                                    self.infer.resolve_ty_shallow(self.ctx, *t),
+                                ),
+                                other => other.clone(),
+                            })
+                            .collect();
                         let mut all_substs = impl_part;
-                        all_substs.extend(method_own_generics.iter().cloned());
+                        all_substs.extend(method_part_resolved);
+
                         let substs = self.ctx.intern_substitution(all_substs);
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let callee = thir::Expr {

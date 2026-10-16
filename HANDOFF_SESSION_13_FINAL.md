@@ -186,3 +186,54 @@ matched benign cases like `"3.14".parse::<f64>()`, whose return type
 `Result<f64, <f64 as FromStr>::Err>` carries an unresolved projection
 var that never reaches a value-construction site and does not ICE
 codegen. Only the enum-construction shape is flagged.
+
+---
+
+## 8. Additional fix: `"3.14".parse::<f64>()` runtime segfault
+
+`"X".parse::<T>()` on any primitive (u8/u16/u32/u64/usize/i8...i64/isize/f64)
+compiled but **segfaulted at runtime** — verified pre-existing at base commit
+`26cbb7bd`. Existing `primitive_trait_impl` tests only checked compilation, so
+they did not catch it.
+
+**Root cause** (in `check_expr::Expr::MethodCall` → `MethodDispatch::Static`):
+the turbofish (`::<f64>`) was read as the *impl-level* substitution, but for
+`impl str { fn parse<T>(&self) -> Result<T, T::Err> }` the impl has no
+generics — the turbofish names the *method's* `T`. Result:
+- Callee `FnDef` substs came out as `[f64, <fresh T>]` (arity 2) instead of
+  `[f64]` (arity 1).
+- The callee body's `return_ty` stayed `Result<Param(0), ...>`; `subst_ty`
+  never saw the `f64`.
+- The caller's destination local was `Result<Infer(..), <T as Trait6>::Err>`;
+  zonk folded the unbound Infer to `Ty::ERROR`.
+- At codegen the destination local's layout was the error-layout (opaque
+  pointer-sized), but the callee wrote a `Result<f64, ...>` aggregate through
+  it — the resulting IR `store { [2 x i64] } %sret_load, ptr null` wrote through
+  a null pointer. Runtime SIGSEGV.
+
+**Fix**:
+1. `impl_part` now comes *only* from the receiver's own ADT args (peeling
+   refs/raw pointers), the same way the `Builtin` arm was fixed. Never the
+   turbofish.
+2. A new `method_part` carries the turbofish args (or the fresh inference vars
+   from `resolve_method_call` when there is no turbofish).
+3. `all_substs = impl_part ++ method_part` — correct arity for both
+   `impl<T> Foo<T> { fn m<U>(..) }` and `impl str { fn parse<T>(..) }`.
+4. `ret_ty` is recomputed as `subst_ty(ret_ty, full_map)` where `full_map`
+   covers both the impl portion and the (resolved) method portion. This folds
+   both `T := f64` and the associated-type projection `<f64 as FromStr>::Err`
+   into the destination local's type.
+
+Verified working at runtime (all via `--with-stdlib --emit=exec` + `./out`):
+
+    "255".parse::<u8>()                    -> ok
+    "4294967295".parse::<u32>()            -> ok
+    "18446744073709551615".parse::<u64>()  -> ok
+    "-128".parse::<i8>()                   -> ok
+    "-9223372036854775808".parse::<i64>()  -> ok
+    "3.14".parse::<f64>()                  -> ok
+    (all eleven primitive `FromStr` impls in one program) -> ok
+
+Plus all previous fixes still hold (`Option<Option<i32>>` nested unwrap,
+annotated `Result<Result<i32,i32>,i32>` unwrap, `.map`/`.and_then`, and the
+E0282 rejection of un-annotated `Result::Ok(5)`).
