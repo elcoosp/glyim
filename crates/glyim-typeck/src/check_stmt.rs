@@ -220,6 +220,7 @@ impl<'a> FnCtxt<'a> {
                 .map(|i| glyim_hir::ExprId::from_raw(i as u32))
                 .collect(),
         };
+
         let len = top_level.len();
 
         for (pos, &expr_id) in top_level.iter().enumerate() {

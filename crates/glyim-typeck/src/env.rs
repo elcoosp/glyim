@@ -78,9 +78,20 @@ impl LocalEnv {
         for i in base..self.vars.len() {
             let var = &self.vars[i];
             if let Some(stack) = self.name_map.get_mut(&var.name) {
-                stack.pop();
-                if stack.is_empty() {
-                    self.name_map.remove(&var.name);
+                // SCOPING-FIX: only pop if *this* id is the one on top of
+                // the stack. Two nested scopes can share the same `base`
+                // when no bindings were added between their `enter_scope`
+                // calls; the inner `leave_scope` pops the binding's name,
+                // and the outer `leave_scope` would then pop *again* from
+                // the same `i` — removing an outer-scope binding of the
+                // same name (e.g. shadowed `fut` in the async desugar).
+                // Checking the top-of-stack id makes the double-iteration
+                // idempotent.
+                if stack.last() == Some(&var.id) {
+                    stack.pop();
+                    if stack.is_empty() {
+                        self.name_map.remove(&var.name);
+                    }
                 }
             }
         }
@@ -88,6 +99,9 @@ impl LocalEnv {
 
     pub fn add_binding(&mut self, name: Name, ty: Ty, mutability: Mutability) -> LocalVarId {
         let id = LocalVarId::from_raw(self.vars.len() as u32);
+        if std::env::var_os("GLYIM_DBG_BIND").is_some() {
+            eprintln!("[BIND] id={} at vars.len={} scope_depth={}", id.to_raw(), self.vars.len(), self.scope_stack.len());
+        }
         self.vars.push(LocalVarInfo {
             id,
             name,

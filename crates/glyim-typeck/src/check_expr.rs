@@ -193,6 +193,14 @@ impl<'a> FnCtxt<'a> {
             Expr::Path(path) => self.check_path(path, span),
 
             Expr::Block { stmts, tail } => {
+                // BLOCK-SCOPE-FIX: a block is a lexical scope. Without
+                // this, `let x = 5; { let x = 10; } x` resolved the
+                // trailing `x` to the inner binding (10, not 5) — a
+                // silent wrong-value bug. `LocalEnv::enter_scope` /
+                // `leave_scope` (see `env::tests::env_scoping_and_shadowing`)
+                // correctly unwind shadowed names; the block arm simply
+                // never invoked them.
+                self.env.enter_scope();
                 let mut thir_stmts = Vec::new();
                 for &stmt_id in stmts {
                     // Statements are *not* expressions: routing them through
@@ -229,6 +237,7 @@ impl<'a> FnCtxt<'a> {
                             ty: Ty::UNIT,
                             span,
                         };
+                        self.env.leave_scope();
                         return (block_expr, Ty::UNIT);
                     }
                     let (tail_expr, tail_ty) = self.check_expr(*tail_id);
@@ -240,6 +249,7 @@ impl<'a> FnCtxt<'a> {
                         ty: tail_ty,
                         span,
                     };
+                    self.env.leave_scope();
                     (block_expr, tail_ty)
                 } else {
                     // A block with no tail whose *last statement* is a
@@ -268,6 +278,7 @@ impl<'a> FnCtxt<'a> {
                         ty,
                         span,
                     };
+                    self.env.leave_scope();
                     (unit_expr, ty)
                 }
             }
