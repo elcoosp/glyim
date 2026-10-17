@@ -147,6 +147,25 @@ pub struct AdtDef {
 pub struct AdtVariant {
     /// Struct.
     pub fields: Vec<Ty>,
+    /// Declared syntax style: `Unit`, `Tuple`, or `Struct`. Tuple-style
+    /// enum variants (`A(i32, i32)`) have all-empty field names, so
+    /// pattern bindings inside them must be matched positionally, not by
+    /// name. A missing default would make `field_index_by_name` return
+    /// `Field(0)` for *every* binding in `A(x, y)`, silently aliasing `y`
+    /// to `x`.
+    pub style: glyim_type::adt_def::VariantStyle,
+}
+
+impl AdtVariant {
+    /// Convenience constructor for tests and synthetic variants where the
+    /// style doesn't matter (defaults to `Struct`, which the name-based
+    /// lookup handles).
+    pub fn new(fields: Vec<Ty>) -> Self {
+        Self {
+            fields,
+            style: glyim_type::adt_def::VariantStyle::Struct,
+        }
+    }
 }
 
 /// The kind of ADT.

@@ -1043,7 +1043,7 @@ impl<'a> MirBuilder<'a> {
                 adt_id,
                 variant_idx,
                 fields,
-                spread: _,
+                spread,
             } => {
                 let substs = match self.ctx.ty_ctx().ty_kind(expr.ty) {
                     TyKind::Adt(_, substs) => substs,
@@ -1057,14 +1057,32 @@ impl<'a> MirBuilder<'a> {
                         ));
                     }
                 };
-                // T024-PATCHED [LOW-2]: resolve each field to its
+                // T024-PATCHED [LOW-2]: resolve each explicit field to its
                 // *declaration* index instead of pushing operands in source
                 // order. Layout, `Field(i)` projections, and codegen all
                 // follow the ADT / variant declaration order, so
                 // `P { y: 2, x: 1 }` previously stored 2 in the `x` slot
                 // and 1 in the `y` slot (silent field-value swap).
+                //
+                // SPREAD FIX: struct-update syntax (`P { x: 10, ..p }`)
+                // was previously lowered as if the spread were absent — the
+                // `..p` source was type-checked, and its `Box<Expr>` stored
+                // on the THIR `spread` slot, but `lower_rvalue`'s arm
+                // discarded it (`spread: _`). The result was an aggregate
+                // with only the *explicit* fields; every field that was
+                // supposed to be copied from the base was an `Error`
+                // constant. In codegen, the Error const is materialised as
+                // a zero-sized placeholder in the wrong field slot, so
+                // `q.y` read the `x`-shaped slot and returned `x`'s value
+                // (silent wrong-value bug).
+                //
+                // Fix: when `spread` is present, evaluate it to a temporary
+                // local and, for each declaration-order field that the
+                // source *didn't* override, project that field out of the
+                // temporary into the aggregate. This is what `..p` desugars
+                // to in rustc.
                 let variant = glyim_mir::VariantIdx::from_raw(*variant_idx);
-                let resolved: Vec<(usize, glyim_mir::Operand)> = fields
+                let mut resolved: Vec<(usize, glyim_mir::Operand)> = fields
                     .iter()
                     .enumerate()
                     .map(|(src_idx, (name, field_expr))| {
@@ -1077,21 +1095,75 @@ impl<'a> MirBuilder<'a> {
                         (idx, operand)
                     })
                     .collect();
-                let total = resolved
-                    .iter()
-                    .map(|(i, _)| i + 1)
-                    .max()
-                    .unwrap_or(fields.len());
+                resolved.sort_by_key(|(i, _)| *i);
+                let explicit_max = resolved.iter().map(|(i, _)| i + 1).max().unwrap_or(0);
+                // If a spread is present, materialise it *before* the
+                // aggregate so its field projections can be read in the
+                // same Rvalue construction. `spread_expr.ty` is already
+                // unified to `expr.ty` by type-checking.
+                let spread_local: Option<LocalIdx> = if let Some(spread_expr) = spread {
+                    let op = self.lower_expr_to_operand(spread_expr);
+                    let temp = self.alloc_local(
+                        spread_expr.ty,
+                        glyim_core::primitives::Mutability::Not,
+                        spread_expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(temp),
+                        spread_expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(temp),
+                            glyim_mir::Rvalue::Use(op),
+                        ),
+                        spread_expr.span,
+                    );
+                    Some(temp)
+                } else {
+                    None
+                };
+                // Field count: read from the ADT def. `lower`'s `AdtDef`
+                // exposes fields only through `variants` (a struct is a
+                // single-variant ADT at index 0).
+                let declared_field_count = {
+                    let def = self.ctx.adt_def(*adt_id);
+                    def.variants
+                        .get(*variant_idx as usize)
+                        .map(|v| v.fields.len())
+                        .unwrap_or(0)
+                };
+                let total = explicit_max.max(declared_field_count);
                 let mut mir_operands: Vec<glyim_mir::Operand> = Vec::with_capacity(total);
-                for (idx, operand) in resolved {
-                    while mir_operands.len() <= idx {
-                        mir_operands.push(glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                            kind: glyim_mir::MirConstKind::Error,
-                            ty: glyim_type::Ty::ERROR,
-                            span: expr.span,
-                        }));
+                let mut resolved_iter = resolved.into_iter().peekable();
+                for i in 0..total {
+                    // Explicit field wins.
+                    if let Some(&(idx, _)) = resolved_iter.peek() {
+                        if idx == i {
+                            let (_, op) = resolved_iter.next().expect("peeked");
+                            mir_operands.push(op);
+                            continue;
+                        }
                     }
-                    mir_operands[idx] = operand;
+                    // Otherwise, take from the spread (if any).
+                    if let Some(sl) = spread_local {
+                        let field_place = glyim_mir::Place {
+                            local: sl,
+                            projection: Box::new([glyim_mir::ProjectionElem::Field(
+                                glyim_type::FieldIdx::from_raw(i as u32),
+                            )]),
+                        };
+                        mir_operands.push(glyim_mir::Operand::Copy(field_place));
+                        continue;
+                    }
+                    // Neither explicit nor spread: keep the previous
+                    // Error-const fallback (typeck already diagnosed the
+                    // missing field).
+                    mir_operands.push(glyim_mir::Operand::Constant(glyim_mir::MirConst {
+                        kind: glyim_mir::MirConstKind::Error,
+                        ty: glyim_type::Ty::ERROR,
+                        span: expr.span,
+                    }));
                 }
                 glyim_mir::Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Adt(*adt_id, variant, *substs),
@@ -1653,6 +1725,22 @@ impl<'a> MirBuilder<'a> {
             } => {
                 if let (Some(init), Some(orig)) = (copy_place.clone(), orig_place.clone()) {
                     let init_place = init;
+                    // BUG-HUNT FIX: a *tuple-style* enum variant
+                    // (`enum E { A(i32,i32) }`) has all fields with an
+                    // empty `Name`. `field_index_by_name` therefore
+                    // returns the same `Field(0)` for every binding in
+                    // `A(x, y)`, so `y` silently aliased `x` (silent
+                    // wrong-value bug — `match E::A(3,4) { E::A(x,y) =>
+                    // y }` returned 3). The variant's `style` is the
+                    // authoritative signal: when it's `Tuple`, use the
+                    // source-order position `i` as the field index.
+                    let is_tuple_variant = {
+                        let def = self.ctx.adt_def(*adt_id);
+                        def.variants
+                            .get(*variant_idx as usize)
+                            .map(|v| v.style == glyim_type::adt_def::VariantStyle::Tuple)
+                            .unwrap_or(false)
+                    };
                     // For an enum scrutinee, insert a `Downcast` before the
                     // `Field` projection. Without it, `Place::ty()` on the
                     // field place bails with "Field projection on
@@ -1671,10 +1759,13 @@ impl<'a> MirBuilder<'a> {
                     } else {
                         (init_place.clone(), orig.clone())
                     };
-                    for field_pat in fields {
-                        let field_idx =
+                    for (pos, field_pat) in fields.iter().enumerate() {
+                        let field_idx: Option<FieldIdx> = if is_tuple_variant {
+                            Some(FieldIdx::from_raw(pos as u32))
+                        } else {
                             self.ctx
-                                .field_index_by_name(*adt_id, *variant_idx, field_pat.field);
+                                .field_index_by_name(*adt_id, *variant_idx, field_pat.field)
+                        };
                         let field_idx = match field_idx {
                             Some(idx) => idx,
                             None => continue,

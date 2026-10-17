@@ -51,17 +51,42 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
     }
     fn adt_def(&self, id: AdtId) -> AdtDef {
         if let Some(adt_def) = self.ty_ctx.adt_def(id) {
-            let variants = adt_def
-                .variants
-                .iter()
-                .map(|variant| AdtVariant {
-                    fields: variant.fields.iter().map(|field| field.ty).collect(),
-                })
-                .collect();
-            let kind = match adt_def.kind {
-                glyim_type::AdtKind::Struct => AdtKind::Struct,
-                glyim_type::AdtKind::Enum => AdtKind::Enum,
-                glyim_type::AdtKind::Union => AdtKind::Union,
+            // `glyim_type::AdtDef` stores struct fields on `AdtDef.fields`
+            // (with an empty `variants` list), whereas enums use `variants`.
+            // The lower-level `AdtDef` unifies them behind `variants`, so
+            // synthesise a single-variant struct here. Before this, a
+            // struct's `variants[0]` was `None`, `AdtVariant::fields` came
+            // back empty, and struct-update / aggregate lowers computed a
+            // zero field count — leading to `[Constant(10)]` (one-field)
+            // aggregates instead of `[Constant(10), Copy(tmp.y)]`.
+            let (variants, kind) = match adt_def.kind {
+                glyim_type::AdtKind::Struct => {
+                    let fields: Vec<Ty> = adt_def.fields.iter().map(|f| f.ty).collect();
+                    let variants = vec![AdtVariant {
+                        fields,
+                        style: glyim_type::adt_def::VariantStyle::Struct,
+                    }];
+                    (variants, AdtKind::Struct)
+                }
+                glyim_type::AdtKind::Enum => {
+                    let variants = adt_def
+                        .variants
+                        .iter()
+                        .map(|variant| AdtVariant {
+                            fields: variant.fields.iter().map(|field| field.ty).collect(),
+                            style: variant.style,
+                        })
+                        .collect();
+                    (variants, AdtKind::Enum)
+                }
+                glyim_type::AdtKind::Union => {
+                    let fields: Vec<Ty> = adt_def.fields.iter().map(|f| f.ty).collect();
+                    let variants = vec![AdtVariant {
+                        fields,
+                        style: glyim_type::adt_def::VariantStyle::Struct,
+                    }];
+                    (variants, AdtKind::Union)
+                }
             };
             return AdtDef { variants, kind };
         }
@@ -81,7 +106,10 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
                         .map(|_field| self.ty_ctx.error_ty())
                         .collect();
                     AdtDef {
-                        variants: vec![AdtVariant { fields }],
+                        variants: vec![AdtVariant {
+                            fields,
+                            style: glyim_type::adt_def::VariantStyle::Struct,
+                        }],
                         kind: AdtKind::Struct,
                     }
                 }
@@ -95,6 +123,19 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
                                 .iter()
                                 .map(|_f| self.ty_ctx.error_ty())
                                 .collect(),
+                            // HIR `Variant.kind` is a `StructKind`; the
+                            // styles map 1:1 onto `VariantStyle`.
+                            style: match variant.kind {
+                                glyim_core::primitives::StructKind::Unit => {
+                                    glyim_type::adt_def::VariantStyle::Unit
+                                }
+                                glyim_core::primitives::StructKind::Tuple => {
+                                    glyim_type::adt_def::VariantStyle::Tuple
+                                }
+                                glyim_core::primitives::StructKind::Record => {
+                                    glyim_type::adt_def::VariantStyle::Struct
+                                }
+                            },
                         })
                         .collect();
                     AdtDef {

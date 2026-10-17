@@ -47,7 +47,7 @@ impl<'a> LowerCtx for TestLowerCtx<'a> {
 
     fn adt_def(&self, _id: AdtId) -> AdtDef {
         AdtDef {
-            variants: vec![AdtVariant { fields: vec![] }],
+            variants: vec![AdtVariant::new(vec![])],
             kind: AdtKind::Struct,
         }
     }

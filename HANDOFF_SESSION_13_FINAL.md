@@ -454,3 +454,85 @@ placeholder.
 **Fixture**: `crates/glyim-test/tests/run-pass/behavior/generic_method_unwrap_then_cast.g`
 (exit 140) covers the four shapes above with distinct primes so a
 wrong-value regression produces a distinctly wrong exit code.
+
+---
+
+## 12. Bug hunt round: two silent wrong-value bugs fixed
+
+A systematic probe of language features (arith, casts, tuples, structs,
+generics, control flow, refs, str, closures, enums) found exactly two
+wrong-value bugs — both in `glyim-lower`, both silent (built clean, ran
+to completion, returned wrong data):
+
+### 12.1 Struct-update syntax discards the spread source
+
+`lower_rvalue`'s `thir::ExprKind::Struct` arm destructured the spread as
+`spread: _`. The `..p` source was type-checked, its `Box<Expr>` stored on
+the THIR slot, and then dropped. The aggregate was built with only the
+*explicit* fields:
+
+    let p = P { x: 3, y: 7 };
+    let q = P { x: 10, ..p };
+    q.y    // returned 3 (read y's slot from a 1-field aggregate)
+
+Downstream `q.y` projected `Field(1)` from a one-field aggregate and
+read the layout's `Error` placeholder, whose bytes happened to match
+`x`'s value.
+
+**Fix**: materialise the spread into a temporary local, then for each
+declaration-order field that the source did not override, project that
+field out of the temporary into the aggregate. This is `..p`'s real
+desugaring.
+
+A second, latent issue surfaced while fixing it:
+`pipeline_context::adt_def` synthesised `AdtVariant`s only from
+`AdtDef::variants`, but `glyim_type::AdtDef` stores struct fields on
+`AdtDef::fields` (with an empty `variants` vec). So a struct's
+`variant[0].fields` was empty, and the fix's `declared_field_count`
+came back 0. Fixed by building a single synthetic variant from
+`AdtDef::fields` for `AdtKind::Struct` / `Union`.
+
+### 12.2 Tuple-style enum variant fields all resolve to `Field(0)`
+
+`enum E { A(i32, i32) }` — every field has an empty `Name`, so
+`bind_pattern`'s `field_index_by_name(adt_id, variant_idx, field_pat.field)`
+returned `Field(0)` for *both* bindings:
+
+    match E::A(3, 4) { E::A(x, y) => y }   // returned 3, should be 4
+    match E::A(2,3,4) { E::A(x,y,z) => x*100+y*10+z }  // 222, should be 234
+
+**Fix**: thread the variant's declared `VariantStyle` through the
+lower-level `AdtDef` (added `AdtVariant::style` in `glyim-lower::lower`
+and populated it from `glyim_type::VariantDef::style` in
+`pipeline_context::adt_def`). In `bind_pattern`, when the variant is
+`Tuple`, use the source-order position as the field index instead of
+the name lookup.
+
+### Fixtures
+
+Both bugs are now locked down by execution-asserting fixtures with
+distinct primes and weighted sums so a residual swap produces a
+distinctly wrong exit code, not a coincidental match:
+
+- `struct_update_spread.g` (exit 89)
+- `enum_tuple_variant_pattern.g` (exit 234)
+
+### Bugs still open (documented, not fixed)
+
+The bug hunt also surfaced three *build-time* bugs that are not silent
+miscompilations and were deferred:
+
+1. `let f = -3.5;` → `cannot apply unary negation to non-numeric type`.
+   Float literal negation doesn't work; `let x: f64 = 3.5; -x` does
+   (but the outer `& 255` then trips `bitand: expected integer types`,
+   suggesting a separate integer-only assumption in `bitand`).
+2. `if "a" == "b" { .. }` → `X0000 eq: mismatched types`. String equality
+   is not implemented (no `PartialEq` impl registered, or the operator
+   lowering doesn't dispatch through trait `eq`).
+3. Capturing closures (`let n = 10; |x| x + n`) → `place_ptr: field type
+   unresolved for current_ty=Closure(...)`. Non-capturing closures work;
+   capture lowering leaves the aggregate field type unresolved.
+
+None of these produce wrong values when they fail — they emit a
+diagnostic or an ICE — so they don't fall into the anti-miscompilation
+class. Each is worth its own session but was out of scope for this one.
