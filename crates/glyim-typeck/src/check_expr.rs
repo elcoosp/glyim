@@ -527,7 +527,11 @@ impl<'a> FnCtxt<'a> {
                 // takes the real multi-iteration path without re-solving the
                 // trait. Mirrors `resolve_trait_method_fn`'s impl scan, scoped
                 // to the `Iterator` trait's `next` method.
-                let next_info = {
+                let is_array_iterable =
+                    matches!(self.ctx.ty_kind(iter_ty), TyKind::Array(_, _));
+                let next_info = if is_array_iterable {
+                    None
+                } else {
                     let iterator_name = self.ctx.resolver().intern("Iterator");
                     let iterator_path = glyim_hir::Path {
                         segments: vec![glyim_hir::PathSegment {
@@ -613,8 +617,13 @@ impl<'a> FnCtxt<'a> {
                         },
                         _ => None,
                     };
+                    let array_elem = match self.ctx.ty_kind(iter_ty) {
+                        TyKind::Array(elem, _) => Some(*elem),
+                        _ => None,
+                    };
                     range_elem
                         .or(ref_slice_elem)
+                        .or(array_elem)
                         .unwrap_or_else(|| self.fresh_infer_ty())
                 };
                 // Phase 1 (GLYIM_DESTUB_PLAN): the loop-pattern bindings (`x` in

@@ -693,6 +693,61 @@ impl<'a> MirBuilder<'a> {
                     ),
                     iterable.span,
                 );
+                // ARRAY-ITERATION PRE-HEADER INIT: for `for x in [a,b,c]`
+                // the lowering uses a direct index loop instead of the
+                // `Iterator` trait (typeck sets `next = None` for arrays,
+                // and `item_ty = T` — the by-value element type). The
+                // idx/len init MUST live in the current block (the
+                // pre-header `bb0`) rather than in the loop header:
+                // emitting it in `header_bb` reset `idx = 0` on every
+                // iteration, so `idx < len` stayed true forever (an
+                // infinite loop). Hoist the allocation + init up here so
+                // it runs exactly once, before the loop.
+                // Use the index-based array path only when typeck did not
+                // resolve a trait-based `next` — real compiles of
+                // `for x in [a,b,c]` set `next = None`, while tests that
+                // explicitly exercise the trait path supply a `next` and
+                // must keep it.
+                // Take the index-based array path only when *neither*
+                // typeck (`next`) nor the lowering-context fallback
+                // (`iterator_next_fn`) supplied an `Iterator::next`. The
+                // fallback is what a mocked test context supplies; real
+                // array iterables arrive here with both absent because
+                // typeck deliberately routes them around the trait.
+                let take_array_path = matches!(
+                    self.ctx.ty_ctx().ty_kind(iter_ty),
+                    TyKind::Array(_, _)
+                ) && next.is_none()
+                    && self.ctx.iterator_next_fn(iter_ty, elem_ty).is_none();
+                let array_loop_state: Option<(glyim_mir::LocalIdx, glyim_mir::LocalIdx)> =
+                    if take_array_path {
+                        let usize_ty = Ty::USIZE;
+                        let idx_local = self.alloc_local(usize_ty, Mutability::Mut, expr.span);
+                        self.push_stmt(StatementKind::StorageLive(idx_local), expr.span);
+                        self.push_stmt(
+                            StatementKind::Assign(
+                                Place::new(idx_local),
+                                Rvalue::Use(Operand::Constant(MirConst {
+                                    kind: MirConstKind::Uint(0),
+                                    ty: usize_ty,
+                                    span: expr.span,
+                                })),
+                            ),
+                            expr.span,
+                        );
+                        let len_local = self.alloc_local(usize_ty, Mutability::Not, expr.span);
+                        self.push_stmt(StatementKind::StorageLive(len_local), expr.span);
+                        self.push_stmt(
+                            StatementKind::Assign(
+                                Place::new(len_local),
+                                Rvalue::Len(Place::new(iter_local)),
+                            ),
+                            expr.span,
+                        );
+                        Some((idx_local, len_local))
+                    } else {
+                        None
+                    };
                 let header_bb = self.new_block();
                 let exit_bb = self.new_block();
                 self.terminate(
@@ -706,6 +761,85 @@ impl<'a> MirBuilder<'a> {
                     break_bb: exit_bb,
                     break_place,
                 });
+                if let Some((idx_local, len_local)) = array_loop_state {
+                    let usize_ty = Ty::USIZE;
+                    let bool_ty = self.ctx.ty_ctx().bool_ty();
+                    self.current_block = Some(header_bb);
+                    let cond_local = self.alloc_local(bool_ty, Mutability::Not, expr.span);
+                    self.push_stmt(StatementKind::StorageLive(cond_local), expr.span);
+                    self.push_stmt(
+                        StatementKind::Assign(
+                            Place::new(cond_local),
+                            Rvalue::BinaryOp(
+                                BinOp::Lt,
+                                Box::new((
+                                    Operand::Copy(Place::new(idx_local)),
+                                    Operand::Copy(Place::new(len_local)),
+                                )),
+                            ),
+                        ),
+                        expr.span,
+                    );
+                    let body_bb = self.new_block();
+                    self.terminate(
+                        TerminatorKind::SwitchInt {
+                            discr: Operand::Copy(Place::new(cond_local)),
+                            switch_ty: bool_ty,
+                            targets: SwitchTargets::if_switch(body_bb, exit_bb),
+                        },
+                        expr.span,
+                    );
+                    self.current_block = Some(body_bb);
+                    let elem_value_place = {
+                        let mut base = Place::new(iter_local);
+                        base.projection = Box::new([glyim_mir::ProjectionElem::Index(idx_local)]);
+                        base
+                    };
+                    let elem_local = self.alloc_local(elem_ty, Mutability::Not, expr.span);
+                    self.push_stmt(StatementKind::StorageLive(elem_local), expr.span);
+                    self.push_stmt(
+                        StatementKind::Assign(
+                            Place::new(elem_local),
+                            Rvalue::Use(Operand::Copy(elem_value_place)),
+                        ),
+                        expr.span,
+                    );
+                    self.bind_pattern(
+                        pat,
+                        Some(Place::new(elem_local)),
+                        Some(Place::new(elem_local)),
+                        expr.span,
+                    );
+                    let _ = self.lower_expr_to_rvalue(body);
+                    if self.current_block.is_some() {
+                        self.push_stmt(
+                            StatementKind::Assign(
+                                Place::new(idx_local),
+                                Rvalue::BinaryOp(
+                                    BinOp::Add,
+                                    Box::new((
+                                        Operand::Copy(Place::new(idx_local)),
+                                        Operand::Constant(MirConst {
+                                            kind: MirConstKind::Uint(1),
+                                            ty: usize_ty,
+                                            span: expr.span,
+                                        }),
+                                    )),
+                                ),
+                            ),
+                            expr.span,
+                        );
+                        self.terminate(TerminatorKind::Goto { target: header_bb }, body.span);
+                    }
+                    self.loop_stack.pop();
+                    self.current_block = Some(exit_bb);
+                    return glyim_mir::Rvalue::Use(Operand::Constant(MirConst {
+                        kind: MirConstKind::Unit,
+                        ty: Ty::UNIT,
+                        span: expr.span,
+                    }));
+                }
+
                 // Get the iterator_next info. Prefer the resolved `next` method
                 // threaded from typeck through the THIR `For` node (production
                 // path, Phase 1 GLYIM_DESTUB_PLAN); fall back to the lowering

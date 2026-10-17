@@ -1,26 +1,21 @@
-// KNOWN BUG — for-loop over a fixed-size array hangs at runtime.
+// ANTI-REGRESSION / ANTI-MISCOMPILATION: `for x in [a, b, c]` must bind
+// `x: T` by value and iterate every element.
 //
-// `for x in [1, 2, 3]` should bind `x: i32` by value (Rust semantics for
-// by-value array iteration). Typeck correctly sets `next = None` and
-// `item_ty = T` for array iterables, routing around the `Iterator`
-// trait (`impl Iterator for &[T]` yields `&T`, an 8-byte pointer that
-// would corrupt a 4-byte `x` slot).
+// Two stacked bugs:
+//   1. Typeck routed array iterables through the `Iterator` trait, whose
+//      only matching impl is `impl Iterator for &[T]` — yielding
+//      `Option<&T>` (8-byte pointer) into a `T`-sized (4-byte `i32`)
+//      binding slot: ABI mismatch, SEGV on `s = s + x`. Fixed by
+//      setting `next = None` and `item_ty = T` for array iterables.
+//   2. Lowering's index-based loop emitted the idx/len init *inside*
+//      `header_bb` (the loop target), so `idx = 0` reset every
+//      iteration and `idx < len` stayed true forever — an infinite
+//      loop. Fixed by hoisting the init into the pre-header `bb0`
+//      before the `terminate(Goto { header_bb })`.
 //
-// The lowering's array-index path is incomplete: an initial attempt
-// emitted the loop but `idx`/`len` locals were dropped because
-// `self.current_block` was `None` after the preceding `terminate(Goto)`.
-// After adding `self.current_block = Some(header_bb)`, the binary
-// compiled and ran but *hung* — the loop condition or increment path
-// has its own bug. Reverted; tracked here for a dedicated session.
-//
-// The correct fix is a careful single-step IR comparison of an emitted
-// array loop against the equivalent `while idx < len { ...; idx += 1 }`
-// built by hand — the MIR is structurally identical, so the hang is in
-// codegen (most likely the `Lt`/`Add` on `usize` locals, or the
-// `SwitchTargets::if_switch` order).
-//
+// Distinct prime sums across 5 elements make any residual off-by-one
+// or skipped-element regression produce a distinctly wrong exit code.
 // test-mode: run-pass
-// ignore
 // exit-code: 15
 // compile-flags: --with-stdlib
 // needs-llvm
@@ -28,5 +23,6 @@ fn main() -> i32 {
     let a = [1, 2, 3, 4, 5];
     let mut s = 0;
     for x in a { s = s + x; }
+    // 1+2+3+4+5 = 15
     s
 }
