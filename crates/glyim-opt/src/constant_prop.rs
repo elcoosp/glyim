@@ -312,7 +312,16 @@ fn evaluate_rvalue_to_const(
             // References to constants are not representable; return None.
             None
         }
-        Rvalue::Cast(_, op, _) => operand_to_const(op, locals),
+        // Casts must NOT be constant-folded to their operand's constant.
+        // `-3.5 as i32` is an *integer* `-3`, not a `FloatBits(-3.5)`. The
+        // previous `operand_to_const(op, locals)` returned the source
+        // operand's constant verbatim, silently dropping the cast: the
+        // caller then saw `Add(FloatBits(-3.5), Int(1000))` — mismatched
+        // types at codegen ("add: mismatched types"). Same for
+        // `(f as i32) & 255` ("bitand: expected integer types"). Codegen
+        // handles every `CastKind` correctly, so returning `None` here
+        // leaves the cast in the MIR and it lowers correctly.
+        Rvalue::Cast(_, _, _) => None,
         Rvalue::Repeat(op, _) => operand_to_const(op, locals),
         Rvalue::Discriminant(_) | Rvalue::Len(_) => None,
     }

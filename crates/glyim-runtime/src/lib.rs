@@ -2010,6 +2010,38 @@ pub unsafe extern "C" fn glyim_str_is_utf8(ptr: *const u8, len: usize) -> i32 {
     i32::from(std::str::from_utf8(slice).is_ok())
 }
 
+/// Byte-for-byte equality of two `&str` / `String` `{ptr, len}` fat
+/// pointers. Used by codegen's `==` / `!=` on string operands; the
+/// language has no `PartialEq for str` impl in the surface stdlib yet,
+/// so the operator lowering reaches for this intrinsic directly (mirrors
+/// how `glyim_str_is_utf8` is declared on demand).
+///
+/// # Safety
+/// `l_ptr` / `r_ptr` must point at valid read-only buffers of `l_len` /
+/// `r_len` bytes. Both may be null iff the corresponding length is 0
+/// (empty string case). The caller (codegen) reads the fields from
+/// properly-typed `{ptr, len}` structs.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn glyim_str_eq(
+    l_ptr: *const u8,
+    l_len: usize,
+    r_ptr: *const u8,
+    r_len: usize,
+) -> i32 {
+    if l_len != r_len {
+        return 0;
+    }
+    if l_len == 0 {
+        return 1;
+    }
+    // SAFETY: caller guarantees both pointers are valid for `l_len` bytes
+    // (equal to `r_len` at this point).
+    let l_slice = unsafe { std::slice::from_raw_parts(l_ptr, l_len) };
+    let r_slice = unsafe { std::slice::from_raw_parts(r_ptr, r_len) };
+    i32::from(l_slice == r_slice)
+}
+
+
 /// LSP/format FFI: allocate a `{ptr, len}` String from raw bytes.
 ///
 /// Writes 16 bytes (pointer then length, both native-endian) to `out`.

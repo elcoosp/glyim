@@ -361,8 +361,24 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // pipeline used to define the body, so the const operand's
                 // symbol matches the definition. See
                 // `glyim_type::mangle_fn_symbol`.
+                //
+                // CLOSURE special-case: a closure's `FnDefId` is a re-typed
+                // `ClosureId` (see `check_expr`'s closure arm). The
+                // pipeline emits the closure body under the plain
+                // `__glyim_fn_<closure_id>` symbol (see
+                // `prepare_compilation`'s `closure_bodies_codegen` push), not
+                // the mangled `__glyim_fn_<id>_<subst_idx>_<len>` form. If
+                // we mangled here, the stored fn-pointer would refer to a
+                // symbol that never gets defined ("Undefined symbols:
+                // ___glyim_fn_<id>_<idx>_<len>"). Detect the closure shape
+                // via `closure_sig` and use the plain name for those.
+                let is_closure = self
+                    .ty_ctx
+                    .closure_sig(glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw()))
+                    .is_some();
                 let fn_name = match self.ty_ctx.extern_fn_name(*fn_def_id) {
                     Some(ext) => ext.to_string(),
+                    None if is_closure => format!("__glyim_fn_{}", fn_def_id.to_raw()),
                     None => glyim_type::mangle_fn_symbol(fn_def_id.to_raw(), *substs),
                 };
                 let module = self.module;
@@ -734,6 +750,63 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     }
                                 })
                                 .unwrap_or(Ty::ERROR)
+                        }
+                        // CLOSURE FIELDS: a closure's field types are not
+                        // reachable through `TyKind::Adt` (the closure's
+                        // `{fn_ptr, captures...}` shape is registered in
+                        // `closure_adt_map`, not as a first-class ADT id).
+                        // `place_ptr` on a closure-field projection used to
+                        // fall through to `Ty::ERROR` and log "field type
+                        // unresolved for current_ty=Closure(...)", which made
+                        // the closure-call arm read captures through a null
+                        // pointer. Dispatch through `TyCtx::closure_adt` (the
+                        // same table `register_closure` populated) so the
+                        // field types mirror `layout_of`'s closure arm: field
+                        // 0 is the pointer-sized fn pointer, fields 1..N are
+                        // the captures (see `glyim-layout/src/lib.rs`).
+                        TyKind::Closure(closure_id, substs) => {
+                            let closure_id = *closure_id;
+                            let closure_substs =
+                                self.ty_ctx.substitution_args(*substs).to_vec();
+                            if idx.to_raw() == 0 {
+                                // Field 0 is the code pointer. Represent it
+                                // as a raw pointer to unit — pointer-sized,
+                                // doesn't need `fn_abi_of`, and matches the
+                                // shape `layout_of` computes for field 0.
+                                self.ty_ctx.mk_ty(TyKind::RawPtr(
+                                    Ty::UNIT,
+                                    glyim_core::primitives::Mutability::Not,
+                                ))
+                            } else {
+                                // Field N is the (N-1)th captured value.
+                                let capture_idx = (idx.to_raw() - 1) as usize;
+                                // The closure's substitution args ARE the
+                                // capture types (see `register_closure`'s
+                                // `capture_tys`). When the call site has a
+                                // generic closure (rare), fall back to the
+                                // registered ADT's field type.
+                                if let Some(glyim_type::GenericArg::Ty(t)) =
+                                    closure_substs.get(capture_idx)
+                                {
+                                    *t
+                                } else {
+                                    // Fallback: consult the closure's ADT.
+                                    match self.ty_ctx.closure_adt(closure_id) {
+                                        Some(adt_id) => {
+                                            match self.ty_ctx.adt_def(adt_id) {
+                                                Some(def) => def
+                                                    .fields
+                                                    .as_slice()
+                                                    .get(capture_idx)
+                                                    .map(|f| f.ty)
+                                                    .unwrap_or(Ty::ERROR),
+                                                None => Ty::ERROR,
+                                            }
+                                        }
+                                        None => Ty::ERROR,
+                                    }
+                                }
+                            }
                         }
                         TyKind::Adt(adt_id, substs) => {
                             let adt_substs = self.ty_ctx.substitution_args(*substs);
@@ -1849,6 +1922,103 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         matches!(self.ty_ctx.ty_kind(ty), TyKind::Int(_))
     }
 
+    /// Whether `l` and `r` are LLVM `{ptr, len}` struct values
+    /// representing strings (`TyKind::String` / `&str` / `String` —
+    /// all of which lower to that shape).
+    fn is_string_shaped(
+        &self,
+        l: BasicValueEnum<'ctx>,
+        r: BasicValueEnum<'ctx>,
+        operand_ty: Ty,
+    ) -> bool {
+        let ty_is_str = match self.ty_ctx.ty_kind(operand_ty) {
+            TyKind::String => true,
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
+                matches!(self.ty_ctx.ty_kind(*inner), TyKind::String | TyKind::Slice(_))
+            }
+            _ => false,
+        };
+        ty_is_str && l.is_struct_value() && r.is_struct_value()
+    }
+
+    /// Byte-for-byte `==` / `!=` on two `{ptr, len}` string values.
+    ///
+    /// Calls the runtime helper `glyim_str_eq(l_ptr, l_len, r_ptr, r_len)`
+    /// (declared on demand, mirroring `glyim_str_is_utf8`), then wraps
+    /// the i32 result into a `bool` (i1) — the surrounding `SwitchInt`
+    /// expects a `TyKind::Bool`-shaped discriminant, not i32.
+    ///
+    /// Both operand values are LLVM `{ ptr, ptr_width_ty }` structs — the
+    /// same shape `llvm_type_for_ty` produces for `TyKind::String` /
+    /// `&str`. Extract field 0 (data pointer) and field 1 (length) from
+    /// each and pass them to the runtime.
+    fn lower_string_eq(
+        &self,
+        l: BasicValueEnum<'ctx>,
+        r: BasicValueEnum<'ctx>,
+        negate: bool,
+    ) -> CompResult<BasicValueEnum<'ctx>> {
+        let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::default());
+        let ptr_width = self.target_info.pointer_width();
+        let len_ty = self.llvm_int_type(ptr_width as u32);
+        let l_struct = l.into_struct_value();
+        let r_struct = r.into_struct_value();
+        let l_ptr = self
+            .builder
+            .build_extract_value(l_struct, 0, "l_ptr")
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq l_ptr: {e:?}"))])?
+            .into_pointer_value();
+        let l_len = self
+            .builder
+            .build_extract_value(l_struct, 1, "l_len")
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq l_len: {e:?}"))])?
+            .into_int_value();
+        let r_ptr = self
+            .builder
+            .build_extract_value(r_struct, 0, "r_ptr")
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq r_ptr: {e:?}"))])?
+            .into_pointer_value();
+        let r_len = self
+            .builder
+            .build_extract_value(r_struct, 1, "r_len")
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq r_len: {e:?}"))])?
+            .into_int_value();
+        // The runtime signature: `(i8*, usize, i8*, usize) -> i32`.
+        let helper = self
+            .module
+            .get_function("glyim_str_eq")
+            .unwrap_or_else(|| {
+                let ft = self
+                    .context
+                    .i32_type()
+                    .fn_type(&[i8_ptr.into(), len_ty.into(), i8_ptr.into(), len_ty.into()], false);
+                self.module.add_function("glyim_str_eq", ft, None)
+            });
+        let call = self
+            .builder
+            .build_call(
+                helper,
+                &[l_ptr.into(), l_len.into(), r_ptr.into(), r_len.into()],
+                "str_eq",
+            )
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq call: {e:?}"))])?
+            .try_as_basic_value()
+            .basic()
+            .ok_or_else(|| vec![GlyimDiagnostic::internal_error("str_eq void")])?
+            .into_int_value();
+        // i32 result → bool (i1). `ne 0` for `==`; `eq 0` for `!=`.
+        let pred = if negate {
+            inkwell::IntPredicate::EQ
+        } else {
+            inkwell::IntPredicate::NE
+        };
+        self.builder
+            .build_int_compare(pred, call, self.context.i32_type().const_zero(), "str_eq_bool")
+            .map(|v| v.as_basic_value_enum())
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq cmp: {e:?}"))])
+    }
+
+
     fn lower_binop(
         &self,
         op: BinOp,
@@ -2046,6 +2216,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 e
                             ))]
                         })
+                } else if self.is_string_shaped(l, r, operand_ty) {
+                    self.lower_string_eq(l, r, false)
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "eq: mismatched types",
@@ -2083,6 +2255,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 e
                             ))]
                         })
+                } else if self.is_string_shaped(l, r, operand_ty) {
+                    self.lower_string_eq(l, r, true)
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "ne: mismatched types",
@@ -6686,7 +6860,31 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 }
                 let capture_count = (fn_sig.inputs.len() as usize) - args.len();
                 let fn_name = format!("__glyim_fn_{}", closure_id.to_raw());
-                let direct_fn_val = self.module.get_function(&fn_name);
+                // A closure body may be emitted *after* the call site: the
+                // pipeline puts `closure_bodies_codegen` at the end of
+                // `all_bodies` (see `prepare_compilation`), so a `main`
+                // that calls `|x| x + n` reaches this arm before
+                // `__glyim_fn_<closure_id>` is defined. If the function
+                // doesn't exist yet, forward-declare it with the exact
+                // signature the body emission will later fill in. Inkwell
+                // reuses the same `FunctionValue` when `lower_body` (for
+                // the closure) calls `module.add_function(name, ty, None)`
+                // — same symbol, same type, so the direct call resolves at
+                // link time. Without this, the call arm saw `None` and
+                // bailed with "closure body function was not emitted
+                // before the call site".
+                let direct_fn_val = match self.module.get_function(&fn_name) {
+                    Some(f) => Some(f),
+                    None => {
+                        // Build the LLVM fn type from the closure's
+                        // registered `FnSig`. `llvm_fn_type_from_sig`
+                        // consults `fn_abi_of`, which correctly classifies
+                        // the capture + explicit-param + sret shape (the
+                        // closure body lowering calls the same helper).
+                        let fn_type = self.llvm_fn_type_from_sig(&fn_sig)?;
+                        Some(self.module.add_function(&fn_name, fn_type, None))
+                    }
+                };
                 // The closure value is `{ fn_ptr, captures... }` — field 0 is
                 // the code pointer, fields 1..N the captures (see
                 // `lower_closure`). The closure's LLVM type is an

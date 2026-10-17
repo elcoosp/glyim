@@ -618,3 +618,191 @@ miscompilations and were deferred:
 None of these produce wrong values when they fail — they emit a
 diagnostic or an ICE — so they don't fall into the anti-miscompilation
 class. Each is worth its own session but was out of scope for this one.
+
+---
+
+## 13. Bug-hunt round: three non-silent bugs fixed
+
+The three bugs deferred in §12 are now resolved.
+
+### 13.1 Float-literal negation + cast folding
+
+Two stacked bugs:
+
+1. **typeck**: `-3.5` failed with `cannot apply unary negation to
+   non-numeric type` because the `UnOp::Neg` check's `matches!` clause
+   listed `Infer(Int(_))` and `Infer(Ty(_))` but not `Infer(Float(_))`.
+   A float literal is `Infer(Float(_))` until context pins it, so every
+   negated float literal (and every `-x` on an unannotated float
+   variable) was rejected. Added the missing arm.
+
+2. **glyim-opt**: `evaluate_rvalue_to_const`'s `Rvalue::Cast` arm
+   returned `operand_to_const(op, locals)` — the *operand's* constant,
+   silently dropping the cast. `-3.5 as i32` folded to
+   `FloatBits(-3.5)`, so a surrounding `+` / `&` saw a `double` where
+   an `i32` was expected and codegen ICEd with `add: mismatched types`
+   / `bitand: expected integer types`. Changed to `Rvalue::Cast(_, _,
+   _) => None` — leave the cast in the MIR; codegen already handles
+   every `CastKind` correctly.
+
+### 13.2 String equality (`==` / `!=` on `&str`)
+
+Typeck permits `==` on any unifiable pair, but codegen's `Eq`/`Ne` arms
+only handled int/float and errored with `eq: mismatched types`. Added:
+
+- `glyim-runtime::glyim_str_eq(l_ptr, l_len, r_ptr, r_len) -> i32`:
+  length check first (short-circuits on `l_len != r_len`), then a
+  byte-slice comparison. The length-first order is important — the
+  pointers may be null for empty strings.
+- `LoweringCtx::is_string_shaped` and `::lower_string_eq` in codegen.
+  String operands are `{ptr, len}` LLVM structs (same shape as
+  `TyKind::String` / `&str`); extract fields 0 and 1 from each and call
+  the runtime helper, then `icmp` the `i32` result to `bool`. `==` uses
+  `ne 0`; `!=` uses `eq 0`.
+- `Eq`/`Ne` `lower_binop` arms now dispatch through
+  `is_string_shaped` before the "mismatched types" fallback.
+
+### 13.3 Capturing closures
+
+Three stacked bugs:
+
+1. **codegen `place_ptr` Field**: the arm handled `TyKind::Adt` but not
+   `TyKind::Closure`, so a closure-field projection (capture read) fell
+   through to `Ty::ERROR` and logged "field type unresolved for
+   current_ty=Closure(...)". Fixed by adding a `TyKind::Closure` case
+   that mirrors `glyim-layout`'s closure layout: field 0 is the pointer-
+   sized code pointer (represented as `*const ()`), fields 1..N are the
+   capture types from the closure's substitution args (with a fallback
+   to the registered `ClosureAdt`'s fields).
+
+2. **codegen closure call forward-declaration**: the pipeline emits
+   `closure_bodies_codegen` *after* `all_bodies`, so a `main` that
+   calls `|x| x + n` reaches the call arm before
+   `__glyim_fn_<closure_id>` is defined. The call arm bailed with
+   "closure body function was not emitted before the call site". Fixed
+   by forward-declaring the closure function (type derived from the
+   registered `FnSig` via `llvm_fn_type_from_sig`) when
+   `module.get_function` returns `None` — inkwell reuses the same
+   `FunctionValue` when the body emission later calls `add_function`
+   with the same name and type, so the direct call resolves at link.
+
+3. **codegen `MirConstKind::Fn` const mangling**: the closure's
+   `FnDefId` is a re-typed `ClosureId`. The pipeline emits the closure
+   body under the plain `__glyim_fn_<id>` symbol, but the
+   `MirConstKind::Fn` const arm mangled it to
+   `__glyim_fn_<id>_<subst_idx>_<len>` — a symbol that never gets
+   defined. Link then failed with `Undefined symbols:
+   ___glyim_fn_<id>_<idx>_<len>`. Fixed by detecting the closure shape
+   (`ty_ctx.closure_sig(ClosureId::from_raw(id)).is_some()`) and using
+   the plain un-mangled form for closures.
+
+### Fixtures added
+
+- `float_negation.g` (exit 253) — negated float + cast
+- `float_cast_then_int_op.g` (exit 23) — cast survives const-prop
+- `str_equality.g` (exit 47) — `==` / `!=` on `&str` literals
+- `str_equality_vars.g` (exit 19) — `==` on vars incl. empty strings
+- `closure_capture_basic.g` (exit 67) — two-capture by-ref closure
+- `closure_move_capture.g` (exit 71) — move closure
+
+Each asserts on the executable's exit code with distinct prime values
+so a residual wrong-value regression produces a distinctly wrong exit
+code.
+
+### All green
+
+4599/4599 tests pass. Working tree clean.
+
+---
+
+## 13. Bug-hunt round: three non-silent bugs fixed
+
+The three bugs deferred in §12 are now resolved.
+
+### 13.1 Float-literal negation + cast folding
+
+Two stacked bugs:
+
+1. **typeck**: `-3.5` failed with `cannot apply unary negation to
+   non-numeric type` because the `UnOp::Neg` check's `matches!` clause
+   listed `Infer(Int(_))` and `Infer(Ty(_))` but not `Infer(Float(_))`.
+   A float literal is `Infer(Float(_))` until context pins it, so every
+   negated float literal (and every `-x` on an unannotated float
+   variable) was rejected. Added the missing arm.
+
+2. **glyim-opt**: `evaluate_rvalue_to_const`'s `Rvalue::Cast` arm
+   returned `operand_to_const(op, locals)` — the *operand's* constant,
+   silently dropping the cast. `-3.5 as i32` folded to
+   `FloatBits(-3.5)`, so a surrounding `+` / `&` saw a `double` where
+   an `i32` was expected and codegen ICEd with `add: mismatched types`
+   / `bitand: expected integer types`. Changed to `Rvalue::Cast(_, _,
+   _) => None` — leave the cast in the MIR; codegen already handles
+   every `CastKind` correctly.
+
+### 13.2 String equality (`==` / `!=` on `&str`)
+
+Typeck permits `==` on any unifiable pair, but codegen's `Eq`/`Ne` arms
+only handled int/float and errored with `eq: mismatched types`. Added:
+
+- `glyim-runtime::glyim_str_eq(l_ptr, l_len, r_ptr, r_len) -> i32`:
+  length check first (short-circuits on `l_len != r_len`), then a
+  byte-slice comparison. The length-first order is important — the
+  pointers may be null for empty strings.
+- `LoweringCtx::is_string_shaped` and `::lower_string_eq` in codegen.
+  String operands are `{ptr, len}` LLVM structs (same shape as
+  `TyKind::String` / `&str`); extract fields 0 and 1 from each and call
+  the runtime helper, then `icmp` the `i32` result to `bool`. `==` uses
+  `ne 0`; `!=` uses `eq 0`.
+- `Eq`/`Ne` `lower_binop` arms now dispatch through
+  `is_string_shaped` before the "mismatched types" fallback.
+
+### 13.3 Capturing closures
+
+Three stacked bugs:
+
+1. **codegen `place_ptr` Field**: the arm handled `TyKind::Adt` but not
+   `TyKind::Closure`, so a closure-field projection (capture read) fell
+   through to `Ty::ERROR` and logged "field type unresolved for
+   current_ty=Closure(...)". Fixed by adding a `TyKind::Closure` case
+   that mirrors `glyim-layout`'s closure layout: field 0 is the pointer-
+   sized code pointer (represented as `*const ()`), fields 1..N are the
+   capture types from the closure's substitution args (with a fallback
+   to the registered `ClosureAdt`'s fields).
+
+2. **codegen closure call forward-declaration**: the pipeline emits
+   `closure_bodies_codegen` *after* `all_bodies`, so a `main` that
+   calls `|x| x + n` reaches the call arm before
+   `__glyim_fn_<closure_id>` is defined. The call arm bailed with
+   "closure body function was not emitted before the call site". Fixed
+   by forward-declaring the closure function (type derived from the
+   registered `FnSig` via `llvm_fn_type_from_sig`) when
+   `module.get_function` returns `None` — inkwell reuses the same
+   `FunctionValue` when the body emission later calls `add_function`
+   with the same name and type, so the direct call resolves at link.
+
+3. **codegen `MirConstKind::Fn` const mangling**: the closure's
+   `FnDefId` is a re-typed `ClosureId`. The pipeline emits the closure
+   body under the plain `__glyim_fn_<id>` symbol, but the
+   `MirConstKind::Fn` const arm mangled it to
+   `__glyim_fn_<id>_<subst_idx>_<len>` — a symbol that never gets
+   defined. Link then failed with `Undefined symbols:
+   ___glyim_fn_<id>_<idx>_<len>`. Fixed by detecting the closure shape
+   (`ty_ctx.closure_sig(ClosureId::from_raw(id)).is_some()`) and using
+   the plain un-mangled form for closures.
+
+### Fixtures added
+
+- `float_negation.g` (exit 253) — negated float + cast
+- `float_cast_then_int_op.g` (exit 23) — cast survives const-prop
+- `str_equality.g` (exit 47) — `==` / `!=` on `&str` literals
+- `str_equality_vars.g` (exit 19) — `==` on vars incl. empty strings
+- `closure_capture_basic.g` (exit 67) — two-capture by-ref closure
+- `closure_move_capture.g` (exit 71) — move closure
+
+Each asserts on the executable's exit code with distinct prime values
+so a residual wrong-value regression produces a distinctly wrong exit
+code.
+
+### All green
+
+4599/4599 tests pass. Working tree clean.

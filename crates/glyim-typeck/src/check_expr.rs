@@ -287,6 +287,7 @@ impl<'a> FnCtxt<'a> {
                             TyKind::Int(_)
                                 | TyKind::Float(_)
                                 | TyKind::Infer(InferVar::Int(_))
+                                | TyKind::Infer(InferVar::Float(_))
                                 | TyKind::Infer(InferVar::Ty(_))
                         ) {
                             inner_ty
