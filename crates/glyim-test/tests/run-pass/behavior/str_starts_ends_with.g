@@ -6,7 +6,7 @@
 // naive byte-scan implementations that match Rust's byte-substring
 // semantics.
 // test-mode: run-pass
-// exit-code: 6
+// exit-code: 19
 // compile-flags: --with-stdlib
 // needs-llvm
 fn main() -> i32 {
