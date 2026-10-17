@@ -806,3 +806,77 @@ code.
 ### All green
 
 4599/4599 tests pass. Working tree clean.
+
+---
+
+## 14. Bug-hunt round 2: 1 fixed, 3 found (not fixed)
+
+### 14.1 Fixed: `resolve_trait_method_fn` dropped its substitution
+
+`resolve_trait_method_fn` returned only `FnDefId`, discarding the impl-level
+generic substitution the match-unification had just established. Both
+callers (for-loop `Iterator::next` and path-qualified
+`Trait::method(receiver)`) hardcoded `Substitution::empty()`, so any impl
+method whose body mentioned an impl-level generic parameter reached codegen
+with `TyKind::Param(0)` unresolved → `TyKind::Param reached LLVM codegen`
+ICE.
+
+**Fix**: return `(FnDefId, Substitution)` with the impl's generic params
+resolved through the inference table. Verified non-regressing; 4599/4599
+tests still pass.
+
+### 14.2 Found but not fixed: for-loop on a fixed-size array
+
+    let a = [1, 2, 3, 4, 5];
+    let mut s = 0;
+    for x in a { s = s + x; }   // SEGV at runtime
+
+Root cause: the only available impl is `impl<'a, T> Iterator for &'a [T]`,
+which yields `Option<&T>`. The for-loop's bind is `x: T` (per Rust
+semantics for by-value array iteration). The payload is an 8-byte pointer
+stored into a 4-byte slot — stack corruption.
+
+Two ways to fix, both non-trivial:
+  - (a) special-case array iterables in lowering: emit an index-based
+    loop, `Copy`ing `arr[i]` into the binding (no trait call at all).
+    This matches Rust's `IntoIterator for [T; N]` behaviour.
+  - (b) add `IntoIterator for [T; N]` to the stdlib — but the language
+    doesn't support const generics yet, so `[T; N]` cannot be written in
+    `.g` source. Requires either const-generics work or a compiler-
+    synthesized impl.
+
+`for x in &a` has the *same* ABI mismatch (the loop body's `x` is typed
+`T` but the iterator yields `&T`), so it doesn't work either.
+
+### 14.3 Found but not fixed: `&arr[a..b]` slice indexing SEGV
+
+    let a = [1, 2, 3, 4, 5];
+    let s = &a[1..4];
+    s[0]                        // SEGV
+
+Root cause: MIR lowers the slice's pointer arithmetic with `usize`
+throughout, but the temp local that holds the *base element* (`a[0]`,
+typed `i32`) is declared as `usize` in the MIR. Codegen allocates the
+alloca from the *value* type (`i32`, 4 bytes) but reads it back as `i64`
+(8 bytes) — pulling adjacent stack bytes into the high half and driving
+the pointer arithmetic out of bounds.
+
+Fix: in the slice-lowering path, insert an explicit `i32 -> usize` cast
+on the base element before adding the `usize` offset, or declare the
+local as the element type and cast on read.
+
+### 14.4 Found but not fixed: manual `.next()` on array-typed `&a`
+
+    let a = [1, 2, 3];
+    let mut it = &a;
+    let x = it.next();          // crash
+
+Same root as 14.2 — the iterator is `impl Iterator for &[T]` (yields
+`&T`) but the surrounding expression's type inference picks `T` as the
+payload. ABI mismatch on the return slot.
+
+These three remaining bugs are related enough to be one focused future
+session: **array-as-iterable / slice-lowering correctness**. Each is
+blocked on architectural work (const generics for a proper
+`IntoIterator for [T; N]`, or a dedicated array-iteration lowering path)
+rather than a one-line fix.
