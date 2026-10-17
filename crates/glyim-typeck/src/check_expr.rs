@@ -1679,6 +1679,26 @@ impl<'a> FnCtxt<'a> {
                             m
                         };
                         let ret_ty = self.ctx.subst_ty(ret_ty, &full_map);
+                        // Resolve any `Infer(TyVar)` that remains. The
+                        // sig's `output` for a method whose return type is
+                        // an *impl-level* generic (`impl<T> Option<T> { fn
+                        // unwrap(self) -> T }`) is a fresh `Infer(TyVar)`
+                        // created when `resolve_method_call` instantiated
+                        // the impl's `param_map`. That var is bound during
+                        // the receiver's ADT unify (`Option<u8>` pins it to
+                        // `u8`), but `subst_ty` only walks `Param(i)` — it
+                        // never looks at the inference table. So without
+                        // this resolve, `ret_ty` stayed `Infer(TyVar)` and
+                        // a downstream `as i64` on it produced "invalid
+                        // cast" (cast.rs's `is_valid_cast` has no
+                        // `Infer(Ty)` source arm — only `Infer(Int|Float)`).
+                        //
+                        // `resolve_ty_shallow` folds a bound infer var to
+                        // its value; it is idempotent and cheap for the
+                        // already-concrete case (`str::parse::<f64>`'s
+                        // `Result<f64, ..>`), so calling it unconditionally
+                        // is fine.
+                        let ret_ty = self.infer.resolve_ty_shallow(self.ctx, ret_ty);
 
                         // Rebuild `method_part` from the *resolved* method
                         // generics so the callee's `FnDef` substitution

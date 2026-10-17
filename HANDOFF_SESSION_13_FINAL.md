@@ -384,3 +384,73 @@ fired, the raw projection reached the backend and ICEd with
     let _ = "42".parse::<i32>();  (discard)                             -> 0
     "10".parse::<i32>().unwrap() + "20".parse::<i32>().unwrap()         -> 30
     mixed primitive types in one program                                -> 0
+
+---
+
+## 11. Final fix: unwrap-then-cast on generic return types
+
+The remaining gap noted in §10 ("`parse::<u8>().unwrap() as i32` trips
+`invalid cast`") is closed. All of these now work:
+
+    let x: Option<u8> = Option::Some(23); x.unwrap() as i32        -> 23
+    "23".parse::<u8>().unwrap() as i32                             -> 23
+    "42".parse::<i32>().unwrap() as i64 as i32                     -> 42
+    let r: Result<i32,i32> = Result::Ok(5); r.unwrap() as i64 as i32 -> 5
+    Option::Some(Option::Some(11u8)).unwrap().unwrap() as i32      -> 11
+
+**Root cause**: `impl<T> Option<T> { fn unwrap(self) -> T }` has a fresh
+`Infer(TyVar)` as its `FnSig.output` after `resolve_method_call`
+instantiates the impl's param map. That var *is* bound by the receiver's
+ADT unify (`Option<u8>` pins it to `u8`), but the `Static` dispatch arm
+only ran `subst_ty(ret_ty, full_map)` — and `subst_ty` walks `Param(i)`
+only; it never consults the inference table. So `ret_ty` stayed
+`Infer(TyVar)`, and a downstream `as i64` failed `is_valid_cast` (which
+has no `Infer(Ty)` source arm, only `Infer(Int)`/`Infer(Float)`).
+
+**Fix**: after `subst_ty`, fold the remaining type through
+`self.infer.resolve_ty_shallow(self.ctx, ret_ty)`. The bound var becomes
+its concrete value (`u8`), the cast check sees `u8` and accepts.
+
+This is exactly the same class as the earlier MethodCall-return-type fix
+(`c6439a78`): the dispatch arm's `thir_expr.ty` (and the value it
+returns to the caller) must be the *resolved* type, not a pre-inference
+placeholder.
+
+**Fixture**: `crates/glyim-test/tests/run-pass/behavior/generic_method_unwrap_then_cast.g`
+(exit 140) covers the four shapes above with distinct primes so a
+wrong-value regression produces a distinctly wrong exit code.
+
+---
+
+## 11. Final fix: unwrap-then-cast on generic return types
+
+The remaining gap noted in §10 ("`parse::<u8>().unwrap() as i32` trips
+`invalid cast`") is closed. All of these now work:
+
+    let x: Option<u8> = Option::Some(23); x.unwrap() as i32        -> 23
+    "23".parse::<u8>().unwrap() as i32                             -> 23
+    "42".parse::<i32>().unwrap() as i64 as i32                     -> 42
+    let r: Result<i32,i32> = Result::Ok(5); r.unwrap() as i64 as i32 -> 5
+    Option::Some(Option::Some(11u8)).unwrap().unwrap() as i32      -> 11
+
+**Root cause**: `impl<T> Option<T> { fn unwrap(self) -> T }` has a fresh
+`Infer(TyVar)` as its `FnSig.output` after `resolve_method_call`
+instantiates the impl's param map. That var *is* bound by the receiver's
+ADT unify (`Option<u8>` pins it to `u8`), but the `Static` dispatch arm
+only ran `subst_ty(ret_ty, full_map)` — and `subst_ty` walks `Param(i)`
+only; it never consults the inference table. So `ret_ty` stayed
+`Infer(TyVar)`, and a downstream `as i64` failed `is_valid_cast` (which
+has no `Infer(Ty)` source arm, only `Infer(Int)`/`Infer(Float)`).
+
+**Fix**: after `subst_ty`, fold the remaining type through
+`self.infer.resolve_ty_shallow(self.ctx, ret_ty)`. The bound var becomes
+its concrete value (`u8`), the cast check sees `u8` and accepts.
+
+This is exactly the same class as the earlier MethodCall-return-type fix
+(`c6439a78`): the dispatch arm's `thir_expr.ty` (and the value it
+returns to the caller) must be the *resolved* type, not a pre-inference
+placeholder.
+
+**Fixture**: `crates/glyim-test/tests/run-pass/behavior/generic_method_unwrap_then_cast.g`
+(exit 140) covers the four shapes above with distinct primes so a
+wrong-value regression produces a distinctly wrong exit code.
