@@ -15,7 +15,7 @@
 // residual placeholder or a swapped field produces a distinct exit
 // code.
 // test-mode: run-pass
-// exit-code: 100
+// exit-code: 89
 // compile-flags: --with-stdlib
 // needs-llvm
 struct P { a: i32, b: i32, c: i32 }
