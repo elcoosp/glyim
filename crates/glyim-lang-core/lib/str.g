@@ -57,6 +57,51 @@ impl str {
         false
     }
 
+    /// Returns `true` if `self` begins with `prefix`.
+    ///
+    /// Byte-scan over `as_bytes()`; a prefix longer than the receiver
+    /// is trivially `false`.
+    fn starts_with(&self, prefix: &str) -> bool {
+        let h = self.as_bytes();
+        let p = prefix.as_bytes();
+        let hn = h.len();
+        let pn = p.len();
+        if pn > hn {
+            return false;
+        }
+        let mut i = 0;
+        while i < pn {
+            if h[i] != p[i] {
+                return false;
+            }
+            i = i + 1;
+        }
+        true
+    }
+
+    /// Returns `true` if `self` ends with `suffix`.
+    ///
+    /// Byte-scan from the end; a suffix longer than the receiver is
+    /// trivially `false`.
+    fn ends_with(&self, suffix: &str) -> bool {
+        let h = self.as_bytes();
+        let s = suffix.as_bytes();
+        let hn = h.len();
+        let sn = s.len();
+        if sn > hn {
+            return false;
+        }
+        let off = hn - sn;
+        let mut i = 0;
+        while i < sn {
+            if h[off + i] != s[i] {
+                return false;
+            }
+            i = i + 1;
+        }
+        true
+    }
+
     /// Returns an iterator over the chars of the string slice.
     fn chars(&self) -> Chars {
         Chars { s: self }

@@ -299,6 +299,13 @@ impl Place {
                 ProjectionElem::Index(_) => match ctx.ty_kind(ty) {
                     TyKind::Array(inner_ty, _) => *inner_ty,
                     TyKind::Slice(inner_ty) => *inner_ty,
+                    // STR-INDEX: a `str` / `String` indexes to a `u8` byte.
+                    // Codegen already lowers a str index to a `{ptr, len}`
+                    // data-pointer GEP + `i8` load, so the element type
+                    // here must be `u8`. Without this arm, `"abc"[0]`
+                    // tripped the "Index on non-array/slice type"
+                    // invariant and returned `Ty::ERROR`.
+                    TyKind::String => Ty::U8,
                     _ => {
                         tracing::error!("Place::ty(): Index on non-array/slice type");
                         ctx.error_ty()
@@ -319,6 +326,7 @@ impl Place {
                     // Constant index returns the element type of the array/slice.
                     match ctx.ty_kind(ty) {
                         TyKind::Array(inner_ty, _) | TyKind::Slice(inner_ty) => *inner_ty,
+                        TyKind::String => Ty::U8,
                         _ => {
                             tracing::error!("Place::ty(): ConstantIndex on non-array/slice type");
                             ctx.error_ty()
@@ -397,6 +405,7 @@ impl Place {
                 ProjectionElem::Index(_) => match ctx.ty_kind(ty) {
                     TyKind::Array(inner_ty, _) => *inner_ty,
                     TyKind::Slice(inner_ty) => *inner_ty,
+                    TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
                     _ => {
                         tracing::error!("Place::ty_mut(): Index on non-array/slice type");
                         ctx.error_ty()
@@ -409,6 +418,7 @@ impl Place {
                     from_end: _,
                 } => match ctx.ty_kind(ty) {
                     TyKind::Array(inner_ty, _) | TyKind::Slice(inner_ty) => *inner_ty,
+                    TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
                     _ => {
                         tracing::error!("Place::ty_mut(): ConstantIndex on non-array/slice type");
                         ctx.error_ty()

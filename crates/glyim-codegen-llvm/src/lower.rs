@@ -911,6 +911,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     let elem_ty = match self.ty_ctx.ty_kind(current_ty) {
                         TyKind::Array(elem, _) => *elem,
                         TyKind::Slice(elem) => *elem,
+                        // STR-INDEX: a `str` / `String` indexes to a `u8`.
+                        // Its LLVM representation is the same `{ptr, len}`
+                        // fat-pointer struct a slice has, so the following
+                        // slice path handles it directly.
+                        TyKind::String => {
+                            self.ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8))
+                        }
                         _ => {
                             return Err(vec![GlyimDiagnostic::internal_error(format!(
                                 "internal compiler error: Index projection on non-array/slice type {:?}",
@@ -918,7 +925,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             ))]);
                         }
                     };
-                    if let TyKind::Slice(_) = self.ty_ctx.ty_kind(current_ty) {
+                    if matches!(
+                        self.ty_ctx.ty_kind(current_ty),
+                        TyKind::Slice(_) | TyKind::String
+                    ) {
                         let i8_ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
                         let zero_i64 = i64_ty.const_zero();
                         let field0_ptr = unsafe {
