@@ -2644,13 +2644,45 @@ impl<'a> MirBuilder<'a> {
         );
 
         // 2. Compute start_val
+        //
+        // SLICE-BOUND-TYPE-FIX: the source bound (`2` in `a[2..]`) is
+        // resolved by typeck as an *unsuffixed integer literal* whose
+        // default type is `i32`. Storing it directly into `start_local`
+        // (declared `usize`) left the high half of the 8-byte local
+        // uninitialised — codegen emitted `store i32 2, ptr ...` and
+        // every later `load i64` from that local pulled in adjacent
+        // stack bytes, so `2 * 4` computed 8 from garbage+bias and drove
+        // the pointer arithmetic out of bounds. Cast through a
+        // temporary when the source type isn't already `usize`.
         let start_val = if let Some(start_expr) = start_opt {
-            // Evaluate start expression and assign to start_local
-            let start_rvalue = self.lower_expr_to_rvalue(start_expr);
-            self.push_stmt(
-                StatementKind::Assign(Place::new(start_local), start_rvalue),
-                start_expr.span,
+            let needs_cast = !matches!(
+                self.ctx.ty_ctx().ty_kind(start_expr.ty),
+                TyKind::Uint(glyim_core::primitives::UintTy::Usize),
             );
+            if needs_cast {
+                let temp = self.alloc_local(start_expr.ty, Mutability::Mut, span);
+                self.push_stmt(StatementKind::StorageLive(temp), span);
+                let start_rvalue = self.lower_expr_to_rvalue(start_expr);
+                self.push_stmt(
+                    StatementKind::Assign(Place::new(temp), start_rvalue),
+                    start_expr.span,
+                );
+                let cast = Rvalue::Cast(
+                    glyim_mir::CastKind::IntToInt,
+                    Operand::Copy(Place::new(temp)),
+                    Ty::USIZE,
+                );
+                self.push_stmt(
+                    StatementKind::Assign(Place::new(start_local), cast),
+                    span,
+                );
+            } else {
+                let start_rvalue = self.lower_expr_to_rvalue(start_expr);
+                self.push_stmt(
+                    StatementKind::Assign(Place::new(start_local), start_rvalue),
+                    start_expr.span,
+                );
+            }
             Operand::Copy(Place::new(start_local))
         } else {
             // start = 0
@@ -2666,12 +2698,36 @@ impl<'a> MirBuilder<'a> {
         };
 
         // 3. Compute end_val
+        // (Same integer-width treatment as `start_val` above.)
         let end_val = if let Some(end_expr) = end_opt {
-            let end_rvalue = self.lower_expr_to_rvalue(end_expr);
-            self.push_stmt(
-                StatementKind::Assign(Place::new(end_local), end_rvalue),
-                end_expr.span,
+            let needs_cast = !matches!(
+                self.ctx.ty_ctx().ty_kind(end_expr.ty),
+                TyKind::Uint(glyim_core::primitives::UintTy::Usize),
             );
+            if needs_cast {
+                let temp = self.alloc_local(end_expr.ty, Mutability::Mut, span);
+                self.push_stmt(StatementKind::StorageLive(temp), span);
+                let end_rvalue = self.lower_expr_to_rvalue(end_expr);
+                self.push_stmt(
+                    StatementKind::Assign(Place::new(temp), end_rvalue),
+                    end_expr.span,
+                );
+                let cast = Rvalue::Cast(
+                    glyim_mir::CastKind::IntToInt,
+                    Operand::Copy(Place::new(temp)),
+                    Ty::USIZE,
+                );
+                self.push_stmt(
+                    StatementKind::Assign(Place::new(end_local), cast),
+                    span,
+                );
+            } else {
+                let end_rvalue = self.lower_expr_to_rvalue(end_expr);
+                self.push_stmt(
+                    StatementKind::Assign(Place::new(end_local), end_rvalue),
+                    end_expr.span,
+                );
+            }
             // For inclusive ranges (`..=`), the upper bound is `end + 1` because
             // the slice includes index `end`. Add 1 with an overflow check: if
             // `end == usize::MAX`, `end + 1` would wrap to 0, which must panic
@@ -2855,13 +2911,67 @@ impl<'a> MirBuilder<'a> {
             }
         };
 
+        // SLICE-INDEX-FIX: `data_ptr_ptr` is `usize` — it must hold an
+        // *address*, not the first element's value. For an array base
+        // (`&a[1..4]` on `a: [i32; 5]`) the natural projection is
+        // `ConstantIndex(0)`, which yields the element *value* (`i32`);
+        // storing that into a `usize` slot allocated `i32`-shaped was the
+        // source of a 4-byte-vs-8-byte read at codegen (`load i64` from
+        // a 4-byte `i32` alloca pulled adjacent stack bytes into the high
+        // half and drove the pointer arithmetic out of bounds — a
+        // SEGV on `s[0]`). For a slice base (`x: &[i32]`, `x[1..4]`)
+        // the projection is `Field(0)` and already yields the fat
+        // pointer's data pointer; that IS a pointer value, but still
+        // needs `PtrToInt` so the destination `usize` slot holds an
+        // integer that can be added to `byte_offset`.
+        //
+        // Both cases therefore become: take the *address* of the first
+        // element (arrays) or the already-loaded pointer (slices),
+        // `PtrToInt` to `usize`, store.
+        let base_is_array =
+            matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Array(_, _));
         let data_ptr_ptr = self.alloc_local(Ty::USIZE, Mutability::Not, span);
         self.push_stmt(StatementKind::StorageLive(data_ptr_ptr), span);
-        let load_data_ptr = Rvalue::Use(Operand::Copy(first_elem_place));
-        self.push_stmt(
-            StatementKind::Assign(Place::new(data_ptr_ptr), load_data_ptr),
-            span,
-        );
+        if base_is_array {
+            // ARRAY BASE (`&a[1..4]`): `ConstantIndex(0)` yields the
+            // element *value* (`i32`, 4 bytes), not its address. Take
+            // `&a[0]` instead — a pointer — store it in a *pointer-typed*
+            // local (NOT `usize`: `PtrToInt`'s codegen checks
+            // `is_pointer_value()` on the source, so a `usize`-typed
+            // local holding a `Ref` fails with "PtrToInt cast on
+            // non-pointer"), then `PtrToInt` to `usize` for arithmetic.
+            let ptr_ty = self.ctx.ty_ctx().mk_ty(TyKind::RawPtr(
+                elem_ty,
+                glyim_core::primitives::Mutability::Not,
+            ));
+            let ptr_local = self.alloc_local(ptr_ty, Mutability::Not, span);
+            self.push_stmt(StatementKind::StorageLive(ptr_local), span);
+            self.push_stmt(
+                StatementKind::Assign(
+                    Place::new(ptr_local),
+                    Rvalue::Ref(first_elem_place, glyim_mir::BorrowKind::Shared),
+                ),
+                span,
+            );
+            let ptr_to_int = Rvalue::Cast(
+                glyim_mir::CastKind::PtrToInt,
+                Operand::Copy(Place::new(ptr_local)),
+                Ty::USIZE,
+            );
+            self.push_stmt(
+                StatementKind::Assign(Place::new(data_ptr_ptr), ptr_to_int),
+                span,
+            );
+        } else {
+            // SLICE BASE (`x: &[i32]`, `x[1..4]`): `Field(0)` of the fat
+            // pointer already yields an 8-byte pointer-shaped value.
+            // Store it directly into the `usize` slot.
+            let load_data_ptr = Rvalue::Use(Operand::Copy(first_elem_place));
+            self.push_stmt(
+                StatementKind::Assign(Place::new(data_ptr_ptr), load_data_ptr),
+                span,
+            );
+        }
 
         let layout_computer =
             glyim_layout::SimpleLayoutComputer::new(self.ctx.ty_ctx(), TargetInfo::x86_64());
