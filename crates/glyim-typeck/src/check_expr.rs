@@ -545,7 +545,7 @@ impl<'a> FnCtxt<'a> {
                     ) {
                         Some(trait_def_id) => self
                             .resolve_trait_method_fn(iter_ty, trait_def_id, next_name, span)
-                            .map(|fn_def_id| {
+                            .map(|(fn_def_id, fn_substs)| {
                                 let option_ty = self
                                     .ctx
                                     .fn_sig(fn_def_id)
@@ -553,7 +553,6 @@ impl<'a> FnCtxt<'a> {
                                     .unwrap_or_else(|| self.ctx.error_ty());
                                 let ref_iter_ty =
                                     self.ctx.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
-                                let fn_substs = self.ctx.intern_substitution(vec![]);
                                 let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
                                 let discr_ty = self.ctx.mk_ty(TyKind::Uint(UintTy::U8));
                                 thir::ForIteratorNext {
@@ -984,10 +983,9 @@ impl<'a> FnCtxt<'a> {
 
                 if let Some((trait_def_id, method_name)) = trait_call {
                     let recv_ty = arg_exprs.first().map(|e| e.ty).unwrap_or(Ty::ERROR);
-                    if let Some(fn_def_id) =
+                    if let Some((fn_def_id, substs)) =
                         self.resolve_trait_method_fn(recv_ty, trait_def_id, method_name, span)
                     {
-                        let substs = self.ctx.intern_substitution(vec![]);
                         let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, substs));
                         let ret_ty = self.instantiate_fn_sig(fn_def_id, span);
                         let callee = thir::Expr {
@@ -4059,7 +4057,7 @@ impl<'a> FnCtxt<'a> {
         trait_def_id: TraitDefId,
         method_name: Name,
         span: Span,
-    ) -> Option<FnDefId> {
+    ) -> Option<(FnDefId, glyim_type::Substitution)> {
         // Receiver candidate types: the receiver as-is, then autoref
         // (`&`/`&mut`), then successive structural derefs — same priority as
         // `resolve_method_call`.
@@ -4153,7 +4151,35 @@ impl<'a> FnCtxt<'a> {
                                     .get(&body_id)
                                     .copied()
                                     .unwrap_or_else(|| self.hir.body_owners[body_id]);
-                                return Some(FnDefId::from_raw(local.to_raw()));
+                                // Collect the impl's generic params in
+                                // declaration order, resolved through the
+                                // inference table so a `<T>` impl called
+                                // at `T = i32` produces `[i32]` — not
+                                // `[Infer(TyVar)]`. The `self_matches`
+                                // probe above already unified each param
+                                // with the receiver's concrete type.
+                                // Returning the substitution lets the
+                                // caller build `FnDef(id, [i32])`
+                                // instead of `FnDef(id, [])`, which is
+                                // what makes the method's body substitute
+                                // `T := i32` before codegen (otherwise
+                                // `TyKind::Param(0)` reaches LLVM).
+                                let resolved_params: Vec<GenericArg> = impl_item
+                                    .generic_params
+                                    .iter()
+                                    .filter_map(|gp| {
+                                        param_map.get(&gp.name).map(|t| {
+                                            GenericArg::Ty(
+                                                self.infer.resolve_ty_shallow(self.ctx, *t),
+                                            )
+                                        })
+                                    })
+                                    .collect();
+                                let substs = self.ctx.intern_substitution(resolved_params);
+                                return Some((
+                                    FnDefId::from_raw(local.to_raw()),
+                                    substs,
+                                ));
                             }
                         }
                     }
