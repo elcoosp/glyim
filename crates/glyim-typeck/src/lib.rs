@@ -1874,6 +1874,138 @@ fn check_fn_items_in_module(
                         ));
                     }
                 }
+                // TRAIT-DEFAULT-METHODS: for `impl Trait for P { }` with
+                // no methods overridden, the loop above iterates nothing.
+                // Check each *un-overridden* trait default body so the
+                // call site can resolve to a real FnDefId. If the body
+                // fails to check (e.g. it references `Self::Item` which
+                // this impl doesn't pin), roll back the diagnostics,
+                // inference state, and allocated LocalDefId — a clear
+                // diagnostic beats a silent wrong value, and the stdlib's
+                // generic trait defaults (Iterator, Read, …) don't break
+                // the compile.
+                let impl_method_names: std::collections::HashSet<Name> =
+                    impl_item.methods.iter().map(|m| m.name).collect();
+                if let Some(trait_path) = &impl_item.trait_ref
+                    && let Some(trait_name) = trait_path.as_name()
+                {
+                    let trait_methods: Vec<_> = hir
+                        .items
+                        .iter()
+                        .find_map(|t_item| {
+                            let ItemKind::Trait(trait_item) = &t_item.kind else {
+                                return None;
+                            };
+                            if t_item.name != trait_name {
+                                return None;
+                            }
+                            Some(trait_item.methods.clone())
+                        })
+                        .unwrap_or_default();
+                    let trait_def_id_opt = tyconv::resolve_path_to_trait_def_id(
+                        def_map, ctx, trait_path, impl_span,
+                    );
+                    for tm in &trait_methods {
+                        if impl_method_names.contains(&tm.name) {
+                            continue;
+                        }
+                        let Some(body_id) = tm.default_body else {
+                            continue;
+                        };
+                        let local_def_id = {
+                            let id = *next_local_def_id;
+                            *next_local_def_id += 1;
+                            LocalDefId::from_raw(id)
+                        };
+                        let owner = DefId::new(local_krate, local_def_id);
+                        let combined_generics: Vec<glyim_hir::GenericParam> = impl_item
+                            .generic_params
+                            .iter()
+                            .chain(tm.generic_params.iter())
+                            .cloned()
+                            .collect();
+                        let saved_diag_len = diagnostics.len();
+                        let saved_infer = infer.snapshot();
+                        let saved_thir_len = thir_bodies.len();
+                        let saved_obligations_len = all_obligations.len();
+                        body_owner_map.insert(body_id, local_def_id);
+                        let sig = tyconv::resolve_fn_sig(
+                            ctx,
+                            infer,
+                            def_map,
+                            diagnostics,
+                            &tm.params,
+                            &tm.return_ty,
+                            &combined_generics,
+                            impl_span,
+                            self_ty_opt,
+                        );
+                        let inputs = ctx.intern_substitution(
+                            sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
+                        );
+                        ctx.register_fn_sig(
+                            FnDefId::from_raw(local_def_id.to_raw()),
+                            FnSig {
+                                inputs,
+                                output: sig.return_ty,
+                                c_variadic: false,
+                                unsafety: Safety::Safe,
+                                abi: Abi::Glyim,
+                            },
+                        );
+                        if let (Some(self_ty), Some(trait_def_id)) =
+                            (self_ty_opt, trait_def_id_opt)
+                        {
+                            ctx.register_impl_method(
+                                trait_def_id,
+                                self_ty,
+                                tm.name,
+                                FnDefId::from_raw(local_def_id.to_raw()),
+                            );
+                        }
+                        let params: Vec<(Name, Ty, Span)> = tm
+                            .params
+                            .iter()
+                            .zip(sig.param_tys.iter())
+                            .map(|(p, ty)| (p.name, *ty, p.span))
+                            .collect();
+                        check_body(
+                            ctx,
+                            infer,
+                            diagnostics,
+                            all_obligations,
+                            hir,
+                            body_id,
+                            owner,
+                            sig.return_ty,
+                            &params,
+                            thir_bodies,
+                            local_def_id,
+                            def_map,
+                            trait_ctx,
+                            body_owner_map,
+                            all_expr_types,
+                            module_id,
+                            &combined_generics,
+                            self_ty_opt,
+                        );
+                        // Rollback on error: if this default body can't be
+                        // checked for this impl (unresolvable projections,
+                        // missing trait method resolution, etc.), unrecord
+                        // it so the call site falls through to `Virtual` +
+                        // a clean diagnostic instead of a garbage FnDefId.
+                        let new_errors = diagnostics[saved_diag_len..]
+                            .iter()
+                            .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error));
+                        if new_errors {
+                            diagnostics.truncate(saved_diag_len);
+                            infer.rollback_to(saved_infer);
+                            thir_bodies.truncate(saved_thir_len);
+                            all_obligations.truncate(saved_obligations_len);
+                            body_owner_map.remove(&body_id);
+                        }
+                    }
+                }
             }
             ItemKind::Const(c) => {
                 // Resolve the constant's value type and register it so

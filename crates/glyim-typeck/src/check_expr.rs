@@ -3871,20 +3871,45 @@ impl<'a> FnCtxt<'a> {
                                             Ty::UNIT
                                         };
                                         if let Some(body_id) = m.default_body {
-                                            let local = self
-                                                .body_owner_map
-                                                .get(&body_id)
-                                                .copied()
-                                                .unwrap_or_else(|| self.hir.body_owners[body_id]);
-                                            candidates.push((
-                                                recv_ty,
-                                                return_ty,
-                                                Vec::new(),
-                                                Vec::new(),
-                                                Some(MethodDispatch::Static(FnDefId::from_raw(
-                                                    local.to_raw(),
-                                                ))),
-                                            ));
+                                            // TRAIT-DEFAULT-FALLBACK: only
+                                            // resolve a `Static` FnDefId
+                                            // when the impl-checking pass
+                                            // actually recorded a
+                                            // `body_owner_map` entry for the
+                                            // default body. Previously this
+                                            // used `hir.body_owners[body_id]`
+                                            // — a *different* id space that
+                                            // pointed at an unrelated body,
+                                            // so `impl T for P { }; p.m()`
+                                            // called a garbage function
+                                            // (silent wrong value). If the
+                                            // pass couldn't check the body
+                                            // (unresolvable assoc types),
+                                            // fall through to `Virtual` —
+                                            // which surfaces a clean
+                                            // diagnostic instead.
+                                            match self.body_owner_map.get(&body_id).copied() {
+                                                Some(local) => {
+                                                    candidates.push((
+                                                        recv_ty,
+                                                        return_ty,
+                                                        Vec::new(),
+                                                        Vec::new(),
+                                                        Some(MethodDispatch::Static(
+                                                            FnDefId::from_raw(local.to_raw()),
+                                                        )),
+                                                    ));
+                                                }
+                                                None => {
+                                                    candidates.push((
+                                                        recv_ty,
+                                                        return_ty,
+                                                        Vec::new(),
+                                                        Vec::new(),
+                                                        Some(MethodDispatch::Virtual(trait_id)),
+                                                    ));
+                                                }
+                                            }
                                         } else {
                                             candidates.push((
                                                 recv_ty,
