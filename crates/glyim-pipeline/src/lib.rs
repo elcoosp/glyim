@@ -131,6 +131,14 @@ pub(crate) struct PreparedCompilation {
     /// instantiations of the same generic fn no longer collide on a plain
     /// `__glyim_fn_<id>`.
     pub all_bodies: Vec<(String, Arc<Body>)>,
+    /// The same bodies as `all_bodies`, but **before** `glyim_opt::optimize`.
+    /// Used by `--emit=mir` so the MIR dump reflects what the lowering pass
+    /// produced rather than the post-DCE image — `fn main() { let mut i =
+    /// 0; i += 1; let _ = i; }` is optimized to an empty body (the compound
+    /// assign writes a local nothing reads), so a test looking for the
+    /// `BinaryOp(Add, ...)` that `+=` lowers to needs the unoptimized form.
+    /// Codegen modes still use `all_bodies`.
+    pub pre_opt_bodies: Vec<(String, Arc<Body>)>,
     /// Non-error diagnostics accumulated during the front half.
     pub warnings: Vec<GlyimDiagnostic>,
 }
@@ -508,13 +516,18 @@ impl Pipeline {
         // closures never have generic substitutions. Pair each with its
         // symbol so the pipeline's all_bodies stays uniform.
         let mut closure_bodies_codegen: Vec<(String, Arc<Body>)> = Vec::new();
-        let mir_bodies_map: std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>> = {
+        let (mir_bodies_map, pre_opt_bodies_map): (
+            std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>>,
+            std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>>,
+        ) = {
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
 
             let lower_ctx =
                 PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
             let mut bodies = std::collections::HashMap::new();
+            let mut pre_opt_bodies_map: std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>> =
+                std::collections::HashMap::new();
 
             for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
                 let lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
@@ -532,6 +545,12 @@ impl Pipeline {
                 if sink_cell.borrow().has_errors() {
                     return Err(sink_cell.into_inner().into_diagnostics());
                 }
+
+                // Capture the pre-optimization body so `--emit=mir` can
+                // show the lowering artifacts (DCE would otherwise erase
+                // writes to dead locals, which the compound-assign
+                // regression test relies on seeing).
+                pre_opt_bodies_map.insert(owner, mir_arc.clone());
 
                 let opt_body = glyim_opt::optimize(ty_ctx_ref, &mir_arc);
                 bodies.insert(owner, Arc::new(opt_body.body));
@@ -567,7 +586,7 @@ impl Pipeline {
                     closure_bodies_codegen.push((c_sym, Arc::new(c_body)));
                 }
             }
-            bodies
+            (bodies, pre_opt_bodies_map)
         };
 
         let (mono_roots, discovery_diags) = {
@@ -737,11 +756,27 @@ impl Pipeline {
         // left in the sink is advisory. Surface it on the success value so the
         // caller can render it. Sorted + deduped for a stable order.
         let warnings = sink_cell.into_inner().into_diagnostics();
+        // For `--emit=mir`: use the pre-opt body when we have one, else
+        // the mono/opt body (generic fns have no pre-opt non-generic
+        // template in `pre_opt_bodies_map`, so fall back to the codegen
+        // version — still useful and consistent with codegen).
+        let pre_opt_bodies: Vec<(String, Arc<Body>)> = all_bodies
+            .iter()
+            .map(|(sym, b)| {
+                let pre = pre_opt_bodies_map
+                    .get(&b.owner)
+                    .cloned()
+                    .unwrap_or_else(|| b.clone());
+                (sym.clone(), pre)
+            })
+            .collect();
+
         Ok(PreparedCompilation {
             def_map,
             typeck_result,
             ty_ctx,
             all_bodies,
+            pre_opt_bodies,
             warnings,
         })
     }
@@ -1021,122 +1056,36 @@ pub fn emit_mir(
     db: &mut Database,
     input: &Path,
     output: &Path,
-    _proc_registry: Option<&glyim_proc_macro::Registry>,
+    proc_registry: Option<&glyim_proc_macro::Registry>,
 ) -> Result<(), Vec<GlyimDiagnostic>> {
-    let sink = DiagSink::new();
-    let sink_cell = RefCell::new(sink);
+    // Route through the shared front half (`prepare_compilation`) so the
+    // body goes through the same diagnostics, monomorphization, and
+    // raw-generic filtering as every other emit mode. The previous
+    // standalone implementation re-implemented the entire pipeline
+    // inline, which meant:
+    //
+    //   * the E0282 type-annotation-needed check (added in
+    //     `prepare_compilation`) was silently skipped — `--emit=mir` on
+    //     `fn main() -> i32 { Result::Ok(5).unwrap() }` succeeded where
+    //     `--emit=obj` / `--emit=exec` correctly emitted "type
+    //     annotations needed";
+    //   * `all_bodies` was the *pre*-mono `thir_bodies` lowered one by
+    //     one, so generic stdlib templates appeared as raw `Param`
+    //     locals in the MIR dump;
+    //   * the `body_is_raw_generic` filter never ran.
+    //
+    // Every other emit mode already routes through
+    // `prepare_compilation` for exactly this reason (see
+    // `emit_llvm_ir`'s comment).
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry)?;
 
-    let (file_id, source) = match load_crate_source(db, input) {
-        Ok(pair) => pair,
-        Err(mod_diags) => {
-            sink_cell.borrow_mut().extend(mod_diags);
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-    };
-
-    let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
-    sink_cell
-        .borrow_mut()
-        .extend(parse_result.diagnostics.clone());
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let mut hygiene = glyim_span::HygieneCtx::new();
-    let mut expander = glyim_meta::Expander::new(&mut hygiene);
-    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
-    sink_cell.borrow_mut().extend(expand_diags);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
-    sink_cell.borrow_mut().extend(def_diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
-    sink_cell.borrow_mut().extend(hir_diags.clone());
-    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
-    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
-    // of silently lowering a miscompiling state machine.
-    if hir_diags
-        .iter()
-        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
-    {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let resolver = db.interner().clone();
-    let mut ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
-    let mut trait_ctx = glyim_solve::TraitContext::new();
-    register_builtin_traits(&mut trait_ctx, db.interner());
-    // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so that
-    // 1-argument usages like `Result<usize>` expand to `Result<usize, Error>`.
-    // The RHS is resolved to a `Ty` template with the alias formals left as
-    // `TyKind::Param`, stored for later expansion by `resolve_name_to_adt_ty`
-    // (stdlib-completion).
-    {
-        let mut alias_infer = InferenceTable::new();
-        let mut alias_diags = Vec::new();
-        for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty
-            {
-                let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                let mut params: Vec<(u32, Name)> = Vec::new();
-                for (i, gp) in alias.generic_params.iter().enumerate() {
-                    let pname = gp.name;
-                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
-                        index: i as u32,
-                        name: pname,
-                    }));
-                    param_map.insert(pname, pty);
-                    params.push((i as u32, pname));
-                }
-                let template = tyconv::resolve_type_ref(
-                    &mut ty_ctx_mut,
-                    &mut alias_infer,
-                    &def_map,
-                    &mut alias_diags,
-                    rhs,
-                    &param_map,
-                    item.span,
-                );
-                ty_ctx_mut.register_type_alias(item.name, params, template);
-            }
-        }
-    }
-    let mut solver = SimpleTraitSolver::new(&trait_ctx);
-    let (ty_ctx, typeck_result) =
-        glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
-    sink_cell.borrow_mut().extend(typeck_result.diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    db.set_ty_ctx(ty_ctx);
-
-    let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
-    let ty_ctx_ref = ty_ctx_guard.as_ref();
-    let lower_ctx = PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
-    let mut mir_bodies = Vec::new();
-
-    for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-        let lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
-        sink_cell.borrow_mut().extend(lower_result.diagnostics);
-        if sink_cell.borrow().has_errors() {
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-        mir_bodies.push(lower_result.body);
-    }
-
+    // `all_bodies` carries `(symbol, body)` pairs; the MIR dump is keyed
+    // by the body's owner `DefId`, and `format_body` prints the owner's
+    // local id. Iterate the pairs so the output preserves the mono
+    // ordering.
     let mut out = String::new();
-    for body in &mir_bodies {
-        out.push_str(&format_body(body, ty_ctx_ref));
+    for (_symbol, body) in &prepared.pre_opt_bodies {
+        out.push_str(&format_body(body, &prepared.ty_ctx));
         out.push_str("\n\n");
     }
     std::fs::write(output, out)
