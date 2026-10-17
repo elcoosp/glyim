@@ -400,6 +400,32 @@ impl TyCtxMut {
     /// type to build `subst`, and the return type is instantiated through it
     /// (plan unstub-5 P5: generic call instantiation).
     pub fn subst_ty(&mut self, ty: Ty, subst: &std::collections::HashMap<u32, GenericArg>) -> Ty {
+        self.subst_ty_depth(ty, subst, 0)
+    }
+
+    /// Depth-guarded substitution. See `subst_ty` for the public API.
+    ///
+    /// `depth` is threaded explicitly rather than stored on `self` because
+    /// `subst_ty` is called re-entrantly from many paths (including from
+    /// inside its own arms), and a `&mut self` field would require careful
+    /// save/restore across early returns. Threading it as an argument makes
+    /// the invariant trivially correct.
+    ///
+    /// The guard fires at `depth >= 64`. A self-referential substitution
+    /// (`{0: <Param(0) as Tr>::X}`) — produced when a call-site substitution
+    /// replaces `T` with a projection whose *self* is that same `T` —
+    /// otherwise recurses forever and overflows the stack. 64 levels is
+    /// deeper than any legitimate chain; returning the type unchanged at the
+    /// limit preserves semantics for all valid inputs.
+    fn subst_ty_depth(
+        &mut self,
+        ty: Ty,
+        subst: &std::collections::HashMap<u32, GenericArg>,
+        depth: u32,
+    ) -> Ty {
+        if depth >= 64 {
+            return ty;
+        }
         if subst.is_empty() {
             return ty;
         }
@@ -410,9 +436,6 @@ impl TyCtxMut {
                 if let Some(repl) = subst.get(&pt.index) {
                     match repl {
                         GenericArg::Ty(t) => *t,
-                        // Const replacements only apply to array lengths (handled
-                        // in the `Array` arm); a type parameter is always
-                        // substituted by a type, not a const.
                         GenericArg::Const(_) => ty,
                         GenericArg::Lifetime(_) => ty,
                     }
@@ -421,7 +444,7 @@ impl TyCtxMut {
                 }
             }
             TyKind::Ref(region, inner, mutability) => {
-                let new_inner = self.subst_ty(inner, subst);
+                let new_inner = self.subst_ty_depth(inner, subst, depth + 1);
                 self.mk_ref(region, new_inner, mutability)
             }
             TyKind::RawPtr(inner, mutability) => {
@@ -433,7 +456,7 @@ impl TyCtxMut {
                 // field produced `*mut T` (the impl's own generic param) and
                 // later unified against `&Inner` as `T vs Inner`. This was
                 // the root cause of the entire `T vs Adt` cluster in sync.g.
-                let new_inner = self.subst_ty(inner, subst);
+                let new_inner = self.subst_ty_depth(inner, subst, depth + 1);
                 self.mk_ty(TyKind::RawPtr(new_inner, mutability))
             }
             TyKind::Adt(adt_id, substs) => {
@@ -441,7 +464,7 @@ impl TyCtxMut {
                 let new_args: Vec<GenericArg> = args
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty(t, subst)),
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
                         other => other,
                     })
                     .collect();
@@ -453,7 +476,7 @@ impl TyCtxMut {
                 let new_args: Vec<GenericArg> = args
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty(t, subst)),
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
                         other => other,
                     })
                     .collect();
@@ -465,7 +488,7 @@ impl TyCtxMut {
                 let new_args: Vec<GenericArg> = args
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty(t, subst)),
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
                         other => other,
                     })
                     .collect();
@@ -489,12 +512,12 @@ impl TyCtxMut {
                     .to_vec()
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty(t, subst)),
+                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
                         other => other,
                     })
                     .collect();
                 let new_inputs = self.intern_substitution(inputs);
-                let new_output = self.subst_ty(sig.output, subst);
+                let new_output = self.subst_ty_depth(sig.output, subst, depth + 1);
                 self.mk_ty(TyKind::FnPtr(crate::FnSig {
                     inputs: new_inputs,
                     output: new_output,
@@ -514,7 +537,7 @@ impl TyCtxMut {
                 let trait_ref = proj.trait_ref;
                 let self_ty = self.substitution_args(trait_ref.substs).first().cloned();
                 let new_self = match self_ty {
-                    Some(GenericArg::Ty(t)) => self.subst_ty(t, subst),
+                    Some(GenericArg::Ty(t)) => self.subst_ty_depth(t, subst, depth + 1),
                     Some(_) | None => {
                         // No self type to substitute; keep the projection as-is.
                         return ty;
@@ -555,7 +578,7 @@ impl TyCtxMut {
                     let impl_subst =
                         self.impl_param_subst(new_self, trait_ref.def_id, proj.item_name);
                     if !impl_subst.is_empty() {
-                        self.subst_ty(resolved, &impl_subst)
+                        self.subst_ty_depth(resolved, &impl_subst, depth + 1)
                     } else {
                         resolved
                     }
@@ -568,7 +591,7 @@ impl TyCtxMut {
                 // AND a const-parameter length. Previously the length was left
                 // unchanged, so `[T; N]` with `N` a `ConstKind::Param` could not
                 // be monomorphized to a concrete length.
-                let new_inner = self.subst_ty(inner, subst);
+                let new_inner = self.subst_ty_depth(inner, subst, depth + 1);
                 let new_len = match &len.kind {
                     ConstKind::Param(pc) => {
                         if let Some(GenericArg::Const(c)) = subst.get(&pc.index) {
@@ -582,7 +605,7 @@ impl TyCtxMut {
                 self.mk_ty(TyKind::Array(new_inner, new_len))
             }
             TyKind::Slice(inner) => {
-                let new_inner = self.subst_ty(inner, subst);
+                let new_inner = self.subst_ty_depth(inner, subst, depth + 1);
                 self.mk_ty(TyKind::Slice(new_inner))
             }
             _ => ty,

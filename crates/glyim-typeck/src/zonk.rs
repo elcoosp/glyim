@@ -348,8 +348,66 @@ fn zonk_ty(infer: &InferenceTable, ctx: &TyCtx, ty: Ty) -> Ty {
         | TyKind::Infer(_)
         | TyKind::Param(_)
         | TyKind::Bound(_, _)
-        | TyKind::Dynamic(_, _)
-        | TyKind::Projection(_) => ty,
+        | TyKind::Dynamic(_, _) => ty,
+
+        // Projection normalization. `zonk_bodies` runs *after* the
+        // inference table has been fully populated, so this is the last
+        // chance to turn a `<T as FromStr>::Err` into its concrete defining
+        // type before codegen. `zonk_ty` recurses the projection's *self*
+        // type through the inference table first (so `Param(0)` that has
+        // since become `i32` is folded), then asks the impl-associated-type
+        // table to resolve by `(self_adt, item_name)` — the same lookup
+        // codegen uses, but done here so the type never reaches codegen as
+        // a raw `Projection`. Without this, `match "42".parse::<i32>() {
+        // Result::Ok(v) => v, Result::Err(e) => -1 }` ICEd the LLVM backend
+        // with "TyKind::Projection reached LLVM codegen".
+        TyKind::Projection(proj) => {
+            // Resolve the projection's self type through the inference table.
+            // `proj.trait_ref.substs` is `[Self, ...]`; the first arg is the
+            // receiver.
+            let args = ctx.substitution_args(proj.trait_ref.substs).to_vec();
+            let self_ty = args.first().and_then(|a| match a {
+                GenericArg::Ty(t) => Some(*t),
+                _ => None,
+            });
+            let resolved_self = match self_ty {
+                Some(st) => zonk_ty(infer, ctx, st),
+                None => return ty,
+            };
+            // Lookup by self-ADT + name (the same fallback codegen uses).
+            // `resolve_associated_type_by_self_ty_name` is name-string-based
+            // and therefore robust against cross-arena `Name` handle
+            // mismatches.
+            let item_name_str = ctx.name_str(proj.item_name).to_string();
+            if let Some(resolved) =
+                ctx.resolve_associated_type_by_self_ty_name(resolved_self, &item_name_str)
+            {
+                // The impl's associated type may itself reference impl-level
+                // parameters (`impl<T> Future for Ready<T> { type Output = T }`
+                // registers `Output = T`). Substitute them through the
+                // receiver's own substitution — the same pattern
+                // `subst_ty`'s Projection arm uses.
+                let impl_subst_args: Vec<GenericArg> = match ctx.ty_kind(resolved_self) {
+                    TyKind::Adt(_, s) => ctx.substitution_args(*s).to_vec(),
+                    _ => Vec::new(),
+                };
+                let impl_map: std::collections::HashMap<u32, GenericArg> = impl_subst_args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| (i as u32, a.clone()))
+                    .collect();
+                if !impl_map.is_empty() && matches!(ctx.ty_kind(resolved), TyKind::Param(_)) {
+                    if let TyKind::Param(p) = ctx.ty_kind(resolved) {
+                        if let Some(GenericArg::Ty(t)) = impl_map.get(&p.index) {
+                            return *t;
+                        }
+                    }
+                }
+                resolved
+            } else {
+                ty
+            }
+        }
 
         TyKind::Ref(region, inner, mutability) => {
             let inner = zonk_ty(infer, ctx, inner);

@@ -1679,6 +1679,7 @@ impl<'a> FnCtxt<'a> {
                             m
                         };
                         let ret_ty = self.ctx.subst_ty(ret_ty, &full_map);
+
                         // Rebuild `method_part` from the *resolved* method
                         // generics so the callee's `FnDef` substitution
                         // carries the concrete type.
@@ -1971,7 +1972,27 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                 };
-                (thir_expr, ret_ty)
+                // Return the *dispatch-arm's* type, not the outer `ret_ty`.
+                //
+                // `resolve_method_call` returns a `ret_ty` whose method-level
+                // params are still fresh inference vars — for
+                // `str::parse::<T>` it is `Result<T, <T as FromStr>::Err>`
+                // with `T = Infer(..)`. The `MethodDispatch::Static` arm
+                // recomputes `ret_ty` from the callee's final substitution
+                // and stores the resolved shape on `thir_expr.ty` (e.g.
+                // `Result<i32, ParseIntError>`). But returning the outer
+                // `ret_ty` here made `let r = "42".parse::<i32>();` bind `r`
+                // to the *unsubstituted* shape while the call's destination
+                // local (declared from `thir_expr.ty`) was the resolved one.
+                // A later `match r { Err(_) => .. }` then tried to lay out
+                // the unnormalized projection and ICEd at codegen with
+                // "TyKind::Projection reached LLVM codegen".
+                //
+                // `thir_expr.ty` is always the dispatch arm's most precise
+                // type; the outer binding is only a fallback for the
+                // diagnostic paths (which set `thir_expr.ty` too).
+                let ret_ty_final = thir_expr.ty;
+                (thir_expr, ret_ty_final)
             }
 
             Expr::Field { receiver, field } => {

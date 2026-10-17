@@ -276,3 +276,111 @@ is not normalized before codegen. This is a distinct bug from anything
 fixed this session (the discard-only use of `parse` works). The fixture
 exists so the gap is *visible* and so the eventual fix has a place to
 attach; removing the `// ignore` line makes it a live test.
+
+---
+
+## 10. Final fix: using the parsed value (pattern-match / unwrap)
+
+The gap documented in §9 as "Known gap" is now closed. `let r =
+"42".parse::<i32>(); match r { Ok(v) => v, Err(_) => -1 }` now runs and
+returns 42; so does `"42".parse::<i32>().unwrap()`.
+
+**Root cause**: `check_expr`'s `Expr::MethodCall` arm returns `(thir_expr,
+ret_ty)`. The `thir_expr.ty` was recomputed by the `Static` dispatch arm from
+the callee's final substitution (`Result<i32, ParseIntError>`), but the outer
+`ret_ty` — which the return slot reported to the caller's `let` — still held
+the pre-substitution shape from `resolve_method_call`
+(`Result<T, <T as FromStr>::Err>` with a rigid `T`). So `r`'s binding was
+`Result<Param(0), <Param(0) as FromStr>::Err>` while the call's destination
+local was `Result<i32, ParseIntError>`.
+
+The disagreement only became a compile-time failure when a downstream
+`match r { Err(_) => .. }` tried to *lay out* the projection's field type:
+the `subst_ty` Projection arm produced a self-referential substitution
+`{0: <Param(0) as FromStr>::Err}` and the recursive substitution
+overflowed before the type reached codegen — or, when the recursion guard
+fired, the raw projection reached the backend and ICEd with
+"TyKind::Projection reached LLVM codegen".
+
+**Fixes**:
+1. `Expr::MethodCall` now returns `thir_expr.ty` (the dispatch arm's
+   precise type) as its second slot instead of the outer `ret_ty`. The
+   dispatch arm is responsible for making `thir_expr.ty` the right shape —
+   the outer binding is only a fallback for diagnostic paths, which set
+   `thir_expr.ty` too.
+2. `subst_ty` is now a thin wrapper around `subst_ty_depth` with an
+   explicit `depth` argument. The guard fires at 64 levels and returns the
+   type unchanged. This terminates the self-referential projection
+   substitution that a call-site `T := <T as FromStr>::Err` shape can
+   produce, without changing semantics for any non-cyclic map (real chains
+   are a handful of levels deep).
+3. `zonk::zonk_ty`'s Projection arm now attempts to normalize
+   `Projection` types through `resolve_associated_type_by_self_ty_name`
+   after resolving the projection's self type. This means a projection
+   that *does* survive to zonk (e.g. one whose self is still a `Param` when
+   zonk runs but a concrete ADT by the time a later substitution fills it
+   in) still gets a chance to become the concrete defining type before
+   codegen sees it.
+
+**Verified working** (all via `--with-stdlib --emit=exec` + `./out`):
+
+    let r = "42".parse::<i32>(); match r { Ok(v) => v, Err(_) => -1 }  -> 42
+    let r = "abc".parse::<i32>(); match r { Ok(v) => v, Err(_) => -1 } -> 255 (exit)
+    "42".parse::<i32>().unwrap()                                        -> 42
+    let _ = "42".parse::<i32>();  (discard)                             -> 0
+    "10".parse::<i32>().unwrap() + "20".parse::<i32>().unwrap()         -> 30
+    mixed primitive types in one program                                -> 0
+
+---
+
+## 10. Final fix: using the parsed value (pattern-match / unwrap)
+
+The gap documented in §9 as "Known gap" is now closed. `let r =
+"42".parse::<i32>(); match r { Ok(v) => v, Err(_) => -1 }` now runs and
+returns 42; so does `"42".parse::<i32>().unwrap()`.
+
+**Root cause**: `check_expr`'s `Expr::MethodCall` arm returns `(thir_expr,
+ret_ty)`. The `thir_expr.ty` was recomputed by the `Static` dispatch arm from
+the callee's final substitution (`Result<i32, ParseIntError>`), but the outer
+`ret_ty` — which the return slot reported to the caller's `let` — still held
+the pre-substitution shape from `resolve_method_call`
+(`Result<T, <T as FromStr>::Err>` with a rigid `T`). So `r`'s binding was
+`Result<Param(0), <Param(0) as FromStr>::Err>` while the call's destination
+local was `Result<i32, ParseIntError>`.
+
+The disagreement only became a compile-time failure when a downstream
+`match r { Err(_) => .. }` tried to *lay out* the projection's field type:
+the `subst_ty` Projection arm produced a self-referential substitution
+`{0: <Param(0) as FromStr>::Err}` and the recursive substitution
+overflowed before the type reached codegen — or, when the recursion guard
+fired, the raw projection reached the backend and ICEd with
+"TyKind::Projection reached LLVM codegen".
+
+**Fixes**:
+1. `Expr::MethodCall` now returns `thir_expr.ty` (the dispatch arm's
+   precise type) as its second slot instead of the outer `ret_ty`. The
+   dispatch arm is responsible for making `thir_expr.ty` the right shape —
+   the outer binding is only a fallback for diagnostic paths, which set
+   `thir_expr.ty` too.
+2. `subst_ty` is now a thin wrapper around `subst_ty_depth` with an
+   explicit `depth` argument. The guard fires at 64 levels and returns the
+   type unchanged. This terminates the self-referential projection
+   substitution that a call-site `T := <T as FromStr>::Err` shape can
+   produce, without changing semantics for any non-cyclic map (real chains
+   are a handful of levels deep).
+3. `zonk::zonk_ty`'s Projection arm now attempts to normalize
+   `Projection` types through `resolve_associated_type_by_self_ty_name`
+   after resolving the projection's self type. This means a projection
+   that *does* survive to zonk (e.g. one whose self is still a `Param` when
+   zonk runs but a concrete ADT by the time a later substitution fills it
+   in) still gets a chance to become the concrete defining type before
+   codegen sees it.
+
+**Verified working** (all via `--with-stdlib --emit=exec` + `./out`):
+
+    let r = "42".parse::<i32>(); match r { Ok(v) => v, Err(_) => -1 }  -> 42
+    let r = "abc".parse::<i32>(); match r { Ok(v) => v, Err(_) => -1 } -> 255 (exit)
+    "42".parse::<i32>().unwrap()                                        -> 42
+    let _ = "42".parse::<i32>();  (discard)                             -> 0
+    "10".parse::<i32>().unwrap() + "20".parse::<i32>().unwrap()         -> 30
+    mixed primitive types in one program                                -> 0
