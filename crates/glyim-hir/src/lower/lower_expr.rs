@@ -940,6 +940,104 @@ fn lower_if_expr(
     diags: &mut Vec<GlyimDiagnostic>,
     struct_field_map: &HashMap<Name, Vec<Name>>,
 ) -> Option<ExprId> {
+    // IF-LET: `if let PAT = RHS { THEN } else { ELSE }` is desugared into
+    //     match RHS { PAT => THEN, _ => ELSE }
+    // (or `_ => ()` when there is no else). This mirrors `lower_while_expr`'s
+    // `while let` handling above — the Match arm's pattern-lowering binds
+    // the pattern's variables into the arm's scope, so `x` in
+    // `if let Some(x) = .. { x }` resolves correctly. The wildcard arm uses
+    // `Pat::Wild` (NOT `Pat::Binding { name: "_" }`): a real binding would
+    // allocate a fresh local for `_` whose liveness bitset insert went past
+    // the capacity computed from the *user-declared* locals — the
+    // `insert at index N exceeds fixedbitset size N` ICE.
+    let has_let = node.children_with_tokens().any(
+        |el| matches!(&el, glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::KwLet),
+    );
+
+    if has_let {
+        let mut pat_node: Option<SyntaxNode> = None;
+        let mut rhs_node: Option<SyntaxNode> = None;
+        let mut then_node: Option<SyntaxNode> = None;
+        let mut else_node: Option<SyntaxNode> = None;
+        let mut after_eq = false;
+        let mut after_else = false;
+        for el in node.children_with_tokens() {
+            match el {
+                glyim_syntax::SyntaxElement::Token(t) => {
+                    if t.kind() == SyntaxKind::Eq {
+                        after_eq = true;
+                    } else if t.kind() == SyntaxKind::KwElse {
+                        after_else = true;
+                    }
+                }
+                glyim_syntax::SyntaxElement::Node(n) => {
+                    if after_else {
+                        // The else branch is either a Block or an IfExpr
+                        // (an `else if`).
+                        if matches!(n.kind(), SyntaxKind::Block | SyntaxKind::IfExpr) {
+                            else_node = Some(n.clone());
+                        }
+                    } else if n.kind() == SyntaxKind::Block {
+                        if after_eq && rhs_node.is_some() {
+                            then_node = Some(n.clone());
+                        }
+                    } else if is_pat_node(&n) && pat_node.is_none() {
+                        pat_node = Some(n.clone());
+                    } else if is_expr_node(&n) && after_eq && rhs_node.is_none() {
+                        rhs_node = Some(n.clone());
+                    }
+                }
+            }
+        }
+
+        let (pat_node, rhs_node, then_node) = match (pat_node, rhs_node, then_node) {
+            (Some(p), Some(r), Some(t)) => (p, r, t),
+            _ => return None,
+        };
+
+        let rhs_id = lower_expr(&rhs_node, interner, body, diags, struct_field_map)?;
+        let pat_id = super::lower_pat::lower_pat(
+            &pat_node,
+            interner,
+            &mut body.pats,
+            &mut body.pat_spans,
+            diags,
+        )?;
+        let then_id = lower_expr(&then_node, interner, body, diags, struct_field_map)?;
+
+        // Else branch: user-supplied `else { .. }` / `else if ..`, else `()`.
+        let else_expr_id = match else_node {
+            Some(e) => lower_expr(&e, interner, body, diags, struct_field_map)?,
+            None => body.alloc_expr(Expr::Tuple(Vec::new()), node_span(node)),
+        };
+
+        // Wildcard arm — `Pat::Wild`, not a binding. A binding would
+        // allocate a local whose liveness bitset index exceeds the
+        // capacity derived from `body.locals.len()` (the MIR builder
+        // reserves MIR locals from user bindings only).
+        let wild_pat = body.pats.push(Pat::Wild);
+        body.pat_spans.push(node_span(node));
+
+        let arm_then = MatchArm {
+            pat: pat_id,
+            guard: None,
+            body: then_id,
+        };
+        let arm_else = MatchArm {
+            pat: wild_pat,
+            guard: None,
+            body: else_expr_id,
+        };
+
+        let expr = Expr::Match {
+            scrutinee: rhs_id,
+            arms: vec![arm_then, arm_else],
+        };
+        let eid = body.alloc_expr(expr, node_span(node));
+        return Some(eid);
+    }
+
+    // Plain `if COND { BODY } [else { .. }]`.
     let mut children: Vec<SyntaxNode> = node
         .children()
         .filter(|c| is_expr_node(c) || c.kind() == SyntaxKind::Block)
