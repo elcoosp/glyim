@@ -2189,6 +2189,31 @@ MirConstKind::Error => {
                     Ok(InterpValue::String(s[skip..].to_string()))
                 }
             }
+            // Pointer comparison: two pointer-shaped operands (`Ref` or
+            // `StaticPtr`) are address-compared, mirroring LLVM's
+            // `ptrtoint`-then-`icmp`. Encode the address the same way the
+            // `PtrToInt` cast does (`(frame << 48) | local`), with the
+            // high bit set for `StaticPtr` so a static address can never
+            // collide with a frame-local address.
+            (
+                Ref { .. } | StaticPtr { .. },
+                Ref { .. } | StaticPtr { .. },
+            ) => {
+                let ptr_addr = |v: &InterpValue| -> u128 {
+                    match v {
+                        InterpValue::Ref { frame, local } => {
+                            ((*frame as u128) << 48) | (*local as u128)
+                        }
+                        InterpValue::StaticPtr { def_id } => {
+                            (1u128 << 127) | (def_id.to_raw() as u128)
+                        }
+                        _ => 0,
+                    }
+                };
+                let l = ptr_addr(left);
+                let r = ptr_addr(right);
+                self.eval_binary_op(op, &Uint(l), &Uint(r), dest_ty)
+            }
             _ => Err(InterpError::Panic(format!(
                 "unsupported binop types: {:?} and {:?}",
                 left, right

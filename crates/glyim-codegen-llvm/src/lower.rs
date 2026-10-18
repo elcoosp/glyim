@@ -2266,6 +2266,43 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })
                 } else if self.is_string_shaped(l, r, operand_ty) {
                     self.lower_string_eq(l, r, false)
+                } else if l.is_pointer_value() && r.is_pointer_value() {
+                    // Raw-pointer / reference comparison: cast both to
+                    // pointer-sized integers and compare. (Rust's `*const T
+                    // == *const T` and `&T == &T` — after the referent
+                    // types have been unified by typeck — are integer
+                    // address compares.)
+                    let ptr_ty = self.ty_ctx.mk_ty(glyim_type::TyKind::Uint(
+                        glyim_core::primitives::UintTy::Usize,
+                    ));
+                    let int_ty = self.llvm_type_for_ty(ptr_ty)?.into_int_type();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "eq ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "eq ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder
+                        .build_int_compare(IntPredicate::EQ, l_int, r_int, "eq")
+                        .map(|v| v.as_basic_value_enum())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "eq failed: {:?}",
+                                e
+                            ))]
+                        })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "eq: mismatched types",
@@ -2305,6 +2342,43 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })
                 } else if self.is_string_shaped(l, r, operand_ty) {
                     self.lower_string_eq(l, r, true)
+                } else if l.is_pointer_value() && r.is_pointer_value() {
+                    // Raw-pointer / reference comparison: cast both to
+                    // pointer-sized integers and compare. (Rust's `*const T
+                    // == *const T` and `&T == &T` — after the referent
+                    // types have been unified by typeck — are integer
+                    // address compares.)
+                    let ptr_ty = self.ty_ctx.mk_ty(glyim_type::TyKind::Uint(
+                        glyim_core::primitives::UintTy::Usize,
+                    ));
+                    let int_ty = self.llvm_type_for_ty(ptr_ty)?.into_int_type();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "ne ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "ne ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder
+                        .build_int_compare(IntPredicate::NE, l_int, r_int, "ne")
+                        .map(|v| v.as_basic_value_enum())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "ne failed: {:?}",
+                                e
+                            ))]
+                        })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "ne: mismatched types",
@@ -2338,6 +2412,43 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             r.into_float_value(),
                             "lt",
                         )
+                        .map(|v| v.as_basic_value_enum())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "lt failed: {:?}",
+                                e
+                            ))]
+                        })
+                } else if l.is_pointer_value() && r.is_pointer_value() {
+                    // Raw-pointer / reference comparison: cast both to
+                    // pointer-sized integers and compare. (Rust's `*const T
+                    // == *const T` and `&T == &T` — after the referent
+                    // types have been unified by typeck — are integer
+                    // address compares.)
+                    let ptr_ty = self.ty_ctx.mk_ty(glyim_type::TyKind::Uint(
+                        glyim_core::primitives::UintTy::Usize,
+                    ));
+                    let int_ty = self.llvm_type_for_ty(ptr_ty)?.into_int_type();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "lt ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "lt ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder
+                        .build_int_compare(IntPredicate::SLT, l_int, r_int, "lt")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
@@ -2385,6 +2496,43 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 e
                             ))]
                         })
+                } else if l.is_pointer_value() && r.is_pointer_value() {
+                    // Raw-pointer / reference comparison: cast both to
+                    // pointer-sized integers and compare. (Rust's `*const T
+                    // == *const T` and `&T == &T` — after the referent
+                    // types have been unified by typeck — are integer
+                    // address compares.)
+                    let ptr_ty = self.ty_ctx.mk_ty(glyim_type::TyKind::Uint(
+                        glyim_core::primitives::UintTy::Usize,
+                    ));
+                    let int_ty = self.llvm_type_for_ty(ptr_ty)?.into_int_type();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "gt ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "gt ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder
+                        .build_int_compare(IntPredicate::SGT, l_int, r_int, "gt")
+                        .map(|v| v.as_basic_value_enum())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "gt failed: {:?}",
+                                e
+                            ))]
+                        })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "gt: mismatched types",
@@ -2425,6 +2573,43 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 e
                             ))]
                         })
+                } else if l.is_pointer_value() && r.is_pointer_value() {
+                    // Raw-pointer / reference comparison: cast both to
+                    // pointer-sized integers and compare. (Rust's `*const T
+                    // == *const T` and `&T == &T` — after the referent
+                    // types have been unified by typeck — are integer
+                    // address compares.)
+                    let ptr_ty = self.ty_ctx.mk_ty(glyim_type::TyKind::Uint(
+                        glyim_core::primitives::UintTy::Usize,
+                    ));
+                    let int_ty = self.llvm_type_for_ty(ptr_ty)?.into_int_type();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "le ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "le ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder
+                        .build_int_compare(IntPredicate::SLE, l_int, r_int, "le")
+                        .map(|v| v.as_basic_value_enum())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "le failed: {:?}",
+                                e
+                            ))]
+                        })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "le: mismatched types",
@@ -2458,6 +2643,43 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             r.into_float_value(),
                             "ge",
                         )
+                        .map(|v| v.as_basic_value_enum())
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "ge failed: {:?}",
+                                e
+                            ))]
+                        })
+                } else if l.is_pointer_value() && r.is_pointer_value() {
+                    // Raw-pointer / reference comparison: cast both to
+                    // pointer-sized integers and compare. (Rust's `*const T
+                    // == *const T` and `&T == &T` — after the referent
+                    // types have been unified by typeck — are integer
+                    // address compares.)
+                    let ptr_ty = self.ty_ctx.mk_ty(glyim_type::TyKind::Uint(
+                        glyim_core::primitives::UintTy::Usize,
+                    ));
+                    let int_ty = self.llvm_type_for_ty(ptr_ty)?.into_int_type();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "ge ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "ge ptr cast failed: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder
+                        .build_int_compare(IntPredicate::SGE, l_int, r_int, "ge")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
