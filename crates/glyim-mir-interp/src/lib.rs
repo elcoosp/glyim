@@ -2610,16 +2610,19 @@ MirConstKind::Error => {
                 let target = match base_val {
                     InterpValue::Ref { frame, local } => (frame, local),
                     InterpValue::StaticPtr { def_id } => {
-                        // Write to a `static mut` through a deeper projection
-                        // (`*STATIC_PTR.field = v` etc.) is not yet supported;
-                        // whole-global writes go through the proj_count == 1
-                        // branch below. Silently dropping the write would
-                        // miscompile, so surface an explicit interpreter panic.
-                        let _ = def_id;
-                        return Err(InterpError::Panic(
-                            "write through StaticPtr with deeper projections is not yet supported"
-                                .into(),
-                        ));
+                        // Write to a `static mut` field through a deeper
+                        // projection (`STATIC.field = v` /
+                        // `*STATIC_PTR.field = v`). Load the current global
+                        // value, apply the remaining projections to it
+                        // in-place, then write the mutated value back.
+                        let mut cur = self.globals.borrow().get(&def_id).cloned()
+                            .ok_or_else(|| InterpError::Panic(format!(
+                                "write to uninitialized static {:?}",
+                                def_id
+                            )))?;
+                        write_projection_into_value(&mut cur, &place.projection[1..], val)?;
+                        self.globals.borrow_mut().insert(def_id, cur);
+                        return Ok(());
                     }
                     _ => {
                         return Err(InterpError::Panic(
@@ -3153,3 +3156,49 @@ pub type InterpResult<T> = Result<T, InterpError>;
 
 #[cfg(test)]
 mod tests;
+
+/// Recursively write `val` into `cur` at `projections`. Supports `Field`
+/// (index into `Aggregate`), and is the free-function form so it can be
+/// called from `&self` methods that only have a `RefCell`-owned value to
+/// mutate. `projections` empty means "replace the whole value".
+fn write_projection_into_value(
+    cur: &mut InterpValue,
+    projections: &[glyim_mir::ProjectionElem],
+    val: InterpValue,
+) -> InterpResult<()> {
+    if projections.is_empty() {
+        *cur = val;
+        return Ok(());
+    }
+    match &projections[0] {
+        glyim_mir::ProjectionElem::Field(idx) => {
+            let fi = idx.index();
+            match cur {
+                InterpValue::Aggregate(fields) => {
+                    let len = fields.len();
+                    let field = fields.get_mut(fi).ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "field {fi} out of range on static aggregate ({len} fields)"
+                        ))
+                    })?;
+                    write_projection_into_value(field, &projections[1..], val)
+                }
+                other => Err(InterpError::Panic(format!(
+                    "field projection on non-aggregate static value: {:?}",
+                    other
+                ))),
+            }
+        }
+        glyim_mir::ProjectionElem::Deref => {
+            // Deref through a nested `Ref` isn't reachable for statics (no
+            // way to form a `Ref` to a static's field via `&STATIC.field`
+            // yet); reject clearly rather than miscompiling.
+            Err(InterpError::Panic(
+                "deref projection in static deeper-write path is not yet supported".into(),
+            ))
+        }
+        _ => Err(InterpError::Panic(
+            "unsupported projection in static deeper-write path".into(),
+        )),
+    }
+}

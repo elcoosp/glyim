@@ -134,7 +134,62 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 .struct_type(&[ptr_ty.into(), len_ty.into()], false)
                 .into()
         }
-        TyKind::Adt(_adt_id, _subst) => {
+        TyKind::Adt(adt_id, subst) => {
+            // Mirror the tuple structural fix. For a non-enum ADT (struct
+            // / union), build an LLVM struct with one field per declared
+            // field so `lower_const`'s `build_insert_value(cur, val, i)`
+            // for field >= 1 doesn't fail with `ExtractOutOfRange` (the
+            // opaque `{[N x align_ty]}` form has exactly 1 field). LLVM's
+            // automatic inter-field padding matches `glyim-layout`'s ADT
+            // offsets for the same ABI, so the byte-GEP store path in
+            // `build_layout_aggregate` and the byte-GEP read path in
+            // `place_ptr` are unaffected.
+            //
+            // Enum ADTs keep the opaque form: their layout is a
+            // tag-plus-variant-payload shape that doesn't map 1:1 to a
+            // structural LLVM struct field list, and the byte-GEP
+            // offsets that readers/writers already use are their
+            // contract.
+            let adt_def = ctx.adt_def(*adt_id);
+            let is_struct = adt_def
+                .map(|d| d.kind == glyim_type::adt_def::AdtKind::Struct)
+                .unwrap_or(false);
+            if is_struct {
+                let field_tys: Vec<glyim_type::Ty> = adt_def
+                    .map(|d| d.fields.iter().map(|f| f.ty).collect())
+                    .unwrap_or_default();
+                // Apply the ADT's substitution to each field type (generic
+                // structs). `subst_ty` handles Param/Tuple/Adt/Ref/RawPtr.
+                let mut local_ctx = glyim_type::TyCtxMut::from_ty_ctx(ctx);
+                let subst_map: std::collections::HashMap<
+                    u32,
+                    glyim_type::GenericArg,
+                > = ctx
+                    .substitution_args(*subst)
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| (i as u32, a.clone()))
+                    .collect();
+                let resolved: Vec<glyim_type::Ty> = field_tys
+                    .iter()
+                    .map(|t| local_ctx.subst_ty(*t, &subst_map))
+                    .collect();
+                let mut fields: Vec<BasicTypeEnum<'ctx>> =
+                    Vec::with_capacity(resolved.len());
+                let mut ok = true;
+                for ft in &resolved {
+                    match llvm_type_for_ty(ctx, target_info, context, *ft) {
+                        Ok(bt) => fields.push(bt),
+                        Err(_) => {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if ok {
+                    return Ok(context.struct_type(&fields, false).into());
+                }
+            }
             let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
                 if layout.size.0 == 0 {
