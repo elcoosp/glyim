@@ -403,8 +403,24 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             let cid = glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw());
                             self.ty_ctx.closure_sig(cid).cloned()
                         });
+                        // Session 14 fix: the registered `fn_sig` for a
+                        // *generic* fn carries `Param(i)` in its inputs/output.
+                        // The `substs` field on this `MirConstKind::Fn` is the
+                        // instantiation (`[i32]` for `id::<i32>`), so apply it
+                        // via `concretize_fn_sig` before building the LLVM
+                        // type. Without this, codegen's `fn_abi_of` -> layout
+                        // ICEs with `UnknownType(Param(0))` (surfacing as
+                        // `fn type lowering failed: fn_abi_of failed:
+                        // UnknownType(Ty(16))`). Non-generic fns have empty
+                        // substs and concretize is a no-op.
                         let fn_type = if let Some(sig) = sig_opt.as_ref() {
-                            self.llvm_fn_type_from_sig(sig)?
+                            let param_map = self.ty_ctx.substitution_args(*substs).to_vec();
+                            let concrete_sig = if param_map.is_empty() {
+                                sig.clone()
+                            } else {
+                                Self::concretize_fn_sig(sig, &param_map, self.ty_ctx)
+                            };
+                            self.llvm_fn_type_from_sig(&concrete_sig)?
                         } else {
                             self.context.void_type().fn_type(&[], false)
                         };
