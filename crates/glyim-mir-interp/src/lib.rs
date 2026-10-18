@@ -2195,6 +2195,12 @@ MirConstKind::Error => {
             // `PtrToInt` cast does (`(frame << 48) | local`), with the
             // high bit set for `StaticPtr` so a static address can never
             // collide with a frame-local address.
+            //
+            // The pointer-vs-numeric arm below catches the remaining
+            // `(p as usize) != 0` shape when the intermediate cast result
+            // is optimised/elided and the raw `Ref` reaches the compare
+            // (LLVM lowers this to ptrtoint + icmp; the interpreter
+            // matches it by encoding the address on the fly).
             (
                 Ref { .. } | StaticPtr { .. },
                 Ref { .. } | StaticPtr { .. },
@@ -2213,6 +2219,36 @@ MirConstKind::Error => {
                 let l = ptr_addr(left);
                 let r = ptr_addr(right);
                 self.eval_binary_op(op, &Uint(l), &Uint(r), dest_ty)
+            }
+            (
+                Ref { .. } | StaticPtr { .. },
+                Int(_) | Uint(_),
+            ) => {
+                let l = match left {
+                    InterpValue::Ref { frame, local } => {
+                        ((*frame as u128) << 48) | (*local as u128)
+                    }
+                    InterpValue::StaticPtr { def_id } => {
+                        (1u128 << 127) | (def_id.to_raw() as u128)
+                    }
+                    _ => 0,
+                };
+                self.eval_binary_op(op, &Uint(l), right, dest_ty)
+            }
+            (
+                Int(_) | Uint(_),
+                Ref { .. } | StaticPtr { .. },
+            ) => {
+                let r = match right {
+                    InterpValue::Ref { frame, local } => {
+                        ((*frame as u128) << 48) | (*local as u128)
+                    }
+                    InterpValue::StaticPtr { def_id } => {
+                        (1u128 << 127) | (def_id.to_raw() as u128)
+                    }
+                    _ => 0,
+                };
+                self.eval_binary_op(op, left, &Uint(r), dest_ty)
             }
             _ => Err(InterpError::Panic(format!(
                 "unsupported binop types: {:?} and {:?}",

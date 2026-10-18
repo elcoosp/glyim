@@ -867,6 +867,30 @@ impl InferenceTable {
             // inputs; unify them structurally against the FnPtr's concrete
             // sig so `let g: fn(i32)->i32 = id::<i32>;` works (the substs
             // are already applied to `FnDef`'s substitution and appear in
+            // `&T -> *const T` / `&mut T -> *mut T`: an implicit reference-to-
+            // raw-pointer coercion (Rust's `Ref -> RawPtr` coercion). Mirrors
+            // the `can_coerce` arms in `solver.rs` / `fulfill.rs`. The
+            // mutability direction is only `Mut -> Not` (never the reverse) —
+            // `&mut T -> *mut T` and `&T -> *const T` are allowed, `&mut T ->
+            // *const T` also (a `*const` promises only shared access), but
+            // `&T -> *mut T` is rejected. Pointees unify structurally.
+            (TyKind::Ref(_, inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b))
+            | (TyKind::RawPtr(inner_b, mut_b), TyKind::Ref(_, inner_a, mut_a)) => {
+                let mut_ok = mut_a == mut_b
+                    || (mut_a == glyim_core::primitives::Mutability::Mut
+                        && mut_b == glyim_core::primitives::Mutability::Not);
+                if !mut_ok {
+                    return Err(vec![GlyimDiagnostic::type_error(
+                        span,
+                        format!(
+                            "mismatched types: {} vs {}",
+                            PrintTy::new(a, ctx),
+                            PrintTy::new(b, ctx)
+                        ),
+                    )]);
+                }
+                self.unify_tys(ctx, inner_a, inner_b, span)
+            }
             // the sig via `subst_ty` at mono, but at unify time we compare
             // the raw registered sig).
             (TyKind::FnDef(fn_id, substs), TyKind::FnPtr(sig))

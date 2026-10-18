@@ -77,6 +77,15 @@ pub fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
                     && *mut_b == glyim_core::primitives::Mutability::Not))
                 && can_coerce(ctx, *inner_a, *inner_b)
         }
+        // `&T -> *const T` / `&mut T -> *mut T` / `&mut T -> *const T`.
+        // Mirrors the same arm in `solver.rs::can_coerce` (that copy had
+        // it; this one was missing).
+        (TyKind::Ref(_, inner_a, mut_a), TyKind::RawPtr(inner_b, mut_b)) => {
+            let mut_ok = mut_a == mut_b
+                || (*mut_a == glyim_core::primitives::Mutability::Mut
+                    && *mut_b == glyim_core::primitives::Mutability::Not);
+            mut_ok && can_coerce(ctx, *inner_a, *inner_b)
+        }
         // §6.2: fn-item coercion to fn pointer. A zero-sized function item
         // coerces to `fn(Args) -> Ret` when its signature matches the pointer's.
         (TyKind::FnDef(fn_def_id, _), TyKind::FnPtr(target_sig)) => {
