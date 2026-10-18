@@ -463,6 +463,20 @@ impl<'a> MonoCtx<'a> {
             // `MonoItem::Const` (which would require a lowered const body)
             // for value-namespace const references yet.
             MirConstKind::ConstRef(_, _) => {}
+            MirConstKind::StaticRef { def_id: _, init, .. } => {
+                // Don't enqueue `MonoItem::Static` here: statics have no
+                // lowered MIR body (typeck never registers one — only
+                // function bodies go through `thir_bodies`), and codegen
+                // emits the `__glyim_static_<id>` global lazily on the
+                // first `lower_const(StaticRef)` it sees.
+                //
+                // Do recurse into the initializer though: a
+                // `static F: fn(..) = some_fn;` folds `some_fn` into `init`
+                // as `MirConstKind::Fn(some_fn, [])`, and `some_fn`'s body
+                // must be enqueued or the emitted global references an
+                // undefined `__glyim_fn_<id>` at link.
+                self.scan_const(init);
+            }
             _ => {}
         }
     }

@@ -50,6 +50,11 @@ pub struct ConstEvaluator<'a> {
     primitive_tys: Option<std::collections::HashMap<&'static str, Ty>>,
     /// Registered user-defined `const fn`s (plan §4.2), keyed by name.
     const_fns: HashMap<Name, BodyFn>,
+    /// Name -> `FnDefId` for every top-level `fn` visible at the crate
+    /// root. Used to fold `const F: fn(..) = some_fn;` / `static F: ...`
+    /// path initializers to a `ConstValue::Fn`. Populated from the
+    /// def-map's value namespace when the caller can supply it.
+    fn_defs: HashMap<Name, glyim_core::def_id::FnDefId>,
     /// Set when a `break`/`continue` is encountered inside a loop so the loop
     /// driver can react. `None` means normal flow.
     loop_control: Option<LoopControl>,
@@ -258,6 +263,7 @@ impl<'a> ConstEvaluator<'a> {
             ty_ctx: None,
             primitive_tys: None,
             const_fns: HashMap::new(),
+            fn_defs: HashMap::new(),
             loop_control: None,
         }
     }
@@ -316,6 +322,18 @@ impl<'a> ConstEvaluator<'a> {
     }
 
     /// with_pointer_width.
+    /// Register a name -> `FnDefId` mapping so a bare path in a const
+    /// initializer that names a top-level `fn` folds to
+    /// `ConstValue::Fn`.
+    pub fn with_fn_def(
+        mut self,
+        name: Name,
+        def_id: glyim_core::def_id::FnDefId,
+    ) -> Self {
+        self.fn_defs.insert(name, def_id);
+        self
+    }
+
     pub fn with_pointer_width(mut self, width: u32) -> Self {
         self.pointer_width = width;
         self
@@ -404,6 +422,9 @@ impl<'a> ConstEvaluator<'a> {
             }
             Expr::Path(path) => {
                 if let Some(name) = path.as_name() {
+                    if let Some(&fn_id) = self.fn_defs.get(&name) {
+                        return Ok(ConstValue::Fn(fn_id));
+                    }
                     if let Some(val) = self.lookup(name) {
                         Ok(val.clone())
                     } else {

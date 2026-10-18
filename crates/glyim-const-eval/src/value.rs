@@ -1,5 +1,6 @@
 //! Runtime values produced by const evaluation.
 
+use glyim_core::def_id::FnDefId;
 use glyim_core::interner::Name;
 use glyim_core::primitives::{FloatTy, IntTy, UintTy};
 
@@ -29,6 +30,11 @@ pub enum ConstValue {
     /// Range value (`start..end` / `start..=end`). Either bound may be absent
     /// (open-ended range). Produced by constant evaluation of `Expr::Range`.
     Range(Option<Box<ConstValue>>, Option<Box<ConstValue>>, bool),
+    /// Reference to a top-level `fn` item (its def id). Produced by
+    /// constant evaluation of a `Path` that resolves to an fn def, so a
+    /// `const F: fn(..) = some_fn;` / `static F: fn(..) = some_fn;` can
+    /// fold to a `MirConstKind::Fn`.
+    Fn(FnDefId),
 }
 
 impl ConstValue {

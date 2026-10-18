@@ -388,6 +388,14 @@ impl<'a> PipelineLowerCtx<'a> {
             ConstValue::Char(c) => MirConstKind::Char(*c),
             ConstValue::String(n) => MirConstKind::String(*n),
             ConstValue::Unit => MirConstKind::Unit,
+            ConstValue::Fn(def_id) => {
+                // A top-level `fn` path in a const initializer. Fold to a
+                // `MirConstKind::Fn` with an empty substitution; monomorphic
+                // fns are the only case this evaluator resolves today
+                // (generics need turbofish plumbing that the const syntax
+                // doesn't carry).
+                MirConstKind::Fn(*def_id, glyim_type::Substitution::empty())
+            }
             ConstValue::Tuple(vals) => {
                 let elem_tys: Vec<glyim_type::Ty> = match self.ty_ctx.ty_kind(ty) {
                     TyKind::Tuple(substs) => self

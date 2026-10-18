@@ -2080,6 +2080,21 @@ fn check_fn_items_in_module(
                     let mut evaluator = glyim_const_eval::ConstEvaluator::new(body)
                         .with_interner(ctx.resolver())
                         .with_ty_ctx(ctx, primitive_tys);
+                    for fn_item in hir.items.iter() {
+                        if matches!(fn_item.kind, ItemKind::Fn(_)) {
+                            let fn_local_def_id = def_map.modules[def_map.root]
+                                .scope
+                                .values
+                                .get(&fn_item.name)
+                                .map(|(id, _, _)| *id);
+                            if let Some(local) = fn_local_def_id {
+                                evaluator = evaluator.with_fn_def(
+                                    fn_item.name,
+                                    FnDefId::from_raw(local.to_raw()),
+                                );
+                            }
+                        }
+                    }
                     if let Ok(value) = evaluator.evaluate(root_expr) {
                         all_const_values.insert(const_alias, value);
                     }
@@ -2206,6 +2221,21 @@ fn check_fn_items_in_module(
                     let mut evaluator = glyim_const_eval::ConstEvaluator::new(body)
                         .with_interner(ctx.resolver())
                         .with_ty_ctx(ctx, primitive_tys);
+                    for fn_item in hir.items.iter() {
+                        if matches!(fn_item.kind, ItemKind::Fn(_)) {
+                            let fn_local_def_id = def_map.modules[def_map.root]
+                                .scope
+                                .values
+                                .get(&fn_item.name)
+                                .map(|(id, _, _)| *id);
+                            if let Some(local) = fn_local_def_id {
+                                evaluator = evaluator.with_fn_def(
+                                    fn_item.name,
+                                    FnDefId::from_raw(local.to_raw()),
+                                );
+                            }
+                        }
+                    }
                     match evaluator.evaluate(root_expr) {
                         Ok(value) => {
                             all_const_values.insert(const_def_id, value);
