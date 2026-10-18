@@ -410,17 +410,50 @@ impl<'a> MonoCtx<'a> {
                 if is_builtin_fn_id(*def_id) {
                     return;
                 }
-                // When a type context is present, generic calls are
-                // instantiated from their argument types at the `Call`
-                // terminator (see `scan_terminator`); the callee constant
-                // frequently carries an empty substitution, so we skip it here
-                // to avoid enqueuing an un-instantiated (-polymorphic) body
-                // that codegen cannot lower. When no context is attached
-                // (e.g. unit tests), fall back to the constant's own substs.
-                if self.ty_ctx.is_none() {
+                // Session 14 fix: value-position `Fn` constants (e.g.
+                // `let f: fn(i32,i32)->i32 = add;`) are lowered to an
+                // `Rvalue::Use(Constant(Fn(..)))` *statement* — they never
+                // appear inside a `Call` terminator, so `scan_terminator`'s
+                // `Call` arm never sees them and the callee's body is never
+                // enqueued (undefined `__glyim_fn_<id>` at link). Enqueue
+                // directly here whenever the substitution carried by the
+                // constant's `FnDef` type is fully monomorphic (no
+                // `Param`/`Bound`/`Projection`/`Infer` heads), so
+                // un-instantiated generic call constants still bail out as
+                // before. For `Call`-position constants, `mir_const.ty`'s
+                // `FnDef` substitution is the instantiated one and the
+                // enqueue is idempotent with `scan_terminator::Call`'s
+                // direct enqueue (`seen` deduplicates).
+                let resolved_substs = match self.ty_ctx {
+                    Some(ty_ctx) => match ty_ctx.ty_kind(mir_const.ty) {
+                        TyKind::FnDef(_, s) => *s,
+                        _ => *substs,
+                    },
+                    None => *substs,
+                };
+                let is_concrete = match self.ty_ctx {
+                    Some(ty_ctx) => !ty_ctx
+                        .substitution_args(resolved_substs)
+                        .iter()
+                        .any(|arg| {
+                            matches!(
+                                arg,
+                                &glyim_type::GenericArg::Ty(t)
+                                    if matches!(
+                                        *ty_ctx.ty_kind(t),
+                                        TyKind::Param(_)
+                                            | TyKind::Bound(_, _)
+                                            | TyKind::Projection(_)
+                                            | TyKind::Infer(_)
+                                    )
+                            )
+                        }),
+                    None => true,
+                };
+                if is_concrete {
                     self.enqueue(MonoItem::Fn {
                         def_id: *def_id,
-                        substs: *substs,
+                        substs: resolved_substs,
                     });
                 }
             }
