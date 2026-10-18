@@ -61,9 +61,17 @@ the int compare. Interpreter: `eval_binary_op` gains a
 `(Ref|StaticPtr, Ref|StaticPtr)` arm encoding each operand as an
 integer address (same scheme as `PtrToInt`).
 
-## 2. Remaining known gap (NOT in session 14 handoff §2)
+## 2. Session-14 handoff §2 addendum: `&T -> *const T` (CLOSED)
 
-### 2.1 `&T -> *const T` is not an implicit coercion
+**Status: fixed in `cdc07f43`.**
+
+The original text of this section (below) described a gap discovered
+while diagnosing §2.3. The typeck coercion arm was added in
+`cdc07f43`; the interpreter also needed `(Ref|StaticPtr, Int|Uint)`
+comparison arms for `(p as usize) != 0` when the intermediate cast
+result is elided.
+
+### 2.1 `&T -> *const T` was not an implicit coercion (ORIGINAL TEXT)
 
 ```g
 let p: *const i32 = &x;
