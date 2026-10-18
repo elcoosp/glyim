@@ -2157,8 +2157,18 @@ impl<'a> FnCtxt<'a> {
             }
 
             Expr::Index { base, index } => {
-                let (base_expr, base_ty) = self.check_expr(*base);
+                let (base_expr, base_ty_raw) = self.check_expr(*base);
                 let (idx_expr, idx_ty) = self.check_expr(*index);
+                // INDEX-INFER-FIX: resolve the base type through the
+                // inference table before classifying it. A nested array
+                // like `let m = [[1, 2], [3, 4]]` has element type
+                // `Infer(?T)` on its outer `Array(...)` — `m[0]` yields
+                // the raw `Infer(?T)` (still bound to `[i32; 2]` in the
+                // table), so `m[0][0]` saw `TyKind::Infer` and reported
+                // "indexing operation requires array, slice, Vec, or str
+                // type". Resolve first so the classification sees the
+                // concrete `Array`.
+                let base_ty = self.infer.resolve_ty_shallow(self.ctx, base_ty_raw);
 
                 // Helper to get the element type and whether this is a str type.
                 // Handles Array, Slice, Vec<T>, str, and their reference variants.
