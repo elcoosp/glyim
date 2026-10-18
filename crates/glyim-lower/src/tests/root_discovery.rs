@@ -66,6 +66,7 @@ fn static_item(interner: &mut Interner, id: u32, name: &str) -> Item {
         kind: ItemKind::Static(StaticItem {
             ty: TypeRef::Path(Path::from_single(make_name(interner, "i32"))),
             body: None,
+            root_expr: None,
             is_mut: false,
         }),
         visibility: Visibility::Public,
@@ -257,6 +258,7 @@ fn t08_used_static_detected() {
         kind: ItemKind::Static(StaticItem {
             ty: TypeRef::Path(Path::from_single(make_name(&mut interner, "i32"))),
             body: None,
+            root_expr: None,
             is_mut: false,
         }),
         visibility: Visibility::Public,

@@ -100,6 +100,7 @@ fn walk_expr(ctx: &TyCtx, expr: &thir::Expr, f: &mut impl FnMut(Ty)) {
         | thir::ExprKind::VarRef(_)
         | thir::ExprKind::FnRef(_)
         | thir::ExprKind::ConstRef(_)
+        | thir::ExprKind::StaticRef(_)
         | thir::ExprKind::VariantRef(_, _)
         | thir::ExprKind::VariantCtor { .. }
         | thir::ExprKind::TraitMethodRef { .. }
@@ -585,6 +586,7 @@ fn zonk_expr(infer: &InferenceTable, ctx: &TyCtx, expr: &mut thir::Expr) {
         | thir::ExprKind::VarRef(_)
         | thir::ExprKind::FnRef(_)
         | thir::ExprKind::ConstRef(_)
+        | thir::ExprKind::StaticRef(_)
         | thir::ExprKind::VariantRef(_, _)
         | thir::ExprKind::VariantCtor { .. }
         | thir::ExprKind::TraitMethodRef { .. }
@@ -1032,6 +1034,7 @@ fn walk_expr_for_variant_ctor_calls(
         | thir::ExprKind::VarRef(_)
         | thir::ExprKind::FnRef(_)
         | thir::ExprKind::ConstRef(_)
+        | thir::ExprKind::StaticRef(_)
         | thir::ExprKind::VariantRef(_, _)
         | thir::ExprKind::VariantCtor { .. }
         | thir::ExprKind::TraitMethodRef { .. }

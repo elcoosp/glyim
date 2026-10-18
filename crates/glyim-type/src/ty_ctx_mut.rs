@@ -11,7 +11,7 @@ use crate::ty::*;
 use crate::type_arena::TypeArena;
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{
-    AdtId, ClosureId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, OpaqueTyId,
+    AdtId, ClosureId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, OpaqueTyId, StaticDefId,
 };
 use glyim_core::interner::{Interner, Name};
 use glyim_core::primitives::{IntTy, Mutability, UintTy};
@@ -67,6 +67,7 @@ pub struct TyCtxMut {
     variant_types: HashMap<AdtId, Vec<Ty>>,
     fn_sigs: HashMap<FnDefId, FnSig>,
     const_tys: HashMap<ConstDefId, Ty>,
+    static_tys: HashMap<StaticDefId, Ty>,
     closure_sigs: HashMap<ClosureId, FnSig>,
     body_tys: HashMap<LocalDefId, Ty>,
     /// Registry of compiler-known builtin types/traits (Option, Range, Drop,
@@ -186,6 +187,7 @@ impl TyCtxMut {
             variant_types: HashMap::new(),
             fn_sigs: HashMap::new(),
             const_tys: HashMap::new(),
+            static_tys: HashMap::new(),
             closure_sigs: HashMap::new(),
             closure_adt_map: HashMap::new(),
             impl_assoc_types: HashMap::new(),
@@ -330,6 +332,7 @@ impl TyCtxMut {
             variant_types: ctx.variant_types.clone(),
             fn_sigs: ctx.fn_sigs.clone(),
             const_tys: ctx.const_tys.clone(),
+            static_tys: ctx.static_tys.clone(),
             closure_sigs: ctx.closure_sigs.clone(),
             closure_adt_map: ctx.closure_adt_map.clone(),
             impl_assoc_types: ctx.impl_assoc_types.clone(),
@@ -1032,6 +1035,13 @@ impl TyCtxMut {
         self.const_tys.insert(def_id, ty);
     }
 
+    /// Register the value type of a `static` item so `check_path` can
+    /// resolve a bare static path to `thir::ExprKind::StaticRef` with
+    /// the right type. Mirrors `register_const_ty`.
+    pub fn register_static_ty(&mut self, def_id: StaticDefId, ty: Ty) {
+        self.static_tys.insert(def_id, ty);
+    }
+
     /// Register a trait definition (its name and method set) so that vtable
     /// generation and other downstream passes can resolve the trait's methods.
     pub fn register_trait_def(&mut self, id: glyim_core::def_id::TraitDefId, def: crate::TraitDef) {
@@ -1282,6 +1292,11 @@ impl TyCtxMut {
         self.const_tys.get(&def_id).copied()
     }
 
+    /// The value type of a static item. Mirrors `const_ty`.
+    pub fn static_ty(&self, def_id: StaticDefId) -> Option<Ty> {
+        self.static_tys.get(&def_id).copied()
+    }
+
     /// Every registered closure id. Used by post-inference passes
     /// (`glyim-typeck::zonk::zonk_closure_sigs`) that must fold inference
     /// variables out of the closure signatures registered during body
@@ -1337,6 +1352,7 @@ impl TyCtxMut {
             variant_types: self.variant_types.clone(),
             fn_sigs: self.fn_sigs.clone(),
             const_tys: self.const_tys.clone(),
+            static_tys: self.static_tys.clone(),
             closure_sigs: self.closure_sigs.clone(),
             closure_adt_map: self.closure_adt_map.clone(),
             impl_assoc_types: self.impl_assoc_types.clone(),
@@ -1380,6 +1396,7 @@ impl TyCtxMut {
             variant_types: self.variant_types,
             fn_sigs: self.fn_sigs,
             const_tys: self.const_tys,
+            static_tys: self.static_tys,
             closure_sigs: self.closure_sigs,
             closure_adt_map: self.closure_adt_map,
             impl_assoc_types: self.impl_assoc_types,

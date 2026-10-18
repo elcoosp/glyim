@@ -1,6 +1,6 @@
 //! Unification and type resolution logic for FnCtxt.
 
-use glyim_core::def_id::{AdtId, ConstDefId, FnDefId};
+use glyim_core::def_id::{AdtId, ConstDefId, FnDefId, StaticDefId};
 use glyim_core::interner::Name;
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
@@ -366,6 +366,19 @@ impl<'a> FnCtxt<'a> {
                     span,
                 };
                 return (thir_expr, const_ty);
+            }
+            // A static item in the value namespace: emit a `StaticRef`
+            // carrying the static's value type (statics and consts share the
+            // raw LocalDefId space, so `static_ty` is keyed by the same raw
+            // id wrapped as a `StaticDefId`).
+            let static_def_id = StaticDefId::from_raw(local.to_raw());
+            if let Some(static_ty) = self.ctx.static_ty(static_def_id) {
+                let thir_expr = thir::Expr {
+                    kind: thir::ExprKind::StaticRef(static_def_id),
+                    ty: static_ty,
+                    span,
+                };
+                return (thir_expr, static_ty);
             }
             // Resolved to a value that is neither a registered function nor a
             // registered constant (e.g. an enum variant, which needs a

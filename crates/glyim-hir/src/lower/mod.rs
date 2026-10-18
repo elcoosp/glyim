@@ -333,6 +333,20 @@ pub(crate) fn lower_crate_raw(
                     items.push(item);
                 }
             }
+            SyntaxKind::StaticDef => {
+                if let Some(item) = lower_item::lower_static_def(
+                    &child,
+                    interner,
+                    &mut local_def_counter,
+                    &mut item_id_counter,
+                    &mut bodies,
+                    &mut body_owners,
+                    diags,
+                    &struct_field_map,
+                ) {
+                    items.push(item);
+                }
+            }
             SyntaxKind::ConstDef => {
                 if let Some(item) = lower_item::lower_const_def(
                     &child,

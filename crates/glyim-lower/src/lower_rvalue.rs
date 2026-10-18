@@ -221,6 +221,31 @@ impl<'a> MirBuilder<'a> {
                     span: expr.span,
                 }))
             }
+            thir::ExprKind::StaticRef(static_def_id) => {
+                // Fold by-value static reads to the initializer's const-
+                // evaluated value. Statics and consts share the same
+                // `LocalDefId` raw id space, so `const_value` is queried
+                // under the aliased `ConstDefId` (typeck stores it that way).
+                let const_alias =
+                    glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                let substs = glyim_type::Substitution::empty();
+                if let Some(mir_const) = self.ctx.const_value(const_alias, substs) {
+                    return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(mir_const));
+                }
+                // Stage A only supports statics whose initializers const-
+                // evaluate. Anything else is a Stage B feature (real LLVM
+                // globals for non-foldable initializers), so surface a clear
+                // error constant rather than miscompiling to `0`.
+                tracing::warn!(
+                    "static {} could not be const-evaluated (Stage A limitation)",
+                    static_def_id.to_raw()
+                );
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
+                    kind: glyim_mir::MirConstKind::Error,
+                    ty: expr.ty,
+                    span: expr.span,
+                }))
+            }
             thir::ExprKind::VariantRef(adt_id, variant_idx) => {
                 // A unit enum variant used as a value (`Color::Red`) constructs
                 // the enum via an `Aggregate` of its ADT with no fields. Data

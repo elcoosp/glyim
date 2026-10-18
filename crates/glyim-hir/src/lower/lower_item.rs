@@ -1063,7 +1063,7 @@ pub(crate) fn lower_static_def(
             _ => {}
         }
     }
-    let body_id: Option<BodyId> = if let Some(init) = init_node {
+    let (body_id, root_expr_id): (Option<BodyId>, Option<crate::ExprId>) = if let Some(init) = init_node {
         let mut body = Body {
             owner,
             exprs: IndexVec::new(),
@@ -1073,12 +1073,12 @@ pub(crate) fn lower_static_def(
             span: node_span(node),
             expr_spans: IndexVec::new(),
         };
-        let _ = lower_expr(&init, interner, &mut body, diags, struct_field_map);
+        let root = lower_expr(&init, interner, &mut body, diags, struct_field_map);
         let bid = bodies.push(body);
         body_owners.push(owner);
-        Some(bid)
+        (Some(bid), root)
     } else {
-        None
+        (None, None)
     };
 
     let id = ItemId::from_raw(*item_id_counter);
@@ -1089,6 +1089,7 @@ pub(crate) fn lower_static_def(
         kind: ItemKind::Static(StaticItem {
             ty,
             body: body_id,
+            root_expr: root_expr_id,
             is_mut,
         }),
         visibility: Visibility::Inherited,

@@ -11,7 +11,7 @@ use crate::ty_ctx_mut::TyCtxMut;
 use crate::type_arena::TypeArena;
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{
-    AdtId, ClosureId, ConstDefId, FnDefId, LocalDefId, OpaqueTyId, TraitDefId,
+    AdtId, ClosureId, ConstDefId, FnDefId, LocalDefId, OpaqueTyId, StaticDefId, TraitDefId,
 };
 use glyim_core::interner::{Interner, Name};
 use glyim_core::primitives::Mutability;
@@ -62,6 +62,11 @@ pub struct TyCtx {
     pub(crate) extern_fns: HashMap<FnDefId, String>,
     pub(crate) const_fns: HashMap<FnDefId, String>,
     pub(crate) const_tys: HashMap<ConstDefId, Ty>,
+    /// Value types of `static` items, keyed by their def id. Populated
+    /// by typeck when checking the static; consumed by `check_path` so
+    /// that a bare static path resolves to `thir::ExprKind::StaticRef`
+    /// with the right type.
+    pub(crate) static_tys: HashMap<StaticDefId, Ty>,
     pub(crate) closure_sigs: HashMap<ClosureId, FnSig>,
     /// `ClosureId` → synthetic `AdtId` for the closure's captured environment
     /// (populated by `TyCtxMut::register_closure`). Lets the debug-info pass
@@ -721,6 +726,14 @@ impl TyCtx {
     /// `const X: i32 = ...`). Populated by typeck when checking the const.
     pub fn const_ty(&self, def_id: ConstDefId) -> Option<Ty> {
         self.const_tys.get(&def_id).copied()
+    }
+
+    /// The value type of a static item (e.g. `i32` for
+    /// `static X: i32 = ...`). Populated by typeck when checking the
+    /// static; consumed by `check_path` so a bare static path resolves
+    /// to `thir::ExprKind::StaticRef` with the right type.
+    pub fn static_ty(&self, def_id: StaticDefId) -> Option<Ty> {
+        self.static_tys.get(&def_id).copied()
     }
 
     /// closure_sig.

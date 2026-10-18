@@ -291,6 +291,9 @@ pub struct StaticItem {
     pub ty: TypeRef,
     /// Struct.
     pub body: Option<BodyId>,
+    /// Root expression of the static's initializer body, used by const
+    /// evaluation in typeck (mirrors `ConstItem::root_expr`).
+    pub root_expr: Option<ExprId>,
     /// Struct.
     pub is_mut: bool,
 }

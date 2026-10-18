@@ -49,7 +49,7 @@ pub mod zonk;
 use std::collections::HashMap;
 
 use glyim_core::arena::IndexVec;
-use glyim_core::def_id::{AdtId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, TraitDefId};
+use glyim_core::def_id::{AdtId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, StaticDefId, TraitDefId};
 use glyim_core::interner::Name;
 use glyim_core::primitives::{Abi, Mutability, Safety};
 use glyim_def_map::{CrateDefMap, ModuleId, Resolver};
@@ -554,7 +554,7 @@ pub fn typeck_crate(
                             .unwrap_or(module_id);
                         visit_consts(hir, &m.children, def_map, child_mod, visit);
                     }
-                    ItemKind::Const(_) => visit(item, module_id),
+                    ItemKind::Const(_) | ItemKind::Static(_) => visit(item, module_id),
                     _ => {}
                 }
             }
@@ -576,25 +576,56 @@ pub fn typeck_crate(
             .collect();
 
         let mut register_const_type = |item: &glyim_hir::Item, module_id: ModuleId| {
-            let ItemKind::Const(c) = &item.kind else {
-                return;
-            };
-            let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
-                Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
-                None => return, // unregistered const — the later branch handles it
-            };
-            let empty_params: HashMap<Name, Ty> = HashMap::new();
-            let mut local_diags = Vec::new();
-            let const_ty = tyconv::resolve_type_ref(
-                &mut ctx,
-                &mut infer,
-                def_map,
-                &mut local_diags,
-                &c.ty,
-                &empty_params,
-                item.span,
-            );
-            ctx.register_const_ty(const_def_id, const_ty);
+            match &item.kind {
+                ItemKind::Const(c) => {
+                    let const_def_id =
+                        match def_map.modules[module_id].scope.values.get(&item.name) {
+                            Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
+                            None => return, // unregistered — later branch handles it
+                        };
+                    let empty_params: HashMap<Name, Ty> = HashMap::new();
+                    let mut local_diags = Vec::new();
+                    let const_ty = tyconv::resolve_type_ref(
+                        &mut ctx,
+                        &mut infer,
+                        def_map,
+                        &mut local_diags,
+                        &c.ty,
+                        &empty_params,
+                        item.span,
+                    );
+                    ctx.register_const_ty(const_def_id, const_ty);
+                }
+                ItemKind::Static(s) => {
+                    // Register the static's value type so `check_path` can
+                    // resolve a bare static path to `StaticRef`.
+                    let static_def_id =
+                        match def_map.modules[module_id].scope.values.get(&item.name) {
+                            Some((id, _, _)) => StaticDefId::from_raw(id.to_raw()),
+                            None => return,
+                        };
+                    let empty_params: HashMap<Name, Ty> = HashMap::new();
+                    let mut local_diags = Vec::new();
+                    let static_ty = tyconv::resolve_type_ref(
+                        &mut ctx,
+                        &mut infer,
+                        def_map,
+                        &mut local_diags,
+                        &s.ty,
+                        &empty_params,
+                        item.span,
+                    );
+                    ctx.register_static_ty(static_def_id, static_ty);
+                    // Also alias into `const_tys` under the same raw id
+                    // so `PipelineLowerCtx::const_value` can recover the
+                    // type (it does `const_ty(def_id)` for the alias).
+                    ctx.register_const_ty(
+                        ConstDefId::from_raw(static_def_id.to_raw()),
+                        static_ty,
+                    );
+                }
+                _ => {}
+            }
         };
         visit_consts(
             hir,
@@ -2004,6 +2035,51 @@ fn check_fn_items_in_module(
                             all_obligations.truncate(saved_obligations_len);
                             body_owner_map.remove(&body_id);
                         }
+                    }
+                }
+            }
+            ItemKind::Static(s) => {
+                // Resolve the static's value type and register it so
+                // `check_path` can produce a `StaticRef` with the right type.
+                let static_def_id = match def_map.modules[module_id].scope.values.get(&item.name)
+                {
+                    Some((id, _, _)) => StaticDefId::from_raw(id.to_raw()),
+                    None => {
+                        let id = *next_local_def_id;
+                        *next_local_def_id += 1;
+                        StaticDefId::from_raw(id)
+                    }
+                };
+                let empty_params: HashMap<Name, Ty> = HashMap::new();
+                let static_ty = tyconv::resolve_type_ref(
+                    ctx,
+                    infer,
+                    def_map,
+                    diagnostics,
+                    &s.ty,
+                    &empty_params,
+                    item.span,
+                );
+                ctx.register_static_ty(static_def_id, static_ty);
+                ctx.register_const_ty(
+                    ConstDefId::from_raw(static_def_id.to_raw()),
+                    static_ty,
+                );
+
+                // Const-evaluate the static's initializer so lowering can
+                // fold the static to a `MirConst`. Statics and consts share
+                // the same `LocalDefId` raw id space; the value is stored
+                // under a `ConstDefId` aliasing the static's raw id.
+                if let (Some(body_id), Some(root_expr)) = (s.body, s.root_expr) {
+                    let const_alias = ConstDefId::from_raw(static_def_id.to_raw());
+                    let primitive_tys =
+                        glyim_const_eval::ConstEvaluator::build_primitive_tys(ctx);
+                    let body = &hir.bodies[body_id];
+                    let mut evaluator = glyim_const_eval::ConstEvaluator::new(body)
+                        .with_interner(ctx.resolver())
+                        .with_ty_ctx(ctx, primitive_tys);
+                    if let Ok(value) = evaluator.evaluate(root_expr) {
+                        all_const_values.insert(const_alias, value);
                     }
                 }
             }
