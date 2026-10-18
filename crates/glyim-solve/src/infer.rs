@@ -856,6 +856,90 @@ impl InferenceTable {
             // closure to a `FnPtr`-typed parameter always fails, so every
             // higher-order builtin method (`map`, `map_or`, `and_then`, …)
             // left its closure argument untyped and cascaded.
+            // FN-ITEM COERCION: a zero-sized function item (`fn add(..)`)
+            // coerces to a bare `fn(..) -> R` pointer when the item's
+            // registered signature matches the pointer's. This is Rust's
+            // `CoerceFnItemToFnPtr`. Without it, `let f: fn(i32,i32) -> i32
+            // = add;` failed with "mismatched types: FnDef318 vs
+            // fn(i32,i32) -> i32" — the FnDef never unified with the FnPtr.
+            //
+            // The registered `FnSig` for a *generic* fn carries `Param(i)`
+            // inputs; unify them structurally against the FnPtr's concrete
+            // sig so `let g: fn(i32)->i32 = id::<i32>;` works (the substs
+            // are already applied to `FnDef`'s substitution and appear in
+            // the sig via `subst_ty` at mono, but at unify time we compare
+            // the raw registered sig).
+            (TyKind::FnDef(fn_id, substs), TyKind::FnPtr(sig))
+            | (TyKind::FnPtr(sig), TyKind::FnDef(fn_id, substs)) => {
+                let Some(item_sig) = ctx.fn_sig(fn_id).cloned() else {
+                    return Ok(Vec::new());
+                };
+                if item_sig.unsafety != sig.unsafety
+                    || item_sig.abi != sig.abi
+                    || item_sig.c_variadic != sig.c_variadic
+                {
+                    return Err(vec![GlyimDiagnostic::type_error(
+                        span,
+                        format!(
+                            "mismatched types: {} vs {}",
+                            PrintTy::new(a, ctx),
+                            PrintTy::new(b, ctx)
+                        ),
+                    )]);
+                }
+                // Substitute the FnDef's own generic arguments into the
+                // raw registered sig before unifying. For `id<T>` the
+                // registered sig carries `Param(0)`; the turbofish
+                // instantiation (`id::<i32>`) is carried by `substs`.
+                // Without this substitution, `let g: fn(i32)->i32 =
+                // id::<i32>;` fails with "T vs i32" because the raw
+                // `Param(0)` is unified directly against `i32`.
+                let subst_map: std::collections::HashMap<u32, GenericArg> = ctx
+                    .substitution_args(substs)
+                    .iter()
+                    .enumerate()
+                    .map(|(i, arg)| (i as u32, arg.clone()))
+                    .collect();
+                let raw_item_inputs: Vec<Ty> = ctx
+                    .substitution_args(item_sig.inputs)
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    })
+                    .collect();
+                let item_inputs: Vec<Ty> = raw_item_inputs
+                    .iter()
+                    .map(|t| ctx.subst_ty(*t, &subst_map))
+                    .collect();
+                let fn_inputs: Vec<Ty> = ctx
+                    .substitution_args(sig.inputs)
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    })
+                    .collect();
+                if item_inputs.len() != fn_inputs.len() {
+                    return Err(vec![GlyimDiagnostic::type_error(
+                        span,
+                        "mismatched function argument counts".to_string(),
+                    )]);
+                }
+                let mut constraints = Vec::new();
+                for (ity, fty) in item_inputs.iter().zip(fn_inputs.iter()) {
+                    constraints.extend(self.unify_tys(ctx, *ity, *fty, span)?);
+                }
+                let item_output = if item_sig.output != Ty::ERROR {
+                    ctx.subst_ty(item_sig.output, &subst_map)
+                } else {
+                    item_sig.output
+                };
+                if item_output != Ty::ERROR && sig.output != Ty::ERROR {
+                    constraints.extend(self.unify_tys(ctx, item_output, sig.output, span)?);
+                }
+                Ok(constraints)
+            }
             (TyKind::Closure(cid, _), TyKind::FnPtr(sig))
             | (TyKind::FnPtr(sig), TyKind::Closure(cid, _)) => {
                 let Some(closure_sig) = ctx.closure_sig(cid).cloned() else {
