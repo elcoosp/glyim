@@ -616,6 +616,7 @@ pub fn typeck_crate(
                         item.span,
                     );
                     ctx.register_static_ty(static_def_id, static_ty);
+                    ctx.register_static_is_mut(static_def_id, s.is_mut);
                     // Also alias into `const_tys` under the same raw id
                     // so `PipelineLowerCtx::const_value` can recover the
                     // type (it does `const_ty(def_id)` for the alias).
@@ -2061,6 +2062,7 @@ fn check_fn_items_in_module(
                     item.span,
                 );
                 ctx.register_static_ty(static_def_id, static_ty);
+                ctx.register_static_is_mut(static_def_id, s.is_mut);
                 ctx.register_const_ty(
                     ConstDefId::from_raw(static_def_id.to_raw()),
                     static_ty,

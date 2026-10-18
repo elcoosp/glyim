@@ -68,6 +68,7 @@ pub struct TyCtxMut {
     fn_sigs: HashMap<FnDefId, FnSig>,
     const_tys: HashMap<ConstDefId, Ty>,
     static_tys: HashMap<StaticDefId, Ty>,
+    static_is_mut: HashMap<StaticDefId, bool>,
     closure_sigs: HashMap<ClosureId, FnSig>,
     body_tys: HashMap<LocalDefId, Ty>,
     /// Registry of compiler-known builtin types/traits (Option, Range, Drop,
@@ -188,6 +189,7 @@ impl TyCtxMut {
             fn_sigs: HashMap::new(),
             const_tys: HashMap::new(),
             static_tys: HashMap::new(),
+            static_is_mut: HashMap::new(),
             closure_sigs: HashMap::new(),
             closure_adt_map: HashMap::new(),
             impl_assoc_types: HashMap::new(),
@@ -333,6 +335,7 @@ impl TyCtxMut {
             fn_sigs: ctx.fn_sigs.clone(),
             const_tys: ctx.const_tys.clone(),
             static_tys: ctx.static_tys.clone(),
+            static_is_mut: ctx.static_is_mut.clone(),
             closure_sigs: ctx.closure_sigs.clone(),
             closure_adt_map: ctx.closure_adt_map.clone(),
             impl_assoc_types: ctx.impl_assoc_types.clone(),
@@ -1042,6 +1045,11 @@ impl TyCtxMut {
         self.static_tys.insert(def_id, ty);
     }
 
+    /// Register whether the static is `static mut`.
+    pub fn register_static_is_mut(&mut self, def_id: StaticDefId, is_mut: bool) {
+        self.static_is_mut.insert(def_id, is_mut);
+    }
+
     /// Register a trait definition (its name and method set) so that vtable
     /// generation and other downstream passes can resolve the trait's methods.
     pub fn register_trait_def(&mut self, id: glyim_core::def_id::TraitDefId, def: crate::TraitDef) {
@@ -1297,6 +1305,10 @@ impl TyCtxMut {
         self.static_tys.get(&def_id).copied()
     }
 
+    pub fn static_is_mut(&self, def_id: StaticDefId) -> bool {
+        self.static_is_mut.get(&def_id).copied().unwrap_or(false)
+    }
+
     /// Every registered closure id. Used by post-inference passes
     /// (`glyim-typeck::zonk::zonk_closure_sigs`) that must fold inference
     /// variables out of the closure signatures registered during body
@@ -1353,6 +1365,7 @@ impl TyCtxMut {
             fn_sigs: self.fn_sigs.clone(),
             const_tys: self.const_tys.clone(),
             static_tys: self.static_tys.clone(),
+            static_is_mut: self.static_is_mut.clone(),
             closure_sigs: self.closure_sigs.clone(),
             closure_adt_map: self.closure_adt_map.clone(),
             impl_assoc_types: self.impl_assoc_types.clone(),
@@ -1397,6 +1410,7 @@ impl TyCtxMut {
             fn_sigs: self.fn_sigs,
             const_tys: self.const_tys,
             static_tys: self.static_tys,
+            static_is_mut: self.static_is_mut,
             closure_sigs: self.closure_sigs,
             closure_adt_map: self.closure_adt_map,
             impl_assoc_types: self.impl_assoc_types,

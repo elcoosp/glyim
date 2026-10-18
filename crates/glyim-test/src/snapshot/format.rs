@@ -444,6 +444,12 @@ fn format_const(c: &glyim_mir::MirConst) -> String {
             format!("aggregate([{}])", parts.join(", "))
         }
         glyim_mir::MirConstKind::SizeOf(t) => format!("size_of({:?})", t),
+        glyim_mir::MirConstKind::StaticRef { def_id, is_mut, init } => format!(
+            "static_ref({:?}, mut={}, init={})",
+            def_id,
+            is_mut,
+            format_const(init)
+        ),
         glyim_mir::MirConstKind::Error => "<error>".to_string(),
         glyim_mir::MirConstKind::VirtualMethod {
             trait_def_id,

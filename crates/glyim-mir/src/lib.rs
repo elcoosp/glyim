@@ -544,6 +544,21 @@ pub enum MirConstKind {
     Fn(FnDefId, Substitution),
     #[allow(missing_docs)]
     ConstRef(ConstDefId, Substitution),
+    /// Reference to a `static` item. Carries the already-const-evaluated
+    /// initializer (`init`) so codegen can emit a real LLVM global with
+    /// that initializer, and `is_mut` so the global's mutability/linkage
+    /// reflect `static mut`. Codegen's lowering of this variant returns
+    /// the **address** of the global; by-value reads must load through
+    /// a `Deref` projection (see `lower_rvalue`).
+    StaticRef {
+        /// The static's def id. Used to form the `__glyim_static_<id>` symbol.
+        def_id: StaticDefId,
+        /// The initializer value (already const-evaluated by typeck,
+        /// boxed to keep `MirConstKind` small).
+        init: Box<MirConst>,
+        /// Whether the static is `static mut`.
+        is_mut: bool,
+    },
     /// A trait-method reference that must be devirtualized at
     /// monomorphization (or resolved at interpretation) against the concrete
     /// type of the call's first argument (the receiver). Used for calls on a

@@ -451,6 +451,28 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     c.ty,
                 ))])
             }
+            MirConstKind::StaticRef { def_id, init, is_mut } => {
+                // B.1: emit (or reuse) an LLVM global `__glyim_static_<id>`
+                // initialized with `init`, and return its **address** as an
+                // opaque pointer. By-value reads must subsequently load
+                // through a `Deref` projection; `&STATIC` uses this address
+                // directly (see `lower_rvalue`).
+                let global_name = format!("__glyim_static_{}", def_id.to_raw());
+                let module = self.module;
+                if let Some(g) = module.get_global(&global_name) {
+                    return Ok(g.as_pointer_value().as_basic_value_enum());
+                }
+                let init_val = self.lower_const(init)?;
+                let llvm_ty = init_val.get_type();
+                let global = module.add_global(llvm_ty, None, &global_name);
+                global.set_initializer(&init_val);
+                global.set_constant(!*is_mut);
+                // Internal linkage for non-`#[no_mangle]` statics; the
+                // current `static` surface has no `#[no_mangle]` plumbing
+                // yet, so use Private for now.
+                global.set_linkage(inkwell::module::Linkage::Private);
+                Ok(global.as_pointer_value().as_basic_value_enum())
+            }
             MirConstKind::Aggregate(elems) => {
                 // Emit a constant aggregate (tuple/array/struct) by recursively
                 // lowering each constant element and inserting it into a zero

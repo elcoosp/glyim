@@ -88,6 +88,11 @@ pub struct Interpreter<'tcx> {
     /// original panic so that once the caller's own cleanups finish and it
     /// re-panics, the walk continues upward rather than being swallowed.
     pending_unwind: Option<InterpError>,
+    /// `static` item storage. Initialized lazily by `MirConstKind::StaticRef`
+    /// eval; read / written through `InterpValue::StaticPtr` + `Deref` in
+    /// `read_place` / `write_place`. Mirrors the LLVM backend's
+    /// `__glyim_static_<id>` globals.
+    globals: std::cell::RefCell<std::collections::HashMap<glyim_core::def_id::StaticDefId, InterpValue>>,
 }
 
 struct CallFrame {
@@ -132,6 +137,7 @@ impl<'tcx> Interpreter<'tcx> {
             frame_generations: Vec::new(),
             next_frame_gen: 0,
             pending_unwind: None,
+            globals: std::cell::RefCell::new(std::collections::HashMap::new()),
         }
     }
 
@@ -1949,7 +1955,18 @@ impl<'tcx> Interpreter<'tcx> {
                 let size = lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0);
                 Ok(InterpValue::Uint(size as u128))
             }
-            MirConstKind::Error => {
+                        MirConstKind::StaticRef { def_id, init, .. } => {
+                            // Initialize the global lazily. Subsequent
+                            // `Deref` through the returned `StaticPtr` reads /
+                            // writes the stored value.
+                            let init_val = self.eval_mir_const(init)?;
+                            self.globals
+                                .borrow_mut()
+                                .entry(*def_id)
+                                .or_insert(init_val);
+                            Ok(InterpValue::StaticPtr { def_id: *def_id })
+                        }
+MirConstKind::Error => {
                 // T140-PATCHED-INTERP-ERROR: compiler-synthetic builtin calls
                 // (`into`/`to_string`/`clone`/`drop`) lower to an `Error`
                 // constant on runtime-dead branches (e.g. the error arm of
@@ -2190,6 +2207,15 @@ impl<'tcx> Interpreter<'tcx> {
             // the pointee out of the referenced frame's locals. This is required
             // for `Drop`/`fn` bodies that dereference a `&mut` field (e.g. a
             // `&mut i32` counter incremented inside `drop`).
+            (UnOp::Deref, InterpValue::StaticPtr { def_id }) => {
+                // `*p` where `p = &STATIC`: read the global's current value.
+                self.globals.borrow().get(def_id).cloned().ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "deref of uninitialized static {:?}",
+                        def_id
+                    ))
+                })
+            }
             (UnOp::Deref, InterpValue::Ref { frame, local }) => {
                 let frame_locals = self.locals_for_ref_frame(*frame).ok_or_else(|| {
                     InterpError::Panic(format!("deref of Ref from dead frame {frame}"))
@@ -2266,6 +2292,21 @@ impl<'tcx> Interpreter<'tcx> {
                             .and_then(|decls| decls.get(target))
                             .map(|decl| decl.ty);
                         current_ty = decl_ty.unwrap_or(Ty::ERROR);
+                    }
+                    InterpValue::StaticPtr { def_id } => {
+                        // `static mut` / `&STATIC` read: fetch the value
+                        // stored in the interpreter's globals map (lazily
+                        // initialized from the `StaticRef` init on first
+                        // reference).
+                        let v = self.globals.borrow().get(&def_id).cloned().ok_or_else(
+                            || {
+                                InterpError::Panic(format!(
+                                    "deref of uninitialized static {:?}",
+                                    def_id
+                                ))
+                            },
+                        )?;
+                        val = v;
                     }
                     _ => {
                         return Err(InterpError::Panic(
@@ -2568,6 +2609,18 @@ impl<'tcx> Interpreter<'tcx> {
                     })?;
                 let target = match base_val {
                     InterpValue::Ref { frame, local } => (frame, local),
+                    InterpValue::StaticPtr { def_id } => {
+                        // Write to a `static mut` through a deeper projection
+                        // (`*STATIC_PTR.field = v` etc.) is not yet supported;
+                        // whole-global writes go through the proj_count == 1
+                        // branch below. Silently dropping the write would
+                        // miscompile, so surface an explicit interpreter panic.
+                        let _ = def_id;
+                        return Err(InterpError::Panic(
+                            "write through StaticPtr with deeper projections is not yet supported"
+                                .into(),
+                        ));
+                    }
                     _ => {
                         return Err(InterpError::Panic(
                             "deref projection on non-reference value".into(),
@@ -2589,6 +2642,11 @@ impl<'tcx> Interpreter<'tcx> {
                     })?;
                 let target = match base_val {
                     InterpValue::Ref { frame, local } => (frame, local),
+                    InterpValue::StaticPtr { def_id } => {
+                        // Write to the whole `static mut` global.
+                        self.globals.borrow_mut().insert(def_id, val);
+                        return Ok(());
+                    }
                     _ => {
                         return Err(InterpError::Panic(
                             "deref projection on non-reference value".into(),
@@ -2917,6 +2975,7 @@ impl<'tcx> Interpreter<'tcx> {
             InterpValue::Float(f) => f.to_bits() as u128,
             InterpValue::String(s) => s.len() as u128,
             InterpValue::Fn(_) | InterpValue::ConstRef(_) => 0,
+            InterpValue::StaticPtr { def_id } => def_id.to_raw() as u128,
         }
     }
 
@@ -2937,6 +2996,7 @@ impl<'tcx> Interpreter<'tcx> {
             InterpValue::Float(f) => Ok(*f != 0.0),
             InterpValue::String(s) => Ok(!s.is_empty()),
             InterpValue::Fn(_) | InterpValue::ConstRef(_) => Ok(true),
+            InterpValue::StaticPtr { .. } => Ok(true),
         }
     }
 

@@ -222,29 +222,67 @@ impl<'a> MirBuilder<'a> {
                 }))
             }
             thir::ExprKind::StaticRef(static_def_id) => {
-                // Fold by-value static reads to the initializer's const-
-                // evaluated value. Statics and consts share the same
-                // `LocalDefId` raw id space, so `const_value` is queried
-                // under the aliased `ConstDefId` (typeck stores it that way).
+                // B.1: `StaticRef` in *rvalue* position (by-value read).
+                // Lower to:
+                //   _addr = Use(Constant(StaticRef { .. }))     ; the address
+                //   _val  = Use(Copy(Place{_addr, [Deref]}))    ; the load
+                // expressed as a two-statement pattern inside a single rvalue.
+                // The builder only supports one statement here, so emit the
+                // load via a `Deref` on a temporary local holding the address.
+                //
+                // Fallback: if the initializer hasn't been const-evaluated
+                // (e.g. it references a runtime value), surface a diagnostic.
                 let const_alias =
                     glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
                 let substs = glyim_type::Substitution::empty();
-                if let Some(mir_const) = self.ctx.const_value(const_alias, substs) {
-                    return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(mir_const));
-                }
-                // Stage A only supports statics whose initializers const-
-                // evaluate. Anything else is a Stage B feature (real LLVM
-                // globals for non-foldable initializers), so surface a clear
-                // error constant rather than miscompiling to `0`.
-                tracing::warn!(
-                    "static {} could not be const-evaluated (Stage A limitation)",
-                    static_def_id.to_raw()
-                );
-                glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                    kind: glyim_mir::MirConstKind::Error,
+                let Some(init) = self.ctx.const_value(const_alias, substs) else {
+                    tracing::warn!(
+                        "static {} could not be const-evaluated (needed for StaticRef)",
+                        static_def_id.to_raw()
+                    );
+                    return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                        glyim_mir::MirConst {
+                            kind: glyim_mir::MirConstKind::Error,
+                            ty: expr.ty,
+                            span: expr.span,
+                        },
+                    ));
+                };
+                let is_mut = self
+                    .ctx
+                    .ty_ctx()
+                    .static_is_mut(*static_def_id);
+                let static_ref_const = glyim_mir::MirConst {
+                    kind: glyim_mir::MirConstKind::StaticRef {
+                        def_id: *static_def_id,
+                        init: Box::new(init),
+                        is_mut,
+                    },
                     ty: expr.ty,
                     span: expr.span,
-                }))
+                };
+                // Emit a place that reads through a Deref of the address. We
+                // need a temp local holding the address; builders in this
+                // module expose `alloc_local`.
+                let ptr_ty = self.ctx.ty_ctx().mk_ty(glyim_type::TyKind::RawPtr(
+                    expr.ty,
+                    glyim_core::primitives::Mutability::Not,
+                ));
+                let addr_local = self
+                    .alloc_local(ptr_ty, glyim_core::primitives::Mutability::Not, expr.span);
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(addr_local),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(static_ref_const)),
+                    ),
+                    expr.span,
+                );
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
+                    glyim_mir::Place {
+                        local: addr_local,
+                        projection: vec![glyim_mir::ProjectionElem::Deref].into_boxed_slice(),
+                    },
+                ))
             }
             thir::ExprKind::VariantRef(adt_id, variant_idx) => {
                 // A unit enum variant used as a value (`Color::Red`) constructs
@@ -343,6 +381,32 @@ impl<'a> MirBuilder<'a> {
                 mutability,
                 operand,
             } => {
+                // `&STATIC` / `&mut STATIC`: the operand lowers to a
+                // `StaticRef` constant which IS the pointer value; wrapping
+                // it in `Rvalue::Ref(Place{addr,[Deref]})` makes the
+                // interpreter capture a temp-local ref instead of the
+                // static itself (correctness gap in `read_place`/`write_place`
+                // deref handling — treating the StaticRef constant as the
+                // pointer directly avoids it).
+                if let thir::ExprKind::StaticRef(static_def_id) = &operand.kind {
+                    let const_alias =
+                        glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                    let substs = glyim_type::Substitution::empty();
+                    if let Some(init) = self.ctx.const_value(const_alias, substs) {
+                        let is_mut = self.ctx.ty_ctx().static_is_mut(*static_def_id);
+                        return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                            glyim_mir::MirConst {
+                                kind: glyim_mir::MirConstKind::StaticRef {
+                                    def_id: *static_def_id,
+                                    init: Box::new(init),
+                                    is_mut,
+                                },
+                                ty: expr.ty,
+                                span: expr.span,
+                            },
+                        ));
+                    }
+                }
                 // `&base[a..b]` (a sub-slice) is *not* a `Ref` of a `Place`:
                 // the sub-slice value is itself a fat pointer `{data_ptr, len}`,
                 // so a reference to it is the same fat pointer. `Place` cannot
@@ -1649,6 +1713,50 @@ impl<'a> MirBuilder<'a> {
                     self.place_with_projection(glyim_mir::Place::new(local), ProjectionElem::Deref)
                 } else {
                     glyim_mir::Place::new(local)
+                }
+            }
+            thir::ExprKind::StaticRef(static_def_id) => {
+                // B.1: `&STATIC` / `static mut` write target. Materialize
+                // the static's address into a fresh temp local and return
+                // `Place{temp, [Deref]}` so the caller writes THROUGH the
+                // global, not into a stack temporary. Mirrors the rvalue
+                // arm's two-step lowering.
+                let const_alias =
+                    glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                let substs = glyim_type::Substitution::empty();
+                let Some(init) = self.ctx.const_value(const_alias, substs) else {
+                    tracing::warn!(
+                        "static {} could not be const-evaluated (StaticRef place)",
+                        static_def_id.to_raw()
+                    );
+                    return glyim_mir::Place::new(LocalIdx::from_raw(0));
+                };
+                let is_mut = self.ctx.ty_ctx().static_is_mut(*static_def_id);
+                let static_ref_const = glyim_mir::MirConst {
+                    kind: glyim_mir::MirConstKind::StaticRef {
+                        def_id: *static_def_id,
+                        init: Box::new(init),
+                        is_mut,
+                    },
+                    ty: expr.ty,
+                    span: expr.span,
+                };
+                let ptr_ty = self.ctx.ty_ctx().mk_ty(glyim_type::TyKind::RawPtr(
+                    expr.ty,
+                    glyim_core::primitives::Mutability::Not,
+                ));
+                let addr_local = self
+                    .alloc_local(ptr_ty, glyim_core::primitives::Mutability::Not, expr.span);
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(addr_local),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(static_ref_const)),
+                    ),
+                    expr.span,
+                );
+                glyim_mir::Place {
+                    local: addr_local,
+                    projection: vec![glyim_mir::ProjectionElem::Deref].into_boxed_slice(),
                 }
             }
             thir::ExprKind::Field {

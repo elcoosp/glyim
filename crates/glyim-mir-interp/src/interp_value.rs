@@ -21,6 +21,14 @@ pub enum InterpValue {
     Fn(glyim_core::DefId),
     #[allow(missing_docs)]
     ConstRef(glyim_core::DefId),
+    /// Opaque pointer to a `static` item (an address into the
+    /// interpreter's `globals` map). Produced by evaluating
+    /// `MirConstKind::StaticRef` and consumed by `Deref` projections in
+    /// `read_place` / `write_place` to access the global's value.
+    StaticPtr {
+        /// The static's def id (the key into the interpreter's `globals`).
+        def_id: glyim_core::def_id::StaticDefId,
+    },
 }
 
 impl PartialEq for InterpValue {

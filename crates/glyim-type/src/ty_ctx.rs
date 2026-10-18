@@ -67,6 +67,9 @@ pub struct TyCtx {
     /// that a bare static path resolves to `thir::ExprKind::StaticRef`
     /// with the right type.
     pub(crate) static_tys: HashMap<StaticDefId, Ty>,
+    /// Mutability of each static item. Consumed by `StaticRef` lowering
+    /// so codegen can emit a mutable global for `static mut`.
+    pub(crate) static_is_mut: HashMap<StaticDefId, bool>,
     pub(crate) closure_sigs: HashMap<ClosureId, FnSig>,
     /// `ClosureId` → synthetic `AdtId` for the closure's captured environment
     /// (populated by `TyCtxMut::register_closure`). Lets the debug-info pass
@@ -734,6 +737,11 @@ impl TyCtx {
     /// to `thir::ExprKind::StaticRef` with the right type.
     pub fn static_ty(&self, def_id: StaticDefId) -> Option<Ty> {
         self.static_tys.get(&def_id).copied()
+    }
+
+    /// Whether the static with the given def id is `static mut`.
+    pub fn static_is_mut(&self, def_id: StaticDefId) -> bool {
+        self.static_is_mut.get(&def_id).copied().unwrap_or(false)
     }
 
     /// closure_sig.
