@@ -102,6 +102,18 @@ impl<'a> FnCtxt<'a> {
 
     /// Type-check a pattern, producing the THIR pattern and binding names.
     pub fn check_pattern(&mut self, pat_id: PatId, expected_ty: Ty, span: Span) -> thir::Pattern {
+        // PATTERN-SCRUTINEE-RESOLVE: resolve the expected type through the
+        // inference table before dispatching on it. `check_expr`'s Match
+        // arm passes the scrutinee's *pre-unification* type — for a nested
+        // `match a { Some(inner) => match inner { .. } }` the inner match
+        // receives `Infer(?T)` (already unified against the outer field's
+        // concrete `Option<i32>` in the table, but the local binding still
+        // carries the raw `Infer`). Without resolution, the variant-pattern
+        // arm below falls through to the `expected_ty` fallback for field
+        // types and binds `x: Param(T)` — then the arm body (`x` as an
+        // `i32`) fails "mismatched types: T vs i32". Resolving at entry
+        // gives every arm the concrete `Option<i32>`.
+        let expected_ty = self.infer.resolve_ty_shallow_preserve_int(self.ctx, expected_ty);
         let pat = &self.body.pats[pat_id];
         match pat {
             Pat::Wild => thir::Pattern::wild(expected_ty, span),
