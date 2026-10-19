@@ -162,10 +162,25 @@ impl<'tcx> Interpreter<'tcx> {
         self
     }
 
-    /// Configure whether a panicking call is expected to unwind to its
-    /// `cleanup` block. Currently a no-op flag (full unwind-table support is
-    /// out of scope for this tree-walking interpreter); provided so callers
-    /// can opt into the documented-but-unimplemented behavior intentionally.
+    /// Configure whether a panicking call unwinds to its `cleanup` block.
+    ///
+    /// Default is `false`: a panic aborts immediately with
+    /// `InterpError::Panic`, which is the contract the interpreter's own
+    /// tests (`panic_without_unwind_aborts`, the `*_panics` family in
+    /// `tests/advanced.rs`, `tests/div_rem.rs`, …) and both production
+    /// callers (`glyip test`, `glyim-test`'s `interpreter_runner`) are
+    /// written against — they match on `Panic(payload)`.
+    ///
+    /// Setting this to `true` enables the cross-frame unwinding path in
+    /// `unwind_step` (walk caller frames to their `cleanup` edges, run drop
+    /// glue, surface `InterpError::Unwind` at the top). That path is
+    /// implemented and exercised by `tests/unwind_cleanup.rs`, but is not
+    /// enabled by default because it changes the top-level error variant
+    /// every caller observes.
+    ///
+    /// (An earlier revision of this doc claimed the flag was a no-op and
+    /// the behavior unimplemented; both were wrong — see the field doc on
+    /// `panics_unwind` and `unwind_step`'s implementation.)
     pub fn with_panics_unwind(mut self, yes: bool) -> Self {
         self.panics_unwind = yes;
         self
