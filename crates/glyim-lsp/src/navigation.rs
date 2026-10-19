@@ -76,7 +76,7 @@ pub fn goto_definition(
     let target_path = file_map.path(def.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
     Some(GotoDefinitionResponse::Scalar(Location {
-        uri: Uri::from_str(target_uri.as_str()).unwrap(),
+        uri: Uri::from_str(target_uri.as_str()).ok()?,
         range: Range {
             start: Position {
                 line: start_line as u32,
@@ -167,7 +167,7 @@ pub fn find_references(
         };
         let loc_uri = Url::from_file_path(path).ok()?;
         locations.push(Location {
-            uri: Uri::from_str(loc_uri.as_str()).unwrap(),
+            uri: Uri::from_str(loc_uri.as_str()).ok()?,
             range: Range {
                 start: Position {
                     line: start_line as u32,
@@ -285,7 +285,7 @@ pub fn workspace_symbols(
             name: info.name.clone(),
             kind,
             location: Location {
-                uri: Uri::from_str(uri.as_str()).unwrap(),
+                uri: Uri::from_str(uri.as_str()).ok()?,
                 range: Range {
                     start: Position {
                         line: start_line as u32,

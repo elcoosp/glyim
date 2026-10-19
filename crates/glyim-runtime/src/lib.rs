@@ -148,6 +148,20 @@ pub unsafe extern "C" fn glyim_drop_in_place(ptr: *mut u8, drop_fn: Option<DropF
     }
 }
 
+/// Acquire `m`, recovering the guard if the mutex was poisoned.
+///
+/// A poisoned mutex means some thread panicked while holding it. In a
+/// compiler runtime the data behind these locks is a plain `HashMap` of
+/// handles (TCP streams, UDP sockets, thread infos) — a mid-panic state can
+/// at worst be a missing or stale entry, never a torn allocation — so the
+/// safe response is to recover the guard and keep going rather than
+/// cascading a second panic out of every subsequent FFI call. (An
+/// `.unwrap()` on `lock()` does exactly the wrong thing here: one panic
+/// poisons the mutex, and every later `lock().unwrap()` panics too.)
+fn lock_recover<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Panic handler for the runtime.
 ///
 /// Exits with code 101 — the same exit code a Rust panic produces, and the
@@ -1116,7 +1130,7 @@ pub unsafe extern "C" fn glyim_net_tcp_connect(addr: *const u8, addr_len: usize,
         Err(_) => return -1,
     };
     let id = alloc_socket_id();
-    tcp_streams().lock().unwrap().streams.insert(id, stream);
+    lock_recover(&tcp_streams()).streams.insert(id, stream);
     id as i32
 }
 
@@ -1153,7 +1167,7 @@ pub unsafe extern "C" fn glyim_net_tcp_bind(addr: *const u8, addr_len: usize, po
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_net_tcp_accept(fd: i32) -> i32 {
     let fd = fd as u32;
-    let mut listener_store = tcp_listeners().lock().unwrap();
+    let mut listener_store = lock_recover(&tcp_listeners());
     let listener = match listener_store.listeners.get_mut(&fd) {
         Some(l) => l,
         None => return -1,
@@ -1164,7 +1178,7 @@ pub unsafe extern "C" fn glyim_net_tcp_accept(fd: i32) -> i32 {
     };
     drop(listener_store);
     let new_id = alloc_socket_id();
-    tcp_streams().lock().unwrap().streams.insert(new_id, stream);
+    lock_recover(&tcp_streams()).streams.insert(new_id, stream);
     new_id as i32
 }
 
@@ -1176,7 +1190,7 @@ pub unsafe extern "C" fn glyim_net_tcp_read(fd: i32, buf: *mut u8, count: usize)
         return -1;
     }
     let fd = fd as u32;
-    let mut store = tcp_streams().lock().unwrap();
+    let mut store = lock_recover(&tcp_streams());
     let stream = match store.streams.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1196,7 +1210,7 @@ pub unsafe extern "C" fn glyim_net_tcp_write(fd: i32, buf: *const u8, count: usi
         return -1;
     }
     let fd = fd as u32;
-    let mut store = tcp_streams().lock().unwrap();
+    let mut store = lock_recover(&tcp_streams());
     let stream = match store.streams.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1213,7 +1227,7 @@ pub unsafe extern "C" fn glyim_net_tcp_write(fd: i32, buf: *const u8, count: usi
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_net_tcp_local_addr(fd: i32, buf: *mut u8, buf_len: usize) -> i32 {
     let fd = fd as u32;
-    let store = tcp_streams().lock().unwrap();
+    let store = lock_recover(&tcp_streams());
     let stream = match store.streams.get(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1239,7 +1253,7 @@ pub unsafe extern "C" fn glyim_net_tcp_local_addr(fd: i32, buf: *mut u8, buf_len
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_net_tcp_peer_addr(fd: i32, buf: *mut u8, buf_len: usize) -> i32 {
     let fd = fd as u32;
-    let store = tcp_streams().lock().unwrap();
+    let store = lock_recover(&tcp_streams());
     let stream = match store.streams.get(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1273,7 +1287,7 @@ pub unsafe extern "C" fn glyim_net_tcp_peer_addr(fd: i32, buf: *mut u8, buf_len:
 pub unsafe extern "C" fn glyim_net_tcp_set_nonblocking(fd: i32, nonblocking: i32) -> i32 {
     use socket2::SockRef;
     let fd = fd as u32;
-    let store = tcp_streams().lock().unwrap();
+    let store = lock_recover(&tcp_streams());
     let stream = match store.streams.get(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1300,7 +1314,7 @@ pub unsafe extern "C" fn glyim_net_udp_bind(addr: *const u8, addr_len: usize, po
         Err(_) => return -1,
     };
     let id = alloc_socket_id();
-    udp_sockets().lock().unwrap().sockets.insert(id, socket);
+    lock_recover(&udp_sockets()).sockets.insert(id, socket);
     id as i32
 }
 
@@ -1331,7 +1345,7 @@ pub unsafe extern "C" fn glyim_net_udp_send_to(
         Some(addr) => addr,
         None => return -1,
     };
-    let mut store = udp_sockets().lock().unwrap();
+    let mut store = lock_recover(&udp_sockets());
     let socket = match store.sockets.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1358,7 +1372,7 @@ pub unsafe extern "C" fn glyim_net_udp_recv_from(
         return -1;
     }
     let fd = fd as u32;
-    let mut store = udp_sockets().lock().unwrap();
+    let mut store = lock_recover(&udp_sockets());
     let socket = match store.sockets.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1410,7 +1424,7 @@ pub unsafe extern "C" fn glyim_net_udp_connect(
         Some(addr) => addr,
         None => return -1,
     };
-    let mut store = udp_sockets().lock().unwrap();
+    let mut store = lock_recover(&udp_sockets());
     let socket = match store.sockets.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1429,7 +1443,7 @@ pub unsafe extern "C" fn glyim_net_udp_send(fd: i32, buf: *const u8, count: usiz
         return -1;
     }
     let fd = fd as u32;
-    let mut store = udp_sockets().lock().unwrap();
+    let mut store = lock_recover(&udp_sockets());
     let socket = match store.sockets.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1449,7 +1463,7 @@ pub unsafe extern "C" fn glyim_net_udp_recv(fd: i32, buf: *mut u8, count: usize)
         return -1;
     }
     let fd = fd as u32;
-    let mut store = udp_sockets().lock().unwrap();
+    let mut store = lock_recover(&udp_sockets());
     let socket = match store.sockets.get_mut(&fd) {
         Some(s) => s,
         None => return -1,
@@ -1513,7 +1527,7 @@ fn ensure_current_thread_registered() -> ThreadId {
             handle: None,
             thread: Arc::new(std::thread::current()),
         };
-        threads().lock().unwrap().infos.insert(id, info);
+        lock_recover(&threads()).infos.insert(id, info);
         c.set(id);
         id
     })
@@ -1537,7 +1551,7 @@ pub unsafe extern "C" fn glyim_thread_spawn(f: extern "C" fn(*mut u8), arg: *mut
         handle: Some(handle),
         thread: Arc::new(thread),
     };
-    threads().lock().unwrap().infos.insert(id, info);
+    lock_recover(&threads()).infos.insert(id, info);
     id
 }
 
@@ -1580,7 +1594,7 @@ pub unsafe extern "C" fn glyim_thread_spawn_named(
         handle: Some(handle),
         thread: Arc::new(thread),
     };
-    threads().lock().unwrap().infos.insert(id, info);
+    lock_recover(&threads()).infos.insert(id, info);
     id
 }
 
@@ -1589,7 +1603,7 @@ pub unsafe extern "C" fn glyim_thread_spawn_named(
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_thread_join(handle: usize) -> i32 {
     let handle_id = handle;
-    let mut store = threads().lock().unwrap();
+    let mut store = lock_recover(&threads());
     if let Some(info) = store.infos.remove(&handle_id) {
         drop(store);
         match info.handle {
@@ -1646,7 +1660,7 @@ pub unsafe extern "C" fn glyim_thread_park_timeout(secs: u64, nanos: u32) {
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_thread_unpark(handle: usize) {
     let handle_id = handle;
-    let store = threads().lock().unwrap();
+    let store = lock_recover(&threads());
     if let Some(info) = store.infos.get(&handle_id) {
         info.thread.unpark();
     }

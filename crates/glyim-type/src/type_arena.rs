@@ -92,6 +92,16 @@ impl TypeArena {
                 return t;
             }
         }
+        // Do NOT recover from poisoning here. `write_gate` serializes
+        // writes to the raw `types`/`type_flags`/`substitution_data`
+        // pointers; a poisoned gate means a previous writer panicked
+        // *mid-write*, so those arenas may hold a torn count or a partially
+        // written element. Recovering the guard (`PoisonError::into_inner`)
+        // would let this writer proceed over corrupted state — unsound.
+        // Panicking keeps the failure loud and local, which is the correct
+        // trade for an invariant this strong. (Contrast the runtime's
+        // handle maps, which are plain `HashMap`s and *do* recover — see
+        // `lock_recover` in `glyim-runtime`.)
         let _gate = self.write_gate.lock().unwrap();
         // SAFETY: `types`/`type_flags` point to stable heap storage; we hold the
         // exclusive write gate, so no reader can observe a torn state.
@@ -148,6 +158,7 @@ impl TypeArena {
                 return s;
             }
         }
+        // Do NOT recover from poisoning; see `alloc_ty`'s note.
         let _gate = self.write_gate.lock().unwrap();
         // SAFETY: see `alloc_ty`.
         let data = unsafe { &mut *self.substitution_data };
