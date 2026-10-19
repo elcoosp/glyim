@@ -141,3 +141,70 @@ Plus the session-14 fixtures still green: `fn_ptr_assignment.g`,
 `static_used_in_expr.g`, `static_alongside_const.g`,
 `static_ref_deref.g`, `static_mut_write.g`, `static_mut_read.g`,
 `static_ref_stable_address.g`.
+
+## 6. Post-handoff work (session 15 continuation)
+
+Two more items closed after the §2 addendum:
+
+### 6.1 `StaticPtr` projections beyond `Field` — `578ed645`
+
+`write_projection_into_value` handled only `Field`; indexing into a
+static array (`A[1] = v` / `A[i] = v`) panicked on the interpreter
+with "unsupported projection in static deeper-write path" even
+though the same program ran correctly through the LLVM backend
+(which lowers the store as a byte-GEP).
+
+Added:
+
+- `ConstantIndex { offset, from_end }` — fixed array/tuple offset;
+  `from_end = true` counts from the tail.
+- `Index(local)` — dynamic index. The index value lives in a local
+  of the *current* frame, so the helper takes a
+  `&[Option<InterpValue>]` snapshot of that frame. The snapshot is
+  taken in `write_place_frame` *before* the `frame_locals` mutable
+  borrow ends (touching `self.globals` while `frame_locals` was live
+  was a borrow conflict).
+- `Downcast(_)` — no-op at the value level (the tag lives in field 0
+  of the aggregate); recurse through.
+
+Fixtures (5): tuple-field write, nested-struct field write,
+array-of-struct field write (ConstantIndex + Field),
+`&mut STATIC.field` deref-then-field write, dynamic-index array
+write. LLVM + interpreter both green.
+
+### 6.2 Non-const-evaluable static initializers — `ae449060`
+
+Handoff §2 said "MonoItem::Static with a real MIR body". On
+investigation that was based on a false premise:
+
+- `static X: i32 = compute();` is **invalid Rust** (E0015, "cannot
+  call non-const fn in statics"). Runtime-initialized statics are a
+  C++ feature, not Rust.
+- What was actually broken in glyim was a *silent miscompile*:
+  typeck's const-eval error was swallowed
+  (`if let Ok(value) = ...`), `lower_rvalue` warned and emitted
+  `MirConstKind::Error`, and codegen turned that into a zero
+  constant. The program compiled cleanly and returned `0` instead
+  of failing.
+- The `const` arm already propagated evaluator errors as `[C0001]`
+  diagnostics; the static arm didn't.
+
+Closed by making the static arm mirror the const arm:
+
+- `glyim-typeck`'s `ItemKind::Static` arm matches on the evaluator
+  result and pushes `e.into_diagnostic()` on failure.
+- `glyim-lower`'s `StaticRef` arm emits a loud internal error if it
+  reaches lowering without a folded initializer (belt and braces:
+  typeck should now reject the program first).
+- UI fixture `static_non_const_init.g` / `.expected` asserting
+  `[C0001]`.
+
+Full C++-style runtime init (MonoItem::Static body,
+`__glyim_static_init_<id>` prologue in `main`, interpreter-side
+init before `run_body`) remains a possible future language feature,
+deliberately out of scope here.
+
+### 6.3 Where things stand
+
+- **4599/4599** tests green; corpus green; 2 skipped.
+- `ae449060` is the current tip.
