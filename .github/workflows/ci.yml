@@ -189,3 +189,54 @@ jobs:
         run: |
           cargo clippy -p glyim-codegen --all-targets -- -W dead_code -D warnings
           cargo clippy -p glyim-frontend --all-targets -- -W dead_code -D warnings
+
+  # Appendix A §A10: report coverage and mutation scores without gating yet.
+  # The thresholds (`tools/glyim-pilot/src/gates/{coverage,mutation}.rs`:
+  # 80% lines, 75% kill rate) are the project's own bar, but neither has ever
+  # been measured on CI. `continue-on-error` keeps them advisory until a
+  # baseline is recorded and the numbers are known-good; flipping that to
+  # `false` is the deliberate "harden the gate" step.
+  #
+  # `--lib` only: the integration corpus spawns `glyim-cli` as a subprocess,
+  # and llvm-cov cannot attribute child-process coverage back to the parent,
+  # so including tests/ would drag the number down with code that *is*
+  # exercised (see the session-15 handoff note on the 48% artifact).
+  coverage-report:
+    name: Coverage (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Measure line coverage
+        run: |
+          cargo llvm-cov --workspace --lib \
+            --ignore-filename-regex '(tests?/|/build\.rs$)' \
+            --summary-only | tee /tmp/cov.txt
+          echo "## Coverage" >> "$GITHUB_STEP_SUMMARY"
+          sed -n '/^TOTAL/p' /tmp/cov.txt >> "$GITHUB_STEP_SUMMARY"
+
+  mutation-report:
+    name: Mutation (advisory, sampled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --locked
+      # The whole workspace is far too slow for one CI job, so sample two
+      # crates with dense pure logic and no LLVM dependency.
+      - name: Measure mutation kill rate (glyim-type, glyim-solve)
+        run: |
+          cargo mutants -p glyim-type -p glyim-solve --no-times | tee /tmp/mut.txt || true
+          echo "## Mutation" >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'kill rate|mutants tested' /tmp/mut.txt >> "$GITHUB_STEP_SUMMARY" || true
