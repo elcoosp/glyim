@@ -543,18 +543,51 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                     e
                 ))]
             })?;
-        let thin_obj = thin_objects.into_iter().next().ok_or_else(|| {
-            vec![glyim_diag::GlyimDiagnostic::internal_error(
+        if thin_objects.is_empty() {
+            return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
                 "ThinLTO thin-link produced no object files",
-            )]
-        })?;
-        std::fs::copy(&thin_obj, &object_path).map_err(|e| {
-            vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
-                "ThinLTO: failed to copy thin-linked object to {}: {}",
-                object_path.display(),
-                e
-            ))]
-        })?;
+            )]);
+        }
+        // `llvm-lto2 run` can emit one object per output module. The rest
+        // of the compile pipeline (cache, `finalize_after_object`, the
+        // linker invocation) is written against a single `object_path`, so
+        // when the thin-link produces more than one object we merge them
+        // into a single relocatable object with `ld -r` before writing
+        // `object_path`. That keeps the cache and link paths uniform and
+        // guarantees no post-thin-link object is dropped.
+        if thin_objects.len() == 1 {
+            std::fs::copy(&thin_objects[0], &object_path).map_err(|e| {
+                vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
+                    "ThinLTO: failed to copy thin-linked object to {}: {}",
+                    object_path.display(),
+                    e
+                ))]
+            })?;
+        } else {
+            // Merge: `link_with_args` runs the platform linker with `-r`
+            // (partial link) so the resulting `object_path` is a single
+            // relocatable object containing every thin-linked module.
+            let mut merge_args = linker::LinkArgs::default();
+            merge_args
+                .objects
+                .extend(thin_objects.iter().skip(1).cloned());
+            merge_args.user_flags.push("-r".to_string());
+            linker::link_with_args(
+                &thin_objects[0],
+                &object_path,
+                &merge_args,
+                args.linker.as_deref(),
+                args.target.as_deref(),
+            )
+            .map_err(|e| {
+                vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
+                    "ThinLTO: failed to merge {} thin-linked objects into {}: {}",
+                    thin_objects.len(),
+                    object_path.display(),
+                    e
+                ))]
+            })?;
+        }
     } else if args.backend == "bytecode" {
         if args.opt_level > 0 {
             tracing::warn!(

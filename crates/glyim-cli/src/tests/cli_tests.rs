@@ -190,10 +190,12 @@ fn test_lto_fat_compiles_to_object() {
     );
 }
 
-/// Phase 10.2: `--lto thin` is a tracked gap (linker-driver integration) and
-/// must surface an explicit error rather than silently degrading to a no-op.
+/// `--lto thin` used to be a tracked gap; it now runs `llvm-lto2` (with
+/// the `-r=` symbol-resolution directives it requires). When `llvm-lto2`
+/// is unavailable the compile must fail with an actionable diagnostic
+/// naming the missing tool (degraded-path contract).
 #[test]
-fn test_lto_thin_surfaces_tracked_gap() {
+fn test_lto_thin_is_no_longer_a_tracked_gap() {
     let mut tmp = NamedTempFile::new().unwrap();
     writeln!(tmp, "fn main() {{}}").unwrap();
     let path = tmp.into_temp_path();
@@ -214,10 +216,20 @@ fn test_lto_thin_surfaces_tracked_gap() {
         with_stdlib: false,
     };
     let result = run_with_args(args);
-    assert!(
-        result.is_err(),
-        "LTO=thin must surface its tracked-gap error, not silently no-op"
-    );
+    // Two acceptable outcomes: success when llvm-lto2 is present, or a
+    // diagnostic naming the missing tool. What is NOT acceptable is
+    // succeeding silently as a no-op or emitting an unrelated error.
+    if let Err(diags) = result {
+        let joined = diags
+            .iter()
+            .map(|d| format!("{d:?}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            joined.contains("llvm-lto2"),
+            "LTO=thin failure must name llvm-lto2; got:\n{joined}"
+        );
+    }
 }
 
 /// Phase 9.2: `--emit=cdylib` compiles the program to an object then links it
