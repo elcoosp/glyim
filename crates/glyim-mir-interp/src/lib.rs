@@ -2668,6 +2668,12 @@ MirConstKind::Error => {
                     .ok_or_else(|| {
                         InterpError::Panic(format!("write to uninitialized local {idx}"))
                     })?;
+                // Snapshot the frame's locals before entering the match, so
+                // the `frame_locals` mutable borrow of `self` ends before any
+                // arm touches `self.globals`. Used by the `StaticPtr` arm to
+                // resolve dynamic `Index` projections.
+                let frame_snapshot: Vec<Option<InterpValue>> =
+                    frame_locals.iter().cloned().collect();
                 let target = match base_val {
                     InterpValue::Ref { frame, local } => (frame, local),
                     InterpValue::StaticPtr { def_id } => {
@@ -2681,7 +2687,12 @@ MirConstKind::Error => {
                                 "write to uninitialized static {:?}",
                                 def_id
                             )))?;
-                        write_projection_into_value(&mut cur, &place.projection[1..], val)?;
+                        write_projection_into_value(
+                            &mut cur,
+                            &place.projection[1..],
+                            val,
+                            &frame_snapshot,
+                        )?;
                         self.globals.borrow_mut().insert(def_id, cur);
                         return Ok(());
                     }
@@ -3226,6 +3237,7 @@ fn write_projection_into_value(
     cur: &mut InterpValue,
     projections: &[glyim_mir::ProjectionElem],
     val: InterpValue,
+    frame_locals: &[Option<InterpValue>],
 ) -> InterpResult<()> {
     if projections.is_empty() {
         *cur = val;
@@ -3242,13 +3254,90 @@ fn write_projection_into_value(
                             "field {fi} out of range on static aggregate ({len} fields)"
                         ))
                     })?;
-                    write_projection_into_value(field, &projections[1..], val)
+                    write_projection_into_value(field, &projections[1..], val, frame_locals)
                 }
                 other => Err(InterpError::Panic(format!(
                     "field projection on non-aggregate static value: {:?}",
                     other
                 ))),
             }
+        }
+        glyim_mir::ProjectionElem::ConstantIndex {
+            offset, from_end, ..
+        } => {
+            // Fixed offset into an array/tuple/slice aggregate. For arrays
+            // this is a straight index (Rust MIR uses `from_end = false`);
+            // for slices with `from_end = true` it counts from the tail.
+            let fi = match cur {
+                InterpValue::Aggregate(fields) => {
+                    let idx = if *from_end {
+                        fields.len().saturating_sub(*offset as usize)
+                    } else {
+                        *offset as usize
+                    };
+                    let len = fields.len();
+                    fields.get_mut(idx).ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "constant index {idx} out of range on static aggregate ({len} fields)"
+                        ))
+                    })?
+                }
+                other => {
+                    return Err(InterpError::Panic(format!(
+                        "constant-index projection on non-aggregate static value: {:?}",
+                        other
+                    )));
+                }
+            };
+            write_projection_into_value(fi, &projections[1..], val, frame_locals)
+        }
+        glyim_mir::ProjectionElem::Index(index_local) => {
+            // Dynamic index: the index lives in a local of the *current
+            // frame*. `frame_locals` is a snapshot of that frame taken by
+            // the caller (we can't borrow `self.locals` while the frame's
+            // borrow is alive).
+            let raw = frame_locals
+                .get(index_local.index())
+                .and_then(|o| o.as_ref())
+                .ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "index local {} uninitialized in static deeper-write path",
+                        index_local.index()
+                    ))
+                })?;
+            let i = match raw {
+                InterpValue::Uint(u) => *u as usize,
+                InterpValue::Int(v) if *v >= 0 => *v as usize,
+                other => {
+                    return Err(InterpError::Panic(format!(
+                        "non-integer index value in static deeper-write path: {:?}",
+                        other
+                    )));
+                }
+            };
+            let fi = match cur {
+                InterpValue::Aggregate(fields) => {
+                    let len = fields.len();
+                    fields.get_mut(i).ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "index {i} out of range on static aggregate ({len} fields)"
+                        ))
+                    })?
+                }
+                other => {
+                    return Err(InterpError::Panic(format!(
+                        "index projection on non-aggregate static value: {:?}",
+                        other
+                    )));
+                }
+            };
+            write_projection_into_value(fi, &projections[1..], val, frame_locals)
+        }
+        glyim_mir::ProjectionElem::Downcast(_) => {
+            // A `Downcast` on an enum value in this interpreter is a no-op
+            // at the value level (the tag is encoded in field 0 of the
+            // Aggregate). Recurse through.
+            write_projection_into_value(cur, &projections[1..], val, frame_locals)
         }
         glyim_mir::ProjectionElem::Deref => {
             // Deref through a nested `Ref` isn't reachable for statics (no
