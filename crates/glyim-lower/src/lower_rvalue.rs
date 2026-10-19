@@ -236,10 +236,17 @@ impl<'a> MirBuilder<'a> {
                     glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
                 let substs = glyim_type::Substitution::empty();
                 let Some(init) = self.ctx.const_value(const_alias, substs) else {
-                    tracing::warn!(
-                        "static {} could not be const-evaluated (needed for StaticRef)",
+                    // Typeck must have rejected a non-const-evaluable
+                    // static initializer (Rust E0015). Reaching this arm
+                    // means typeck's `ItemKind::Static` diagnostic was
+                    // suppressed — surface a loud internal error rather
+                    // than silently folding to 0, which would turn a
+                    // compile error into a runtime miscompile.
+                    self.diagnostics.push(GlyimDiagnostic::internal_error(format!(
+                        "static {} reached lowering without a const-evaluated \
+                         initializer; typeck should have rejected it",
                         static_def_id.to_raw()
-                    );
+                    )));
                     return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
                         glyim_mir::MirConst {
                             kind: glyim_mir::MirConstKind::Error,

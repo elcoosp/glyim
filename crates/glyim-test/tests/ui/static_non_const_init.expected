@@ -1,0 +1,5 @@
+ERROR[C0001]: const evaluation error: unknown const fn `compute`
+ --> static_non_const_init.g:4:17
+     |
+4 | static X: i32 = compute();
+     |                 ^^^^^^^^^

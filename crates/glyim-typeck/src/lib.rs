@@ -2095,8 +2095,22 @@ fn check_fn_items_in_module(
                             }
                         }
                     }
-                    if let Ok(value) = evaluator.evaluate(root_expr) {
-                        all_const_values.insert(const_alias, value);
+                    // A `static`'s initializer must be const-evaluable
+                    // (Rust E0015: "cannot call non-const fn in statics").
+                    // Previously the error was swallowed here and
+                    // `lower_rvalue`'s `StaticRef` arm silently fell back to
+                    // `MirConstKind::Error`, which codegen turned into a
+                    // runtime `0` — a silent miscompile. Surface the eval
+                    // failure as a diagnostic, mirroring the `const` arm
+                    // (which already propagates `into_diagnostic` for
+                    // primitive-typed constants).
+                    match evaluator.evaluate(root_expr) {
+                        Ok(value) => {
+                            all_const_values.insert(const_alias, value);
+                        }
+                        Err(e) => {
+                            diagnostics.push(e.into_diagnostic());
+                        }
                     }
                 }
             }
