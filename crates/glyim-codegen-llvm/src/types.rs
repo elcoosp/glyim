@@ -150,10 +150,23 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             // structural LLVM struct field list, and the byte-GEP
             // offsets that readers/writers already use are their
             // contract.
+            // Builtin ADTs (ids 1000..2000) keep the opaque form. Their
+            // `AdtDef` field lists are compiler-synthesized placeholders, and
+            // numerous codegen sites hard-code their ABI shape — e.g.
+            // `String`/`Vec` are read as `{[3 x i64]}` (one field) by the
+            // `to_string` / `as_bytes` / `len` lowerings at
+            // `lower.rs:6322`, `:6505`, `:6878`. Expanding them structurally
+            // (as this arm does for user structs) changes the shape to
+            // `{{ptr, i64}, i64}` and those sites panic with
+            // "Found StructValue … but expected the ArrayValue variant".
+            // User structs (ids < 1000) are the ones that needed the
+            // structural form for `lower_const`'s per-field inserts.
+            let is_builtin = (1000..2000).contains(&adt_id.to_raw());
             let adt_def = ctx.adt_def(*adt_id);
-            let is_struct = adt_def
-                .map(|d| d.kind == glyim_type::adt_def::AdtKind::Struct)
-                .unwrap_or(false);
+            let is_struct = !is_builtin
+                && adt_def
+                    .map(|d| d.kind == glyim_type::adt_def::AdtKind::Struct)
+                    .unwrap_or(false);
             if is_struct {
                 let field_tys: Vec<glyim_type::Ty> = adt_def
                     .map(|d| d.fields.iter().map(|f| f.ty).collect())

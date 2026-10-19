@@ -29,30 +29,38 @@ use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-fn corpus_root() -> std::path::PathBuf {
+fn corpus_root(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
-        .join("run-pass")
+        .join(name)
 }
 
-#[test]
-fn llvm_and_interp_agree_on_run_pass_corpus() {
+/// Drive both backends over `corpus` and assert they agree on observable
+/// behaviour (exit code + stdout).
+///
+/// Run over both `run-pass` and `run-fail`. The `run-fail` half is what
+/// catches backend divergence on *panics*: before it existed, three
+/// independent bugs made a panicking program die by signal on the LLVM
+/// backend (SIGABRT / SIGILL / SIGFPE) while the interpreter reported the
+/// declared `exit-code: 101`, and nothing failed because the run-fail
+/// corpus only ever ran the interpreter.
+fn check_corpus_agreement(corpus: &str) {
     if std::env::var("GLYIM_TEST_REAL_LLVM").is_err() {
         eprintln!(
-            "differential: GLYIM_TEST_REAL_LLVM not set — skipping \
+            "differential[{corpus}]: GLYIM_TEST_REAL_LLVM not set — skipping \
              (set it to 1 with the `real-llvm` feature to run the LLVM side)."
         );
         return;
     }
 
-    let plan = TestRunner::new(corpus_root())
+    let plan = TestRunner::new(corpus_root(corpus))
         .parallel(false)
         .build()
-        .expect("run-pass corpus collection must succeed");
+        .expect("corpus collection must succeed");
 
     assert!(
         !plan.tests.is_empty(),
-        "the differential corpus must not be empty (fixtures missing?)"
+        "the differential[{corpus}] corpus must not be empty (fixtures missing?)"
     );
 
     let compiler = PipelineCompiler::new(Arc::new(MockCodegen::new())).with_real_llvm();
@@ -193,7 +201,7 @@ fn llvm_and_interp_agree_on_run_pass_corpus() {
     }
 
     eprintln!(
-        "differential: compared={} disagreements={} interp_only={} skipped={}",
+        "differential[{corpus}]: compared={} disagreements={} interp_only={} skipped={}",
         compared,
         disagreements.len(),
         interp_only.len(),
@@ -208,9 +216,19 @@ fn llvm_and_interp_agree_on_run_pass_corpus() {
 
     assert!(
         disagreements.is_empty(),
-        "LLVM/interp disagreement on {} of {} compared fixture(s):\n  {}",
+        "LLVM/interp disagreement[{corpus}] on {} of {} compared fixture(s):\n  {}",
         disagreements.len(),
         compared,
         disagreements.join("\n  "),
     );
+}
+
+#[test]
+fn llvm_and_interp_agree_on_run_pass_corpus() {
+    check_corpus_agreement("run-pass");
+}
+
+#[test]
+fn llvm_and_interp_agree_on_run_fail_corpus() {
+    check_corpus_agreement("run-fail");
 }
