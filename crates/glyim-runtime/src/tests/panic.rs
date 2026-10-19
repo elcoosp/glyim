@@ -1,29 +1,28 @@
 //! Tests for glyim_panic FFI function.
 //!
-//! S06-T03: glyim_panic aborts execution.
+//! `glyim_panic` exits the process with status 101 — the same exit code a
+//! Rust panic produces, and the same code `glyim-mir-interp` reports for an
+//! `InterpError`. It used to call `std::process::abort()`, which raised
+//! SIGABRT (exit status 134 in a shell): the same program then exited with
+//! a different code depending on whether it ran through the LLVM backend
+//! or the interpreter, which is precisely what the `run-fail` fixtures
+//! (`// exit-code: 101`) exist to pin.
 //!
-//! Since glyim_panic calls std::process::abort() which terminates the
-//! process immediately, we test it by spawning a child process that
-//! calls glyim_panic and verifying the child is terminated abnormally.
+//! The test spawns a child process that calls `glyim_panic` and verifies
+//! the child exits 101 with the message on stderr.
 
 use crate::glyim_panic;
 
-/// Test that glyim_panic aborts the process.
-///
-/// This test spawns a child process that calls glyim_panic and verifies
-/// that the child is terminated with SIGABRT (on Unix) or a non-zero
-/// exit code (on other platforms).
+/// Test that `glyim_panic` exits 101 and writes the message to stderr.
 #[test]
-fn panic_aborts_process() {
-    // If we're the child process, trigger the panic
+fn panic_exits_101_with_message() {
+    // If we're the child process, trigger the panic.
     if std::env::var("__GLYIM_PANIC_CHILD").is_ok() {
-        // SAFETY: We're in a test subprocess that's expected to abort.
-        // The null pointer is acceptable because glyim_panic ignores
-        // the message parameters in the current implementation.
-        glyim_panic(std::ptr::null(), 0);
+        let msg = b"boom from the child";
+        glyim_panic(msg.as_ptr(), msg.len());
     }
 
-    // Parent process: spawn child and verify it aborts
+    // Parent process: spawn child and check its exit status.
     let exe = std::env::current_exe().unwrap_or_else(|e| {
         panic!("failed to get current executable: {}", e);
     });
@@ -35,31 +34,27 @@ fn panic_aborts_process() {
             panic!("failed to spawn child process: {}", e);
         });
 
-    // The process must not have exited successfully
-    assert!(
-        !output.status.success(),
-        "glyim_panic should cause process abort, but child exited successfully"
+    assert_eq!(
+        output.status.code(),
+        Some(101),
+        "glyim_panic must exit 101; got {:?} (signal {:?})",
+        output.status.code(),
+        {
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                output.status.signal()
+            }
+            #[cfg(not(unix))]
+            {
+                None::<i32>
+            }
+        }
     );
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::ExitStatusExt;
-        let signal = output.status.signal();
-        assert_eq!(
-            signal,
-            Some(6),
-            "expected SIGABRT (signal 6) from abort(), got signal {:?}",
-            signal
-        );
-    }
-
-    #[cfg(not(unix))]
-    {
-        let code = output.status.code();
-        assert!(
-            code.is_some() && code != Some(0),
-            "expected non-zero exit code from abort(), got {:?}",
-            code
-        );
-    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("boom from the child"),
+        "the panic message must reach stderr; got: {stderr:?}"
+    );
 }

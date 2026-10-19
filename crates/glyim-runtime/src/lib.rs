@@ -149,9 +149,35 @@ pub unsafe extern "C" fn glyim_drop_in_place(ptr: *mut u8, drop_fn: Option<DropF
 }
 
 /// Panic handler for the runtime.
+///
+/// Exits with code 101 — the same exit code a Rust panic produces, and the
+/// same code `glyim-mir-interp` reports for an `InterpError`. Panics used
+/// to call `std::process::abort()`, which raises SIGABRT/SIGTRAP: the exit
+/// status observed by the shell is then 134/133 rather than 101, so the
+/// same program's exit code differed between the LLVM and interpreter
+/// backends (`run-fail` fixtures declare `exit-code: 101` and only passed
+/// because the run-fail corpus executes through the interpreter).
+///
+/// The message is written to stderr before exiting so a panicking program
+/// is not silent.
 #[unsafe(no_mangle)]
-pub extern "C" fn glyim_panic(_msg: *const u8, _len: usize) -> ! {
-    std::process::abort()
+pub extern "C" fn glyim_panic(msg: *const u8, len: usize) -> ! {
+    use std::io::Write as _;
+    let payload: &[u8] = if msg.is_null() || len == 0 {
+        b"panic"
+    } else {
+        // SAFETY: the caller (codegen's `panic_call` / `assert_panic`
+        // lowering) passes a pointer to a `str` literal it emitted with
+        // exactly `len` bytes of readable data.
+        unsafe { std::slice::from_raw_parts(msg, len) }
+    };
+    let stderr = std::io::stderr();
+    let mut lock = stderr.lock();
+    let _ = lock.write_all(b"thread 'main' panicked: ");
+    let _ = lock.write_all(payload);
+    let _ = lock.write_all(b"\n");
+    let _ = lock.flush();
+    std::process::exit(101)
 }
 
 /// Free a byte buffer previously returned by an environment or process FFI function.

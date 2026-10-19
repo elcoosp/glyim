@@ -2161,18 +2161,120 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::Div => {
                 if l.is_int_value() && r.is_int_value() {
-                    let result = if self.is_signed_int_ty(operand_ty) {
-                        self.builder.build_int_signed_div(
-                            l.into_int_value(),
-                            r.into_int_value(),
-                            "div",
-                        )
+                    // Rust panics on integer division by zero, and on the
+                    // signed overflow `INT_MIN / -1`. Emitting a raw `sdiv`
+                    // makes both cases trap the *process* (SIGFPE, exit 136
+                    // / 140), which is observable behaviour that diverges
+                    // from Rust and from the interpreter (both report a
+                    // panic, exit 101). Guard the operation: branch to an
+                    // abort block when the divisor is 0 (or, for signed,
+                    // when it is -1 and the dividend is INT_MIN), then
+                    // perform the division on the fall-through block.
+                    let li = l.into_int_value();
+                    let ri = r.into_int_value();
+                    let is_signed = self.is_signed_int_ty(operand_ty);
+                    let zero = ri.get_type().const_zero();
+                    let mut should_panic = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, ri, zero, "div_by_zero")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "div zero cmp: {:?}",
+                                e
+                            ))]
+                        })?;
+                    if is_signed {
+                        let bits = ri.get_type().get_bit_width();
+                        let minus_one = ri.get_type().const_all_ones();
+                        let int_min = ri
+                            .get_type()
+                            .const_int(1u64 << (bits - 1), false);
+                        let is_neg_one = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                ri,
+                                minus_one,
+                                "div_neg_one",
+                            )
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "div -1 cmp: {:?}",
+                                    e
+                                ))]
+                            })?;
+                        let is_min = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                li,
+                                int_min,
+                                "div_int_min",
+                            )
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "div min cmp: {:?}",
+                                    e
+                                ))]
+                            })?;
+                        let overflow = self
+                            .builder
+                            .build_and(is_neg_one, is_min, "div_overflow")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "div overflow and: {:?}",
+                                    e
+                                ))]
+                            })?;
+                        should_panic = self
+                            .builder
+                            .build_or(should_panic, overflow, "div_should_panic")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "div or: {:?}",
+                                    e
+                                ))]
+                            })?;
+                    }
+                    let panic_bb = self
+                        .context
+                        .append_basic_block(self.function, "div_panic");
+                    let cont_bb = self
+                        .context
+                        .append_basic_block(self.function, "div_cont");
+                    self.builder
+                        .build_conditional_branch(should_panic, panic_bb, cont_bb)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "div branch: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder.position_at_end(panic_bb);
+                    let abort_fn = self
+                        .module
+                        .get_function("glyim_process_abort")
+                        .unwrap_or_else(|| {
+                            let fn_ty = self.context.void_type().fn_type(&[], false);
+                            self.module.add_function("glyim_process_abort", fn_ty, None)
+                        });
+                    self.builder.build_call(abort_fn, &[], "").map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "div abort call: {:?}",
+                            e
+                        ))]
+                    })?;
+                    self.builder.build_unreachable().map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "div abort un: {:?}",
+                            e
+                        ))]
+                    })?;
+                    self.builder.position_at_end(cont_bb);
+                    let result = if is_signed {
+                        self.builder.build_int_signed_div(li, ri, "div")
                     } else {
-                        self.builder.build_int_unsigned_div(
-                            l.into_int_value(),
-                            r.into_int_value(),
-                            "div",
-                        )
+                        self.builder.build_int_unsigned_div(li, ri, "div")
                     };
                     result.map(|v| v.as_basic_value_enum()).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
@@ -2198,18 +2300,114 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             BinOp::Rem => {
                 if l.is_int_value() && r.is_int_value() {
-                    let result = if self.is_signed_int_ty(operand_ty) {
-                        self.builder.build_int_signed_rem(
-                            l.into_int_value(),
-                            r.into_int_value(),
-                            "rem",
-                        )
+                    // Same rationale as `BinOp::Div`: a zero divisor (or
+                    // `INT_MIN % -1` for signed) traps the process in raw
+                    // LLVM but panics in Rust. Guard and route to abort.
+                    let li = l.into_int_value();
+                    let ri = r.into_int_value();
+                    let is_signed = self.is_signed_int_ty(operand_ty);
+                    let zero = ri.get_type().const_zero();
+                    let mut should_panic = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, ri, zero, "rem_by_zero")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "rem zero cmp: {:?}",
+                                e
+                            ))]
+                        })?;
+                    if is_signed {
+                        let bits = ri.get_type().get_bit_width();
+                        let minus_one = ri.get_type().const_all_ones();
+                        let int_min = ri
+                            .get_type()
+                            .const_int(1u64 << (bits - 1), false);
+                        let is_neg_one = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                ri,
+                                minus_one,
+                                "rem_neg_one",
+                            )
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "rem -1 cmp: {:?}",
+                                    e
+                                ))]
+                            })?;
+                        let is_min = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                li,
+                                int_min,
+                                "rem_int_min",
+                            )
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "rem min cmp: {:?}",
+                                    e
+                                ))]
+                            })?;
+                        let overflow = self
+                            .builder
+                            .build_and(is_neg_one, is_min, "rem_overflow")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "rem overflow and: {:?}",
+                                    e
+                                ))]
+                            })?;
+                        should_panic = self
+                            .builder
+                            .build_or(should_panic, overflow, "rem_should_panic")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "rem or: {:?}",
+                                    e
+                                ))]
+                            })?;
+                    }
+                    let panic_bb = self
+                        .context
+                        .append_basic_block(self.function, "rem_panic");
+                    let cont_bb = self
+                        .context
+                        .append_basic_block(self.function, "rem_cont");
+                    self.builder
+                        .build_conditional_branch(should_panic, panic_bb, cont_bb)
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "rem branch: {:?}",
+                                e
+                            ))]
+                        })?;
+                    self.builder.position_at_end(panic_bb);
+                    let abort_fn = self
+                        .module
+                        .get_function("glyim_process_abort")
+                        .unwrap_or_else(|| {
+                            let fn_ty = self.context.void_type().fn_type(&[], false);
+                            self.module.add_function("glyim_process_abort", fn_ty, None)
+                        });
+                    self.builder.build_call(abort_fn, &[], "").map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "rem abort call: {:?}",
+                            e
+                        ))]
+                    })?;
+                    self.builder.build_unreachable().map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "rem abort un: {:?}",
+                            e
+                        ))]
+                    })?;
+                    self.builder.position_at_end(cont_bb);
+                    let result = if is_signed {
+                        self.builder.build_int_signed_rem(li, ri, "rem")
                     } else {
-                        self.builder.build_int_unsigned_rem(
-                            l.into_int_value(),
-                            r.into_int_value(),
-                            "rem",
-                        )
+                        self.builder.build_int_unsigned_rem(li, ri, "rem")
                     };
                     result.map(|v| v.as_basic_value_enum()).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
@@ -3232,6 +3430,30 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         LLVMBuildCleanupRet(self.builder.as_mut_ptr(), pad, std::ptr::null_mut());
                     }
                 } else {
+                    // No landingpad / SEH funclet: this block cannot
+                    // continue. Reaching it is a runtime abort — the
+                    // common source is a diverging intrinsic with no body
+                    // (`panic_any`, `unreachable!`), which lowering folds
+                    // to `Unreachable`. Emitting raw `build_unreachable()`
+                    // here is UB: LLVM is free to fall through into
+                    // whatever follows, and the process dies with
+                    // SIGILL/SIGTRAP (observed exit 133/132), not with a
+                    // meaningful status. Route it through
+                    // `glyim_process_abort` (exit 101, matching the
+                    // interpreter's panic contract and Rust's panic exit
+                    // code) so the two backends agree.
+                    let abort_fn = self
+                        .module
+                        .get_function("glyim_process_abort")
+                        .unwrap_or_else(|| {
+                            let fn_ty = self.context.void_type().fn_type(&[], false);
+                            self.module.add_function("glyim_process_abort", fn_ty, None)
+                        });
+                    self.builder.build_call(abort_fn, &[], "").map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "abort call: {e:?}"
+                        ))]
+                    })?;
                     self.builder
                         .build_unreachable()
                         .expect("unreachable failed");

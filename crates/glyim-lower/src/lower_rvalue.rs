@@ -567,6 +567,38 @@ impl<'a> MirBuilder<'a> {
                             ),
                             expr.span,
                         );
+                        // A `-> !` sentinel (`panic_any`) never returns, so
+                        // the current block must be terminated as
+                        // `Unreachable`. Leaving it open makes the *caller*
+                        // (e.g. the `assert!` desugar's match arm) still
+                        // emit its normal "assign + Goto(merge)" epilogue
+                        // into an already-terminated block — and, when the
+                        // caller has no fall-through, the freshly-created
+                        // continuation block is never patched and stays a
+                        // dangling `Unreachable` that later gets rewritten to
+                        // `Goto(self)`, an infinite loop. `assert!(false)`
+                        // hung for exactly this reason.
+                        // `expr.ty` is unreliable here: for `panic_any(msg:
+                        // impl Display)` the call expression's recorded type
+                        // is the unresolved impl-Trait `Param(0)`, not `Never`.
+                        // Consult the *registered* signature instead.
+                        let sig_returns_never = self
+                            .ctx
+                            .ty_ctx()
+                            .fn_sig(*def_id)
+                            .map(|sig| {
+                                matches!(
+                                    self.ctx.ty_ctx().ty_kind(sig.output),
+                                    glyim_type::TyKind::Never
+                                )
+                            })
+                            .unwrap_or(false);
+                        if sig_returns_never {
+                            self.terminate(
+                                glyim_mir::TerminatorKind::Unreachable,
+                                expr.span,
+                            );
+                        }
                         return glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(
                             glyim_mir::Place::new(dest_local),
                         ));
