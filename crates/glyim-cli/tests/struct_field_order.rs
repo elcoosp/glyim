@@ -10,13 +10,16 @@ use std::io::Write;
 use std::process::Command;
 
 fn tempdir() -> std::path::PathBuf {
+    // A monotonic counter guarantees uniqueness even when two tests in
+    // this binary call `tempdir()` within the same nanosecond (they run
+    // in parallel under `cargo test` / `cargo llvm-cov`). PID + nanos
+    // alone is not unique.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let p = std::env::temp_dir().join(format!(
         "glyim_field_order_{}_{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
+        n,
     ));
     std::fs::create_dir_all(&p).unwrap();
     p
