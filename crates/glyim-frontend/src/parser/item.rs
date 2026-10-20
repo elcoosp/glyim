@@ -42,6 +42,45 @@ impl<'a> Parser<'a> {
             return;
         }
 
+        // Item-position macro invocation: `include!("...")`, and any other
+        // macro call in the item *category*. glyim only had the
+        // expression-position parse (`expr.rs::parse_postfix_expr`), so
+        // `include!(..)` at item position fell through to "expected item,
+        // found Ident" — which made the expander's `BuiltinMacro::Include`
+        // arm unreachable: the parser rejected the program before expansion
+        // ever ran.
+        if matches!(
+            self.current_kind(),
+            SyntaxKind::Ident
+                | SyntaxKind::KwCrate
+                | SyntaxKind::KwSuper
+                | SyntaxKind::KwSelf
+        ) && self.next_non_ws_kind() == SyntaxKind::Bang
+        {
+            let cp = self.checkpoint();
+            self.bump(); // first path segment
+            while self.current_kind() == SyntaxKind::ColonColon {
+                self.bump(); // ::
+                if self.current_kind() == SyntaxKind::Ident {
+                    self.bump();
+                } else {
+                    break;
+                }
+            }
+            if self.current_kind() == SyntaxKind::Bang {
+                self.start_node_at(cp, SyntaxKind::MacroCall);
+                self.bump(); // !
+                self.parse_token_tree();
+                self.finish_node();
+                if self.current_kind() == SyntaxKind::Semicolon {
+                    self.bump();
+                }
+                return;
+            }
+            // Not a macro call after all; fall through and let the ordinary
+            // item dispatch report the real problem.
+        }
+
         match self.current_kind() {
             SyntaxKind::KwFn => self.parse_fn_def(),
             SyntaxKind::KwStruct => self.parse_struct_def(),

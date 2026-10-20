@@ -856,7 +856,8 @@ impl<'a> ExpanderImpl<'a> {
                     None,
                     vec![GlyimDiagnostic::type_error(
                         call_site,
-                        "include! for source-code inclusion is not yet supported;                          use a `mod` declaration or `include_str!` for string data."
+                        "include! for source-code inclusion is not yet supported; \
+                         use a `mod` declaration or `include_str!` for string data."
                             .to_string(),
                     )],
                 );
