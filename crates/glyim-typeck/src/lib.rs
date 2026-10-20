@@ -1768,6 +1768,26 @@ fn check_fn_items_in_module(
                     &param_map,
                     impl_span,
                 ));
+                // Record `impl Drop for X` so `TyCtx::needs_drop` — the
+                // single authority both `glyim-lower` and `glyim-opt`
+                // consult — knows `X` carries a destructor. Without this,
+                // `mark_has_drop` was never called by anything and
+                // `needs_drop` returned `false` for every user type, so
+                // `elaborate_scope_drops` emitted no `Drop` terminators and
+                // *no user `Drop` impl ever ran*. (It also meant the SEH
+                // funclet path had no cleanup edges to emit, which is why
+                // the Windows exception-handling support looked unreachable.)
+                //
+                // Done once per impl (not per method) because the answer is a
+                // property of the *type*, and an impl block with zero methods
+                // — `impl Drop for X {}` — still declares the destructor.
+                if let (Some(trait_path), Some(self_ty)) = (&impl_item.trait_ref, self_ty_opt)
+                    && let Some(trait_name) = trait_path.as_name()
+                    && ctx.name_str(trait_name) == "Drop"
+                    && let glyim_type::TyKind::Adt(adt_id, _) = ctx.ty_kind(self_ty)
+                {
+                    ctx.mark_has_drop(*adt_id);
+                }
                 for method in &impl_item.methods {
                     // Look up the id assigned by `pre_allocate_impl_method_ids`
                     // (which runs before any body check); fall back to a fresh
