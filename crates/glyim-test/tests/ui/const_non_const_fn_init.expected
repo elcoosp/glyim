@@ -1,0 +1,5 @@
+ERROR[C0001]: const evaluation error: unknown const fn `make`
+ --> const_non_const_fn_init.g:7:14
+        |
+7 | const K: S = make();
+        |              ^^^^^^

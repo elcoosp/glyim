@@ -439,6 +439,9 @@ impl<'a> PipelineLowerCtx<'a> {
                     .collect::<Option<Vec<_>>>()?;
                 MirConstKind::Aggregate(elems)
             }
+            // A bare zero-field struct name (`const G: Global = Global;`).
+            // Its value is an empty aggregate of the struct's ADT.
+            ConstValue::StructCtor(_adt_id) => MirConstKind::Aggregate(Vec::new()),
             ConstValue::Struct(vals) => {
                 let adt_id = match self.ty_ctx.ty_kind(ty) {
                     TyKind::Adt(adt_id, _) => *adt_id,

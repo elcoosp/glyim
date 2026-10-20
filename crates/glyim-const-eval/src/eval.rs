@@ -426,8 +426,18 @@ impl<'a> ConstEvaluator<'a> {
                         return Ok(ConstValue::Fn(fn_id));
                     }
                     if let Some(val) = self.lookup(name) {
-                        Ok(val.clone())
-                    } else {
+                        return Ok(val.clone());
+                    }
+                    // A bare path naming a *zero-field struct* is that
+                    // struct's unit constructor (`const GLOBAL: Global =
+                    // Global;`). Const-eval previously gave up here, which
+                    // forced typeck to suppress the error for ADT-typed
+                    // consts wholesale — and that suppression also hid
+                    // genuine failures in user code.
+                    if let Some(adt_id) = self.lookup_unit_struct(name) {
+                        return Ok(ConstValue::StructCtor(adt_id));
+                    }
+                    {
                         Err(ConstEvalError::new(
                             "path expressions not yet supported in const eval for non-local paths",
                             span,
@@ -1061,6 +1071,20 @@ impl<'a> ConstEvaluator<'a> {
                 "const >> requires integer operand and integer shift amount",
                 span,
             )),
+        }
+    }
+
+    /// If `name` resolves to a struct ADT with no fields, return its
+    /// `AdtId`. Used by `Expr::Path` to fold a bare zero-field struct name
+    /// (its unit constructor) into a `ConstValue`.
+    fn lookup_unit_struct(&self, name: Name) -> Option<glyim_core::def_id::AdtId> {
+        let ctx = self.ty_ctx?;
+        let adt_id = ctx.adt_id_by_name(name)?;
+        let def = ctx.adt_def(adt_id)?;
+        if def.kind == glyim_type::adt_def::AdtKind::Struct && def.fields.is_empty() {
+            Some(adt_id)
+        } else {
+            None
         }
     }
 

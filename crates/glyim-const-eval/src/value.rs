@@ -30,6 +30,12 @@ pub enum ConstValue {
     /// Range value (`start..end` / `start..=end`). Either bound may be absent
     /// (open-ended range). Produced by constant evaluation of `Expr::Range`.
     Range(Option<Box<ConstValue>>, Option<Box<ConstValue>>, bool),
+    /// A bare struct name used as a value — a unit (zero-field) struct's
+    /// constructor, e.g. `const GLOBAL: Global = Global;`. Carries the
+    /// struct's `AdtId` so lowering can build the (empty) aggregate. Only
+    /// produced for zero-field structs; a struct with fields is not a value
+    /// and the path falls through to the usual diagnostic.
+    StructCtor(glyim_core::def_id::AdtId),
     /// Reference to a top-level `fn` item (its def id). Produced by
     /// constant evaluation of a `Path` that resolves to an fn def, so a
     /// `const F: fn(..) = some_fn;` / `static F: fn(..) = some_fn;` can

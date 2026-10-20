@@ -59,7 +59,7 @@ use glyim_solve::{FulfillmentCtx, InferenceTable, Obligation, ObligationCause, T
 use glyim_span::Span;
 use glyim_type::{
     AdtDef, AdtKind, FieldDef, FnSig, GenericArg, ImplPolarity, MethodDef, Predicate, TraitDef,
-    TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, TyKind, VariantDef,
+    TraitPredicate, TraitRef, Ty, TyCtx, TyCtxMut, VariantDef,
 };
 
 #[derive(Clone, Debug)]
@@ -2255,20 +2255,24 @@ fn check_fn_items_in_module(
                             all_const_values.insert(const_def_id, value);
                         }
                         Err(e) => {
-                            // Suppress the error for non-primitive const types.
-                            let is_primitive = matches!(
-                                ctx.ty_kind(const_ty),
-                                TyKind::Int(_)
-                                    | TyKind::Uint(_)
-                                    | TyKind::Float(_)
-                                    | TyKind::Bool
-                                    | TyKind::Char
-                                    | TyKind::Unit
-                                    | TyKind::String
-                            );
-                            if is_primitive {
-                                diagnostics.push(e.into_diagnostic());
-                            }
+                            // Surface every evaluation failure. This used to be
+                            // gated on `is_primitive` (the declared type), with
+                            // ADT-typed consts silently skipped on the theory
+                            // that MIR lowering would "materialize from the
+                            // ADT's default field layout". Lowering has no such
+                            // path — a non-folded const reached codegen as
+                            // `MirConstKind::ConstRef` and ICEd with
+                            // `[X0000] ConstRef(..) reached LLVM codegen`.
+                            //
+                            // The gate only existed because the const evaluator
+                            // could not fold the stdlib's
+                            // `const GLOBAL: Global = Global;` (a bare
+                            // zero-field struct name used as a value). The
+                            // evaluator now handles that via
+                            // `ConstValue::StructCtor`, so the stdlib produces
+                            // no eval errors and every remaining failure is a
+                            // genuine bug in the source being compiled.
+                            diagnostics.push(e.into_diagnostic());
                         }
                     }
                 }
