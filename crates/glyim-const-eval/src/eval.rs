@@ -421,6 +421,14 @@ impl<'a> ConstEvaluator<'a> {
                 Ok(ConstValue::Tuple(values))
             }
             Expr::Path(path) => {
+                // Two-segment `Enum::Variant`. Resolve the *qualifier* to an
+                // ADT and then match the variant by name within it — the
+                // unscoped `variant_by_name` would match any ADT in the crate.
+                if path.segments.len() == 2
+                    && let Some(adt_id) = self.lookup_variant_path(path)
+                {
+                    return Ok(adt_id);
+                }
                 if let Some(name) = path.as_name() {
                     if let Some(&fn_id) = self.fn_defs.get(&name) {
                         return Ok(ConstValue::Fn(fn_id));
@@ -1072,6 +1080,30 @@ impl<'a> ConstEvaluator<'a> {
                 span,
             )),
         }
+    }
+
+    /// Resolve a two-segment `Enum::Variant` path to a
+    /// `ConstValue::Variant` (unit variants only — a data-carrying variant
+    /// is a constructor, not a value).
+    fn lookup_variant_path(&self, path: &glyim_hir::Path) -> Option<ConstValue> {
+        let ctx = self.ty_ctx?;
+        let qualifier = path.segments.first()?.name;
+        let variant_name = path.segments.get(1)?.name;
+        let adt_id = ctx.adt_id_by_name(qualifier)?;
+        let def = ctx.adt_def(adt_id)?;
+        let idx = def
+            .variants
+            .iter()
+            .position(|v| v.name == variant_name)?;
+        let variant = def.variants.get(idx)?;
+        if !variant.fields.is_empty() {
+            return None;
+        }
+        Some(ConstValue::Variant(
+            adt_id,
+            glyim_core::def_id::VariantIdx::from_raw(idx as u32),
+            Vec::new(),
+        ))
     }
 
     /// If `name` resolves to a struct ADT with no fields, return its

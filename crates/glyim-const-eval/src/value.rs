@@ -36,6 +36,15 @@ pub enum ConstValue {
     /// produced for zero-field structs; a struct with fields is not a value
     /// and the path falls through to the usual diagnostic.
     StructCtor(glyim_core::def_id::AdtId),
+    /// A constant enum value: `adt_id` + `variant_idx` select the
+    /// discriminant, `fields` are the variant's payload (empty for a unit
+    /// variant). Produced by constant evaluation of a path naming an enum
+    /// variant, e.g. `const K: C = C::B;`.
+    Variant(
+        glyim_core::def_id::AdtId,
+        glyim_core::def_id::VariantIdx,
+        Vec<ConstValue>,
+    ),
     /// Reference to a top-level `fn` item (its def id). Produced by
     /// constant evaluation of a `Path` that resolves to an fn def, so a
     /// `const F: fn(..) = some_fn;` / `static F: fn(..) = some_fn;` can

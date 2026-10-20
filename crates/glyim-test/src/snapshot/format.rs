@@ -444,6 +444,19 @@ fn format_const(c: &glyim_mir::MirConst) -> String {
             format!("aggregate([{}])", parts.join(", "))
         }
         glyim_mir::MirConstKind::SizeOf(t) => format!("size_of({:?})", t),
+        glyim_mir::MirConstKind::Variant {
+            adt_id,
+            variant_idx,
+            fields,
+        } => {
+            let parts: Vec<String> = fields.iter().map(format_const).collect();
+            format!(
+                "variant({:?}, {}, [{}])",
+                adt_id,
+                variant_idx.to_raw(),
+                parts.join(", ")
+            )
+        }
         glyim_mir::MirConstKind::StaticRef { def_id, is_mut, init } => format!(
             "static_ref({:?}, mut={}, init={})",
             def_id,

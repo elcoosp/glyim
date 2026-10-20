@@ -578,6 +578,19 @@ pub enum MirConstKind {
     },
     /// Variant.
     Aggregate(Vec<MirConst>),
+    /// A constant enum value: `adt_id` + `variant_idx` select the
+    /// discriminant, `fields` are the variant's payload. Distinct from
+    /// `Aggregate`, which carries no tag — codegen lowers an enum to an
+    /// opaque byte block whose tag lives at a layout-computed offset, so a
+    /// plain per-index insert cannot express it.
+    Variant {
+        /// The enum's ADT id.
+        adt_id: glyim_core::def_id::AdtId,
+        /// Which variant (the discriminant value).
+        variant_idx: VariantIdx,
+        /// The variant's payload fields, in declaration order.
+        fields: Vec<MirConst>,
+    },
     /// The size in bytes of a type, resolved *after* monomorphization.
     /// The slice-range lowering (`lower_dynamic_range_slice`) needs
     /// `size_of::<T>()` to scale a start index into a byte offset, but the

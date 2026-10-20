@@ -473,6 +473,96 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 global.set_linkage(inkwell::module::Linkage::Private);
                 Ok(global.as_pointer_value().as_basic_value_enum())
             }
+            MirConstKind::Variant {
+                adt_id,
+                variant_idx,
+                fields,
+            } => {
+                // A constant enum value. Codegen lays an enum out as an
+                // *opaque* byte block whose discriminant lives at a
+                // layout-computed offset (possibly encoded as a niche in one
+                // of the payload bytes), so `Aggregate`'s per-index insert
+                // cannot express it.
+                //
+                // Build the value as an all-zero constant of the enum's LLVM
+                // (opaque-sized) type, then write the tag bytes. Payload
+                // fields are not handled yet: the only const-eval path that
+                // produces a `Variant` today is a *unit* variant, which has
+                // no payload. A data-carrying variant reaching here means a
+                // new const-eval path was added without extending this arm;
+                // report that rather than silently emitting a tag-only value.
+                if !fields.is_empty() {
+                    return Err(vec![GlyimDiagnostic::internal_error(
+                        "constant enum value with payload fields is not yet \
+                         supported by the LLVM backend",
+                    )]);
+                }
+                let lc = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+                let layout = lc.layout_of(c.ty).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "constant enum layout failed: {:?}",
+                        e
+                    ))]
+                })?;
+                let llvm_ty = self.llvm_type_for_ty(c.ty)?;
+                let VariantsShape::Multiple {
+                    tag_encoding,
+                    tag_size,
+                    ..
+                } = &layout.variants
+                else {
+                    return Err(vec![GlyimDiagnostic::internal_error(
+                        "constant enum value has a single-variant layout",
+                    )]);
+                };
+                // The discriminant *value* to store depends on the encoding:
+                //   * Direct: the variant index itself.
+                //   * Niche: the niche encoding maps each non-untagged variant
+                //     to `niche_start + (idx - first_niche_variant)`; the
+                //     untagged variant stores its own discriminant, which is
+                //     the low `tag_size` bytes of an all-zero block — i.e. it
+                //     needs no write at all.
+                let (discr, needs_write) = match tag_encoding {
+                    TagEncoding::Direct => (variant_idx.index() as u128, true),
+                    TagEncoding::Niche {
+                        untagged_variant,
+                        niche_variants,
+                        niche_start,
+                    } => {
+                        if variant_idx.index() as u32 == *untagged_variant {
+                            (0, false)
+                        } else {
+                            let start = *niche_variants.start();
+                            (
+                                *niche_start
+                                    + (variant_idx.index() as u128 - start as u128),
+                                true,
+                            )
+                        }
+                    }
+                };
+                if !needs_write {
+                    return Ok(llvm_ty.const_zero().as_basic_value_enum());
+                }
+                // `llvm_ty` is an opaque byte block; build the tag as an
+                // integer of exactly `tag_size` bytes and splice it in.
+                // Write the discriminant little-endian into the first
+                // `tag_size` bytes of an otherwise-zero block. Inkwell offers
+                // no byte-level constant surgery, but the tag is a plain
+                // integer, so shift it out byte by byte.
+                let total = layout.size.0 as usize;
+                let mut bytes: Vec<u8> = vec![0u8; total];
+                let mut disc = discr;
+                for b in bytes.iter_mut().take(tag_size.0 as usize) {
+                    *b = (disc & 0xff) as u8;
+                    disc >>= 8;
+                }
+                // `const_string` produces `[N x i8]` with exactly these bytes;
+                // `llvm_ty` is an opaque struct of the same size, so the value
+                // is spliced into any destination slot of the enum's type via
+                // the byte-GEP store path used elsewhere.
+                Ok(self.context.const_string(&bytes, false).as_basic_value_enum())
+            }
             MirConstKind::Aggregate(elems) => {
                 // Emit a constant aggregate (tuple/array/struct) by recursively
                 // lowering each constant element and inserting it into a zero

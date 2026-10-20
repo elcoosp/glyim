@@ -442,6 +442,34 @@ impl<'a> PipelineLowerCtx<'a> {
             // A bare zero-field struct name (`const G: Global = Global;`).
             // Its value is an empty aggregate of the struct's ADT.
             ConstValue::StructCtor(_adt_id) => MirConstKind::Aggregate(Vec::new()),
+            // An enum variant used as a value (`const K: C = C::B;`).
+            ConstValue::Variant(adt_id, variant_idx, fields) => {
+                let field_tys: Vec<glyim_type::Ty> = match self.ty_ctx.ty_kind(ty) {
+                    TyKind::Adt(_, _) => {
+                        let def = self.ty_ctx.adt_def(*adt_id);
+                        def.and_then(|d| d.variants.get(variant_idx.index()))
+                            .map(|v| v.fields.iter().map(|f| f.ty).collect())
+                            .unwrap_or_default()
+                    }
+                    _ => Vec::new(),
+                };
+                let elems = fields
+                    .iter()
+                    .zip(field_tys.iter())
+                    .map(|(v, ft)| {
+                        Some(MirConst {
+                            kind: self.cv_const(v, *ft)?,
+                            ty: *ft,
+                            span: Span::DUMMY,
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                MirConstKind::Variant {
+                    adt_id: *adt_id,
+                    variant_idx: glyim_mir::VariantIdx::from_raw(variant_idx.to_raw()),
+                    fields: elems,
+                }
+            }
             ConstValue::Struct(vals) => {
                 let adt_id = match self.ty_ctx.ty_kind(ty) {
                     TyKind::Adt(adt_id, _) => *adt_id,

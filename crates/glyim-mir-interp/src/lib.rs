@@ -1955,6 +1955,22 @@ impl<'tcx> Interpreter<'tcx> {
                 let def_id = DefId::new(crate_id, local_def_id);
                 Ok(InterpValue::ConstRef(def_id))
             }
+            MirConstKind::Variant {
+                adt_id: _,
+                variant_idx,
+                fields,
+            } => {
+                // Enum values are laid out as `[disc, ...payload]` in this
+                // interpreter (see `Rvalue::Aggregate`'s enum arm and
+                // `Rvalue::Discriminant`). Build the same shape so a
+                // `match` on the constant selects the right arm.
+                let mut tagged = Vec::with_capacity(fields.len() + 1);
+                tagged.push(InterpValue::Int(variant_idx.index() as i128));
+                for f in fields {
+                    tagged.push(self.eval_mir_const(f)?);
+                }
+                Ok(InterpValue::Aggregate(tagged))
+            }
             MirConstKind::Aggregate(elems) => {
                 let mut values = Vec::with_capacity(elems.len());
                 for e in elems {
