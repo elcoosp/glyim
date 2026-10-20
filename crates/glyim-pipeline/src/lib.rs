@@ -209,8 +209,25 @@ impl Pipeline {
         {
             return None;
         }
+        // The *expanded* tree, not the raw parse. `expand_crate` can splice
+        // items in (`include!`) or rewrite a macro call into statements, and
+        // every inserted item shifts the `LocalDefId`s the later def-map
+        // assigns. Building this map from the unexpanded tree therefore
+        // yields ids from a different numbering: with
+        // `include!("a.g"); fn main() { .. }` where `a.g` defines `fn a`,
+        // the stale id for `main` pointed at `a` — the binary compiled and
+        // then ran `a` as the entry point.
+        //
+        // Proc-macro expansion is deliberately not run here (it would need
+        // the registry threaded through); builtin expansion — which is what
+        // `include!` is — covers the cases that shift ids today.
+        let mut hygiene = glyim_span::HygieneCtx::new();
+        let mut expander = glyim_meta::Expander::new(&mut hygiene);
+        expander.set_source_file(file_id);
+        expander.set_vfs(db.vfs());
+        let (expanded_root, _) = expander.expand_crate(&parse_result.root);
         let (def_map, _def_diags) =
-            glyim_def_map::build_def_map(&parse_result.root, db.krate(), db.interner().clone());
+            glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
         let main_name = db.interner().intern("main");
         def_map
             .modules
@@ -332,6 +349,12 @@ impl Pipeline {
         let expanded_root = {
             let mut hygiene = glyim_span::HygieneCtx::new();
             let mut expander = glyim_meta::Expander::new(&mut hygiene);
+            // Anchor `file!`/`include!`/`line!` to the real source and let
+            // `include!` resolve relative paths against the calling file.
+            // Without these the expander sees `FileId::BOGUS` and no VFS, so
+            // a relative `include!("items.g")` cannot find its target.
+            expander.set_source_file(file_id);
+            expander.set_vfs(db.vfs());
             if let Some(reg) = proc_registry
                 && !reg.is_empty()
             {
@@ -915,6 +938,8 @@ pub fn compile_file_to_mir(
     // handlers in `glyim-meta` fire.
     let mut hygiene = glyim_span::HygieneCtx::new();
     let mut expander = glyim_meta::Expander::new(&mut hygiene);
+    expander.set_source_file(file_id);
+    expander.set_vfs(db.vfs());
     let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
     if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
         let dump = expanded_root.text().to_string();

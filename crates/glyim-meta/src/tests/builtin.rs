@@ -322,20 +322,25 @@ fn vfs_backed_line_column_and_include() {
         },
         span: Span::DUMMY,
     });
-    // T171-PATCHED [MAC-8]: `include!` for source-code inclusion is not
-    // yet wired through the full tokenizer/parser; the expander emits a
-    // 'not yet supported' diagnostic. This test verifies the diagnostic
-    // fires (and that the VFS path plumbing stays exercised through the
-    // `line!` case above, which still works).
-    let (_inc_expanded, inc_diags) = expander2.expand_crate(&inc_root);
+    // `include!` now really splices the target file's tokens in. The
+    // footer contains `42`, so the expansion must contain `42` and must
+    // NOT contain a residual `include!`.
+    let (inc_expanded, inc_diags) = expander2.expand_crate(&inc_root);
     assert!(
-        !inc_diags.is_empty(),
-        "include! must produce the 'not yet supported' diagnostic"
+        inc_diags.is_empty(),
+        "include! of an existing file must not diagnose: {:?}",
+        inc_diags
+    );
+    let inc_text = inc_expanded.text().to_string();
+    assert!(
+        inc_text.contains("42"),
+        "include! should splice the file's contents (expected `42`), got: {}",
+        inc_text
     );
     assert!(
-        inc_diags.iter().any(|d| d.message.contains("include!")),
-        "diagnostic should name include!: {:?}",
-        inc_diags
+        !inc_text.contains("include!"),
+        "include! should be expanded away, got: {}",
+        inc_text
     );
 }
 

@@ -71,10 +71,15 @@ impl<'a> Parser<'a> {
                 self.start_node_at(cp, SyntaxKind::MacroCall);
                 self.bump(); // !
                 self.parse_token_tree();
-                self.finish_node();
+                // Consume the statement terminator *inside* the MacroCall
+                // node. The driver replaces the whole MacroCall node with the
+                // expansion, so a `;` left outside would survive as a stray
+                // token — and at item position a lone `;` reparses as
+                // "expected item, found Semicolon".
                 if self.current_kind() == SyntaxKind::Semicolon {
                     self.bump();
                 }
+                self.finish_node();
                 return;
             }
             // Not a macro call after all; fall through and let the ordinary

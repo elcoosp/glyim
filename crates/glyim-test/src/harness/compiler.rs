@@ -245,7 +245,17 @@ impl TestCompiler for PipelineCompiler {
         // The path is unique per fixture (it is the fixture), so concurrent
         // tests never collide.
         let path = source_path.to_path_buf();
-        db.vfs().add_file_content(&path, Arc::from(source));
+        // Capture the id the VFS actually assigned. Parsing with the
+        // *caller-supplied* `file_id` instead leaves every span pointing at a
+        // file the VFS has no path for, so `include!` (which resolves a
+        // relative path against `vfs.file_path(call_site.file)`) cannot find
+        // its target and falls back to a cwd-relative path.
+        // Keep the caller-supplied id for artifact paths (tests assert it),
+        // and use the VFS-assigned id for parsing so `vfs.file_path(span.file)`
+        // resolves — `include!` needs that to find a relative target.
+        let caller_file_id = file_id;
+        let vfs_file_id = db.vfs().add_file_content(&path, Arc::from(source));
+        let file_id = vfs_file_id;
 
         // Phase 9.2: run macro expansion over the parsed source *before* the
         // rest of the pipeline consumes it. Declarative + builtin macros always
@@ -259,6 +269,10 @@ impl TestCompiler for PipelineCompiler {
         if initial_parse.diagnostics.is_empty() {
             let mut hygiene = glyim_span::HygieneCtx::new();
             let mut expander = glyim_meta::Expander::new(&mut hygiene);
+            // `include!` needs the calling file's id (to resolve a relative
+            // path against its directory) and the VFS (to look that path up).
+            expander.set_source_file(file_id);
+            expander.set_vfs(db.vfs());
             if let Some(reg) = self.proc_registry.as_ref() {
                 expander.with_proc_registry(Some(reg.as_ref()));
             }
@@ -275,8 +289,11 @@ impl TestCompiler for PipelineCompiler {
             db.vfs().add_file_content(&path, Arc::from(expanded_src));
         }
 
-        let output_path =
-            std::env::temp_dir().join(format!("glyim_test_{}_{}.o", unique_tag, file_id.to_raw()));
+        let output_path = std::env::temp_dir().join(format!(
+            "glyim_test_{}_{}.o",
+            unique_tag,
+            caller_file_id.to_raw()
+        ));
         let ty_ctx = db.get_ty_ctx();
         let exe_path = output_path.with_extension("");
 

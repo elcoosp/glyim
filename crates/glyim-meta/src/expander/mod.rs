@@ -258,10 +258,48 @@ impl<'a> ExpanderImpl<'a> {
                 // so that expression/statement tokens are correctly parsed as MacroCalls.
                 let temp_root = SyntaxNode::new_root(green.clone());
                 let token_text = temp_root.text().to_string();
-                // Wrap in a function body to parse in statement context
-                let wrapped = format!("fn __glyim_expanded() {{ {} }}", token_text);
+                // The reparse context must match the position the expansion
+                // lands in. Expression/statement-position macros (the vast
+                // majority) are reparsed inside a function body; an
+                // *item*-position macro (`include!("items.g");` at the top
+                // level) must be reparsed as items, or the wrapper's `fn`
+                // scaffolding swallows the result and the spliced items
+                // never appear.
+                let in_item_position = node
+                    .parent()
+                    .map(|p| {
+                        matches!(
+                            p.kind(),
+                            SyntaxKind::SourceFile | SyntaxKind::Module
+                        )
+                    })
+                    .unwrap_or(false);
+                let wrapped = if in_item_position {
+                    token_text
+                } else {
+                    format!("fn __glyim_expanded() {{ {} }}", token_text)
+                };
                 let parse_result = glyim_frontend::parse_to_syntax(&wrapped, FileId::BOGUS);
                 let reparsed_root = parse_result.root;
+                if in_item_position {
+                    // Item-position expansion: the reparse produced items at
+                    // the top level, so emit every child verbatim (recursing
+                    // for nested macro calls). The function-body logic below
+                    // looks for a `FnDef` and would find none here, silently
+                    // dropping the included items.
+                    for child in reparsed_root.children_with_tokens() {
+                        match child {
+                            rowan::NodeOrToken::Node(n) => {
+                                self.expand_node_recursive(&n, depth + 1, builder, diagnostics);
+                            }
+                            rowan::NodeOrToken::Token(t) => {
+                                let kind = GlyimLang::kind_to_raw(t.kind());
+                                builder.token(kind, t.text());
+                            }
+                        }
+                    }
+                    return;
+                }
                 // Find the function body block and expand its statements
                 for child in reparsed_root.children_with_tokens() {
                     match child {
@@ -839,28 +877,64 @@ impl<'a> ExpanderImpl<'a> {
                 }
             }
             BuiltinMacro::Include => {
-                // T171-PATCHED [MAC-8]: `include!` in Rust splices the
-                // file's *tokens* into the program at the call site, so
-                // `include!("items.g");` at item position includes the
-                // items. The previous implementation was byte-for-byte
-                // identical to `include_str!` — it produced a string
-                // literal — so an `include!("items.g");` in item
-                // position expanded to a stray string, and there was no
-                // way to include code. Faithfully tokenizing the file
-                // needs the full lexer + parser plumbing that isn't yet
-                // wired here; emit an explicit "not supported" diagnostic
-                // so users are not silently misled.
-                let _ = args_node;
-                let _ = (self.vfs, call_site);
-                return (
-                    None,
-                    vec![GlyimDiagnostic::type_error(
-                        call_site,
-                        "include! for source-code inclusion is not yet supported; \
-                         use a `mod` declaration or `include_str!` for string data."
-                            .to_string(),
-                    )],
-                );
+                // `include!("path")` splices the file's *tokens* into the
+                // program at the call site: `include!("items.g");` at item
+                // position includes the items. Resolve the path exactly as
+                // `include_str!` does (absolute wins, otherwise relative to
+                // the calling file), read it, and lex it back into a token
+                // tree — `build_expansion_green` then turns that into the
+                // green node the driver splices in.
+                let args_tt = flatten_token_tree(args_node);
+                let Some(path_str) = first_string_lit(&args_tt) else {
+                    return (
+                        None,
+                        vec![GlyimDiagnostic::type_error(
+                            call_site,
+                            "include! expects a string literal path".to_string(),
+                        )],
+                    );
+                };
+                let path = Path::new(path_str);
+                let resolved = if path.is_absolute() {
+                    path.to_path_buf()
+                } else if let Some(vfs) = self.vfs {
+                    vfs.file_path(call_site.file)
+                        .and_then(|calling| {
+                            calling
+                                .parent()
+                                .map(|dir| dir.join(path_str))
+                        })
+                        .unwrap_or_else(|| PathBuf::from(path_str))
+                } else {
+                    PathBuf::from(path_str)
+                };
+                let content = match fs::read_to_string(&resolved) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return (
+                            None,
+                            vec![GlyimDiagnostic::type_error(
+                                call_site,
+                                format!(
+                                    "failed to read included file '{}': {}",
+                                    resolved.display(),
+                                    e
+                                ),
+                            )],
+                        );
+                    }
+                };
+                // Lex with trivia so comments/whitespace round-trip, then
+                // emit each token as a `TokenTree::Token`.
+                let lexed = glyim_frontend::lex_with_trivia(&content, call_site.file);
+                let trees: Vec<TokenTree> = lexed
+                    .tokens
+                    .iter()
+                    .map(|t| TokenTree::Token(t.kind, t.text.clone()))
+                    .collect();
+                let green =
+                    self.build_expansion_green(&trees, call_site, _depth, name, false);
+                return (Some(green), Vec::new());
             }
             BuiltinMacro::Concat => {
                 // concat!(a, b, ...) concatenates string representations, skipping punctuation

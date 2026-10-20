@@ -1,0 +1,2 @@
+// ignore
+pub fn inner() -> i32 { 3 }

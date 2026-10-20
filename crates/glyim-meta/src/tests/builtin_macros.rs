@@ -226,7 +226,8 @@ fn test_option_env_macro() {
 fn test_include_macro() {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("test.txt");
-    let content = "Hello, include!";
+    // `include!` splices *tokens*, so the fixture must be lexable source.
+    let content = "fn included() -> i32 { 42 }";
     fs::write(&file_path, content).unwrap();
 
     let mut hygiene = HygieneCtx::default();
@@ -245,23 +246,24 @@ fn test_include_macro() {
     let args = SyntaxNode::new_root(builder.finish());
     let name = expander.interner().intern("include");
 
-    let _result = expander.expand(name, &args, span);
-    // T171-PATCHED [MAC-8]: `include!` for source-code inclusion is not
-    // yet wired through the full tokenizer/parser; the expander emits an
-    // explicit "not yet supported" diagnostic rather than producing a
-    // string literal byte-identical to `include_str!`.
     let result = expander.expand(name, &args, span);
     assert!(
-        !result.diagnostics.is_empty(),
-        "include! must report the 'not yet supported' diagnostic"
-    );
-    assert!(
-        result
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("include!")),
-        "diagnostic should name include!: {:?}",
+        result.diagnostics.is_empty(),
+        "include! of an existing file must not diagnose: {:?}",
         result.diagnostics
+    );
+    let text = result.expanded.expect("include! should expand").text().to_string();
+    // The file's tokens are spliced in verbatim.
+    assert!(
+        text.contains("included"),
+        "include! should splice the file's tokens, got: {text}"
+    );
+    // The expansion IS the file's contents, so it contains `included` (the
+    // fixture's fn name). What must be gone is the macro *invocation*
+    // syntax — a residual `include!(` would mean expansion didn't happen.
+    assert!(
+        !text.contains("include!("),
+        "the include! invocation should be expanded away, got: {text}"
     );
 }
 
