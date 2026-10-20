@@ -31,8 +31,9 @@ enum Commands {
         /// Target triple.
         #[arg(long)]
         target: Option<String>,
-        /// Codegen backend.
-        #[arg(long, default_value = "bytecode")]
+        /// Codegen backend: `llvm` (native executable, the default) or
+        /// `bytecode` (glyim's own opcode format; not directly runnable).
+        #[arg(long, default_value = "llvm")]
         backend: String,
         /// Optimisation level (0–3).
         #[arg(long, default_value_t = 0)]
@@ -131,11 +132,23 @@ fn main() {
             let opts = glyip::config::RunOptions {
                 release,
                 args,
-                backend: "bytecode".to_string(),
+                // A `run` needs something the OS can exec, which only the
+                // LLVM backend produces.
+                backend: "llvm".to_string(),
                 target,
                 lto: parse_lto(&lto),
             };
-            glyip::cmd_run(&project_dir, &opts).map(|_| ())
+            // `glyip run` must exit with the *child's* status — it is a
+            // transparent wrapper. Returning `Ok(())` here made `glyip run`
+            // always exit 0, so a failing program looked like a passing
+            // command.
+            // `std::process::exit` has type `!`, so the `Ok` arm diverges and
+            // the `match` yields the `Err` arm's type — no trailing expression
+            // needed.
+            match glyip::cmd_run(&project_dir, &opts) {
+                Ok(run) => std::process::exit(run.exit_code),
+                Err(e) => Err(e),
+            }
         }
     };
 

@@ -224,7 +224,7 @@ fn default_build_options() {
     let opts = BuildOptions::default();
     assert!(!opts.release);
     assert!(opts.target.is_none());
-    assert_eq!(opts.backend, "bytecode");
+    assert_eq!(opts.backend, "llvm");
     assert_eq!(opts.opt_level, 0);
 }
 
@@ -233,7 +233,8 @@ fn default_run_options() {
     let opts = RunOptions::default();
     assert!(!opts.release);
     assert!(opts.args.is_empty());
-    assert_eq!(opts.backend, "bytecode");
+    // `run` needs something the OS can exec.
+    assert_eq!(opts.backend, "llvm");
 }
 
 #[test]

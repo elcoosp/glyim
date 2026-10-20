@@ -31,15 +31,15 @@ fn run_with_project() {
     let project_path = create_test_project(dir.path(), &name);
 
     let opts = RunOptions::default();
-    let result = cmd_run(&project_path, &opts);
-    match result {
-        Ok(r) => {
-            assert!(r.binary.to_string_lossy().contains(&name));
-        }
-        Err(_) => {
-            // Expected if the compiler pipeline isn't fully wired up.
-        }
-    }
+    // This must now actually *work*. It previously swallowed every error
+    // ("expected if the compiler pipeline isn't fully wired up"), which is
+    // how `glyip run` shipped for months producing an unrunnable bytecode
+    // blob and then trying to exec it: the only test that exercised the
+    // path treated any failure as acceptable.
+    let r = cmd_run(&project_path, &opts).expect("glyip run must build and run the project");
+    assert!(r.binary.to_string_lossy().contains(&name));
+    // The generated project's `main` returns 0.
+    assert_eq!(r.exit_code, 0, "generated project must exit 0");
 }
 
 #[test]

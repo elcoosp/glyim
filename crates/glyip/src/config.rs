@@ -261,7 +261,7 @@ impl Default for BuildOptions {
         Self {
             release: false,
             target: None,
-            backend: "bytecode".to_string(),
+            backend: "llvm".to_string(),
             opt_level: 0,
             lto: None,
         }
@@ -308,7 +308,7 @@ impl Default for RunOptions {
         Self {
             release: false,
             args: Vec::new(),
-            backend: "bytecode".to_string(),
+            backend: "llvm".to_string(),
             target: None,
             lto: None,
         }

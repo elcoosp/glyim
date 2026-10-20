@@ -474,7 +474,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 Ok(global.as_pointer_value().as_basic_value_enum())
             }
             MirConstKind::Variant {
-                adt_id,
+                adt_id: _,
                 variant_idx,
                 fields,
             } => {

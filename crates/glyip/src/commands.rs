@@ -647,12 +647,13 @@ fn compile_source(
     let _source = fs::read_to_string(entry)?;
 
     // Set up the compiler database.
+    // Target the host unless the user pinned one: a `glyip build` artifact is
+    // meant to *run* on this machine, and an object built for the wrong triple
+    // links (or runs) only by accident.
+    let target_triple = opts.target.clone().unwrap_or_else(host_target_triple);
     let crate_config = CrateConfig {
         name: config.package.name.clone(),
-        target_triple: opts
-            .target
-            .clone()
-            .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string()),
+        target_triple: target_triple.clone(),
         opt_level: opts.opt_level,
     };
     let mut db = Database::new(crate_config);
@@ -664,15 +665,29 @@ fn compile_source(
         return Err(GlyipError::BuildFailed(diags));
     }
 
+    // A build produces something `glyip run` execs, so the object needs a
+    // C-ABI `main` entry symbol. Resolve it here (after the stdlib was
+    // injected, since injection rewrites the file) and hand it to the
+    // backend exactly as `compile_and_run_compiled` does.
+    let entry_main = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, entry);
+
     // Select the codegen backend.
-    #[cfg(feature = "llvm")]
+    //
+    // `glyim-codegen-llvm` is a non-optional dependency, so the previous
+    // `#[cfg(feature = "llvm")]` gate only ever made LLVM *unreachable* in
+    // a default build — `glyip build` silently produced bytecode, which
+    // `glyip run` then could not exec.
     let backend: Box<dyn glyim_codegen::CodegenBackend> = if opts.backend == "llvm" {
-        Box::new(
-            glyim_codegen_llvm::LlvmBackend::new().with_lto(
+        let mut llvm = glyim_codegen_llvm::LlvmBackend::new()
+            .with_target(target_triple.clone())
+            .with_lto(
                 opts.lto
                     .unwrap_or(glyim_codegen_llvm::passes::LtoKind::None),
-            ),
-        )
+            );
+        if let Some(main_id) = entry_main {
+            llvm = llvm.with_entry_main(main_id);
+        }
+        Box::new(llvm)
     } else {
         let ctx = glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze();
         Box::new(glyim_codegen::BytecodeBackend::with_ty_ctx(
@@ -680,37 +695,72 @@ fn compile_source(
             glyim_core::TargetInfo::default(),
         ))
     };
-    #[cfg(not(feature = "llvm"))]
-    let backend: Box<dyn glyim_codegen::CodegenBackend> = {
-        if opts.backend == "llvm" {
-            tracing::warn!("LLVM backend requested but not compiled in, falling back to bytecode");
-        }
-        let ctx = glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze();
-        Box::new(glyim_codegen::BytecodeBackend::with_ty_ctx(
-            std::sync::Arc::new(ctx),
-            glyim_core::TargetInfo::default(),
-        ))
-    };
 
-    // Run the pipeline.
+    // Run the pipeline. `output_path` is the *object* the pipeline writes;
+    // the value `cmd_run` execs is `bin_path`, produced by the link step
+    // below.
     let output_dir = cache.output_dir_for_target(opts.release, opts.target.as_deref());
     fs::create_dir_all(&output_dir)?;
-    let output_path = output_dir.join(&config.package.name);
+    let bin_path = output_dir.join(&config.package.name);
+    let object_path = output_dir.join(format!("{}.o", config.package.name));
 
     match glyim_pipeline::Pipeline::compile_file(
         &mut db,
         entry,
         backend.as_ref(),
-        &output_path,
+        &object_path,
         None,
         None,
     ) {
-        Ok(()) => {
-            info!("Compilation succeeded: {}", output_path.display());
-            Ok((output_path, 0))
-        }
-        Err(diags) => Err(GlyipError::BuildFailed(diags)),
+        Ok(()) => {}
+        Err(diags) => return Err(GlyipError::BuildFailed(diags)),
     }
+
+    // Bytecode backend: the artifact is a `.g` bytecode file that `glyip run`
+    // cannot exec, so just move it into place and return. (Linking a bytecode
+    // file would fail in the system linker.)
+    if opts.backend != "llvm" {
+        // Bytecode is not a native artifact; write it under a distinct name so
+        // a `--backend=bytecode` build cannot overwrite a previously built
+        // executable (which `glyip run` would then try to exec).
+        let bc_path = output_dir.join(format!("{}.gbc", config.package.name));
+        fs::rename(&object_path, &bc_path)?;
+        info!("Compilation succeeded: {}", bc_path.display());
+        return Ok((bc_path, 0));
+    }
+
+    // Link the object into a runnable binary. The runtime staticlib provides
+    // the stdlib's `extern "C"` hooks (`glyim_stdout_write`, `glyim_alloc`, …)
+    // — without it the link fails with a cryptic `undefined _glyim_stdout_write`.
+    let runtime_lib = glyim_cli::linker::find_runtime_staticlib().ok_or_else(|| {
+        GlyipError::BuildFailed(vec![glyim_diag::GlyimDiagnostic::internal_error(
+            "`glyip build` needs the `glyim-runtime` static library \
+             (`libglyim_runtime.a`), which provides the stdlib's \
+             `extern \"C\"` hooks. Build it with `cargo build -p glyim-runtime`, \
+             or point `GLYIM_RUNTIME_LIB` at an existing `libglyim_runtime.a`.",
+        )])
+    })?;
+    let mut link_args = glyim_cli::linker::LinkArgs::default();
+    link_args.objects.push(runtime_lib);
+    glyim_cli::linker::link_with_args(
+        &object_path,
+        &bin_path,
+        &link_args,
+        None,
+        Some(&target_triple),
+    )
+    .map_err(|e| {
+        GlyipError::BuildFailed(vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
+            "linking {} failed: {e}",
+            bin_path.display()
+        ))])
+    })?;
+
+    // The object is an intermediate; keep the tree clean.
+    let _ = fs::remove_file(&object_path);
+
+    info!("Compilation succeeded: {}", bin_path.display());
+    Ok((bin_path, 0))
 }
 
 /// Run a compiled binary and return its exit code.

@@ -139,7 +139,7 @@ fn default_options() {
 
     let build_opts = BuildOptions::default();
     assert!(!build_opts.release);
-    assert_eq!(build_opts.backend, "bytecode");
+    assert_eq!(build_opts.backend, "llvm");
 
     let test_opts = TestOptions::default();
     assert!(test_opts.filter.is_none());
