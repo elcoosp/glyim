@@ -558,7 +558,14 @@ impl Pipeline {
                 std::collections::HashMap::new();
 
             for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-                let lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
+                let mut lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
+                // A never-instantiated generic template's placeholder `Err`
+                // nodes are expected; drop only that warning for such bodies.
+                drop_raw_generic_err_warnings(
+                    &mut lower_result.diagnostics,
+                    &lower_result.body,
+                    ty_ctx_ref,
+                );
                 sink_cell.borrow_mut().extend(lower_result.diagnostics);
                 if sink_cell.borrow().has_errors() {
                     return Err(sink_cell.into_inner().into_diagnostics());
@@ -1033,7 +1040,12 @@ pub fn compile_file_to_mir(
 
     let mut bodies = std::collections::HashMap::new();
     for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-        let lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
+        let mut lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
+        drop_raw_generic_err_warnings(
+            &mut lower_result.diagnostics,
+            &lower_result.body,
+            ty_ctx_ref,
+        );
         sink_cell.borrow_mut().extend(lower_result.diagnostics);
         if sink_cell.borrow().has_errors() {
             return Err(sink_cell.into_inner().into_diagnostics());
@@ -1231,6 +1243,29 @@ fn closure_body_has_unmonomorphized_ty(body: &glyim_mir::Body, ctx: &glyim_type:
 /// `core/unsafecell_new.g` and `behavior/vec_is_empty.g`. Checking the
 /// `return_ty` alone is enough to identify the specific raw-body leak that
 /// motivated this filter.
+/// Drop `[X0000] Err expression in THIR during lowering` warnings emitted by
+/// a body that will never be instantiated.
+///
+/// A *raw generic* body — one whose return type is still `Param`/`Bound`/
+/// `Projection` — is lowered to MIR for reference but filtered out before
+/// emission (`body_is_raw_generic`). Its `Err` nodes are expected: typeck
+/// emits a placeholder `Err` receiver for calls like `T::method(..)` on a
+/// generic parameter (`check_expr.rs`'s `DynamicCall` arm), and the trait
+/// default method `Iterator::fold<B>` contains exactly such a call. Nothing
+/// ever substitutes the body, so the placeholder is never resolved — and
+/// nothing ever runs it, so a warning about it is pure noise. (A genuine
+/// `Err` in a *reachable* body still warns.)
+fn drop_raw_generic_err_warnings(
+    diags: &mut Vec<glyim_diag::GlyimDiagnostic>,
+    body: &glyim_mir::Body,
+    ctx: &glyim_type::TyCtx,
+) {
+    if !body_is_raw_generic(body, ctx) {
+        return;
+    }
+    diags.retain(|d| d.message != "Err expression in THIR during lowering");
+}
+
 fn body_is_raw_generic(body: &glyim_mir::Body, ctx: &glyim_type::TyCtx) -> bool {
     use glyim_type::TyKind;
     matches!(
