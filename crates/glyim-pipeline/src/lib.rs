@@ -352,7 +352,12 @@ impl Pipeline {
         }
 
         let (hir, hir_diags) =
-            glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
+            glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
+                &expanded_root,
+                db.intern_mut(),
+                file_id,
+            );
+
         sink_cell.borrow_mut().extend(hir_diags.clone());
 
         // Safety gate: a compiler must not emit a binary when HIR lowering
@@ -931,7 +936,11 @@ pub fn compile_file_to_mir(
     }
 
     let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline(&expanded_root, db.intern_mut());
+        glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
+            &expanded_root,
+            db.intern_mut(),
+            file_id,
+        );
     sink_cell.borrow_mut().extend(hir_diags.clone());
     // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
     // `.await`-inside-a-loop guard, Error 60) must abort compilation instead

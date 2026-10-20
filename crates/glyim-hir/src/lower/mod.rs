@@ -118,11 +118,40 @@ pub(crate) fn is_pat_node(node: &SyntaxNode) -> bool {
     )
 }
 
+thread_local! {
+    /// The `FileId` that spans produced by `node_span` should carry.
+    ///
+    /// Lowering a crate is a single synchronous pass, and `node_span` is
+    /// called from ~84 sites that have no access to the crate's file id. A
+    /// scoped thread-local set on entry to `lower_crate` keeps those call
+    /// sites untouched.
+    ///
+    /// This previously hardcoded `FileId::from_raw(1)`, which is not the id
+    /// the frontend assigns to the parsed source (that is the VFS's id for
+    /// the file, typically 0). Every HIR span therefore claimed a file that
+    /// did not exist in the VFS — harmless while nothing read `Span::file`,
+    /// but wrong, and it silently defeated any position-based reasoning
+    /// (e.g. distinguishing stdlib items from user items).
+    static CURRENT_FILE_ID: std::cell::Cell<FileId> =
+        const { std::cell::Cell::new(FileId::BOGUS) };
+}
+
+/// Run `f` with `node_span` producing spans for `file_id`.
+pub(crate) fn with_file_id<R>(file_id: FileId, f: impl FnOnce() -> R) -> R {
+    CURRENT_FILE_ID.with(|c| {
+        let prev = c.replace(file_id);
+        let out = f();
+        c.set(prev);
+        out
+    })
+}
+
 pub(crate) fn node_span(node: &SyntaxNode) -> Span {
     let range = node.text_range();
     let lo = ByteIdx::from_raw(u32::from(range.start()));
     let hi = ByteIdx::from_raw(u32::from(range.end()));
-    Span::new(FileId::from_raw(1), lo, hi, SyntaxContext::ROOT)
+    let file = CURRENT_FILE_ID.with(std::cell::Cell::get);
+    Span::new(file, lo, hi, SyntaxContext::ROOT)
 }
 
 fn next_local_def_id(counter: &mut u32) -> LocalDefId {

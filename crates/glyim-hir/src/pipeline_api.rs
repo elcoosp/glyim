@@ -10,11 +10,22 @@ pub fn lower_crate_for_pipeline(
     root: &SyntaxNode,
     interner: &mut Interner,
 ) -> (CrateHir, Vec<GlyimDiagnostic>) {
+    lower_crate_for_pipeline_with_file_id(root, interner, glyim_span::FileId::BOGUS)
+}
+
+/// As [`lower_crate_for_pipeline`], but every produced span carries
+/// `file_id`. The pipeline passes the VFS id of the parsed source so HIR
+/// spans are attributable to a real file.
+pub fn lower_crate_for_pipeline_with_file_id(
+    root: &SyntaxNode,
+    interner: &mut Interner,
+    file_id: glyim_span::FileId,
+) -> (CrateHir, Vec<GlyimDiagnostic>) {
     let mut diags = Vec::new();
     // `lower_crate` performs the raw syntax→HIR lowering AND the `async fn` /
     // `.await` desugar, producing the future state-machine shape the
     // type-checker understands.
-    let hir = lower_crate(root, interner, &mut diags);
+    let hir = crate::lower::with_file_id(file_id, || lower_crate(root, interner, &mut diags));
     (hir, diags)
 }
 
