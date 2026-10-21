@@ -2571,11 +2571,32 @@ MirConstKind::Error => {
                                 })?;
                         }
                         InterpValue::Aggregate(ref elems) => {
-                            val = elems.get(idx_u).cloned().ok_or_else(|| {
+                            // `Vec<T>` is modelled as `Aggregate([buf, len])`
+                            // (see `vec_push`), so an index selects from
+                            // `buf`, not from the two-field header. Without
+                            // this, `v[0]` on a one-element Vec read the
+                            // *data pointer* field and returned garbage.
+                            let is_vec = matches!(
+                                self.tcx.ty_kind(current_ty),
+                                glyim_type::TyKind::Adt(id, _) if id.to_raw() == 1020
+                            );
+                            let target = if is_vec {
+                                match elems.first() {
+                                    Some(InterpValue::Aggregate(buf)) => buf,
+                                    _ => {
+                                        return Err(InterpError::Panic(
+                                            "Vec index: header field 0 is not a buffer".into(),
+                                        ));
+                                    }
+                                }
+                            } else {
+                                elems
+                            };
+                            val = target.get(idx_u).cloned().ok_or_else(|| {
                                 InterpError::Panic(format!(
                                     "index {} out of bounds (len {})",
                                     idx_u,
-                                    elems.len()
+                                    target.len()
                                 ))
                             })?;
                             // Update current_ty: we need element type.

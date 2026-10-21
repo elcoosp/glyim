@@ -632,10 +632,58 @@ impl<'a> FnCtxt<'a> {
                         TyKind::Array(elem, _) => Some(*elem),
                         _ => None,
                     };
-                    range_elem
-                        .or(ref_slice_elem)
-                        .or(array_elem)
-                        .unwrap_or_else(|| self.fresh_infer_ty())
+                    let known = range_elem.or(ref_slice_elem).or(array_elem);
+                    // Reject a non-iterable. Without this, `for x in 5 { .. }`
+                    // and `for x in some_vec { .. }` type-checked silently:
+                    // the item type became a fresh inference variable and
+                    // lowering emitted a loop over nothing. That is a *silent
+                    // miscompile* — the program compiled cleanly and produced
+                    // garbage (observed: 1 instead of 0 iterations for an
+                    // int, 240 for a two-element `Vec`). `Vec` has no
+                    // `Iterator`/`IntoIterator` impl in this stdlib, so it is
+                    // genuinely not iterable today; a diagnostic is the honest
+                    // outcome until one is added.
+                    // Only for *concrete* types. A generic parameter
+                    // (`fn f<I: Iterator>(i: I) { for x in i { .. } }` — the
+                    // stdlib is full of these) is iterable via its bound;
+                    // `next_info` resolution simply does not run for an
+                    // unsubstituted `Param`. Emitting here reported "`I` is
+                    // not iterable" for every program that merely *linked*
+                    // the stdlib.
+                    // A bare integer literal (`for x in 5`) is still
+                    // `Infer(Int(_))` here; resolve through the inference
+                    // table first so it classifies as a concrete (non-
+                    // iterable) `i32` rather than being skipped as
+                    // "unresolved". Only `Infer` is resolved — a `Param` or
+                    // `Projection` genuinely has no concrete answer yet.
+                    let resolved_iter_ty = if matches!(
+                        self.ctx.ty_kind(iter_ty),
+                        TyKind::Infer(_)
+                    ) {
+                        self.infer.resolve_ty_shallow(self.ctx, iter_ty)
+                    } else {
+                        iter_ty
+                    };
+                    let is_unresolved = matches!(
+                        self.ctx.ty_kind(resolved_iter_ty),
+                        TyKind::Param(_)
+                            | TyKind::Bound(_, _)
+                            | TyKind::Projection(_)
+                            | TyKind::Infer(_)
+                            | TyKind::Error
+                    );
+                    if known.is_none() && next_info.is_none() && !is_unresolved {
+                        let iter_desc = PrintTy::new(resolved_iter_ty, self.ctx).to_string();
+                        self.diagnostics.push(GlyimDiagnostic::type_error(
+                            span,
+                            format!(
+                                "`{iter_desc}` is not iterable: it implements neither \
+                                 `Iterator` nor `IntoIterator`, and is not an array, \
+                                 slice, or range"
+                            ),
+                        ));
+                    }
+                    known.unwrap_or_else(|| self.fresh_infer_ty())
                 };
                 // Phase 1 (GLYIM_DESTUB_PLAN): the loop-pattern bindings (`x` in
                 // `for x in ..`) must remain in scope while the body is checked.
