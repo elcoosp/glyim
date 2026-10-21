@@ -739,6 +739,50 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
+            // BC-ITER: `<[T]>::iter(&self) -> &[T]` and `iter_mut`.
+            // The interpreter models a slice as a `String` of one char
+            // per element (same convention `as_slice` uses on Vec), so
+            // `next` (iter.g:332, a real body — not a builtin) can use
+            // `is_empty` / `cur[0]` / `cur[1..]` unchanged. For array
+            // receivers, convert the element aggregate to that string;
+            // for slice/Vec receivers, pass through.
+            (1060, "iter") | (1060, "iter_mut") => {
+                let s = self.builtin_deref(&receiver)?;
+                match &s {
+                    // Already a slice model — identity.
+                    InterpValue::String(_) => Ok(Some(s)),
+                    InterpValue::Aggregate(fields) => {
+                        // Vec-style `{Aggregate(elems), Uint(len)}` vs.
+                        // bare array `Aggregate(elem, ..)`.
+                        let elems: Vec<InterpValue> = if fields.len() == 2
+                            && matches!(&fields[0], InterpValue::Aggregate(_))
+                            && matches!(&fields[1], InterpValue::Uint(_) | InterpValue::Int(_))
+                        {
+                            match &fields[0] {
+                                InterpValue::Aggregate(buf) => buf.clone(),
+                                _ => Vec::new(),
+                            }
+                        } else {
+                            fields.clone()
+                        };
+                        let slice: String = elems
+                            .iter()
+                            .map(|e| match e {
+                                InterpValue::Uint(n) => {
+                                    char::from_u32((*n as u32) & 0xff).unwrap_or('\u{0}')
+                                }
+                                InterpValue::Int(n) => {
+                                    char::from_u32(((*n).max(0) as u32) & 0xff)
+                                        .unwrap_or('\u{0}')
+                                }
+                                _ => '\u{0}',
+                            })
+                            .collect();
+                        Ok(Some(InterpValue::String(slice)))
+                    }
+                    _ => Ok(None),
+                }
+            }
             (1020, "as_slice") | (1020, "as_ref") => {
                 let s = self.builtin_deref(&receiver)?;
                 // VEC-AS-SLICE: a `Vec` is modelled as

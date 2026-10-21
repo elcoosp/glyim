@@ -85,6 +85,39 @@ Builtin macro expansion — which is what `include!` itself is — works.
   parent's destructor entirely — sound (over-retains, never double-frees),
   but leaks the still-initialized siblings.
 
+## 7. Interp: `for x in <slice-iterable>` — reference-into-transient-frame
+
+**Status:** verified. LLVM backend handles `a.iter()` and `v.as_slice()` in
+for-loops (codegen commit for `iter`/`iter_mut` inlines them as unsize +
+identity). The interpreter cannot run any for-loop whose `next` comes from
+the stdlib's `impl Iterator for &[T]` (iter.g:332), because the body returns
+`&T` references into its own transient frame:
+
+    fn next(&mut self) -> Option<&'a T> {
+        let cur: &[T] = *self;
+        ...
+        let first = &cur[0];        // Ref into `next`'s frame
+        Option::Some(first)
+    }
+
+When `next` returns, its frame dies, and the caller's `*x` panics with
+`deref of Ref from dead frame 1`. The same failure hits every
+`for x in <&[T]>` / `for x in <slice-iter>` shape — verified against
+`for x in v.as_slice()` and `for x in &[1,2,3][..2]`.
+
+**Scope of the gap:**
+- LLVM backend: works (`for x in v.as_slice()` → exit 3; `for x in a.iter()` → exit 6).
+- Interp: `RunFailed { exit_code: Some(101) }` — same panic on both forms.
+- No `run-pass` fixture can cover `iter()` until the interpreter can model
+  borrowed returns (either via a lifetime-aware Ref, or a special-case
+  desugar for slices that lowers the for-loop to an index walk — the same
+  approach the array path already uses).
+
+**Not in this session's scope.** Codegen fix for `iter`/`iter_mut` landed
+anyway (closes the LLVM-side link error and unblocks the `iterator` idiom
+under `--emit=exec` / differential). Tracked here so the next agent does
+not re-probe the interp.
+
 ## Verification
 
 Two gates cover most of the above; run both before claiming a gap is closed.

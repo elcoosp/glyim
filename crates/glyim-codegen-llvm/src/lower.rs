@@ -4367,6 +4367,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "to_vec"
                 | "as_slice"
                 | "as_ref"
+                | "iter"
+                | "iter_mut"
                 | "from_utf8_lossy"
                 | "from_utf8"
                 | "capacity"
@@ -5052,6 +5054,103 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         }
 
         // BC-CLEAR: `Vec::<T>::clear` / `String::clear` / `str::clear`.
+        // BC-ITER: `<[T]>::iter(&self) -> &[T]` and `iter_mut`.
+        // For the slice receivers (`&[T]`/`&mut [T]`) this is pure
+        // identity — the fat pointer passes straight through. For an
+        // array receiver (`[T; N]`), unsize: take a pointer to the
+        // array's storage and build `{ptr, N}`.
+        //
+        // The `impl Iterator for &[T]` (iter.g:332) has a real body —
+        // it uses `cur.is_empty()`, `&cur[0]`, `&cur[1..]`. So once
+        // `iter` produces a `&[T]`, `next` works downstream without
+        // further intrinsics.
+        if matches!(method.as_str(), "iter" | "iter_mut")
+            && _recv_adt.to_raw() == 1060
+            && dest_llvm_ty.is_struct_type()
+            && dest_llvm_ty.into_struct_type().count_fields() >= 2
+        {
+            let Some(recv_op) = args.first() else {
+                return Ok(false);
+            };
+            let recv_ty = self.operand_ty(recv_op);
+            // Array receiver: unsize to `&[T]`.
+            if let TyKind::Array(_elem_ty, count) = self.ty_ctx.ty_kind(recv_ty) {
+                let n: u64 = match &count.kind {
+                    ConstKind::Uint(n) => *n as u64,
+                    ConstKind::Int(n) => (*n).max(0) as u64,
+                    _ => return Ok(false),
+                };
+                let arr_ptr = match recv_op {
+                    Operand::Copy(p) | Operand::Move(p) => self.place_ptr(p)?,
+                    _ => return Ok(false),
+                };
+                let i8_ptr = self.context.ptr_type(AddressSpace::default());
+                let data_ptr = self
+                    .builder
+                    .build_bit_cast(arr_ptr, i8_ptr, "iter_dp")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "iter bitcast: {e:?}"
+                        ))]
+                    })?;
+                let len_val: BasicValueEnum =
+                    self.llvm_int_type(64).const_int(n, false).into();
+                let dst_ty = dest_llvm_ty.into_struct_type();
+                let agg = dst_ty.get_undef();
+                let agg = self
+                    .builder
+                    .build_insert_value(agg, data_ptr, 0, "iter_p")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "iter ins p: {e:?}"
+                        ))]
+                    })?
+                    .into_struct_value();
+                let agg = self
+                    .builder
+                    .build_insert_value(agg, len_val, 1, "iter_l")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "iter ins l: {e:?}"
+                        ))]
+                    })?
+                    .into_struct_value();
+                self.builder.build_store(dest_ptr, agg).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "iter store: {e:?}"
+                    ))]
+                })?;
+                if let Some(t) = target {
+                    let tb = *self.bb_map.get(t).expect("iter target");
+                    self.builder.build_unconditional_branch(tb).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "iter br: {e:?}"
+                        ))]
+                    })?;
+                }
+                return Ok(true);
+            }
+            // Slice or ref receiver: fat pointer in, fat pointer out.
+            let recv_val = self.lower_operand(recv_op)?;
+            if !recv_val.is_struct_value() {
+                return Ok(false);
+            }
+            self.builder.build_store(dest_ptr, recv_val).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "iter passthru: {e:?}"
+                ))]
+            })?;
+            if let Some(t) = target {
+                let tb = *self.bb_map.get(t).expect("iter target");
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "iter br: {e:?}"
+                    ))]
+                })?;
+            }
+            return Ok(true);
+        }
+
         // All three share the same 24-byte `{ptr, cap, len}` header, so
         // clearing is a single store of zero at byte offset 16 (the length
         // word). Capacity and buffer pointer are retained, matching the
