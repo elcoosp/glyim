@@ -703,9 +703,17 @@ impl<'a> MirBuilder<'a> {
                 self.lower_match(scrutinee, arms, expr.ty, expr.span)
             }
             thir::ExprKind::Block { stmts, tail } => {
+                // A block is a drop scope: `let` bindings inside it are
+                // destroyed at its `}`, not at the enclosing function's
+                // return. Track them, and emit their `Drop`s on the way out.
+                self.enter_block_scope();
                 for stmt in stmts {
                     self.lower_stmt(stmt);
                     if self.current_block.is_none() {
+                        // Diverged (`return`/`break`/`panic!`): the block's
+                        // scope-exit drops are unreachable from here, and the
+                        // divergent path emits its own terminators.
+                        self.block_scopes.pop();
                         return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
                             glyim_mir::MirConst {
                                 kind: glyim_mir::MirConstKind::Unit,
@@ -715,15 +723,69 @@ impl<'a> MirBuilder<'a> {
                         ));
                     }
                 }
-                if let Some(tail_expr) = tail {
-                    self.lower_expr_to_rvalue(tail_expr)
-                } else {
-                    glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                        kind: glyim_mir::MirConstKind::Unit,
-                        ty: Ty::UNIT,
-                        span: expr.span,
-                    }))
+
+                // Fast path: nothing in this block needs dropping, so the
+                // block is purely structural — return the tail rvalue
+                // directly, with no extra block or temp. This keeps the MIR
+                // shape of `{ <tail> }` identical to a bare `<tail>`.
+                let needs_scope_drops = self
+                    .block_scopes
+                    .last()
+                    .map(|frame| !frame.is_empty())
+                    .unwrap_or(false);
+                if !needs_scope_drops {
+                    self.block_scopes.pop();
+                    return match tail {
+                        Some(t) => self.lower_expr_to_rvalue(t),
+                        None => glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                            glyim_mir::MirConst {
+                                kind: glyim_mir::MirConstKind::Unit,
+                                ty: Ty::UNIT,
+                                span: expr.span,
+                            },
+                        )),
+                    };
                 }
+
+                // Otherwise the tail value must be computed *before* the
+                // drops run (the drops end the block), so stage it into a
+                // temp and hand the caller a read of that temp.
+                let tail_ty = tail.as_ref().map(|t| t.ty).unwrap_or(Ty::UNIT);
+                let tail_rvalue = match tail {
+                    Some(t) => self.lower_expr_to_rvalue(t),
+                    None => glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                        glyim_mir::MirConst {
+                            kind: glyim_mir::MirConstKind::Unit,
+                            ty: Ty::UNIT,
+                            span: expr.span,
+                        },
+                    )),
+                };
+                if self.current_block.is_none() {
+                    // The tail itself diverged.
+                    self.block_scopes.pop();
+                    return tail_rvalue;
+                }
+
+                let result_local = self.alloc_local(
+                    tail_ty,
+                    glyim_core::primitives::Mutability::Mut,
+                    expr.span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(result_local),
+                        tail_rvalue,
+                    ),
+                    expr.span,
+                );
+
+                // Emit the block's drops, then continue in `after_bb`.
+                let after_bb = self.new_block();
+                self.leave_block_scope(after_bb, expr.span);
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(glyim_mir::Place::new(
+                    result_local,
+                )))
             }
             thir::ExprKind::While { cond, body } => {
                 let header_bb = self.new_block();

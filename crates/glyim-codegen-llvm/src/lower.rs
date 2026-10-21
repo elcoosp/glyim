@@ -3805,6 +3805,38 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 .const_null()
                                 .into(),
                         };
+                    // A zero-sized type has no storage, so `place_ptr` yields
+                    // a null address — but it may still have a destructor, and
+                    // `glyim_drop_in_place` (correctly) refuses to call one
+                    // with a null pointer. Pass a dangling *non-null* address
+                    // instead, exactly as Rust does for ZST references; a ZST
+                    // destructor never dereferences it.
+                    let drop_arg: BasicValueEnum<'ctx> = {
+                        let size = glyim_layout::SimpleLayoutComputer::new(
+                            self.ty_ctx,
+                            self.target_info.clone(),
+                        )
+                        .layout_of(ty)
+                        .map(|l| l.size.0)
+                        .unwrap_or(1);
+                        if size == 0 {
+                            self.builder
+                                .build_int_to_ptr(
+                                    self.context.i64_type().const_int(1, false),
+                                    self.context.ptr_type(AddressSpace::default()),
+                                    "zst_drop_ptr",
+                                )
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "zst drop ptr: {:?}",
+                                        e
+                                    ))]
+                                })?
+                                .as_basic_value_enum()
+                        } else {
+                            drop_arg
+                        }
+                    };
                     let null_drop_fn = drop_fn_ptr;
                     let args_vals: Vec<BasicValueEnum<'ctx>> = vec![drop_arg, null_drop_fn.into()];
 

@@ -140,6 +140,10 @@ pub unsafe extern "C" fn glyim_dealloc(ptr: *mut u8, size: usize, align: usize) 
 /// # Safety
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_drop_in_place(ptr: *mut u8, drop_fn: Option<DropFn>) {
+    // A null pointer means "no storage to drop" — calling the destructor
+    // with it would be UB for any non-zero-sized type. Codegen passes a
+    // non-null dangling address for zero-sized types (which have no storage
+    // but do have a destructor), so this guard stays as a safety net.
     if ptr.is_null() {
         return;
     }

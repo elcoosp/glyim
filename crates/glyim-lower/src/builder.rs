@@ -80,6 +80,16 @@ pub struct MirBuilder<'a> {
     /// guard degrades to the pre-existing unconditional-drop behavior (always
     /// sound). See `docs/plans/v0.1.0/feature-gaps/part2.md` §1.8.
     pub(crate) drop_flags: std::collections::HashMap<LocalIdx, LocalIdx>,
+    /// Stack of locals declared in each currently-open *block* scope.
+    ///
+    /// `let` bindings inside an `ExprKind::Block` are dropped at that block's
+    /// `}`, not at the enclosing function's return. Each open block pushes a
+    /// frame here; `alloc_local` records the locals it creates into the
+    /// innermost frame; leaving the block emits their `Drop` terminators.
+    pub(crate) block_scopes: Vec<Vec<LocalIdx>>,
+    /// Locals already dropped by a block-scope exit. `elaborate_scope_drops`
+    /// skips these at function return so a block-local is not dropped twice.
+    pub(crate) dropped_at_block_scope: std::collections::HashSet<LocalIdx>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -112,6 +122,8 @@ impl<'a> MirBuilder<'a> {
             current_block: None,
             loop_stack: Vec::new(),
             drop_flags: std::collections::HashMap::new(),
+            block_scopes: Vec::new(),
+            dropped_at_block_scope: std::collections::HashSet::new(),
         }
     }
 
@@ -129,11 +141,86 @@ impl<'a> MirBuilder<'a> {
 
     /// Allocate a new local variable and return its index.
     pub fn alloc_local(&mut self, ty: Ty, mutability: Mutability, span: Span) -> LocalIdx {
-        self.locals.push(glyim_mir::LocalDecl {
+        let idx = self.locals.push(glyim_mir::LocalDecl {
             ty,
             mutability,
             source_info: glyim_mir::SourceInfo::new(span),
-        })
+        });
+        // Record droppable locals in the innermost open *block* scope so they
+        // are dropped at its `}`, not deferred to function return. `Copy`
+        // locals have no destructor, so they need no bookkeeping.
+        if let Some(frame) = self.block_scopes.last_mut()
+            && self.ctx.ty_ctx().needs_drop(ty)
+        {
+            frame.push(idx);
+        }
+        idx
+    }
+
+    /// Open a block scope. Locals allocated until the matching
+    /// [`Self::leave_block_scope`] are dropped at that block's exit.
+    pub fn enter_block_scope(&mut self) {
+        self.block_scopes.push(Vec::new());
+    }
+
+    /// Close the innermost block scope, emitting `Drop` terminators for its
+    /// droppable locals (reverse declaration order) and branching to
+    /// `after_bb`.
+    ///
+    /// No-op when the scope declared nothing droppable — the caller's current
+    /// block then simply falls through to `after_bb` via the normal
+    /// terminator it emits.
+    pub fn leave_block_scope(&mut self, after_bb: BasicBlockIdx, span: Span) {
+        let Some(locals) = self.block_scopes.pop() else {
+            return;
+        };
+        if locals.is_empty() || self.current_block.is_none() {
+            return;
+        }
+        let Some(fall_through) = self.current_block else {
+            return;
+        };
+
+        // Chain the drops in reverse declaration order, each targeting the
+        // next, with the last targeting `after_bb`.
+        let mut target = after_bb;
+        for local in locals.iter().rev() {
+            self.dropped_at_block_scope.insert(*local);
+            let drop_bb = self.new_block();
+            self.basic_blocks[drop_bb].terminator = glyim_mir::Terminator {
+                kind: glyim_mir::TerminatorKind::Drop {
+                    place: glyim_mir::Place::new(*local),
+                    target,
+                    cleanup: None,
+                },
+                source_info: glyim_mir::SourceInfo::new(span),
+            };
+            // Guard with the local's drop flag when one exists, so a
+            // moved-out value is not dropped here (mirrors
+            // `elaborate_scope_drops`).
+            target = if let Some(&flag) = self.drop_flags.get(local) {
+                let check_bb = self.new_block();
+                self.basic_blocks[check_bb].terminator = glyim_mir::Terminator {
+                    kind: glyim_mir::TerminatorKind::SwitchInt {
+                        discr: glyim_mir::Operand::Copy(glyim_mir::Place::new(flag)),
+                        targets: glyim_mir::SwitchTargets::new(
+                            Box::new([(1u128, drop_bb)]),
+                            target,
+                        ),
+                        switch_ty: self.ctx.ty_ctx().bool_ty(),
+                    },
+                    source_info: glyim_mir::SourceInfo::new(span),
+                };
+                check_bb
+            } else {
+                drop_bb
+            };
+        }
+        self.basic_blocks[fall_through].terminator = glyim_mir::Terminator {
+            kind: glyim_mir::TerminatorKind::Goto { target },
+            source_info: glyim_mir::SourceInfo::new(span),
+        };
+        self.current_block = Some(after_bb);
     }
 
     /// Push a statement onto the current basic block.
@@ -266,6 +353,9 @@ impl<'a> MirBuilder<'a> {
             }
             if (idx.to_raw() as usize) <= self.arg_count {
                 continue; // parameters are dropped by the caller's scope
+            }
+            if self.dropped_at_block_scope.contains(&idx) {
+                continue; // already dropped when its block scope exited
             }
             if self.needs_drop(decl.ty) {
                 to_drop.push(idx);
