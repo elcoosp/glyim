@@ -1,7 +1,7 @@
 //! A contiguous growable array type, `Vec<T>`, for the Glyim alloc library.
 
 use raw_vec::RawVec;
-use ops::{Index, IndexMut};
+use ops::{Deref, Index, IndexMut};
 use iter::{IntoIterator, FromIterator};
 use clone::Clone;
 use default::Default;
@@ -76,6 +76,14 @@ impl<T> Vec<T> {
             }
             self.len += 1;
         }
+    }
+}
+
+impl<T> Deref for Vec<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        self.as_slice()
     }
 }
 
