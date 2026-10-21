@@ -27,7 +27,13 @@ use glyim_test::mock::MockCodegen;
 use std::sync::Arc;
 use std::time::Duration;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+// Interp + LLVM both run under load; a 10s wall-clock budget is tight
+// enough that three consecutive full-suite re-runs (session 15) each
+// flaked on a *different* fixture — always `llvm=true timeout`, always
+// passing on isolated re-run. That's load-sensitive, not a disagreement.
+// 30s gives the native path room under parallel load while still
+// catching a genuine hang.
+const TIMEOUT: Duration = Duration::from_secs(30);
 
 fn corpus_root(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
