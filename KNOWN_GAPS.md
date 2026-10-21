@@ -1,326 +1,111 @@
 # KNOWN_GAPS
 
-A factual inventory of known correctness/feature gaps in the Glyim compiler,
-current as of the commit that introduced this file. Each entry is either
+Verified against the tree at `b91a585e`. Each entry names the code that
+implements (or fails to implement) the behaviour, so a claim can be re-checked
+rather than trusted. Anything not listed here either works or has a clean,
+actionable diagnostic.
 
-  (a) a **hard error** the compiler emits (the program is rejected with a
-      diagnostic rather than miscompiled), or
-  (b) a **latent bug** that is reachable from user code but not covered by
-      the run-pass corpus.
-
-Anything in category (b) is a candidate for a `no-ice` or `should-fail`
-fixture. Anything in category (a) is a candidate for a "not yet supported"
-UI test.
-
-The compiler's differential test (`crates/glyim-test/tests/differential.rs`)
-runs every run-pass fixture on **both** backends — the LLVM backend and the
-MIR interpreter — and asserts they agree on exit code and stdout. A gap that
-only exists on one backend shows up there; a gap that fails identically on
-both does not, which is why some entries below have no corpus coverage.
+**Last audit:** this file was last regenerated from the working tree after a
+session that closed ~20 gaps. The previous revision (2026-10-14) was stale:
+three of its entries — `include!`, `--lto=thin`, and enum-variant value paths
+— described behaviour that had since been implemented, and one
+(`glyim-bytecode-vm` "referenced by nothing") was simply wrong. Treat an
+entry here as a claim about *code*, not about intent.
 
 ---
 
-## 1. Builtin methods not lowered inline (category b)
+## 1. Async: `.await` inside a loop body (category a — hard error)
 
-`crates/glyim-type/src/ty_ctx_mut.rs`'s builtin table registers ~57
-`(AdtId, method)` pairs. Codegen lowers them inline only if the method name
-is in the whitelist in `crates/glyim-codegen-llvm/src/lower.rs`
-(`try_lower_builtin_intrinsic`). A registered method **not** in that
-whitelist falls through to the ordinary `Call` path and emits a call to a
-`__glyim_fn_NNNN` symbol that has no body — an undefined symbol at link time.
-The interpreter is a second implementation that must be kept in sync, or the
-differential will disagree.
+`crates/glyim-hir/src/lower/lower_async.rs` rejects with `[T0060]`:
 
-### 1a. Lowered this session (for reference)
+    `.await` inside a loop body is not yet supported by the async
+    state-machine lowering (tracked: KNOWN_GAPS.md async-v2). Hoist the
+    await out of the loop, or collect futures into a Vec and await them
+    sequentially outside the loop.
 
-`Vec::{clear, remove, insert, truncate, set_len, capacity, reserve,
-as_slice, as_ref}`, `String::{clear, from, from_utf8_lossy, into_bytes}`,
-`str::clear`, `slice::to_vec`. Fixtures in
-`crates/glyim-test/tests/run-pass/behavior/`.
+This is a **deliberate, diagnosed gap**, not a silent miscompile. Single- and
+multi-await sequential bodies both desugar; a loop needs a genuine
+state-machine v2 (a suspension point that is the loop back-edge).
 
-### 1b. Closures — FIXED; combinators still open
+## 2. Windows SEH cleanup edges are unreachable (category b)
 
-Closures now work end-to-end on the LLVM backend. The original breakage had
-four independent causes, all now fixed:
+`crates/glyim-codegen-llvm/src/seh_ffi.rs` and `lower.rs`'s
+`emit_seh_cleanuppad` implement the funclet path, and `Personality::Seh` is
+selected for `x86_64-pc-windows-msvc` / `aarch64-pc-windows-msvc`. **Nothing
+exercises it**, because *no lowering site ever sets `cleanup: Some(..)`* on a
+`Call` or `Drop` terminator — MIR has the field and the backends handle it,
+but lowering never populates it.
 
-1. **Closure signatures were never zonked.** `TyCtxMut::closure_sigs`
-   stored each `FnSig` as registered during typeck, when the body's
-   result/parameter types could still be raw `Infer` vars. `zonk_bodies`
-   folded the THIR body but not this separate table, so `fn_abi_of`
-   panicked with `UnknownType(Infer)`. Fixed by
-   `glyim-typeck::zonk::zonk_closure_sigs`, called from `typeck_crate`.
-2. **Closures were declared with a void type.** `MirConstKind::Fn`'s
-   forward-declaration arm looked the callee up in `fn_sigs` only;
-   closure signatures live in `closure_sigs`, so every closure got a
-   placeholder `void` type that `lower_body` then reused. Fixed by
-   falling back to `closure_sigs`.
-3. **Closure parameter locals were allocated twice** — once by
-   `lower_closure`, once by `MirBuilder::lower_body` — so the prologue
-   stored the incoming argument into one slot and the body read another
-   (uninitialized stack). Fixed by sharing the local via
-   `local_var_map`.
-4. **Closure value layout had no fn-pointer field.** Only captures were
-   counted, so a non-capturing closure was zero-sized and its aggregate
-   store went through a null alloca; a closure in a `fn(..)`-typed
-   formal position SIGBUS'd. Fixed by making `TyKind::Closure` layout
-   `{ fn_ptr, captures... }`, adding a `Place::ty` arm for closure
-   `Field` projections, and reading captures via projected places.
+That is currently harmless: `glyim_panic` calls `process::exit(101)` rather
+than unwinding, so no cleanup edge is ever taken. Verified — a panic inside a
+`Drop` scope exits 101 and runs no destructor, on both targets.
 
-Coverage: `behavior/closure_{bare,capture,inferred,no_args,fnptr}.g`.
+If unwinding (`panic = "unwind"` semantics) is ever wanted, lowering must
+populate `cleanup` edges first; until then the SEH code is dead but correct.
 
-**Still open — closure-passing combinators.** `Option::map`,
-`Result::{map, map_err, map_or}`, `Option::unwrap_or_else`. Neither backend
-implements them. This is a multi-layer feature, not a builtin arm.
+## 3. MIR interpreter: deeper writes through a `StaticPtr` (category b)
 
-Diagnosis (verified by probe at the time of writing):
+`write_projection_into_value` (`crates/glyim-mir-interp/src/lib.rs`) supports
+`Field`, `ConstantIndex`, `Index` and `Downcast` under a `StaticPtr`. A
+`Deref` under a `StaticPtr` is rejected with an explicit panic rather than
+miscompiled. Reaching it needs `&(*STATIC_PTR).field`-style code, which no
+fixture produces today.
 
-1. `o.map(f)` resolves to `MethodDispatch::Static`, **not** `Builtin`. The
-   builtin fast-path gate in `resolve_method_call`
-   (`glyim-typeck/src/check_expr.rs`, the `is_builtin_adt` closure) lists
-   only `1020 | 1040 | 1050` (Vec / Box / String). `Option` (1010) and
-   `Result` (1011) are deliberately excluded.
-2. Simply widening `is_builtin_adt` to include `1010 | 1011` breaks the
-   stdlib: `Option`/`Result` also have *user* `impl` blocks in
-   `glyim-lang-core/lib/{option,result}.g`, and forcing the builtin table
-   first produces
-   `mismatched types: T vs <Self as Trait37>::Item` cascades (the generic
-   combinator impls in `iter.g` no longer agree with the builtin sigs).
-3. Even when dispatch reaches `try_builtin_method`, the closure argument
-   needs a `fn(T) -> U` expectation so `U` unifies. The mechanism exists
-   (`pending_closure_expectation`, set from the builtin sig's `inst_inputs`
-   in the `MethodCall` arg loop), but only fires for `MethodDispatch::Builtin`.
+## 4. `panic!` does not unwind (intentional, documented)
 
-So the fix is a real feature: decide how builtin `Option`/`Result` methods
-coexist with the stdlib's own impls (either drop the stdlib impls for the
-combinator methods, or make the builtin table the sole authority for them),
-then lower the combinators on both backends (codegen: construct the result
-enum + invoke the closure via the existing fn-pointer call path; interp: add
-the `map`/`map_or`/`map_err` arms). This is out of scope for a tail fix —
-it is its own work item.
+`glyim_panic` (`crates/glyim-runtime/src/lib.rs`) writes the message to
+stderr and exits 101. It does not unwind, so destructors do not run on a
+panic. This matches `panic = "abort"` and is what the `run-fail` corpus
+asserts (`// exit-code: 101`).
 
-Remaining symptoms:
+The MIR interpreter has a cross-frame unwinding path (`panics_unwind`,
+`tests/unwind_cleanup.rs`) that is **off by default**: enabling it changes the
+top-level error variant every caller matches on (`Panic` → `Unwind`) and
+breaks 14 tests that pin the current contract. That is a deliberate design
+decision, not an oversight — see the doc comment on `with_panics_unwind`.
 
-| Method | Symptom |
-|---|---|
-| `Option::map` | `layout error building aggregate: UnknownType(Ty(0))` |
-| `Result::map` | same class |
-| `Result::map_err` | `fn_abi_of failed: UnknownType(Ty(169))` |
-| `Result::map_or` | undefined `__glyim_fn_9122` |
+## 5. `include!` — implemented, with a caveat
 
-### 1c. Atomics — mostly done
+`include!("path")` splices the target file's tokens at the call site, at both
+item and expression position, resolving absolute paths and paths relative to
+the calling file. Nested includes work.
 
-`AtomicBool` / `AtomicUsize` / `AtomicU8`: `new`, `load`, `store`,
-`fetch_and`, `fetch_or`, `fetch_add`, `fetch_sub` are lowered inline
-(codegen + interp), with runtime helpers. Fixtures in
-`behavior/atomic_*.g`.
+Caveat: the expander does not run proc-macro expansion inside an included
+file (`entry_main_local_id`'s pre-pass deliberately skips the proc registry).
+Builtin macro expansion — which is what `include!` itself is — works.
 
-Three sub-items were fixed along the way (each its own commit):
+## 6. Deferred (category c — no code path, no diagnostic needed)
 
-1. The `Atomic*` ADTs were registered as **zero-field structs** (0 bytes)
-   while `sync.g` declares them as `struct AtomicX { v: UnsafeCell<T> }`.
-   `AtomicBool::new(true)` stored `const_zero()` into a 0-byte alloca and
-   discarded the value. Now registered with the bare integer field
-   (`u8`/`usize`/`i32`/`u32`).
-2. `cmp.g`'s `Ordering` lacked the four memory-order variants, so every
-   atomic call site failed type-check before reaching codegen.
-3. `glyim_atomic_u8_fetch_and` / `_fetch_or` runtime helpers added.
-
-**`compare_exchange` — DONE.** Lowered inline on both backends
-(commit `2c59c67f`): codegen builds `Result::Ok(prev)` / `Result::Err(prev)`
-from the CAS helper's return; the interp mutates in place on success.
-`glyim_atomic_usize_cas` added to the runtime. Fixtures:
-`behavior/atomic_{usize,bool}_compare_exchange*.g`.
-
-Mechanism note (kept from the earlier investigation, still true): the
-builtin method table **shadows** `sync.g`'s atomic impls, so do NOT try
-to fix atomics by deleting the builtin entries — the methods then fail
-earlier with ``no method `load` found``. The table is load-bearing for
-resolution.
-
-### 1d. Iterator protocol — partial
-
-**Working — `for i in <int-range>`.** Both `for i in 0usize..n`
-(`Range<usize>`) and `for i in 0..5` (`Range<i32>`, the unsuffixed
-default) iterate correctly. Fixed by:
-
-- commit `2171bde9`: the for-loop `SwitchInt` now switches on the
-  `Option`'s *discriminant* (it switched on the whole aggregate, which
-  codegen read as a struct where an `IntValue` was expected), and
-  `Range<usize>` gained an `impl Iterator`.
-- commit `49c276e4`: `Range<i32>` gained `Iterator` + `IntoIterator`
-  impls (`RangeIterI32`), declared *before* the `Range<usize>` impls so
-  the source-order impl scan binds an unresolved integer element to `i32`
-  (Rust's default) rather than `usize`.
-
-Note: the commit message for `49c276e4` also describes an
-`IntoIterator::into_iter` desugar in the `For` arm, but that desugar was
-**not** actually wired in (the helper was added unused and later removed
-in `c8bbe21a`). The range cases work via the direct-`Iterator` path.
-
-**Fixed (codegen) — `&[T; N]` coercion length.** `let s: &[i32] = &a;`
-(where `a: [i32; 3]`) built a bare pointer in `Rvalue::Ref`, leaving the
-length half of the `{ptr, i64}` fat pointer uninitialized, so `s.len()`
-read stack garbage. `glyim-codegen-llvm` now builds the fat pointer with
-the array length. **Not covered by a fixture**: the interpreter models
-`&array` as a plain `Ref{frame,local}` (no fat pointer), so it reports a
-different length; matching the interp is separate work.
-
-**Still open — slice iteration (`for x in &slice`) and closure
-combinators — blocked on associated-type projection normalization.**
-
-Root cause (fully traced): **`TyKind::Projection` is never normalized
-anywhere.**
-
-1. `glyim-typeck::zonk::zonk_ty` treats `TyKind::Projection(_)` as a leaf
-   (it is in the no-children arm), so a projection survives zonking.
-2. `TyCtx::resolve_associated_type` exists but is **never called** — it has
-   no call sites in the whole workspace.
-3. Even if it were called, `impl_assoc_types` is populated (in
-   `typeck_crate`, from `impl_item.associated_types`) with the impl's
-   **`Param`-based** assoc types: `impl<'a, T> Iterator for Iter<'a, T> {
-   type Item = &'a T; }` registers `Item = &'a Param(0)`, with no
-   substitution of the query's concrete args.
-
-Consequence: for `for x in &slice`, `Iterator::next`'s return type is
-`Option<<Iter<'a,T> as Iterator>::Item>`; the projection never becomes
-`&'a T`, so instantiating the call mismatches
-(`<Self as Trait37>::Item vs &T`) and the for-loop falls back to the
-single-iteration path (exit 116/100). The same unnormalized projection
-breaks the closure combinators (`Option::map` → `layout error building
-aggregate: UnknownType(Ty(0))`).
-
-**Proper fix (a real feature, ~3 layers):**
-
-1. Normalize `TyKind::Projection` during zonking: in `zonk_ty`, for a
-   `Projection` with a concrete self type, call `resolve_associated_type`
-   and recurse on the result (falling back to the raw projection if
-   unresolved).
-2. Make `resolve_associated_type` substitute the impl's generic params:
-   when it matches by `AdtId`, rebuild the found assoc type with the
-   query's substitution args (mirror `concretize_fn_sig`).
-3. Then wire the `into_iter` desugar in the `For` arm (probe `next`
-   directly; on failure resolve `IntoIterator::into_iter`, iterate its
-   result). A bare array additionally needs an array→`&[T]` borrow
-   coercion (now that `Rvalue::Ref` writes the fat-pointer length).
-
-Each of these was attempted in isolation this session and regressed the
-128-fixture differential, so they must be done together and validated as
-one change.
-
-### 1e. Simple, unimplemented
-
-| Method | Symptom |
-|---|---|
-| `slice::copy_from_slice` | undefined `__glyim_fn_9092` |  **← fixed**
-| `slice::split_at` | undefined `__glyim_fn_9164` (returns a tuple of two fat pointers) |  **← fixed**
-| `String::from_utf8` | `ambiguous method 'len' found in multiple impls` (typeck, on the `Result` it returns) |
-
-### 1f. `Vec::new()` element type never unified — inference ordering (category b)
-
-The root cause is upstream of `pop`. `let mut v = Vec::new(); v.push(5);`
-leaves `v` typed `Vec<Infer>` — the element type is **never unified with
-`i32`**. Evidence: the MIR for
-
-    fn main() -> i32 { let mut v = Vec::new(); v.push(5); let o = v.pop(); ... }
-
-prints every `Vec` local as `Adt1020<<error>>` and the `pop` result as
-`Adt1010<<error>>`. `Vec::new`'s registered output is `Vec<Param(0)>`; the
-`Param(0)` becomes a fresh inference var at the call site, but the later
-`v.push(5)` does not propagate `i32` back into it.
-
-Consequences:
-- `v.pop()` alone: the codegen `pop` arm bails (both the receiver's and the
-  destination's element types are non-concrete) and the call falls through to
-  `fn_abi_of` on `Option<Infer>` -> `UnknownType(Ty(22677))` ICE.
-- `v.pop().unwrap()`: the same ICE one step later.
-- `Vec::len()` after `push` works only because the `len` arm reads the
-  length word directly and never needs `T`.
-
-Precise blocker (found by probe): in the method-arg loop of `check_expr`,
-`v.push(5)` sees
-
-    arg[0] method=push  a_ty=Infer(Int(IntVar(240)))  expected=Infer(Ty(TyVar(_)))
-
-— the argument is an **int** inference var (the unsuffixed `5`), the
-expected (receiver element) is a **type** inference var. `unify` cannot
-connect an `InferVar::Int` to an `InferVar::Ty`, so `T` stays unresolved.
-A correct fix has to give `Vec::new()`'s element var the right *kind* — or
-unify the integer literal's default (`i32`) into it — which is a change to
-the inference engine's var representation, not a local patch. The
-`Vec::len()`-only fixtures pass because that arm reads the length word and
-never needs `T`.
-
-This is a typeck inference-ordering bug (the class the `MaybeUninit::new`
-fix addressed for associated functions), not an inline-lowering gap. Out of
-scope for a codegen-only fix.
-
----
-
-## 2. Async (category a — hard error)
-
-`.await` inside a loop body is rejected:
-
-  `.await` inside a loop body is not yet supported by the async
-   state-machine lowering (tracked: KNOWN_GAPS.md async-v2).
-
-Source: `crates/glyim-hir/src/lower/lower_async.rs`.
-
-What **does** work: single-suspension bodies (single-poll desugar), and
-multi-`.await` sequential bodies with no `.await` inside a loop. Multi-await
-v1 state-machine scaffolding exists in `lower_async.rs` but the resume
-dispatch is deferred.
-
----
-
-## 3. Const evaluation (category a)
-
-`crates/glyim-const-eval/src/eval.rs` rejects, with an explicit diagnostic:
-
-- path expressions for non-local paths
-- `await`
-- `?`
-- dereference
-- `for` over some iterable kinds
-
----
-
-## 4. Codegen / ABI (category b)
-
-- **Windows SEH landingpads** — deferred. Only the Itanium
-  `landingpad`/`resume` pair is emitted. Windows targets with cleanup blocks
-  are not supported. (`crates/glyim-codegen-llvm/src/lower.rs`, plan §19.1.)
-- **ThinLTO** — `--lto thin` surfaces an explicit error rather than silently
-  no-op'ing (correct behavior; the linker-driver integration is the gap).
-
----
-
-## 5. Macros (category a)
-
-- `include!` (source-code inclusion) is not supported. `include_str!` works.
-  Source: `crates/glyim-meta/src/expander/mod.rs`.
-
----
-
-## 6. Other
-
-- **Enum-variant value paths** — `let f = Some;` (a variant constructor used
-  as a value, not called) is rejected:
-  `enum-variant value paths are not yet supported`. Source:
-  `crates/glyim-typeck/src/unify.rs`.
-- **`glyim-bytecode-vm`** — the crate exists but nothing in `glyim-cli` or
-  `glyim-pipeline` references it. Either wire it or remove it.
-
----
+- **Windows SEH landingpads.** See §2: implemented, structurally unreachable.
+- **`dyn Trait` niche layouts.** `needs_drop` returns `false` for types it
+  cannot inspect (`dyn Trait`, generic params, projections, error/opaque),
+  documented on `TyCtx::needs_drop`. Conservative and sound.
+- **Fine-grained partial-move drop guards.** `drop_flags` models "should this
+  whole local's `Drop` run", not per-field state. A partial move disables the
+  parent's destructor entirely — sound (over-retains, never double-frees),
+  but leaks the still-initialized siblings.
 
 ## Verification
 
-To re-check the status of any entry:
+Two gates cover most of the above; run both before claiming a gap is closed.
 
-```bash
-# builtin lowering: does the method reach codegen inline?
-grep -n '<method>' crates/glyim-codegen-llvm/src/lower.rs
-
-# differential (both backends)
-GLYIM_TEST_REAL_LLVM=1 cargo test -p glyim-test --features real-llvm \
-  --test differential -- --nocapture
 ```
+# Full workspace suite (includes the run-pass corpus, which asserts exact
+# exit codes end-to-end).
+cargo nextest run --workspace --test-threads=2
+
+# Differential: compiles every run-pass AND run-fail fixture once and runs
+# both backends, asserting they agree on exit code and stdout. This is the
+# gate that catches "works on LLVM, silently wrong in the interpreter".
+GLYIM_TEST_REAL_LLVM=1 cargo nextest run -p glyim-test --test differential \
+  --features real-llvm --test-threads=2
+```
+
+One-off reproducers (always bypass the CLI compile cache):
+
+```
+GLYIM_CACHE_DIR=$(mktemp -d) ./target/debug/glyim-cli --with-stdlib \
+  --emit=exec /tmp/x.g -o /tmp/x.out && /tmp/x.out; echo $?
+```
+
+`--emit=mir` and `--emit=llvm-ir` write to the `-o` path, not stdout.
