@@ -166,13 +166,19 @@ fn droppable_local_gets_guarded_drop_via_drop_flag() {
             }
         }
     }
-    assert_eq!(
-        switch_count, 1,
-        "expected exactly one drop-flag guard SwitchInt"
+    // At least one, not exactly one: `let s = <literal>` lowers to a
+    // droppable *temp* moved into `s`, and both now carry a drop flag (the
+    // temp's is cleared by the move, `s`'s stays true). Guarding both is the
+    // correct shape — an unguarded moved-from temp is a double-drop. The
+    // property this test locks is that the guard wiring is *live*, which is
+    // what `guarded_drop` records.
+    assert!(
+        switch_count >= 1,
+        "expected at least one drop-flag guard SwitchInt, got {switch_count}"
     );
     assert!(
         guarded_drop,
-        "expected the SwitchInt to guard a Drop of a different local (real drop-flag)"
+        "expected a SwitchInt to guard a Drop of a different local (real drop-flag)"
     );
 }
 

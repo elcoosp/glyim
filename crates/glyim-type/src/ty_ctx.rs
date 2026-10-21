@@ -589,6 +589,32 @@ impl TyCtx {
         None
     }
 
+    /// Resolve a type's `Drop::drop` without knowing the `Drop` trait's
+    /// `TraitDefId`.
+    ///
+    /// `Drop` is declared in the stdlib (`core/ops.g`) *and* registered as a
+    /// synthetic builtin (2002); which id an `impl Drop for X` is recorded
+    /// under depends on how its trait path resolved during type-checking. In
+    /// practice it is the def-map id. Callers that need "which function is
+    /// this type's destructor" therefore cannot hardcode 2002 — scan the
+    /// dispatch table for a `drop` entry keyed on `ty` under any trait id.
+    pub fn drop_method_for(&self, ty: Ty) -> Option<FnDefId> {
+        let drop_name = self.resolver().intern("drop");
+        let mut base = ty;
+        while let TyKind::Ref(_, inner, _) = self.ty_kind(base) {
+            base = *inner;
+        }
+        let mut found: Option<FnDefId> = None;
+        for ((_, self_ty), methods) in self.impl_method_fns.iter() {
+            if *self_ty == base
+                && let Some(&fn_id) = methods.get(&drop_name)
+            {
+                found = Some(fn_id);
+            }
+        }
+        found
+    }
+
     /// Whether `adt_id` has an explicit `Drop` impl (or is a registered owning
     /// builtin). This is the single authority consulted by `needs_drop`; it
     /// replaces the previous per-crate guesses (`glyim-lower` hardcoded

@@ -1973,10 +1973,23 @@ impl<'a> MirBuilder<'a> {
                 self.var_map.insert(*name, local);
                 self.local_var_map.insert(*var_id, local);
                 self.push_stmt(glyim_mir::StatementKind::StorageLive(local), span);
-                if self.ctx.ty_ctx().needs_drop(pat.ty) {
+                // Guard on the *binding's* type, not `pat.ty`: typeck leaves
+                // a variant-field binding's `pat.ty` as `Ty::ERROR` (see the
+                // `local_ty` computation above), and a flag on an
+                // error-typed local is never read.
+                if self.ctx.ty_ctx().needs_drop(local_ty) {
                     self.register_drop_flag_init(local, span);
                 }
                 if let Some(p) = copy_place {
+                    // The source temp is being *moved out of*. Clear its drop
+                    // flag, or `elaborate_scope_drops` drops it at scope exit
+                    // **in addition to** the binding it moved into — a
+                    // double-drop. `let _g = G { v: 1 }` lowered to
+                    // `temp = G{1}; _g = Move(temp);` and dropped both, which
+                    // double-freed any owning field.
+                    if self.ctx.ty_ctx().needs_drop(local_ty) {
+                        self.register_partial_move(p.local, span);
+                    }
                     let rvalue = glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(p));
                     self.push_stmt(
                         glyim_mir::StatementKind::Assign(glyim_mir::Place::new(local), rvalue),

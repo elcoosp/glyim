@@ -392,6 +392,7 @@ impl<'a> MirBuilder<'a> {
             flag
         } else {
             let f = self.alloc_local(self.ctx.ty_ctx().bool_ty(), Mutability::Mut, span);
+            self.push_stmt(glyim_mir::StatementKind::StorageLive(f), span);
             self.drop_flags.insert(local, f);
             f
         };

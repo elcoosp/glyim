@@ -3773,7 +3773,39 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     };
                     // T005-PATCHED-CALL [LL-15]: pass the null `drop_fn`
                     // the runtime expects as its second argument.
-                    let null_drop_fn = self.context.ptr_type(AddressSpace::default()).const_null();
+                    // Pass the type's real destructor when it has one, so
+                    // `glyim_drop_in_place` actually calls it.
+                    let drop_fn_ptr: BasicValueEnum<'ctx> =
+                        match self.ty_ctx.drop_method_for(ty) {
+                            Some(fn_def_id) => {
+                                let sym = glyim_type::mangle_fn_symbol(
+                                    fn_def_id.to_raw(),
+                                    glyim_type::Substitution::empty(),
+                                );
+                                let callee =
+                                    self.module.get_function(&sym).or_else(|| {
+                                        self.ty_ctx.fn_sig(fn_def_id).cloned().and_then(|sig| {
+                                            self.llvm_fn_type_from_sig(&sig)
+                                                .ok()
+                                                .map(|t| self.module.add_function(&sym, t, None))
+                                        })
+                                    });
+                                match callee {
+                                    Some(f) => f.as_global_value().as_pointer_value().into(),
+                                    None => self
+                                        .context
+                                        .ptr_type(AddressSpace::default())
+                                        .const_null()
+                                        .into(),
+                                }
+                            }
+                            None => self
+                                .context
+                                .ptr_type(AddressSpace::default())
+                                .const_null()
+                                .into(),
+                        };
+                    let null_drop_fn = drop_fn_ptr;
                     let args_vals: Vec<BasicValueEnum<'ctx>> = vec![drop_arg, null_drop_fn.into()];
 
                     if let Some(cleanup_bb) = cleanup_bb {
@@ -7923,6 +7955,18 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         Ok(())
     }
     fn type_needs_drop(&self, ty: Ty) -> bool {
+        // Delegate to the single authority (`TyCtx::needs_drop`), which
+        // consults `has_drop_impl` as well as field types. This used to be a
+        // third hand-written copy of the rule and was the only one that
+        // omitted the drop-impl check — so a type with an explicit
+        // `impl Drop` whose fields were all `Copy` (the common case)
+        // reported `false` here and its destructor never ran. `glyim-lower`
+        // and `glyim-opt` already delegate.
+        self.ty_ctx.needs_drop(ty)
+    }
+
+    #[allow(dead_code)]
+    fn type_needs_drop_fields_only(&self, ty: Ty) -> bool {
         match self.ty_ctx.ty_kind(ty) {
             TyKind::Ref(_, _, _) | TyKind::RawPtr(_, _) => false,
             TyKind::Array(inner, _) => self.type_needs_drop(*inner),

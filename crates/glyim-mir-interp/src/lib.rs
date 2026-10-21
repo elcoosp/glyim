@@ -1608,23 +1608,91 @@ impl<'tcx> Interpreter<'tcx> {
                     target,
                     cleanup: _,
                 } => {
-                    // T009-PATCHED [INT-2]: the previous code carried an
-                    // unconditional `debug_assert!(false, ...)` on the
-                    // premise that drop elaboration rewrites every `Drop`
-                    // into a `Call`. That premise is false: `elaborate_drops`
-                    // keeps `TerminatorKind::Drop` for every needs-drop type
-                    // (it only *guards* it with a drop flag). Any program
-                    // with e.g. a `String` local therefore panicked the
-                    // interpreter thread in debug builds (reported as a
-                    // timeout by the test harness). Treat the terminator as
-                    // a no-op with a debug log until real per-type drop
-                    // glue lands via the runtime `glyim_drop_in_place`
-                    // (see LL-15).
-                    tracing::debug!(
-                        ?place,
-                        "interpreter Drop terminator: no-op (drop glue not yet lowered)"
-                    );
-                    bb_idx = target;
+                    // A `Drop` on a local whose type has a user `Drop`
+                    // impl must actually run that destructor — the LLVM
+                    // backend does (it passes the resolved `drop` function
+                    // to `glyim_drop_in_place`), and a value that is
+                    // dropped on one backend but not the other is exactly
+                    // the divergence the differential suite exists to
+                    // catch.
+                    //
+                    // Run the destructor as an ordinary call frame: the
+                    // `drop(&mut self)` body takes one argument, a `Ref` to
+                    // the local being dropped. `frame_depth` is captured
+                    // *before* the push so the `Ref` addresses the caller's
+                    // frame. Types with no drop impl (and `Copy` types) are
+                    // a plain branch to `target`, matching the previous
+                    // no-op behaviour.
+                    let drop_ty = self
+                        .local_decls
+                        .get(place.local.index())
+                        .map(|d| d.ty)
+                        .unwrap_or(Ty::ERROR);
+                    let drop_body = if drop_ty != Ty::ERROR {
+                        self.tcx.drop_method_for(drop_ty).and_then(|fn_def_id| {
+                            let key = DefId::new(
+                                CrateId::from_raw(0),
+                                LocalDefId::from_raw(fn_def_id.to_raw()),
+                            );
+                            self.function_table.get(&key).cloned()
+                        })
+                    } else {
+                        None
+                    };
+                    let Some(callee_body) = drop_body else {
+                        bb_idx = target;
+                        continue;
+                    };
+
+                    let recv = InterpValue::Ref {
+                        frame: self.frame_depth,
+                        local: place.local.index(),
+                    };
+                    let mut callee_locals = vec![None; callee_body.locals.len()];
+                    if callee_locals.len() < 2 {
+                        return Err(InterpError::Panic(
+                            "internal error: drop glue body has no receiver local".into(),
+                        ));
+                    }
+                    callee_locals[1] = Some(recv);
+
+                    // Mirror the `Call` arm's bookkeeping: the `Return`
+                    // handler decrements *both* counters, so a frame pushed
+                    // without incrementing `recursion_depth` underflows it on
+                    // return (`attempt to subtract with overflow`).
+                    self.recursion_depth += 1;
+                    if self.recursion_depth > self.recursion_limit {
+                        self.current_body = Some(body);
+                        self.current_bb = bb_idx;
+                        return Err(InterpError::StackOverflow);
+                    }
+
+                    let caller_frame = CallFrame {
+                        body,
+                        bb: target,
+                        locals: std::mem::take(&mut self.locals),
+                        // The destructor returns *to* `target`; there is no
+                        // value to place (drop returns `()`).
+                        return_place: Place::new(LocalIdx::from_raw(0)),
+                        target_bb: target,
+                        unwind_target: None,
+                        generation: self.next_frame_gen,
+                    };
+                    let depth = self.frame_depth;
+                    if self.frame_generations.len() <= depth {
+                        self.frame_generations.resize(depth + 1, 0);
+                    }
+                    self.frame_generations[depth] = self.next_frame_gen;
+                    self.next_frame_gen = self.next_frame_gen.wrapping_add(1);
+
+                    self.call_stack.push(caller_frame);
+                    self.frame_depth += 1;
+                    self.local_decls = callee_body.locals.iter().cloned().collect();
+                    self.current_body_owner = Some(callee_body.owner);
+                    self.current_arg_count = callee_body.arg_count;
+                    self.locals = callee_locals;
+                    body = callee_body;
+                    bb_idx = BasicBlockIdx::from_raw(0);
                 }
             }
         }

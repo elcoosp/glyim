@@ -556,6 +556,44 @@ impl<'a> MonoCtx<'a> {
             }
             TerminatorKind::Drop { place, .. } => {
                 self.drop_locals.push(place.local);
+                // Enqueue the type's `Drop::drop`. Codegen's `Drop` lowering
+                // passes that function's address to `glyim_drop_in_place`, so
+                // its body must be emitted or the link fails with an
+                // undefined `__glyim_fn_<id>`.
+                if let Some(ty_ctx) = self.ty_ctx
+                    && let Some(local_decl) = body.locals.get(place.local)
+                {
+                    let mut ty = local_decl.ty;
+                    for proj in place.projection.iter() {
+                        match proj {
+                            glyim_mir::ProjectionElem::Field(idx) => {
+                                if let glyim_type::TyKind::Adt(adt_id, _) = ty_ctx.ty_kind(ty)
+                                    && let Some(def) = ty_ctx.adt_def(*adt_id)
+                                {
+                                    ty = def
+                                        .fields
+                                        .get(glyim_type::FieldIdx::from_raw(idx.index() as u32))
+                                        .map(|f| f.ty)
+                                        .unwrap_or(ty);
+                                }
+                            }
+                            glyim_mir::ProjectionElem::Deref => {
+                                ty = match ty_ctx.ty_kind(ty) {
+                                    glyim_type::TyKind::Ref(_, inner, _)
+                                    | glyim_type::TyKind::RawPtr(inner, _) => *inner,
+                                    _ => ty,
+                                };
+                            }
+                            _ => break,
+                        }
+                    }
+                    if let Some(drop_fn) = ty_ctx.drop_method_for(ty) {
+                        self.enqueue(MonoItem::Fn {
+                            def_id: drop_fn,
+                            substs: Substitution::empty(),
+                        });
+                    }
+                }
             }
             TerminatorKind::SwitchInt { discr, .. } => self.scan_operand(discr),
             TerminatorKind::Assert { cond, .. } => self.scan_operand(cond),
