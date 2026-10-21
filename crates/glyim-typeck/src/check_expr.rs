@@ -678,15 +678,36 @@ impl<'a> FnCtxt<'a> {
                     // `impl Iterator for &[T]` and `next_info` resolves.
                     // But none of the structural arms above produced an
                     // `item_ty` — and lowering would pass `&mut &Vec<T>`
-                    // (a 3-word pointer) to `<&[T]>::next` (which expects
-                    // a 2-word slice pointer): a layout mismatch that
-                    // segfaults at runtime (verified). Without
+                    // (a 3-word pointer-to-Vec) to `<&[T]>::next` (which
+                    // expects a 2-word pointer-to-slice): a layout mismatch
+                    // that segfaults at runtime (verified). Without
                     // `IntoIterator for Vec<T>` (KNOWN_GAPS §3.4) the
                     // honest outcome is to reject with a hint. Clearing
                     // `next_info` here lets the "not iterable" gate below
                     // fire instead of silently reaching the segfaulting
                     // path.
-                    if known.is_none() && next_info.is_some() && !is_unresolved {
+                    //
+                    // Narrow: only the exact `&U` shape whose pointee
+                    // `U` derefs to a slice is affected. A custom
+                    // `impl Iterator for MyIter` (where `MyIter` is a
+                    // concrete ADT — e.g. `struct_drop_runtime.rs`'s
+                    // `Adt6`) legitimately reaches here with
+                    // `known = None, next_info = Some` and MUST NOT be
+                    // rejected. `&[T; N]` and `&[T]` also stay on the
+                    // trait path (their lowering shapes were correct
+                    // before this change).
+                    let is_ref_to_deref_slice = match self.ctx.ty_kind(resolved_iter_ty) {
+                        TyKind::Ref(_, inner, _) => self
+                            .ctx
+                            .deref_ty(*inner)
+                            .is_some_and(|d| matches!(self.ctx.ty_kind(d), TyKind::Slice(_))),
+                        _ => false,
+                    };
+                    if known.is_none()
+                        && next_info.is_some()
+                        && !is_unresolved
+                        && is_ref_to_deref_slice
+                    {
                         next_info = None;
                     }
                     if known.is_none() && next_info.is_none() && !is_unresolved {
