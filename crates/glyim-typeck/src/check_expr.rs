@@ -540,7 +540,7 @@ impl<'a> FnCtxt<'a> {
                 // to the `Iterator` trait's `next` method.
                 let is_array_iterable =
                     matches!(self.ctx.ty_kind(iter_ty), TyKind::Array(_, _));
-                let next_info = if is_array_iterable {
+                let mut next_info = if is_array_iterable {
                     None
                 } else {
                     let iterator_name = self.ctx.resolver().intern("Iterator");
@@ -672,16 +672,55 @@ impl<'a> FnCtxt<'a> {
                             | TyKind::Infer(_)
                             | TyKind::Error
                     );
+                    // `for x in &v` where `v: Vec<T>`: autoderef reaches
+                    // `&[T]` (via `impl Deref for Vec<T>` — see the
+                    // `deref_ty` Slice(Param) arm), so the trait scan finds
+                    // `impl Iterator for &[T]` and `next_info` resolves.
+                    // But none of the structural arms above produced an
+                    // `item_ty` — and lowering would pass `&mut &Vec<T>`
+                    // (a 3-word pointer) to `<&[T]>::next` (which expects
+                    // a 2-word slice pointer): a layout mismatch that
+                    // segfaults at runtime (verified). Without
+                    // `IntoIterator for Vec<T>` (KNOWN_GAPS §3.4) the
+                    // honest outcome is to reject with a hint. Clearing
+                    // `next_info` here lets the "not iterable" gate below
+                    // fire instead of silently reaching the segfaulting
+                    // path.
+                    if known.is_none() && next_info.is_some() && !is_unresolved {
+                        next_info = None;
+                    }
                     if known.is_none() && next_info.is_none() && !is_unresolved {
                         let iter_desc = PrintTy::new(resolved_iter_ty, self.ctx).to_string();
-                        self.diagnostics.push(GlyimDiagnostic::type_error(
-                            span,
-                            format!(
+                        // For `for x in &v` where `v: Vec<T>`: the iterable
+                        // is a reference whose pointee derefs to a slice. We
+                        // do not yet wire `IntoIterator for Vec<T>` (see
+                        // KNOWN_GAPS.md §3.4), so the honest diagnostic ships
+                        // a hint to the already-supported path.
+                        let hint = match self.ctx.ty_kind(resolved_iter_ty) {
+                            TyKind::Ref(_, inner, _) => {
+                                if let Some(d) = self.ctx.deref_ty(*inner)
+                                    && matches!(self.ctx.ty_kind(d), TyKind::Slice(_))
+                                {
+                                    Some("use `<value>.as_slice()` to iterate a slice view")
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        };
+                        let msg = match hint {
+                            Some(h) => format!(
+                                "`{iter_desc}` is not iterable: it implements neither \
+                                 `Iterator` nor `IntoIterator`, and is not an array, \
+                                 slice, or range. Hint: {h}"
+                            ),
+                            None => format!(
                                 "`{iter_desc}` is not iterable: it implements neither \
                                  `Iterator` nor `IntoIterator`, and is not an array, \
                                  slice, or range"
                             ),
-                        ));
+                        };
+                        self.diagnostics.push(GlyimDiagnostic::type_error(span, msg));
                     }
                     known.unwrap_or_else(|| self.fresh_infer_ty())
                 };

@@ -455,17 +455,31 @@ impl TyCtx {
                     return Some(target);
                 }
                 // Generic `impl<T> Deref for Adt<T> { type Target = T; }`: the
-                // most common case has `Target` equal to one of the self
-                // parameters, so substitute it positionally. More elaborate
-                // target types would require building a fresh `Ty`, which the
-                // frozen `TyCtx` cannot do; that is acceptable because real
-                // `Deref` impls use `type Target = T`.
-                if let Some((_self_params, target)) = self.deref_registry.template(*adt_id)
-                    && let TyKind::Param(p) = self.ty_kind(*target)
-                    && let Some(arg) = self.substitution_args(*sub).get(p.index as usize)
-                    && let GenericArg::Ty(t) = arg
-                {
-                    return Some(*t);
+                // target is one of the self parameters, substituted
+                // positionally.
+                if let Some((_self_params, target)) = self.deref_registry.template(*adt_id) {
+                    if let TyKind::Param(p) = self.ty_kind(*target)
+                        && let Some(arg) = self.substitution_args(*sub).get(p.index as usize)
+                        && let GenericArg::Ty(t) = arg
+                    {
+                        return Some(*t);
+                    }
+                    // `impl<T> Deref for Vec<T> { type Target = [T]; }`: the
+                    // registered target is a structural `Slice(Param(i))`.
+                    // `TyCtx::mk_ty` interns into the shared arena and takes
+                    // `&self` (safe on a frozen context under the
+                    // single-threaded-per-compilation invariant), so the
+                    // concrete `[T]` can be materialised here. Without this,
+                    // autoderef on a `Vec<T>` stopped at the ADT and never
+                    // reached `[T]`, so `impl Iterator for &[T]` was invisible
+                    // to `for x in &v`.
+                    if let TyKind::Slice(inner) = self.ty_kind(*target)
+                        && let TyKind::Param(p) = self.ty_kind(*inner)
+                        && let Some(GenericArg::Ty(t)) =
+                            self.substitution_args(*sub).get(p.index as usize)
+                    {
+                        return Some(self.mk_ty(TyKind::Slice(*t)));
+                    }
                 }
                 None
             }
