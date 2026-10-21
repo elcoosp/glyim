@@ -6345,6 +6345,98 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // AdtId (1060). The receiver is a `{ptr, i64}` fat pointer; the
         // helper allocates capacity == length and memcpys.
         if method == "to_vec" && _recv_adt.to_raw() == 1060 {
+            // An *array* receiver (`[1,2,3].to_vec()`) reaches here as an
+            // array value, not the `{ptr, len}` fat pointer a slice gives.
+            // Rust auto-refs and unsizes the array to `&[T]`; glyim's method
+            // resolution finds the builtin but does not insert that coercion,
+            // so handle it here: spill the value to an alloca and use its
+            // address with the array's static length.
+            let recv_rust_ty = match recv {
+                Operand::Copy(place) | Operand::Move(place) => self.place_ty(place),
+                Operand::Constant(cc) => cc.ty,
+            };
+            let peeled = match self.ty_ctx.ty_kind(recv_rust_ty) {
+                TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
+                _ => recv_rust_ty,
+            };
+            if let TyKind::Array(elem_ty, len_const) = self.ty_ctx.ty_kind(peeled).clone() {
+                let len: u64 = match &len_const.kind {
+                    glyim_type::ConstKind::Uint(n) => *n as u64,
+                    glyim_type::ConstKind::Int(n) if *n >= 0 => *n as u64,
+                    _ => return Ok(false),
+                };
+                // Spill the array value so we have an address to hand the
+                // helper (which memcpys `len * elem_size` bytes from it).
+                let arr_llvm_ty = self.llvm_type_for_ty(peeled)?;
+                let slot = self
+                    .builder
+                    .build_alloca(arr_llvm_ty, "tv_arr")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "to_vec array alloca: {e:?}"
+                        ))]
+                    })?;
+                let stored = if recv_val.get_type() == arr_llvm_ty {
+                    recv_val
+                } else {
+                    self.builder
+                        .build_bit_cast(recv_val, arr_llvm_ty, "tv_arr_cast")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "to_vec array cast: {e:?}"
+                            ))]
+                        })?
+                };
+                self.builder.build_store(slot, stored).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "to_vec array store: {e:?}"
+                    ))]
+                })?;
+                let dest_ptr = self.place_ptr(destination)?;
+                let layout_computer =
+                    FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+                let elem_size = layout_computer
+                    .layout_of(elem_ty)
+                    .map(|l| l.size.0)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "to_vec array layout: {e:?}"
+                        ))]
+                    })?;
+                let i64_ty = self.llvm_int_type(64);
+                let helper = self.declare_void_helper(
+                    "glyim_slice_to_vec",
+                    &[
+                        self.context.ptr_type(AddressSpace::default()).into(),
+                        i64_ty.into(),
+                        i64_ty.into(),
+                        self.context.ptr_type(AddressSpace::default()).into(),
+                    ],
+                );
+                let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                    slot.into(),
+                    i64_ty.const_int(len, false).into(),
+                    i64_ty.const_int(elem_size, false).into(),
+                    dest_ptr.into(),
+                ];
+                self.builder
+                    .build_call(helper, &cargs, "to_vec_arr_call")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "to_vec array call: {e:?}"
+                        ))]
+                    })?;
+                if let Some(target_bb) = target {
+                    let tb = *self.bb_map.get(target_bb).expect("to_vec array target");
+                    self.builder.build_unconditional_branch(tb).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "to_vec array branch: {e:?}"
+                        ))]
+                    })?;
+                }
+                return Ok(true);
+            }
+
             if !recv_val.is_struct_value() {
                 return Ok(false);
             }
