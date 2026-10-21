@@ -1036,6 +1036,64 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_z_extend(raw, i64_ty, "idx_zext")
                             .expect("zext failed")
                     };
+                    // `Vec<T>` (AdtId 1020) indexes like `[T]`, but its
+                    // header is `{[3 x i64]}` (data ptr, capacity, length) —
+                    // a single struct field, not the two-field fat pointer a
+                    // slice has. Read word 0 (the data pointer) through a
+                    // byte-GEP, then GEP by the index like the slice path.
+                    if let TyKind::Adt(adt_id, substs) = self.ty_ctx.ty_kind(current_ty).clone()
+                        && adt_id.to_raw() == 1020
+                    {
+                        let elem = self
+                            .ty_ctx
+                            .substitution_args(substs)
+                            .first()
+                            .and_then(|a| match a {
+                                glyim_type::GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            })
+                            .unwrap_or(Ty::ERROR);
+                        let i8_ptr_ty = self.context.ptr_type(AddressSpace::default());
+                        let zero_i64 = i64_ty.const_zero();
+                        let word0_ptr = unsafe {
+                            self.builder.build_in_bounds_gep(
+                                self.context.i8_type(),
+                                ptr,
+                                &[zero_i64],
+                                "vec_data_ptr_gep",
+                            )
+                        }
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec index dp gep: {e:?}"
+                            ))]
+                        })?;
+                        let data_ptr = self
+                            .builder
+                            .build_load(i8_ptr_ty, word0_ptr, "vec_data_ptr")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "vec index dp load: {e:?}"
+                                ))]
+                            })?
+                            .into_pointer_value();
+                        let elem_llvm_ty = self.llvm_type_for_ty(elem)?;
+                        ptr = unsafe {
+                            self.builder.build_in_bounds_gep(
+                                elem_llvm_ty,
+                                data_ptr,
+                                &[index_val],
+                                "vec_elem_gep",
+                            )
+                        }
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "vec index elem gep: {e:?}"
+                            ))]
+                        })?;
+                        current_ty = elem;
+                        continue;
+                    }
                     let elem_ty = match self.ty_ctx.ty_kind(current_ty) {
                         TyKind::Array(elem, _) => *elem,
                         TyKind::Slice(elem) => *elem,

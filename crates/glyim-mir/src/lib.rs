@@ -306,6 +306,18 @@ impl Place {
                     // tripped the "Index on non-array/slice type"
                     // invariant and returned `Ty::ERROR`.
                     TyKind::String => Ty::U8,
+                    // `Vec<T>` (AdtId 1020) indexes like `[T]`; typeck
+                    // accepts it (`get_index_info`), so the MIR element type
+                    // must be `T` too or `place.ty()` yields `ERROR` and the
+                    // load is mis-typed.
+                    TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => ctx
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        })
+                        .unwrap_or(Ty::ERROR),
                     _ => {
                         tracing::error!("Place::ty(): Index on non-array/slice type");
                         ctx.error_ty()
@@ -406,6 +418,14 @@ impl Place {
                     TyKind::Array(inner_ty, _) => *inner_ty,
                     TyKind::Slice(inner_ty) => *inner_ty,
                     TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
+                    TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => ctx
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| ctx.alloc_ty(TyKind::Error)),
                     _ => {
                         tracing::error!("Place::ty_mut(): Index on non-array/slice type");
                         ctx.error_ty()
