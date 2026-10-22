@@ -904,11 +904,34 @@ impl<'a> MirBuilder<'a> {
                 // fallback is what a mocked test context supplies; real
                 // array iterables arrive here with both absent because
                 // typeck deliberately routes them around the trait.
-                let take_array_path = matches!(
+                // SLICE-ITER: also route `for x in <&[T]>` (from
+                // `v.as_slice()` or `a.iter()`) through the index-walk,
+                // NOT the trait path. The trait path calls
+                // `impl Iterator for &[T]`'s `next`, whose body returns
+                // `&T` into its own transient frame — the interpreter
+                // cannot model that (KNOWN_GAPS §7, "deref of Ref from
+                // dead frame"). Index-walk keeps everything in the
+                // caller's frame. `s[i]` on `&[i32]` already works in
+                // both backends (verified: LLVM exit 20 for `s[1]`).
+                //
+                // The item type differs per iterable shape: for a bare
+                // array `[T; N]`, `pat.ty = T`; for `&[T]`, `pat.ty = &T`
+                // (mirroring `impl Iterator for &[T]`'s `Item = &T`). The
+                // wrapper is a `Ref` around the raw element value below.
+                let iter_is_ref_slice = matches!(
+                    self.ctx.ty_ctx().ty_kind(iter_ty),
+                    TyKind::Ref(_, inner, _)
+                        if matches!(self.ctx.ty_ctx().ty_kind(*inner), TyKind::Slice(_))
+                );
+                let iter_is_bare_slice =
+                    matches!(self.ctx.ty_ctx().ty_kind(iter_ty), TyKind::Slice(_));
+                let take_array_path = (matches!(
                     self.ctx.ty_ctx().ty_kind(iter_ty),
                     TyKind::Array(_, _)
                 ) && next.is_none()
-                    && self.ctx.iterator_next_fn(iter_ty, elem_ty).is_none();
+                    && self.ctx.iterator_next_fn(iter_ty, elem_ty).is_none())
+                    || iter_is_ref_slice
+                    || iter_is_bare_slice;
                 let array_loop_state: Option<(glyim_mir::LocalIdx, glyim_mir::LocalIdx)> =
                     if take_array_path {
                         let usize_ty = Ty::USIZE;
@@ -927,10 +950,23 @@ impl<'a> MirBuilder<'a> {
                         );
                         let len_local = self.alloc_local(usize_ty, Mutability::Not, expr.span);
                         self.push_stmt(StatementKind::StorageLive(len_local), expr.span);
+                        // `Rvalue::Len` expects an Array/Slice/str place,
+                        // not a reference. For a `&[T]` iterable, the
+                        // local holds a fat pointer — Deref it first, the
+                        // same way `s[i]` does. `Len` on the resulting
+                        // `[T]` place reads field 1 of the fat pointer
+                        // correctly (codegen's `pointee_is_fat` path).
+                        let len_place = if iter_is_ref_slice {
+                            let mut p = Place::new(iter_local);
+                            p.projection = Box::new([glyim_mir::ProjectionElem::Deref]);
+                            p
+                        } else {
+                            Place::new(iter_local)
+                        };
                         self.push_stmt(
                             StatementKind::Assign(
                                 Place::new(len_local),
-                                Rvalue::Len(Place::new(iter_local)),
+                                Rvalue::Len(len_place),
                             ),
                             expr.span,
                         );
@@ -980,26 +1016,81 @@ impl<'a> MirBuilder<'a> {
                         expr.span,
                     );
                     self.current_block = Some(body_bb);
+                    // For a `&[T]` iterable, the base local holds a fat
+                    // pointer (`{ptr, len}`). Indexing needs a `Deref`
+                    // first (to reach the `[T]` pointee), matching what
+                    // typeck emits for `s[i]` — `[Deref, Index(i)]`. A
+                    // bare `[T]` (already a slice, not a ref) indexes
+                    // directly, matching the array shape.
                     let elem_value_place = {
                         let mut base = Place::new(iter_local);
-                        base.projection = Box::new([glyim_mir::ProjectionElem::Index(idx_local)]);
+                        if iter_is_ref_slice {
+                            base.projection = Box::new([
+                                glyim_mir::ProjectionElem::Deref,
+                                glyim_mir::ProjectionElem::Index(idx_local),
+                            ]);
+                        } else {
+                            base.projection = Box::new([
+                                glyim_mir::ProjectionElem::Index(idx_local),
+                            ]);
+                        }
                         base
                     };
-                    let elem_local = self.alloc_local(elem_ty, Mutability::Not, expr.span);
-                    self.push_stmt(StatementKind::StorageLive(elem_local), expr.span);
+                    // Raw element type: `iter_local[idx]` yields the bare
+                    // element. For a slice iterable, `pat.ty` is `&T`, but
+                    // `iter_local[idx]` is `T` — so we read into an `T`
+                    // temp then Ref-wrap to build `&T`. For an array, the
+                    // two coincide.
+                    let raw_elem_ty = if iter_is_ref_slice {
+                        match self.ctx.ty_ctx().ty_kind(iter_ty) {
+                            TyKind::Ref(_, inner, _) => match self.ctx.ty_ctx().ty_kind(*inner) {
+                                TyKind::Slice(e) => *e,
+                                _ => elem_ty,
+                            },
+                            _ => elem_ty,
+                        }
+                    } else if iter_is_bare_slice {
+                        match self.ctx.ty_ctx().ty_kind(iter_ty) {
+                            TyKind::Slice(e) => *e,
+                            _ => elem_ty,
+                        }
+                    } else {
+                        elem_ty
+                    };
+                    let raw_elem_local =
+                        self.alloc_local(raw_elem_ty, Mutability::Not, expr.span);
+                    self.push_stmt(StatementKind::StorageLive(raw_elem_local), expr.span);
                     self.push_stmt(
                         StatementKind::Assign(
-                            Place::new(elem_local),
+                            Place::new(raw_elem_local),
                             Rvalue::Use(Operand::Copy(elem_value_place)),
                         ),
                         expr.span,
                     );
-                    self.bind_pattern(
-                        pat,
-                        Some(Place::new(elem_local)),
-                        Some(Place::new(elem_local)),
-                        expr.span,
-                    );
+                    // For slices, wrap `&raw_elem_local` to get the `&T`
+                    // item `pat` expects. The ref points into a
+                    // function-scope temp, valid for the body's duration —
+                    // matching the observable semantics of `impl Iterator
+                    // for &[T]`'s transient-ref return, without the frame
+                    // lifetime problem.
+                    let item_place = if iter_is_ref_slice || iter_is_bare_slice {
+                        let ref_local = self.alloc_local(elem_ty, Mutability::Not, expr.span);
+                        self.push_stmt(StatementKind::StorageLive(ref_local), expr.span);
+                        self.push_stmt(
+                            StatementKind::Assign(
+                                Place::new(ref_local),
+                                Rvalue::Ref(
+                                    Place::new(raw_elem_local),
+                                    glyim_mir::BorrowKind::Shared,
+                                ),
+                            ),
+                            expr.span,
+                        );
+                        Place::new(ref_local)
+                    } else {
+                        Place::new(raw_elem_local)
+                    };
+                    self.bind_pattern(pat, Some(item_place.clone()), Some(item_place), expr.span);
                     let _ = self.lower_expr_to_rvalue(body);
                     if self.current_block.is_some() {
                         self.push_stmt(

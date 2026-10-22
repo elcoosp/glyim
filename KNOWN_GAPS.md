@@ -85,13 +85,15 @@ Builtin macro expansion — which is what `include!` itself is — works.
   parent's destructor entirely — sound (over-retains, never double-frees),
   but leaks the still-initialized siblings.
 
-## 7. Interp: `for x in <slice-iterable>` — reference-into-transient-frame
+## 7. `for x in <slice-iterable>` — CLOSED
 
-**Status:** verified. LLVM backend handles `a.iter()` and `v.as_slice()` in
-for-loops (codegen commit for `iter`/`iter_mut` inlines them as unsize +
-identity). The interpreter cannot run any for-loop whose `next` comes from
-the stdlib's `impl Iterator for &[T]` (iter.g:332), because the body returns
-`&T` references into its own transient frame:
+*(Historical note: this gap was open from session 15 until it was closed
+by the lowering change described here. Kept in the file so a future reader
+who remembers the symptom can trace the fix.)*
+
+**Symptom.** The trait-path lowering of `for x in v.as_slice()` /
+`for x in a.iter()` routed through the stdlib's `impl Iterator for &[T]`
+(iter.g:332), whose `next` returns `&T` into its own transient frame:
 
     fn next(&mut self) -> Option<&'a T> {
         let cur: &[T] = *self;
@@ -100,23 +102,44 @@ the stdlib's `impl Iterator for &[T]` (iter.g:332), because the body returns
         Option::Some(first)
     }
 
-When `next` returns, its frame dies, and the caller's `*x` panics with
-`deref of Ref from dead frame 1`. The same failure hits every
-`for x in <&[T]>` / `for x in <slice-iter>` shape — verified against
-`for x in v.as_slice()` and `for x in &[1,2,3][..2]`.
+When `next` returned, its frame died, and the caller's `*x` panicked
+with `deref of Ref from dead frame 1`. LLVM handled it (it doesn't care
+about frames); the **interpreter did not**. A `run-pass` fixture could
+not be added — the harness runs the interpreter, so the fixture would
+fail on the interp path.
 
-**Scope of the gap:**
-- LLVM backend: works (`for x in v.as_slice()` → exit 3; `for x in a.iter()` → exit 6).
-- Interp: `RunFailed { exit_code: Some(101) }` — same panic on both forms.
-- No `run-pass` fixture can cover `iter()` until the interpreter can model
-  borrowed returns (either via a lifetime-aware Ref, or a special-case
-  desugar for slices that lowers the for-loop to an index walk — the same
-  approach the array path already uses).
+**Fix (this session).** `lower_rvalue.rs`'s for-loop lowering now takes
+the *index-walk* path for any slice iterable, not just bare arrays:
 
-**Not in this session's scope.** Codegen fix for `iter`/`iter_mut` landed
-anyway (closes the LLVM-side link error and unblocks the `iterator` idiom
-under `--emit=exec` / differential). Tracked here so the next agent does
-not re-probe the interp.
+- `take_array_path` fires for `TyKind::Ref(_, Slice(_))` (a `&[T]`,
+  which is what `v.as_slice()` and `a.iter()` return), for bare
+  `TyKind::Slice(_)`, and for the existing `TyKind::Array(_, _)`.
+- The element read (`iter_local[Deref, Index(i)]`) uses the same
+  `[Deref, Index]` projection shape that typeck emits for `s[i]`,
+  after which codegen's `pointee_is_fat` path (lower.rs:664) and the
+  interpreter's `ProjectionElem::Deref` arm handle the fat pointer
+  identically. The item is then wrapped in a `Ref` to build the `&T`
+  that `pat` binds — mirroring `impl Iterator for &[T]`'s `Item = &T`,
+  but with the reference target in the caller's frame.
+- The `Rvalue::Len` place also gets a `Deref` prepended for the
+  ref-slice case, matching what `s.len()` emits.
+
+Both backends now agree on every shape. The trait path for `Iterator`
+on user-defined types (custom `impl Iterator for Counter`, etc.) is
+untouched — only slice iterables route around it.
+
+**Verified.**
+
+- LLVM: `for x in v.as_slice()` → exit 3; `for x in a.iter()` → exit 6.
+- Interp: same (harness covers both backends through the fixture).
+- No regression to `for x in [1,2]`, `for i in 0..3`, `s[i]`, `s.len()`.
+- Fixtures: `behavior/for_loop_over_slice.g`,
+  `behavior/for_loop_over_slice_iter.g`.
+
+**Not affected.** `IntoIterator for Vec<T>` is still missing
+(`KNOWN_GAPS.md` §3.4): `for x in &v` where `v: Vec<T>` still rejects
+with the `as_slice()` hint added in the `for x in &v` fix
+(commit `02717423`, narrowed by `cd654fcf`).
 
 ## Verification
 
