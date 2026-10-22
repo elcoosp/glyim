@@ -1682,16 +1682,200 @@ impl<'a> MirBuilder<'a> {
                 }))
             }
             thir::ExprKind::Try { expr: inner } => {
-                // `expr?`: the type-checker has already verified the operand is
-                // `Result<T, E>` / `Option<T>` and unified the error/None
-                // branch against the enclosing function's return. MIR lowering
-                // evaluates the operand and (as a first-cut) yields its
-                // success value directly. A full lowering of `?` into a
-                // discriminant-check + early-return terminator pair is a
-                // codegen follow-up (tracked as ISSUE-0007-adjacent); the
-                // stdlib-compile probe only exercises typeck, so the identity
-                // lowering here is sufficient to keep the pipeline green.
-                self.lower_expr_to_rvalue(inner)
+                // `expr?` — desugar to:
+                //   tmp  = <inner>;                 // Result<T,E> / Option<T>
+                //   disc = Discriminant(tmp);
+                //   switch disc { succ => ok_bb, else => err_bb }
+                //
+                //   ok_bb:
+                //     dest = tmp.succ_field(0);     // T
+                //     goto merge_bb
+                //
+                //   err_bb:
+                //     ret  = <ret_ty>::err_variant(tmp.err_field(0))  // or None
+                //     return ret
+                //
+                //   merge_bb:
+                //     -> dest
+                //
+                // Variant numbering: `Result` (Adt1011) is 0=Ok, 1=Err;
+                // `Option` (Adt1010) is 0=None, 1=Some. Success and error
+                // variants differ per type, so the `success_variant` is
+                // derived from the operand's AdtId below. `None` has no
+                // payload, so the err-extract + aggregate-build step is
+                // skipped for Option; the returned value is a bare
+                // `Option::None` aggregate.
+                //
+                // Typeck (check_expr.rs:3012) has already unified the
+                // operand's error type against the enclosing function's
+                // return error type, so no `From::from` coercion is
+                // needed here.
+                let inner_ty = inner.ty;
+                let (is_result, success_variant, err_variant) =
+                    match self.ctx.ty_ctx().ty_kind(inner_ty) {
+                        TyKind::Adt(id, _) => match id.to_raw() {
+                            1011 => (true, 0u32, 1u32), // Result
+                            1010 => (false, 1u32, 0u32), // Option
+                            _ => (true, 0u32, 1u32),    // defensive; typeck rejects
+                        },
+                        _ => (true, 0u32, 1u32),
+                    };
+
+                // Evaluate the operand into a local.
+                let operand_rv = self.lower_expr_to_rvalue(inner);
+                let operand_local = self.alloc_local(
+                    inner_ty,
+                    glyim_core::primitives::Mutability::Mut,
+                    inner.span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(operand_local),
+                        operand_rv,
+                    ),
+                    inner.span,
+                );
+
+                // Discriminant local.
+                let u8_ty = self.ctx.ty_ctx().mk_ty(TyKind::Uint(
+                    glyim_core::primitives::UintTy::U8,
+                ));
+                let discr_local = self.alloc_local(
+                    u8_ty,
+                    glyim_core::primitives::Mutability::Not,
+                    expr.span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(discr_local),
+                        glyim_mir::Rvalue::Discriminant(glyim_mir::Place::new(operand_local)),
+                    ),
+                    expr.span,
+                );
+
+                // Success value slot.
+                let dest_local = self.alloc_local(
+                    expr.ty,
+                    glyim_core::primitives::Mutability::Mut,
+                    expr.span,
+                );
+                let dest_place = glyim_mir::Place::new(dest_local);
+
+                let ok_bb = self.new_block();
+                let err_bb = self.new_block();
+                let merge_bb = self.new_block();
+
+                self.terminate(
+                    glyim_mir::TerminatorKind::SwitchInt {
+                        discr: glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local)),
+                        switch_ty: u8_ty,
+                        targets: glyim_mir::SwitchTargets::new(
+                            Box::new([(success_variant as u128, ok_bb)]),
+                            err_bb,
+                        ),
+                    },
+                    expr.span,
+                );
+
+                // ok_bb: extract success payload, assign to dest, goto merge.
+                self.current_block = Some(ok_bb);
+                let succ_payload = glyim_mir::Place {
+                    local: operand_local,
+                    projection: vec![
+                        glyim_mir::ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(
+                            success_variant,
+                        )),
+                        glyim_mir::ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)),
+                    ]
+                    .into_boxed_slice(),
+                };
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        dest_place.clone(),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(succ_payload)),
+                    ),
+                    expr.span,
+                );
+                self.terminate(
+                    glyim_mir::TerminatorKind::Goto { target: merge_bb },
+                    expr.span,
+                );
+
+                // err_bb: build the return_ty's error/None variant and Return.
+                self.current_block = Some(err_bb);
+                let ret_ty = self.return_ty;
+                let (ret_adt_id, ret_substs) = match self.ctx.ty_ctx().ty_kind(ret_ty) {
+                    TyKind::Adt(id, substs) => (*id, *substs),
+                    _ => {
+                        // Defensive: typeck should have guaranteed Result/Option
+                        // here. Fall back to the operand's Adt info so the
+                        // aggregate has a valid shape (only the error slot is
+                        // touched, and typeck unifies error types, so this is
+                        // layout-compatible with the real return type).
+                        let (id, substs) = match self.ctx.ty_ctx().ty_kind(inner_ty) {
+                            TyKind::Adt(id, substs) => (*id, *substs),
+                            _ => {
+                                self.terminate(glyim_mir::TerminatorKind::Return, expr.span);
+                                self.current_block = Some(merge_bb);
+                                return glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
+                                    dest_place,
+                                ));
+                            }
+                        };
+                        (id, substs)
+                    }
+                };
+                // Err/None payload: Result carries the error value at field 0
+                // of variant 1; Option::None carries no payload.
+                let agg_args: Vec<glyim_mir::Operand> = if is_result {
+                    let err_payload = glyim_mir::Place {
+                        local: operand_local,
+                        projection: vec![
+                            glyim_mir::ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(
+                                err_variant,
+                            )),
+                            glyim_mir::ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)),
+                        ]
+                        .into_boxed_slice(),
+                    };
+                    vec![glyim_mir::Operand::Copy(err_payload)]
+                } else {
+                    vec![]
+                };
+                let ret_agg = glyim_mir::Rvalue::Aggregate(
+                    glyim_mir::AggregateKind::Adt(
+                        ret_adt_id,
+                        glyim_mir::VariantIdx::from_raw(err_variant),
+                        ret_substs,
+                    ),
+                    agg_args,
+                );
+                let ret_local = self.alloc_local(
+                    ret_ty,
+                    glyim_core::primitives::Mutability::Mut,
+                    expr.span,
+                );
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(glyim_mir::Place::new(ret_local), ret_agg),
+                    expr.span,
+                );
+                // `Return` reads local 0 (the function's return slot). Copy
+                // our aggregate into local 0 before returning.
+                let local0 = glyim_mir::LocalIdx::from_raw(0);
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(
+                        glyim_mir::Place::new(local0),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
+                            glyim_mir::Place::new(ret_local),
+                        )),
+                    ),
+                    expr.span,
+                );
+                self.terminate(glyim_mir::TerminatorKind::Return, expr.span);
+
+                // merge_bb: fall through with the success value.
+                self.current_block = Some(merge_bb);
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(dest_place))
             }
 
             thir::ExprKind::DynamicCall {
