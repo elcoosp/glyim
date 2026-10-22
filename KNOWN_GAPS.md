@@ -176,11 +176,60 @@ currently looks up `next` directly on `iter_ty`). Until that lands,
 `for x in v` rejects with an `as_slice()` hint — an honest diagnostic
 replacing what was (before commit `f4f97c2f`) a **silent miscompile**.
 
-By contrast, **`for x in &v` now works** in both backends. The
-lowering materializes `&[T]` via `Vec::as_slice` (FnDefId 9144), then
-routes the result through the slice index-walk from §7. Item type is
-`&T`, matching `impl Iterator for &[T]`. No trait-path layout mismatch,
-no interp "dead frame". Fixture: `behavior/for_loop_over_vec_ref.g`.
+**Blocker for the stdlib implementation — two real bugs.**
+
+While prototyping `VecIter<T>` (the obvious stdlib implementation of
+`IntoIterator for Vec<T>`), found two independent bugs that would each
+break the adapter on its own:
+
+**Bug A: monomorphization leaves a type parameter in a generic struct field.**
+
+    struct Wrap<T> { v: Vec<T>, i: usize }
+    fn main() -> i32 {
+        let w = Wrap { v: [1, 2, 3].to_vec(), i: 1 };
+        w.v[w.i]
+    }
+    // -> [X0000] TyKind::Param(ParamTy { index: 0, name: Name(359) })
+    //    reached LLVM codegen -- monomorphization should have resolved this
+
+So the IC E reported earlier in this entry is a symptom, not the root
+cause: `place_ptr` (or a caller) sees `Vec<T>` with `T` still a
+`Param(0)`, and either handles it incorrectly or fails at the
+`build_load` boundary. `Wrap<i32>` used directly from `main` should
+have been monomorphized to `Wrap` at `T = i32`, but the codegen backend
+received the *generic* field type. Same class as the
+`Place::ty(): Field projection on non-tuple/ADT type` stderr noise
+(cosmetic but same root cause). Fix is likely in `mono.rs`'s
+`MonoItem` collection or the caller's `Substitution` construction for
+generic struct literals.
+
+**Bug B: `.len()` on a `Vec<T>` field of a concrete struct fails to link.**
+
+    struct Wrap { v: Vec<i32>, i: usize }
+    fn main() -> i32 {
+        let w = Wrap { v: [1, 2, 3].to_vec(), i: 0 };
+        w.v.len() as i32
+    }
+    // -> Undefined symbols: "___glyim_fn_9059_21_1"
+
+`FnDefId(9059)` is `<Vec<T> as _>::len` — the builtin is registered but
+not in codegen's whitelist (`try_lower_builtin_intrinsic`) for the
+"receiver is a struct-field place rather than a `Vec` receiver" shape,
+or the monomorphized substitution for the field isn't reaching the
+call. Same family as KNOWN_GAPS §3.1 (`a.iter()` link error) and §5
+(`String/&str`). Sibling bug to Bug A — both are "generic type
+parameter survives past the point it should have been substituted".
+
+Both bugs need fixing before `VecIter<T>` can work. Neither is in the
+for-loop lowering — this session's `for x in &v` support (§7 / commit
+`8cbd551c`) sidesteps them entirely by materializing `&[T]` via
+`as_slice` (concrete `&[T]`, no generic `T` reaching codegen).
+
+By contrast, `fn take<T>(v: Vec<T>, i: usize) -> T { v[i] }` (generic
+`Vec` indexed through a *function argument*, not a struct field) is
+correct — verified 3 consecutive runs, exit 20 each time. So the
+substitution works when the `Vec<T>` is a direct parameter; it fails
+only when the `Vec<T>` is a struct field.
 
 ## Verification
 
