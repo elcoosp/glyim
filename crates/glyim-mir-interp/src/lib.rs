@@ -2341,6 +2341,21 @@ MirConstKind::Error => {
             //
             // The pointer-vs-numeric arm below catches the remaining
             // `(p as usize) != 0` shape when the intermediate cast result
+            // `String`/`&str` equality. Both sides are modelled as
+            // `InterpValue::String` (the interp stands in for a byte
+            // payload with a UTF-8 string): `String::from(..)` returns
+            // one, and a `"literal"` const lowers to one via
+            // `MirConstKind::String`. So `String == String`,
+            // `String == &str`, and `&str == String` all reach the same
+            // arm. Only `Eq`/`Ne` are meaningful here (byte-for-byte);
+            // the LLVM backend's `glyim_str_eq` is the equivalent.
+            (String(a), String(b)) => match op {
+                BinOp::Eq => Ok(Bool(a == b)),
+                BinOp::Ne => Ok(Bool(a != b)),
+                _ => Err(InterpError::Panic(format!(
+                    "unsupported String binop: {op:?}"
+                ))),
+            },
             // is optimised/elided and the raw `Ref` reaches the compare
             // (LLVM lowers this to ptrtoint + icmp; the interpreter
             // matches it by encoding the address on the fly).

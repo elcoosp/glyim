@@ -1469,7 +1469,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let l = self.lower_operand(left)?;
                 let r = self.lower_operand(right)?;
                 let operand_ty = self.operand_ty(left);
-                self.lower_binop(*op, l, r, operand_ty)
+                let r_ty = self.operand_ty(right);
+                self.lower_binop(*op, l, r, operand_ty, r_ty)
             }
             Rvalue::UnaryOp(op, operand) => {
                 let val = self.lower_operand(operand)?;
@@ -2125,16 +2126,24 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         &self,
         l: BasicValueEnum<'ctx>,
         r: BasicValueEnum<'ctx>,
-        operand_ty: Ty,
+        l_ty: Ty,
+        r_ty: Ty,
     ) -> bool {
-        let ty_is_str = match self.ty_ctx.ty_kind(operand_ty) {
-            TyKind::String => true,
-            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
-                matches!(self.ty_ctx.ty_kind(*inner), TyKind::String | TyKind::Slice(_))
+        let ty_is_str = |ty: Ty| -> bool {
+            match self.ty_ctx.ty_kind(ty) {
+                TyKind::String => true,
+                TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
+                    matches!(self.ty_ctx.ty_kind(*inner), TyKind::String | TyKind::Slice(_))
+                }
+                // `String` (the builtin ADT, 1050) is Vec-shaped: its LLVM
+                // type is `{[3 x i64]}` (ptr, cap, len). Its data ptr is
+                // array[0] and its byte length is array[2]. Comparing it
+                // needs the per-side shape extraction in `string_ptr_len`.
+                TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                _ => false,
             }
-            _ => false,
         };
-        ty_is_str && l.is_struct_value() && r.is_struct_value()
+        ty_is_str(l_ty) && ty_is_str(r_ty) && l.is_struct_value() && r.is_struct_value()
     }
 
     /// Byte-for-byte `==` / `!=` on two `{ptr, len}` string values.
@@ -2148,6 +2157,100 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     /// same shape `llvm_type_for_ty` produces for `TyKind::String` /
     /// `&str`. Extract field 0 (data pointer) and field 1 (length) from
     /// each and pass them to the runtime.
+    /// Extract `(data_ptr, len)` from either a fat-pointer string
+    /// (`{ptr, i64}`, e.g. `&str`, `TyKind::String`, `&[T]`) or a
+    /// Vec-shaped `String` (`{[3 x i64]}`, Adt1050 — the builtin struct).
+    /// The Vec-shaped case reads array indices 0 (data ptr) and 2 (len);
+    /// index 1 is capacity and is unused here.
+    fn string_ptr_len(
+        &self,
+        val: BasicValueEnum<'ctx>,
+    ) -> CompResult<(
+        inkwell::values::PointerValue<'ctx>,
+        inkwell::values::IntValue<'ctx>,
+    )> {
+        if !val.is_struct_value() {
+            return Err(vec![GlyimDiagnostic::internal_error(
+                "string_ptr_len: value is not a struct",
+            )]);
+        }
+        let sv = val.into_struct_value();
+        let nfields = sv.get_type().count_fields();
+        if nfields >= 2 {
+            let sv_a = inkwell::values::AggregateValueEnum::StructValue(sv);
+            let ptr = self
+                .builder
+                .build_extract_value(sv_a, 0, "sp_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "string_ptr_len field0: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let sv_b = inkwell::values::AggregateValueEnum::StructValue(sv);
+            let len = self
+                .builder
+                .build_extract_value(sv_b, 1, "sp_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "string_ptr_len field1: {e:?}"
+                    ))]
+                })?
+                .into_int_value();
+            return Ok((ptr, len));
+        }
+        if nfields == 1 {
+            // `{[3 x i64]}` — one field, an `[3 x i64]` array. Extract
+            // field 0 to get the array, then indices 0 (data ptr) and 2
+            // (len). Index 1 is capacity, unused. Array elements are all
+            // i64 (uniform), so the data pointer is stored as an i64 —
+            // convert with `int_to_ptr`.
+            let sv_a = inkwell::values::AggregateValueEnum::StructValue(sv);
+            let arr = self
+                .builder
+                .build_extract_value(sv_a, 0, "sp_arr")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "string_ptr_len arr: {e:?}"
+                    ))]
+                })?
+                .into_array_value();
+            let arr_a = inkwell::values::AggregateValueEnum::ArrayValue(arr);
+            let ptr_int = self
+                .builder
+                .build_extract_value(arr_a, 0, "sp_pi")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "string_ptr_len arr0: {e:?}"
+                    ))]
+                })?
+                .into_int_value();
+            let arr_b = inkwell::values::AggregateValueEnum::ArrayValue(arr);
+            let len = self
+                .builder
+                .build_extract_value(arr_b, 2, "sp_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "string_ptr_len arr2: {e:?}"
+                    ))]
+                })?
+                .into_int_value();
+            let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::default());
+            let ptr = self
+                .builder
+                .build_int_to_ptr(ptr_int, i8_ptr, "sp_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "string_ptr_len int_to_ptr: {e:?}"
+                    ))]
+                })?;
+            return Ok((ptr, len));
+        }
+        Err(vec![GlyimDiagnostic::internal_error(format!(
+            "string_ptr_len: unexpected struct field count {nfields}"
+        ))])
+    }
+
     fn lower_string_eq(
         &self,
         l: BasicValueEnum<'ctx>,
@@ -2157,28 +2260,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::default());
         let ptr_width = self.target_info.pointer_width();
         let len_ty = self.llvm_int_type(ptr_width as u32);
-        let l_struct = l.into_struct_value();
-        let r_struct = r.into_struct_value();
-        let l_ptr = self
-            .builder
-            .build_extract_value(l_struct, 0, "l_ptr")
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq l_ptr: {e:?}"))])?
-            .into_pointer_value();
-        let l_len = self
-            .builder
-            .build_extract_value(l_struct, 1, "l_len")
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq l_len: {e:?}"))])?
-            .into_int_value();
-        let r_ptr = self
-            .builder
-            .build_extract_value(r_struct, 0, "r_ptr")
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq r_ptr: {e:?}"))])?
-            .into_pointer_value();
-        let r_len = self
-            .builder
-            .build_extract_value(r_struct, 1, "r_len")
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq r_len: {e:?}"))])?
-            .into_int_value();
+        let (l_ptr, l_len) = self.string_ptr_len(l)?;
+        let (r_ptr, r_len) = self.string_ptr_len(r)?;
         // The runtime signature: `(i8*, usize, i8*, usize) -> i32`.
         let helper = self
             .module
@@ -2221,6 +2304,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         l: BasicValueEnum<'ctx>,
         r: BasicValueEnum<'ctx>,
         operand_ty: Ty,
+        r_ty: Ty,
     ) -> CompResult<BasicValueEnum<'ctx>> {
         use inkwell::FloatPredicate;
         use inkwell::IntPredicate;
@@ -2610,7 +2694,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 e
                             ))]
                         })
-                } else if self.is_string_shaped(l, r, operand_ty) {
+                } else if self.is_string_shaped(l, r, operand_ty, r_ty) {
                     self.lower_string_eq(l, r, false)
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
@@ -2686,7 +2770,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 e
                             ))]
                         })
-                } else if self.is_string_shaped(l, r, operand_ty) {
+                } else if self.is_string_shaped(l, r, operand_ty, r_ty) {
                     self.lower_string_eq(l, r, true)
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
@@ -4851,13 +4935,39 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // `{ptr, i64}`); `String::new` is all-zero; `push_str` mutates the
         // receiver's `{ptr, len}` header in place via the runtime helper.
         if method == "as_str" {
-            let stored = if recv_val.get_type() == dest_llvm_ty
-                || (recv_val.is_struct_value() && dest_llvm_ty.is_struct_type())
-            {
-                recv_val
-            } else {
+            // The receiver is either `&str` already (`{ptr, i64}`) or a
+            // `String` (`{[3 x i64]}`, Adt1050). The old "identity" was
+            // only correct for the first shape: for a `String` it stored
+            // a 24-byte `{[3 x i64]}` into a 16-byte `{ptr, i64}` slot,
+            // producing garbage data/len and (empirically) a segfault
+            // for `s.as_str() == "x"`. Extract (ptr, len) from whichever
+            // shape, then rebuild the dest fat pointer.
+            if !dest_llvm_ty.is_struct_type() {
                 return Ok(false);
+            }
+            let (ptr, len) = match self.string_ptr_len(recv_val) {
+                Ok(v) => v,
+                Err(_) => return Ok(false),
             };
+            let dst_struct_ty = dest_llvm_ty.into_struct_type();
+            let sv_dst = dst_struct_ty.get_undef();
+            let sv_p = self
+                .builder
+                .build_insert_value(sv_dst, ptr, 0, "as_str_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_str insert p: {e:?}"
+                    ))]
+                })?;
+            let sv_pl = self
+                .builder
+                .build_insert_value(sv_p, len, 1, "as_str_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "as_str insert l: {e:?}"
+                    ))]
+                })?;
+            let stored: BasicValueEnum = sv_pl.as_basic_value_enum();
             self.builder.build_store(dest_ptr, stored).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
                     "store as_str: {e:?}"
@@ -4865,9 +4975,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("as_str target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))]
+                })?;
             }
             return Ok(true);
         }
