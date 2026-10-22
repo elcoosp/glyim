@@ -24,6 +24,14 @@ pub struct CompileOutput {
     /// failure) — in which case run-pass/run-fail strategies report "no
     /// executable produced" rather than silently running nothing.
     pub executable_path: Option<PathBuf>,
+    /// Owns the per-compile temp dir that holds `executable_path` (if any).
+    /// Held as an `Arc<TempDir>` so `CompileOutput` stays `Clone`; the dir is
+    /// removed when the last clone drops, i.e. once the fixture has finished
+    /// executing. **Before this existed**, the harness wrote the object and
+    /// executable directly into `std::env::temp_dir()` with no cleanup — the
+    /// differential gate alone leaked 3000+ dirs / ~48 GB before disk ran
+    /// out (session 15 follow-up).
+    pub executable_cleanup: Option<Arc<tempfile::TempDir>>,
     /// Raw `LocalDefId` of the crate's `main`, discovered by the same
     /// `entry_main_local_id` pre-pass the CLI uses. Populated for both the
     /// real-LLVM and interpreter paths so the harness can pick `main` out of
@@ -42,6 +50,12 @@ impl std::fmt::Debug for CompileOutput {
             .field("mir_bodies", &self.mir_bodies)
             .field("ty_ctx", &self.ty_ctx.as_ref().map(|_| "TyCtx"))
             .field("executable_path", &self.executable_path)
+            // Presence-only: the `TempDir` has no useful Debug repr and
+            // the field's whole point is lifetime management, not data.
+            .field(
+                "executable_cleanup",
+                &self.executable_cleanup.as_ref().map(|_| "<TempDir>"),
+            )
             .field("entry_main", &self.entry_main)
             .finish()
     }
@@ -85,6 +99,7 @@ impl TestCompiler for FrontendOnlyCompiler {
             mir_bodies: Vec::new(),
             ty_ctx: None,
             executable_path: None,
+            executable_cleanup: None,
             entry_main: None,
         }
     }
@@ -289,7 +304,20 @@ impl TestCompiler for PipelineCompiler {
             db.vfs().add_file_content(&path, Arc::from(expanded_src));
         }
 
-        let output_path = std::env::temp_dir().join(format!(
+        // Per-compile temp dir. Previously the .o and exe went straight
+        // into `env::temp_dir()` and were never removed — the differential
+        // gate leaked one dir per fixture per run (3000+ dirs / ~48 GB
+        // before disk pressure hit). The `TempDir` is stored in
+        // `CompileOutput::executable_cleanup`; when the fixture's
+        // `CompileOutput` drops (i.e. after `ProgramRunner::run` returns),
+        // the whole tree is removed.
+        let workdir = Arc::new(
+            tempfile::Builder::new()
+                .prefix("glyim_test_")
+                .tempdir()
+                .expect("failed to create per-compile temp dir for test artifacts"),
+        );
+        let output_path = workdir.path().join(format!(
             "glyim_test_{}_{}.o",
             unique_tag,
             caller_file_id.to_raw()
@@ -395,6 +423,7 @@ impl TestCompiler for PipelineCompiler {
                         .collect(),
                     ty_ctx: Some(artifacts.ty_ctx),
                     executable_path,
+                    executable_cleanup: Some(workdir),
                     entry_main,
                 }
             }
@@ -408,6 +437,11 @@ impl TestCompiler for PipelineCompiler {
                     mir_bodies: Vec::new(),
                     ty_ctx,
                     executable_path: None,
+                    // The `workdir` still drops at end-of-scope — this
+                    // branch has no exe for the caller, so nothing outlives
+                    // the compile call anyway. Explicit `None` documents
+                    // that contract.
+                    executable_cleanup: None,
                     entry_main,
                 }
             }

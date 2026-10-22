@@ -22,6 +22,7 @@ json-output = ["serde", "serde_json"]
 real-llvm = ["glyim-codegen-llvm"]
 
 [dependencies]
+tempfile = { workspace = true }
 glyim-mir-interp = { workspace = true }
 glyim-core       = { workspace = true }
 glyim-span       = { workspace = true }
