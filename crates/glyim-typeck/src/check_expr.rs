@@ -632,7 +632,46 @@ impl<'a> FnCtxt<'a> {
                         TyKind::Array(elem, _) => Some(*elem),
                         _ => None,
                     };
-                    let known = range_elem.or(ref_slice_elem).or(array_elem);
+                    // 3. `&Vec<T>` iterable: item is `&T` (mirroring
+                    //    `&[T] -> &T`, and consistent with the `as_slice`
+                    //    normalization the lowering applies). Without this
+                    //    arm, `for x in &v` (v: Vec<T>) hit the "not
+                    //    iterable" gate even though it is genuinely
+                    //    supported by the index-walk after `as_slice`.
+                    //    Only shared refs — `&mut Vec<T>` would need
+                    //    `as_slice_mut` semantics that do not exist here
+                    //    yet, so it stays rejected by the gate below.
+                    // Two-step: extract the elem type first (immutable
+                    // borrow), then build the `&T` after the borrow ends.
+                    // A single match-with-closure would hold the
+                    // `ty_kind` borrow across `self.ctx.mk_ref`.
+                    let ref_vec_elem_inner: Option<Ty> = match self.ctx.ty_kind(iter_ty) {
+                        TyKind::Ref(_, inner, glyim_core::primitives::Mutability::Not) => {
+                            match self.ctx.ty_kind(*inner) {
+                                TyKind::Adt(id, substs) if id.to_raw() == 1020 => self
+                                    .ctx
+                                    .substitution_args(*substs)
+                                    .first()
+                                    .and_then(|a| match a {
+                                        GenericArg::Ty(t) => Some(*t),
+                                        _ => None,
+                                    }),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    };
+                    let ref_vec_elem = ref_vec_elem_inner.map(|t| {
+                        self.ctx.mk_ref(
+                            glyim_type::Region::Erased,
+                            t,
+                            glyim_core::primitives::Mutability::Not,
+                        )
+                    });
+                    let known = range_elem
+                        .or(ref_slice_elem)
+                        .or(array_elem)
+                        .or(ref_vec_elem);
                     // Reject a non-iterable. Without this, `for x in 5 { .. }`
                     // and `for x in some_vec { .. }` type-checked silently:
                     // the item type became a fresh inference variable and
@@ -737,6 +776,12 @@ impl<'a> FnCtxt<'a> {
                         // a hint to the already-supported path.
                         let hint = match self.ctx.ty_kind(resolved_iter_ty) {
                             TyKind::Ref(_, inner, _) => {
+                                // `&[T]` is handled by `ref_slice_elem`
+                                // above; `&Vec<T>` by `ref_vec_elem`. The
+                                // only ref shapes still reaching this hint
+                                // are `&mut Vec<T>` (needs `as_slice_mut`
+                                // semantics) and any other `Deref` to a
+                                // slice. Keep the hint there.
                                 if let Some(d) = self.ctx.deref_ty(*inner)
                                     && matches!(self.ctx.ty_kind(d), TyKind::Slice(_))
                                 {

@@ -918,6 +918,103 @@ impl<'a> MirBuilder<'a> {
                 // array `[T; N]`, `pat.ty = T`; for `&[T]`, `pat.ty = &T`
                 // (mirroring `impl Iterator for &[T]`'s `Item = &T`). The
                 // wrapper is a `Ref` around the raw element value below.
+                // For `for x in &v` where `v: Vec<T>`, materialize `&[T]`
+                // via the `as_slice` builtin (FnDefId 9162, exactly what
+                // `v.as_slice()` / `(&v).as_slice()` resolve to; the
+                // codegen path handles both pointer- and struct-valued
+                // receivers). This lets the slice index-walk below apply
+                // unchanged, giving both backends the same proven path
+                // (no trait-path layout mismatch, no interp "dead frame"
+                // reference). Item type is `&T` (already set by typeck
+                // through `ref_vec_elem`); the Ref-wrap below builds it
+                // from the raw `T` at each index.
+                let (iter_ty, iter_local) = match self.ctx.ty_ctx().ty_kind(iter_ty) {
+                    TyKind::Ref(_, inner, glyim_core::primitives::Mutability::Not) => {
+                        match self.ctx.ty_ctx().ty_kind(*inner) {
+                            TyKind::Adt(id, substs) if id.to_raw() == 1020 => {
+                                let elem_t = self
+                                    .ctx
+                                    .ty_ctx()
+                                    .substitution_args(*substs)
+                                    .first()
+                                    .and_then(|a| match a {
+                                        glyim_type::GenericArg::Ty(t) => Some(*t),
+                                        _ => None,
+                                    });
+                                match elem_t {
+                                    Some(elem_t) => {
+                                        let slice_ty = self
+                                            .ctx
+                                            .ty_ctx()
+                                            .mk_ty(TyKind::Slice(elem_t));
+                                        let ref_slice_ty = self.ctx.ty_ctx().mk_ref(
+                                            glyim_type::Region::Erased,
+                                            slice_ty,
+                                            Mutability::Not,
+                                        );
+                                        let slice_local = self.alloc_local(
+                                            ref_slice_ty,
+                                            Mutability::Not,
+                                            iterable.span,
+                                        );
+                                        self.push_stmt(
+                                            StatementKind::StorageLive(slice_local),
+                                            iterable.span,
+                                        );
+                                        // 9144 = `<Vec<T> as _>::as_slice` —
+                                        // verified via MIR: `let s =
+                                        // (&v).as_slice()` emits `Fn(9144)`
+                                        // (this is NOT 9162, which is
+                                        // `to_vec`; a first pass used 9162
+                                        // and the synthesized call hit an
+                                        // undefined `__glyim_fn_9162` at
+                                        // link time). Both backends already
+                                        // handle `as_slice` (Vec receiver,
+                                        // reads word 0 = ptr, word 2 = len,
+                                        // returns a `{ptr, len}` fat
+                                        // pointer).
+                                        let as_slice_fn =
+                                            glyim_core::def_id::FnDefId::from_raw(9144);
+                                        let substs = self.ctx.ty_ctx().intern_substitution(
+                                            vec![glyim_type::GenericArg::Ty(elem_t)],
+                                        );
+                                        let fn_ty = self
+                                            .ctx
+                                            .ty_ctx()
+                                            .mk_ty(TyKind::FnDef(as_slice_fn, substs));
+                                        let after_call = self.new_block();
+                                        self.terminate(
+                                            glyim_mir::TerminatorKind::Call {
+                                                func: glyim_mir::Operand::Constant(
+                                                    glyim_mir::MirConst {
+                                                        kind: glyim_mir::MirConstKind::Fn(
+                                                            as_slice_fn,
+                                                            substs,
+                                                        ),
+                                                        ty: fn_ty,
+                                                        span: iterable.span,
+                                                    },
+                                                ),
+                                                args: vec![glyim_mir::Operand::Copy(
+                                                    glyim_mir::Place::new(iter_local),
+                                                )],
+                                                destination: glyim_mir::Place::new(slice_local),
+                                                target: Some(after_call),
+                                                cleanup: None,
+                                            },
+                                            iterable.span,
+                                        );
+                                        self.current_block = Some(after_call);
+                                        (ref_slice_ty, slice_local)
+                                    }
+                                    None => (iter_ty, iter_local),
+                                }
+                            }
+                            _ => (iter_ty, iter_local),
+                        }
+                    }
+                    _ => (iter_ty, iter_local),
+                };
                 let iter_is_ref_slice = matches!(
                     self.ctx.ty_ctx().ty_kind(iter_ty),
                     TyKind::Ref(_, inner, _)

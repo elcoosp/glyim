@@ -168,10 +168,19 @@ untouched — only slice iterables route around it.
 - Fixtures: `behavior/for_loop_over_slice.g`,
   `behavior/for_loop_over_slice_iter.g`.
 
-**Not affected.** `IntoIterator for Vec<T>` is still missing
-(`KNOWN_GAPS.md` §3.4): `for x in &v` where `v: Vec<T>` still rejects
-with the `as_slice()` hint added in the `for x in &v` fix
-(commit `02717423`, narrowed by `cd654fcf`).
+**Not affected — `IntoIterator for Vec<T>` (§3.4, updated).** The
+by-value `for x in v` still needs a real `IntoIterator for Vec<T>`
+yielding `T` by move, plus a `VecIter<T>` adapter, plus typeck
+resolving `IntoIterator::into_iter` before `Iterator::next` (the for-arm
+currently looks up `next` directly on `iter_ty`). Until that lands,
+`for x in v` rejects with an `as_slice()` hint — an honest diagnostic
+replacing what was (before commit `f4f97c2f`) a **silent miscompile**.
+
+By contrast, **`for x in &v` now works** in both backends. The
+lowering materializes `&[T]` via `Vec::as_slice` (FnDefId 9144), then
+routes the result through the slice index-walk from §7. Item type is
+`&T`, matching `impl Iterator for &[T]`. No trait-path layout mismatch,
+no interp "dead frame". Fixture: `behavior/for_loop_over_vec_ref.g`.
 
 ## Verification
 
