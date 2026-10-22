@@ -176,13 +176,13 @@ currently looks up `next` directly on `iter_ty`). Until that lands,
 `for x in v` rejects with an `as_slice()` hint — an honest diagnostic
 replacing what was (before commit `f4f97c2f`) a **silent miscompile**.
 
-**Blocker for the stdlib implementation — two real bugs.**
+**Blocker for the stdlib implementation — one real bug.**
 
 While prototyping `VecIter<T>` (the obvious stdlib implementation of
 `IntoIterator for Vec<T>`), found two independent bugs that would each
 break the adapter on its own:
 
-**Bug A: monomorphization leaves a type parameter in a generic struct field.**
+**Monomorphization leaves a type parameter in a generic struct field.**
 
     struct Wrap<T> { v: Vec<T>, i: usize }
     fn main() -> i32 {
@@ -203,33 +203,47 @@ received the *generic* field type. Same class as the
 `MonoItem` collection or the caller's `Substitution` construction for
 generic struct literals.
 
-**Bug B: `.len()` on a `Vec<T>` field of a concrete struct fails to link.**
+## 8. Interp: `w.v.len()` on a `Vec<T>` field (Ref drops Field projection)
 
-    struct Wrap { v: Vec<i32>, i: usize }
+**Status:** verified. LLVM is correct; the interpreter returns the wrong
+value.
+
+    struct W { v: Vec<i32> }
     fn main() -> i32 {
-        let w = Wrap { v: [1, 2, 3].to_vec(), i: 0 };
-        w.v.len() as i32
+        let w = W { v: [1, 2, 3].to_vec() };
+        w.v.len() as i32         // LLVM: 3. Interp: 1.
     }
-    // -> Undefined symbols: "___glyim_fn_9059_21_1"
 
-`FnDefId(9059)` is `<Vec<T> as _>::len` — the builtin is registered but
-not in codegen's whitelist (`try_lower_builtin_intrinsic`) for the
-"receiver is a struct-field place rather than a `Vec` receiver" shape,
-or the monomorphized substitution for the field isn't reaching the
-call. Same family as KNOWN_GAPS §3.1 (`a.iter()` link error) and §5
-(`String/&str`). Sibling bug to Bug A — both are "generic type
-parameter survives past the point it should have been substituted".
+**Root cause.** `Rvalue::Ref` in `crates/glyim-mir-interp/src/lib.rs`
+(line ~1851) builds `InterpValue::Ref { frame, local }` and **discards
+`place.projection`**. For `w.v.len()`, the MIR is:
 
-Both bugs need fixing before `VecIter<T>` can work. Neither is in the
-for-loop lowering — this session's `for x in &v` support (§7 / commit
-`8cbd551c`) sidesteps them entirely by materializing `&[T]` via
-`as_slice` (concrete `&[T]`, no generic `T` reaching codegen).
+    _6 = &mut _5.field0;          // Rvalue::Ref(place{5, [Field(0)]})
+    _7 = <Vec<i32>>::len(move _6)
 
-By contrast, `fn take<T>(v: Vec<T>, i: usize) -> T { v[i] }` (generic
-`Vec` indexed through a *function argument*, not a struct field) is
-correct — verified 3 consecutive runs, exit 20 each time. So the
-substitution works when the `Vec<T>` is a direct parameter; it fails
-only when the `Vec<T>` is a struct field.
+The Ref reaches `builtin_deref`, which clones `frame_locals[5]` — the
+whole `W { v: ... }` struct (a 1-field `Aggregate`). `vec_len` falls
+back to `fields.len()` = **1**, hence the wrong answer.
+
+LLVM was similarly wrong before this session's `e50d03df` (it passed
+`&mut Vec<T>` to an arm that only accepted by-value `{[3 x i64]}` and
+fell through to an undefined symbol). That is fixed. The interp's
+`Ref`-drops-projection is separate and **pre-dates** this session — the
+new fixture just exposes it for the first time.
+
+**Scope of the fix.** 24 uses of `InterpValue::Ref` in
+`crates/glyim-mir-interp/src/lib.rs`. The proper fix extends the enum
+variant to carry `projection: Box<[ProjectionElem]>`, wires it through
+`Rvalue::Ref`, and applies it in `builtin_deref` /
+`read_place` / `write_place_frame` / `mutate_receiver` / pointer
+comparison (each currently peels only the first projection step).
+Mechanical but wide; deserves its own session.
+
+**Not in this session's scope.** The e50d03df codegen fix and the two
+fixtures it was written against (`vec_field_len.g`, `vec_field_is_empty.g`)
+are *reverted* — the fixtures would fail the interp gate until this
+gap is closed, and there is no way to mark "LLVM-only" in the run-pass
+corpus today.
 
 ## Verification
 

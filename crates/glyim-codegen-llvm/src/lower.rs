@@ -6982,10 +6982,44 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // `len` / `is_empty` on a fat pointer `{data_ptr, len}` extract field
         // 1 (the length). `is_empty` further compares it to 0.
         if matches!(method.as_str(), "len" | "is_empty") {
-            // The receiver may be a fat pointer directly, or a thin pointer to
-            // a local that holds one. Handle the struct value first; if the
-            // operand loaded a thin pointer, we currently do not chase it
-            // (only fat-pointer receivers reach this arm in practice).
+            // The receiver reaches this arm in two shapes:
+            //
+            //   - By-value (struct): `v.len()` where `v: Vec<T>` — the
+            //     receiver operand loads the `{[3 x i64]}` (or `{ptr, i64}`)
+            //     directly, so `recv_val.is_struct_value()`.
+            //   - By-reference (pointer): `w.v.len()` where `v` is a *field*
+            //     of a struct — typeck emits the call with the receiver as
+            //     `&mut Vec<T>`, so the operand loads a **pointer** to the
+            //     `{[3 x i64]}` header. Before this fix that case hit the
+            //     `!recv_val.is_struct_value()` guard below and returned
+            //     `Ok(false)`, so `lower_call` fell through and emitted a
+            //     call to the undefined symbol `__glyim_fn_9059` (link
+            //     error).
+            //
+            // Load through the pointer to get the header struct, then
+            // continue on the same path as the by-value case. The load
+            // type comes from the receiver's MIR type (`&T` → `T`).
+            let recv_val: BasicValueEnum<'ctx> = if recv_val.is_pointer_value() {
+                let pointee_ty = match self.ty_ctx.ty_kind(self.operand_ty(recv)) {
+                    TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
+                    _ => return Ok(false),
+                };
+                let pointee_llvm_ty = self.llvm_type_for_ty(pointee_ty)?;
+                self.builder
+                    .build_load(
+                        pointee_llvm_ty,
+                        recv_val.into_pointer_value(),
+                        "len_recv_load",
+                    )
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "len pointer receiver load failed: {:?}",
+                            e
+                        ))]
+                    })?
+            } else {
+                recv_val
+            };
             if !recv_val.is_struct_value() {
                 return Ok(false);
             }
