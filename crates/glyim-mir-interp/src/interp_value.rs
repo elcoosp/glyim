@@ -11,8 +11,22 @@ pub enum InterpValue {
     Unit,
     #[allow(missing_docs)]
     Aggregate(Vec<InterpValue>),
+    /// A reference to a local (or a sub-place of one) in the current
+    /// frame or an ancestor frame.
+    ///
+    /// `projection` records the place's projection chain at the point
+    /// `Rvalue::Ref` was evaluated, so a projection like
+    /// `&mut _5.field0` can still resolve to `_5.field0` (not the whole
+    /// `_5`) when the ref is later dereferenced. Before this field
+    /// existed, projections were discarded at ref-creation, so
+    /// `w.v.len()` (where `v` is a struct field of `w`) derefed to the
+    /// whole `W` and read the wrong length. See KNOWN_GAPS §8.
     #[allow(missing_docs)]
-    Ref { frame: usize, local: usize },
+    Ref {
+        frame: usize,
+        local: usize,
+        projection: Box<[glyim_mir::ProjectionElem]>,
+    },
     #[allow(missing_docs)]
     Float(f64),
     #[allow(missing_docs)]
@@ -39,7 +53,14 @@ impl PartialEq for InterpValue {
             (InterpValue::Bool(a), InterpValue::Bool(b)) => a == b,
             (InterpValue::Unit, InterpValue::Unit) => true,
             (InterpValue::Aggregate(a), InterpValue::Aggregate(b)) => a == b,
-            (InterpValue::Ref { frame: a, local: b }, InterpValue::Ref { frame: c, local: d }) => {
+            (
+                InterpValue::Ref { frame: a, local: b, .. },
+                InterpValue::Ref { frame: c, local: d, .. },
+            ) => {
+                // Address identity: two Refs are "equal" iff they point at
+                // the same (frame, local) base. Projection is not compared
+                // (that would be structural equality, not address
+                // equality); matching the pre-projection-field behaviour.
                 a == c && b == d
             }
             (InterpValue::Float(a), InterpValue::Float(b)) => a.to_bits() == b.to_bits(),

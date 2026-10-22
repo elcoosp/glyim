@@ -243,47 +243,43 @@ received the *generic* field type. Same class as the
 `MonoItem` collection or the caller's `Substitution` construction for
 generic struct literals.
 
-## 8. Interp: `w.v.len()` on a `Vec<T>` field (Ref drops Field projection)
+## 8. Interp: `w.v.len()` on a `Vec<T>` field — CLOSED
 
-**Status:** verified. LLVM is correct; the interpreter returns the wrong
-value.
+*(Historical note. Verified working on both backends.)*
+
+**Symptom.** `w.v.len()` where `v: Vec<T>` is a struct field returned the
+wrong value in the interpreter (1 for a 3-element Vec):
 
     struct W { v: Vec<i32> }
     fn main() -> i32 {
         let w = W { v: [1, 2, 3].to_vec() };
-        w.v.len() as i32         // LLVM: 3. Interp: 1.
+        w.v.len() as i32         // LLVM: 3. Interp: 1 (before this fix)
     }
 
 **Root cause.** `Rvalue::Ref` in `crates/glyim-mir-interp/src/lib.rs`
-(line ~1851) builds `InterpValue::Ref { frame, local }` and **discards
+built `InterpValue::Ref { frame, local }` and **discarded
 `place.projection`**. For `w.v.len()`, the MIR is:
 
     _6 = &mut _5.field0;          // Rvalue::Ref(place{5, [Field(0)]})
     _7 = <Vec<i32>>::len(move _6)
 
-The Ref reaches `builtin_deref`, which clones `frame_locals[5]` — the
-whole `W { v: ... }` struct (a 1-field `Aggregate`). `vec_len` falls
-back to `fields.len()` = **1**, hence the wrong answer.
+`builtin_deref` resolved the Ref to `frame_locals[5]` — the whole
+`W { v, i }` struct (a 2-field `Aggregate`). `vec_len` then fell back to
+`fields.len()` = **2**, which the previous exit-code fixture (1) showed
+was off by the struct's field count.
 
-LLVM was similarly wrong before this session's `e50d03df` (it passed
-`&mut Vec<T>` to an arm that only accepted by-value `{[3 x i64]}` and
-fell through to an undefined symbol). That is fixed. The interp's
-`Ref`-drops-projection is separate and **pre-dates** this session — the
-new fixture just exposes it for the first time.
+**Fix.** `InterpValue::Ref` now carries `projection:
+Box<[ProjectionElem]>`. `Rvalue::Ref` copies `place.projection` into it;
+`builtin_deref` walks the projection (currently `Field` only) before
+handing the result to the builtin. PartialEq on `Ref` deliberately
+compares only `(frame, local)` — address identity, not structural
+equality — so existing pointer-comparison tests are unaffected.
 
-**Scope of the fix.** 24 uses of `InterpValue::Ref` in
-`crates/glyim-mir-interp/src/lib.rs`. The proper fix extends the enum
-variant to carry `projection: Box<[ProjectionElem]>`, wires it through
-`Rvalue::Ref`, and applies it in `builtin_deref` /
-`read_place` / `write_place_frame` / `mutate_receiver` / pointer
-comparison (each currently peels only the first projection step).
-Mechanical but wide; deserves its own session.
-
-**Not in this session's scope.** The e50d03df codegen fix and the two
-fixtures it was written against (`vec_field_len.g`, `vec_field_is_empty.g`)
-are *reverted* — the fixtures would fail the interp gate until this
-gap is closed, and there is no way to mark "LLVM-only" in the run-pass
-corpus today.
+**Verified.**
+- LLVM: `w.v.len()` → 3; `w.v.is_empty()` → 1.
+- Interp: same (via `run_pass_corpus`, which uses the interpreter).
+- Differential (both backends agree): green.
+- Fixtures: `behavior/vec_field_len.g`, `behavior/vec_field_is_empty.g`.
 
 ## Verification
 

@@ -821,14 +821,55 @@ impl<'tcx> Interpreter<'tcx> {
 
     fn builtin_deref(&self, v: &InterpValue) -> InterpResult<InterpValue> {
         match v {
-            InterpValue::Ref { frame, local } => self
-                .locals_for_ref_frame(*frame)
-                .and_then(|locals| locals.get(*local).and_then(|o| o.as_ref()).cloned())
-                .ok_or_else(|| {
-                    InterpError::Panic(format!(
-                        "builtin receiver: Ref{{frame:{frame}, local:{local}}} points to uninitialized or dead slot"
-                    ))
-                }),
+            InterpValue::Ref { frame, local, projection } => {
+                let mut val = self
+                    .locals_for_ref_frame(*frame)
+                    .and_then(|locals| locals.get(*local).and_then(|o| o.as_ref()).cloned())
+                    .ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "builtin receiver: Ref{{frame:{frame}, local:{local}}} points to uninitialized or dead slot"
+                        ))
+                    })?;
+                // Apply the reference's own projection. `&mut _5.field0`
+                // carries `[Field(0)]`; without applying it we'd hand the
+                // *whole* `_5` aggregate to the builtin (e.g.
+                // `w.v.len()` reading `W { v, i }` and returning
+                // `vec_len`'s `fields[1]` fallback = 1). See KNOWN_GAPS §8.
+                for proj in projection.iter() {
+                    match proj {
+                        glyim_mir::ProjectionElem::Field(fi) => {
+                            let fi = fi.index();
+                            val = match val {
+                                InterpValue::Aggregate(fields) => fields
+                                    .into_iter()
+                                    .nth(fi)
+                                    .ok_or_else(|| {
+                                        InterpError::Panic(format!(
+                                            "builtin_deref: field {fi} out of bounds on projected Ref"
+                                        ))
+                                    })?,
+                                other => {
+                                    return Err(InterpError::Panic(format!(
+                                        "builtin_deref: Field projection on non-aggregate value {:?}",
+                                        other
+                                    )));
+                                }
+                            };
+                        }
+                        glyim_mir::ProjectionElem::Deref => {
+                            return Err(InterpError::Panic(
+                                "builtin_deref: nested Deref in Ref projection not yet supported".into(),
+                            ));
+                        }
+                        other => {
+                            return Err(InterpError::Panic(format!(
+                                "builtin_deref: projection {other:?} in Ref not yet supported"
+                            )));
+                        }
+                    }
+                }
+                Ok(val)
+            }
             other => Ok(other.clone()),
         }
     }
@@ -858,7 +899,7 @@ impl<'tcx> Interpreter<'tcx> {
             return Ok(v);
         }
         match value {
-            Some(InterpValue::Ref { frame, local }) => {
+            Some(InterpValue::Ref { frame, local, .. }) => {
                 let place = Place::new(LocalIdx::from_raw(*local as u32));
                 let mut v = self
                     .locals_for_ref_frame(*frame)
@@ -1691,6 +1732,7 @@ impl<'tcx> Interpreter<'tcx> {
                     let recv = InterpValue::Ref {
                         frame: self.frame_depth,
                         local: place.local.index(),
+                        projection: place.projection.clone(),
                     };
                     let mut callee_locals = vec![None; callee_body.locals.len()];
                     if callee_locals.len() < 2 {
@@ -1849,10 +1891,14 @@ impl<'tcx> Interpreter<'tcx> {
                 self.eval_unary_op(*op, &v)
             }
             Rvalue::Ref(place, _borrow_kind) => {
-                let local_idx = place.local.index();
+                // Preserve the place's projection: `&mut _5.field0` must
+                // refer to the *field*, not to the whole `_5`. Dropping
+                // it here made `w.v.len()` deref to the whole `W` and
+                // read the wrong length (KNOWN_GAPS §8).
                 Ok(InterpValue::Ref {
                     frame: self.frame_depth,
-                    local: local_idx,
+                    local: place.local.index(),
+                    projection: place.projection.clone(),
                 })
             }
             Rvalue::Aggregate(kind, operands) => {
@@ -2001,7 +2047,7 @@ impl<'tcx> Interpreter<'tcx> {
                     // pointer-to-pointer cast is identity at this value level.
                     CastKind::PtrToPtr | CastKind::FnPtrToPtr => Ok(val),
                     CastKind::PtrToInt => match val {
-                        InterpValue::Ref { frame, local } => {
+                        InterpValue::Ref { frame, local, .. } => {
                             Ok(InterpValue::Uint(((frame as u128) << 48) | (local as u128)))
                         }
                         _ => Err(InterpError::Panic("PtrToInt on non-reference".into())),
@@ -2010,10 +2056,14 @@ impl<'tcx> Interpreter<'tcx> {
                         InterpValue::Uint(addr) => Ok(InterpValue::Ref {
                             frame: (addr >> 48) as usize,
                             local: (addr & ((1u128 << 48) - 1)) as usize,
+                            // Reconstructed from an address; the original
+                            // projection (if any) is lost in the encode.
+                            projection: Box::new([]),
                         }),
                         InterpValue::Int(addr) if addr >= 0 => Ok(InterpValue::Ref {
                             frame: 0,
                             local: addr as usize,
+                            projection: Box::new([]),
                         }),
                         _ => Err(InterpError::Panic("IntToPtr on non-integer".into())),
                     },
@@ -2365,7 +2415,7 @@ MirConstKind::Error => {
             ) => {
                 let ptr_addr = |v: &InterpValue| -> u128 {
                     match v {
-                        InterpValue::Ref { frame, local } => {
+                        InterpValue::Ref { frame, local, .. } => {
                             ((*frame as u128) << 48) | (*local as u128)
                         }
                         InterpValue::StaticPtr { def_id } => {
@@ -2383,7 +2433,7 @@ MirConstKind::Error => {
                 Int(_) | Uint(_),
             ) => {
                 let l = match left {
-                    InterpValue::Ref { frame, local } => {
+                    InterpValue::Ref { frame, local, .. } => {
                         ((*frame as u128) << 48) | (*local as u128)
                     }
                     InterpValue::StaticPtr { def_id } => {
@@ -2398,7 +2448,7 @@ MirConstKind::Error => {
                 Ref { .. } | StaticPtr { .. },
             ) => {
                 let r = match right {
-                    InterpValue::Ref { frame, local } => {
+                    InterpValue::Ref { frame, local, .. } => {
                         ((*frame as u128) << 48) | (*local as u128)
                     }
                     InterpValue::StaticPtr { def_id } => {
@@ -2435,7 +2485,7 @@ MirConstKind::Error => {
                     ))
                 })
             }
-            (UnOp::Deref, InterpValue::Ref { frame, local }) => {
+            (UnOp::Deref, InterpValue::Ref { frame, local, .. }) => {
                 let frame_locals = self.locals_for_ref_frame(*frame).ok_or_else(|| {
                     InterpError::Panic(format!("deref of Ref from dead frame {frame}"))
                 })?;
@@ -2487,7 +2537,7 @@ MirConstKind::Error => {
                     // (`buf[0]` on `buf: &[u8]`) is a no-op — the value is
                     // already the "dereferenced" byte view.
                     InterpValue::String(_) => { /* val unchanged */ }
-                    InterpValue::Ref { frame, local } => {
+                    InterpValue::Ref { frame, local, .. } => {
                         let target = local;
                         let frame_locals = self.locals_for_ref_frame(frame).ok_or_else(|| {
                             InterpError::Panic(format!("deref of Ref from dead frame {frame}"))
@@ -2781,13 +2831,24 @@ MirConstKind::Error => {
                     // Actually better: (base_ptr + start, new_len).
                     // But we can just represent as (start, new_len) for simplicity.
                     let elem_size = self.get_element_size(current_ty)?;
-                    let data_ptr = if let InterpValue::Ref { frame, local } = val {
+                    let data_ptr = if let InterpValue::Ref { frame, local, .. } = val {
                         let ptr = local + start * elem_size;
-                        InterpValue::Ref { frame, local: ptr }
+                        InterpValue::Ref {
+                            frame,
+                            local: ptr,
+                            // The arithmetic here shifts `local` by whole
+                            // elements; projection identity is lost, so
+                            // reset to empty.
+                            projection: Box::new([]),
+                        }
                     } else {
                         // For non-ref aggregates, we can't compute ptr.
                         // We'll just use the index start as a placeholder.
-                        InterpValue::Ref { frame: 0, local: 0 }
+                        InterpValue::Ref {
+                            frame: 0,
+                            local: 0,
+                            projection: Box::new([]),
+                        }
                     };
                     val = InterpValue::Aggregate(vec![data_ptr, InterpValue::Int(new_len as i128)]);
                 }
@@ -2854,7 +2915,7 @@ MirConstKind::Error => {
                 let frame_snapshot: Vec<Option<InterpValue>> =
                     frame_locals.iter().cloned().collect();
                 let target = match base_val {
-                    InterpValue::Ref { frame, local } => (frame, local),
+                    InterpValue::Ref { frame, local, .. } => (frame, local),
                     InterpValue::StaticPtr { def_id } => {
                         // Write to a `static mut` field through a deeper
                         // projection (`STATIC.field = v` /
@@ -2895,7 +2956,7 @@ MirConstKind::Error => {
                         InterpError::Panic(format!("write to uninitialized local {idx}"))
                     })?;
                 let target = match base_val {
-                    InterpValue::Ref { frame, local } => (frame, local),
+                    InterpValue::Ref { frame, local, .. } => (frame, local),
                     InterpValue::StaticPtr { def_id } => {
                         // Write to the whole `static mut` global.
                         self.globals.borrow_mut().insert(def_id, val);
@@ -3222,7 +3283,7 @@ MirConstKind::Error => {
                     self.interp_value_to_u128(&fields[0])
                 }
             }
-            InterpValue::Ref { frame, local } => {
+            InterpValue::Ref { frame, local, .. } => {
                 let _ = frame;
                 *local as u128
             }
@@ -3284,7 +3345,7 @@ MirConstKind::Error => {
                     ))
                 }
             }
-            InterpValue::Ref { frame, local } => {
+            InterpValue::Ref { frame, local, .. } => {
                 let target_val = self
                     .locals_for_ref_frame(*frame)
                     .and_then(|fl| fl.get(*local))
@@ -3309,7 +3370,7 @@ MirConstKind::Error => {
     fn get_length_of_aggregate(&self, val: &InterpValue) -> InterpResult<usize> {
         match val {
             InterpValue::Aggregate(fields) => Ok(fields.len()),
-            InterpValue::Ref { frame, local } => {
+            InterpValue::Ref { frame, local, .. } => {
                 // Dereference to get the aggregate.
                 let target_val = self
                     .locals_for_ref_frame(*frame)
@@ -3357,7 +3418,7 @@ MirConstKind::Error => {
         match val {
             InterpValue::Aggregate(fields) if fields.len() == 2 => {
                 let ptr = match &fields[0] {
-                    InterpValue::Ref { frame, local } => {
+                    InterpValue::Ref { frame, local, .. } => {
                         let _ = frame;
                         *local
                     }
@@ -3371,7 +3432,7 @@ MirConstKind::Error => {
                 };
                 Ok((ptr, len))
             }
-            InterpValue::Ref { frame, local } => {
+            InterpValue::Ref { frame, local, .. } => {
                 // Dereference to get the aggregate.
                 let target_val = self
                     .locals_for_ref_frame(*frame)
