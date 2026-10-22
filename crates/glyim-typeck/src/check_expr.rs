@@ -703,10 +703,28 @@ impl<'a> FnCtxt<'a> {
                             .is_some_and(|d| matches!(self.ctx.ty_kind(d), TyKind::Slice(_))),
                         _ => false,
                     };
+                    // A **by-value** `Vec<T>` reaches the same segfaulting
+                    // shape as `&Vec<T>`: the trait scan resolves
+                    // `Iterator::next` for `Vec<T>` through its `Deref` to
+                    // `[T]`, so `next_info` is `Some`, but lowering passes
+                    // `&mut Vec<T>` (3-word) to `<&[T]>::next` (2-word).
+                    // This used to be a **silent miscompile** (no
+                    // diagnostic, exit 252) — the earlier narrowing only
+                    // covered `&Vec<T>`, leaving the by-value case to
+                    // reach the trait path unguarded. Reject it with the
+                    // same hint. The full feature (`IntoIterator for
+                    // Vec<T>` yielding `T` by move, plus `VecIter<T>`)
+                    // needs typeck to resolve `IntoIterator::into_iter`
+                    // first and then `Iterator::next` on its return type
+                    // — a separate, larger change.
+                    let is_vec_by_value = matches!(
+                        self.ctx.ty_kind(resolved_iter_ty),
+                        TyKind::Adt(id, _) if id.to_raw() == 1020
+                    );
                     if known.is_none()
                         && next_info.is_some()
                         && !is_unresolved
-                        && is_ref_to_deref_slice
+                        && (is_ref_to_deref_slice || is_vec_by_value)
                     {
                         next_info = None;
                     }
@@ -726,6 +744,18 @@ impl<'a> FnCtxt<'a> {
                                 } else {
                                     None
                                 }
+                            }
+                            TyKind::Adt(id, _) if id.to_raw() == 1020 => {
+                                // `Vec<T>` — either by value or behind a
+                                // `&` (the `Ref` arm above handles the
+                                // latter). Both share the same fix and
+                                // the same honest hint.
+                                Some(
+                                    "use `<value>.as_slice()` to iterate a slice view \
+                                     (`for x in v` / `for x in &v` both require \
+                                     `IntoIterator for Vec<T>`, which this stdlib \
+                                     does not provide yet — see KNOWN_GAPS §3.4)",
+                                )
                             }
                             _ => None,
                         };
