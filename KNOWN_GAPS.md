@@ -43,13 +43,31 @@ than unwinding, so no cleanup edge is ever taken. Verified — a panic inside a
 If unwinding (`panic = "unwind"` semantics) is ever wanted, lowering must
 populate `cleanup` edges first; until then the SEH code is dead but correct.
 
-## 3. MIR interpreter: deeper writes through a `StaticPtr` (category b)
+## 3. MIR interpreter: deeper writes through a `StaticPtr` — CLOSED (unreachable)
 
-`write_projection_into_value` (`crates/glyim-mir-interp/src/lib.rs`) supports
-`Field`, `ConstantIndex`, `Index` and `Downcast` under a `StaticPtr`. A
-`Deref` under a `StaticPtr` is rejected with an explicit panic rather than
-miscompiled. Reaching it needs `&(*STATIC_PTR).field`-style code, which no
-fixture produces today.
+*(Historical note: the panic arm this described is still present, but the
+only MIR shape that would reach it can't be produced from source in the
+current compiler.)*
+
+`write_projection_into_value` (`crates/glyim-mir-interp/src/lib.rs`) rejects
+a `Deref` after a `StaticPtr` with an explicit panic. Reaching it needs a
+`static mut` whose initializer contains a **reference** field (so that
+writing through `*static.field = v` produces `Place{static, [Field, Deref]}`).
+
+Verified unreachable:
+
+- `static mut R: &'static mut i32 = &mut A;` — the const-evaluator rejects
+  the initializer (`path expressions not yet supported in const eval for
+  non-local paths`).
+- `static mut S: S<'static> = S { p: &mut A };` — same rejection.
+- A *local* `let s = S { p: &mut A }; *(s.p) = 9;` **does** produce
+  `[Field, Deref]`, but on a local (not a `StaticPtr`), which takes the
+  `Ref` arm of `write_place_frame`, not `write_projection_into_value`.
+
+So no source program reaches the panic. If the const-evaluator ever gains
+path-expression support for non-local paths, this entry becomes live again;
+until then the reject arm is a correct guard against a shape that can't
+occur.
 
 ## 4. `panic!` does not unwind (intentional, documented)
 
@@ -64,15 +82,29 @@ top-level error variant every caller matches on (`Panic` → `Unwind`) and
 breaks 14 tests that pin the current contract. That is a deliberate design
 decision, not an oversight — see the doc comment on `with_panics_unwind`.
 
-## 5. `include!` — implemented, with a caveat
+## 5. `include!` — implemented; proc-macro + pre-pass now aligned
 
 `include!("path")` splices the target file's tokens at the call site, at both
 item and expression position, resolving absolute paths and paths relative to
-the calling file. Nested includes work.
+the calling file. Nested includes work, and **builtin macros inside an
+included file are expanded** (verified: `include!("inner.g");` where
+`inner.g` uses `concat!` in a function body compiles and runs).
 
-Caveat: the expander does not run proc-macro expansion inside an included
-file (`entry_main_local_id`'s pre-pass deliberately skips the proc registry).
-Builtin macro expansion — which is what `include!` itself is — works.
+The previous caveat — "the expander does not run proc-macro expansion inside
+an included file" — was imprecise. The full pipeline *always* ran proc
+expansion; the issue was the `entry_main_local_id` **pre-pass**, which
+expanded with a builtin-only expander so its `LocalDefId` numbering could
+diverge from the real pipeline's when a proc macro emitted items before
+`main`. The pre-pass is what decides which body codegen treats as the entry
+point, so a shifted id meant the wrong function ran.
+
+Fixed by threading the proc registry into the pre-pass
+(`entry_main_local_id_with_proc_registry`); the harness's compiler uses it.
+The wrapper `entry_main_local_id(db, path)` keeps the old no-registry
+behaviour for unit-test callers that don't have a registry to give. CLI and
+`glyip` still call the wrapper (they build the registry themselves at a
+layer above the pre-pass); if a user program combines an item-emitting proc
+macro *and* `include!`, upgrade those two call sites too.
 
 ## 6. Deferred (category c — no code path, no diagnostic needed)
 

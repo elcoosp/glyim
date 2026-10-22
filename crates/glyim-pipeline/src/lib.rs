@@ -200,6 +200,29 @@ impl Pipeline {
     /// exists because the backend is constructed *before* the full pipeline
     /// runs, so the entry `main` must be known up front.
     pub fn entry_main_local_id(db: &mut Database, path: &Path) -> Option<u32> {
+        Self::entry_main_local_id_with_proc_registry(db, path, None)
+    }
+
+    /// Like [`entry_main_local_id`] but threads a proc-macro registry
+    /// through the expansion pre-pass.
+    ///
+    /// **Why this exists.** The pre-pass has to reproduce the *exact*
+    /// `LocalDefId` numbering the real pipeline will assign — that is how
+    /// the id it returns identifies the same `main` the codegen will see.
+    /// `include!` splices items and shifts ids, so the pre-pass runs the
+    /// builtin expander. A proc macro that emits items also shifts ids; if
+    /// the pre-pass skips it, the id it returns points at whatever item
+    /// now sits in `main`'s old slot (verified: with
+    /// `include!` doing the splicing the analogous bug ran the *included*
+    /// function instead of `main`).
+    ///
+    /// Callers that do not have a registry (unit tests, small probes) keep
+    /// using the wrapper above — no behaviour change for them.
+    pub fn entry_main_local_id_with_proc_registry(
+        db: &mut Database,
+        path: &Path,
+        proc_registry: Option<&glyim_proc_macro::Registry>,
+    ) -> Option<u32> {
         let (file_id, source) = load_crate_source(db, path).ok()?;
         let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
         if parse_result
@@ -210,21 +233,25 @@ impl Pipeline {
             return None;
         }
         // The *expanded* tree, not the raw parse. `expand_crate` can splice
-        // items in (`include!`) or rewrite a macro call into statements, and
-        // every inserted item shifts the `LocalDefId`s the later def-map
-        // assigns. Building this map from the unexpanded tree therefore
-        // yields ids from a different numbering: with
-        // `include!("a.g"); fn main() { .. }` where `a.g` defines `fn a`,
-        // the stale id for `main` pointed at `a` — the binary compiled and
-        // then ran `a` as the entry point.
+        // items in (`include!`), rewrite a macro call into statements, or
+        // (through the proc registry) generate whole items from an
+        // attribute / function-like macro. Every inserted item shifts the
+        // `LocalDefId`s the later def-map assigns — building this map from
+        // the unexpanded tree therefore yields ids from a different
+        // numbering (see the `include!` case that motivated this pre-pass
+        // in the first place: the stale id for `main` pointed at an
+        // included function).
         //
-        // Proc-macro expansion is deliberately not run here (it would need
-        // the registry threaded through); builtin expansion — which is what
-        // `include!` is — covers the cases that shift ids today.
+        // When `proc_registry` is supplied, proc expansion runs too, so the
+        // numbering matches the real pipeline exactly. Without it, callers
+        // get the same behaviour they had before this function existed.
         let mut hygiene = glyim_span::HygieneCtx::new();
         let mut expander = glyim_meta::Expander::new(&mut hygiene);
         expander.set_source_file(file_id);
         expander.set_vfs(db.vfs());
+        if let Some(reg) = proc_registry {
+            expander.with_proc_registry(Some(reg));
+        }
         let (expanded_root, _) = expander.expand_crate(&parse_result.root);
         let (def_map, _def_diags) =
             glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());

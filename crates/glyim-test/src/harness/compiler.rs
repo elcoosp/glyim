@@ -346,7 +346,11 @@ impl TestCompiler for PipelineCompiler {
             use glyim_pipeline::Pipeline;
             let mut real =
                 glyim_codegen_llvm::LlvmBackend::with_db(&db).with_target(&target_triple);
-            if let Some(main_id) = Pipeline::entry_main_local_id(&mut db, &path) {
+            if let Some(main_id) = Pipeline::entry_main_local_id_with_proc_registry(
+                &mut db,
+                &path,
+                self.proc_registry.as_deref(),
+            ) {
                 real = real.with_entry_main(main_id);
             }
             Some(real)
@@ -363,7 +367,11 @@ impl TestCompiler for PipelineCompiler {
 
         // Discover `main`'s LocalDefId the same way the CLI does. Used by
         // the interpreter fallback path to select which body to run.
-        let entry_main = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, &path);
+        let entry_main = glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(
+            &mut db,
+            &path,
+            self.proc_registry.as_deref(),
+        );
 
         match glyim_pipeline::Pipeline::compile_file_with_artifacts(
             &mut db,
