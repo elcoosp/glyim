@@ -184,6 +184,46 @@ break the adapter on its own:
 
 **Monomorphization leaves a type parameter in a generic struct field.**
 
+**Additional diagnosis (this session).** The ICE fires in
+`llvm_type_for_ty` on `Param(0)`. Three speculative fixes were attempted
+and reverted:
+
+1. Recursive `subst_ty` on `TypeLookup`/`TyCtx`, called from
+   `Place::ty`'s Adt `Field` arm.
+2. Same method, called from codegen's `place_ptr` Adt `Field` arm.
+3. Both sites together.
+
+None changed the ICE.
+
+What *is* established:
+
+- `--emit=mir` on the Bug A program contains **no** `Param` in any local
+  decl (only `Adt319<i32>`, `Adt1020<i32>`). The MIR dump is pre-mono;
+  the `Param(0)` that reaches `llvm_type_for_ty` must be produced after
+  that dump — either in the mono pipeline, or from an `AdtDef` field
+  type that no `subst_ty` call site currently reaches.
+- A probe in `place_ptr`'s Adt `Field` arm showed the existing
+  leaf-only substitution *is* applied there and *does* resolve
+  `Wrap<T>::v` to `Adt(1020, [i32])` when given a recursive helper. So
+  `place_ptr` is not the source.
+- A probe in `lower.rs`'s `place_ty` wrapper did **not** fire for
+  `Param` output — suggesting the offending `llvm_type_for_ty(Param)`
+  call does **not** come through `place_ty`. (Probe was reverted; the
+  conclusion is "not place_ty", not "definitely somewhere else".)
+
+**Not confirmed.** The specific call site producing `Param(0)` is still
+unknown. The next attempt should instrument `llvm_type_for_ty` at the
+`Param` arm with a full backtrace *and* walk up to the caller that
+supplied the type — the earlier backtrace ended at `lower_operand`
+→ `place_ty`, but the `place_ty` probe contradicts that, so a fresh
+backtrace with the probe attached at both sites is the way to resolve it.
+
+**Not the fix:** a `Place::ty` / `place_ptr` patch. Three attempts
+against that hypothesis all failed identically. The next session should
+resist that direction until the actual `llvm_type_for_ty(Param)` caller
+is identified.
+
+
     struct Wrap<T> { v: Vec<T>, i: usize }
     fn main() -> i32 {
         let w = Wrap { v: [1, 2, 3].to_vec(), i: 1 };
