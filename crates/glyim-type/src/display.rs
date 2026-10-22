@@ -50,6 +50,31 @@ pub trait TypeLookup {
             })
             .unwrap_or_else(|| self.error_ty())
     }
+
+    /// Substitute a type's `Param(i)` leaves with `subst[i]`.
+    ///
+    /// **Default substitutes only a top-level `Param`.** Safe on
+    /// `&dyn TypeLookup` where the underlying context is `TyCtxMut`
+    /// (`mk_ty` requires `&mut self`). `TyCtx` overrides to recurse into
+    /// `Adt`/`Tuple`/`Ref`/`RawPtr`/`Slice`/`Array`.
+    ///
+    /// Needed by `Place::ty` on a generic ADT's field: `wrap.v` for
+    /// `struct Wrap<T> { v: Vec<T> }` is `Adt(1020, [Param(0)])` — a
+    /// *nested* Param that leaf-only substitution leaves in place, so
+    /// `Index` then extracts `Param(0)`. See KNOWN_GAPS §3.4 Bug A.
+    fn subst_ty(&self, ty: Ty, subst: Substitution) -> Ty {
+        if let TyKind::Param(p) = self.ty_kind(ty) {
+            return self
+                .substitution_args(subst)
+                .get(p.index as usize)
+                .and_then(|a| match a {
+                    GenericArg::Ty(t) => Some(*t),
+                    _ => None,
+                })
+                .unwrap_or(ty);
+        }
+        ty
+    }
 }
 
 const MAX_DISPLAY_DEPTH: u32 = 10;

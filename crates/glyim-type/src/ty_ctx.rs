@@ -158,6 +158,58 @@ impl TyCtx {
         self.adt_by_name.get(&name).copied()
     }
 
+    /// Recursive substitution — see `TypeLookup::subst_ty`.
+    pub fn subst_ty_recursive(&self, ty: Ty, subst: Substitution) -> Ty {
+        match self.ty_kind(ty) {
+            TyKind::Param(p) => self
+                .substitution_args(subst)
+                .get(p.index as usize)
+                .and_then(|a| match a {
+                    GenericArg::Ty(t) => Some(*t),
+                    _ => None,
+                })
+                .unwrap_or(ty),
+            TyKind::Adt(id, sub) => {
+                let new_sub = self.subst_substitution_recursive(*sub, subst);
+                self.mk_ty(TyKind::Adt(*id, new_sub))
+            }
+            TyKind::Tuple(sub) => {
+                let new_sub = self.subst_substitution_recursive(*sub, subst);
+                self.mk_ty(TyKind::Tuple(new_sub))
+            }
+            TyKind::Ref(region, inner, mutability) => {
+                let inner_subst = self.subst_ty_recursive(*inner, subst);
+                self.mk_ty(TyKind::Ref(region.clone(), inner_subst, *mutability))
+            }
+            TyKind::RawPtr(inner, mutability) => {
+                let inner_subst = self.subst_ty_recursive(*inner, subst);
+                self.mk_ty(TyKind::RawPtr(inner_subst, *mutability))
+            }
+            TyKind::Slice(inner) => {
+                let inner_subst = self.subst_ty_recursive(*inner, subst);
+                self.mk_ty(TyKind::Slice(inner_subst))
+            }
+            TyKind::Array(inner, len) => {
+                let inner_subst = self.subst_ty_recursive(*inner, subst);
+                self.mk_ty(TyKind::Array(inner_subst, len.clone()))
+            }
+            _ => ty,
+        }
+    }
+
+    fn subst_substitution_recursive(&self, sub: Substitution, outer: Substitution) -> Substitution {
+        let args: Vec<GenericArg> = self
+            .substitution_args(sub)
+            .iter()
+            .map(|a| match a {
+                GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_recursive(*t, outer)),
+                other => other.clone(),
+            })
+            .collect();
+        self.intern_substitution(args)
+    }
+
+
     /// region.
     pub fn region(&self, vid: RegionVid) -> &Region {
         &self.regions[vid]
@@ -850,6 +902,10 @@ impl TypeLookup for TyCtx {
                 .unwrap_or_else(|| self.error_ty());
         }
         self.error_ty()
+    }
+
+    fn subst_ty(&self, ty: Ty, subst: Substitution) -> Ty {
+        self.subst_ty_recursive(ty, subst)
     }
 }
 impl TyCtx {

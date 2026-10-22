@@ -3231,7 +3231,11 @@ mod subst_ty_tests {
         let arr = tcx.mk_ty(TyKind::Array(param0, len));
 
         let subst = HashMap::from([(0u32, GenericArg::Ty(i32_ty))]);
-        let result = tcx.subst_ty(arr, &subst);
+        // UFCS: the inherent `TyCtxMut::subst_ty(&mut self, ty, &HashMap)`
+        // is now shadowed by `TypeLookup::subst_ty(&self, ty, Substitution)`
+        // at method-resolution time when `tcx` is borrowed immutably; the
+        // test wants the inherent HashMap-based form.
+        let result = TyCtxMut::subst_ty(&mut tcx, arr, &subst);
 
         match tcx.ty_kind(result) {
             TyKind::Array(inner, _) => {
@@ -3268,7 +3272,11 @@ mod subst_ty_tests {
             (0u32, GenericArg::Ty(i32_ty)),
             (1u32, GenericArg::Const(concrete_len.clone())),
         ]);
-        let result = tcx.subst_ty(arr, &subst);
+        // UFCS: the inherent `TyCtxMut::subst_ty(&mut self, ty, &HashMap)`
+        // is now shadowed by `TypeLookup::subst_ty(&self, ty, Substitution)`
+        // at method-resolution time when `tcx` is borrowed immutably; the
+        // test wants the inherent HashMap-based form.
+        let result = TyCtxMut::subst_ty(&mut tcx, arr, &subst);
 
         match tcx.ty_kind(result) {
             TyKind::Array(inner, len) => {

@@ -974,19 +974,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 // the ADT's own `substs[i]` so that e.g. `Poll<T>`'s
                                 // `Ready(T)` field resolves to the concrete `T`
                                 // (e.g. `i32`) instead of a bare `Param`.
-                                match self.ty_ctx.ty_kind(field_raw) {
-                                    TyKind::Param(p) => adt_substs
-                                        .get(p.index as usize)
-                                        .and_then(|a| {
-                                            if let glyim_type::GenericArg::Ty(t) = a {
-                                                Some(*t)
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .unwrap_or(field_raw),
-                                    _ => field_raw,
-                                }
+                                // Recursive substitution — see
+                                // `TyCtx::subst_ty_recursive` and KNOWN_GAPS
+                                // §3.4 Bug A.
+                                let _ = &adt_substs;
+                                self.ty_ctx.subst_ty_recursive(field_raw, *substs)
                             } else {
                                 self.ty_ctx.field_ty(*adt_id, field_idx)
                             }

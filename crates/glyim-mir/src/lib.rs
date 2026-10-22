@@ -277,19 +277,12 @@ impl Place {
                         // `TypeLookup` cannot intern, but substituting a leaf
                         // `Param` for an already-interned concrete handle needs
                         // no allocation.
-                        match ctx.ty_kind(field_ty) {
-                            TyKind::Param(p) => sub_args
-                                .get(p.index as usize)
-                                .and_then(|a| {
-                                    if let GenericArg::Ty(t) = a {
-                                        Some(*t)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or(field_ty),
-                            _ => field_ty,
-                        }
+                        // Recursive substitution via `TypeLookup::subst_ty`.
+                        // The trait default only substitutes a top-level
+                        // `Param`; `TyCtx` overrides to recurse. See
+                        // KNOWN_GAPS §3.4 Bug A.
+                        let _ = &sub_args; // keep the earlier binding live
+                        TypeLookup::subst_ty(ctx, field_ty, *substs)
                     }
                     _ => {
                         tracing::error!("Place::ty(): Field projection on non-tuple/ADT type");
@@ -408,7 +401,10 @@ impl Place {
                             ctx.error_ty()
                         }
                     }
-                    TyKind::Adt(adt_id, _substs) => ctx.field_ty(*adt_id, idx.to_raw() as usize),
+                    TyKind::Adt(adt_id, substs) => {
+                        let ft = ctx.field_ty(*adt_id, idx.to_raw() as usize);
+                        TypeLookup::subst_ty(ctx, ft, *substs)
+                    }
                     _ => {
                         tracing::error!("Place::ty_mut(): Field projection on non-tuple/ADT type");
                         ctx.error_ty()

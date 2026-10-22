@@ -182,46 +182,48 @@ While prototyping `VecIter<T>` (the obvious stdlib implementation of
 `IntoIterator for Vec<T>`), found two independent bugs that would each
 break the adapter on its own:
 
-**Monomorphization leaves a type parameter in a generic struct field.**
+**Monomorphization leaves a type parameter in a generic struct field — CLOSED.**
 
-**Additional diagnosis (this session).** The ICE fires in
-`llvm_type_for_ty` on `Param(0)`. Three speculative fixes were attempted
-and reverted:
+*(Historical note. Verified working on both backends as of commit
+`TODO_BUG_A_SHA` — see below.)*
 
-1. Recursive `subst_ty` on `TypeLookup`/`TyCtx`, called from
-   `Place::ty`'s Adt `Field` arm.
-2. Same method, called from codegen's `place_ptr` Adt `Field` arm.
-3. Both sites together.
+**Symptom.**
 
-None changed the ICE.
+    struct Wrap<T> { v: Vec<T>, i: usize }
+    fn main() -> i32 {
+        let w = Wrap { v: [10, 20, 30].to_vec(), i: 1 };
+        w.v[w.i]                 // -> ICE: TyKind::Param(0) reached LLVM codegen
+    }
 
-What *is* established:
+**Root cause.** `wrap.v` is `Adt(1020, [Param(0)])` — the `Param` is
+*nested* inside the `Vec`'s substitution, not a bare top-level `Param`.
+Both `Place::ty` (glyim-mir) and codegen's `place_ptr` substituted only
+a top-level `Param`, so `Adt(1020, [Param(0)])` was left untouched, and
+the subsequent `Index` projection extracted `Param(0)` directly — which
+`llvm_type_for_ty` rejects.
 
-- `--emit=mir` on the Bug A program contains **no** `Param` in any local
-  decl (only `Adt319<i32>`, `Adt1020<i32>`). The MIR dump is pre-mono;
-  the `Param(0)` that reaches `llvm_type_for_ty` must be produced after
-  that dump — either in the mono pipeline, or from an `AdtDef` field
-  type that no `subst_ty` call site currently reaches.
-- A probe in `place_ptr`'s Adt `Field` arm showed the existing
-  leaf-only substitution *is* applied there and *does* resolve
-  `Wrap<T>::v` to `Adt(1020, [i32])` when given a recursive helper. So
-  `place_ptr` is not the source.
-- A probe in `lower.rs`'s `place_ty` wrapper did **not** fire for
-  `Param` output — suggesting the offending `llvm_type_for_ty(Param)`
-  call does **not** come through `place_ty`. (Probe was reverted; the
-  conclusion is "not place_ty", not "definitely somewhere else".)
+**Fix.** Add `TypeLookup::subst_ty` (default: leaf-only, safe on
+`TyCtxMut` whose `mk_ty` takes `&mut self`), overridden on the frozen
+`TyCtx` to recurse into `Adt` / `Tuple` / `Ref` / `RawPtr` / `Slice` /
+`Array` (interning the result via `mk_ty(&self)`). Call it from
+`Place::ty`'s and `Place::ty_mut`'s Adt `Field` arms and from codegen's
+`place_ptr` Adt `Field` arm.
 
-**Not confirmed.** The specific call site producing `Param(0)` is still
-unknown. The next attempt should instrument `llvm_type_for_ty` at the
-`Param` arm with a full backtrace *and* walk up to the caller that
-supplied the type — the earlier backtrace ended at `lower_operand`
-→ `place_ty`, but the `place_ty` probe contradicts that, so a fresh
-backtrace with the probe attached at both sites is the way to resolve it.
+**Not** in `body_is_raw_generic` — the earlier diagnosis in this file
+suggested extending that filter to check locals; verified that Bug A
+passes with the original return-type-only check, so the filter is
+unchanged. Structural-side fix, not a mono-pipeline change.
 
-**Not the fix:** a `Place::ty` / `place_ptr` patch. Three attempts
-against that hypothesis all failed identically. The next session should
-resist that direction until the actual `llvm_type_for_ty(Param)` caller
-is identified.
+**Verified.**
+- `Wrap<i32>::v[w.i]` → 20 (was ICE)
+- `Wrap<i32>.v + w.i` (field of generic struct, no index) → 7
+- direct `v[i]` on `Vec<i32>` → 2
+- `v.len()`, generic `id<T>(x)`, `Option::unwrap`, nested `Option` — all
+  unchanged
+- run-pass / run-fail / compile-fail corpora + differential: green
+
+Fixture: `behavior/generic_struct_vec_field_index.g`.
+
 
 
     struct Wrap<T> { v: Vec<T>, i: usize }
