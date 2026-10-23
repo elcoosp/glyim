@@ -388,3 +388,109 @@ GLYIM_CACHE_DIR=$(mktemp -d) ./target/debug/glyim-cli --with-stdlib \
 ```
 
 `--emit=mir` and `--emit=llvm-ir` write to the `-o` path, not stdout.
+
+#### 3.4.x — s16 final verdict (revert-only)
+
+**Diagnosis complete. Fix requires architectural change. Session 16 ends with
+the 6th attempt fully reverted to `919575fa`.**
+
+The immediate symptom was wrong self type in `VecIntoIter<T>::next`'s return:
+
+    fn next(&mut VecIntoIter<T>) -> Option<<T as Iterator>::Item>   // WRONG
+    fn next(&mut VecIntoIter<T>) -> Option<<VecIntoIter<T> as Iterator>::Item>  // RIGHT
+
+`Self::Item` in the impl-method return type was resolved via the Script 63
+fast path in `crates/glyim-typeck/src/tyconv.rs::resolve_path_type`, which
+looks up `ctx.param_bounds_for(qname)`. That's a **crate-wide flat**
+`HashMap<Name, Vec<(Name, TraitDefId)>>` **keyed only by the bare
+parameter name**, so `"I"`, `"T"`, `"Self"`, `"U"` etc. accumulate a bound
+from every impl/fn in the crate that declares a param with that name.
+
+Three concrete collisions observed during s16 investigation:
+
+1. `"Self"` was in `param_bounds` (registered by *some* impl's bound
+   writer keyed by the literal name `"Self"`). This made the fast path
+   fire for `Self::Item` and build `<Param(0, "Self") as SomeTrait>::Item`
+   — a projection whose self type is a bare generic param, not the impl's
+   declared self type. Guarding the fast path against `"Self"` fixed this
+   specific case, but exposed problem 2.
+
+2. **`Iterator` and `IntoIterator` both declare `type Item`.** In
+   `impl<I: Iterator> Iterator for Skip<I>`, the resolver for the RHS of
+   `type Item = I::Item;` saw two candidate bounds for `"I"`: the current
+   impl's `I: Iterator`, and a *stale* `I: IntoIterator` registered by an
+   earlier impl elsewhere. Heuristics tried and rejected this session:
+   * `.first()` — picks whichever was registered earliest (wrong when
+     IntoIterator came first).
+   * `.filter(declares(aname)).last()` — fails because
+     `trait_def(Iterator).associated_types` is empty during early passes
+     (assoc types not yet registered), so the filter excludes the correct
+     bound too.
+   * "prefer declaring, else `.last()`" — combines both failure modes,
+     introduced *new* regressions (`trivial_42` failed, `for x in &v`
+     segfaulted, corpus went red on the LLVM path).
+
+3. **Generic index hardcoding.** The fast path built
+   `ParamTy { index: 0, name }` unconditionally. In
+   `impl<T, U: TryFrom<T>> TryInto<U> for T`, `U` has index 1; hardcoding
+   index 0 produced `<Param(0, "U") as TryFrom>::Error` which never
+   unified with the correct `<Param(1, "U") as TryFrom>::Error`. This
+   surfaced as `mismatched types: <U as Trait179>::Error vs
+   <U as Trait178>::Error @66447..66464` in the assembled stdlib.
+
+**The structural blocker:** any heuristic over `param_bounds` cannot be
+sound, because the map is unordered w.r.t. the *current* impl scope, and
+the correct bound is not identifiable from the name alone.
+
+### Recommended fix (options)
+
+* **A. Extend `param_map`** (currently `HashMap<Name, Ty>`) to carry
+  per-scope trait bounds, e.g. `HashMap<Name, (Ty, Vec<TraitDefId>)>`.
+  Threaded through `resolve_type_ref` / `resolve_path_type` /
+  `resolve_fn_sig` / `check_body`. Small at each call site, but touches
+  ~15 signatures.
+
+* **B. Scope `param_bounds` by owner** — key on `(DefId, Name)` or use a
+  scoped save/restore around each impl/fn walk. Same signature churn as
+  A to preserve access to enclosing scopes.
+
+* **C. Full trait solver.** Out of scope for a single session.
+
+Preferred: **A**, because it makes the correct bound impossible to
+confuse with a stale one — you can only see the bounds the current
+scope declared.
+
+### What must be reapplied once A/B land
+
+1. `crates/glyim-type/src/ty_ctx.rs` — the
+   `subst_impl_params_into_assoc` helper (shared by all three
+   `resolve_associated_type*` resolvers). It substitutes the impl's
+   generic params into its stored assoc type when the query self type
+   supplies concrete arguments, so `<VecIntoIter<i32> as Iterator>::Item`
+   normalizes to `i32` instead of leaving `Param(0)`.
+   **Not committable alone** — s16 verified it regresses `for x in &v`
+   (`[T0001] mismatched types: expected integer type, found &i32`) by
+   enabling extra projection normalization in cases where the current
+   resolver produces wrong-but-consistent types. Pairs with the resolver
+   fix.
+
+2. The `for x in v` wiring (spec'd in HANDOFF s16 §4): `thir::ForIntoIter`,
+   `check_expr.rs`'s `Expr::For` arm (`into_iter` resolution + output_ty
+   substitution), `lower::IntoIterInfo`, `lower_rvalue.rs`'s into_iter
+   emission, `pipeline_context.rs` fallback.
+
+### Test fixtures to add with the fix
+
+* `for x in v` (Vec<i32> [1,2,3]) → exit 6
+* `for x in v` (empty Vec) → exit 0
+* `for x in v` (Vec<String>, sum lengths) → sum length
+* Regressions to keep green: `for x in &v` → 6, `for i in 0..3` → 3,
+  `v.into_iter()` explicit → 6, `for x in a.iter()` → 6,
+  user `impl Iterator for Counter` → 3, Bug A `Wrap<i32>::v[w.i]` → 20.
+
+### Do not repeat
+
+Do not attempt further heuristic tweaks to `.first()` / `.last()` /
+"prefer declaring" in the fast path or in the second 2-segment block.
+The map is fundamentally unordered w.r.t. the current scope, and no
+heuristic on it can be sound. Fix the scope first.
