@@ -191,32 +191,51 @@ the only remaining piece.**
 The for-arm in `check_expr.rs` looks up `Iterator::next` on `iter_ty`
 directly; it never calls `IntoIterator::into_iter`. So a
 `IntoIterator`-only type (which `Vec<T>` now is) is still rejected at
-the for-head. This is a **typeck-only** change — no stdlib or codegen
-work remains:
+the for-head.
 
-- `Expr::For` in `check_expr.rs`: before the `Iterator::next` scan,
-  resolve `IntoIterator::into_iter` on `iter_ty`; if found, run the
-  `Iterator::next` scan on its **return type** (`IntoIter`) instead of
-  on `iter_ty` itself. Then thread the resolved `into_iter` call into
-  THIR so lowering emits it before the loop.
-- Lowering: emit `<iter_ty as IntoIterator>::into_iter(iterable)`,
-  store into the iteration local, and pass that to
-  `Iterator::next`. The `VecIter<T>`/`VecIntoIter<T>` fixtures
-  (`behavior/generic_iterator_with_vec_field.g`,
-  `behavior/vec_into_iter_explicit.g`) prove the resulting iterator
-  works; the missing piece is just having lowering call `into_iter`
-  first.
+**Attempted this session and reverted.** The natural wiring is:
 
-The diagnostic on `for x in v` was updated to say exactly this
-(previously it claimed the stdlib lacked `IntoIterator for Vec<T>`,
-which is now false). Verified via `for x in v` producing:
+- `Expr::For` in `check_expr.rs`: resolve `IntoIterator::into_iter` on
+  `iter_ty`; run the `Iterator::next` scan on its **return type**
+  instead of `iter_ty`.
+- Lowering: emit that `into_iter` call before the loop, re-bind the
+  iteration local to its output.
+- New THIR field `ForIteratorNext::into_iter: Option<ForIntoIter>` +
+  matching `IteratorNextInfo::into_iter: Option<IntoIterInfo>`.
 
-    `Adt1020<i32>` is not iterable here: typeck resolves
-    `Iterator::next` directly and does not call
-    `IntoIterator::into_iter` first, so an `IntoIterator`-only type
-    (e.g. `Vec<T>` — which does implement `IntoIterator` in the alloc
-    stdlib) is not usable as a `for`-loop head yet. Hint: iterate via
-    `v.into_iter()` (...) or `v.as_slice()` (...)
+Implementation was done end-to-end and reverted because `for x in v`
+went from a **clean reject** (diagnostic) to a **codegen ICE**:
+
+    fn type lowering failed: fn_abi_of failed: UnknownType(Ty(7292))
+
+Investigating the emitted MIR revealed why: the "into_iter" call that
+lowering emitted resolved to `Fn(FnDefId(9162))` — that is `to_vec`,
+**not** `VecIntoIter::into_iter`. `VecIntoIter` never appears as a type
+in the MIR at all (`Adt1020`, `Adt1010`, `Adt63` only), and `VecIntoIter`'s
+`next` body (`Fn(421)`) *was* collected — so the shape resolved halfway.
+Root causes, unfixed:
+
+- The for-arm's `resolve_trait_method_fn(iter_ty, IntoIterator, into_iter)`
+  scan picked up an unrelated builtin id instead of the stdlib impl.
+  `resolve_trait_method_fn`'s impl scan may be matching the wrong trait
+  (it is scoped to `trait_def_id`, but the builtin-id path for `to_vec`
+  short-circuits earlier than it should, or the `Vec<T>` receiver is
+  matching `impl<T> FromIterator for Vec<T>` which also registers an
+  `into_iter`-shaped method through its `FromIterator` bound).
+- Because no `VecIntoIter::into_iter` call was emitted, the MIR's
+  `into_iter` local had type `Vec<i32>` (not `VecIntoIter<i32>`), and
+  the subsequent `next` call — resolved against the *intended*
+  `VecIntoIter` — got an `UnknownType` at codegen.
+
+**What a future attempt needs to check first:** after resolving
+`IntoIterator::into_iter` for `Vec<T>`, verify the returned `fn_def_id`
+is `VecIntoIter`'s `into_iter` (not `to_vec`, not any builtin) before
+threading it into THIR. A debug probe at
+`check_expr.rs`'s new `into_iter_info = Some(...)` site, printing
+`fn_def_id` and `output_ty`, would have caught this before the ICE.
+The whole change is documented here so the next attempt starts from
+"verify the resolved fn id" rather than from "wire the shape".
+
 
 **Already-working fallbacks** (unchanged): `for x in v.as_slice()`,
 `for x in &v`, and `for x in v.into_iter()` (explicit).
