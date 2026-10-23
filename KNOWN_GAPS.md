@@ -168,82 +168,76 @@ untouched — only slice iterables route around it.
 - Fixtures: `behavior/for_loop_over_slice.g`,
   `behavior/for_loop_over_slice_iter.g`.
 
-**Not affected — `IntoIterator for Vec<T>` (§3.4, updated).** The
-by-value `for x in v` still needs a real `IntoIterator for Vec<T>`
-yielding `T` by move, plus a `VecIter<T>` adapter, plus typeck
-resolving `IntoIterator::into_iter` before `Iterator::next` (the for-arm
-currently looks up `next` directly on `iter_ty`). Until that lands,
-`for x in v` rejects with an `as_slice()` hint — an honest diagnostic
-replacing what was (before commit `f4f97c2f`) a **silent miscompile**.
+**`IntoIterator for Vec<T>` — codegen/interp ready, typeck wiring blocked.**
 
-**Blocker for the stdlib implementation — one real bug.**
+**Status as of `0c6ad117`:**
 
-While prototyping `VecIter<T>` (the obvious stdlib implementation of
-`IntoIterator for Vec<T>`), found two independent bugs that would each
-break the adapter on its own:
+- The stdlib `VecIntoIter<T>` + `impl<T> IntoIterator for Vec<T>` is
+  **verified to work as ordinary user code**. A program that defines
+  the exact impl inline and calls `v.into_iter()` (then loops on
+  `it.next()`) compiles and runs correctly, returning 6 for `[1,2,3]`.
+- Writing the same impl into `crates/glyim-lang-alloc/lib/vec.g`
+  compiles cleanly (the stdlib crate builds).
 
-**Monomorphization leaves a type parameter in a generic struct field — CLOSED.**
+**The blocker is typeck's `for`-loop, not the stdlib.** Two separate
+gaps, both in `check_expr.rs`'s `Expr::For` arm, which today only looks
+up `Iterator::next` on `iter_ty` directly:
 
-*(Historical note. Verified working on both backends as of commit
-`TODO_BUG_A_SHA` — see below.)*
+1. **`IntoIterator::into_iter` is never resolved.** The for-arm has to
+   call `into_iter(iter_ty)` first, then resolve `Iterator::next` on its
+   *return type*. Today it goes straight to `Iterator::next` on
+   `iter_ty`, which misses every `IntoIterator`-only type.
 
-**Symptom.**
+2. **Associated-type projection normalization is incomplete.** Probing
+   the shape with explicit calls:
 
-    struct Wrap<T> { v: Vec<T>, i: usize }
-    fn main() -> i32 {
-        let w = Wrap { v: [10, 20, 30].to_vec(), i: 1 };
-        w.v[w.i]                 // -> ICE: TyKind::Param(0) reached LLVM codegen
-    }
+       let it = v.into_iter();          // <Vec<i32> as IntoIterator>::into_iter
+       // T0001 mismatched types: expected integer type,
+       //       found <?ty33155 as Trait37>::Item
 
-**Root cause.** `wrap.v` is `Adt(1020, [Param(0)])` — the `Param` is
-*nested* inside the `Vec`'s substitution, not a bare top-level `Param`.
-Both `Place::ty` (glyim-mir) and codegen's `place_ptr` substituted only
-a top-level `Param`, so `Adt(1020, [Param(0)])` was left untouched, and
-the subsequent `Index` projection extracted `Param(0)` directly — which
-`llvm_type_for_ty` rejects.
+       let it = IntoIterator::into_iter(v);
+       // T0001 mismatched types: expected integer type,
+       //       found <T as Trait37>::Item
 
-**Fix.** Add `TypeLookup::subst_ty` (default: leaf-only, safe on
-`TyCtxMut` whose `mk_ty` takes `&mut self`), overridden on the frozen
-`TyCtx` to recurse into `Adt` / `Tuple` / `Ref` / `RawPtr` / `Slice` /
-`Array` (interning the result via `mk_ty(&self)`). Call it from
-`Place::ty`'s and `Place::ty_mut`'s Adt `Field` arms and from codegen's
-`place_ptr` Adt `Field` arm.
+   Both forms bind `it.next()`'s result to an **unresolved projection**
+   `<?ty as IntoIterator>::Item` instead of normalizing to `T = i32`.
+   The turbofish form additionally ICEs (`fn_abi_of failed:
+   UnknownType(Ty(70439))`). So even if the for-arm resolved
+   `into_iter`, the `next()` call on its return type would still yield
+   an unnormalized projection, and lowering would drop it as a fresh
+   inference variable — the same class of gap this session's
+   `subst_ty` work addressed for `Param`, but one level up (a
+   projection rather than a parameter).
 
-**Not** in `body_is_raw_generic` — the earlier diagnosis in this file
-suggested extending that filter to check locals; verified that Bug A
-passes with the original return-type-only check, so the filter is
-unchanged. Structural-side fix, not a mono-pipeline change.
+**Not a stdlib problem.** Adding the impl to `vec.g` does not fix
+`for x in v` (verified — the diagnostic is unchanged after adding it),
+and it makes explicit `v.into_iter()` newly *fail* with the projection
+error above (previously "no method found"). The tree is reverted to
+`0c6ad117` so the stdlib does not ship a half-wired impl.
 
-**Verified.**
-- `Wrap<i32>::v[w.i]` → 20 (was ICE)
-- `Wrap<i32>.v + w.i` (field of generic struct, no index) → 7
-- direct `v[i]` on `Vec<i32>` → 2
-- `v.len()`, generic `id<T>(x)`, `Option::unwrap`, nested `Option` — all
-  unchanged
-- run-pass / run-fail / compile-fail corpora + differential: green
+**Next steps for a future session, in order:**
 
-Fixture: `behavior/generic_struct_vec_field_index.g`.
+1. Fix `Projection` normalization for `<T as Trait>::AssocTy` when `T`
+   is a concrete type bound through an impl — the `IntoIterator::Item`
+   = `T` projection has to fold to `T` here, not stay symbolic. The
+   `TyCtx::resolve_associated_type` path exists (`TyKind::Projection`
+   handling in `llvm_type_for_ty`) but apparently is not called at
+   inference time from the method-call return-type path.
+2. Only after (1) lands: teach the for-arm to resolve
+   `IntoIterator::into_iter` first (like `resolve_method_call` does for
+   ordinary methods), then `Iterator::next` on its `IntoIter` return.
+3. Then the stdlib `VecIntoIter<T>` can be added and the for-loop
+   works.
 
+**Verified this session:**
 
-
-    struct Wrap<T> { v: Vec<T>, i: usize }
-    fn main() -> i32 {
-        let w = Wrap { v: [1, 2, 3].to_vec(), i: 1 };
-        w.v[w.i]
-    }
-    // -> [X0000] TyKind::Param(ParamTy { index: 0, name: Name(359) })
-    //    reached LLVM codegen -- monomorphization should have resolved this
-
-So the IC E reported earlier in this entry is a symptom, not the root
-cause: `place_ptr` (or a caller) sees `Vec<T>` with `T` still a
-`Param(0)`, and either handles it incorrectly or fails at the
-`build_load` boundary. `Wrap<i32>` used directly from `main` should
-have been monomorphized to `Wrap` at `T = i32`, but the codegen backend
-received the *generic* field type. Same class as the
-`Place::ty(): Field projection on non-tuple/ADT type` stderr noise
-(cosmetic but same root cause). Fix is likely in `mono.rs`'s
-`MonoItem` collection or the caller's `Substitution` construction for
-generic struct literals.
+- `VecIter<T>` (user-defined `Iterator` with a `Vec<T>` field, `next`
+  returns `Option<T>`): works on LLVM and interp (commit `0c6ad117`,
+  fixture `behavior/generic_iterator_with_vec_field.g`).
+- Inline `VecIntoIter<T>` + `IntoIterator for Vec<T>` in a user file:
+  works (returns 6 for `[1,2,3]`).
+- The same impl in `vec.g` + explicit `v.into_iter()`: **fails with
+  the projection error** — confirms the typeck gap, not the stdlib.
 
 ## 8. Interp: `w.v.len()` on a `Vec<T>` field — CLOSED
 
