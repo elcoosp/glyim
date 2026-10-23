@@ -796,19 +796,23 @@ impl<'a> FnCtxt<'a> {
                                 // latter). Both share the same fix and
                                 // the same honest hint.
                                 Some(
-                                    "use `<value>.as_slice()` to iterate a slice view \
-                                     (`for x in v` / `for x in &v` both require \
-                                     `IntoIterator for Vec<T>`, which this stdlib \
-                                     does not provide yet — see KNOWN_GAPS §3.4)",
+                                    "iterate via `v.into_iter()` (yields `T` by move; \
+                                     the alloc stdlib now provides `IntoIterator for \
+                                     Vec<T>`), or `v.as_slice()` (yields `&T`) — \
+                                     `for x in v` itself is not yet wired to call \
+                                     `IntoIterator::into_iter` (KNOWN_GAPS §3.4)",
                                 )
                             }
                             _ => None,
                         };
                         let msg = match hint {
                             Some(h) => format!(
-                                "`{iter_desc}` is not iterable: it implements neither \
-                                 `Iterator` nor `IntoIterator`, and is not an array, \
-                                 slice, or range. Hint: {h}"
+                                "`{iter_desc}` is not iterable here: typeck resolves \
+                                 `Iterator::next` directly and does not call \
+                                 `IntoIterator::into_iter` first, so an \
+                                 `IntoIterator`-only type (e.g. `Vec<T>` — which \
+                                 does implement `IntoIterator` in the alloc stdlib) \
+                                 is not usable as a `for`-loop head yet. Hint: {h}"
                             ),
                             None => format!(
                                 "`{iter_desc}` is not iterable: it implements neither \

@@ -2,7 +2,7 @@
 
 use raw_vec::RawVec;
 use ops::{Deref, Index, IndexMut};
-use iter::{IntoIterator, FromIterator};
+use iter::{IntoIterator, Iterator, FromIterator};
 use clone::Clone;
 use default::Default;
 
@@ -116,5 +116,32 @@ impl<T> IndexMut<usize> for Vec<T> {
     fn index_mut(&mut self, index: usize) -> &mut T {
         assert!(index < self.len, "Vec index out of bounds");
         unsafe { &mut *self.buf.as_mut_ptr().add(index) }
+    }
+}
+
+/// Owned iterator over a `Vec<T>`.
+pub struct VecIntoIter<T> {
+    v: Vec<T>,
+    front: usize,
+}
+
+impl<T> Iterator for VecIntoIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.front < self.v.len() {
+            let x = self.v[self.front];
+            self.front = self.front + 1;
+            Option::Some(x)
+        } else {
+            Option::None
+        }
+    }
+}
+
+impl<T> IntoIterator for Vec<T> {
+    type Item = T;
+    type IntoIter = VecIntoIter<T>;
+    fn into_iter(self) -> VecIntoIter<T> {
+        VecIntoIter { v: self, front: 0 }
     }
 }

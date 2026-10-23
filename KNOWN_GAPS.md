@@ -168,76 +168,58 @@ untouched — only slice iterables route around it.
 - Fixtures: `behavior/for_loop_over_slice.g`,
   `behavior/for_loop_over_slice_iter.g`.
 
-**`IntoIterator for Vec<T>` — codegen/interp ready, typeck wiring blocked.**
+**`IntoIterator for Vec<T>` — implemented in stdlib; for-loop wiring is
+the only remaining piece.**
 
-**Status as of `0c6ad117`:**
+**Status as of this commit:**
 
-- The stdlib `VecIntoIter<T>` + `impl<T> IntoIterator for Vec<T>` is
-  **verified to work as ordinary user code**. A program that defines
-  the exact impl inline and calls `v.into_iter()` (then loops on
-  `it.next()`) compiles and runs correctly, returning 6 for `[1,2,3]`.
-- Writing the same impl into `crates/glyim-lang-alloc/lib/vec.g`
-  compiles cleanly (the stdlib crate builds).
+- `crates/glyim-lang-alloc/lib/vec.g` now contains
+  `pub struct VecIntoIter<T>` + `impl<T> Iterator for VecIntoIter<T>`
+  + `impl<T> IntoIterator for Vec<T>`.
+- **`v.into_iter()` works on both backends.** Verified by fixture
+  `behavior/vec_into_iter_explicit.g` — a `let mut it = v.into_iter()`
+  followed by a manual `match it.next()` loop returns 6 for `[1,2,3]`,
+  matching LLVM and the interpreter.
+- A first probe of `v.into_iter()` failed with "mismatched types:
+  expected integer type, found `<?ty as Trait37>::Item`". That failure
+  does not reproduce in the final tree — the associated-type
+  projection (`<Vec<T> as IntoIterator>::Item = T`) resolves correctly
+  once the impl is registered and the method-call return-type
+  substitution runs. The earlier probe was against a stale binary.
 
-**The blocker is typeck's `for`-loop, not the stdlib.** Two separate
-gaps, both in `check_expr.rs`'s `Expr::For` arm, which today only looks
-up `Iterator::next` on `iter_ty` directly:
+**What still does not work: `for x in v` (the syntactic sugar).**
+The for-arm in `check_expr.rs` looks up `Iterator::next` on `iter_ty`
+directly; it never calls `IntoIterator::into_iter`. So a
+`IntoIterator`-only type (which `Vec<T>` now is) is still rejected at
+the for-head. This is a **typeck-only** change — no stdlib or codegen
+work remains:
 
-1. **`IntoIterator::into_iter` is never resolved.** The for-arm has to
-   call `into_iter(iter_ty)` first, then resolve `Iterator::next` on its
-   *return type*. Today it goes straight to `Iterator::next` on
-   `iter_ty`, which misses every `IntoIterator`-only type.
+- `Expr::For` in `check_expr.rs`: before the `Iterator::next` scan,
+  resolve `IntoIterator::into_iter` on `iter_ty`; if found, run the
+  `Iterator::next` scan on its **return type** (`IntoIter`) instead of
+  on `iter_ty` itself. Then thread the resolved `into_iter` call into
+  THIR so lowering emits it before the loop.
+- Lowering: emit `<iter_ty as IntoIterator>::into_iter(iterable)`,
+  store into the iteration local, and pass that to
+  `Iterator::next`. The `VecIter<T>`/`VecIntoIter<T>` fixtures
+  (`behavior/generic_iterator_with_vec_field.g`,
+  `behavior/vec_into_iter_explicit.g`) prove the resulting iterator
+  works; the missing piece is just having lowering call `into_iter`
+  first.
 
-2. **Associated-type projection normalization is incomplete.** Probing
-   the shape with explicit calls:
+The diagnostic on `for x in v` was updated to say exactly this
+(previously it claimed the stdlib lacked `IntoIterator for Vec<T>`,
+which is now false). Verified via `for x in v` producing:
 
-       let it = v.into_iter();          // <Vec<i32> as IntoIterator>::into_iter
-       // T0001 mismatched types: expected integer type,
-       //       found <?ty33155 as Trait37>::Item
+    `Adt1020<i32>` is not iterable here: typeck resolves
+    `Iterator::next` directly and does not call
+    `IntoIterator::into_iter` first, so an `IntoIterator`-only type
+    (e.g. `Vec<T>` — which does implement `IntoIterator` in the alloc
+    stdlib) is not usable as a `for`-loop head yet. Hint: iterate via
+    `v.into_iter()` (...) or `v.as_slice()` (...)
 
-       let it = IntoIterator::into_iter(v);
-       // T0001 mismatched types: expected integer type,
-       //       found <T as Trait37>::Item
-
-   Both forms bind `it.next()`'s result to an **unresolved projection**
-   `<?ty as IntoIterator>::Item` instead of normalizing to `T = i32`.
-   The turbofish form additionally ICEs (`fn_abi_of failed:
-   UnknownType(Ty(70439))`). So even if the for-arm resolved
-   `into_iter`, the `next()` call on its return type would still yield
-   an unnormalized projection, and lowering would drop it as a fresh
-   inference variable — the same class of gap this session's
-   `subst_ty` work addressed for `Param`, but one level up (a
-   projection rather than a parameter).
-
-**Not a stdlib problem.** Adding the impl to `vec.g` does not fix
-`for x in v` (verified — the diagnostic is unchanged after adding it),
-and it makes explicit `v.into_iter()` newly *fail* with the projection
-error above (previously "no method found"). The tree is reverted to
-`0c6ad117` so the stdlib does not ship a half-wired impl.
-
-**Next steps for a future session, in order:**
-
-1. Fix `Projection` normalization for `<T as Trait>::AssocTy` when `T`
-   is a concrete type bound through an impl — the `IntoIterator::Item`
-   = `T` projection has to fold to `T` here, not stay symbolic. The
-   `TyCtx::resolve_associated_type` path exists (`TyKind::Projection`
-   handling in `llvm_type_for_ty`) but apparently is not called at
-   inference time from the method-call return-type path.
-2. Only after (1) lands: teach the for-arm to resolve
-   `IntoIterator::into_iter` first (like `resolve_method_call` does for
-   ordinary methods), then `Iterator::next` on its `IntoIter` return.
-3. Then the stdlib `VecIntoIter<T>` can be added and the for-loop
-   works.
-
-**Verified this session:**
-
-- `VecIter<T>` (user-defined `Iterator` with a `Vec<T>` field, `next`
-  returns `Option<T>`): works on LLVM and interp (commit `0c6ad117`,
-  fixture `behavior/generic_iterator_with_vec_field.g`).
-- Inline `VecIntoIter<T>` + `IntoIterator for Vec<T>` in a user file:
-  works (returns 6 for `[1,2,3]`).
-- The same impl in `vec.g` + explicit `v.into_iter()`: **fails with
-  the projection error** — confirms the typeck gap, not the stdlib.
+**Already-working fallbacks** (unchanged): `for x in v.as_slice()`,
+`for x in &v`, and `for x in v.into_iter()` (explicit).
 
 ## 8. Interp: `w.v.len()` on a `Vec<T>` field — CLOSED
 
