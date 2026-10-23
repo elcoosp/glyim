@@ -193,7 +193,7 @@ directly; it never calls `IntoIterator::into_iter`. So a
 `IntoIterator`-only type (which `Vec<T>` now is) is still rejected at
 the for-head.
 
-**Attempted this session and reverted.** The natural wiring is:
+**Attempted this session (twice) and reverted.** The natural wiring is:
 
 - `Expr::For` in `check_expr.rs`: resolve `IntoIterator::into_iter` on
   `iter_ty`; run the `Iterator::next` scan on its **return type**
@@ -203,38 +203,76 @@ the for-head.
 - New THIR field `ForIteratorNext::into_iter: Option<ForIntoIter>` +
   matching `IteratorNextInfo::into_iter: Option<IntoIterInfo>`.
 
-Implementation was done end-to-end and reverted because `for x in v`
-went from a **clean reject** (diagnostic) to a **codegen ICE**:
+Both attempts produced a **codegen ICE** where the previous behavior
+was a clean reject:
 
     fn type lowering failed: fn_abi_of failed: UnknownType(Ty(7292))
 
-Investigating the emitted MIR revealed why: the "into_iter" call that
-lowering emitted resolved to `Fn(FnDefId(9162))` — that is `to_vec`,
-**not** `VecIntoIter::into_iter`. `VecIntoIter` never appears as a type
-in the MIR at all (`Adt1020`, `Adt1010`, `Adt63` only), and `VecIntoIter`'s
-`next` body (`Fn(421)`) *was* collected — so the shape resolved halfway.
-Root causes, unfixed:
+**Actual cause (verified by a `[DBG_RES]` probe in `check_expr.rs`
+inserted right before the new `if iter_is_by_value_vec ...` block).**
+The resolution block **never fires for the user's `for x in v`.** The
+probe was set up to print `iter_kind` at every `Expr::For` typechecked
+during the compilation, and every logged line was a stdlib-internal
+loop:
 
-- The for-arm's `resolve_trait_method_fn(iter_ty, IntoIterator, into_iter)`
-  scan picked up an unrelated builtin id instead of the stdlib impl.
-  `resolve_trait_method_fn`'s impl scan may be matching the wrong trait
-  (it is scoped to `trait_def_id`, but the builtin-id path for `to_vec`
-  short-circuits earlier than it should, or the `Vec<T>` receiver is
-  matching `impl<T> FromIterator for Vec<T>` which also registers an
-  `into_iter`-shaped method through its `FromIterator` bound).
-- Because no `VecIntoIter::into_iter` call was emitted, the MIR's
-  `into_iter` local had type `Vec<i32>` (not `VecIntoIter<i32>`), and
-  the subsequent `next` call — resolved against the *intended*
-  `VecIntoIter` — got an `UnknownType` at codegen.
+    [DBG_RES] iter_is_by_value_vec=false iter_is_concrete=true iter_kind=Adt(AdtId(1000), …)   // Range
+    [DBG_RES] iter_is_by_value_vec=false iter_is_concrete=true iter_kind=Ref(Erased, Ty(36), …) // slice ref
+    …
 
-**What a future attempt needs to check first:** after resolving
-`IntoIterator::into_iter` for `Vec<T>`, verify the returned `fn_def_id`
-is `VecIntoIter`'s `into_iter` (not `to_vec`, not any builtin) before
-threading it into THIR. A debug probe at
-`check_expr.rs`'s new `into_iter_info = Some(...)` site, printing
-`fn_def_id` and `output_ty`, would have caught this before the ICE.
-The whole change is documented here so the next attempt starts from
-"verify the resolved fn id" rather than from "wire the shape".
+Not a single `iter_kind=Adt(AdtId(1020), …)` line — the user's `Vec`
+for-head never reaches our block at all. So the emitted MIR showed no
+`Fn(419)` (the correct `VecIntoIter::into_iter`) call, the `into_iter`
+local kept its pre-`into_iter` type (`Vec<i32>`), and the subsequent
+`next` call — resolved against `VecIntoIter` from `iter_ty_for_next`,
+which was computed inside the *never-entered* block — landed on an
+inconsistent type. Hence `UnknownType`.
+
+**Why the block never fires is not yet diagnosed.** Likely candidates,
+in order of suspicion:
+
+1. The user's `for x in v` may be typechecked **after** the stdlib's
+   own items and, by the time it reaches `Expr::For`, `iter_ty` is
+   already `Infer(...)` rather than the resolved `Adt(1020, …)`. Our
+   probe fires on the raw `iter_ty` *before* any inference resolution,
+   so if the user's `v` is bound to a `?T` that resolves to
+   `Vec<i32>` later, the block's `matches!(TyKind::Adt(1020))` silently
+   takes the `false` branch. Stdlib `for` loops bind their iterands to
+   already-resolved types (Range literals, slices), so they all pass;
+   the user's program is the only one that sees the `Infer`.
+2. `main`'s `Expr::For` may be typechecked during a phase that our
+   probe doesn't cover (the crash means typeck *did* run, but no
+   `Adt(1020)` line appeared — the probe's own print is inside
+   `check_expr`'s `Expr::For` arm, so if it didn't fire, that arm
+   either ran with a non-`Adt(1020)` iterand or ran somewhere our
+   instrumented copy is not visible). This is the second attempt to
+   instrument it — the first (`DBG_INTO_ITER` above) *did* resolve
+   `fn 419` correctly, which means the two probes are seeing *different*
+   `Expr::For` nodes. The working resolution in the first probe likely
+   came from a *separate* typecheck invocation (a pre-pass) where
+   `iter_ty` was already concrete; the *final* pass that lowering
+   consumes runs with `iter_ty = Infer`, which our concrete-only
+   check skips.
+
+**Next step for a future attempt.** Instead of gating on
+`matches!(TyKind::Adt(1020))`, first resolve `iter_ty` through the
+inference table:
+
+    let resolved_iter_ty = self.infer.resolve_ty_shallow(self.ctx, iter_ty);
+
+and match on `resolved_iter_ty`. That is exactly the pattern the
+existing `is_unresolved` block uses (`check_expr.rs:707`). The gating
+`iter_is_by_value_vec` should consult `resolved_iter_ty`, not the raw
+`iter_ty`, for the same reason. This should make the block fire for the
+user's `for x in v` — and, because `resolve_trait_method_fn` was
+already verified (via `[DBG_INTO_ITER]` probe) to correctly return
+`fn_def_id 419` for `Adt(1020, [i32])`, the rest of the wiring is
+already known to work.
+
+**Corrected misdiagnosis.** The earlier text in this entry said the
+resolved fn id was `9162` (`to_vec`). That was a misreading of the MIR
+dump: line 23 of the emitted MIR is the *source-level* `[1,2,3].to_vec()`
+call, not the `into_iter` call. The actual `into_iter` emission was
+**missing entirely** — see the `[DBG_RES]` result above.
 
 
 **Already-working fallbacks** (unchanged): `for x in v.as_slice()`,
