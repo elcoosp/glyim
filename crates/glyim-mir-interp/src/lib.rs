@@ -857,9 +857,44 @@ impl<'tcx> Interpreter<'tcx> {
                             };
                         }
                         glyim_mir::ProjectionElem::Deref => {
-                            return Err(InterpError::Panic(
-                                "builtin_deref: nested Deref in Ref projection not yet supported".into(),
-                            ));
+                            // `self.v.len()` where `self: &mut VecIter<T>`
+                            // produces `Ref{1, [Deref, Field(0)]}`: deref the
+                            // `&mut VecIter<T>` to reach the struct, then
+                            // project its `v` field. `builtin_deref` has
+                            // already resolved the base local (a `Ref` value
+                            // in `frame_locals[local]`), so a Deref step here
+                            // just peels that outer reference.
+                            val = match val {
+                                InterpValue::Ref { frame, local, .. } => self
+                                    .locals_for_ref_frame(frame)
+                                    .and_then(|locals| {
+                                        locals.get(local).and_then(|o| o.as_ref()).cloned()
+                                    })
+                                    .ok_or_else(|| {
+                                        InterpError::Panic(format!(
+                                            "builtin_deref: Deref in projection points at uninitialized local {local} (frame {frame})"
+                                        ))
+                                    })?,
+                                // Byte payload (`String`) — already the
+                                // "dereferenced" view (`read_place` treats
+                                // `Deref` on it as a no-op). Same here.
+                                InterpValue::String(_) => val,
+                                InterpValue::StaticPtr { def_id } => self
+                                    .globals
+                                    .borrow()
+                                    .get(&def_id)
+                                    .cloned()
+                                    .ok_or_else(|| {
+                                        InterpError::Panic(format!(
+                                            "builtin_deref: Deref in projection points at uninitialized static {def_id:?}"
+                                        ))
+                                    })?,
+                                other => {
+                                    return Err(InterpError::Panic(format!(
+                                        "builtin_deref: Deref on non-reference value {other:?}"
+                                    )));
+                                }
+                            };
                         }
                         other => {
                             return Err(InterpError::Panic(format!(
@@ -2576,6 +2611,66 @@ MirConstKind::Error => {
                             },
                         )?;
                         val = v;
+                    }
+                    // `Deref` on a `Vec<T>` (AdtId 1020) is a trait deref:
+                    // `impl<T> Deref for Vec<T> { type Target = [T]; }`.
+                    // `self.v[i]` inside an `impl<T> Iterator for
+                    // VecIter<T>` body lowers to
+                    // `[Deref, Field(0), Deref, Index(..)]`; the second
+                    // `Deref` derefs the `Vec<T>` to `[T]`.
+                    //
+                    // The interpreter models a Vec as
+                    // `Aggregate([Aggregate(elements), Uint(len)])` and a
+                    // slice as a one-char-per-element `String` (same as
+                    // `(1020, "as_slice")`, which this mirrors). Convert
+                    // here, so the following `Index` arm (which already
+                    // handles `InterpValue::String`) extracts the element.
+                    //
+                    // Note: the String encoding is lossy for elements
+                    // outside `0..=255` — same limitation `as_slice` has.
+                    // Acceptable for the corpus-level contract; a faithful
+                    // model would need `InterpValue::Slice` (a broader
+                    // change).
+                    InterpValue::Aggregate(fields)
+                        if fields.len() == 2
+                            && matches!(&fields[0], InterpValue::Aggregate(_))
+                            && matches!(&fields[1], InterpValue::Uint(_) | InterpValue::Int(_)) =>
+                    {
+                        let elems: Vec<InterpValue> = match &fields[0] {
+                            InterpValue::Aggregate(buf) => buf.clone(),
+                            _ => Vec::new(),
+                        };
+                        let slice: String = elems
+                            .iter()
+                            .map(|e| match e {
+                                InterpValue::Uint(n) => {
+                                    char::from_u32((*n as u32) & 0xff).unwrap_or('\u{0}')
+                                }
+                                InterpValue::Int(n) => {
+                                    char::from_u32(((*n).max(0) as u32) & 0xff)
+                                        .unwrap_or('\u{0}')
+                                }
+                                _ => '\u{0}',
+                            })
+                            .collect();
+                        val = InterpValue::String(slice);
+                        // Update `current_ty` to `Slice(elem)` so the
+                        // following `Index` classifies correctly.
+                        if let TyKind::Adt(adt_id, substs) = self.tcx.ty_kind(current_ty) {
+                            if adt_id.to_raw() == 1020 {
+                                let elem = self
+                                    .tcx
+                                    .substitution_args(*substs)
+                                    .first()
+                                    .and_then(|a| match a {
+                                        glyim_type::GenericArg::Ty(t) => Some(*t),
+                                        _ => None,
+                                    });
+                                if let Some(e) = elem {
+                                    current_ty = self.tcx.mk_ty(TyKind::Slice(e));
+                                }
+                            }
+                        }
                     }
                     _ => {
                         return Err(InterpError::Panic(

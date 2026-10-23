@@ -646,6 +646,142 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         for elem in place.projection.iter() {
             match elem {
                 ProjectionElem::Deref => {
+                    // `Deref` on `Vec<T>` (AdtId 1020) is a *trait* deref,
+                    // not a raw pointer deref. Vec's LLVM layout is
+                    // `{[3 x i64]}` = `{ptr, cap, len}`; the trailing
+                    // `Deref` in a projection chain like
+                    // `[Deref, Field(0), Deref, Index(..)]` (produced by
+                    // `self.v[i]` inside an `impl<T> Iterator for
+                    // VecIter<T>` body) means "deref the Vec to `[T]`".
+                    //
+                    // The generic Deref arm below would try to `build_load`
+                    // the Vec's `{[3 x i64]}` header and then `.into_pointer_value()`
+                    // it — an ICE ("Found StructValue ... but expected
+                    // PointerValue"). Instead:
+                    //
+                    //   1. Read word 0 (data ptr) and word 2 (len) from
+                    //      the Vec header.
+                    //   2. Build a fresh `{data, len}` slice fat pointer
+                    //      in a stack alloca.
+                    //   3. Set `ptr` to that alloca and `current_ty` to
+                    //      `[T]`, so the following `Index` arm takes the
+                    //      ordinary slice path.
+                    //
+                    // This does not change the semantics of the Vec itself
+                    // — it's a pure structural view. `Vec<T>::Deref<Target
+                    // = [T]>` is the caller-visible contract this mirrors.
+                    if let TyKind::Adt(adt_id, substs) = self.ty_ctx.ty_kind(current_ty)
+                        && adt_id.to_raw() == 1020
+                    {
+                        let elem = self
+                            .ty_ctx
+                            .substitution_args(*substs)
+                            .first()
+                            .and_then(|a| match a {
+                                glyim_type::GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            })
+                            .unwrap_or(Ty::ERROR);
+                        let i8_ptr_ty =
+                            self.context.ptr_type(AddressSpace::default());
+                        let i64_ty = self.llvm_int_type(64);
+                        let base = self
+                            .builder
+                            .build_bit_cast(ptr, i8_ptr_ty, "deref_vec_base")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec base bitcast: {e:?}"
+                                ))]
+                            })?
+                            .into_pointer_value();
+                        let zero = i64_ty.const_zero();
+                        let sixteen = i64_ty.const_int(16, false);
+                        let dp_slot = unsafe {
+                            self.builder.build_in_bounds_gep(
+                                self.context.i8_type(),
+                                base,
+                                &[zero],
+                                "deref_vec_dp_slot",
+                            )
+                        }
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "deref_vec dp gep: {e:?}"
+                            ))]
+                        })?;
+                        let lp_slot = unsafe {
+                            self.builder.build_in_bounds_gep(
+                                self.context.i8_type(),
+                                base,
+                                &[sixteen],
+                                "deref_vec_lp_slot",
+                            )
+                        }
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "deref_vec lp gep: {e:?}"
+                            ))]
+                        })?;
+                        let data = self
+                            .builder
+                            .build_load(i8_ptr_ty, dp_slot, "deref_vec_data")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec data load: {e:?}"
+                                ))]
+                            })?;
+                        let len = self
+                            .builder
+                            .build_load(i64_ty, lp_slot, "deref_vec_len")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec len load: {e:?}"
+                                ))]
+                            })?;
+                        let slice_ty = self
+                            .ty_ctx
+                            .mk_ty(TyKind::Slice(elem));
+                        let slice_llvm_ty =
+                            self.llvm_type_for_ty(slice_ty)?;
+                        let slice_struct_ty =
+                            slice_llvm_ty.into_struct_type();
+                        let alloca = self
+                            .builder
+                            .build_alloca(slice_llvm_ty, "deref_vec_slice")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec slice alloca: {e:?}"
+                                ))]
+                            })?;
+                        let undef = slice_struct_ty.get_undef();
+                        let with_p = self
+                            .builder
+                            .build_insert_value(undef, data, 0, "dv_slice_p")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec slice insert 0: {e:?}"
+                                ))]
+                            })?;
+                        let with_l = self
+                            .builder
+                            .build_insert_value(with_p, len, 1, "dv_slice_l")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec slice insert 1: {e:?}"
+                                ))]
+                            })?;
+                        self.builder
+                            .build_store(alloca, with_l)
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "deref_vec slice store: {e:?}"
+                                ))]
+                            })?;
+                        ptr = alloca;
+                        current_ty = slice_ty;
+                        continue;
+                    }
+
                     // A fat pointer (`&[T]` / `&str`, represented as
                     // `{data_ptr, i64 len}`) dereferences to the unsized
                     // `[T]` / `str`, which is laid out *at* the fat pointer

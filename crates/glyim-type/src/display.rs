@@ -51,6 +51,18 @@ pub trait TypeLookup {
             .unwrap_or_else(|| self.error_ty())
     }
 
+    /// Build (intern) a fresh `Ty` from `kind`.
+    ///
+    /// The default returns `error_ty()` — safe for `TyCtxMut`, whose
+    /// real `mk_ty` requires `&mut self`. `TyCtx` (frozen, `mk_ty(&self)`)
+    /// overrides with the real implementation.
+    ///
+    /// Used by [`subst_ty_in`](Self::subst_ty_in) and by the recursive
+    /// `Deref`-on-`Vec<T>` arm in `Place::ty` / `Place::ty_mut`.
+    fn intern_ty(&self, _kind: TyKind) -> Ty {
+        self.error_ty()
+    }
+
     /// Substitute a type's `Param(i)` leaves with `subst[i]`.
     ///
     /// **Default substitutes only a top-level `Param`.** Safe on
@@ -62,7 +74,7 @@ pub trait TypeLookup {
     /// `struct Wrap<T> { v: Vec<T> }` is `Adt(1020, [Param(0)])` — a
     /// *nested* Param that leaf-only substitution leaves in place, so
     /// `Index` then extracts `Param(0)`. See KNOWN_GAPS §3.4 Bug A.
-    fn subst_ty(&self, ty: Ty, subst: Substitution) -> Ty {
+    fn subst_ty_in(&self, ty: Ty, subst: Substitution) -> Ty {
         if let TyKind::Param(p) = self.ty_kind(ty) {
             return self
                 .substitution_args(subst)

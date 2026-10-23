@@ -904,7 +904,11 @@ impl TypeLookup for TyCtx {
         self.error_ty()
     }
 
-    fn subst_ty(&self, ty: Ty, subst: Substitution) -> Ty {
+    fn intern_ty(&self, kind: TyKind) -> Ty {
+        TyCtx::mk_ty(self, kind)
+    }
+
+    fn subst_ty_in(&self, ty: Ty, subst: Substitution) -> Ty {
         self.subst_ty_recursive(ty, subst)
     }
 }

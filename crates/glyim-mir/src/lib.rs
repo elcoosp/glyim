@@ -179,6 +179,24 @@ impl Place {
                 ProjectionElem::Deref => match ctx.ty_kind(ty) {
                     TyKind::Ref(_, inner_ty, _) => *inner_ty,
                     TyKind::RawPtr(inner_ty, _) => *inner_ty,
+                    // `Deref` on `Vec<T>` (AdtId 1020) is a *trait* deref
+                    // (`impl<T> Deref for Vec<T> { type Target = [T]; }`).
+                    // `self.v[i]` inside an `impl<T> Iterator for VecIter<T>`
+                    // body lowers to `[Deref, Field(0), Deref, Index(..)]` —
+                    // the second `Deref` derefs a `Vec<i32>` to `Slice(i32)`.
+                    // codegen's `place_ptr` handles the same shape (reads the
+                    // Vec header into a slice alloca); here we just need the
+                    // resulting *type* so the following `Index` arm's
+                    // classification succeeds.
+                    TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => {
+                        let args = ctx.substitution_args(*substs);
+                        match args.first() {
+                            Some(glyim_type::GenericArg::Ty(t)) => {
+                                ctx.intern_ty(TyKind::Slice(*t))
+                            }
+                            _ => ctx.error_ty(),
+                        }
+                    }
                     _ => {
                         tracing::error!("Place::ty(): Deref on non-pointer type");
                         ctx.error_ty()
@@ -282,7 +300,7 @@ impl Place {
                         // `Param`; `TyCtx` overrides to recurse. See
                         // KNOWN_GAPS §3.4 Bug A.
                         let _ = &sub_args; // keep the earlier binding live
-                        TypeLookup::subst_ty(ctx, field_ty, *substs)
+                        TypeLookup::subst_ty_in(ctx, field_ty, *substs)
                     }
                     _ => {
                         tracing::error!("Place::ty(): Field projection on non-tuple/ADT type");
@@ -383,6 +401,16 @@ impl Place {
                 ProjectionElem::Deref => match ctx.ty_kind(ty) {
                     TyKind::Ref(_, inner_ty, _) => *inner_ty,
                     TyKind::RawPtr(inner_ty, _) => *inner_ty,
+                    // See `Place::ty`'s Deref arm.
+                    TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => {
+                        let args = ctx.substitution_args(*substs);
+                        match args.first() {
+                            Some(glyim_type::GenericArg::Ty(t)) => {
+                                ctx.intern_ty(TyKind::Slice(*t))
+                            }
+                            _ => ctx.error_ty(),
+                        }
+                    }
                     _ => {
                         tracing::error!("Place::ty_mut(): Deref on non-pointer type");
                         ctx.error_ty()
@@ -403,7 +431,7 @@ impl Place {
                     }
                     TyKind::Adt(adt_id, substs) => {
                         let ft = ctx.field_ty(*adt_id, idx.to_raw() as usize);
-                        TypeLookup::subst_ty(ctx, ft, *substs)
+                        TypeLookup::subst_ty_in(ctx, ft, *substs)
                     }
                     _ => {
                         tracing::error!("Place::ty_mut(): Field projection on non-tuple/ADT type");
