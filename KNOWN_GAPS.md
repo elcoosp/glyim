@@ -270,9 +270,57 @@ already known to work.
 
 **Corrected misdiagnosis.** The earlier text in this entry said the
 resolved fn id was `9162` (`to_vec`). That was a misreading of the MIR
-dump: line 23 of the emitted MIR is the *source-level* `[1,2,3].to_vec()`
-call, not the `into_iter` call. The actual `into_iter` emission was
-**missing entirely** — see the `[DBG_RES]` result above.
+dump: line 23 of the emitted MIR is the *source-level*
+`[1,2,3].to_vec()` call, not the `into_iter` call. The actual
+`into_iter` emission was **missing entirely** — see the `[DBG_RES]`
+result above.
+
+**Fifth attempt (also failed, reverted).** Following the
+`resolve_ty_shallow` recommendation, the `iter_is_by_value_vec` gate was
+changed to match on
+`self.infer.resolve_ty_shallow(self.ctx, iter_ty)` instead of the raw
+`iter_ty`. Same result: `for x in v` still ICEs with
+`fn_abi_of failed: UnknownType(Ty(7292))`. So inference resolution was
+not the (only) blocker either.
+
+**Concrete facts established across five attempts:**
+
+- `resolve_trait_method_fn(Adt(1020, [i32]), IntoIterator, into_iter)`
+  returns `fn_def_id = 419` with output `Adt63<i32>` (VecIntoIter<i32>)
+  — verified by a `[DBG_INTO_ITER]` probe. The resolution step *can*
+  work.
+- In one run, `[DBG_INTO_ITER]` fired on `Adt(1020, [i32])`. In another
+  run (with the same gating shape in a different probe, `[DBG_RES]`),
+  **no** `Adt(1020)` line was ever printed — only `Adt(1000)` (Range)
+  and `Ref(Erased, Ty(36), …)` (slice). Two probes in structurally
+  identical positions produced *different* `iter_ty` populations. That
+  is the crux: the program is typechecked more than once, and at least
+  one of those passes sees `Adt(1020)` (the pre-pass) while the pass
+  whose THIR reaches lowering may not (or vice versa).
+- The lowering's `[DBG_LOWER_II]` probe consistently reported
+  `into_iter.is_some=false` — i.e. whatever THIR copy lowering actually
+  consumes does not carry the field set by typeck's pass.
+
+**What the next attempt must do first, before writing any wiring:**
+determine **which typeck invocation lowering consumes**. Concrete
+approach:
+
+1. Add an unconditional `eprintln!` in `check_expr.rs`'s `Expr::For`
+   arm (no gate, every invocation) printing `iter_ty` and
+   `std::thread::current().id()`.
+2. Add a matching unconditional `eprintln!` in lowering's `For` arm
+   printing `next.is_some()`, `next.as_ref().map(|n|
+   n.into_iter.is_some())`, and thread id.
+3. Run `for x in v` once. Compare the thread ids / pass counts. If
+   there are two typeck passes and lowering consumes the second, trace
+   *why* the second pass discards the `into_iter` field — likely
+   `zonk.rs` or a THIR clone/rebuild somewhere between typeck and
+   lowering that doesn't preserve the new field.
+
+Until that's done, further attempts will keep producing the same ICE.
+There is no shame in leaving this as an honestly-rejected diagnostic —
+`v.into_iter()` is the documented workaround, and it works on both
+backends today.
 
 
 **Already-working fallbacks** (unchanged): `for x in v.as_slice()`,
