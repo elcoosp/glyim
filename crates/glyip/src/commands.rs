@@ -134,6 +134,35 @@ pub struct BuildResult {
     pub incremental: bool,
 }
 
+/// Resolve the project's lockfile: read the existing `Glyip.lock` if it is
+/// still consistent with the manifest; otherwise re-resolve and rewrite it.
+///
+/// P0-3 (production-readiness plan §5): the three call sites that used to
+/// do `let _lockfile = resolver.resolve(...)` threw the resolved lockfile
+/// away, so `Glyip.lock` was never read, validated, or refreshed.
+fn resolve_lockfile(config: &GlyipToml, project_dir: &Path) -> GlyipResult<Lockfile> {
+    let existing = Lockfile::read_from_dir(project_dir).unwrap_or_default();
+    if !existing.is_empty() {
+        let conflicts = existing.validate_against_manifest(config);
+        if conflicts.is_empty() {
+            info!(
+                "Using existing Glyip.lock ({} crate(s) locked)",
+                existing.len()
+            );
+            return Ok(existing);
+        }
+        info!(
+            "Glyip.lock has {} conflict(s) with the manifest — re-resolving",
+            conflicts.len()
+        );
+    }
+    let resolver = DependencyResolver::new_no_index();
+    let resolved = resolver.resolve(config, project_dir)?;
+    resolved.write_to_dir(project_dir)?;
+    info!("Wrote Glyip.lock ({} crate(s) locked)", resolved.len());
+    Ok(resolved)
+}
+
 /// Build the project in the current directory (or `project_dir`).
 pub fn cmd_build(project_dir: &Path, opts: &BuildOptions) -> GlyipResult<BuildResult> {
     let config = GlyipToml::read_from_dir(project_dir)?;
@@ -144,9 +173,8 @@ pub fn cmd_build(project_dir: &Path, opts: &BuildOptions) -> GlyipResult<BuildRe
         config.package.name, config.package.version
     );
 
-    // Dependency resolution.
-    let resolver = DependencyResolver::new_no_index();
-    let _lockfile = resolver.resolve(&config, project_dir)?;
+    // Dependency resolution (P0-3: read/validate/persist Glyip.lock).
+    let _lockfile = resolve_lockfile(&config, project_dir)?;
     info!("Dependencies resolved");
 
     // Incremental check.
@@ -217,9 +245,8 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
         config.package.name, config.package.version
     );
 
-    // Resolve dependencies.
-    let resolver = DependencyResolver::new_no_index();
-    let _lockfile = resolver.resolve(&config, project_dir)?;
+    // Resolve dependencies (P0-3: read/validate/persist Glyip.lock).
+    let _lockfile = resolve_lockfile(&config, project_dir)?;
 
     // Find test entry points.
     let test_dir = project_dir.join("tests");
@@ -561,9 +588,8 @@ pub fn cmd_run(project_dir: &Path, opts: &RunOptions) -> GlyipResult<RunResult> 
         config.package.name, config.package.version
     );
 
-    // Resolve dependencies.
-    let resolver = DependencyResolver::new_no_index();
-    let _lockfile = resolver.resolve(&config, project_dir)?;
+    // Resolve dependencies (P0-3: read/validate/persist Glyip.lock).
+    let _lockfile = resolve_lockfile(&config, project_dir)?;
 
     // Build first.
     let build_opts = BuildOptions {

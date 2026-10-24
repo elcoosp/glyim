@@ -5,6 +5,8 @@
 //! fetching crate metadata from remote registries via the [`RegistryClient`]
 //! trait.
 
+use sha2::{Digest, Sha256};
+
 use crate::config::GlyipToml;
 use crate::error::{GlyipError, GlyipResult};
 use crate::lockfile::{CrateSource, LockedCrate, Lockfile};
@@ -215,7 +217,52 @@ pub trait RegistryClient {
     /// Download a crate's source tarball and extract it to `dest`.
     ///
     /// Returns the path to the extracted source directory.
-    fn download_crate(&self, name: &str, version: &str, dest: &Path) -> GlyipResult<PathBuf>;
+    ///
+    /// `expected_checksum` is the sha256 hex recorded in the lockfile (or
+    /// registry index entry). Implementations MUST verify it; a missing
+    /// checksum is treated as an error (plan P0-3 — "refusing download").
+    fn download_crate(
+        &self,
+        name: &str,
+        version: &str,
+        expected_checksum: Option<&str>,
+        dest: &Path,
+    ) -> GlyipResult<PathBuf>;
+}
+
+/// Verify a downloaded crate tarball's sha256 against the expected hex.
+///
+/// P0-3 (production-readiness plan §5). Returns an error if the checksum is
+/// missing (nothing to verify against — refuse the download rather than
+/// trust arbitrary bytes) or mismatched (tampered / corrupt tarball).
+///
+/// Centralised so the *callers* of `RegistryClient::download_crate` and the
+/// tests all agree on the semantics.
+pub(crate) fn verify_checksum(
+    bytes: &[u8],
+    expected: Option<&str>,
+    name: &str,
+    version: &str,
+) -> GlyipResult<()> {
+    let Some(hex) = expected else {
+        return Err(GlyipError::RegistryError(format!(
+            "registry entry for {name}@{version} has no checksum; refusing download"
+        )));
+    };
+    let got = Sha256::digest(bytes);
+    // `Sha256::digest` returns a `GenericArray<u8, ...>`; format the bytes
+    // manually (LowerHex is not implemented for it).
+    let got_hex: String = got.iter().fold(String::with_capacity(64), |mut acc, b| {
+        use std::fmt::Write;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    });
+    if got_hex != hex {
+        return Err(GlyipError::RegistryError(format!(
+            "checksum mismatch for {name}@{version}: expected {hex}, got {got_hex}"
+        )));
+    }
+    Ok(())
 }
 
 /// HTTP-based registry client that fetches from a remote crate index.
@@ -293,7 +340,13 @@ impl RegistryClient for HttpRegistryClient {
         Ok(entry)
     }
 
-    fn download_crate(&self, name: &str, version: &str, dest: &Path) -> GlyipResult<PathBuf> {
+    fn download_crate(
+        &self,
+        name: &str,
+        version: &str,
+        expected_checksum: Option<&str>,
+        dest: &Path,
+    ) -> GlyipResult<PathBuf> {
         let url = format!(
             "{}/crates/{}/{}-{}.crate",
             self.base_url, name, name, version
@@ -317,6 +370,11 @@ impl RegistryClient for HttpRegistryClient {
             GlyipError::RegistryError(format!("read response '{}' v{}: {}", name, version, e))
         })?;
 
+        // P0-3 (production-readiness plan §5): verify the sha256 before
+        // trusting the tarball. The plan's own test is "tamper a .crate
+        // file → build must hard-fail on checksum" — this is that gate.
+        verify_checksum(&bytes, expected_checksum, name, version)?;
+
         // Persist the tarball to cache.
         std::fs::create_dir_all(dest)?;
         let tarball_path = dest.join(format!("{}-{}.crate", name, version));
@@ -334,6 +392,45 @@ impl RegistryClient for HttpRegistryClient {
 
         info!("Downloaded and extracted '{}' v{}", name, version);
         Ok(extract_dir)
+    }
+}
+
+#[cfg(test)]
+mod checksum_tests {
+    use super::*;
+
+    fn hex_of(bytes: &[u8]) -> String {
+        Sha256::digest(bytes).iter().fold(String::with_capacity(64), |mut acc, b| {
+            use std::fmt::Write;
+            let _ = write!(acc, "{b:02x}");
+            acc
+        })
+    }
+
+    #[test]
+    fn valid_checksum_passes() {
+        let bytes = b"hello, world";
+        let hex = hex_of(bytes);
+        verify_checksum(bytes, Some(&hex), "foo", "1.0.0").unwrap();
+    }
+
+    #[test]
+    fn tampered_tarball_rejects() {
+        // Simulate tampering: the bytes do not match the expected hash.
+        let bytes = b"tampered contents";
+        let hex = hex_of(b"the original contents");
+        let err = verify_checksum(bytes, Some(&hex), "foo", "1.0.0").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("checksum mismatch"), "got: {msg}");
+        assert!(msg.contains("foo@1.0.0"), "got: {msg}");
+    }
+
+    #[test]
+    fn missing_checksum_rejects() {
+        let err = verify_checksum(b"anything", None, "foo", "1.0.0").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("no checksum"), "got: {msg}");
+        assert!(msg.contains("refusing download"), "got: {msg}");
     }
 }
 
@@ -828,10 +925,24 @@ impl DependencyResolver {
     /// Returns the path to the extracted source directory.
     pub fn download_crate(&self, locked: &LockedCrate, cache_dir: &Path) -> GlyipResult<PathBuf> {
         if let Some(ref client) = self.registry_client
-            && let CrateSource::Registry { .. } = &locked.source
+            && let CrateSource::Registry { checksum, .. } = &locked.source
         {
+            // P0-3: pass the locked checksum through so the client can
+            // verify the tarball. Empty string means the index entry had
+            // no checksum — treated as None, which `verify_checksum`
+            // rejects ("no checksum; refusing download").
+            let expected = if checksum.is_empty() {
+                None
+            } else {
+                Some(checksum.as_str())
+            };
             let dest = cache_dir.join("registry").join(&locked.name);
-            return client.download_crate(&locked.name, &locked.version, &dest);
+            return client.download_crate(
+                &locked.name,
+                &locked.version,
+                expected,
+                &dest,
+            );
         }
         Err(GlyipError::RegistryError(format!(
             "no registry client available to download '{}'",

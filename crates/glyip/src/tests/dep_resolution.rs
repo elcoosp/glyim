@@ -45,8 +45,10 @@ impl RegistryClient for MockRegistryClient {
         &self,
         name: &str,
         version: &str,
+        expected_checksum: Option<&str>,
         dest: &Path,
     ) -> crate::error::GlyipResult<PathBuf> {
+        let _ = expected_checksum;
         let extract_dir = dest.join(format!("{}-{}", name, version));
         let src_dir = extract_dir.join("src");
         std::fs::create_dir_all(&src_dir)?;
@@ -395,6 +397,6 @@ fn mock_registry_download_count() {
     assert_eq!(mock.download_count(), 0);
 
     let dir = TempDir::new().unwrap();
-    mock.download_crate("counted", "0.1.0", dir.path()).unwrap();
+    mock.download_crate("counted", "0.1.0", None, dir.path()).unwrap();
     assert_eq!(mock.download_count(), 1);
 }
