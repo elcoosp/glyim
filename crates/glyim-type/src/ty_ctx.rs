@@ -209,6 +209,50 @@ impl TyCtx {
         self.intern_substitution(args)
     }
 
+    /// Substitute the *impl's* generic params into its stored associated type,
+    /// using the query self type's concrete args at the positions where the
+    /// impl's self type had a `Param`.
+    ///
+    /// See HANDOFF s16 §3 (Bug 2). An impl
+    /// `impl<T> Iterator for VecIntoIter<T> { type Item = T; }` stores
+    /// `VecIntoIter<Param(0, T)>.Item = Param(0, T)`. A query for
+    /// `VecIntoIter<i32>::Item` reaches the assoc lookup with
+    /// `impl_self_ty = VecIntoIter<Param(0, T)>`,
+    /// `query_self_ty = VecIntoIter<i32>`, `assoc = Param(0, T)`; this
+    /// helper substitutes `{0 -> i32}` and returns `i32`.
+    fn subst_impl_params_into_assoc(&self, impl_self_ty: Ty, query_self_ty: Ty, assoc: Ty) -> Ty {
+        let (impl_sub, query_sub) = match (self.ty_kind(impl_self_ty), self.ty_kind(query_self_ty))
+        {
+            (TyKind::Adt(_, a), TyKind::Adt(_, b)) => (*a, *b),
+            _ => return assoc,
+        };
+        let impl_args = self.substitution_args(impl_sub);
+        let query_args = self.substitution_args(query_sub);
+        let mut slots: Vec<Option<Ty>> = vec![None; impl_args.len().max(query_args.len())];
+        let mut any_filled = false;
+        for (ia, qa) in impl_args.iter().zip(query_args.iter()) {
+            if let (GenericArg::Ty(it), GenericArg::Ty(qt)) = (ia, qa) {
+                if let TyKind::Param(p) = self.ty_kind(*it) {
+                    let idx = p.index as usize;
+                    if slots.len() <= idx {
+                        slots.resize(idx + 1, None);
+                    }
+                    slots[idx] = Some(*qt);
+                    any_filled = true;
+                }
+            }
+        }
+        if !any_filled {
+            return assoc;
+        }
+        let unit = self.mk_ty(TyKind::Unit);
+        let args: Vec<GenericArg> = slots
+            .into_iter()
+            .map(|s| GenericArg::Ty(s.unwrap_or(unit)))
+            .collect();
+        let subst = self.intern_substitution(args);
+        self.subst_ty_recursive(assoc, subst)
+    }
 
     /// region.
     pub fn region(&self, vid: RegionVid) -> &Region {
@@ -266,11 +310,11 @@ impl TyCtx {
                             && matches!(self.ty_kind(*sty), TyKind::Adt(b, _) if b == &self_adt)
                             && entries.iter().any(|(n, _)| *n == assoc_name)
                     })
-                    .and_then(|((_, _), entries)| {
+                    .and_then(|((impl_sty, _), entries)| {
                         entries
                             .iter()
                             .find(|(name, _)| *name == assoc_name)
-                            .map(|(_, ty)| *ty)
+                            .map(|(_, ty)| self.subst_impl_params_into_assoc(*impl_sty, self_ty, *ty))
                     })
             }
             _ => None,
@@ -338,11 +382,11 @@ impl TyCtx {
                 };
                 sty_matches && entries.iter().any(|(n, _)| self.name_str(*n) == assoc_name)
             })
-            .and_then(|((_, _), entries)| {
+            .and_then(|((impl_sty, _), entries)| {
                 entries
                     .iter()
                     .find(|(name, _)| self.name_str(*name) == assoc_name)
-                    .map(|(_, ty)| *ty)
+                    .map(|(_, ty)| self.subst_impl_params_into_assoc(*impl_sty, self_ty, *ty))
             })
     }
 
@@ -360,11 +404,11 @@ impl TyCtx {
                 };
                 sty_matches && entries.iter().any(|(n, _)| *n == assoc_name)
             })
-            .and_then(|((_, _), entries)| {
+            .and_then(|((impl_sty, _), entries)| {
                 entries
                     .iter()
                     .find(|(name, _)| *name == assoc_name)
-                    .map(|(_, ty)| *ty)
+                    .map(|(_, ty)| self.subst_impl_params_into_assoc(*impl_sty, self_ty, *ty))
             })
     }
 
