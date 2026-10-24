@@ -3429,6 +3429,34 @@ impl<'a> FnCtxt<'a> {
                         TyKind::Ref(_, i, _) => *i,
                         _ => step_ty,
                     };
+                    // CLONE-BUILTIN-FIRST (production-readiness plan §6
+                    // P1-C1, other half). Mirror the `to_string` fix: for an
+                    // ADT receiver whose registry has a real builtin
+                    // `clone` (e.g. `Vec<T>` → 9068), return that `FnDefId`
+                    // instead of the sentinel `u32::MAX - 3`. The sentinel
+                    // is lowered to a zeroing `MirConstKind::Error` —
+                    // `Vec<i32>::clone().len()` silently returned 0.
+                    //
+                    // Codegen currently has no `Vec::clone` arm, so the
+                    // P1-C2 gate in `lower_call` (fe63ecd3) reports a clean
+                    // compiler-gap diagnostic instead of emitting a zeroing
+                    // constant. That's a silent-miscompile → honest-error
+                    // improvement; implementing the real lowering is a
+                    // Phase 2 follow-up (see KNOWN_GAPS §6 P1-C1).
+                    let canon: Option<AdtId> = match self.ctx.ty_kind(step_ty) {
+                        TyKind::Adt(id, _) => Some(*id),
+                        TyKind::Ref(_, i, _) => match self.ctx.ty_kind(*i) {
+                            TyKind::Adt(id, _) => Some(*id),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(aid) = canon
+                        && let Some((fn_id, _sig)) =
+                            self.ctx.lookup_builtin_method(aid, method_name)
+                    {
+                        return Some((inner, fn_id));
+                    }
                     let fn_id = FnDefId::from_raw(u32::MAX - 3);
                     return Some((inner, fn_id));
                 }
