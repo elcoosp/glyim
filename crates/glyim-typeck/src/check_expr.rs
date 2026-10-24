@@ -377,6 +377,18 @@ impl<'a> FnCtxt<'a> {
 
                 let result_ty = match op {
                     BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::LtEq | BinOp::GtEq => {
+                        // P1-C5 (production-readiness plan §6): reject
+                        // comparisons on types codegen cannot lower. Prior
+                        // to this, `struct P == struct P` and
+                        // `&[f64] == &[f64]` reached `Err("eq: mismatched
+                        // types")` in codegen — an ICE, not a diagnostic.
+                        if operand_ty != Ty::ERROR && !self.comparison_comparable(operand_ty) {
+                            let ty_str = PrintTy::new(operand_ty, &*self.ctx).to_string();
+                            self.diagnostics.push(GlyimDiagnostic::type_error(
+                                span,
+                                format!("comparison operator not defined for `{ty_str}`"),
+                            ));
+                        }
                         Ty::BOOL
                     }
                     BinOp::And | BinOp::Or => {
@@ -3279,6 +3291,114 @@ impl<'a> FnCtxt<'a> {
             map.insert(i as u32, arg.clone());
         }
         self.ctx.subst_ty(ty, &map)
+    }
+
+    /// P1-C5 (production-readiness plan §6): does `ty` contain any part that
+    /// is not yet a concrete type — an inference variable, or an unresolved
+    /// generic parameter/bound/projection? If so, the comparison gate must
+    /// defer: the answer at *this* point is not final (the type is being
+    /// checked inside a generic impl, and the real receiver at
+    /// monomorphisation will be something the codegen can lower).
+    ///
+    /// Without this, the gate fired on stdlib generic code such as
+    /// `Slice<T>::contains`'s `if item == x` where `item: &T` — flagging
+    /// every downstream compilation.
+    fn ty_has_unresolved(&self, ty: Ty) -> bool {
+        match self.ctx.ty_kind(ty) {
+            TyKind::Infer(_)
+            | TyKind::Param(_)
+            | TyKind::Bound(_, _)
+            | TyKind::Projection(_) => true,
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) | TyKind::Slice(inner) => {
+                self.ty_has_unresolved(*inner)
+            }
+            TyKind::Array(inner, _) => self.ty_has_unresolved(*inner),
+            TyKind::Adt(_, substs) | TyKind::Tuple(substs) => {
+                let args = self.ctx.substitution_args(*substs);
+                args.iter().any(|a| match a {
+                    glyim_type::GenericArg::Ty(t) => self.ty_has_unresolved(*t),
+                    _ => false,
+                })
+            }
+            _ => false,
+        }
+    }
+
+    /// P1-C5 (production-readiness plan §6): does the operand type have a
+    /// valid `==`/`!=`/ordering lowering today?
+    ///
+    /// The codegen `BinOp::Eq` / `Ne` arms handle *only*:
+    ///   * integer / bool / char   → `ICmp`
+    ///   * float                    → `FCmp`
+    ///   * string-shaped            → `glyim_str_eq` (byte content)
+    ///   * pointer values           → address compare
+    ///
+    /// Everything else reaches `Err("eq: mismatched types")` — an ICE, not
+    /// a user-facing diagnostic. Two of those "pointer" shapes are also
+    /// semantically wrong (`&i32 == &i32` compares addresses instead of
+    /// values). This predicate decides up front whether the operand shape
+    /// has an honest lowering; `false` produces a typeck diagnostic
+    /// instead.
+    ///
+    /// **Defers on any type containing an unresolved part** (Infer / Param
+    /// / Bound / Projection anywhere inside). Generic stdlib code
+    /// (`if item == x` in a `Slice<T>` impl) must not be rejected here:
+    /// the receiver's real type is only known at monomorphisation.
+    fn comparison_comparable(&self, ty: Ty) -> bool {
+        if self.ty_has_unresolved(ty) {
+            return true;
+        }
+        match self.ctx.ty_kind(ty) {
+            // Scalar — codegen lowers directly.
+            TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => {
+                true
+            }
+            // Already failing or diverges — don't pile on.
+            TyKind::Error | TyKind::Never => true,
+            // String shapes — codegen routes through `glyim_str_eq`.
+            TyKind::String => true,
+            TyKind::Adt(id, _) if id.to_raw() == 1050 => true, // String
+            TyKind::Slice(e) => matches!(self.ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)),
+            // `&str`, `&String`, `&[u8]` — content-compared by `is_string_shaped`.
+            // `&i32`, `&mut Vec<T>`, etc. compare addresses at codegen (wrong);
+            // reject rather than miscompile.
+            TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
+                TyKind::String => true,
+                TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                TyKind::Slice(e) => matches!(self.ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)),
+                _ => false,
+            },
+            // Raw pointers — codegen does address compare, matching Rust.
+            TyKind::RawPtr(_, _) => true,
+            // Fieldless enums — codegen lowers the discriminant to an int
+            // and the int arm handles it. Allow when every variant is
+            // `VariantStyle::Unit`.
+            // Enums — codegen lowers the discriminant to an int and the int
+            // arm handles it. Allow all enums (a placeholder adt_def may
+            // still report its variants as non-Unit at this point in the
+            // pipeline — the discriminant is what matters, not the payload).
+            TyKind::Adt(id, _) => self
+                .ctx
+                .adt_def(*id)
+                .map(|def| matches!(def.kind, glyim_type::adt_def::AdtKind::Enum))
+                .unwrap_or(false),
+            // **Arrays and tuples — defer the ICE, do not gate.**
+            //
+            // Codegen has always hit `Err("eq: mismatched types")` on these
+            // (pre-existing, not the P1-C5 bug). But the *stdlib's own
+            // dead code* has array comparisons inside `Ipv4Addr` / `Ipv6Addr`
+            // (e.g. `self.octets == other.octets` in an uncalled method); a
+            // typeck-side gate fires on those and breaks the whole stdlib
+            // compile. The honest answer for arrays and tuples is to keep
+            // the pre-existing ICE at codegen — unchanged from before this
+            // commit — and revisit when there is real array-compare
+            // lowering. Only `&[f64] == &[f64]` (the *silent-wrong* case the
+            // plan calls out) needs the gate, and it is covered by the Ref
+            // arm above.
+            TyKind::Array(_, _) | TyKind::Tuple(_) => true,
+            // User ADTs with data, tuples, arrays, unions, dyn, fn pointers.
+            _ => false,
+        }
     }
 
     /// Does `ty` or any of its immediate type-argument positions contain a
