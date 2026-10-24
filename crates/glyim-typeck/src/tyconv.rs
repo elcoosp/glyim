@@ -609,6 +609,37 @@ pub fn resolve_path_type(
         let aname = path.segments[1].name;
         let qname_str = ctx.name_str(qname).to_string();
 
+        // `Self::X` in an impl method must first try to resolve through the
+        // impl's registered associated-type table (`param_map["Self"]` is
+        // the impl's declared self type, e.g. `VecIntoIter<T>`). This is
+        // what turns `Self::Item` into:
+        //   * `T` (or the substituted `i32` at monomorphisation) for
+        //     `impl<T> Iterator for VecIntoIter<T> { type Item = T; }`, or
+        //   * `<I as Iterator>::Item` for
+        //     `impl<I: Iterator> Iterator for Skip<I> { type Item = I::Item; }`.
+        //
+        // The projection-building fallback below would instead produce
+        // `<Self as Trait>::X` against a *bare* `Param(0, "Self")` — which
+        // aliases `Param(0, "T")` (the impl's first generic) and gets
+        // substituted with the wrong concrete type at monomorphisation
+        // (s16's `UnknownType(Ty(<i32 as Iterator>::Item))` ICE).
+        //
+        // If the impl's assoc entry isn't yet registered (this is exactly
+        // the case *while* the impl's own `type X = ...` is being
+        // registered), `resolve_associated_type_by_self_ty` returns `None`
+        // and we fall through to the existing projection path — which
+        // happens to be the same raw template the registration is about
+        // to store, so the two sides of `type Item = I::Item` agree.
+        if qname_str == "Self" {
+            if let Some(&impl_self_ty) = param_map.get(&qname) {
+                if let Some(resolved) =
+                    ctx.resolve_associated_type_by_self_ty(impl_self_ty, aname)
+                {
+                    return resolved;
+                }
+            }
+        }
+
         // Fast path: if the qualifier is a generic param bound by a trait
         // declaring `aname`, build `ProjectionTy(param, aname)`.
         // Extract the bound trait id BEFORE any mutable borrow of `ctx`
