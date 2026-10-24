@@ -7737,9 +7737,35 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         if let Operand::Constant(c) = func
             && let MirConstKind::Fn(fn_id, _) = &c.kind
             && fn_id.to_raw() >= 9_000
-            && self.try_lower_builtin_intrinsic(*fn_id, args, destination, target)?
         {
-            return Ok(());
+            if self.try_lower_builtin_intrinsic(*fn_id, args, destination, target)? {
+                return Ok(());
+            }
+            // P1-C2 (production-readiness plan §6): a builtin-method FnDefId
+            // in the 9_000+ range was resolved by typeck's registry but the
+            // LLVM backend has no lowering for it. Previously we fell through
+            // to the generic FnDef arm below, which emitted a call to
+            // `__glyim_fn_{id}` (undefined) — the user saw only
+            // `ld: symbol(s) not found for architecture ...: ___glyim_fn_9022`,
+            // an opaque link error. Diagnose it here, with the method name
+            // when the registry still knows it.
+            // The registry's first tuple slot is a *placeholder* for
+            // primitive methods (`u32::count_ones` etc.) — it is not a real
+            // ADT id and must not be shown as `Adt0`. Print just the method
+            // name plus the synthetic FnDefId when available.
+            let method_desc = self
+                .ty_ctx
+                .builtin_fn_id(*fn_id)
+                .map(|(_, name)| format!("`{}`", self.ty_ctx.name_str(name)))
+                .unwrap_or_else(|| format!("FnDefId({})", fn_id.to_raw()));
+            return Err(vec![GlyimDiagnostic::internal_error(format!(
+                "builtin method {method_desc} is resolved by the type checker but \
+                 not implemented by the LLVM backend. This is a compiler gap \
+                 (KNOWN_GAPS §6 P1-C2) — the method should either be lowered \
+                 inline (see `try_lower_builtin_intrinsic`) or rejected during \
+                 type checking, not left to fail as an undefined symbol at link \
+                 time."
+            ))]);
         }
         // Determine the call target. A function pointer is one form; a closure
         // is carried as an aggregate of its captures with the closure id encoded
