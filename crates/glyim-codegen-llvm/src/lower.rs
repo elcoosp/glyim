@@ -2250,28 +2250,50 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     /// Whether `l` and `r` are LLVM `{ptr, len}` struct values
     /// representing strings (`TyKind::String` / `&str` / `String` —
     /// all of which lower to that shape).
+    /// P1-C5 (production-readiness plan §6): decide whether both operand
+    /// types are "string-shaped" — i.e. their contents should be compared
+    /// bytewise via `glyim_str_eq` — by *type only*, not by LLVM value
+    /// shape.
+    ///
+    /// The previous version also required both operands to be
+    /// `is_struct_value()`, which excluded `&String` (a thin pointer to a
+    /// `{[3 x i64]}` struct, not a struct itself). That made
+    /// `&String == &String` fall through to the pointer arm — an *address*
+    /// comparison that gave `false` for two equal-content Strings at
+    /// different addresses. The type-based check lets `&String` reach
+    /// `string_ptr_len_typed`, which loads through the pointer.
+    ///
+    /// Also restricts slice matching to `u8` elements. `&[f64] == &[f64]`
+    /// previously routed here and got a byte-by-byte comparison of float
+    /// bit patterns, which reports `NaN == NaN` as `true` (IEEE says
+    /// `false`) and would compare padding bytes on other multi-byte
+    /// elements.
     fn is_string_shaped(
         &self,
-        l: BasicValueEnum<'ctx>,
-        r: BasicValueEnum<'ctx>,
+        _l: BasicValueEnum<'ctx>,
+        _r: BasicValueEnum<'ctx>,
         l_ty: Ty,
         r_ty: Ty,
     ) -> bool {
-        let ty_is_str = |ty: Ty| -> bool {
-            match self.ty_ctx.ty_kind(ty) {
+        self.is_string_shaped_ty(l_ty) && self.is_string_shaped_ty(r_ty)
+    }
+
+    fn is_string_shaped_ty(&self, ty: Ty) -> bool {
+        match self.ty_ctx.ty_kind(ty) {
+            TyKind::String => true,
+            TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => match self.ty_ctx.ty_kind(*inner)
+            {
                 TyKind::String => true,
-                TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
-                    matches!(self.ty_ctx.ty_kind(*inner), TyKind::String | TyKind::Slice(_))
-                }
-                // `String` (the builtin ADT, 1050) is Vec-shaped: its LLVM
-                // type is `{[3 x i64]}` (ptr, cap, len). Its data ptr is
-                // array[0] and its byte length is array[2]. Comparing it
-                // needs the per-side shape extraction in `string_ptr_len`.
                 TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                TyKind::Slice(e) => {
+                    matches!(self.ty_ctx.ty_kind(*e), TyKind::Uint(UintTy::U8))
+                }
                 _ => false,
-            }
-        };
-        ty_is_str(l_ty) && ty_is_str(r_ty) && l.is_struct_value() && r.is_struct_value()
+            },
+            TyKind::Slice(e) => matches!(self.ty_ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)),
+            _ => false,
+        }
     }
 
     /// Byte-for-byte `==` / `!=` on two `{ptr, len}` string values.
@@ -2290,6 +2312,47 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     /// Vec-shaped `String` (`{[3 x i64]}`, Adt1050 — the builtin struct).
     /// The Vec-shaped case reads array indices 0 (data ptr) and 2 (len);
     /// index 1 is capacity and is unused here.
+    /// Like [`Self::string_ptr_len`], but also accepts `&String`
+    /// (`TyKind::Ref(_, String | Adt1050, _)`). For that case the LLVM value
+    /// is a thin pointer to the `{[3 x i64]}` struct, so we load through
+    /// before extracting (ptr, len). Other shapes pass through unchanged.
+    ///
+    /// P1-C5 (production-readiness plan §6): without this, `&String ==
+    /// &String` fell to the pointer arm — an address compare.
+    fn string_ptr_len_typed(
+        &self,
+        val: BasicValueEnum<'ctx>,
+        ty: Ty,
+    ) -> CompResult<(
+        inkwell::values::PointerValue<'ctx>,
+        inkwell::values::IntValue<'ctx>,
+    )> {
+        let val = match self.ty_ctx.ty_kind(ty) {
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _)
+                if matches!(self.ty_ctx.ty_kind(*inner), TyKind::String)
+                    || matches!(
+                        self.ty_ctx.ty_kind(*inner),
+                        TyKind::Adt(id, _) if id.to_raw() == 1050
+                    ) =>
+            {
+                let pointee_ty = self.llvm_type_for_ty(*inner)?;
+                self.builder
+                    .build_load(
+                        pointee_ty,
+                        val.into_pointer_value(),
+                        "spl_deref",
+                    )
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "string_ptr_len_typed deref: {e:?}"
+                        ))]
+                    })?
+            }
+            _ => val,
+        };
+        self.string_ptr_len(val)
+    }
+
     fn string_ptr_len(
         &self,
         val: BasicValueEnum<'ctx>,
@@ -2383,13 +2446,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         &self,
         l: BasicValueEnum<'ctx>,
         r: BasicValueEnum<'ctx>,
+        l_ty: Ty,
+        r_ty: Ty,
         negate: bool,
     ) -> CompResult<BasicValueEnum<'ctx>> {
         let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::default());
         let ptr_width = self.target_info.pointer_width();
         let len_ty = self.llvm_int_type(ptr_width as u32);
-        let (l_ptr, l_len) = self.string_ptr_len(l)?;
-        let (r_ptr, r_len) = self.string_ptr_len(r)?;
+        let (l_ptr, l_len) = self.string_ptr_len_typed(l, l_ty)?;
+        let (r_ptr, r_len) = self.string_ptr_len_typed(r, r_ty)?;
         // The runtime signature: `(i8*, usize, i8*, usize) -> i32`.
         let helper = self
             .module
@@ -2823,7 +2888,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             ))]
                         })
                 } else if self.is_string_shaped(l, r, operand_ty, r_ty) {
-                    self.lower_string_eq(l, r, false)
+                    self.lower_string_eq(l, r, operand_ty, r_ty, false)
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
                     // pointer-sized integers and compare. (Rust's `*const T
@@ -2899,7 +2964,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             ))]
                         })
                 } else if self.is_string_shaped(l, r, operand_ty, r_ty) {
-                    self.lower_string_eq(l, r, true)
+                    self.lower_string_eq(l, r, operand_ty, r_ty, true)
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
                     // pointer-sized integers and compare. (Rust's `*const T
