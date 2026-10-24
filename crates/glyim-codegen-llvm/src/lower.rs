@@ -5027,6 +5027,22 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // arm. Handle the zero-arg constructors first. `dest` is the
         // `{ptr, len}` fat pointer; an empty collection is all-zero.
         if method == "new" {
+            // P0-1 (production-readiness plan §5): the generic zero-arg `new`
+            // arm below stores `const_zero()` and discards any arguments.
+            // Prior to this gate, `Box::new(42)` fell through to this arm
+            // (Box is ADT 1040, no dedicated arm exists) and compiled to a
+            // zeroed box containing 0 instead of 42 — silent miscompile,
+            // exit 1 for `if *b == 42 { 0 } else { 1 }`. Reject loudly here
+            // until the full Box::new arm lands (Phase 1).
+            if !args.is_empty() {
+                return Err(vec![GlyimDiagnostic::internal_error(format!(
+                    "builtin `{method}` received {} argument(s) — the generic zero-arg \
+                     constructor arm cannot lower it. `Box::new(value)` and \
+                     multi-arg constructors are pending (production-readiness \
+                     plan §5 P0-1 Phase 1).",
+                    args.len()
+                ))]);
+            }
             let dest_ty0 = self
                 .body
                 .locals

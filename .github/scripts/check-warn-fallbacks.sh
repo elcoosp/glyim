@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# P2-T1 (production-readiness plan §11.1): the previous version set
+# FAILED=1 inside a `find | while` pipeline subshell, so the outer check
+# always saw 0 — the gate could never fail. `lastpipe` keeps the loop in
+# the current shell.
+shopt -s lastpipe
+
 echo "Checking for bare tracing::warn fallbacks in critical crates..."
 FAILED=0
 

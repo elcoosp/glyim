@@ -242,8 +242,9 @@ glyim input.g --emit exec -o hello
 # Compile to a cdylib (used for proc-macro crates)
 glyim proc_macro_dep.g --emit cdylib
 
-# Optimise at level 2 with fat LTO
-glyim input.g -O2 --lto fat
+# Optimise at level 2 with thin LTO (fat LTO requires multi-CGU support,
+# which is not yet implemented; --lto fat errors cleanly)
+glyim input.g -O2 --lto thin
 
 # Cross-compile to AArch64 Linux
 glyim input.g --target aarch64-unknown-linux-gnu

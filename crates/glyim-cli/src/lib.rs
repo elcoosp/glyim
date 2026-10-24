@@ -407,7 +407,16 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // Build the LLVM backend concretely so the Thin path can drive per-CGU
     // bitcode emission (`emit_thinlto_bitcode_files`) directly. For the
     // non-Thin paths it is boxed into the `CodegenBackend` trait object.
-    let entry_main = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, input);
+    // P0-2 (production-readiness plan): thread the proc registry into the
+    // entry pre-pass. Without it, an item-emitting proc macro shifts the
+    // LocalDefId numbering so the id returned here points at the wrong
+    // item — miscompiling `main`.
+    let entry_main =
+        glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(
+            &mut db,
+            input,
+            proc_registry_ref,
+        );
     let target_info = glyim_core::TargetInfo::from_triple(&target_triple);
     let mut llvm = LlvmBackend::with_db(&db)
         .with_target(&target_triple)
@@ -461,6 +470,14 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                 }
             }
         }
+        // P1-O2 (production-readiness plan): codegen_units affects the
+        // emitted object, so include it in the cache key. Without this a
+        // build with a different `--codegen-units` silently serves the
+        // previous object.
+        extra_key_bytes.extend_from_slice(b"\x1fcgu\x1f");
+        extra_key_bytes.extend_from_slice(
+            &args.codegen_units.unwrap_or(0).to_le_bytes(),
+        );
         extra_key_bytes.extend_from_slice(b"\x1flto\x1f");
         extra_key_bytes.push(match lto {
             glyim_codegen_llvm::passes::LtoKind::None => 0,

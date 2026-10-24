@@ -449,7 +449,9 @@ fn compile_and_run_compiled(
         // Target the host triple so the produced object links and runs on the
         // dev machine (see `host_target_triple`).
         let mut llvm = glyim_codegen_llvm::LlvmBackend::new().with_target(host_target_triple());
-        if let Some(main_id) = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, file) {
+        if let Some(main_id) =
+            glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(&mut db, file, None)
+        {
             llvm = llvm.with_entry_main(main_id);
         }
         Box::new(llvm)
@@ -669,7 +671,8 @@ fn compile_source(
     // C-ABI `main` entry symbol. Resolve it here (after the stdlib was
     // injected, since injection rewrites the file) and hand it to the
     // backend exactly as `compile_and_run_compiled` does.
-    let entry_main = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, entry);
+    let entry_main =
+        glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(&mut db, entry, None);
 
     // Select the codegen backend.
     //

@@ -35,6 +35,15 @@ jobs:
     name: Test (ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # P1-O1 (production-readiness plan): 44 `// needs-llvm` fixtures
+      # were silently Ignored on this job because GLYIM_LLVM was unset
+      # (~18% of the corpus). This job already installs LLVM 23, so
+      # running them is the honest choice; a pass means the flagship
+      # backend is verified end-to-end, and a fail means we need to fix
+      # something real. If any of these need to be excluded later, use a
+      # per-fixture `// only-target` annotation, not a job-wide skip.
+      GLYIM_LLVM: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Install LLVM 23
