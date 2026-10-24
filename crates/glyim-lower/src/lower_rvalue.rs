@@ -863,26 +863,69 @@ impl<'a> MirBuilder<'a> {
                 iterable,
                 body,
                 next,
+                into_iter,
             } => {
                 let iter_ty = iterable.ty;
                 let elem_ty = pat.ty;
-                let iter_local = self.alloc_local(
+                let initial_iter_local = self.alloc_local(
                     iter_ty,
                     glyim_core::primitives::Mutability::Mut,
                     iterable.span,
                 );
                 self.push_stmt(
-                    glyim_mir::StatementKind::StorageLive(iter_local),
+                    glyim_mir::StatementKind::StorageLive(initial_iter_local),
                     iterable.span,
                 );
                 let iter_rvalue = self.lower_expr_to_rvalue(iterable);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
-                        glyim_mir::Place::new(iter_local),
+                        glyim_mir::Place::new(initial_iter_local),
                         iter_rvalue,
                     ),
                     iterable.span,
                 );
+                // Vec-by-value (`for x in v` where `v: Vec<T>`): emit
+                // `IntoIterator::into_iter(v)` into a fresh local and rebind
+                // `iter_local` to it. The subsequent `next` call then operates
+                // on `VecIntoIter<T>` (its declared output), not on the Vec
+                // itself — avoiding the segfaulting 3-word-vs-2-word mismatch.
+                // `iter_ty` is rebound too, so the `&Vec` slice-walk match
+                // below does not fire (its Vec-arm requires an `Adt(1020)`).
+                let (iter_ty, iter_local) = if let Some(info) = into_iter.as_ref() {
+                    let output_local = self.alloc_local(
+                        info.output_ty,
+                        glyim_core::primitives::Mutability::Mut,
+                        iterable.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(output_local),
+                        iterable.span,
+                    );
+                    let after_call = self.new_block();
+                    self.terminate(
+                        glyim_mir::TerminatorKind::Call {
+                            func: glyim_mir::Operand::Constant(glyim_mir::MirConst {
+                                kind: glyim_mir::MirConstKind::Fn(
+                                    info.fn_def_id,
+                                    info.fn_substs,
+                                ),
+                                ty: info.fn_ty,
+                                span: iterable.span,
+                            }),
+                            args: vec![glyim_mir::Operand::Move(glyim_mir::Place::new(
+                                initial_iter_local,
+                            ))],
+                            destination: glyim_mir::Place::new(output_local),
+                            target: Some(after_call),
+                            cleanup: None,
+                        },
+                        iterable.span,
+                    );
+                    self.current_block = Some(after_call);
+                    (info.output_ty, output_local)
+                } else {
+                    (iter_ty, initial_iter_local)
+                };
                 // ARRAY-ITERATION PRE-HEADER INIT: for `for x in [a,b,c]`
                 // the lowering uses a direct index loop instead of the
                 // `Iterator` trait (typeck sets `next = None` for arrays,

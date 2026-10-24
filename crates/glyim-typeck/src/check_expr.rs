@@ -531,6 +531,84 @@ impl<'a> FnCtxt<'a> {
             } => {
                 let (iter_expr, _iter_ty) = self.check_expr(*iterable);
                 let iter_ty = iter_expr.ty;
+                // Vec-by-value (`for x in v` where `v: Vec<T>`): resolve
+                // `IntoIterator::into_iter` for `Vec<T>` and use its output
+                // (e.g. `VecIntoIter<i32>`) as the *effective* iterable type
+                // for the `next` scan. Without this, the trait scan on `Vec`
+                // directly finds a `next` via Deref to `[T]` but with the
+                // wrong layout (3-word Vec vs 2-word fat pointer) — the
+                // segfaulting shape the `is_vec_by_value` guard below catches.
+                let is_vec_by_value_iterable = matches!(
+                    self.ctx.ty_kind(iter_ty),
+                    TyKind::Adt(id, _) if id.to_raw() == 1020
+                );
+                let vec_by_value_elem: Option<Ty> = if is_vec_by_value_iterable {
+                    match self.ctx.ty_kind(iter_ty) {
+                        TyKind::Adt(_, substs) => self
+                            .ctx
+                            .substitution_args(*substs)
+                            .first()
+                            .and_then(|a| match a {
+                                GenericArg::Ty(t) => Some(*t),
+                                _ => None,
+                            }),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let into_iter_info: Option<thir::ForIntoIter> = if is_vec_by_value_iterable {
+                    // Resolve `into_iter` for `Vec<T>` with EXACT receiver
+                    // matching — no autoref, no deref. The generic
+                    // `resolve_trait_method_fn` walks `Vec<T> -> [T] -> &[T]`
+                    // and matches `impl IntoIterator for &[T]` (whose `Item`
+                    // is `&T`) *before* `impl IntoIterator for Vec<T>` — that
+                    // produced a `VecIntoIter<i32>` slot filled with a slice
+                    // iterator, and each iteration read `&T`-as-`i32` (the
+                    // s17 `sum = 12` garbage). For `into_iter` there is only
+                    // one semantically-correct impl: the one whose `Self`
+                    // type IS the receiver's type.
+                    let into_iter_fn = self.resolve_into_iter_exact(iter_ty, span);
+                    match into_iter_fn {
+                        Some((fn_def_id, fn_substs)) => Some({
+                            let raw_out = self
+                                .ctx
+                                .fn_sig(fn_def_id)
+                                .map(|s| s.output)
+                                .unwrap_or_else(|| self.ctx.error_ty());
+                            // The impl's stored output is
+                            // `VecIntoIter<Param(0, T)>` (raw); substitute
+                            // the Vec's concrete elem for Param(0).
+                            let output_ty = match vec_by_value_elem {
+                                Some(t) => {
+                                    let mut m: std::collections::HashMap<u32, GenericArg> =
+                                        std::collections::HashMap::new();
+                                    m.insert(0, GenericArg::Ty(t));
+                                    m.insert(1, GenericArg::Ty(t));
+                                    m.insert(2, GenericArg::Ty(t));
+                                    self.ctx.subst_ty(raw_out, &m)
+                                }
+                                None => raw_out,
+                            };
+                            let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
+                            thir::ForIntoIter {
+                                fn_def_id,
+                                fn_substs,
+                                fn_ty,
+                                output_ty,
+                            }
+                        }),
+                        None => None,
+                    }
+                } else {
+                    None
+                };
+                // The `next` scan uses the into_iter output when present;
+                // otherwise it uses the iterable type as-is.
+                let effective_iter_ty = into_iter_info
+                    .as_ref()
+                    .map(|i| i.output_ty)
+                    .unwrap_or(iter_ty);
                 // Phase 1 (GLYIM_DESTUB_PLAN): resolve the `Iterator::next`
                 // method for the iterable's concrete type here (where we hold a
                 // `&mut TyCtxMut` and the resolved `FnDefId` + signatures), and
@@ -559,15 +637,37 @@ impl<'a> FnCtxt<'a> {
                         span,
                     ) {
                         Some(trait_def_id) => self
-                            .resolve_trait_method_fn(iter_ty, trait_def_id, next_name, span)
+                            .resolve_trait_method_fn(
+                                effective_iter_ty,
+                                trait_def_id,
+                                next_name,
+                                span,
+                            )
                             .map(|(fn_def_id, fn_substs)| {
-                                let option_ty = self
+                                let raw_opt = self
                                     .ctx
                                     .fn_sig(fn_def_id)
                                     .map(|s| s.output)
                                     .unwrap_or_else(|| self.ctx.error_ty());
-                                let ref_iter_ty =
-                                    self.ctx.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
+                                // For Vec-by-value, the raw output is
+                                // `Option<Param(0, T)>` (the impl's template);
+                                // substitute the Vec's concrete elem so the
+                                // lowering sees `Option<i32>`.
+                                let option_ty = match vec_by_value_elem {
+                                    Some(t) if into_iter_info.is_some() => {
+                                        let mut m: std::collections::HashMap<u32, GenericArg> =
+                                            std::collections::HashMap::new();
+                                        m.insert(0, GenericArg::Ty(t));
+                                        m.insert(1, GenericArg::Ty(t));
+                                        self.ctx.subst_ty(raw_opt, &m)
+                                    }
+                                    _ => raw_opt,
+                                };
+                                let ref_iter_ty = self.ctx.mk_ref(
+                                    Region::Erased,
+                                    effective_iter_ty,
+                                    Mutability::Mut,
+                                );
                                 let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
                                 let discr_ty = self.ctx.mk_ty(TyKind::Uint(UintTy::U8));
                                 thir::ForIteratorNext {
@@ -671,7 +771,12 @@ impl<'a> FnCtxt<'a> {
                     let known = range_elem
                         .or(ref_slice_elem)
                         .or(array_elem)
-                        .or(ref_vec_elem);
+                        .or(ref_vec_elem)
+                        .or(if into_iter_info.is_some() {
+                            vec_by_value_elem
+                        } else {
+                            None
+                        });
                     // Reject a non-iterable. Without this, `for x in 5 { .. }`
                     // and `for x in some_vec { .. }` type-checked silently:
                     // the item type became a fresh inference variable and
@@ -760,10 +865,15 @@ impl<'a> FnCtxt<'a> {
                         self.ctx.ty_kind(resolved_iter_ty),
                         TyKind::Adt(id, _) if id.to_raw() == 1020
                     );
+                    // Skip the segfault guard when we've resolved into_iter:
+                    // the `next` scan then operates on the into_iter output
+                    // (e.g. VecIntoIter<i32>), not on the Vec itself, so the
+                    // trait-path layout mismatch does not arise.
                     if known.is_none()
                         && next_info.is_some()
                         && !is_unresolved
-                        && (is_ref_to_deref_slice || is_vec_by_value)
+                        && (is_ref_to_deref_slice
+                            || (is_vec_by_value && into_iter_info.is_none()))
                     {
                         next_info = None;
                     }
@@ -843,6 +953,7 @@ impl<'a> FnCtxt<'a> {
                             pat: Box::new(pat_thir),
                             iterable: Box::new(iter_expr),
                             body: Box::new(body_expr),
+                            into_iter: into_iter_info,
                             next: next_info.map(|mut n| {
                                 let elem = match self.ctx.ty_kind(iter_ty) {
                                     TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
@@ -4285,6 +4396,101 @@ impl<'a> FnCtxt<'a> {
         }
 
         (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), candidates[0].4.clone())
+    }
+
+    /// Resolve `IntoIterator::into_iter` for `recv_ty` with **exact** receiver
+    /// matching: the impl's declared self type must be structurally the same
+    /// ADT as `recv_ty` (same `AdtId`). No autoref, no autoderef.
+    ///
+    /// Required for `for x in v` (v: Vec<T>): the generic
+    /// `resolve_trait_method_fn` walks `Vec<T> -> [T] -> &[T]` and matches
+    /// `impl IntoIterator for &[T]` (Item = &T) *before* the correct
+    /// `impl IntoIterator for Vec<T>` (Item = T), yielding a slice iterator
+    /// stored in a `VecIntoIter<i32>` slot. See KNOWN_GAPS §3.4.
+    fn resolve_into_iter_exact(
+        &mut self,
+        recv_ty: Ty,
+        span: Span,
+    ) -> Option<(FnDefId, glyim_type::Substitution)> {
+        let recv_adt = match self.ctx.ty_kind(recv_ty) {
+            TyKind::Adt(id, _) => *id,
+            _ => return None,
+        };
+        let trait_name = self.ctx.resolver().intern("IntoIterator");
+        let method_name = self.ctx.resolver().intern("into_iter");
+        for (_id, item) in self.hir.items.iter_enumerated() {
+            let glyim_hir::ItemKind::Impl(impl_item) = &item.kind else {
+                continue;
+            };
+            let Some(trait_path) = &impl_item.trait_ref else {
+                continue;
+            };
+            let Some(last) = trait_path.segments.last() else {
+                continue;
+            };
+            if last.name != trait_name {
+                continue;
+            }
+            let mut param_map: HashMap<Name, Ty> = HashMap::new();
+            for gp in impl_item.generic_params.iter() {
+                let var = self.infer.new_ty_var(self.ctx);
+                param_map.insert(gp.name, self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))));
+            }
+            let impl_self_ty = crate::tyconv::resolve_type_ref(
+                self.ctx,
+                self.infer,
+                self.def_map,
+                &mut Vec::new(),
+                &impl_item.self_ty,
+                &param_map,
+                span,
+            );
+            let impl_adt = match self.ctx.ty_kind(impl_self_ty) {
+                TyKind::Adt(id, _) => *id,
+                _ => continue,
+            };
+            if impl_adt != recv_adt {
+                continue;
+            }
+            // Probe-unify (bind impl inference vars to the receiver's
+            // concrete args). Snapshot first so a failed match leaves no
+            // side effects; on success we do not need the result.
+            let snap = self.infer.snapshot();
+            let infer = &mut *self.infer;
+            let unified = infer.unify(self.ctx, impl_self_ty, recv_ty, span).is_ok();
+            if !unified {
+                self.infer.rollback_to(snap);
+                continue;
+            }
+            for method in &impl_item.methods {
+                if method.name != method_name {
+                    continue;
+                }
+                let Some(body_id) = method.body else {
+                    continue;
+                };
+                // `body_owner_map` is the id space typeck actually
+                // allocated FnDefIds in (populated by
+                // `pre_allocate_impl_method_ids` before any body check).
+                // `hir.body_owners` is a *separate* HIR id space and
+                // points at an unrelated body — using it produced
+                // `[X0000] MIR body not found for DefId LocalDefId(252)`
+                // because FnDefId(252) is not where the lowered
+                // `into_iter` body lives. Match the working
+                // `resolve_trait_method_fn` at check_expr.rs:~4586.
+                let local = match self.body_owner_map.get(&body_id).copied() {
+                    Some(l) => l,
+                    None => continue,
+                };
+                let fn_def_id = FnDefId::from_raw(local.to_raw());
+                let recv_substs = match self.ctx.ty_kind(recv_ty) {
+                    TyKind::Adt(_, s) => *s,
+                    _ => self.ctx.intern_substitution(vec![]),
+                };
+                return Some((fn_def_id, recv_substs));
+            }
+        }
+        None
     }
 
     /// Resolve a path-qualified trait method call `Trait::method(receiver, ..)`

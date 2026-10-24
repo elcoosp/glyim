@@ -173,6 +173,7 @@ fn walk_expr(ctx: &TyCtx, expr: &thir::Expr, f: &mut impl FnMut(Ty)) {
             iterable,
             body,
             next,
+            into_iter,
         } => {
             walk_pattern(ctx, pat, f);
             walk_expr(ctx, iterable, f);
@@ -182,6 +183,10 @@ fn walk_expr(ctx: &TyCtx, expr: &thir::Expr, f: &mut impl FnMut(Ty)) {
                 f(n.discr_ty);
                 f(n.ref_iter_ty);
                 f(n.fn_ty);
+            }
+            if let Some(i) = into_iter {
+                f(i.fn_ty);
+                f(i.output_ty);
             }
         }
         thir::ExprKind::Array(elems) | thir::ExprKind::Tuple(elems) => {
@@ -659,6 +664,7 @@ fn zonk_expr(infer: &InferenceTable, ctx: &TyCtx, expr: &mut thir::Expr) {
             iterable,
             body,
             next,
+            into_iter,
         } => {
             zonk_pattern(infer, ctx, pat);
             zonk_expr(infer, ctx, iterable);
@@ -669,6 +675,11 @@ fn zonk_expr(infer: &InferenceTable, ctx: &TyCtx, expr: &mut thir::Expr) {
                 n.ref_iter_ty = zonk_ty(infer, ctx, n.ref_iter_ty);
                 n.fn_ty = zonk_ty(infer, ctx, n.fn_ty);
                 n.fn_substs = zonk_substitution(infer, ctx, n.fn_substs);
+            }
+            if let Some(i) = into_iter {
+                i.fn_ty = zonk_ty(infer, ctx, i.fn_ty);
+                i.output_ty = zonk_ty(infer, ctx, i.output_ty);
+                i.fn_substs = zonk_substitution(infer, ctx, i.fn_substs);
             }
         }
         thir::ExprKind::Array(elems) | thir::ExprKind::Tuple(elems) => {

@@ -48,6 +48,7 @@ fn create_for_loop_body(
             iterable: Box::new(iterable),
             body: Box::new(body_expr),
             next,
+            into_iter: None,
         },
         span,
     };

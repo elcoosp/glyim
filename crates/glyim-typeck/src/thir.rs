@@ -102,6 +102,24 @@ impl Expr {
     }
 }
 
+/// Resolved `IntoIterator::into_iter` call for a by-value `for x in v`
+/// where `v: Vec<T>`. Typeck resolves the impl method (and substitutes
+/// the Vec's element type into the impl's generic slots) so lowering can
+/// emit the call before the loop header and rebind `iter_local` to its
+/// output.
+#[derive(Clone, Debug)]
+pub struct ForIntoIter {
+    /// The `FnDefId` of `IntoIterator::into_iter` for this receiver.
+    pub fn_def_id: FnDefId,
+    /// The substitution for the `into_iter()` call.
+    pub fn_substs: Substitution,
+    /// The type of the `into_iter` function reference (`TyKind::FnDef`).
+    pub fn_ty: Ty,
+    /// The return type of `into_iter()` — the iterator that `next` will
+    /// then be called on (e.g. `VecIntoIter<i32>` for `Vec<i32>`).
+    pub output_ty: Ty,
+}
+
 #[derive(Clone, Debug)]
 /// ForIteratorNext.
 pub struct ForIteratorNext {
@@ -282,6 +300,11 @@ pub enum ExprKind {
         /// typeck could not resolve an `Iterator` impl (or the test harness left it
         /// unset); lowering then falls back to `LowerCtx::iterator_next_fn`.
         next: Option<ForIteratorNext>,
+        /// Resolved `IntoIterator::into_iter` call to emit before the loop
+        /// header (Some only for by-value `Vec<T>` heads — see KNOWN_GAPS
+        /// §3.4). `next` (if present) operates on `into_iter.output_ty`
+        /// rather than on the original iterable type.
+        into_iter: Option<ForIntoIter>,
     },
     #[allow(missing_docs)]
     Array(Vec<Expr>),
