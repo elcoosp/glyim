@@ -653,6 +653,25 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         c.store(k, &object_path);
     }
 
+    // P1-C10 (production-readiness plan §6 / §13): the bytecode backend emits
+    // raw VM opcode bytes, not a relocatable object. Passing that to `cc`
+    // produces a bare "ld: unknown file type" error — an unhelpful leak of
+    // backend internals. Reject the combination up front with a documented
+    // message, mirroring the thin-LTO/bytecode check above. The VM itself
+    // (correctness, wiring `glyim run --backend bytecode`) is a Phase 4
+    // concern; today the honest outcome is a clean error.
+    if args.backend == "bytecode"
+        && matches!(emit, EmitKind::Exec | EmitKind::Cdylib)
+    {
+        return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
+            "`--backend=bytecode` cannot produce an executable or cdylib: it emits \
+             raw VM opcode bytes, not a relocatable object, so the system linker \
+             rejects the result. Use the default (LLVM) backend for `--emit=exec` \
+             or `--emit=cdylib`. (The bytecode backend is available for `--emit=obj` \
+             as a testing tool — see KNOWN_GAPS §6 P1-C10.)",
+        )]);
+    }
+
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
         let final_path = final_output_path.expect("emit should have final output");
         // `--emit=exec` binaries need the `glyim-runtime` static library for
