@@ -89,9 +89,26 @@ fn test_float_to_int() {
         .lower_body_to_module(&context, &body)
         .expect("lowering");
     let ir = module.print_to_string().to_string();
+    // P1-C3 (production-readiness plan §6): the cast now emits the
+    // saturating `llvm.fptosi.sat` intrinsic (Rust's `f as iN` semantics
+    // — NaN→0, out-of-range→MIN/MAX) instead of raw `fptosi` (poison on
+    // out-of-range/NaN). The IR is no longer a constant-folded
+    // `store i32 42`; it is a call to the intrinsic followed by a store
+    // of the call result. Both shapes are correct for the in-range case
+    // this test exercises; the intrinsic keeps the out-of-range case
+    // conformant.
     assert!(
-        ir.contains("store i32 42"),
-        "Expected store i32 42 in IR:
+        ir.contains("llvm.fptosi.sat.i32.f64"),
+        "Expected saturating fptosi intrinsic in IR:
+{}",
+        ir
+    );
+    // The store must target an i32 slot (result width); do not pin the
+    // *source* of the stored value, since it can be either a folded
+    // constant or a call result.
+    assert!(
+        ir.contains("store i32"),
+        "Expected a 32-bit store in IR:
 {}",
         ir
     );
