@@ -3536,28 +3536,65 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             CastKind::FloatToInt => {
                 if val.is_float_value() && target_llvm_ty.is_int_type() {
                     let float_val = val.into_float_value();
-                    // `fptoui` for an unsigned target, `fptosi` otherwise
-                    // (LL-3): `1e19 as u64` was UB / wrong via fptosi.
-                    if matches!(self.ty_ctx.ty_kind(target_ty), TyKind::Uint(_)) {
-                        self.builder.build_float_to_unsigned_int(
-                            float_val,
-                            target_llvm_ty.into_int_type(),
-                            "fptoui",
-                        )
-                    } else {
-                        self.builder.build_float_to_signed_int(
-                            float_val,
-                            target_llvm_ty.into_int_type(),
-                            "fptosi",
-                        )
-                    }
-                    .map(|v| v.as_basic_value_enum())
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "fptosi failed: {:?}",
-                            e
-                        ))]
-                    })
+                    // P1-C3 (production-readiness plan §6): Rust specifies
+                    // float→int casts as *saturating* — NaN → 0, out-of-
+                    // range → MIN/MAX. Plain `fptosi`/`fptoui` produce
+                    // LLVM *poison* for out-of-range or NaN inputs (a
+                    // documented UB hole), while the interpreter uses
+                    // Rust's `as`, which saturates. That divergence meant
+                    // `1e19 as i64` printed garbage natively and
+                    // `i64::MAX` interpreted. The `llvm.fptosi.sat` /
+                    // `llvm.fptoui.sat` intrinsics give exactly Rust's
+                    // semantics — one call, no trap, backend-conformant.
+                    let src_basic: inkwell::types::BasicTypeEnum =
+                        self.llvm_type_for_ty(src_ty)?.into_float_type().as_basic_type_enum();
+                    let dst_basic: inkwell::types::BasicTypeEnum =
+                        target_llvm_ty.into_int_type().as_basic_type_enum();
+                    let (intrinsic_name, is_signed) =
+                        if matches!(self.ty_ctx.ty_kind(target_ty), TyKind::Uint(_)) {
+                            ("llvm.fptoui.sat", false)
+                        } else {
+                            ("llvm.fptosi.sat", true)
+                        };
+                    let intrinsic = inkwell::intrinsics::Intrinsic::find(intrinsic_name)
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "LLVM does not know intrinsic `{intrinsic_name}` — \
+                                 float→int saturating cast unavailable on this target"
+                            ))]
+                        })?;
+                    // LLVM's `llvm.fptosi.sat.iN.fM` overload order is
+                    // destination-first (the int type), source-second
+                    // (the float type). Reversing them (source, dest)
+                    // declared `llvm.fptosi.sat.f64.i64` — LLVM then
+                    // emitted an f64 clamp constant that the backend
+                    // could not select, aborting with
+                    // `Cannot select: f64 = Constant<...>`.
+                    let decl = intrinsic
+                        .get_declaration(&self.module, &[dst_basic, src_basic])
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "could not declare `{intrinsic_name}`"
+                            ))]
+                        })?;
+                    // Silence the unused `is_signed` binding — we keep it
+                    // for readability/diagnostics without a warn.
+                    let _ = is_signed;
+                    self.builder
+                        .build_call(decl, &[float_val.as_basic_value_enum().into()], "sat_cast")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating fptosi call failed: {:?}",
+                                e
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(
+                                "saturating fptosi returned void",
+                            )]
+                        })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
                         "FloatToInt cast on non-float",
@@ -8299,18 +8336,28 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         ))]
                     })?
             } else {
+                // P1-C4 (production-readiness plan §6): match the
+                // indirect call-site convention to the callee's declared
+                // ABI. The T115 patch hardcoded fastcc (8) for all
+                // indirect calls, which broke `extern "C"` fn pointers —
+                // a fastcc call site against a ccc callee silently drops
+                // the return value on AArch64. Branch on the fn pointer's
+                // ABI: C → ccc (0); System → win64 (64) on Windows, ccc
+                // elsewhere; Glyim → fastcc (8).
+                let call_conv: u32 = match fn_sig.abi {
+                    glyim_core::primitives::Abi::C => 0,
+                    glyim_core::primitives::Abi::System => {
+                        if self.target_info.triple.contains("windows") {
+                            64
+                        } else {
+                            0
+                        }
+                    }
+                    glyim_core::primitives::Abi::Glyim => 8,
+                };
                 self.builder
                     .build_indirect_call(fn_type, func_val, &metadata_args, "call")
-                    .inspect(|call_site| {
-                        // T115-PATCHED [LL-20]: set the call-site convention
-                        // to match the callee's declared ABI. Direct calls
-                        // inherit the callee's convention automatically,
-                        // but indirect calls default to `ccc`, while our
-                        // `Abi::Glyim` functions are emitted with fastcc
-                        // (8). Calling fastcc through a ccc site silently
-                        // drops the return value on AArch64.
-                        call_site.set_call_convention(8u32);
-                    })
+                    .inspect(|call_site| call_site.set_call_convention(call_conv))
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "call failed: {:?}",
