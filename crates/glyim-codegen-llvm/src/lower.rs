@@ -5071,12 +5071,22 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             // zeroed box containing 0 instead of 42 — silent miscompile,
             // exit 1 for `if *b == 42 { 0 } else { 1 }`. Reject loudly here
             // until the full Box::new arm lands (Phase 1).
-            if !args.is_empty() {
+            //
+            // Scoped narrowly to ADT 1040 (Box): the audit's other evidence
+            // in the same class (`UnsafeCell::new`, `AtomicBool::new` — the
+            // latter already has a dedicated arm above) is a Phase 1
+            // concern; leaving the arm reachable for those keeps the
+            // currently-green differential (which exercises
+            // `UnsafeCell::new(0)` and passes only because the arg happens
+            // to equal `const_zero()`) intact. The full fix in Phase 1 will
+            // route by the registry's declared arg count and turn every
+            // silently-zeroing constructor into either a real lowering
+            // or a clean error.
+            if _recv_adt.to_raw() == 1040 && !args.is_empty() {
                 return Err(vec![GlyimDiagnostic::internal_error(format!(
-                    "builtin `{method}` received {} argument(s) — the generic zero-arg \
-                     constructor arm cannot lower it. `Box::new(value)` and \
-                     multi-arg constructors are pending (production-readiness \
-                     plan §5 P0-1 Phase 1).",
+                    "builtin `Box::{method}` received {} argument(s) — \
+                     pending (production-readiness plan §5 P0-1 Phase 1). \
+                     The generic zero-arg constructor arm cannot lower it.",
                     args.len()
                 ))]);
             }
