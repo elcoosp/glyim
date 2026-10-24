@@ -44,6 +44,12 @@ pub struct AnalysisDriver {
     cache_dir: PathBuf,
     dep_graph: Arc<parking_lot::RwLock<DependencyGraph>>,
     _watcher: Option<RecommendedWatcher>, // kept for drop
+    /// P0-4 (production-readiness plan §5): client socket so `analyze_file`
+    /// can publish `textDocument/publishDiagnostics` after each analysis
+    /// (and an empty list on `didClose` to clear). `Some` in the production
+    /// `run_server` path; `None` on the legacy `LspState::start_driver`
+    /// path (which has no client socket in scope).
+    client: Option<async_lsp::ClientSocket>,
 }
 
 impl AnalysisDriver {
@@ -53,6 +59,7 @@ impl AnalysisDriver {
         rx: Receiver<AnalysisMessage>,
         cache_dir: PathBuf,
         analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
+        client: Option<async_lsp::ClientSocket>,
     ) -> Self {
         // Create a channel for file system events, but we won't spawn a thread for now
         // to keep compilation simple. The watcher can be added later.
@@ -64,6 +71,7 @@ impl AnalysisDriver {
             cache_dir,
             dep_graph: Arc::new(parking_lot::RwLock::new(DependencyGraph::new())),
             _watcher,
+            client,
         }
     }
 
@@ -119,16 +127,22 @@ impl AnalysisDriver {
             }
 
             for path in closed_paths {
+                // P0-4 (production-readiness plan §5): LSP requires the
+                // server to *clear* diagnostics for a closed file by
+                // publishing an empty list. Without this, an editor keeps
+                // showing the last diagnostics for a file the user closed
+                // and re-opened elsewhere.
+                self.publish_diagnostics(&path, None, Vec::new());
                 self.db.file_map.write().remove(&path);
                 self.dep_graph.write().clear_deps(&path);
             }
-            for (path, (content, _version)) in latest_changes {
-                self.analyze_file(&path, &content).await;
+            for (path, (content, version)) in latest_changes {
+                self.analyze_file(&path, &content, Some(version)).await;
             }
         }
     }
 
-    async fn analyze_file(&self, path: &PathBuf, content: &str) {
+    async fn analyze_file(&self, path: &PathBuf, content: &str, version: Option<i32>) {
         self.dep_graph.write().clear_deps(path);
 
         let file_id = { self.db.file_map.write().get_or_create(path) };
@@ -207,22 +221,66 @@ impl AnalysisDriver {
 
         let lsp_diagnostics =
             crate::diagnostics::convert_diagnostics(file_id, &sm, &all_diagnostics);
-        if lsp_diagnostics.is_empty() {
+        let to_publish: Vec<lsp_types::Diagnostic> = if lsp_diagnostics.is_empty() {
             self.db.diagnostics.write().remove(&file_id);
             self.db.raw_diagnostics.write().remove(&file_id);
+            Vec::new()
         } else {
+            let copy = lsp_diagnostics.clone();
             self.db.diagnostics.write().insert(file_id, lsp_diagnostics);
             self.db
                 .raw_diagnostics
                 .write()
                 .insert(file_id, all_diagnostics.clone());
-        }
+            copy
+        };
+
+        // P0-4 (production-readiness plan §5): the driver computes
+        // diagnostics into `db.diagnostics` but nothing ever sent them to
+        // the editor. Publish via `textDocument/publishDiagnostics` so the
+        // README's "LSP with diagnostics" claim becomes true.
+        self.publish_diagnostics(path, version, to_publish);
 
         debug!(
             "Analyzed file {:?} with {} diagnostics",
             path,
             all_diagnostics.len()
         );
+    }
+
+    /// Publish `textDocument/publishDiagnostics` for `path`.
+    ///
+    /// `version` is the `didChange` version (or `None` for the initial
+    /// `didOpen`); LSP clients use it to reject stale notifications. An
+    /// empty `diagnostics` list is the documented way to *clear* prior
+    /// diagnostics (sent on `didClose` and after a fix).
+    fn publish_diagnostics(
+        &self,
+        path: &Path,
+        version: Option<i32>,
+        diagnostics: Vec<lsp_types::Diagnostic>,
+    ) {
+        let Some(client) = self.client.as_ref() else {
+            return;
+        };
+        let uri_str = match crate::uri::path_to_uri(path) {
+            Ok(u) => u,
+            Err(_) => return,
+        };
+        // lsp-types 0.97 uses its own `Uri` newtype (a `fluent_uri` URI),
+        // not `url::Url`. Parse from the string form.
+        use std::str::FromStr;
+        let uri = match lsp_types::Uri::from_str(&uri_str) {
+            Ok(u) => u,
+            Err(_) => return,
+        };
+        let params = lsp_types::PublishDiagnosticsParams {
+            uri,
+            version,
+            diagnostics,
+        };
+        use lsp_types::notification::PublishDiagnostics as PD;
+        let _ = client.notify::<PD>(params);
     }
 
     fn extract_dependencies(

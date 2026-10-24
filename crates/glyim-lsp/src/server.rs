@@ -9,12 +9,18 @@ use tokio::sync::mpsc;
 pub async fn run_server(_log_file: Option<std::path::PathBuf>) {
     let db = Arc::new(AnalysisDatabase::new());
     let (tx, rx) = mpsc::channel(16);
-    let (mainloop, _client_socket) =
+    let (mainloop, client_socket) =
         MainLoop::new_server(|peer_socket| build_router(db.clone(), tx.clone(), peer_socket));
     let cache_dir = std::env::temp_dir().join("glyim-lsp-incremental");
     // T130-PATCHED [LSP-6]: also give the driver the sender so it can
     // enqueue re-analysis of dependent files after a change.
-    let driver = AnalysisDriver::new(db, rx, cache_dir, tx);
+    //
+    // P0-4 (production-readiness plan §5): pass the `ClientSocket` through
+    // to the driver so it can publish `textDocument/publishDiagnostics`
+    // after each analysis. Before this the socket was discarded as
+    // `_client_socket` and no notification was ever sent — the README's
+    // "LSP with diagnostics" claim was a lie.
+    let driver = AnalysisDriver::new(db, rx, cache_dir, tx, Some(client_socket));
     tokio::spawn(driver.run());
     let stdin = async_lsp::stdio::PipeStdin::lock_tokio().unwrap();
     let stdout = async_lsp::stdio::PipeStdout::lock_tokio().unwrap();
