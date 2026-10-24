@@ -545,6 +545,34 @@ impl<'a> MirBuilder<'a> {
                 // a zero value.
                 if let glyim_type::TyKind::FnDef(def_id, _) = self.ctx.ty_ctx().ty_kind(func.ty) {
                     if def_id.to_raw() >= u32::MAX - 4 {
+                        // P1-C1 (production-readiness plan §6): the `clone`
+                        // (u32::MAX - 3) and `into` (u32::MAX - 1) sentinels
+                        // were lowering to a zeroing `Error` constant even on
+                        // *live* paths — `let x: i32 = 5; let y = x.clone();`
+                        // produced `y = 0`. The typeck-side fix is
+                        // Phase 1 P1-C1's registry-first pass; this lowering
+                        // handles the concrete case the plan calls out first:
+                        // **for a Copy receiver whose result type is the same
+                        // as the receiver type**, a `clone`/`into` is exactly
+                        // a plain operand use. Any other shape falls through
+                        // to the existing `Error` path (unchanged — no
+                        // regression).
+                        let is_copy_sentinel = matches!(
+                            def_id.to_raw(),
+                            x if x == u32::MAX - 3 || x == u32::MAX - 1
+                        );
+                        if is_copy_sentinel
+                            && let Some(arg_expr) = args.first()
+                        {
+                            let arg_ty = arg_expr.ty;
+                            if arg_ty == expr.ty
+                                && self.ctx.ty_ctx().is_copy(arg_ty)
+                            {
+                                return glyim_mir::Rvalue::Use(
+                                    self.lower_expr_to_operand(arg_expr),
+                                );
+                            }
+                        }
                         let dest_local = self.alloc_local(
                             expr.ty,
                             glyim_core::primitives::Mutability::Mut,
