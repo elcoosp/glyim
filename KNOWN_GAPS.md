@@ -494,3 +494,61 @@ Do not attempt further heuristic tweaks to `.first()` / `.last()` /
 "prefer declaring" in the fast path or in the second 2-segment block.
 The map is fundamentally unordered w.r.t. the current scope, and no
 heuristic on it can be sound. Fix the scope first.
+
+
+#### 3.4.y — s17 CLOSED
+
+`for x in v` (v: Vec<T>) now compiles and runs correctly on both backends.
+All ten targeted cases pass: sum-of-[1,2,3]→6, empty→0, [1,2,3,4,5]→15,
+single element→elem, last-of-[1,2,3]→3. Plus all pre-existing regressions
+(`for x in &v`, `for i in 0..3`, explicit `v.into_iter()`, `for x in
+a.iter()`, `for x in [1,2,3]`) stay green.
+
+**The three commits that closed it** (on top of `5a427776`):
+
+1. `f17d262c` — `subst_impl_params_into_assoc` in ty_ctx.rs. Substitutes
+   the query self type's concrete args into the impl's generic slots of
+   its stored assoc type, so `<VecIntoIter<i32> as Iterator>::Item`
+   normalizes to `i32` instead of leaving `Param(0, T)`. Standalone
+   correctness fix; required by both later commits.
+
+2. `c1f568df` — `Self::X` pre-check in `resolve_path_type`'s fast path.
+   For `Self::X` where `param_map["Self"]` is the impl's declared self
+   type, try `resolve_associated_type_by_self_ty(impl_self_ty, "X")` first
+   — this returns the impl's registered assoc type, normalized through
+   (1). Falls through to the projection-building path when the impl's
+   own assoc entry isn't registered yet (during the impl's own
+   `type Item = ...` registration) — same raw template either way.
+   Without this, `Self::Item` resolved to `<Param(0, "Self") as
+   Iterator>::Item`, which at monomorphisation became
+   `<i32 as Iterator>::Item` and ICEd as `UnknownType`.
+
+3. `55276722` — the `for x in v` wiring:
+   * `thir::ForIntoIter` carried on `ExprKind::For.into_iter` (Option).
+   * Typeck's for-arm resolves `IntoIterator::into_iter` for `Vec<T>` via
+     **`resolve_into_iter_exact`** — exact receiver match (same `AdtId`,
+     no autoref, no autoderef). The generic `resolve_trait_method_fn`
+     walks `Vec<T> -> [T] -> &[T]` and matches
+     `impl IntoIterator for &[T]` (Item = `&T`) before the correct
+     `impl IntoIterator for Vec<T>` (Item = `T`), yielding a
+     slice-iterator whose output (a 2-word fat pointer) was written into
+     a `VecIntoIter<i32>` slot (3-word). Each iteration then read an
+     `&i32` as `i32` — the s17 "sum = 12 for [1,2,3]" garbage. The exact
+     matcher unifies the impl's self type against the receiver so the
+     impl's inference vars bind to the Vec's concrete element; its stored
+     output template substitutes to `VecIntoIter<i32>`.
+   * The `Iterator::next` scan operates on that output type.
+   * Lowering emits `into_iter(v)` into a fresh local, rebinds
+     `iter_local` and `iter_ty` to it before the loop header.
+   * Segfault guard (`is_vec_by_value` rejection) now fires only when
+     `into_iter` was NOT resolved.
+
+**Diagnostic trap caught during s17** — worth remembering: `FnDefId`s
+must be looked up via `self.body_owner_map` (the id space
+`pre_allocate_impl_method_ids` populated), NOT `hir.body_owners` (a
+different HIR-side id space). The latter produced
+`[X0000] MIR body not found for DefId LocalDefId(NNN)` because NNN is
+an unrelated body. The working `resolve_trait_method_fn` already does
+this correctly at check_expr.rs:~4586 — copy its pattern.
+
+**Fixture:** `crates/glyim-test/tests/run-pass/behavior/for_loop_over_vec_owned.g`
