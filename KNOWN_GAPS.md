@@ -711,3 +711,26 @@ unblock the stdlib's `thread.g` module from the strict pipeline.
 (future) should assert the code above compiles; conversely
 `tests/compile-fail/borrowck/field_after_field_move.g` should reject
 `let a = s.a; s.a;` (using the *same* field twice).
+
+#### 3.5.3 — CLOSED (P1-C9 unblocked)
+
+All three blockers from §3.5.1 are fixed:
+
+* `489ece72` — auto-reborrow `&mut` field operands (net.g sites)
+* `a97c1bef` — `Copy` for `&T` shared-ref field operands
+* `4deae722` — `count_fields` falls back to `adt_def.fields.len()` for
+  user struct ADTs, giving per-field move paths (thread.g site)
+
+The two remaining `fs.g Err expression in THIR during lowering`
+diagnostics from §3.5.1 items (1)/(2) turned out to be
+`DiagSeverity::Warning`, not `Error`. `prepare_compilation`'s
+`has_errors()` correctly tolerates them, exactly as `--emit=exec`
+already did. So `compile_file_to_mir`'s inline
+`drop_raw_generic_err_warnings` filter has no analogue in
+`prepare_compilation` — and doesn't need one.
+
+**Landed:** `0a9f3e2d` — `compile_file_to_mir` now delegates to
+`prepare_compilation`, closing P1-C9. `stdlib_full_probe` passes with
+the delegation in place. Fuzz target (`fuzz_compile`) and glyip test
+discovery now exercise the same pipeline as `--emit=exec` /
+`--emit=obj`, including borrowck and optimizer passes.
