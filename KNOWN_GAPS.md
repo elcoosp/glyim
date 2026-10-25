@@ -924,3 +924,72 @@ in `place_ptr` / `build_store` helpers in `codegen-llvm` to catch the
 misalignment at the source. The fix is likely a one-line change in the
 alignment lookup — the layout engine (`glyim-layout`) already knows the
 correct per-field alignment; the codegen just isn't consulting it.
+
+#### 3.5.6 — P1-C6 CLOSED (struct-variant patterns) + P1-C1 second half CLOSED (Vec::clone)
+
+Two of the outstanding issues resolved this session:
+
+**P1-C6 (struct-variant pattern field binding)** — `a71ce481`.
+
+The audit's description ("enum bare-Field offset skew: niche encoding uses
+wrong tag prefix; direct encoding mixed-alignment write/read mismatch") was
+inaccurate. What was actually broken:
+
+    enum E { A { x: u8, y: u64 }, B }
+    match e { E::A { y, .. } => ... }   // y bound to x's value
+
+Root cause: `check_pat.rs`'s `Pat::Struct` arm used a single `is_variant`
+branch that assumed all variant patterns are **positional** (true for tuple
+variants `E::A(x, y)`, false for struct variants `E::A { y, x }` — HIR
+`Pat::Struct.fields` is `Vec<(Name, PatId)>` with real names). Positional
+binding gave wrong field name, wrong index, wrong type — reverse-order and
+`..`-only patterns silently bound the wrong field.
+
+Fix: dispatch on `variant.style`:
+  * `Tuple` → positional (`variant.fields[i]`), correct as before.
+  * `Struct` → remap HIR field name via `remap_name`, then look up its
+    declared index for both the binding name and field type.
+
+Every shape verified at `a71ce481`:
+  * `E::A { y, .. }`, `E::A { y, x }`, `E::A { x, y }` — all OK
+  * `E::A(x, y)` (tuple), plain struct, `Option`/`Result` — unchanged
+  * Fixture: `tests/run-pass/behavior/enum_struct_variant_pattern_names.g`
+
+The mixed-alignment enum case the audit *also* mentioned
+(`enum E { A(u8), B(u64) }`) was already correct at HEAD — verified.
+The struct-variant bug was the entire remaining failure in that class.
+
+**P1-C1 second half (Vec::clone for non-Copy elements)** — `0793fd61`.
+
+`v.clone()` on `Vec<T>` where `T: !Copy` used to hit the P1-C2 clean
+diagnostic (`builtin method \`clone\` is resolved by the type checker but
+not implemented by the LLVM backend`) — no longer silent-wrong, but
+unusable. Implemented in **both backends**:
+
+  * **LLVM** (codegen-llvm/lower.rs): new `clone` arm. Reads ptr (byte
+    0) + len (byte 16) from the Vec's 24-byte `{ptr, cap, len}`
+    `{[3 x i64]}` header, gets element type from the Vec substitution,
+    sizes memcpy from `FullLayoutComputer`, calls the existing
+    `glyim_slice_to_vec(src, len, elem_size, dest)` runtime helper —
+    same one the `to_vec` arm uses. Dispatch + arm gated on
+    `_recv_adt == 1020` (Vec).
+  * **Interpreter** (mir-interp/lib.rs): new `(1020, "clone")` arm.
+    Interp Vec model is `Aggregate([Aggregate(elements), Uint(len)])`;
+    clone is `InterpValue::clone()` of the dereferenced receiver (deep
+    structural copy). Without this, mir-interp fell to
+    `function not found: FnDefId(9068)` — the reason `vec_clone.g`
+    passed LLVM but failed the run-pass corpus (which uses mir-interp).
+
+Verified (both backends):
+  * `v.clone()` length preserved (3 == 3)  → 0
+  * clone independence (mutate original after clone → 4 vs 3)  → 0
+  * `x.clone()` on Copy `i32`, `for x in v`, `for x in &v`,
+    `[1,2,3].to_vec()` — unchanged
+  * glyim-codegen-llvm: 302/302
+  * run_pass_corpus, stdlib_full_probe — pass
+  * full workspace: 4603/4603
+
+Fixture: `tests/run-pass/behavior/vec_clone.g`
+
+**Not pushed** at the time of writing (per user instruction); both
+commits are local-ahead-of-origin at `0793fd61`.
