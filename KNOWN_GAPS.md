@@ -734,3 +734,92 @@ already did. So `compile_file_to_mir`'s inline
 the delegation in place. Fuzz target (`fuzz_compile`) and glyip test
 discovery now exercise the same pipeline as `--emit=exec` /
 `--emit=obj`, including borrowck and optimizer passes.
+
+#### 3.5.4 — P1-C8: `VarRef` lowering emitted `Copy` for every type, hiding all move-after-move
+
+Attempted during this session (2026-10-25). Reverted — the fix is a
+much larger change than it looked.
+
+**The bug.** In `lower_expr_to_rvalue` (and `lower_expr_to_operand`)
+the `thir::ExprKind::VarRef` arm unconditionally emits
+`Rvalue::Use(Operand::Copy(place))`, regardless of whether the read
+type is `Copy`. This is why every move-after-move in the compiler is
+silently accepted:
+
+    let s = S { a: Option::None, b: Option::None };   // S: !Copy
+    let y = s;
+    let z = s;          // BUG: accepted, both reads "copy" an unmoved s
+    take(s); take(s);   // BUG: accepted
+    let a = v; let b = v; // BUG: accepted for Vec<i32>
+    let a = s; let b = s; // BUG: accepted for String
+
+Compare with the `Field` read arm (lower_rvalue.rs ~1521), which does
+the `is_copy` check and emits `Move` + `register_partial_move` for
+non-Copy types. `VarRef` never got the same treatment.
+
+**What was tried.** Add the same `is_copy` check to both `VarRef` arms:
+
+    let is_copy = self.ctx.ty_ctx().is_copy(expr.ty);
+    if is_copy { Copy(place) } else { Move(place) }
+
+**Why it failed.** The fix exposed every latent move-after-move in the
+stdlib itself. Every `with-stdlib` compile broke on:
+
+    iterator::max (stdlib iter.g, ~line 1260):
+
+        fn max(self) -> Option<Self::Item> where Self::Item: Ord {
+            let mut result = self.next()?;
+            let mut this = self;
+            while let Option::Some(item) = this.next() {
+                if item > result {
+                    result = item;   // move of non-Copy `item`
+                }
+            }
+            Option::Some(result)
+        }
+
+`result = item` is a genuine `Move` of a non-Copy `item` into
+`result`. Each iteration rebinds `item` via the `while let` pattern, so
+it *should* be fresh — but `move_analysis`'s dataflow unions the
+previous iteration's `moved` set into the loop header, and pattern
+bindings (`while let Some(x) = ...`) do not call `record_init` on the
+bound local. So the second iteration trips `[B0001] use of moved value`.
+
+**Scope.** Three intertwined sub-problems, each substantial:
+
+1. **Pattern binding needs to register inits.** `while let` / `match` /
+  `if let` all bind fresh locals each execution; the dataflow must
+  model them as re-initializing. `move_analysis` has no
+  pattern-bind statement kind — the pattern's `Assign(dest, _)` already
+  exists in MIR, so this may just need the loop-header dataflow to
+  forget the pattern-bound locals on each back-edge. Careful work.
+
+2. **`MovePathArena` needs to be sized upfront.** My earlier on-demand
+  child creation attempt (`Field` arm returning parent → creating new
+  path) ICE'd because the move-dead/move-init bitsets are sized by
+  `arena.len()` at `build_move_paths` time. Growing the arena mid-
+  analysis panics. Enum variants need `Downcast` children created here,
+  which is why §3.5.2 explicitly left enums on the old
+  "collapse-to-root" behaviour.
+
+3. **The stdlib contains latent move-after-move.** Even if (1) and (2)
+  are fixed, `iterator::max` may still be a real problem in the
+  current lowering (it may need `let item = match this.next() { Some
+  (x) => x, None => break };` — a rebind — if `while let` doesn't
+  produce a fresh binding in the current MIR shape).
+
+**Follow-up.** This is a multi-session project, not a one-line fix.
+Reverting the `VarRef` change restores the (unsound but working) status
+quo. The soundness hole is real — `take(s); take(s);` and `let y = s;
+let z = s;` compile and would produce UB at runtime if `noalias` were
+emitted. It becomes a miscompile the moment alias attributes land in
+codegen.
+
+**Correct end state.** Soundness hole closed AND stdlib compiles with
+strict move semantics. Sequence:
+  a. Fix dataflow (1) — pattern-bound locals reinit at back-edges.
+  b. Fix arena (2) — size `MovePathArena` to a conservative upper bound
+     or grow the bitsets with it.
+  c. Re-apply the `VarRef` is_copy check.
+  d. Fix the stdlib (3) as needed.
+  e. Full workspace + differential gate.
