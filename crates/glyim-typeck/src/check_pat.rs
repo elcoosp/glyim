@@ -369,27 +369,60 @@ impl<'a> FnCtxt<'a> {
 
                 let mut field_pats = Vec::new();
                 if is_variant {
-                    // Variant pattern: `fields` are positional (the inner
-                    // patterns, in source order). Precompute each field's name
-                    // and type so we can release the `adt_def` borrow before
-                    // recursing into `check_pattern` (which needs `&mut self`).
-                    let (field_names, field_tys): (Vec<_>, Vec<_>) = match adt_def
+                    // P1-C6 (KNOWN_GAPS §3.5.5): variant patterns come in
+                    // two flavors that need different field-name resolution:
+                    //
+                    //   * **Tuple** variant (`E::A(x, y)`): HIR has no field
+                    //     names, the pattern is genuinely positional. Use
+                    //     `variant.fields[i]` by index — the current
+                    //     behavior, correct.
+                    //   * **Struct** variant (`E::A { y, x }`): HIR **does**
+                    //     carry the field name `(Name, PatId)`, and the
+                    //     pattern may appear in any order. Using position `i`
+                    //     binds `y` to `variant.fields[0] = x` — wrong name,
+                    //     wrong field type. Look up by the pattern's
+                    //     source name (remapped HIR → TyCtx interner), then
+                    //     find that field's declared index for the type.
+                    let (field_names, field_tys, variant_style): (Vec<_>, Vec<_>, _) = match adt_def
                         .as_ref()
                         .and_then(|d| d.variants.get(variant_idx as usize))
                     {
-                        Some(variant) => (0..variant.fields.len())
-                            .map(|i| {
-                                let f = &variant.fields[glyim_type::FieldIdx::from_raw(i as u32)];
-                                (f.name, f.ty)
-                            })
-                            .unzip(),
-                        None => (Vec::new(), Vec::new()),
+                        Some(variant) => (
+                            variant.fields.iter().map(|f| f.name).collect(),
+                            variant.fields.iter().map(|f| f.ty).collect(),
+                            variant.style,
+                        ),
+                        None => (
+                            Vec::new(),
+                            Vec::new(),
+                            glyim_type::adt_def::VariantStyle::Unit,
+                        ),
                     };
-                    for (i, (_, field_pat_id)) in fields.iter().enumerate() {
-                        let field_name = field_names
-                            .get(i)
-                            .copied()
-                            .unwrap_or_else(|| self.ctx.resolver().intern(&format!("_{}", i)));
+                    let is_struct_style =
+                        variant_style == glyim_type::adt_def::VariantStyle::Struct;
+                    for (i, (h_field_name, field_pat_id)) in fields.iter().enumerate() {
+                        let (field_name, declared_idx) = if is_struct_style {
+                            // Struct variant: pattern carries the field name.
+                            // Remap HIR Name → TyCtx interner, then find that
+                            // name's declared index for the field type.
+                            let remapped = self.remap_name(*h_field_name);
+                            let di = field_names
+                                .iter()
+                                .position(|n| *n == remapped)
+                                .unwrap_or(i);
+                            (remapped, di)
+                        } else {
+                            // Tuple variant: positional binding, no source
+                            // name available. `variant.fields[i].name` is
+                            // empty for tuples; the returned `field_name`
+                            // is only used by codegen-lower's name-based
+                            // lookup for *struct* variants, so an
+                            // unidentifiable placeholder here is harmless.
+                            let n = field_names.get(i).copied().unwrap_or_else(|| {
+                                self.ctx.resolver().intern(&format!("_{}", i))
+                            });
+                            (n, i)
+                        };
                         // Plan unstub-5 P5: the formal field type (e.g. `T` for
                         // `Poll::Ready(T)`) must be substituted through the
                         // scrutinee's substitution. When matching
@@ -407,7 +440,7 @@ impl<'a> FnCtxt<'a> {
                             TyKind::Ref(_, inner, _) => (*inner, true),
                             _ => (expected_ty, false),
                         };
-                        let field_ty = match field_tys.get(i).copied() {
+                        let field_ty = match field_tys.get(declared_idx).copied() {
                             Some(formal) => {
                                 let subst = match self.ctx.ty_kind(adt_expected) {
                                     TyKind::Adt(_, sub) => {
