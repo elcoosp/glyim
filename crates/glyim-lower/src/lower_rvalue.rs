@@ -2232,6 +2232,47 @@ impl<'a> MirBuilder<'a> {
                 };
                 glyim_mir::Operand::Copy(place)
             }
+            // AUTO-REBORROW-&MUT-FIELD: `&mut T` is not Copy, so passing a
+            // `&mut`-typed **field** by value (`f(self.inner, self.buf)`,
+            // `self.inner.read(self.buf)`) lowers to a partial *move* of
+            // the field — which `move_analysis` correctly rejects with
+            // `[B0001] use of partially moved value: local_1.*`. Rust
+            // auto-reborrows in this position (`&mut *self.buf`), so the
+            // caller only takes a temporary reborrow; the field stays
+            // usable. Emit the reborrow here.
+            //
+            // Restricted to `Field` so `VarRef` (`Copy`) and explicit
+            // `ExprKind::Ref` (`&mut x`, already an Rvalue::Ref via
+            // `lower_expr_to_rvalue`) keep their current lowering.
+            thir::ExprKind::Field { .. }
+                if matches!(
+                    self.ctx.ty_ctx().ty_kind(expr.ty),
+                    glyim_type::TyKind::Ref(_, _, glyim_core::primitives::Mutability::Mut)
+                ) =>
+            {
+                let mut place = self.lower_expr_to_place(expr);
+                // Append `Deref` to reach the pointee's place. `place` is
+                // the `&mut T` field (e.g. `self.buf`); `Deref` gives
+                // `*self.buf`, and `Ref(.., Mut)` on that is exactly
+                // `&mut *self.buf`.
+                let mut proj: Vec<glyim_mir::ProjectionElem> = place.projection.into_vec();
+                proj.push(glyim_mir::ProjectionElem::Deref);
+                place.projection = proj.into_boxed_slice();
+                let rvalue = glyim_mir::Rvalue::Ref(
+                    place,
+                    glyim_mir::BorrowKind::Mut {
+                        allow_two_phase_borrow: false,
+                    },
+                );
+                let local =
+                    self.alloc_local(expr.ty, glyim_core::primitives::Mutability::Mut, expr.span);
+                let local_place = glyim_mir::Place::new(local);
+                self.push_stmt(
+                    glyim_mir::StatementKind::Assign(local_place.clone(), rvalue),
+                    expr.span,
+                );
+                glyim_mir::Operand::Move(local_place)
+            }
             _ => {
                 let rvalue = self.lower_expr_to_rvalue(expr);
                 let local =
