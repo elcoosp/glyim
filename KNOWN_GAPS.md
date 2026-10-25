@@ -823,3 +823,66 @@ strict move semantics. Sequence:
   c. Re-apply the `VarRef` is_copy check.
   d. Fix the stdlib (3) as needed.
   e. Full workspace + differential gate.
+
+#### 3.5.5 — Struct-variant field binding in patterns is wrong (P1-C6, corrected)
+
+Attempted P1-C6 this session (2026-10-25) and found the audit's
+description inaccurate. The bug is not `tag_prefix` offset skew in
+`codegen-llvm/lower.rs` — it is struct-variant **field name → index**
+resolution in pattern lowering.
+
+**Reproducer.**
+
+    enum E { A { x: u8, y: u64 }, B }
+    fn main() -> i32 {
+        let e = E::A { x: 11, y: 42 };
+        match e {
+            E::A { y, x } => (y as i32) * 100 + (x as i32),
+            E::B => 0,
+        }
+    }
+
+Expected `42 * 100 + 11 = 4211`. Got **`118`**.
+
+**Diagnosis.** The MIR for `match e { E::A { x, .. } => x }` uses the
+projection `Downcast(VariantIdx(0)), Field(FieldIdx(0))` — correct for
+`x`. But for `E::A { y, x }` and `E::A { x, y }`, the produced
+projections bind to the wrong `FieldIdx` (garbage value 118 rather than
+1142 or 4211 in either order — no arithmetic on the expected values
+produces this, so the pattern binder is reading raw bytes at the wrong
+offset / width rather than swapping the two fields).
+
+**Where.** Pattern lowering of `PatternKind::Struct { fields: [(name,
+subpat)], .. }` — the name-to-`FieldIdx` lookup for a struct *variant*
+(as opposed to a struct *item*). Likely in `hir/lower/lower_pat.rs` (the
+pattern lowering that turns a named field into a `FieldIdx`) or in
+typeck's pattern checker where the HIR field name is resolved against
+the variant's `AdtDef::variants[v].fields`.
+
+Nothing to do with `tag_prefix` in codegen — the audit's `P1-C6`
+heading ("enum bare-Field offset skew: niche encoding uses wrong tag
+prefix; direct encoding mixed-alignment write/read mismatch") describes
+a *different* case that:
+  * the mixed-alignment enum `enum E { A(u8), B(u64) }` now handles
+    correctly (verified: `E::B(42)` → 42);
+  * the 2-field niche enum `enum E { A { x: u8, y: u64 }, B }` inherits
+    by construction — its failure is field-name lookup, not byte offset.
+
+**What works today** (verified this session):
+  * `enum E { A(u8), B(u64) }` → 42
+  * `Option<&T>` niche enum → correct
+  * tuple variant `E::A(u8, u64)` → 42
+  * unit-variant enums → correct
+  * `Option<u64>` in a `match` → correct
+  * nested `Outer::Wrap(Inner::X(42))` → correct
+
+**What is broken:**
+  * struct-variant pattern with named fields — wrong `FieldIdx`, wrong
+    value.
+
+**Next session.** Probe `hir/lower/lower_pat.rs` (or wherever
+struct-variant patterns are lowered) for how `{ field: pat }` names map
+to `FieldIdx`. Fix that one mapping. The `codegen-llvm/lower.rs`
+`tag_prefix` logic audited as P1-C6 may still hide a real bug for
+*unit + non-Copy* enums (`E { A, B(u64) }` — the audit's niche case),
+but it is not what blocks user struct-variant patterns today.
