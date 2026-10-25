@@ -625,3 +625,63 @@ reports 4 diagnostics:
 
 stdlib_full_probe passes only because it calls compile_file_to_mir,
 which (at 489ece72) still skips borrowck.
+
+#### 3.5.1 — P1-C9 blocker progress (post a97c1bef)
+
+Since the §3.5 write-up, two of the four P1-C9 blockers are fixed:
+
+* `489ece72` — auto-reborrow `&mut` field operands. Cleared the two
+  `net.g` `WriteFuture::poll` / `ReadFuture::poll` `[B0001]` sites.
+* `a97c1bef` — `Copy` (not `Move`) for `&T` shared-ref field operands.
+  Same class, shared-ref shape.
+
+Three diagnostics remain from `--emit=exec` on the full stdlib at
+`a97c1bef`:
+
+1. `fs.g:152` (`File::metadata`)         `Err expression in THIR`
+2. `fs.g:447` (`impl FromStr for i16`)   `Err expression in THIR`
+3. `thread.g:275` (`Option::None`)       `[B0001] partially moved`
+
+(1)/(2) are specific to the `fs.g` shapes — an isolated
+`extern "C" { }` inside a fn body lowers cleanly, so the failing
+construct is something else in those methods.
+
+(3) looks like a second Copy-vs-Move instance, this time for a struct-
+literal field assignment `stack_size: Option::None`. `Option<usize>`'s
+payload is Copy, but the field expression itself is lowered as `Move`
+by the generic catch-all in `lower_expr_to_operand` — the same shape
+`a97c1bef` fixed for `&T` fields, but for an `Option<usize>` payload.
+
+The `compile_file_to_mir` → `prepare_compilation` delegation is ready
+and correct; it is reverted at each attempt only because it would make
+`stdlib_full_probe` fail on these three pre-existing diagnostics.
+
+#### 3.5.1 — P1-C9 blocker progress (post a97c1bef)
+
+Since the §3.5 write-up, two of the four P1-C9 blockers are fixed:
+
+* `489ece72` — auto-reborrow `&mut` field operands. Cleared the two
+  `net.g` `WriteFuture::poll` / `ReadFuture::poll` `[B0001]` sites.
+* `a97c1bef` — `Copy` (not `Move`) for `&T` shared-ref field operands.
+  Same class, shared-ref shape.
+
+Three diagnostics remain from `--emit=exec` on the full stdlib at
+`a97c1bef`:
+
+1. `fs.g:152` (`File::metadata`)         `Err expression in THIR`
+2. `fs.g:447` (`impl FromStr for i16`)   `Err expression in THIR`
+3. `thread.g:275` (`Option::None`)       `[B0001] partially moved`
+
+(1)/(2) are specific to the `fs.g` shapes — an isolated
+`extern "C" { }` inside a fn body lowers cleanly, so the failing
+construct is something else in those methods.
+
+(3) looks like a second Copy-vs-Move instance, this time for a struct-
+literal field assignment `stack_size: Option::None`. `Option<usize>`'s
+payload is Copy, but the field expression itself is lowered as `Move`
+by the generic catch-all in `lower_expr_to_operand` — the same shape
+`a97c1bef` fixed for `&T` fields, but for an `Option<usize>` payload.
+
+The `compile_file_to_mir` → `prepare_compilation` delegation is ready
+and correct; it is reverted at each attempt only because it would make
+`stdlib_full_probe` fail on these three pre-existing diagnostics.
