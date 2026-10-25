@@ -2273,6 +2273,27 @@ impl<'a> MirBuilder<'a> {
                 );
                 glyim_mir::Operand::Move(local_place)
             }
+            // SHARED-REF-FIELD-COPY: a `&T` field (`self.buf` where
+            // `buf: &'a [u8]`) is `Copy`. The generic catch-all below
+            // emits `Move(place)` for it, which `move_analysis` then
+            // correctly reports as a partial move — even though a move of
+            // a `Copy` type is a no-op semantically. Reproducer: any
+            // `while self.x < self.buf.len() { ... self.inner.write(&self.buf[r..]) }`
+            // loop, where `&self.buf` in the *condition* is lowered to
+            // `Move((*self).buf)` and the loop body's borrow then looks
+            // like a use of a partially moved place.
+            //
+            // Emit `Copy(place)` directly — no reborrow needed, since `&T`
+            // already is a pointer; the caller copies the fat-pointer value.
+            thir::ExprKind::Field { .. }
+                if matches!(
+                    self.ctx.ty_ctx().ty_kind(expr.ty),
+                    glyim_type::TyKind::Ref(_, _, glyim_core::primitives::Mutability::Not)
+                ) =>
+            {
+                let place = self.lower_expr_to_place(expr);
+                glyim_mir::Operand::Copy(place)
+            }
             _ => {
                 let rvalue = self.lower_expr_to_rvalue(expr);
                 let local =
