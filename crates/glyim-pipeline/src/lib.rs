@@ -942,185 +942,21 @@ pub fn compile_file_to_mir(
     db: &mut Database,
     path: &Path,
 ) -> Result<MirCompilation, Vec<GlyimDiagnostic>> {
-    let sink = DiagSink::new();
-    let sink_cell = RefCell::new(sink);
-
-    let (file_id, source) = match load_crate_source(db, path) {
-        Ok(pair) => pair,
-        Err(mod_diags) => {
-            sink_cell.borrow_mut().extend(mod_diags);
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-    };
-
-    let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
-    sink_cell
-        .borrow_mut()
-        .extend(parse_result.diagnostics.clone());
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
+    // P1-C9 (production-readiness plan §6): route through the shared front
+    // half. The previous standalone implementation re-implemented the
+    // pipeline inline and skipped borrowck + glyim_opt::optimize — a
+    // second, weaker language definition reachable via fuzz_compile and
+    // glyip test discovery. prepare_compilation runs every phase with the
+    // same diagnostics.
+    let prepared = Pipeline::prepare_compilation(db, path, None, None)?;
+    let mut bodies = std::collections::HashMap::with_capacity(prepared.all_bodies.len());
+    for (_symbol, body) in prepared.all_bodies {
+        bodies.insert(body.owner, body);
     }
-
-    // Macro expansion. `compile_file_to_mir` previously skipped this step
-    // entirely — only `Pipeline::compile_file` ran the expander, and only when
-    // a non-empty proc-macro registry was supplied. That meant every macro
-    // call in the compiled source (`format!`, `println!`, `vec!`, …) reached
-    // HIR lowering as an unexpanded `MacroCall`, which `lower_macro_call_expr`
-    // then lowered into `Expr::Call { func: Path("format"), .. }` — a bare
-    // name that resolves to nothing and reports `unresolved name format`.
-    // Running the expander unconditionally here lets the builtin-macro
-    // handlers in `glyim-meta` fire.
-    let mut hygiene = glyim_span::HygieneCtx::new();
-    let mut expander = glyim_meta::Expander::new(&mut hygiene);
-    expander.set_source_file(file_id);
-    expander.set_vfs(db.vfs());
-    let (expanded_root, expand_diags) = expander.expand_crate(&parse_result.root);
-    if std::env::var("GLYIM_DUMP_EXPANDED").is_ok() {
-        let dump = expanded_root.text().to_string();
-        let dump_path =
-            std::env::temp_dir().join(format!("glyim_expanded_{}.g", std::process::id()));
-        let _ = std::fs::write(&dump_path, &dump);
-        eprintln!("wrote {} bytes to {}", dump.len(), dump_path.display());
-    }
-    sink_cell.borrow_mut().extend(expand_diags);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let (def_map, def_diagnostics) =
-        glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
-    sink_cell.borrow_mut().extend(def_diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let (hir, hir_diags) =
-        glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
-            &expanded_root,
-            db.intern_mut(),
-            file_id,
-        );
-    sink_cell.borrow_mut().extend(hir_diags.clone());
-    // Safety gate: HIR-level Error diagnostics (e.g. the async desugar's
-    // `.await`-inside-a-loop guard, Error 60) must abort compilation instead
-    // of silently lowering a miscompiling state machine.
-    if hir_diags
-        .iter()
-        .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
-    {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    let resolver = db.interner().clone();
-    let mut ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
-    let mut trait_ctx = glyim_solve::TraitContext::new();
-    register_builtin_traits(&mut trait_ctx, db.interner());
-    // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so that
-    // 1-argument usages like `Result<usize>` expand to `Result<usize, Error>`.
-    // The RHS is resolved to a `Ty` template with the alias formals left as
-    // `TyKind::Param`, stored for later expansion by `resolve_name_to_adt_ty`
-    // (stdlib-completion).
-    {
-        let mut alias_infer = InferenceTable::new();
-        let mut alias_diags = Vec::new();
-        for (_id, item) in hir.items.iter_enumerated() {
-            if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                && let Some(rhs) = &alias.ty
-            {
-                let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                let mut params: Vec<(u32, Name)> = Vec::new();
-                for (i, gp) in alias.generic_params.iter().enumerate() {
-                    let pname = gp.name;
-                    let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
-                        index: i as u32,
-                        name: pname,
-                    }));
-                    param_map.insert(pname, pty);
-                    params.push((i as u32, pname));
-                }
-                let template = tyconv::resolve_type_ref(
-                    &mut ty_ctx_mut,
-                    &mut alias_infer,
-                    &def_map,
-                    &mut alias_diags,
-                    rhs,
-                    &param_map,
-                    item.span,
-                );
-                ty_ctx_mut.register_type_alias(item.name, params, template);
-            }
-        }
-    }
-    let mut solver = SimpleTraitSolver::new(&trait_ctx);
-    let (ty_ctx, typeck_result) =
-        glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
-    sink_cell.borrow_mut().extend(typeck_result.diagnostics);
-    if sink_cell.borrow().has_errors() {
-        return Err(sink_cell.into_inner().into_diagnostics());
-    }
-
-    db.set_ty_ctx(ty_ctx);
-
-    let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
-    let ty_ctx_ref = ty_ctx_guard.as_ref();
-    let lower_ctx = PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
-
-    let mut bodies = std::collections::HashMap::new();
-    for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-        let mut lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
-        drop_raw_generic_err_warnings(
-            &mut lower_result.diagnostics,
-            &lower_result.body,
-            ty_ctx_ref,
-        );
-        sink_cell.borrow_mut().extend(lower_result.diagnostics);
-        if sink_cell.borrow().has_errors() {
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-        let mir_arc = Arc::new(lower_result.body);
-        let owner = mir_arc.owner;
-        bodies.insert(owner, mir_arc);
-        // HIR-31: closures lowered while lowering this function are real MIR
-        // bodies (the callee of a runtime closure call). `prepare_compilation`
-        // already registers them for codegen; `compile_file_to_mir` used to
-        // drop them, so a closure call in the interpreter failed with
-        // "function not found: ...2000000". Key them by their owner `DefId`,
-        // matching the `Fn(closure_id)` operand that `resolve_callee` unpacks.
-        for (_cid, _substs, cbody) in lower_result.closure_bodies {
-            if closure_body_has_unmonomorphized_ty(&cbody, ty_ctx_ref) {
-                continue;
-            }
-            let cowner = cbody.owner;
-            bodies.insert(cowner, Arc::new(cbody));
-        }
-    }
-
-    // Drop-glue elaboration: lower `Drop` terminators into conditional drop
-    // flag handling and array-drop loops (de-stubbing plan §15.2). Runs on a
-    // `TyCtxMut` derived from the frozen `TyCtx` via `to_mut()`, which SHARES
-    // the canonical type arena — so any `[bool; N]` flag-array types it
-    // synthesizes are valid in the consuming `TyCtx` (the P0 interner fix that
-    // previously made this path OOB-panic). After elaboration we re-freeze and
-    // publish the updated context.
-    {
-        let frozen: &glyim_type::TyCtx = &ty_ctx_guard;
-        let mut elaborator = frozen.to_mut();
-        for body_arc in bodies.values_mut() {
-            let mut body = (**body_arc).clone();
-            glyim_opt::elaborate_drops(&mut elaborator, &mut body);
-            *body_arc = Arc::new(body);
-        }
-        let new_ty_ctx = elaborator.freeze();
-        db.set_ty_ctx(new_ty_ctx);
-    }
-    let ty_ctx_guard = db
-        .get_ty_ctx()
-        .expect("TyCtx not initialized after elaboration");
-
     Ok(MirCompilation {
         bodies,
-        def_map,
-        ty_ctx: ty_ctx_guard,
+        def_map: prepared.def_map,
+        ty_ctx: prepared.ty_ctx,
     })
 }
 
