@@ -272,7 +272,30 @@ fn count_fields(ty: glyim_type::Ty, ctx: &TyCtx) -> Option<u32> {
     match ctx.ty_kind(ty) {
         glyim_type::TyKind::Tuple(substs) => Some(u32::from(substs.len())),
         glyim_type::TyKind::Adt(adt_id, _) => {
-            ctx.adt_repr(*adt_id).map(|r| r.field_tys.len() as u32)
+            // KNOWN_GAPS §3.5.2: prefer the registered AdtRepr (builtins,
+            // tests) but fall back to the AdtDef for user ADTs. Production
+            // never calls `register_adt_repr` for user structs, so the
+            // previous adt_repr-only path returned `None` for every user
+            // struct — `build_move_paths` then created no field children,
+            // and every field access (`s.a`, `s.b`) collapsed to the root
+            // local's move path. A move of `s.a` therefore marked the
+            // whole local as moved, and a subsequent read of `s.b`
+            // tripped "use of partially moved value".
+            if let Some(r) = ctx.adt_repr(*adt_id) {
+                return Some(r.field_tys.len() as u32);
+            }
+            ctx.adt_def(*adt_id).and_then(|def| match def.kind {
+                glyim_type::adt_def::AdtKind::Struct | glyim_type::adt_def::AdtKind::Union => {
+                    Some(def.fields.len() as u32)
+                }
+                // Enums need `Downcast(v)` children per variant, which the
+                // `find()` Downcast arm tries to create on demand — but the
+                // dataflow bitsets are pre-sized, so on-demand growth ICEs.
+                // Enum field tracking is a separate gap; keep the previous
+                // "None → collapse to root" behaviour for enums so this
+                // fix doesn't regress the ICE.
+                glyim_type::adt_def::AdtKind::Enum => None,
+            })
         }
         glyim_type::TyKind::Array(_, len) => {
             // Try to resolve the const length.
