@@ -552,3 +552,76 @@ an unrelated body. The working `resolve_trait_method_fn` already does
 this correctly at check_expr.rs:~4586 — copy its pattern.
 
 **Fixture:** `crates/glyim-test/tests/run-pass/behavior/for_loop_over_vec_owned.g`
+
+#### 3.5 — Borrowck: loop-condition borrow outlives the condition (P1-C8, s18)
+
+**Status:** OPEN. Blocks P1-C9 (delegating compile_file_to_mir to
+prepare_compilation). Discovered while attempting that refactor: the
+delegation is correct — it routes compile_file_to_mir through the
+*same* strict pipeline --emit=exec uses — but the strict pipeline
+reports 4 diagnostics on the full assembled stdlib that the old
+compile_file_to_mir silently swallowed by skipping borrowck.
+
+Of the 4, 2 are a real borrowck bug (the other 2 are Err-expression-in-
+THIR from fs.g, tracked below).
+
+**The bug.** A borrow created inside a while *condition* is treated
+as live for the entire loop body:
+
+    struct F<'a> { inner: &'a mut Inner, buf: &'a [u8], written: usize }
+    fn go(&mut self) -> i32 {
+        while self.written < self.buf.len() {
+            let _n = self.inner.write(&self.buf[self.written..]);
+            self.written = self.written + 1;
+        }
+        0
+    }
+
+Produces [B0001] use of partially moved value: local_1.* twice.
+Real stdlib site: net.g WriteFuture::poll (line ~304).
+
+**Narrowed test matrix** (each isolated, no stdlib):
+
+| variant | result |
+|---|---|
+| while cond borrows self.buf AND body borrows self.buf[..] | FAIL |
+| while self.written < 3 { ... &self.buf[r..] ... } | OK |
+| while self.written < 3 { ... self.buf ... } (no range) | OK |
+| (no loop) let _n = ...write(&self.buf[r..]); | OK |
+| inner.two(&self.buf[0..1], &self.buf[r..]) (two slice args) | OK |
+
+The trigger is specifically: the loop *condition* borrows the same
+place the loop *body* borrows. Rust's NLL ends the condition's borrow
+when the condition expression finishes. Glyim's move_analysis.rs / loan
+model treats the loan as live while the *destination local* of the
+reference is live — and for a condition expression lowered into the
+loop header, that local's liveness spans the body.
+
+**Fix shape.** Two candidates:
+
+* A. Region-based: give each temporary its own Region, end it at
+  the last use (real NLL).
+* B. Local-scope heuristic: mark locals allocated by
+  lower_expr_to_operand's temp path as "condition temp", and in
+  move_analysis treat their loan as ending at the end of the enclosing
+  expression rather than at local death.
+
+B is the smaller change and unblocks P1-C9; A is the principled fix
+and subsumes P1-C8 (loan-through-rebind unsoundness the original plan
+also lists).
+
+**Also blocking P1-C9:** two Err-expression-in-THIR diagnostics from
+fs.g (File::metadata, create_dir_all-adjacent File method). These are
+ExprKind::Err reaching lowering in non-raw-generic bodies. The
+drop_raw_generic_err_warnings filter only clears them for raw-generic
+bodies; the failing bodies are concrete. Root cause not yet isolated
+— an isolated extern "C" { } inside a fn body lowers cleanly, so it
+is specific to the fs.g shapes.
+
+**Evidence.** At 489ece72, --emit=exec on the full assembled stdlib
+reports 4 diagnostics:
+  - two [X0000] Err expression in THIR during lowering @111277, @119668
+  - two [B0001] use of partially moved value: local_1.* @131362, @131381
+
+stdlib_full_probe passes only because it calls compile_file_to_mir,
+which (at 489ece72) still skips borrowck.
