@@ -429,6 +429,21 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(v))
             }
+            // BC-VEC-CLONE (KNOWN_GAPS §3.5.4 / P1-C1 second half):
+            // `Vec<T>::clone` for non-Copy `T`. The LLVM backend lowers
+            // this to `glyim_slice_to_vec` via a new arm in
+            // `codegen-llvm/lower.rs`; the interpreter has to mirror it
+            // so the run-pass corpus (which uses mir-interp) passes.
+            //
+            // The interp Vec model is `Aggregate([Aggregate(elements),
+            // Uint(len)])`. Cloning is a deep structural copy — no
+            // interior-mutability or reference sharing, which matches
+            // Rust semantics for `Vec<T>::clone` (the elements themselves
+            // are recursively cloned).
+            (1020, "clone") => {
+                let v = self.builtin_deref(&receiver)?;
+                Ok(Some(v.clone()))
+            }
             (1050, "clear") | (1061, "clear") => {
                 let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     *v = InterpValue::String(String::new());

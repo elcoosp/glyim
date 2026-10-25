@@ -4681,6 +4681,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "to_vec"
                 | "as_slice"
                 | "as_ref"
+                | "clone"
                 | "iter"
                 | "iter_mut"
                 | "from_utf8_lossy"
@@ -5634,6 +5635,175 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 self.builder.build_unconditional_branch(tb).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "as_slice branch: {e:?}"
+                    ))]
+                })?;
+            }
+            return Ok(true);
+        }
+
+        // BC-VEC-CLONE (KNOWN_GAPS §3.5.4 / P1-C1 second half): `Vec::<T>::clone`
+        // for `T` that isn't `Copy`. Before this arm, `v.clone()` produced a
+        // clean "builtin method `clone` is resolved by the type checker but
+        // not implemented by the LLVM backend" diagnostic (the P1-C2 gate at
+        // `lower_call`). That was better than the earlier silent zeroing,
+        // but the semantics are exactly `slice::to_vec` of the current
+        // contents: read ptr (byte 0) and len (byte 16) from the Vec's
+        // 24-byte `{ptr, cap, len}` header, then memcpy into a fresh buffer
+        // via the existing `glyim_slice_to_vec` runtime helper (same one the
+        // `to_vec` arm below uses).
+        //
+        // Gated on `Vec`'s AdtId (1020). The P1-C1 Copy path (i32/u8/bool
+        // clone via lower_rvalue's Copy-lowering) never reaches here — the
+        // sentinel FnDefId is resolved to a plain operand use before this
+        // function is called.
+        if method == "clone" && _recv_adt.to_raw() == 1020 {
+            // Element type from the Vec<T>'s substitution (receiver type).
+            let recv_rust_ty = match recv {
+                Operand::Copy(place) | Operand::Move(place) => self.place_ty(place),
+                Operand::Constant(cc) => cc.ty,
+            };
+            let elem_ty = match self.ty_ctx.ty_kind(recv_rust_ty) {
+                TyKind::Adt(_, substs) => self
+                    .ty_ctx
+                    .substitution_args(*substs)
+                    .first()
+                    .and_then(|a| match a {
+                        glyim_type::GenericArg::Ty(t) => Some(*t),
+                        _ => None,
+                    }),
+                TyKind::Ref(_, inner, _) => match self.ty_ctx.ty_kind(*inner) {
+                    TyKind::Adt(_, substs) => self
+                        .ty_ctx
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        }),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let Some(elem_ty) = elem_ty else {
+                return Err(vec![GlyimDiagnostic::internal_error(
+                    "Vec::clone: cannot determine element type from receiver",
+                )]);
+            };
+            // Header pointer — same shape as the as_slice arm.
+            let header_ptr = if recv_val.is_pointer_value() {
+                recv_val.into_pointer_value()
+            } else if recv_val.is_struct_value() {
+                let place = match recv {
+                    Operand::Copy(p) | Operand::Move(p) => Some(p),
+                    _ => None,
+                };
+                if let Some(p) = place {
+                    self.place_ptr(p)?
+                } else {
+                    let alloca = self.builder.build_alloca(recv_val.get_type(), "vc_hdr").map_err(
+                        |e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "Vec::clone hdr alloca: {e:?}"
+                            ))]
+                        },
+                    )?;
+                    self.builder.build_store(alloca, recv_val).map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "Vec::clone hdr store: {e:?}"
+                        ))]
+                    })?;
+                    alloca
+                }
+            } else {
+                return Ok(false);
+            };
+            let i8_ptr = self.context.ptr_type(AddressSpace::default());
+            let base = self
+                .builder
+                .build_bit_cast(header_ptr, i8_ptr, "vc_base")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "Vec::clone bitcast: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let zero = self.llvm_int_type(64).const_zero();
+            let sixteen = self.llvm_int_type(64).const_int(16, false);
+            let data_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[zero], "vc_dp")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "Vec::clone dp: {e:?}"
+                ))]
+            })?;
+            let len_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(self.context.i8_type(), base, &[sixteen], "vc_lp")
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "Vec::clone lp: {e:?}"
+                ))]
+            })?;
+            let src_ptr = self
+                .builder
+                .build_load(i8_ptr, data_ptr, "vc_p")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "Vec::clone pload: {e:?}"
+                    ))]
+                })?
+                .into_pointer_value();
+            let len = self
+                .builder
+                .build_load(self.llvm_int_type(64), len_ptr, "vc_l")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "Vec::clone lload: {e:?}"
+                    ))]
+                })?
+                .into_int_value();
+            let layout_computer =
+                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let elem_size = layout_computer
+                .layout_of(elem_ty)
+                .map(|l| l.size.0)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "Vec::clone layout: {e:?}"
+                    ))]
+                })?;
+            let dest_ptr_here = self.place_ptr(destination)?;
+            let i64_ty = self.llvm_int_type(64);
+            let helper = self.declare_void_helper(
+                "glyim_slice_to_vec",
+                &[
+                    i8_ptr.into(),
+                    i64_ty.into(),
+                    i64_ty.into(),
+                    i8_ptr.into(),
+                ],
+            );
+            let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
+                src_ptr.into(),
+                len.into(),
+                i64_ty.const_int(elem_size, false).into(),
+                dest_ptr_here.into(),
+            ];
+            self.builder
+                .build_call(helper, &cargs, "vec_clone_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "Vec::clone call: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("Vec::clone target");
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "Vec::clone branch: {e:?}"
                     ))]
                 })?;
             }
