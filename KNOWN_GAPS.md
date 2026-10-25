@@ -886,3 +886,41 @@ to `FieldIdx`. Fix that one mapping. The `codegen-llvm/lower.rs`
 `tag_prefix` logic audited as P1-C6 may still hide a real bug for
 *unit + non-Copy* enums (`E { A, B(u64) }` — the audit's niche case),
 but it is not what blocks user struct-variant patterns today.
+
+**Update (2026-10-25, second probe).** LLVM IR examination narrows the
+suspected cause to aggregate **alignment**, not field-name lookup.
+
+For the failing case `enum E { A { x: u8, y: u64 }, B }`:
+
+* Store side (correct offsets): `x = 11` stored at byte 8 with
+  `align 1`; `y = 42` stored at byte 16 with **`align 4`** (should be
+  `align 8` — `u64` on ARM64 has natural alignment 8).
+* Aggregate load/store round-trips (`load { [3 x i64] }`,
+  `store { [3 x i64] }`) all use `align 4`.
+* Field reads at MIR level use the correct offsets: `Downcast(0),
+  Field(0)` reads byte 8 (x), `Downcast(0), Field(1)` reads byte 16
+  (y).
+
+So the field indices and byte offsets are *correct*; the *alignment* is
+wrong. Both pattern orders (`x*100+y` and `y*100+x`) produce the same
+wrong value 118, which suggests the aggregate round-trip with `align 4`
+corrupts the stored `i64` value (possibly through a poorly-optimized
+misaligned 8-byte store that overlaps adjacent bytes, or through
+spilling that assumes 8-aligned layouts while the actual local is only
+4-aligned).
+
+**Correct diagnosis.** The alignment computation in
+`codegen-llvm`'s `store_to_place` / `load_from_place` /
+`build_layout_aggregate` paths is passing `align 4` where the field's
+natural alignment is 8 (u64) or the aggregate's is 8
+(`{[3 x i64]}`). This is the audit's actual P1-C6 finding — "mixed-
+alignment write/read mismatch" — just not for the niche-tag-prefix
+reason the audit described.
+
+**Next step (proper debugging).** Build with `-Z llvm-print-after-all`
+(or equivalent) on the failing case and inspect the machine code
+around the misaligned store. Or add `assert(ptr.is_aligned_to(natural))`
+in `place_ptr` / `build_store` helpers in `codegen-llvm` to catch the
+misalignment at the source. The fix is likely a one-line change in the
+alignment lookup — the layout engine (`glyim-layout`) already knows the
+correct per-field alignment; the codegen just isn't consulting it.
