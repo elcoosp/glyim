@@ -625,3 +625,89 @@ reports 4 diagnostics:
 
 stdlib_full_probe passes only because it calls compile_file_to_mir,
 which (at 489ece72) still skips borrowck.
+
+#### 3.5.1 — P1-C9 blocker progress (post a97c1bef)
+
+Since the §3.5 write-up, two of the four P1-C9 blockers are fixed:
+
+* `489ece72` — auto-reborrow `&mut` field operands. Cleared the two
+  `net.g` `WriteFuture::poll` / `ReadFuture::poll` `[B0001]` sites.
+* `a97c1bef` — `Copy` (not `Move`) for `&T` shared-ref field operands.
+  Same class, shared-ref shape.
+
+Three diagnostics remain from `--emit=exec` on the full stdlib at
+`a97c1bef`:
+
+1. `fs.g:152` (`File::metadata`)         `Err expression in THIR`
+2. `fs.g:447` (`impl FromStr for i16`)   `Err expression in THIR`
+3. `thread.g:275` (`Option::None`)       `[B0001] partially moved`
+
+(1)/(2) are specific to the `fs.g` shapes — an isolated
+`extern "C" { }` inside a fn body lowers cleanly, so the failing
+construct is something else in those methods.
+
+(3) looks like a second Copy-vs-Move instance, this time for a struct-
+literal field assignment `stack_size: Option::None`. `Option<usize>`'s
+payload is Copy, but the field expression itself is lowered as `Move`
+by the generic catch-all in `lower_expr_to_operand` — the same shape
+`a97c1bef` fixed for `&T` fields, but for an `Option<usize>` payload.
+
+The `compile_file_to_mir` → `prepare_compilation` delegation is ready
+and correct; it is reverted at each attempt only because it would make
+`stdlib_full_probe` fail on these three pre-existing diagnostics.
+
+#### 3.5.2 — Partial-move analysis rejects disjoint field moves from owned self
+
+Discovered while narrowing §3.5.1 blocker (3) (`thread.g:275`).
+
+**The bug.** Moving one field out of an owned (consumed) struct, then
+reading a *different* field of the same struct, is rejected:
+
+    struct S { a: Option<usize>, b: Option<usize> }
+    fn take(_x: Option<usize>, _y: Option<usize>) -> i32 { 0 }
+    fn main() -> i32 {
+        let s = S { a: Option::None, b: Option::None };
+        take(s.a, s.b)         // <- [B0001] use of partially moved value
+    }
+
+Rust allows this: `s.a` moves field `a` and leaves `s.b` intact; the
+second argument's `s.b` accesses a **disjoint** field of `s`, which is
+still initialized. Same shape as `Builder::spawn` in `thread.g:275`:
+`spawn_impl(self.name, self.stack_size)` inside `impl Builder { fn
+spawn(self) -> ... }` — `self` is consumed, and moving two non-Copy
+fields into the callee's parameters is legal.
+
+**Current behaviour.** `move_analysis.rs` reports
+`[B0001] use of partially moved value: local_1.*` on the second
+argument. That diagnostic is emitted from `check_place_used` at line
+~824-852: after `moved.contains(mp_idx)` for the root local `s`, *any*
+field access is rejected. The check is at the level of the root
+`MovePath`'s children list, but doesn't consider that a sibling child
+(field `b`) is untouched.
+
+**Fix shape.** The check has two levels today:
+
+  * If `place.projection.is_empty()` → "use of moved value" (correct,
+    whole-struct move).
+  * If `place.projection` names a specific field → check whether that
+    **specific field's move path** is in `moved`, not whether any child
+    of the root is.
+
+The relevant code is `check_place_used` at `move_analysis.rs:~800-860`.
+`move_paths.find(place)` already produces a `MovePathIdx` for the exact
+projection; the problem is the *fallback* branch that scans
+`root_index[place.local].children` for any moved child and reports the
+whole local. That branch should either (a) not fire when
+`place.projection` is non-empty (the exact-projection check above is
+authoritative), or (b) restrict the "any child moved" check to
+`place.projection.is_empty()`.
+
+**Consequence for P1-C9.** This is the last blocker for
+`compile_file_to_mir -> prepare_compilation` other than the two
+`fs.g Err-expression` sites (§3.5.1 items 1 and 2). Fixing this would
+unblock the stdlib's `thread.g` module from the strict pipeline.
+
+**Verification fixture.** `tests/compile-pass/borrowck/disjoint_field_moves.g`
+(future) should assert the code above compiles; conversely
+`tests/compile-fail/borrowck/field_after_field_move.g` should reject
+`let a = s.a; s.a;` (using the *same* field twice).
