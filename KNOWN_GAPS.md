@@ -1034,6 +1034,75 @@ Verification (both deltas are loud when broken):
 
 Fixture: `tests/run-pass/behavior/into_copy_primitive.g`
 
+#### 3.5.7 — P1-C2 batch 1: unsigned bit-manipulation intrinsics
+
+`count_ones` / `count_zeros` / `leading_zeros` / `trailing_zeros` /
+`next_power_of_two` on the integer primitives were registered in
+`TyCtxMut::register_builtin_methods` (`ty_ctx_mut.rs:2709..2723` and
+`:2767..2781`) but had **no lowering** in either backend. Any call hit
+the P1-C2 gate:
+
+    [X0000] builtin method `count_ones` is resolved by the type checker
+    but not implemented by the LLVM backend. This is a compiler gap
+    (KNOWN_GAPS §6 P1-C2) ...
+
+The registry entry is what makes them type-check and produce a real
+`FnDefId`; the gate is the deliberate "clean diagnostic" for
+registry-without-lowering. Batch 1 closes the four unsigned-integer
+bit ops and the power-of-two round-up.
+
+**LLVM** (`codegen-llvm/lower.rs::try_lower_builtin_intrinsic`):
+
+  * The dispatcher allow-list gains the five method names.
+  * New inline arm routes each to the LLVM intrinsic declared on
+    demand per bit width — `llvm.ctpop.iN`, `llvm.ctlz.iN`,
+    `llvm.cttz.iN`. `is_zero_poison` on ctlz/cttz is passed as
+    `false` so `leading_zeros(0) == width` and `trailing_zeros(0) ==
+    width`, matching Rust.
+  * `count_zeros(x)` is `width - ctpop(x)`.
+  * `next_power_of_two(x)` is `1 << (width - ctlz(x - 1))` with a
+    `select` on `x <= 1` (so `x == 0` and `x == 1` both yield 1).
+  * The intrinsic result is truncated or zero-extended to the
+    destination integer type (e.g. `count_ones` on a `u8` receiver
+    returns `u32` per the registry signature — the destination is
+    `u32`, the intrinsic result is `i8`, so the arm inserts `zext`).
+
+**Interpreter** (`mir-interp/src/lib.rs::try_call_builtin`):
+
+  * New `(_, "count_ones" | "count_zeros" | "leading_zeros" |
+    "trailing_zeros" | "next_power_of_two")` arms. `count_ones` is
+    width-independent and delegates to `u128::count_ones`; the
+    others need the receiver's bit width, so a new
+    `operand_bit_width(Option<&Operand>)` helper reads it off the
+    receiver place's local type via `self.local_decls`. Projected
+    places return `None`, and the arms surface an explicit
+    `InterpError::Panic` rather than silently miscomputing.
+  * Zero semantics match Rust exactly: `leading_zeros(0) == width`,
+    `trailing_zeros(0) == width`, `next_power_of_two(0) == 1`.
+
+**Known follow-up (not in batch 1):** `next_power_of_two` overflow
+(`x > 2^(width-1)`) currently *wraps to 0* on both backends, matching
+the LLVM behavior of a poison-shift. Rust panics in debug and wraps
+in release. The fixture does not exercise this case; a future batch
+will either route through `llvm.umul.with.overflow` + a panic
+intrinsic (debug-style) or document the wrap-to-0 contract.
+
+Also not in batch 1: `count_zeros` / `leading_ones` / `trailing_ones`
+for `u64` and `u8` are not registered (`ty_ctx_mut.rs` has
+`count_zeros` only on `usize` and `u32`). Adding registry entries is
+a one-line-per-type change when a caller needs them.
+
+Verified (both backends, `--with-stdlib`):
+  * `(5 as u32).count_ones()` → 2
+  * `(0 as u32).leading_zeros()` → 32, `(1 as u32).leading_zeros()` → 31
+  * `(0x100 as u32).trailing_zeros()` → 8
+  * `(1000 as u32).next_power_of_two()` → 1024
+  * `(0 as usize).count_zeros()` → 64, `(5 as usize).count_zeros()` → 62
+  * Reproducer through `--emit=exec` and `GLYIM_LLVM=1 --emit=exec`
+  * Full workspace: 4605/4605
+
+Fixture: `tests/run-pass/behavior/bit_methods_batch1.g`
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
