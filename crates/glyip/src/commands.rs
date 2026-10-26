@@ -338,9 +338,18 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
                 match glyim_pipeline::compile_file_to_mir(&mut db, &discovered_test.file) {
                     Ok(m) => Some(m),
                     Err(diags) => {
-                        eprintln!("[DBG] compile error diags:");
+                        // P2-F5 (KNOWN_GAPS §8.3): the pre-fix block
+                        // printed `[DBG] compile error diags:` and
+                        // `[DBG]   {:?}` — leftover debug output that
+                        // (a) looked like internal debug noise to the
+                        // user, not a diagnostic, and (b) used `{:?}` on
+                        // the message string, printing a quoted Rust
+                        // `String` debug rather than the diagnostic text.
+                        // Print the diagnostic via its own `Display` so
+                        // it has the same code/span/severity shape as
+                        // `glyim`'s CLI output.
                         for d in &diags {
-                            eprintln!("[DBG]   {:?}", d.message);
+                            eprintln!("{}", d);
                         }
                         None
                     }
